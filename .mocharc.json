@@ -1,0 +1,4 @@
+{
+  "extension": ["mts"],
+  "loader": "ts-node/esm"
+}

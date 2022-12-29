@@ -1,6 +1,15 @@
 # SKI in TS
 
-An implementation of a parser, evaluator, printer, and serializer for the [SKI](https://en.wikipedia.org/wiki/SKI_combinator_calculus) combinators in [Typescript](https://www.typescriptlang.org/).
+An implementation of a parser, evaluator, printer, and visualizer for the [SKI](https://en.wikipedia.org/wiki/SKI_combinator_calculus) combinators in [Typescript](https://www.typescriptlang.org/).
+
+## Running
+
+In the checkout directory:
+
+```bash
+npm run build
+npx ski
+```
 
 ## Books
 

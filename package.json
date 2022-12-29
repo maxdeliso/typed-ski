@@ -1,6 +1,6 @@
 {
   "name": "typed-ski",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "SKI combinators in Typescript",
   "scripts": {
     "test": "mocha",
@@ -11,6 +11,9 @@
   },
   "type": "commonjs",
   "main": "build/lib/index.js",
+  "bin": {
+    "ski": "build/bin/ski.js"
+  },
   "repository": {
     "type": "git",
     "url": "git@github.com:maxdeliso/typed-ski.git"
@@ -31,6 +34,7 @@
     "@types/mocha": "^10.0.1",
     "@types/node": "^18.11.18",
     "@types/random-seed": "^0.3.3",
+    "@types/terminal-kit": "^2.5.1",
     "@typescript-eslint/eslint-plugin": "^5.47.1",
     "chai": "^4.3.7",
     "eslint": "^8.30.0",
@@ -41,6 +45,7 @@
     "typescript": "^4.9.4"
   },
   "dependencies": {
-    "random-seed": "^0.3.0"
+    "random-seed": "^0.3.0",
+    "terminal-kit": "^3.0.0"
   }
 }

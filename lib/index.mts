@@ -1,5 +1,0 @@
-export * from './expression.mjs'
-export * from './syntaxExpression.mjs'
-export * from './packer.mjs'
-export * from './parser.mjs'
-export * from './evaluator.mjs'

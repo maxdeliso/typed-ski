@@ -1,7 +1,7 @@
-import { Expression } from './expression.mjs'
-import { nt } from './nonterminal.mjs'
-import { SyntaxExpression, append } from './syntaxExpression.mjs'
-import { term, TerminalSymbol } from './terminal.mjs'
+import { Expression } from './expression'
+import { nt } from './nonterminal'
+import { SyntaxExpression, append } from './syntaxExpression'
+import { term, TerminalSymbol } from './terminal'
 
 export class ParseError extends Error { }
 

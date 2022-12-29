@@ -1,6 +1,6 @@
-import { parse } from '../lib/parser.mjs'
-import { stepOnce } from '../lib/evaluator.mjs'
-import { prettyPrint } from '../lib/expression.mjs'
+import { parse } from '../lib/parser'
+import { stepOnce } from '../lib/evaluator'
+import { prettyPrint } from '../lib/expression'
 
 import { describe, it } from 'mocha'
 import { assert } from 'chai'

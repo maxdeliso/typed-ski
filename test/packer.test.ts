@@ -1,17 +1,16 @@
-import { parse } from '../lib/parser.mjs'
+import { parse } from '../lib/parser'
 import {
   BinaryHeap,
   maxHeapIndex,
   packHeap,
   unpackHeap
-} from '../lib/packer.mjs'
-import { compute, Expression, size } from '../lib/expression.mjs'
+} from '../lib/packer'
+import { compute, Expression, size } from '../lib/expression'
 
 import { assert } from 'chai'
 import { describe, it } from 'mocha'
 import { hrtime } from 'process'
-import pkg from 'random-seed'
-const { create } = pkg
+import { create } from 'random-seed'
 
 const eye = parse('I')
 const dos = parse('II')

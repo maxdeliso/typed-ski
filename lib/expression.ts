@@ -1,7 +1,7 @@
-import { stepOnce } from './evaluator.mjs'
-import { NonTerminal, nt } from './nonterminal.mjs'
-import { SyntaxExpression } from './syntaxExpression.mjs'
-import { generate as generateTerminal, Terminal } from './terminal.mjs'
+import { stepOnce } from './evaluator'
+import { NonTerminal, nt } from './nonterminal'
+import { SyntaxExpression } from './syntaxExpression'
+import { generate as generateTerminal, Terminal } from './terminal'
 
 import { RandomSeed } from 'random-seed'
 

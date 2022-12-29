@@ -1,9 +1,8 @@
-import { compute } from '../lib/expression.mjs'
+import { compute } from '../lib/expression'
 
 import { hrtime } from 'process'
 import { Readable } from 'stream'
-import pkg from 'random-seed'
-const { create } = pkg
+import { create } from 'random-seed'
 
 describe('evaluator performance', () => {
   const S = 64 // symbol count in each randomly generated expression

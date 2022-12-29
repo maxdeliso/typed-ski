@@ -1,6 +1,6 @@
-import { Expression } from './expression.mjs'
-import { nt } from './nonterminal.mjs'
-import { TerminalSymbol } from './terminal.mjs'
+import { Expression } from './expression'
+import { nt } from './nonterminal'
+import { TerminalSymbol } from './terminal'
 
 /**
   * the shape of an evaluation result.

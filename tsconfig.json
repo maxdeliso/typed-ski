@@ -1,9 +1,8 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "esnext",
+    "target": "ES2015",
+    "module": "CommonJS",
     "skipLibCheck": true,
-    "moduleResolution": "NodeNext",
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "noImplicitAny": true,
@@ -24,8 +23,8 @@
     "noPropertyAccessFromIndexSignature": true,
     "allowUnusedLabels": true,
     "allowUnreachableCode": true,
-    "outDir": "./dist",
-    "declarationDir": "./dist",
+    "outDir": "./build",
+    "declarationDir": "./build",
     "declaration": true,
     "declarationMap": true
   }

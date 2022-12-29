@@ -1,8 +1,8 @@
-import { NonTerminal, nt } from './nonterminal.mjs'
-import { Terminal } from './terminal.mjs'
+import { NonTerminal, nt } from './nonterminal'
+import { Terminal } from './terminal'
 
 /**
- * A variation on the expression type, that allows undefined values.
+ * A variation on the expression type that allows undefined values.
  * This version is used to build up a syntax expression during parsing,
  * which is then converted into an abstract expression after the parse,
  * while verifying that no undefined values, or 'holes', remain.

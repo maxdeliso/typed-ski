@@ -1,10 +1,9 @@
-import { Expression, generate, prettyPrint, size } from '../lib/expression.mjs'
-import { nt } from '../lib/nonterminal.mjs'
-import { K, S } from '../lib/terminal.mjs'
+import { Expression, generate, prettyPrint, size } from '../lib/expression'
+import { nt } from '../lib/nonterminal'
+import { K, S } from '../lib/terminal'
 
 import { assert } from 'chai'
-import pkg, { RandomSeed } from 'random-seed'
-const { create } = pkg
+import { create, RandomSeed } from 'random-seed'
 
 describe('prettyPrint', () => {
   const expr = nt<Expression>(nt<Expression>(S, K), K)

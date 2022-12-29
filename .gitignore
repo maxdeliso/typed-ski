@@ -1,5 +1,3 @@
 node_modules/
-dist/
+build/
 .vscode/
-.nyc_output/
-*.tgz

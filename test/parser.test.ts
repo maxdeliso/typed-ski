@@ -1,7 +1,7 @@
-import { Expression, prettyPrint } from '../lib/expression.mjs'
-import { nt } from '../lib/nonterminal.mjs'
-import { parse, ParseError } from '../lib/parser.mjs'
-import { I, K, S } from '../lib/terminal.mjs'
+import { Expression, prettyPrint } from '../lib/expression'
+import { nt } from '../lib/nonterminal'
+import { parse, ParseError } from '../lib/parser'
+import { I, K, S } from '../lib/terminal'
 
 import { assert, expect } from 'chai'
 import { describe, it } from 'mocha'

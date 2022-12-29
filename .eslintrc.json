@@ -16,7 +16,7 @@
   ],
   "overrides": [
     {
-      "files": ["*.mts"],
+      "files": ["*.ts"],
       "rules": {
         "max-len": ["error", 80]
       }

@@ -1,6 +1,6 @@
-import { Expression } from './expression.mjs'
-import { nt } from './nonterminal.mjs'
-import { term, TerminalSymbol } from './terminal.mjs'
+import { Expression } from './expression'
+import { nt } from './nonterminal'
+import { term, TerminalSymbol } from './terminal'
 
 export type SymbolHeap = Array<TerminalSymbol | undefined>;
 

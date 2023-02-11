@@ -17,11 +17,7 @@ export function parse (input: string): Expression {
 
   for (const ch of input) {
     if (ch === '(') {
-      syn = append(syn, {
-        kind: 'non-terminal',
-        lft: undefined,
-        rgt: undefined
-      })
+      syn = append(syn, nt(undefined, undefined))
       parenLevel++
     } else if (ch === ')') {
       parenLevel--
@@ -29,9 +25,11 @@ export function parse (input: string): Expression {
       if (parenLevel < 0) {
         throw new ParseError('mismatched parens! (early)')
       }
-    } else if (ch === TerminalSymbol.S ||
+    } else if (
+      ch === TerminalSymbol.S ||
       ch === TerminalSymbol.K ||
-      ch === TerminalSymbol.I) {
+      ch === TerminalSymbol.I
+    ) {
       syn = append(syn, term(ch))
     } else {
       throw new ParseError('unrecognized char: ' + ch)

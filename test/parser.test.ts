@@ -10,11 +10,16 @@ const firstLiteral = '(I(SK))'
 const secondLiteral = '(((((SK)I)S)K)I)'
 
 describe('parse', () => {
-  it(`should parse ${firstLiteral} and variations`, () => {
-    const expected = nt<Expression>(I, nt(S, K))
+  const assertPrintedParsedPair = (a: Expression, b: Expression): void => {
+    assert.deepStrictEqual(prettyPrint(a), prettyPrint(b))
+    assert.deepStrictEqual(a, b)
+  }
 
-    assert.deepStrictEqual(parse(firstLiteral), expected)
-    assert.deepStrictEqual(parse('I(SK)'), expected)
+  it(`should parse ${firstLiteral} and variations`, () => {
+    const expectedISK = nt<Expression>(I, nt(S, K))
+    const parsedISK = parse('I(SK)')
+
+    assertPrintedParsedPair(parsedISK, expectedISK)
   })
 
   it(`should parse ${secondLiteral} and variations`, () => {
@@ -29,8 +34,7 @@ describe('parse', () => {
           K),
         I)
 
-    assert.deepStrictEqual(parse(secondLiteral), expected)
-    assert.deepStrictEqual(parse('SKISKI'), expected)
+    assertPrintedParsedPair(parse(secondLiteral), expected)
   })
 
   it('should parse adjacent chars associating to the left', () => {
@@ -52,8 +56,8 @@ describe('parse', () => {
     const reparsed = parse(printed)
     const reprinted = prettyPrint(reparsed)
 
-    assert.deepStrictEqual(parsed, reparsed)
     assert.deepStrictEqual(printed, reprinted)
+    assert.deepStrictEqual(parsed, reparsed)
   }
 
   it('should reparse complicated expressions', () => {

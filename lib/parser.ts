@@ -1,6 +1,7 @@
+import { Appendable } from './appendable'
 import { Expression } from './expression'
 import { nt } from './nonterminal'
-import { SyntaxExpression, append } from './syntaxExpression'
+import { SyntaxExpression } from './syntaxExpression'
 import { term, TerminalSymbol } from './terminal'
 
 export class ParseError extends Error { }
@@ -12,12 +13,12 @@ export class ParseError extends Error { }
  * @throws {ParseError} if the input string is not a well formed expression.
  */
 export function parse (input: string): Expression {
-  let syn: SyntaxExpression
+  const syn = new Appendable()
   let parenLevel = 0
 
   for (const ch of input) {
     if (ch === '(') {
-      syn = append(syn, nt(undefined, undefined))
+      syn.append(nt<SyntaxExpression>(undefined, undefined))
       parenLevel++
     } else if (ch === ')') {
       parenLevel--
@@ -30,7 +31,7 @@ export function parse (input: string): Expression {
       ch === TerminalSymbol.K ||
       ch === TerminalSymbol.I
     ) {
-      syn = append(syn, term(ch))
+      syn.append(term(ch))
     } else {
       throw new ParseError('unrecognized char: ' + ch)
     }
@@ -40,27 +41,5 @@ export function parse (input: string): Expression {
     throw new ParseError('mismatched parens! (late)')
   }
 
-  return flatten(syn)
-}
-
-/**
- * @param exp a syntax expression.
- * @returns an abstract expression.
- * @throws {ParseError} if there are any empty internal nodes in the
- * expression.
- */
-export const flatten = (exp: SyntaxExpression): Expression => {
-  if (exp === undefined) {
-    throw new ParseError('expression undefined (empty)')
-  } else if (exp.kind === 'terminal') {
-    return exp
-  } else if ((exp.lft === undefined) && (exp.rgt !== undefined)) {
-    return flatten(exp.rgt)
-  } else if ((exp.lft !== undefined) && (exp.rgt === undefined)) {
-    return flatten(exp.lft)
-  } else if ((exp.lft === undefined) || (exp.rgt === undefined)) {
-    throw new ParseError('expression undefined (hole)')
-  } else {
-    return nt(flatten(exp.lft), flatten(exp.rgt))
-  }
+  return syn.flatten()
 }

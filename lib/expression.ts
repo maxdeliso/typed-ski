@@ -1,8 +1,6 @@
 import { stepOnce } from './evaluator'
 import { NonTerminal, nt } from './nonterminal'
-import { SyntaxExpression } from './syntaxExpression'
 import { generate as generateTerminal, Terminal } from './terminal'
-
 import { RandomSeed } from 'random-seed'
 
 /**
@@ -23,20 +21,18 @@ import { RandomSeed } from 'random-seed'
 export type Expression = Terminal | NonTerminal<Expression>
 
 /**
-  * @param syntaxExpression an expression to pretty print.
+  * @param expr an expression to pretty print.
   * @returns a pretty printed expression.
   */
-export function prettyPrint (syntaxExpression: SyntaxExpression): string {
-  if (syntaxExpression === undefined) return '∅'
-
-  switch (syntaxExpression.kind) {
+export function prettyPrint (expr: Expression): string {
+  switch (expr.kind) {
     case 'terminal':
-      return syntaxExpression.sym
+      return expr.sym
     case 'non-terminal': {
       const printed = [
         '(',
-        `${prettyPrint(syntaxExpression.lft)}`,
-        `${prettyPrint(syntaxExpression.rgt)}`,
+        `${prettyPrint(expr.lft)}`,
+        `${prettyPrint(expr.rgt)}`,
         ')'
       ]
 

@@ -1,6 +1,6 @@
 import { parse } from '../lib/parser'
 import { stepOnce } from '../lib/evaluator'
-import { prettyPrint } from '../lib/expression'
+import { Expression, prettyPrint } from '../lib/expression'
 
 import { describe, it } from 'mocha'
 import { assert } from 'chai'
@@ -14,14 +14,17 @@ const sixth = parse('SKKII')
 const seventh = parse('KI(KI)')
 
 describe('stepOnce', () => {
+  const compareExpressions = (a: Expression, b: Expression): void => {
+    assert.deepStrictEqual(prettyPrint(a), prettyPrint(b))
+    assert.deepStrictEqual(a, b)
+  }
+
   it(`evaluates ${prettyPrint(second)}
       =>
       ${prettyPrint(third)}`, () => {
     const result = stepOnce(second)
-
     assert(result.altered)
-
-    assert.deepStrictEqual(result.expr, third)
+    compareExpressions(result.expr, third)
   })
 
   it(`evaluates ${prettyPrint(first)}
@@ -29,20 +32,16 @@ describe('stepOnce', () => {
       ${prettyPrint(third)}`,
   () => {
     const result = stepOnce(stepOnce(first).expr)
-
     assert(result.altered)
-
-    assert.deepStrictEqual(result.expr, third)
+    compareExpressions(result.expr, third)
   })
 
   it(`evaluates ${prettyPrint(fourth)}
       =>
       ${prettyPrint(third)}`, () => {
     const result = stepOnce(fourth)
-
     assert(result.altered)
-
-    assert.deepStrictEqual(result.expr, third)
+    compareExpressions(result.expr, third)
   })
 
   it(`evaluates
@@ -50,10 +49,8 @@ describe('stepOnce', () => {
       =>
       ${prettyPrint(seventh)}`, () => {
     const first = stepOnce(fifth)
-
     assert(first.altered)
-
-    assert.deepStrictEqual(first.expr, seventh)
+    compareExpressions(first.expr, seventh)
   })
 
   it(`${prettyPrint(sixth)}
@@ -61,17 +58,11 @@ describe('stepOnce', () => {
       ${prettyPrint(third)}`,
   () => {
     const firstStep = stepOnce(sixth)
-
     assert(firstStep.altered)
-
     const secondStep = stepOnce(firstStep.expr)
-
     assert(secondStep.altered)
-
     const thirdStep = stepOnce(secondStep.expr)
-
     assert(thirdStep.altered)
-
-    assert.deepStrictEqual(thirdStep.expr, third)
+    compareExpressions(thirdStep.expr, third)
   })
 })

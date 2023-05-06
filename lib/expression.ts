@@ -47,7 +47,7 @@ export function prettyPrint (expr: Expression): string {
   * @returns a randomly generated expression.
   */
 export function generate (rs: RandomSeed, n: number): Expression {
-  if (n === 0) {
+  if (n <= 0) {
     throw new Error('A valid expression must contain at least one symbol.')
   }
 

@@ -1,7 +1,5 @@
 import { Appendable } from './appendable'
 import { Expression } from './expression'
-import { nt } from './nonterminal'
-import { SyntaxExpression } from './syntaxExpression'
 import { term, TerminalSymbol } from './terminal'
 
 export class ParseError extends Error { }
@@ -13,12 +11,12 @@ export class ParseError extends Error { }
  * @throws {ParseError} if the input string is not a well formed expression.
  */
 export function parse (input: string): Expression {
-  const syn = new Appendable()
+  const app = new Appendable()
   let parenLevel = 0
 
   for (const ch of input) {
     if (ch === '(') {
-      syn.append(nt<SyntaxExpression>(undefined, undefined))
+      app.appendEmptyBranch()
       parenLevel++
     } else if (ch === ')') {
       parenLevel--
@@ -31,7 +29,7 @@ export function parse (input: string): Expression {
       ch === TerminalSymbol.K ||
       ch === TerminalSymbol.I
     ) {
-      syn.append(term(ch))
+      app.appendSymbol(term(ch))
     } else {
       throw new ParseError('unrecognized char: ' + ch)
     }
@@ -41,5 +39,5 @@ export function parse (input: string): Expression {
     throw new ParseError('mismatched parens! (late)')
   }
 
-  return syn.flatten()
+  return app.flatten()
 }

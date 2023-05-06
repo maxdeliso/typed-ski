@@ -1,29 +1,56 @@
 import { Expression } from './expression'
 import { ParseError } from './parser'
-import { nt } from './nonterminal'
-import { SyntaxExpression } from './syntaxExpression'
+import { NonTerminal, nt } from './nonterminal'
+import { Terminal } from './terminal'
+
+/**
+ * A variation on the expression type that allows undefined values.
+ * This version is used to build up a syntax expression during parsing,
+ * which is then converted into an abstract expression after the parse,
+ * while verifying that no undefined values, or 'holes', remain.
+ */
+type SyntaxExpression
+  = Terminal
+  | NonTerminal<SyntaxExpression>
+  | undefined;
 
 export class Appendable {
   private syn: SyntaxExpression
-  private restorePoint: SyntaxExpression
+  private insertionSites: NonTerminal<SyntaxExpression>[] = []
 
-  /**
-   * @param newNode a (possibly hole-y) syntax expression to append.
-   * @returns nothing, manipulates the local state.
-   */
-  public append (newNode: SyntaxExpression): void {
+  public appendSymbol (term: Terminal): void {
+    this.appendInternal(term)
+  }
+
+  public appendEmptyBranch (): void {
+    const newBranch = nt<SyntaxExpression>(undefined, undefined)
+    this.appendInternal(newBranch)
+    this.insertionSites.push(newBranch)
+  }
+
+  private appendInternal (newNode: SyntaxExpression): void {
     if (this.syn === undefined) {
       this.syn = newNode
       return
     }
 
+    while (this.insertionSites.length > 0) {
+      const top = this.insertionSites.pop()
+
+      if (top === undefined) {
+        throw new Error('insertionSites should not have an undefined value')
+      } else if (top?.lft === undefined) {
+        top.lft = newNode
+        this.insertionSites.push(top)
+        return
+      } else if (top.rgt === undefined) {
+        top.rgt = newNode
+        return
+      }
+    }
+
     let currentNode : SyntaxExpression = this.syn
     const nodeStack : Array<SyntaxExpression> = []
-
-    if (this.restorePoint) {
-      currentNode = this.restorePoint
-      this.restorePoint = undefined
-    }
 
     while (currentNode !== undefined || nodeStack.length > 0) {
       // traverse left, accumulating the spine on a stack
@@ -46,24 +73,10 @@ export class Appendable {
       } else if (currentNode.lft === undefined) {
         // if a node has an empty left branch, that's our insert site
         currentNode.lft = newNode
-        // and cache the current node to restore from as an optimization
-        this.restorePoint = currentNode
         return
       } else if (currentNode.rgt === undefined) {
         // and if it has an empty right branch, insert there
         currentNode.rgt = newNode
-
-        // with the restore point being the first insertable node when
-        // traversing the node stack in reverse
-        for (let i = nodeStack.length - 1; i >= 0; i--) {
-          const remaining = nodeStack[i]
-
-          if (this.insertable(remaining)) {
-            this.restorePoint = remaining
-            break
-          }
-        }
-
         return
       } else {
         // otherwise we have a non-empty current node and we iterate right
@@ -84,15 +97,6 @@ export class Appendable {
    */
   public flatten (): Expression {
     return this.flattenInternal(this.syn)
-  }
-
-  /**
-   * @param se a syntax expression.
-   * @returns true if there is a place to insert into the syntax expression.
-   */
-  private insertable (se: SyntaxExpression): boolean {
-    return se?.kind === 'non-terminal' &&
-      (se.lft === undefined || se.rgt === undefined)
   }
 
   private flattenInternal = (exp: SyntaxExpression): Expression => {

@@ -1,6 +1,9 @@
 import { stepOnce } from './evaluator'
 import { NonTerminal, nt } from './nonterminal'
-import { generate as generateTerminal, Terminal } from './terminal'
+import {
+  generate as generateTerminal,
+  Terminal
+} from './terminal'
 import { RandomSeed } from 'random-seed'
 
 /**
@@ -67,6 +70,19 @@ export function generate (rs: RandomSeed, n: number): Expression {
 export function size (exp: Expression): number {
   if (exp.kind === 'terminal') return 1
   else return size(exp.lft) + size(exp.rgt)
+}
+
+/**
+ * Apply a function to its arguments.
+ * @param exps an array of expressions.
+ * @returns an unevaluated result.
+ */
+export const apply = (...exps: Expression[]): Expression => {
+  if (exps.length <= 0) {
+    throw new Error('there must be at least one expression to apply')
+  } else {
+    return exps.reduce(nt<Expression>)
+  }
 }
 
 /**

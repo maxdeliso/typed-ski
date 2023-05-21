@@ -1,8 +1,9 @@
 import { S, K, I } from '../lib/terminal'
 import { nt } from '../lib/nonterminal'
-import { expect } from 'chai'
 import { Appendable } from '../lib/appendable'
 import { Expression } from '../lib'
+
+import { expect } from 'chai'
 
 describe('appendable expressions', () => {
   it('append a pair of terminals into a single non-terminal', () => {

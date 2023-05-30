@@ -70,6 +70,15 @@ export function size (exp: Expression): number {
 }
 
 /**
+ * Apply a function to its arguments.
+ * @param lft the function.
+ * @param rgt the arguments.
+ * @returns an unevaluated result.
+ */
+export const apply = (lft: Expression, rgt: Expression): Expression =>
+  nt(lft, rgt)
+
+/**
  * Run reductions continuously, with the supplied parameters.
  * Note: when an expression can no longer be reduced, a new
  * expression is generated.

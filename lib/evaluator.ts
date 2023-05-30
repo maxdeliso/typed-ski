@@ -18,9 +18,27 @@ export interface Result<E> {
 export type Step<E> = (expr: E) => Result<E>
 
 /**
+ * the SKI combinator reduction function.
+ * @param expr the input expression.
+ * @returns the evaluation result after one step.
+ *
+ * NOTE: this function is not guaranteed to terminate
+ */
+export const stepMany: Step<Expression> =
+  (expr: Expression) => {
+    const result = stepOnce(expr)
+
+    if (result.altered) {
+      return stepMany(result.expr)
+    } else {
+      return result
+    }
+  }
+
+/**
  * the SKI combinator single step reduction function.
  * @param expr the input expression.
- * @returns the evaluation result.
+ * @returns the evaluation result after one step.
  */
 export const stepOnce: Step<Expression> =
   (expr: Expression) => scanStep(expr, [stepOnceI, stepOnceK, stepOnceS])

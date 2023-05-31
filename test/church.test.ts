@@ -80,7 +80,7 @@ describe('Church encodings', () => {
      */
     for (let a = 0; a < 8; a++) {
       for (let b = 0; b < 8; b++) {
-        expect(reduce(apply(apply(Church(a), succ), Church(b))))
+        expect(reduce(apply(Church(a), succ, Church(b))))
           .to.deep.equal(Church(a + b))
       }
     }
@@ -93,7 +93,7 @@ describe('Church encodings', () => {
      */
     for (let a = 0; a < 8; a++) {
       for (let b = 0; b < 8; b++) {
-        expect(reduce(apply(apply(Church(a), apply(Church(b), succ)), zero)))
+        expect(reduce(apply(Church(a), apply(Church(b), succ), zero)))
           .to.deep.equal(Church(a * b))
       }
     }

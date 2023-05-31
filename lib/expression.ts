@@ -75,8 +75,13 @@ export function size (exp: Expression): number {
  * @param rgt the arguments.
  * @returns an unevaluated result.
  */
-export const apply = (lft: Expression, rgt: Expression): Expression =>
-  nt(lft, rgt)
+export const apply = (...exps: Expression[]): Expression => {
+  if (exps.length < 0) {
+    throw new Error('there must be at least one expression to apply')
+  } else {
+    return exps.reduce(nt<Expression>)
+  }
+}
 
 /**
  * Run reductions continuously, with the supplied parameters.

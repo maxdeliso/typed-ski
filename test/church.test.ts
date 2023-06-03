@@ -38,11 +38,22 @@ const one = parse('I')
  * (Kf)x(nfx) (by K)
  * f(nfx)
  *
- * as an algebraic function this is
- *
- * successor n = n + 1
+ * this acts as the successor function for Church numerals
  */
 const succ = parse('S(S(SK)K)')
+
+/*
+ * composition function
+ *
+ * λnfx.n(fx)
+ *
+ * S(KS)Knfx
+ * (KS)n(Kn)fx (by S)
+ * S(Kn)fx (by K)
+ * (Kn)x(fx) (by S)
+ * n(fx)
+ */
+const B = parse('S(KS)K')
 
 describe('Church encodings', () => {
   const reduce = (exp: Expression): Expression =>
@@ -70,31 +81,38 @@ describe('Church encodings', () => {
       .to.deep.equal(Church(2))
   })
 
-  it('reduces a + b to its sum in Church numerals', () => {
-    /*
-     * λab.a succ b
-     *
-     * in other words, apply the first church numeral to the successor function,
-     * and then apply the result to the second church numeral, which yields
-     * a + b
-     */
-    for (let a = 0; a < 8; a++) {
-      for (let b = 0; b < 8; b++) {
-        expect(reduce(apply(Church(a), succ, Church(b))))
-          .to.deep.equal(Church(a + b))
+  it('reduces sums in Church numerals', () => {
+    for (let m = 0; m < 8; m++) {
+      for (let n = 0; n < 8; n++) {
+        const sum = Church(m + n)
+
+        /*
+         * λmn.(m succ)n is equivalent to m + n in Church numerals
+         */
+        expect(reduce(apply(Church(m), succ, Church(n))))
+          .to.deep.equal(sum)
       }
     }
   })
 
-  it('reduces a * b to its product in Church numerals', () => {
-    /*
-     * λab.(a(b succ))0
-     * is equivalent to (+ b) a times on 0
-     */
-    for (let a = 0; a < 8; a++) {
-      for (let b = 0; b < 8; b++) {
-        expect(reduce(apply(Church(a), apply(Church(b), succ), zero)))
-          .to.deep.equal(Church(a * b))
+  it('reduces products in Church numerals', () => {
+    for (let m = 0; m < 8; m++) {
+      for (let n = 0; n < 8; n++) {
+        const product = Church(m * n)
+
+        /*
+         * λmn.m(n(succ)) is equivalent to m * n in Church numerals
+         */
+        expect(reduce(apply(Church(m), apply(Church(n), succ), zero)))
+          .to.deep.equal(product)
+
+        /*
+         * Bmnfx yields (m(nf))x which is also equivalent to m * n
+         * so the B combinator is functional composition and multiplication
+         * in the Church numerals simultaneously.
+         */
+        expect(reduce(apply(B, Church(m), Church(n), succ, zero)))
+          .to.deep.equal(product)
       }
     }
   })

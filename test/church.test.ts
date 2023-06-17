@@ -1,10 +1,10 @@
 import { parse } from '../lib/parser'
 import { stepMany } from '../lib/evaluator'
-import { Expression, apply, prettyPrint } from '../lib/expression'
+import { Expression, apply } from '../lib/expression'
 
 import { describe, it } from 'mocha'
 import { expect } from 'chai'
-import { I, K, S } from '../lib/terminal'
+import { S, K, I, TerminalSymbol } from '../lib/terminal'
 
 /*
  * This test verifies that numeral systems and boolean logic can be encoded
@@ -93,7 +93,9 @@ const B = parse('S(KS)K')
  *
  * this acts as the successor function for Church numerals
  */
-const Succ = parse('S(S(SK)K)')
+const Succ = apply(S, B)
+
+const Plus = apply(B, S, apply(B, B))
 
 const reduce = (exp: Expression): Expression =>
   stepMany(exp).expr
@@ -106,19 +108,46 @@ const ChurchN = (n: number): Expression => {
   } else if (n === 1) {
     return One
   } else {
-    return reduce(apply(Succ, ChurchN(n - 1)))
+    return apply(Succ, ChurchN(n - 1))
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ToFunc = (exp: Expression): any => {
+  if (exp.kind === 'non-terminal') {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    return ToFunc(exp.lft)(ToFunc(exp.rgt))
+  } else {
+    switch (exp.sym) {
+    // eslint-disable-next-line max-len
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, max-len
+      case TerminalSymbol.S: return (x: (arg0: any) => {(arg0: any): any; new(): any }) => (y: (arg0: any) => any) => (z: any) => x(z)((y(z)))
+      // eslint-disable-next-line max-len
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @typescript-eslint/no-unsafe-return
+      case TerminalSymbol.K: return (x: any) => (_y: any) => x
+      // eslint-disable-next-line max-len
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any
+      case TerminalSymbol.I: return (x: any) => x
+    }
+  }
+}
+
+/*
+ * To verify that combinator expressions produce n applications of f on x,
+ * this function is introduced which runs the combinator forward with a lambda
+ * that adds one to its argument and returns a number.
+ *
+ * This is needed because each function has infinitely many representations
+ * in the SKI combinators, but we are concerned with whether a given function
+ * represents a Church numeral, regardless of which one it is.
+ */
+const UnChurch = (exp: Expression): number => {
+  // eslint-disable-next-line max-len
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+  return ToFunc(exp)((x: number) => x + 1)(0)
 }
 
 const ChurchB = (b: boolean): Expression => b ? True : False
-
-const UpTo = (n: number): Array<number> => {
-  const result = []
-  for (let i = n; i >= 0; i--) {
-    result.push(i)
-  }
-  return result
-}
 
 /*
  * Cardinal
@@ -185,7 +214,7 @@ const V = apply(B, C, T)
  *
  * λa.aa ≡ M
  */
-const M = parse('SII')
+// const M = parse('SII')
 
 /*
  * Retrieve the first element in a Cons cell.
@@ -215,45 +244,23 @@ const Car = apply(T, Fst)
  */
 const Cdr = apply(T, Snd)
 
+const DownFrom = (n: number): Array<number> => {
+  const result = []
+  for (let i = n; i >= 0; i--) {
+    result.push(i)
+  }
+  return result
+}
+
 describe('Church encodings', () => {
   it('reduces 0 + 1 to 1 ', () => {
-    expect(One)
-      .to.deep.equal(ChurchN(1))
+    expect(UnChurch(apply(Succ, ChurchN(0))))
+      .to.deep.equal(1)
   })
 
   it('reduces 1 + 1 to 2', () => {
-    expect(reduce(apply(Succ, One)))
-      .to.deep.equal(ChurchN(2))
-  })
-
-  it('reduces sums and products in Church numerals', () => {
-    UpTo(8).forEach(m => {
-      UpTo(8).forEach(n => {
-        const sum = ChurchN(m + n)
-
-        const product = ChurchN(m * n)
-
-        /*
-         * λmn.(m succ)n is equivalent to m + n in Church numerals
-         */
-        expect(reduce(apply(ChurchN(m), Succ, ChurchN(n))))
-          .to.deep.equal(sum)
-
-        /*
-         * λmn.m(n(succ)) is equivalent to m * n in Church numerals
-         */
-        expect(reduce(apply(ChurchN(m), apply(ChurchN(n), Succ), Zero)))
-          .to.deep.equal(product)
-
-        /*
-         * Bmnfx yields m(nf)x which is also equivalent to m * n
-         * so the B combinator is functional composition and multiplication
-         * in the Church numerals simultaneously.
-         */
-        expect(reduce(apply(B, ChurchN(m), ChurchN(n), Succ, Zero)))
-          .to.deep.equal(product)
-      })
-    })
+    expect(UnChurch(reduce(apply(Succ, ChurchN(1)))))
+      .to.deep.equal(2)
   })
 
   it('reduces boolean expressions in Church encoding', () => {
@@ -289,9 +296,6 @@ describe('Church encodings', () => {
   })
 
   it('reduces pairs', () => {
-    console.log(prettyPrint(V))
-    console.log(prettyPrint(M))
-
     expect(reduce(apply(V, ChurchN(0), ChurchN(1), Fst)))
       .to.deep.equal(ChurchN(0))
 
@@ -307,5 +311,52 @@ describe('Church encodings', () => {
       reduce(
         apply(Cdr, apply(V, ChurchN(0), ChurchN(1)))
       )).to.deep.equal(ChurchN(1))
+  })
+
+  it('is zero', () => {
+    expect(
+      reduce(
+        apply(ChurchN(0), apply(K, False), True)
+      )).to.deep.equal(ChurchB(true))
+
+    expect(
+      reduce(
+        apply(ChurchN(1), apply(K, False), True)
+      )).to.deep.equal(ChurchB(false))
+
+    expect(
+      reduce(
+        apply(ChurchN(2), apply(K, False), True)
+      )
+    ).to.deep.equal(ChurchB(false))
+  })
+
+  it('reduces sums and products in Church numerals', () => {
+    DownFrom(8).forEach(m => {
+      DownFrom(8).forEach(n => {
+        // λmn.(m succ)n is equivalent to m + n in Church numerals
+        expect(UnChurch(
+          reduce(apply(ChurchN(m), Succ, ChurchN(n)))
+        )).to.equal(m + n)
+
+        expect(UnChurch(
+          reduce(apply(Plus, ChurchN(m), ChurchN(n)))
+        )).to.equal(m + n)
+
+        //  λmn.m(n(succ)) is equivalent to m * n in Church numerals
+        expect(UnChurch(
+          reduce(apply(ChurchN(m), apply(ChurchN(n), Succ), Zero))
+        )).to.equal(m * n)
+
+        /*
+         * Bmnfx yields m(nf)x which is also equivalent to m * n
+         * so the B combinator is functional composition and multiplication
+         * in the Church numerals simultaneously.
+         */
+        expect(UnChurch(
+          reduce(apply(B, ChurchN(m), ChurchN(n), Succ, Zero))
+        )).to.equal(m * n)
+      })
+    })
   })
 })

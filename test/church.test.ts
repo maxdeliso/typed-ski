@@ -1,7 +1,4 @@
 import { apply } from '../lib/expression'
-
-import { describe, it } from 'mocha'
-import { expect } from 'chai'
 import { K } from '../lib/terminal'
 import { reduce } from '../lib/evaluator'
 import { UnChurch, ChurchN, ChurchB } from '../lib/church'
@@ -12,6 +9,9 @@ import {
   False, Zero, True,
   Plus
 } from '../lib/combinators'
+
+import { describe, it } from 'mocha'
+import { expect } from 'chai'
 
 /*
  * This test verifies that numeral systems and boolean logic can be encoded
@@ -80,7 +80,7 @@ describe('Church encodings', () => {
       )).to.deep.equal(ChurchN(1))
   })
 
-  it('is zero', () => {
+  it('isZero tests for whether a numeral is zero', () => {
     expect(
       reduce(
         apply(ChurchN(0), apply(K, False), True)

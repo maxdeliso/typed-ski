@@ -7,7 +7,7 @@ import { TerminalSymbol } from './terminal'
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding
- * @param n A number
+ * @param n a number
  * @returns an extensionally equivalent Church numeral.
  */
 export const ChurchN = (n: number): Expression => {

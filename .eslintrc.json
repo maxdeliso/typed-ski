@@ -16,9 +16,14 @@
   ],
   "overrides": [
     {
-      "files": ["*.ts"],
+      "files": [
+        "*.ts"
+      ],
       "rules": {
-        "max-len": ["error", 80]
+        "max-len": [
+          "error",
+          80
+        ]
       }
     }
   ]

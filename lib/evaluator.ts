@@ -36,6 +36,13 @@ export const stepMany: Step<Expression> =
   }
 
 /**
+ * Run β reduction on a SKI expression until it terminates.
+ * @param exp the input expression.
+ * @returns the evaluation result.
+ */
+export const reduce = (exp: Expression): Expression => stepMany(exp).expr
+
+/**
  * the SKI combinator single step reduction function.
  * @param expr the input expression.
  * @returns the evaluation result after one step.

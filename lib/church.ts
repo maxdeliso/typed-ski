@@ -41,9 +41,7 @@ export const ChurchB = (b: boolean): Expression => b ? True : False
 
 /**
  * This is a somewhat foul construction in TypeScript, which gives insight into
- * the nature of the untyped lambda calculus. Because the system predates types
- * and was designed to create an elegant functional basis, the primitives S, K,
- * and I have very unpleasant looking types.
+ * the nature of the untyped lambda calculus.
  *
  * @param exp an expression in the SKI combinator language.
  * @returns a Curried TypeScript lambda which is extensionally equivalent to it
@@ -55,7 +53,7 @@ const toLambda = (exp: Expression): any => {
   } else {
     switch (exp.sym) {
       case TerminalSymbol.S:
-        return (x: (_: any) => {(_: any): any; new(): any }) =>
+        return (x: (_: any) => {(_: any): any; _: any }) =>
           (y: (_: any) => any) =>
             (z: any) =>
             // eslint-disable-next-line @typescript-eslint/no-unsafe-return

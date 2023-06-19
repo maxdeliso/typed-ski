@@ -1,4 +1,4 @@
-import { Expression } from './expression'
+import { Expression, prettyPrint } from './expression'
 import { nt } from './nonterminal'
 import { TerminalSymbol } from './terminal'
 
@@ -35,12 +35,34 @@ export const stepMany: Step<Expression> =
     }
   }
 
+export const loggedStepMany: Step<Expression> =
+  (expr: Expression) => {
+    console.log(prettyPrint(expr))
+    console.log('->')
+    const result = stepOnce(expr)
+
+    if (result.altered) {
+      return loggedStepMany(result.expr)
+    } else {
+      return result
+    }
+  }
+
 /**
  * Run β reduction on a SKI expression until it terminates.
  * @param exp the input expression.
  * @returns the evaluation result.
  */
-export const reduce = (exp: Expression): Expression => stepMany(exp).expr
+export const reduce = (exp: Expression): Expression =>
+  stepMany(exp).expr
+
+/**
+ * Run β reduction on a SKI expression until it terminates.
+ * @param exp the input expression.
+ * @returns the evaluation result.
+ */
+export const loggedReduce = (exp: Expression): Expression =>
+  loggedStepMany(exp).expr
 
 /**
  * the SKI combinator single step reduction function.

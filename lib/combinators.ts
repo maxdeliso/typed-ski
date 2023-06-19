@@ -85,6 +85,20 @@ export const B = parse('S(KS)K')
  */
 export const Succ = apply(S, B)
 
+/*
+ * Binary addition
+ *
+ * λmnfx.mf((nf)x)
+ *
+ * BS(BB)mnfx
+ * S((BB)m)nfx
+ * ((BB)m)f(nf)x
+ * BBmf(nf)x
+ * B(mf)(nf)x
+ * (mf)((nf)x)
+ *
+ * λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
+ */
 export const Plus = apply(B, S, apply(B, B))
 
 /*
@@ -103,7 +117,7 @@ export const Plus = apply(B, S, apply(B, B))
  *
  * λxyz.xzy ≡ S(BBS)(KK)
  */
-const C = apply(S, apply(B, B, S), apply(K, K))
+export const C = apply(S, apply(B, B, S), apply(K, K))
 
 /*
  * Thrush
@@ -118,7 +132,7 @@ const C = apply(S, apply(B, B, S), apply(K, K))
  *
  * λxy.yx ≡ CI ≡ flip
  */
-const T = apply(C, I)
+export const T = apply(C, I)
 
 /*
  * Vireo
@@ -181,3 +195,27 @@ export const Car = apply(T, Fst)
  * b
  */
 export const Cdr = apply(T, Snd)
+
+/*
+ * Duplicate the second argument of a function.
+ *
+ * λxy.xyy
+ *
+ * SS(SK)xy
+ * Sx((SK)x)y
+ * xy(((SK)x)y)
+ * xy(Ky(Kx))
+ * xyy
+ *
+ * λxy.xyy ≡ W
+ */
+export const W = parse('SS(SK)')
+
+// λabcd.a(bcd)
+export const Blk = apply(B, B, B)
+
+// λabcde.ab(cde)
+export const E = apply(B, apply(B, B, B))
+
+// λabc.cba
+export const F = apply(E, T, T, E, T)

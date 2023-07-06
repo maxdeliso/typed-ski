@@ -25,15 +25,15 @@ describe('Lambda conversion', () => {
 
   const flip = mkAbs('x', mkAbs('y', nt(mkVar('y'), mkVar('x'))))
 
-  it('should convert λx -> x to I', () => {
+  it('should convert λx.x to I', () => {
     expect(convertLambda(id)).to.deep.equal(I)
   })
 
-  it('should convert λx y -> x to something that acts like K', () => {
+  it('should convert λx.λy.x to something that acts like K', () => {
     expect(reduce(apply(convertLambda(konst), S, K))).to.deep.equal(S)
   })
 
-  it('should convert λx y -> y x to something that acts like T', () => {
+  it('should convert λx.λy.y x to something that acts like T', () => {
     expect(reduce(apply(convertLambda(flip), S, K))).to.deep.equal(nt(K, S))
   })
 })

@@ -3,6 +3,7 @@ import { S, K, I } from '../lib/terminal'
 import { reduce } from '../lib/evaluator'
 import { apply } from '../lib/expression'
 import { nt } from '../lib/nonterminal'
+import { mkVar } from '../lib/lambda'
 
 import { expect } from 'chai'
 import { describe, it } from 'mocha'
@@ -12,11 +13,6 @@ describe('Lambda conversion', () => {
     kind: 'lambda-abs',
     name,
     body
-  })
-
-  const mkVar = (name: string): Lambda => ({
-    kind: 'lambda-var',
-    name
   })
 
   const id = mkAbs('x', mkVar('x'))

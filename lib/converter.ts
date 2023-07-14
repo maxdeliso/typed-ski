@@ -2,33 +2,29 @@ import { NonTerminal, nt } from './nonterminal'
 import { S, K, I, Terminal } from './terminal'
 import { Expression } from './expression'
 import { B, C } from './combinators'
+import { LambdaVar } from './lambda'
 
-type LambdaVar = {
-    kind: 'lambda-var',
-    name: string
+type LambdaAbsMixed = {
+  kind: 'lambda-abs',
+  name: string,
+  // eslint-disable-next-line no-use-before-define
+  body: LambdaMixed
 }
 
-type LambdaAbs = {
-    kind: 'lambda-abs',
-    name: string,
-    // eslint-disable-next-line no-use-before-define
-    body: LambdaMixed
-}
-
-export type LambdaMixed
+type LambdaMixed
   = Terminal
   | LambdaVar
-  | LambdaAbs
+  | LambdaAbsMixed
   | NonTerminal<LambdaMixed>
 
 export type Lambda
   = LambdaVar
-  | LambdaAbs
+  | LambdaAbsMixed
   | NonTerminal<Lambda>
 
 export class ConversionError extends Error { }
 
-const mkAbstract = (name: string, body: LambdaMixed): LambdaMixed => ({
+const mkAbstractMixed = (name: string, body: LambdaMixed): LambdaMixed => ({
   kind: 'lambda-abs',
   name,
   body
@@ -81,10 +77,10 @@ const convert = (lm: LambdaMixed): LambdaMixed => {
           if (free(x, E)) {
             // Rule 5. T[λx.λy.E] ⇒ T[λx.T[λy.E]]
             return convert(
-              mkAbstract(
+              mkAbstractMixed(
                 x,
                 convert(
-                  mkAbstract(y, E)
+                  mkAbstractMixed(y, E)
                 )
               )
             )
@@ -101,20 +97,20 @@ const convert = (lm: LambdaMixed): LambdaMixed => {
           if (free(x, E1) && free(x, E2)) {
             // Rule 6. T[λx.(E₁ E₂)] ⇒ (S T[λx.E₁] T[λx.E₂])
             return nt(
-              nt(S, convert(mkAbstract(x, E1))),
-              convert(mkAbstract(x, E2))
+              nt(S, convert(mkAbstractMixed(x, E1))),
+              convert(mkAbstractMixed(x, E2))
             )
           } else if (free(x, E1) && !free(x, E2)) {
             // Rule 7. T[λx.(E₁ E₂)] ⇒ (C T[λx.E₁] T[E₂])
             return nt(
-              nt(C, convert(mkAbstract(x, E1))),
+              nt(C, convert(mkAbstractMixed(x, E1))),
               convert(E2)
             )
           } else if (!free(x, E1) && free(x, E2)) {
             // Rule 8. T[λx.(E₁ E₂)] ⇒ (B T[E₁] T[λx.E₂])
             return nt(
               nt(B, convert(E1)),
-              convert(mkAbstract(x, E2))
+              convert(mkAbstractMixed(x, E2))
             )
           } else {
             throw new ConversionError('x not free in E1 or E2')

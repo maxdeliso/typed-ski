@@ -1,6 +1,6 @@
 import { LambdaVar } from './lambda'
 import { NonTerminal } from './nonterminal'
-import { Type, arrow, typesEqual } from './types'
+import { Type, arrow, prettyPrintTy, typesEqual } from './types'
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -106,5 +106,42 @@ export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): Type => {
 
       return gives
     }
+  }
+}
+
+export const prettyPrintTypedExpr = (expr: TypedLambda): string => {
+  switch (expr.kind) {
+    case 'lambda-var': {
+      return expr.name
+    }
+    case 'typed-lambda-abstraction': {
+      return 'λ' +
+        expr.varName +
+        ':' +
+        prettyPrintTy(expr.ty) +
+        '.' +
+        prettyPrintTypedExpr(expr.body)
+    }
+    case 'non-terminal': {
+      return '(' +
+        prettyPrintTypedExpr(expr.lft) +
+        prettyPrintTypedExpr(expr.rgt) +
+        ')'
+    }
+  }
+}
+
+export const typedTermsEq = (a: TypedLambda, b: TypedLambda): boolean => {
+  if (a.kind === 'lambda-var' && b.kind === 'lambda-var') {
+    return a.name === b.name
+  } else if (a.kind === 'typed-lambda-abstraction' &&
+             b.kind === 'typed-lambda-abstraction') {
+    return typesEqual(a.ty, b.ty) &&
+      a.varName === b.varName &&
+      typedTermsEq(a.body, b.body)
+  } else if (a.kind === 'non-terminal' && b.kind === 'non-terminal') {
+    return typedTermsEq(a.lft, b.lft) && typedTermsEq(a.rgt, b.rgt)
+  } else {
+    return false
   }
 }

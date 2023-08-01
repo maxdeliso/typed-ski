@@ -12,7 +12,6 @@ describe('the type checker', () => {
     const typedI = mkTypedAbs('x', mkTypeVar('a'), mkVar('x'))
     const typeofI = typecheck(typedI)
     const expectedTy = arrow(mkTypeVar('a'), mkTypeVar('a'))
-
     expect(typesEqual(typeofI, expectedTy)).to.equal(true)
   })
 

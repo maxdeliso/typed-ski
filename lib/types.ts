@@ -24,13 +24,6 @@ export const arrows = (...tys: Type[]): Type => tys.reduceRight(
   (acc, ty) => nt<Type>(ty, acc)
 )
 
-export const mono = (ty: Type): boolean => {
-  switch (ty.kind) {
-    case 'type-var': return true
-    case 'non-terminal': return false
-  }
-}
-
 export const typesEqual = (a: Type, b: Type): boolean => {
   if (a.kind === 'type-var' && b.kind === 'type-var') {
     return a.typeName === b.typeName
@@ -38,5 +31,13 @@ export const typesEqual = (a: Type, b: Type): boolean => {
     return typesEqual(a.lft, b.lft) && typesEqual(a.rgt, b.rgt)
   } else {
     return false
+  }
+}
+
+export const prettyPrintTy = (ty: Type): string => {
+  if (ty.kind === 'type-var') {
+    return ty.typeName
+  } else {
+    return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`
   }
 }

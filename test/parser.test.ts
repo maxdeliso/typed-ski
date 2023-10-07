@@ -33,6 +33,10 @@ describe('parse', () => {
     assertPrintedParsedPair(parsedISK, expectedISK)
   })
 
+  it('should fail to parse an unrecognized literal', () => {
+    expect(() => parse('(Q')).to.throw(ParseError, /unrecognized/)
+  })
+
   it(`should parse ${secondLiteral} and variations`, () => {
     const expected =
       nt<Expression>(

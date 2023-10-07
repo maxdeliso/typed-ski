@@ -2,11 +2,11 @@ name: Node.js CI
 on: [push]
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        node-version: ["18.12.1"]
+        node-version: ["20.8.0"]
 
     steps:
       - uses: actions/checkout@v2

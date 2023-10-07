@@ -29,12 +29,8 @@ export function parse (input: string): Expression {
       if (parenLevel < 0) {
         throw new ParseError('mismatched parens! (early)')
       }
-    } else if (
-      ch === TerminalSymbol.S ||
-      ch === TerminalSymbol.K ||
-      ch === TerminalSymbol.I
-    ) {
-      app.appendSymbol(term(ch))
+    } else if (Object.values(TerminalSymbol).includes(ch as TerminalSymbol)) {
+      app.appendSymbol(term(ch as TerminalSymbol))
     } else {
       throw new ParseError('unrecognized char: ' + ch)
     }

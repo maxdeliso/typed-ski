@@ -1,6 +1,6 @@
 # SKI in TS
 
-An implementation of a parser, evaluator, printer, and visualizer for the [SKI](https://en.wikipedia.org/wiki/SKI_combinator_calculus) combinators in [Typescript](https://www.typescriptlang.org/).
+An implementation of a parser, evaluator, printer, and visualizer for the [SKI](https://en.wikipedia.org/wiki/SKI_combinator_calculus) combinators in [TypeScript](https://www.typescriptlang.org/).
 
 ## Running
 
@@ -13,9 +13,9 @@ npx ski
 
 ## Books
 
-* [Combinators: A Centennial View, Stephen Wolfram](https://www.amazon.com/dp/1579550436/ref=nosim?tag=YOURASSOCIATEID)
-* [To Mock a Mockingbird, Raymond Smullyan](https://www.amazon.com/dp/0192801422/ref=nosim?tag=YOURASSOCIATEID)
-* [Combinatory Logic Volume I, Haskell Brooks Curry & Robert Feys](https://www.amazon.com/dp/B0041N5RDC/ref=nosim?tag=YOURASSOCIATEID)
+* [Combinators: A Centennial View, Stephen Wolfram](https://www.amazon.com/dp/1579550436)
+* [To Mock a Mockingbird, Raymond Smullyan](https://www.amazon.com/dp/0192801422)
+* [Combinatory Logic Volume I, Haskell Brooks Curry & Robert Feys](https://www.amazon.com/dp/B0041N5RDC)
 
 ## Papers
 

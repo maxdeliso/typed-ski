@@ -4,13 +4,13 @@ import { parse, ParseError, parseType, parseTypedLambda } from '../lib/parser'
 import { S, K, I } from '../lib/terminal'
 import {
   mkTypedAbs,
-  typedTermsEq
+  typedTermsLitEq
 } from '../lib/typedLambda'
 import { mkVar } from '../lib/lambda'
 import {
   arrow,
   mkTypeVar,
-  typesEqual,
+  typesLitEq,
   arrows
 } from '../lib/types'
 
@@ -89,7 +89,7 @@ describe('parse', () => {
     const parsed = nt(mkVar('x'), mkVar('y'))
 
     expect(parsedLit).to.equal(parseInput)
-    expect(typedTermsEq(term, parsed)).to.equal(true)
+    expect(typedTermsLitEq(term, parsed)).to.equal(true)
   })
 
   it('parses juxstaposed terms', () => {
@@ -99,7 +99,7 @@ describe('parse', () => {
     const parsed = nt(nt(mkVar('x'), mkVar('z')), nt(mkVar('y'), mkVar('z')))
 
     expect(parsedLit).to.equal(parseInput)
-    expect(typedTermsEq(term, parsed)).to.equal(true)
+    expect(typedTermsLitEq(term, parsed)).to.equal(true)
   })
 
   it('parses the type a→b', () => {
@@ -107,7 +107,7 @@ describe('parse', () => {
     const [typeLit, type] = parseType(parseInput)
 
     expect(typeLit).to.equal(parseInput)
-    expect(typesEqual(type, arrow(mkTypeVar('a'), mkTypeVar('b'))))
+    expect(typesLitEq(type, arrow(mkTypeVar('a'), mkTypeVar('b'))))
   })
 
   it('parses the type a→b→c', () => {
@@ -120,7 +120,7 @@ describe('parse', () => {
     )
 
     expect(typeLit).to.equal(parseInput)
-    expect(typesEqual(type, expectedTy)).to.equal(true)
+    expect(typesLitEq(type, expectedTy)).to.equal(true)
   })
 
   it('parses the type (a→b)→a→b', () => {
@@ -133,7 +133,7 @@ describe('parse', () => {
         arrow(mkTypeVar('a'), mkTypeVar('b')))
 
     expect(typeLit).to.equal(parseInput)
-    expect(typesEqual(type, expectedTy)).to.equal(true)
+    expect(typesLitEq(type, expectedTy)).to.equal(true)
   })
 
   it('parses the type a→b→a→b', () => {
@@ -148,7 +148,7 @@ describe('parse', () => {
         mkTypeVar('b'))
 
     expect(typeLit).to.equal(parseInput)
-    expect(typesEqual(type, expectedTy)).to.equal(true)
+    expect(typesLitEq(type, expectedTy)).to.equal(true)
   })
 
   it('parses λx:a.xx', () => {
@@ -161,22 +161,22 @@ describe('parse', () => {
         nt(mkVar('x'), mkVar('x')))
 
     expect(inputLit).to.equal(parseInput)
-    expect(typedTermsEq(term, parsed)).to.equal(true)
+    expect(typedTermsLitEq(term, parsed)).to.equal(true)
   })
 
   it('parses a typed lambda expression corresponding to K', () => {
-    const parseInput = 'λx:a→b.λy:a.xy'
+    const parseInput = 'λx:a.λy:b.x'
     const [inputLit, term] = parseTypedLambda(parseInput)
 
     const parsed =
       mkTypedAbs('x',
-        arrow(mkTypeVar('a'), mkTypeVar('b')),
+        mkTypeVar('a'),
         mkTypedAbs('y',
-          mkTypeVar('a'),
-          nt(mkVar('x'), mkVar('y'))))
+          mkTypeVar('b'),
+          mkVar('x')))
 
     expect(inputLit).to.equal(parseInput)
-    expect(typedTermsEq(term, parsed)).to.equal(true)
+    expect(typedTermsLitEq(term, parsed)).to.equal(true)
   })
 
   it('parses a typed lambda expression corresponding to S', () => {
@@ -192,7 +192,7 @@ describe('parse', () => {
             nt(nt(mkVar('x'), mkVar('z')), nt(mkVar('y'), mkVar('z'))))))
 
     expect(parsedLit).to.equal(parseInput)
-    expect(typedTermsEq(term, parsed)).to.equal(true)
+    expect(typedTermsLitEq(term, parsed)).to.equal(true)
   })
 
   it('fails to parse missing variable', () => {

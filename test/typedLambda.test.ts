@@ -1,18 +1,18 @@
 import { mkVar } from '../lib/lambda'
 import { nt } from '../lib/nonterminal'
 import { mkTypedAbs, typecheck } from '../lib/typedLambda'
-import { arrow, arrows, mkTypeVar, typesEqual } from '../lib/types'
+import { arrow, arrows, mkTypeVar, typesLitEq } from '../lib/types'
 
 import { expect } from 'chai'
 import { describe, it } from 'mocha'
 
-describe('the type checker', () => {
+describe('type checking', () => {
   it('typechecks the I combinator', () => {
     // λx : a . x ≡ I : a -> a
     const typedI = mkTypedAbs('x', mkTypeVar('a'), mkVar('x'))
     const typeofI = typecheck(typedI)
     const expectedTy = arrow(mkTypeVar('a'), mkTypeVar('a'))
-    expect(typesEqual(typeofI, expectedTy)).to.equal(true)
+    expect(typesLitEq(typeofI, expectedTy)).to.equal(true)
   })
 
   it('typechecks the K combinator', () => {
@@ -26,7 +26,7 @@ describe('the type checker', () => {
     const typeofK = typecheck(typedK)
     const expectedTy = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('a'))
 
-    expect(typesEqual(typeofK, expectedTy)).to.equal(true)
+    expect(typesLitEq(typeofK, expectedTy)).to.equal(true)
   })
 
   it('typechecks the S combinator', () => {
@@ -59,6 +59,6 @@ describe('the type checker', () => {
 
     const typeofS = typecheck(typedS)
 
-    expect(typesEqual(typeofS, expectedTy)).to.equal(true)
+    expect(typesLitEq(typeofS, expectedTy)).to.equal(true)
   })
 })

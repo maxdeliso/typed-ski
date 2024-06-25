@@ -1,6 +1,4 @@
 {
-  "extension": [
-    "ts"
-  ],
-  "require": "ts-node/register"
+  "$schema": "https://json.schemastore.org/mocharc.json",
+  "require": "tsx"
 }

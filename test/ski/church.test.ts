@@ -1,29 +1,28 @@
-import { apply } from '../lib/expression'
-import { S, K, I } from '../lib/terminal'
-import { reduce } from '../lib/evaluator'
-import { UnChurch, ChurchN, ChurchB } from '../lib/church'
+import { apply } from '../../lib/ski/expression'
+import { S, K, I } from '../../lib/ski/terminal'
+import { reduceSKI } from '../../lib/evaluator/skiEvaluator'
+import { UnChurch, ChurchN, ChurchB } from '../../lib/ski/church'
 import {
   Fst, Snd, Car, Cdr,
   Succ,
   V, B,
   False, Zero, True,
   Plus,
-  F
-} from '../lib/combinators'
+  F,
+  pred
+} from '../../lib/consts/combinators'
 
 import { describe, it } from 'mocha'
 import { expect } from 'chai'
-import { parse } from '../lib/parser'
+import { parseSKI } from '../../lib/parser/ski'
 
-const UpTo = (n: number): Array<number> => {
+export const UpTo = (n: number): Array<number> => {
   const result = []
   for (let i = 0; i < n; i++) {
     result.push(i)
   }
   return result
 }
-
-const DupePair = apply(parse('SS(SK)'), V)
 
 /*
  * This test verifies that numeral systems and boolean logic can be encoded
@@ -32,13 +31,15 @@ const DupePair = apply(parse('SS(SK)'), V)
  */
 
 describe('Church encodings', () => {
+  const DupePair = apply(parseSKI('SS(SK)'), V)
+
   it('reduces 0 + 1 to 1 ', () => {
     expect(UnChurch(apply(Succ, ChurchN(0))))
       .to.deep.equal(1)
   })
 
   it('reduces 1 + 1 to 2', () => {
-    expect(UnChurch(reduce(apply(Succ, ChurchN(1)))))
+    expect(UnChurch(reduceSKI(apply(Succ, ChurchN(1)))))
       .to.deep.equal(2)
   })
 
@@ -57,7 +58,7 @@ describe('Church encodings', () => {
          * (AND)FT = F?T:F = F
          * (AND)FF = F?F:F = F
          */
-        expect(reduce(apply(ChurchB(p), ChurchB(q), ChurchB(p))))
+        expect(reduceSKI(apply(ChurchB(p), ChurchB(q), ChurchB(p))))
           .to.deep.equal(conj)
 
         /*
@@ -68,30 +69,30 @@ describe('Church encodings', () => {
          * (OR)FT = F?F:T = T
          * (OR)FF = F?F:F = F
          */
-        expect(reduce(apply(ChurchB(p), ChurchB(p), ChurchB(q))))
+        expect(reduceSKI(apply(ChurchB(p), ChurchB(p), ChurchB(q))))
           .to.deep.equal(dis)
       })
     })
   })
 
   it('reduces pairs', () => {
-    expect(reduce(apply(V, ChurchN(0), ChurchN(1), Fst)))
+    expect(reduceSKI(apply(V, ChurchN(0), ChurchN(1), Fst)))
       .to.deep.equal(ChurchN(0))
 
-    expect(reduce(apply(V, ChurchN(0), ChurchN(1), Snd)))
+    expect(reduceSKI(apply(V, ChurchN(0), ChurchN(1), Snd)))
       .to.deep.equal(ChurchN(1))
 
-    expect(reduce(
+    expect(reduceSKI(
       apply(Car, apply(V, ChurchN(0), ChurchN(1)))
     )).to.deep.equal(ChurchN(0))
 
-    expect(reduce(
+    expect(reduceSKI(
       apply(Cdr, apply(V, ChurchN(0), ChurchN(1)))
     )).to.deep.equal(ChurchN(1))
 
     expect(
-      reduce(apply(DupePair, ChurchN(2)))
-    ).to.deep.equal(reduce(apply(V, ChurchN(2), ChurchN(2))))
+      reduceSKI(apply(DupePair, ChurchN(2)))
+    ).to.deep.equal(reduceSKI(apply(V, ChurchN(2), ChurchN(2))))
   })
 
   /*
@@ -100,23 +101,23 @@ describe('Church encodings', () => {
   const IsZero = apply(F, True, apply(K, False))
 
   it('isZero tests for whether a numeral is zero', () => {
-    expect(reduce(
+    expect(reduceSKI(
       apply(ChurchN(0), apply(K, False), True)
     )).to.deep.equal(ChurchB(true))
 
-    expect(reduce(
+    expect(reduceSKI(
       apply(ChurchN(1), apply(K, False), True)
     )).to.deep.equal(ChurchB(false))
 
-    expect(reduce(
+    expect(reduceSKI(
       apply(ChurchN(2), apply(K, False), True)
     )).to.deep.equal(ChurchB(false))
 
-    expect(reduce(
+    expect(reduceSKI(
       apply(IsZero, ChurchN(0))
     )).to.deep.equal(ChurchB(true))
 
-    expect(reduce(
+    expect(reduceSKI(
       apply(IsZero, ChurchN(1))
     )).to.deep.equal(ChurchB(false))
   })
@@ -126,17 +127,17 @@ describe('Church encodings', () => {
       UpTo(8).forEach(n => {
         // λmn.(m succ)n, or apply m +1s to n
         expect(UnChurch(
-          reduce(apply(ChurchN(m), Succ, ChurchN(n)))
+          reduceSKI(apply(ChurchN(m), Succ, ChurchN(n)))
         )).to.equal(m + n)
 
         // λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
         expect(UnChurch(
-          reduce(apply(Plus, ChurchN(m), ChurchN(n)))
+          reduceSKI(apply(Plus, ChurchN(m), ChurchN(n)))
         )).to.equal(m + n)
 
         // λmn.m(n(succ)), or apply m +ns to 0
         expect(UnChurch(
-          reduce(apply(ChurchN(m), apply(ChurchN(n), Succ), Zero))
+          reduceSKI(apply(ChurchN(m), apply(ChurchN(n), Succ), Zero))
         )).to.equal(m * n)
 
         /*
@@ -145,7 +146,7 @@ describe('Church encodings', () => {
          * in the Church numerals simultaneously.
          */
         expect(UnChurch(
-          reduce(apply(B, ChurchN(m), ChurchN(n), Succ, Zero))
+          reduceSKI(apply(B, ChurchN(m), ChurchN(n), Succ, Zero))
         )).to.equal(m * n)
       })
     })
@@ -170,13 +171,19 @@ describe('Church encodings', () => {
 
   it('computes the predecessor', () => {
     UpTo(8).forEach(m => {
+      const expected = Math.max(m - 1, 0) // pred of 0 is 0
+
       expect(
         UnChurch(
-          reduce(
+          reduceSKI(
             apply(Cdr, apply(ChurchN(m), pairShiftSucc, pairZeroZero))
           )
         )
-      ).to.equal(Math.max(m - 1, 0)) // in Church numerals, pred of 0 is 0
+      ).to.equal(expected)
+
+      expect(
+        UnChurch(reduceSKI(apply(pred, ChurchN(m))))
+      ).to.deep.equal(expected)
     })
   })
 })

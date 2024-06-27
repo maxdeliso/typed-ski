@@ -1,8 +1,8 @@
-import { Expression } from './expression'
-import { nt } from './nonterminal'
-import { term, TerminalSymbol } from './terminal'
+import { SKIExpression } from './expression'
+import { nt } from '../nonterminal'
+import { term, SKITerminalSymbol } from './terminal'
 
-export type SymbolHeap = Array<TerminalSymbol | undefined>;
+export type SymbolHeap = Array<SKITerminalSymbol | undefined>;
 
 export type BinaryHeap = Uint8Array
 
@@ -22,9 +22,9 @@ function rgtIndex (heapIdx: number): number {
  * @param exp an expression.
  * @returns a symbol heap.
  */
-export function heapify (exp: Expression): SymbolHeap {
+export function heapify (exp: SKIExpression): SymbolHeap {
   const heapLength = maxHeapIndex(exp) + 1
-  const result = new Array<TerminalSymbol | undefined>(heapLength)
+  const result = new Array<SKITerminalSymbol | undefined>(heapLength)
   const indexes = [rootIndex]
   const nodes = [exp]
 
@@ -50,11 +50,11 @@ export function heapify (exp: Expression): SymbolHeap {
   return result
 }
 
-export function maxHeapIndex (exp: Expression): number {
+export function maxHeapIndex (exp: SKIExpression): number {
   return maxHeapIndexInternal(exp, 0)
 }
 
-function maxHeapIndexInternal (exp: Expression, acc: number): number {
+function maxHeapIndexInternal (exp: SKIExpression, acc: number): number {
   if (exp.kind === 'non-terminal') {
     return Math.max(
       maxHeapIndexInternal(exp.lft, lftIndex(acc)),
@@ -65,7 +65,7 @@ function maxHeapIndexInternal (exp: Expression, acc: number): number {
   }
 }
 
-export function unheapify (heapSyms: SymbolHeap): Expression {
+export function unheapify (heapSyms: SymbolHeap): SKIExpression {
   if (heapSyms.length === 0) {
     throw new Error('expression must be non-empty')
   }
@@ -73,7 +73,7 @@ export function unheapify (heapSyms: SymbolHeap): Expression {
   return unheapifyFrom(heapSyms, 0)
 }
 
-function unheapifyFrom (heapSyms: SymbolHeap, heapIdx: number): Expression {
+function unheapifyFrom (heapSyms: SymbolHeap, heapIdx: number): SKIExpression {
   if (heapIdx >= heapSyms.length) {
     throw new Error(`heap index exceeded: ${heapIdx}. input is corrupt.`)
   }
@@ -101,14 +101,14 @@ function unheapifyFrom (heapSyms: SymbolHeap, heapIdx: number): Expression {
  *
  * NOTE: here ∅ represents the empty set, or lack of a value.
  */
-function packSymbol (sym: TerminalSymbol | undefined): number {
+function packSymbol (sym: SKITerminalSymbol | undefined): number {
   if (sym === undefined) {
     return 0b00
-  } else if (sym === TerminalSymbol.S) {
+  } else if (sym === SKITerminalSymbol.S) {
     return 0b01
-  } else if (sym === TerminalSymbol.K) {
+  } else if (sym === SKITerminalSymbol.K) {
     return 0b10
-  } else if (sym === TerminalSymbol.I) {
+  } else if (sym === SKITerminalSymbol.I) {
     return 0b11
   } else {
     throw new Error('Impossible.')
@@ -123,15 +123,15 @@ function packSymbol (sym: TerminalSymbol | undefined): number {
  *
  * @see packSymbol
  */
-function unpackSymbol (n: number): TerminalSymbol | undefined {
+function unpackSymbol (n: number): SKITerminalSymbol | undefined {
   if (n === 0b00) {
     return undefined
   } else if (n === 0b01) {
-    return TerminalSymbol.S
+    return SKITerminalSymbol.S
   } else if (n === 0b10) {
-    return TerminalSymbol.K
+    return SKITerminalSymbol.K
   } else if (n === 0b11) {
-    return TerminalSymbol.I
+    return SKITerminalSymbol.I
   } else {
     throw new Error(`The number ${n} does not correspond to a symbol in SKI.`)
   }
@@ -211,7 +211,7 @@ export function unpackBinaryHeap (inputBytes: BinaryHeap): SymbolHeap {
  * @param exp the input expression.
  * @returns a binary heap packed result.
  */
-export function packHeap (exp: Expression): BinaryHeap {
+export function packHeap (exp: SKIExpression): BinaryHeap {
   return packSymbolHeap(heapify(exp))
 }
 
@@ -220,6 +220,6 @@ export function packHeap (exp: Expression): BinaryHeap {
  * @param heapBytes the input binary heap.
  * @returns an expression.
  */
-export function unpackHeap (heapBytes: BinaryHeap): Expression {
+export function unpackHeap (heapBytes: BinaryHeap): SKIExpression {
   return unheapify(unpackBinaryHeap(heapBytes))
 }

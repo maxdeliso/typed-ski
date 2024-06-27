@@ -1,4 +1,4 @@
-import { ParseError } from './parser'
+import { ParseError } from './parseError'
 
 export class RecursiveDescentBuffer {
   buf!: string
@@ -22,6 +22,14 @@ export class RecursiveDescentBuffer {
   consumeN (n: number): void {
     if (n <= 0) throw new ParseError('n must be positive')
     this.idx += n
+  }
+
+  matchLP (): void {
+    this.matchCh('(')
+  }
+
+  matchRP (): void {
+    this.matchCh(')')
   }
 
   matchCh (ch: string): void {
@@ -51,7 +59,7 @@ export class RecursiveDescentBuffer {
     return next
   }
 
-  peel (): RecursiveDescentBuffer {
+  peelRemaining (): RecursiveDescentBuffer {
     return new RecursiveDescentBuffer(this.buf.slice(this.idx))
   }
 }

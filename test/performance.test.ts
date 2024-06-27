@@ -1,4 +1,4 @@
-import { compute } from '../lib/expression'
+import { compute } from '../lib/ski/expression'
 
 import { hrtime } from 'process'
 import { Readable } from 'stream'

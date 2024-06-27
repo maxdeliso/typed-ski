@@ -1,7 +1,7 @@
-import { S, K, I } from '../lib/terminal'
-import { nt } from '../lib/nonterminal'
-import { Appendable } from '../lib/appendable'
-import { Expression } from '../lib'
+import { S, K, I } from '../../lib/ski/terminal'
+import { nt } from '../../lib/nonterminal'
+import { Appendable } from '../../lib/parser/appendable'
+import { SKIExpression } from '../../lib'
 
 import { expect } from 'chai'
 
@@ -48,18 +48,18 @@ describe('appendable expressions', () => {
     app.appendSymbol(K)
     app.appendSymbol(I)
     expect(app.flatten()).to.deep.equal(
-      nt<Expression>(
-        nt<Expression>(
-          nt<Expression>(
+      nt<SKIExpression>(
+        nt<SKIExpression>(
+          nt<SKIExpression>(
             S,
             K
           ),
-          nt<Expression>(
+          nt<SKIExpression>(
             I,
             S
           )
         ),
-        nt<Expression>(
+        nt<SKIExpression>(
           K,
           I
         )
@@ -79,18 +79,18 @@ describe('appendable expressions', () => {
     app.appendSymbol(K)
     app.appendSymbol(I)
     expect(app.flatten()).to.deep.equal(
-      nt<Expression>(
-        nt<Expression>(
-          nt<Expression>(
+      nt<SKIExpression>(
+        nt<SKIExpression>(
+          nt<SKIExpression>(
             S,
             K
           ),
-          nt<Expression>(
+          nt<SKIExpression>(
             I,
             S
           )
         ),
-        nt<Expression>(
+        nt<SKIExpression>(
           K,
           I
         )

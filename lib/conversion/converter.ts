@@ -1,8 +1,9 @@
-import { NonTerminal, nt } from './nonterminal'
-import { S, K, I, Terminal } from './terminal'
-import { Expression } from './expression'
-import { B, C } from './combinators'
-import { LambdaVar } from './lambda'
+import { NonTerminal, nt } from '../nonterminal'
+import { S, K, I, SKITerminal } from '../ski/terminal'
+import { SKIExpression } from '../ski/expression'
+import { B, C } from '../consts/combinators'
+import { LambdaVar } from '../lambda/lambda'
+import { ConversionError } from './conversionError'
 
 type LambdaAbsMixed = {
   kind: 'lambda-abs',
@@ -12,7 +13,7 @@ type LambdaAbsMixed = {
 }
 
 type LambdaMixed
-  = Terminal
+  = SKITerminal
   | LambdaVar
   | LambdaAbsMixed
   | NonTerminal<LambdaMixed>
@@ -22,15 +23,13 @@ export type Lambda
   | LambdaAbsMixed
   | NonTerminal<Lambda>
 
-export class ConversionError extends Error { }
-
 const mkAbstractMixed = (name: string, body: LambdaMixed): LambdaMixed => ({
   kind: 'lambda-abs',
   name,
   body
 })
 
-export const convertLambda = (lm: Lambda): Expression => {
+export const convertLambda = (lm: Lambda): SKIExpression => {
   const mixed = convert(lm)
   return assertCombinator(mixed)
 }
@@ -120,7 +119,7 @@ const convert = (lm: LambdaMixed): LambdaMixed => {
   }
 }
 
-const assertCombinator = (lm: LambdaMixed): Expression => {
+const assertCombinator = (lm: LambdaMixed): SKIExpression => {
   switch (lm.kind) {
     case 'terminal':
       return lm
@@ -130,7 +129,9 @@ const assertCombinator = (lm: LambdaMixed): Expression => {
         throw new ConversionError('lambda abstraction detected in nt')
       }
 
-      return nt<Expression>(assertCombinator(lm.lft), assertCombinator(lm.rgt))
+      return nt<SKIExpression>(
+        assertCombinator(lm.lft), assertCombinator(lm.rgt)
+      )
     default:
       throw new ConversionError('lambda abstraction detected at top')
   }

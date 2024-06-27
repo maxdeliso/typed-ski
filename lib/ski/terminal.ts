@@ -1,30 +1,30 @@
 import { RandomSeed } from 'random-seed'
 
-export enum TerminalSymbol {
+export enum SKITerminalSymbol {
   S = 'S',
   K = 'K',
   I = 'I'
 }
 
-export interface Terminal {
+export interface SKITerminal {
   kind: 'terminal';
-  sym: TerminalSymbol;
+  sym: SKITerminalSymbol;
 }
 
-export const term = (sym: TerminalSymbol): Terminal => ({
+export const term = (sym: SKITerminalSymbol): SKITerminal => ({
   kind: 'terminal',
   sym
 })
 
-export const S = term(TerminalSymbol.S)
-export const K = term(TerminalSymbol.K)
-export const I = term(TerminalSymbol.I)
+export const S = term(SKITerminalSymbol.S)
+export const K = term(SKITerminalSymbol.K)
+export const I = term(SKITerminalSymbol.I)
 
 /**
  * @param rs the random seed to use.
  * @returns a randomly selected terminal symbol.
  */
-export function generate (rs: RandomSeed): Terminal {
+export function generate (rs: RandomSeed): SKITerminal {
   const die = rs.intBetween(1, 3)
 
   if (die === 1) {

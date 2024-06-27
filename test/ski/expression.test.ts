@@ -1,12 +1,17 @@
-import { Expression, generate, prettyPrint, size } from '../lib/expression'
-import { nt } from '../lib/nonterminal'
-import { K, S } from '../lib/terminal'
+import {
+  SKIExpression,
+  generate,
+  prettyPrint,
+  size
+} from '../../lib/ski/expression'
+import { nt } from '../../lib/nonterminal'
+import { K, S } from '../../lib/ski/terminal'
 
 import { assert } from 'chai'
 import { create, RandomSeed } from 'random-seed'
 
 describe('prettyPrint', () => {
-  const expr = nt<Expression>(nt<Expression>(S, K), K)
+  const expr = nt<SKIExpression>(nt<SKIExpression>(S, K), K)
   const printedExpr = '((SK)K)'
 
   it('pretty prints a valid expression',

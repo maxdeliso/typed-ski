@@ -1,5 +1,5 @@
-import { LambdaVar } from './lambda'
-import { NonTerminal } from './nonterminal'
+import { LambdaVar } from '../lambda/lambda'
+import { NonTerminal } from '../nonterminal'
 import {
   Type,
   arrow,
@@ -46,8 +46,6 @@ export const mkTypedAbs = (
   ty,
   body
 })
-
-export class TypeError extends Error { }
 
 /**
  * Γ, or capital Gamma, represents the set of mappings from names to types.

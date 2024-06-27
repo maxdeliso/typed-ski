@@ -4,24 +4,24 @@ import * as terminalKit from 'terminal-kit'
 import { hrtime } from 'process'
 import { create } from 'random-seed'
 import { Terminal } from 'terminal-kit'
-import { Expression, generate } from '../lib/expression'
-import { TerminalSymbol } from '../lib/terminal'
-import { stepOnce } from '../lib'
+import { SKIExpression, generate } from '../lib/ski/expression'
+import { SKITerminalSymbol } from '../lib/ski/terminal'
+import { stepOnceSKI } from '../lib'
 
-function colorizeSymbol (sym: TerminalSymbol): string {
+function colorizeSymbol (sym: SKITerminalSymbol): string {
   switch (sym) {
-    case TerminalSymbol.S:
+    case SKITerminalSymbol.S:
       return ' ^[red]S^ '
-    case TerminalSymbol.K:
+    case SKITerminalSymbol.K:
       return ' ^[green]K^ '
-    case TerminalSymbol.I:
+    case SKITerminalSymbol.I:
       return ' ^[blue]I^ '
     default:
       return '?'
   }
 }
 
-function colorizeExpression (expr: Expression): string {
+function colorizeExpression (expr: SKIExpression): string {
   switch (expr.kind) {
     case 'terminal':
       return colorizeSymbol(expr.sym)
@@ -36,7 +36,7 @@ function colorizeExpression (expr: Expression): string {
   }
 }
 
-function formatted (expr: Expression): string {
+function formatted (expr: SKIExpression): string {
   return '> ' + colorizeExpression(expr) + '\n'
 }
 
@@ -63,7 +63,7 @@ function runTUI (): number {
         term.grabInput(false)
         break
       case 's': {
-        const stepResult = stepOnce(expression)
+        const stepResult = stepOnceSKI(expression)
         expression = stepResult.expr
         term(formatted(expression))
         break
@@ -73,7 +73,7 @@ function runTUI (): number {
         let iterations = 0
 
         while (loop && iterations < MAX_ITER) {
-          const stepResult = stepOnce(expression)
+          const stepResult = stepOnceSKI(expression)
           expression = stepResult.expr
           if (stepResult.altered) {
             term(formatted(expression))

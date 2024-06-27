@@ -1,13 +1,13 @@
-import { Expression, prettyPrint } from './expression'
-import { nt } from './nonterminal'
-import { TerminalSymbol } from './terminal'
+import { SKIExpression, prettyPrint } from '../ski/expression'
+import { nt } from '../nonterminal'
+import { SKITerminalSymbol } from '../ski/terminal'
 
 /**
   * the shape of an evaluation result.
   * altered is set if the evaluation step changed the input.
   * expr is the evaluation output.
   */
-export interface Result<E> {
+export interface SKIResult<E> {
   altered: boolean;
   expr: E;
 }
@@ -15,7 +15,7 @@ export interface Result<E> {
 /**
  * a computation step; takes an expression and returns a result.
  */
-export type Step<E> = (expr: E) => Result<E>
+export type SKIStep<E> = (expr: E) => SKIResult<E>
 
 /**
  * the SKI combinator reduction function.
@@ -24,9 +24,9 @@ export type Step<E> = (expr: E) => Result<E>
  *
  * NOTE: this function is not guaranteed to terminate
  */
-export const stepMany: Step<Expression> =
-  (expr: Expression) => {
-    const result = stepOnce(expr)
+export const stepMany: SKIStep<SKIExpression> =
+  (expr: SKIExpression) => {
+    const result = stepOnceSKI(expr)
 
     if (result.altered) {
       return stepMany(result.expr)
@@ -35,11 +35,11 @@ export const stepMany: Step<Expression> =
     }
   }
 
-export const loggedStepMany: Step<Expression> =
-  (expr: Expression) => {
+export const loggedStepMany: SKIStep<SKIExpression> =
+  (expr: SKIExpression) => {
     console.log(prettyPrint(expr))
     console.log('->')
-    const result = stepOnce(expr)
+    const result = stepOnceSKI(expr)
 
     if (result.altered) {
       return loggedStepMany(result.expr)
@@ -53,7 +53,9 @@ export const loggedStepMany: Step<Expression> =
  * @param exp the input expression.
  * @returns the evaluation result.
  */
-export const reduce = (exp: Expression): Expression =>
+export const reduceSKI = (
+  exp: SKIExpression
+): SKIExpression =>
   stepMany(exp).expr
 
 /**
@@ -61,7 +63,9 @@ export const reduce = (exp: Expression): Expression =>
  * @param exp the input expression.
  * @returns the evaluation result.
  */
-export const loggedReduce = (exp: Expression): Expression =>
+export const loggedReduceSKI = (
+  exp: SKIExpression
+): SKIExpression =>
   loggedStepMany(exp).expr
 
 /**
@@ -69,17 +73,18 @@ export const loggedReduce = (exp: Expression): Expression =>
  * @param expr the input expression.
  * @returns the evaluation result after one step.
  */
-export const stepOnce: Step<Expression> =
-  (expr: Expression) => scanStep(expr, [stepOnceI, stepOnceK, stepOnceS])
+export const stepOnceSKI: SKIStep<SKIExpression> =
+  (expr: SKIExpression) =>
+    scanStep(expr, [stepOnceI, stepOnceK, stepOnceS])
 
-const stepOnceI: Step<Expression> =
-  (expr: Expression) => treeStep(expr, stepI)
+const stepOnceI: SKIStep<SKIExpression> =
+  (expr: SKIExpression) => treeStep(expr, stepI)
 
-const stepOnceK: Step<Expression> =
-  (expr: Expression) => treeStep(expr, stepK)
+const stepOnceK: SKIStep<SKIExpression> =
+  (expr: SKIExpression) => treeStep(expr, stepK)
 
-const stepOnceS: Step<Expression> =
-  (expr: Expression) => treeStep(expr, stepS)
+const stepOnceS: SKIStep<SKIExpression> =
+  (expr: SKIExpression) => treeStep(expr, stepS)
 
 /**
  * @param expr the expression to scan with steppers.
@@ -88,8 +93,11 @@ const stepOnceS: Step<Expression> =
  *
  * NOTE: this is an eagerly returning fold
  */
-const scanStep = (expr: Expression, steppers: Array<Step<Expression>>):
-  Result<Expression> => {
+const scanStep = (
+  expr: SKIExpression,
+  steppers: Array<SKIStep<SKIExpression>>
+):
+  SKIResult<SKIExpression> => {
   for (const step of steppers) {
     const result = step(expr)
 
@@ -114,8 +122,11 @@ const scanStep = (expr: Expression, steppers: Array<Step<Expression>>):
  * is the input and a singular function that processes an expression
  * and returns either nothing or some result, returning eagerly.
  */
-function treeStep (expr: Expression, step: Step<Expression>):
-  Result<Expression> {
+function treeStep (
+  expr: SKIExpression,
+  step: SKIStep<SKIExpression>
+):
+  SKIResult<SKIExpression> {
   switch (expr.kind) {
     case 'terminal':
       return ({
@@ -151,8 +162,11 @@ function treeStep (expr: Expression, step: Step<Expression>):
 
 type ExtractStep<E> = (expr: E) => E | false
 
-function extractStep (expr: Expression, extractStep: ExtractStep<Expression>):
-  Result<Expression> {
+function extractStep (
+  expr: SKIExpression,
+  extractStep: ExtractStep<SKIExpression>
+):
+  SKIResult<SKIExpression> {
   const extractionResult = extractStep(expr)
 
   if (extractionResult) {
@@ -166,12 +180,12 @@ function extractStep (expr: Expression, extractStep: ExtractStep<Expression>):
  * identity
  * Ix = x
  */
-const stepI: Step<Expression> = (expr: Expression) =>
+const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) =>
   extractStep(
-    expr, (expr: Expression) =>
+    expr, (expr: SKIExpression) =>
       expr.kind === 'non-terminal' &&
       expr.lft.kind === 'terminal' &&
-      expr.lft.sym === TerminalSymbol.I &&
+      expr.lft.sym === SKITerminalSymbol.I &&
       expr.rgt
   )
 
@@ -179,13 +193,13 @@ const stepI: Step<Expression> = (expr: Expression) =>
  * constant
  * Kxy = x
  */
-const stepK: Step<Expression> = (expr: Expression) =>
+const stepK: SKIStep<SKIExpression> = (expr: SKIExpression) =>
   extractStep(
-    expr, (expr: Expression) =>
+    expr, (expr: SKIExpression) =>
       expr.kind === 'non-terminal' &&
       expr.lft.kind === 'non-terminal' &&
       expr.lft.lft.kind === 'terminal' &&
-      expr.lft.lft.sym === TerminalSymbol.K &&
+      expr.lft.lft.sym === SKITerminalSymbol.K &&
       expr.lft.rgt
   )
 
@@ -193,15 +207,15 @@ const stepK: Step<Expression> = (expr: Expression) =>
  * fusion
  * Sxyz = xz(yz)
  */
-const stepS: Step<Expression> = (expr: Expression) =>
+const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) =>
   extractStep(
-    expr, (expr: Expression) => {
+    expr, (expr: SKIExpression) => {
       if (
         expr.kind === 'non-terminal' &&
         expr.lft.kind === 'non-terminal' &&
         expr.lft.lft.kind === 'non-terminal' &&
         expr.lft.lft.lft.kind === 'terminal' &&
-        expr.lft.lft.lft.sym === TerminalSymbol.S
+        expr.lft.lft.lft.sym === SKITerminalSymbol.S
       ) {
         const x = expr.lft.lft.rgt
         const y = expr.lft.rgt

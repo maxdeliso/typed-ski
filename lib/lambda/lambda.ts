@@ -1,4 +1,4 @@
-import { NonTerminal } from './nonterminal'
+import { NonTerminal, nt } from '../nonterminal'
 
 /**
  * This is a single term variable with a name.
@@ -39,6 +39,9 @@ export type UntypedLambda
   = LambdaVar
   | UntypedLambdaAbs
   | NonTerminal<UntypedLambda>
+
+export const typelessApp = (...uts: UntypedLambda[]) =>
+  uts.reduce(nt<UntypedLambda>)
 
 export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
   switch (ut.kind) {

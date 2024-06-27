@@ -1,6 +1,7 @@
-import { UntypedLambda } from './lambda'
-import { NonTerminal, nt } from './nonterminal'
+import { UntypedLambda } from '../lambda/lambda'
+import { NonTerminal, nt } from '../nonterminal'
 import { Context, TypedLambda, mkTypedAbs, typecheck } from './typedLambda'
+import { TypeError } from './typeError'
 
 export type TypeVariable = {
   kind: 'type-var',

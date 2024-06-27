@@ -1,6 +1,6 @@
 {
   "name": "typed-ski",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "SKI combinators in Typescript",
   "scripts": {
     "test": "npx mocha test/**/*.test.ts",

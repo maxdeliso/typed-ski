@@ -1,7 +1,7 @@
-import { mkVar } from '../lib/lambda'
-import { nt } from '../lib/nonterminal'
-import { mkTypedAbs, typecheck } from '../lib/typedLambda'
-import { arrow, arrows, mkTypeVar, typesLitEq } from '../lib/types'
+import { mkVar } from '../../lib/lambda/lambda'
+import { nt } from '../../lib/nonterminal'
+import { mkTypedAbs, typecheck } from '../../lib/typed/typedLambda'
+import { arrow, arrows, mkTypeVar, typesLitEq } from '../../lib/typed/types'
 
 import { expect } from 'chai'
 import { describe, it } from 'mocha'

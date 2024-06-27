@@ -1,26 +1,26 @@
-import { parse } from '../lib/parser'
 import {
   BinaryHeap,
   maxHeapIndex,
   packHeap,
   unpackHeap
-} from '../lib/packer'
-import { compute, Expression, size } from '../lib/expression'
+} from '../../lib/ski/packer'
+import { compute, SKIExpression, size } from '../../lib/ski/expression'
 
 import { assert } from 'chai'
 import { describe, it } from 'mocha'
 import { hrtime } from 'process'
 import { create } from 'random-seed'
+import { parseSKI } from '../../lib/parser/ski'
 
-const eye = parse('I')
-const dos = parse('II')
-const tres = parse('III')
-const quattro = parse('SKKI')
-const toTheRight = parse('(I(S(KI)))')
-const zipper = parse('((I(S(KI)))I)')
+const eye = parseSKI('I')
+const dos = parseSKI('II')
+const tres = parseSKI('III')
+const quattro = parseSKI('SKKI')
+const toTheRight = parseSKI('(I(S(KI)))')
+const zipper = parseSKI('((I(S(KI)))I)')
 
 describe('packHeap and unpackHeap', () => {
-  const assertRepack = (expr: Expression): BinaryHeap => {
+  const assertRepack = (expr: SKIExpression): BinaryHeap => {
     const packed = packHeap(expr)
     const unpacked = unpackHeap(packed)
     assert.deepStrictEqual(expr, unpacked)

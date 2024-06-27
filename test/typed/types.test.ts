@@ -4,14 +4,14 @@ import {
   mkTypeVar,
   typesLitEq,
   inferType
-} from '../lib/types'
+} from '../../lib/typed/types'
 
 import { expect } from 'chai'
 import { describe, it } from 'mocha'
-import { UntypedLambda, mkUntypedAbs, mkVar } from '../lib/lambda'
-import { nt } from '../lib/nonterminal'
-import { typedTermsLitEq } from '../lib/typedLambda'
-import { parseType, parseTypedLambda } from '../lib'
+import { UntypedLambda, mkUntypedAbs, mkVar } from '../../lib/lambda/lambda'
+import { nt } from '../../lib/nonterminal'
+import { typedTermsLitEq } from '../../lib/typed/typedLambda'
+import { parseType, parseTypedLambda } from '../../lib'
 
 describe('type construction and equivalence', () => {
   const t1 = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c'))

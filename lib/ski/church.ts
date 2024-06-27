@@ -1,16 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Zero, One, Succ, True, False } from './combinators'
-import { Expression, apply } from './expression'
-import { TerminalSymbol } from './terminal'
+import { Zero, One, Succ, True, False } from '../consts/combinators'
+import { SKIExpression, apply } from './expression'
+import { SKITerminalSymbol } from './terminal'
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding
  * @param n a number
  * @returns an extensionally equivalent Church numeral.
  */
-export const ChurchN = (n: number): Expression => {
+export const ChurchN = (n: number): SKIExpression => {
   if (n < 0) {
     throw new Error('only positive integers represented')
   } else if (n === 0) {
@@ -32,12 +32,12 @@ export const ChurchN = (n: number): Expression => {
  * represents a given Church numeral, regardless of which one it is. This is
  * the notion of extensional equality.
  */
-export const UnChurch = (exp: Expression): number => {
+export const UnChurch = (exp: SKIExpression): number => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   return toLambda(exp)((x: number) => x + 1)(0)
 }
 
-export const ChurchB = (b: boolean): Expression => b ? True : False
+export const ChurchB = (b: boolean): SKIExpression => b ? True : False
 
 /**
  * This is a somewhat foul construction in TypeScript, which gives insight into
@@ -46,21 +46,21 @@ export const ChurchB = (b: boolean): Expression => b ? True : False
  * @param exp an expression in the SKI combinator language.
  * @returns a Curried TypeScript lambda which is extensionally equivalent to it
  */
-const toLambda = (exp: Expression): any => {
+const toLambda = (exp: SKIExpression): any => {
   if (exp.kind === 'non-terminal') {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     return toLambda(exp.lft)(toLambda(exp.rgt))
   } else {
     switch (exp.sym) {
-      case TerminalSymbol.S:
+      case SKITerminalSymbol.S:
         return (x: (_: any) => {(_: any): any; _: any }) =>
           (y: (_: any) => any) =>
             (z: any) =>
             // eslint-disable-next-line @typescript-eslint/no-unsafe-return
               x(z)(y(z))
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      case TerminalSymbol.K: return (x: any) => (_y: any) => x
-      case TerminalSymbol.I: return (x: any) => x
+      case SKITerminalSymbol.K: return (x: any) => (_y: any) => x
+      case SKITerminalSymbol.I: return (x: any) => x
     }
   }
 }

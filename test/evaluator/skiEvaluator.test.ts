@@ -1,20 +1,20 @@
-import { parse } from '../lib/parser'
-import { stepOnce } from '../lib/evaluator'
-import { Expression, prettyPrint } from '../lib/expression'
+import { stepOnceSKI } from '../../lib/evaluator/skiEvaluator'
+import { SKIExpression, prettyPrint } from '../../lib/ski/expression'
 
 import { describe, it } from 'mocha'
 import { assert } from 'chai'
+import { parseSKI } from '../../lib/parser/ski'
 
-const first = parse('III')
-const second = parse('II')
-const third = parse('I')
-const fourth = parse('KIS')
-const fifth = parse('SKKI')
-const sixth = parse('SKKII')
-const seventh = parse('KI(KI)')
+const first = parseSKI('III')
+const second = parseSKI('II')
+const third = parseSKI('I')
+const fourth = parseSKI('KIS')
+const fifth = parseSKI('SKKI')
+const sixth = parseSKI('SKKII')
+const seventh = parseSKI('KI(KI)')
 
 describe('stepOnce', () => {
-  const compareExpressions = (a: Expression, b: Expression): void => {
+  const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
     assert.deepStrictEqual(prettyPrint(a), prettyPrint(b))
     assert.deepStrictEqual(a, b)
   }
@@ -22,7 +22,7 @@ describe('stepOnce', () => {
   it(`evaluates ${prettyPrint(second)}
       =>
       ${prettyPrint(third)}`, () => {
-    const result = stepOnce(second)
+    const result = stepOnceSKI(second)
     assert(result.altered)
     compareExpressions(result.expr, third)
   })
@@ -31,7 +31,7 @@ describe('stepOnce', () => {
       =>
       ${prettyPrint(third)}`,
   () => {
-    const result = stepOnce(stepOnce(first).expr)
+    const result = stepOnceSKI(stepOnceSKI(first).expr)
     assert(result.altered)
     compareExpressions(result.expr, third)
   })
@@ -39,7 +39,7 @@ describe('stepOnce', () => {
   it(`evaluates ${prettyPrint(fourth)}
       =>
       ${prettyPrint(third)}`, () => {
-    const result = stepOnce(fourth)
+    const result = stepOnceSKI(fourth)
     assert(result.altered)
     compareExpressions(result.expr, third)
   })
@@ -48,7 +48,7 @@ describe('stepOnce', () => {
       ${prettyPrint(fifth)}
       =>
       ${prettyPrint(seventh)}`, () => {
-    const first = stepOnce(fifth)
+    const first = stepOnceSKI(fifth)
     assert(first.altered)
     compareExpressions(first.expr, seventh)
   })
@@ -57,11 +57,11 @@ describe('stepOnce', () => {
       =>
       ${prettyPrint(third)}`,
   () => {
-    const firstStep = stepOnce(sixth)
+    const firstStep = stepOnceSKI(sixth)
     assert(firstStep.altered)
-    const secondStep = stepOnce(firstStep.expr)
+    const secondStep = stepOnceSKI(firstStep.expr)
     assert(secondStep.altered)
-    const thirdStep = stepOnce(secondStep.expr)
+    const thirdStep = stepOnceSKI(secondStep.expr)
     assert(thirdStep.altered)
     compareExpressions(thirdStep.expr, third)
   })

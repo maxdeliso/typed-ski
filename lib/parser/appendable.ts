@@ -1,7 +1,7 @@
-import { Expression } from './expression'
-import { ParseError } from './parser'
-import { NonTerminal, nt } from './nonterminal'
-import { Terminal } from './terminal'
+import { SKIExpression } from '../ski/expression'
+import { NonTerminal, nt } from '../nonterminal'
+import { SKITerminal } from '../ski/terminal'
+import { ParseError } from './parseError'
 
 /**
  * A variation on the expression type that allows undefined values.
@@ -10,7 +10,7 @@ import { Terminal } from './terminal'
  * while verifying that no undefined values, or 'holes', remain.
  */
 type SyntaxExpression
-  = Terminal
+  = SKITerminal
   | NonTerminal<SyntaxExpression>
   | undefined;
 
@@ -18,7 +18,7 @@ export class Appendable {
   private syn: SyntaxExpression
   private insertionSites: NonTerminal<SyntaxExpression>[] = []
 
-  public appendSymbol (term: Terminal): void {
+  public appendSymbol (term: SKITerminal): void {
     this.appendInternal(term)
   }
 
@@ -95,11 +95,11 @@ export class Appendable {
    * @throws {ParseError} if there are any empty internal nodes in the
    * expression.
    */
-  public flatten (): Expression {
+  public flatten (): SKIExpression {
     return this.flattenInternal(this.syn)
   }
 
-  private flattenInternal = (exp: SyntaxExpression): Expression => {
+  private flattenInternal = (exp: SyntaxExpression): SKIExpression => {
     if (exp === undefined) {
       throw new ParseError('expression undefined (empty)')
     } else if (exp.kind === 'terminal') {

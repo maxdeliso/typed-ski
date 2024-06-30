@@ -58,8 +58,4 @@ export class RecursiveDescentBuffer {
     this.consume()
     return next
   }
-
-  peelRemaining (): RecursiveDescentBuffer {
-    return new RecursiveDescentBuffer(this.buf.slice(this.idx))
-  }
 }

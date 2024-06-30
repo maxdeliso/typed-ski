@@ -17,9 +17,12 @@ function parseUntypedLambdaInternal (rdb: RecursiveDescentBuffer):
     let nextTerm: UntypedLambda | undefined
 
     if (rdb.peek() === 'λ') {
-      const [lambdaLit, lambdaTerm] = parseUntypedLambda(rdb)
-      resultStr += lambdaLit
-      nextTerm = lambdaTerm
+      rdb.matchCh('λ')
+      const varLit = rdb.parseVariable()
+      rdb.matchCh('.')
+      const [bodyLit, term] = parseUntypedLambdaInternal(rdb)
+      resultStr += `λ${varLit}.${bodyLit}`
+      nextTerm = mkUntypedAbs(varLit, term)
     } else if (rdb.peek() === '(') {
       rdb.matchLP()
       const [lit1, t1] = parseUntypedLambdaInternal(rdb)
@@ -48,14 +51,4 @@ function parseUntypedLambdaInternal (rdb: RecursiveDescentBuffer):
   }
 
   return [resultStr, resultExpr]
-}
-
-function parseUntypedLambda (rdb: RecursiveDescentBuffer):
-[string, UntypedLambda] {
-  rdb.matchCh('λ')
-  const varLit = rdb.parseVariable()
-  rdb.matchCh('.')
-  const [bodyLit, term] = parseLambda(rdb.peelRemaining().buf)
-  rdb.consumeN(bodyLit.length)
-  return [`λ${varLit}.${bodyLit}`, mkUntypedAbs(varLit, term)]
 }

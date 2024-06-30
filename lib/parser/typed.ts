@@ -63,17 +63,6 @@ function parseTypeInternal (rdb: RecursiveDescentBuffer): [string, Type] {
     }
   }
 }
-function parseLambdaInternal (rdb: RecursiveDescentBuffer):
-[string, TypedLambda] {
-  rdb.matchCh('λ')
-  const varLit = rdb.parseVariable()
-  rdb.matchCh(':')
-  const [typeLit, ty] = parseTypeInternal(rdb)
-  rdb.matchCh('.')
-  const [bodyLit, term] = parseTypedLambdaInternal(rdb.peelRemaining())
-  rdb.consumeN(bodyLit.length)
-  return [`λ${varLit}:${typeLit}.${bodyLit}`, mkTypedAbs(varLit, ty, term)]
-}
 
 function parseTypedLambdaInternal (rdb: RecursiveDescentBuffer):
 [string, TypedLambda] {
@@ -84,7 +73,16 @@ function parseTypedLambdaInternal (rdb: RecursiveDescentBuffer):
     let nextTerm: TypedLambda
 
     if (rdb.peek() === 'λ') {
-      const [lambdaLit, lambdaTerm] = parseLambdaInternal(rdb)
+      rdb.matchCh('λ')
+      const varLit = rdb.parseVariable()
+      rdb.matchCh(':')
+      const [typeLit, ty] = parseTypeInternal(rdb)
+      rdb.matchCh('.')
+      const [bodyLit, term] = parseTypedLambdaInternal(rdb)
+      const [lambdaLit, lambdaTerm] = [
+        `λ${varLit}:${typeLit}.${bodyLit}`,
+        mkTypedAbs(varLit, ty, term)
+      ]
       nextTerm = lambdaTerm
       resultStr += lambdaLit
     } else {

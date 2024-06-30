@@ -19,11 +19,6 @@ export class RecursiveDescentBuffer {
     this.idx++
   }
 
-  consumeN (n: number): void {
-    if (n <= 0) throw new ParseError('n must be positive')
-    this.idx += n
-  }
-
   matchLP (): void {
     this.matchCh('(')
   }

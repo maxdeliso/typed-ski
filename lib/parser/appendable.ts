@@ -39,7 +39,7 @@ export class Appendable {
 
       if (top === undefined) {
         throw new Error('insertionSites should not have an undefined value')
-      } else if (top?.lft === undefined) {
+      } else if (top.lft === undefined) {
         top.lft = newNode
         this.insertionSites.push(top)
         return
@@ -50,9 +50,9 @@ export class Appendable {
     }
 
     let currentNode : SyntaxExpression = this.syn
-    const nodeStack : Array<SyntaxExpression> = []
+    const nodeStack : SyntaxExpression[] = []
 
-    while (currentNode !== undefined || nodeStack.length > 0) {
+    while (nodeStack.length > 0) {
       // traverse left, accumulating the spine on a stack
       while (currentNode !== undefined) {
         if (currentNode.kind === 'non-terminal') {

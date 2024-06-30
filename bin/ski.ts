@@ -28,8 +28,8 @@ function colorizeExpression (expr: SKIExpression): string {
     case 'non-terminal': {
       return [
         '(',
-        `${colorizeExpression(expr.lft)}`,
-        `${colorizeExpression(expr.rgt)}`,
+        colorizeExpression(expr.lft),
+        colorizeExpression(expr.rgt),
         ')'
       ].join('')
     }
@@ -43,7 +43,7 @@ function formatted (expr: SKIExpression): string {
 function runTUI (): number {
   const term : Terminal = terminalKit.terminal
   const seed = hrtime.bigint()
-  const randomSeed = create(`${seed}`)
+  const randomSeed = create(seed.toString())
   const N = 32
   const MAX_ITER = 100
 
@@ -83,7 +83,7 @@ function runTUI (): number {
         }
 
         if (iterations === MAX_ITER) {
-          term.red(`stopped evaluating after ${iterations} iterations. \n`)
+          term.red(`stopped evaluating after ${iterations.toString()} iterations. \n`)
         }
 
         break

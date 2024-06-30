@@ -56,7 +56,6 @@ const toLambda = (exp: SKIExpression): any => {
         return (x: (_: any) => {(_: any): any; _: any }) =>
           (y: (_: any) => any) =>
             (z: any) =>
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
               x(z)(y(z))
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       case SKITerminalSymbol.K: return (x: any) => (_y: any) => x

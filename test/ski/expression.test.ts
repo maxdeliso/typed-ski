@@ -8,14 +8,14 @@ import { nt } from '../../lib/nonterminal'
 import { K, S } from '../../lib/ski/terminal'
 
 import { assert } from 'chai'
-import { create, RandomSeed } from 'random-seed'
+import { RandomSeed, create } from 'random-seed'
 
 describe('prettyPrint', () => {
   const expr = nt<SKIExpression>(nt<SKIExpression>(S, K), K)
   const printedExpr = '((SK)K)'
 
   it('pretty prints a valid expression',
-    () => assert.deepStrictEqual(prettyPrint(expr), printedExpr)
+    () => { assert.deepStrictEqual(prettyPrint(expr), printedExpr); }
   )
 })
 

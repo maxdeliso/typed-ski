@@ -7,8 +7,9 @@ An implementation of a parser, evaluator, printer, and visualizer for the [SKI](
 In the checkout directory:
 
 ```bash
-npm run build
-npx ski
+yarn install
+yarn run build
+yarn run ski
 ```
 
 ## Books

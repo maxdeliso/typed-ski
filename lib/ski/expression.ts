@@ -34,8 +34,8 @@ export function prettyPrint (expr: SKIExpression): string {
     case 'non-terminal': {
       const printed = [
         '(',
-        `${prettyPrint(expr.lft)}`,
-        `${prettyPrint(expr.rgt)}`,
+        prettyPrint(expr.lft),
+        prettyPrint(expr.rgt),
         ')'
       ]
 

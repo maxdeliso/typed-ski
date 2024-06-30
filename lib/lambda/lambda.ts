@@ -5,7 +5,7 @@ import { NonTerminal, nt } from '../nonterminal'
  *
  * For instance, in the expression "λx:a.y", this is just "y".
  */
-export type LambdaVar = {
+export interface LambdaVar {
   kind: 'lambda-var',
   name: string
 }
@@ -16,15 +16,13 @@ export const mkVar = (name: string): LambdaVar => ({
 })
 
 // λx.<body>, where x is a name
-type UntypedLambdaAbs = {
+interface UntypedLambdaAbs {
   kind: 'lambda-abs',
   name: string,
-  // eslint-disable-next-line no-use-before-define
   body: UntypedLambda
 }
 
 export const mkUntypedAbs =
-  // eslint-disable-next-line no-use-before-define
   (name: string, body: UntypedLambda): UntypedLambda => ({
     kind: 'lambda-abs',
     name,

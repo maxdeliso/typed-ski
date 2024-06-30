@@ -3,7 +3,7 @@ import { NonTerminal, nt } from '../nonterminal'
 import { Context, TypedLambda, mkTypedAbs, typecheck } from './typedLambda'
 import { TypeError } from './typeError'
 
-export type TypeVariable = {
+export interface TypeVariable {
   kind: 'type-var',
   typeName: string
 }

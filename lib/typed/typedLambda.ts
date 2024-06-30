@@ -22,11 +22,10 @@ import {
  * The type is a.
  * The body of the expression is y.
  */
-export type TypedLambdaAbs = {
+export interface TypedLambdaAbs {
   kind: 'typed-lambda-abstraction',
   varName: string,
   ty: Type,
-  // eslint-disable-next-line no-use-before-define
   body: TypedLambda
 }
 

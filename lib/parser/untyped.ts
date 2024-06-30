@@ -38,12 +38,10 @@ function parseUntypedLambdaInternal (rdb: RecursiveDescentBuffer):
       nextTerm = mkVar(singleVar)
     }
 
-    if (nextTerm !== undefined) {
-      if (resultExpr === undefined) {
-        resultExpr = nextTerm
-      } else {
-        resultExpr = nt(resultExpr, nextTerm)
-      }
+    if (resultExpr === undefined) {
+      resultExpr = nextTerm
+    } else {
+      resultExpr = nt(resultExpr, nextTerm)
     }
   }
   if (resultExpr === undefined) {

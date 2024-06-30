@@ -8,7 +8,6 @@ import { compute, SKIExpression, size } from '../../lib/ski/expression'
 
 import { assert } from 'chai'
 import { describe, it } from 'mocha'
-import { hrtime } from 'process'
 import { create } from 'random-seed'
 import { parseSKI } from '../../lib/parser/ski'
 
@@ -56,8 +55,7 @@ describe('packHeap and unpackHeap', () => {
   const N = 128 // the total number of reductions to complete
 
   it('packs and unpacks many randomly generated expressions', () => {
-    const seed = hrtime.bigint()
-    const rs = create(`${seed}`)
+    const rs = create('testing')
 
     compute(S, N, rs,
       (expr) => assertRepack(expr),

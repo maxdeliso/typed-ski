@@ -12,7 +12,7 @@ export class RecursiveDescentBuffer {
   }
 
   peek (): string | null {
-    return this.buf[this.idx] || null
+    return this.buf[this.idx] ?? null
   }
 
   consume (): void {
@@ -29,14 +29,14 @@ export class RecursiveDescentBuffer {
 
   matchCh (ch: string): void {
     if (this.peek() !== ch) {
-      throw new ParseError(`Expected ${ch} but found ${this.peek() || 'null'}'`)
+      throw new ParseError(`Expected ${ch} but found ${this.peek() ?? 'null'}'`)
     }
 
     this.consume()
   }
 
   remaining (): boolean {
-    return this.buf[this.idx] !== undefined
+    return this.idx < this.buf.length
   }
 
   parseVariable (): string {

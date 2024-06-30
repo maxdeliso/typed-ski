@@ -5,10 +5,9 @@ import { B, C } from '../consts/combinators'
 import { LambdaVar } from '../lambda/lambda'
 import { ConversionError } from './conversionError'
 
-type LambdaAbsMixed = {
+interface LambdaAbsMixed {
   kind: 'lambda-abs',
   name: string,
-  // eslint-disable-next-line no-use-before-define
   body: LambdaMixed
 }
 
@@ -143,7 +142,7 @@ const free = (needle: string, lm: LambdaMixed): boolean => {
   return idx !== undefined
 }
 
-const freeVariables = (lm: LambdaMixed): Array<string> => {
+const freeVariables = (lm: LambdaMixed): string[] => {
   switch (lm.kind) {
     case 'lambda-var':
       return [lm.name]

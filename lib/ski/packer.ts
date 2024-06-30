@@ -2,7 +2,7 @@ import { SKIExpression } from './expression'
 import { nt } from '../nonterminal'
 import { term, SKITerminalSymbol } from './terminal'
 
-export type SymbolHeap = Array<SKITerminalSymbol | undefined>;
+export type SymbolHeap = (SKITerminalSymbol | undefined)[];
 
 export type BinaryHeap = Uint8Array
 
@@ -40,10 +40,8 @@ export function heapify (exp: SKIExpression): SymbolHeap {
 
       indexes.push(rgtIndex(idx))
       nodes.push(node.rgt)
-    } else if (node.kind === 'terminal') {
-      result[idx] = node.sym
     } else {
-      throw new Error('unexpected node kind')
+      result[idx] = node.sym
     }
   }
 
@@ -75,7 +73,7 @@ export function unheapify (heapSyms: SymbolHeap): SKIExpression {
 
 function unheapifyFrom (heapSyms: SymbolHeap, heapIdx: number): SKIExpression {
   if (heapIdx >= heapSyms.length) {
-    throw new Error(`heap index exceeded: ${heapIdx}. input is corrupt.`)
+    throw new Error(`heap index exceeded: ${heapIdx.toString()}. input is corrupt.`)
   }
 
   const heapValue = heapSyms[heapIdx]
@@ -108,10 +106,8 @@ function packSymbol (sym: SKITerminalSymbol | undefined): number {
     return 0b01
   } else if (sym === SKITerminalSymbol.K) {
     return 0b10
-  } else if (sym === SKITerminalSymbol.I) {
-    return 0b11
   } else {
-    throw new Error('Impossible.')
+    return 0b11
   }
 }
 
@@ -133,7 +129,7 @@ function unpackSymbol (n: number): SKITerminalSymbol | undefined {
   } else if (n === 0b11) {
     return SKITerminalSymbol.I
   } else {
-    throw new Error(`The number ${n} does not correspond to a symbol in SKI.`)
+    throw new Error(`The number ${n.toString()} does not correspond to a symbol in SKI.`)
   }
 }
 
@@ -182,9 +178,7 @@ export function packSymbolHeap (ts: SymbolHeap): BinaryHeap {
 export function unpackBinaryHeap (inputBytes: BinaryHeap): SymbolHeap {
   const result: SymbolHeap = []
 
-  for (let i = 0; i < inputBytes.length; i++) {
-    const byte = inputBytes[i] || 0
-
+  for (const by of inputBytes) {
     /*
      * 0 b 1100 0000 = 0 x C 0
      * 0 b 0011 0000 = 0 x 3 0
@@ -192,10 +186,10 @@ export function unpackBinaryHeap (inputBytes: BinaryHeap): SymbolHeap {
      * 0 b 0000 0011 = 0 x 0 3
      */
     const fourSnakeEyes = [
-      (byte & 0xC0) >> 6,
-      (byte & 0x30) >> 4,
-      (byte & 0x0C) >> 2,
-      (byte & 0x03) >> 0
+      (by & 0xC0) >> 6,
+      (by & 0x30) >> 4,
+      (by & 0x0C) >> 2,
+      (by & 0x03) >> 0
     ]
 
     fourSnakeEyes

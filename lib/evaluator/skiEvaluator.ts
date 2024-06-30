@@ -95,7 +95,7 @@ const stepOnceS: SKIStep<SKIExpression> =
  */
 const scanStep = (
   expr: SKIExpression,
-  steppers: Array<SKIStep<SKIExpression>>
+  steppers: SKIStep<SKIExpression>[]
 ):
   SKIResult<SKIExpression> => {
   for (const step of steppers) {

@@ -15,7 +15,19 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+      - name: Run yarn install
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: install --frozen-lockfile
+      - name: Run lint
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: run lint
+      - name: Run build
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: build
+      - name: Run test
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: test

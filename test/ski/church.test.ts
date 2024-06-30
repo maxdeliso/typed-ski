@@ -16,7 +16,7 @@ import { describe, it } from 'mocha'
 import { expect } from 'chai'
 import { parseSKI } from '../../lib/parser/ski'
 
-export const UpTo = (n: number): Array<number> => {
+export const UpTo = (n: number): number[] => {
   const result = []
   for (let i = 0; i < n; i++) {
     result.push(i)

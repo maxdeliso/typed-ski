@@ -1,56 +1,56 @@
-import { ParseError } from './parseError'
+import { ParseError } from './parseError.ts';
 
 export class RecursiveDescentBuffer {
-  buf!: string
-  idx!: number
+  buf!: string;
+  idx!: number;
 
-  private variablePattern = /[a-zA-Z]/
+  private variablePattern = /[a-zA-Z]/;
 
-  public constructor (buf: string) {
-    this.buf = buf
-    this.idx = 0
+  public constructor(buf: string) {
+    this.buf = buf;
+    this.idx = 0;
   }
 
-  peek (): string | null {
-    return this.buf[this.idx] ?? null
+  peek(): string | null {
+    return this.buf[this.idx] ?? null;
   }
 
-  consume (): void {
-    this.idx++
+  consume(): void {
+    this.idx++;
   }
 
-  matchLP (): void {
-    this.matchCh('(')
+  matchLP(): void {
+    this.matchCh('(');
   }
 
-  matchRP (): void {
-    this.matchCh(')')
+  matchRP(): void {
+    this.matchCh(')');
   }
 
-  matchCh (ch: string): void {
+  matchCh(ch: string): void {
     if (this.peek() !== ch) {
-      throw new ParseError(`Expected ${ch} but found ${this.peek() ?? 'null'}'`)
+      throw new ParseError(`Expected ${ch} but found ${this.peek() ?? 'null'}'`);
     }
 
-    this.consume()
+    this.consume();
   }
 
-  remaining (): boolean {
-    return this.idx < this.buf.length
+  remaining(): boolean {
+    return this.idx < this.buf.length;
   }
 
-  parseVariable (): string {
-    const next = this.peek()
+  parseVariable(): string {
+    const next = this.peek();
 
     if (next == null) {
-      throw new ParseError('failed to parse variable: no next character')
+      throw new ParseError('failed to parse variable: no next character');
     }
 
     if (!this.variablePattern.test(next)) {
-      throw new ParseError(`failed to parse variable: ${next} did not match`)
+      throw new ParseError(`failed to parse variable: ${next} did not match`);
     }
 
-    this.consume()
-    return next
+    this.consume();
+    return next;
   }
 }

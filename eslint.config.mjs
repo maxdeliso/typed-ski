@@ -1,32 +1,38 @@
-import eslint from '@eslint/js'
-import tseslint from 'typescript-eslint'
-import path from "path"
-import url from "url"
-
-const __meta_url = new url.URL(import.meta.url)
-const __filename = url.fileURLToPath(__meta_url)
-const __dirname = path.dirname(__filename)
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import stylisticTs from '@stylistic/eslint-plugin-ts';
 
 export default tseslint.config(
   {
-    files: ["**/*.{ts,mjs}"],
+    files: ['**/*.ts']
   },
   {
-    ignores: [
-      "**/node_modules/**",
-      "build/**",
-    ],
+    ignores: ['**/build/**', '**/node_modules/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   ...tseslint.configs.recommendedTypeChecked,
   {
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+      '@stylistic/ts': stylisticTs
+    },
     languageOptions: {
+      parser: tseslint.parser,
       parserOptions: {
         project: true,
-        tsconfigRootDir: __dirname,
       },
     },
-  },
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@stylistic/ts/semi': 'error',
+      '@stylistic/ts/indent': ['error', 2],
+      '@stylistic/ts/quotes': ['error', 'single']
+    },
+  }
 );

@@ -1,19 +1,19 @@
-import { mkVar } from '../../lib/lambda/lambda'
-import { nt } from '../../lib/nonterminal'
-import { mkTypedAbs, typecheck } from '../../lib/typed/typedLambda'
-import { arrow, arrows, mkTypeVar, typesLitEq } from '../../lib/typed/types'
+import { cons } from '../../lib/cons.ts';
+import { mkVar } from '../../lib/lambda/lambda.ts';
+import { mkTypedAbs, typecheck } from '../../lib/typed/typedLambda.ts';
+import { mkTypeVar, arrow, typesLitEq, arrows } from '../../lib/typed/types.ts';
 
-import { expect } from 'chai'
-import { describe, it } from 'mocha'
+import { expect } from 'chai';
+import { describe, it } from 'mocha';
 
 describe('type checking', () => {
   it('typechecks the I combinator', () => {
     // λx : a . x ≡ I : a -> a
-    const typedI = mkTypedAbs('x', mkTypeVar('a'), mkVar('x'))
-    const typeofI = typecheck(typedI)
-    const expectedTy = arrow(mkTypeVar('a'), mkTypeVar('a'))
-    expect(typesLitEq(typeofI, expectedTy)).to.equal(true)
-  })
+    const typedI = mkTypedAbs('x', mkTypeVar('a'), mkVar('x'));
+    const typeofI = typecheck(typedI);
+    const expectedTy = arrow(mkTypeVar('a'), mkTypeVar('a'));
+    expect(typesLitEq(typeofI, expectedTy)).to.equal(true);
+  });
 
   it('typechecks the K combinator', () => {
     // λx : a . λy : b . x ≡ K : a -> b -> a
@@ -22,12 +22,12 @@ describe('type checking', () => {
         mkTypedAbs('y', mkTypeVar('b'), // λy : b
           mkVar('x') // x
         )
-      )
-    const typeofK = typecheck(typedK)
-    const expectedTy = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('a'))
+      );
+    const typeofK = typecheck(typedK);
+    const expectedTy = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('a'));
 
-    expect(typesLitEq(typeofK, expectedTy)).to.equal(true)
-  })
+    expect(typesLitEq(typeofK, expectedTy)).to.equal(true);
+  });
 
   it('typechecks the S combinator', () => {
     // λx : (a -> b -> c) . λy : (a -> b) . λz : a . xz(yz)
@@ -42,23 +42,23 @@ describe('type checking', () => {
           mkTypedAbs(
             'z', // a
             mkTypeVar('a'),
-            nt(
-              nt(mkVar('x'), mkVar('z')),
-              nt(mkVar('y'), mkVar('z'))
+            cons(
+              cons(mkVar('x'), mkVar('z')),
+              cons(mkVar('y'), mkVar('z'))
             )
           )
         )
-      )
+      );
 
     // (a -> b -> c) -> (a -> b) -> a -> c
     const expectedTy = arrows(
       arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c')),
       arrows(mkTypeVar('a'), mkTypeVar('b')),
       arrows(mkTypeVar('a'), mkTypeVar('c'))
-    )
+    );
 
-    const typeofS = typecheck(typedS)
+    const typeofS = typecheck(typedS);
 
-    expect(typesLitEq(typeofS, expectedTy)).to.equal(true)
-  })
-})
+    expect(typesLitEq(typeofS, expectedTy)).to.equal(true);
+  });
+});

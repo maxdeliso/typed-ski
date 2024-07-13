@@ -1,12 +1,9 @@
-import { stepOnceSKI } from '../evaluator/skiEvaluator'
-import { NonTerminal, nt } from '../nonterminal'
-import {
-  generate as generateTerminal,
-  SKITerminal
-} from './terminal'
-import { RandomSeed } from 'random-seed'
+import { RandomSeed } from 'random-seed';
+import { ConsCell, cons } from '../cons.ts';
+import { stepOnceSKI } from '../evaluator/skiEvaluator.ts';
+import { SKITerminal, generate } from './terminal.ts';
 
-/**
+/*
  * EBNF grammar:
  *
  * terminal = "S" | "K" | "I"
@@ -21,55 +18,50 @@ import { RandomSeed } from 'random-seed'
  *
  * terminal | non-terminal | expression
  */
-export type SKIExpression = SKITerminal | NonTerminal<SKIExpression>
+export type SKIExpression = SKITerminal | ConsCell<SKIExpression>;
 
 /**
   * @param expr an expression to pretty print.
   * @returns a pretty printed expression.
   */
-export function prettyPrint (expr: SKIExpression): string {
+export function prettyPrint(expr: SKIExpression): string {
   switch (expr.kind) {
     case 'terminal':
-      return expr.sym
+      return expr.sym;
     case 'non-terminal': {
       const printed = [
         '(',
         prettyPrint(expr.lft),
         prettyPrint(expr.rgt),
         ')'
-      ]
+      ];
 
-      return printed.join('')
+      return printed.join('');
     }
   }
 }
 
-/**
-  * @param rs a random seed.
-  * @param n the number of symbols to include in the expression.
-  * @returns a randomly generated expression.
-  */
-export function generate (rs: RandomSeed, n: number): SKIExpression {
+export const generateExpr = (rs: RandomSeed, n: number): SKIExpression => {
   if (n <= 0) {
-    throw new Error('A valid expression must contain at least one symbol.')
+    throw new Error('A valid expression must contain at least one symbol.');
   }
 
-  let result: SKIExpression = generateTerminal(rs)
+  let result: SKIExpression = generate(rs);
 
   for (let i = 0; i < n - 1; i++) {
-    result = splat(rs, result, generateTerminal(rs))
+    result = splat(rs, result, generate(rs));
   }
 
-  return result
-}
+  return result;
+};
 
 /**
   * @param exp an abstract expression.
   * @returns how many terminals are present in the expression.
   */
-export function size (exp: SKIExpression): number {
-  if (exp.kind === 'terminal') return 1
-  else return size(exp.lft) + size(exp.rgt)
+export function size(exp: SKIExpression): number {
+  if (exp.kind === 'terminal') return 1;
+  else return size(exp.lft) + size(exp.rgt);
 }
 
 /**
@@ -79,11 +71,11 @@ export function size (exp: SKIExpression): number {
  */
 export const apply = (...exps: SKIExpression[]): SKIExpression => {
   if (exps.length <= 0) {
-    throw new Error('there must be at least one expression to apply')
+    throw new Error('there must be at least one expression to apply');
   } else {
-    return exps.reduce(nt<SKIExpression>)
+    return exps.reduce(cons<SKIExpression>);
   }
-}
+};
 
 /**
  * Run reductions continuously, with the supplied parameters.
@@ -96,27 +88,27 @@ export const apply = (...exps: SKIExpression[]): SKIExpression => {
  * @param onStep a callback function for when a step occurs.
  * @param onRegenerate a callback function for when a regeneration occurs.
  */
-export function compute (
+export function compute(
   S: number,
   N: number,
   rs: RandomSeed,
   onStep: (_: SKIExpression) => void,
   onRegenerate: (_: SKIExpression) => void): SKIExpression {
-  let exp = generate(rs, S)
+  let exp = generateExpr(rs, S);
 
   for (let i = 0; i < N; i++) {
-    const stepResult = stepOnceSKI(exp)
+    const stepResult = stepOnceSKI(exp);
 
     if (stepResult.altered) {
-      exp = stepResult.expr
-      onStep(exp)
+      exp = stepResult.expr;
+      onStep(exp);
     } else {
-      exp = generate(rs, S)
-      onRegenerate(exp)
+      exp = generateExpr(rs, S);
+      onRegenerate(exp);
     }
   }
 
-  return exp
+  return exp;
 }
 
 /**
@@ -129,18 +121,18 @@ export function compute (
  * location.
  */
 const splat = (randomSeed: RandomSeed, expr: SKIExpression, term: SKITerminal):
-  SKIExpression => {
-  const direction = randomSeed.intBetween(0, 1) === 1
+SKIExpression => {
+  const direction = randomSeed.intBetween(0, 1) === 1;
 
   if (expr.kind === 'terminal') {
     if (direction) {
-      return nt(expr, term)
+      return cons(expr, term);
     } else {
-      return nt(term, expr)
+      return cons(term, expr);
     }
   } else if (direction) {
-    return nt(splat(randomSeed, expr.lft, term), expr.rgt)
+    return cons(splat(randomSeed, expr.lft, term), expr.rgt);
   } else {
-    return nt(expr.lft, splat(randomSeed, expr.rgt, term))
+    return cons(expr.lft, splat(randomSeed, expr.rgt, term));
   }
-}
+};

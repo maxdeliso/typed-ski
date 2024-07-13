@@ -1,11 +1,6 @@
-import { LambdaVar } from '../lambda/lambda'
-import { NonTerminal } from '../nonterminal'
-import {
-  Type,
-  arrow,
-  prettyPrintTy,
-  typesLitEq
-} from './types'
+import { ConsCell } from '../cons.ts';
+import { LambdaVar } from '../lambda/lambda.ts';
+import { Type, arrow, typesLitEq, prettyPrintTy } from './types.ts';
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -35,7 +30,7 @@ export interface TypedLambdaAbs {
 export type TypedLambda
   = LambdaVar
   | TypedLambdaAbs
-  | NonTerminal<TypedLambda>
+  | ConsCell<TypedLambda>;
 
 export const mkTypedAbs = (
   varName: string, ty: Type, body: TypedLambda
@@ -44,25 +39,25 @@ export const mkTypedAbs = (
   varName,
   ty,
   body
-})
+});
 
 /**
  * Γ, or capital Gamma, represents the set of mappings from names to types.
  */
-export type Context = Map<string, Type>
+export type Context = Map<string, Type>;
 
 export const addBinding =
   (ctx: Context, name: string, ty: Type): Context => {
     if (ctx.get(name)) {
-      throw new TypeError('duplicated binding for name: ' + name)
+      throw new TypeError('duplicated binding for name: ' + name);
     }
 
-    return ctx.set(name, ty)
-  }
+    return ctx.set(name, ty);
+  };
 
 export const typecheck = (typedTerm: TypedLambda): Type => {
-  return typecheckGiven(new Map<string, Type>(), typedTerm)
-}
+  return typecheckGiven(new Map<string, Type>(), typedTerm);
+};
 
 /**
  * Type checks terms in the simply typed lambda calculus.
@@ -75,44 +70,44 @@ export const typecheck = (typedTerm: TypedLambda): Type => {
 export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): Type => {
   switch (typedTerm.kind) {
     case 'lambda-var': {
-      const termName = typedTerm.name
-      const lookedUp = ctx.get(termName)
+      const termName = typedTerm.name;
+      const lookedUp = ctx.get(termName);
 
       if (lookedUp === undefined) {
-        throw new TypeError('unknown term named: ' + termName)
+        throw new TypeError('unknown term named: ' + termName);
       }
 
-      return lookedUp
+      return lookedUp;
     }
     case 'typed-lambda-abstraction': {
-      const updatedCtx = addBinding(ctx, typedTerm.varName, typedTerm.ty)
-      const bodyTy = typecheckGiven(updatedCtx, typedTerm.body)
-      return arrow(typedTerm.ty, bodyTy)
+      const updatedCtx = addBinding(ctx, typedTerm.varName, typedTerm.ty);
+      const bodyTy = typecheckGiven(updatedCtx, typedTerm.body);
+      return arrow(typedTerm.ty, bodyTy);
     }
     case 'non-terminal': {
-      const tyLft = typecheckGiven(ctx, typedTerm.lft)
-      const tyRgt = typecheckGiven(ctx, typedTerm.rgt)
+      const tyLft = typecheckGiven(ctx, typedTerm.lft);
+      const tyRgt = typecheckGiven(ctx, typedTerm.rgt);
 
       if (tyLft.kind !== 'non-terminal') {
-        throw new TypeError('arrow type expected on lhs')
+        throw new TypeError('arrow type expected on lhs');
       }
 
-      const takes = tyLft.lft
-      const gives = tyLft.rgt
+      const takes = tyLft.lft;
+      const gives = tyLft.rgt;
 
       if (!typesLitEq(tyRgt, takes)) {
-        throw new TypeError('type mismatch')
+        throw new TypeError('type mismatch');
       }
 
-      return gives
+      return gives;
     }
   }
-}
+};
 
 export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
   switch (expr.kind) {
     case 'lambda-var': {
-      return expr.name
+      return expr.name;
     }
     case 'typed-lambda-abstraction': {
       return 'λ' +
@@ -120,28 +115,28 @@ export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
         ':' +
         prettyPrintTy(expr.ty) +
         '.' +
-        prettyPrintTypedLambda(expr.body)
+        prettyPrintTypedLambda(expr.body);
     }
     case 'non-terminal': {
       return '(' +
         prettyPrintTypedLambda(expr.lft) +
         prettyPrintTypedLambda(expr.rgt) +
-        ')'
+        ')';
     }
   }
-}
+};
 
 export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
   if (a.kind === 'lambda-var' && b.kind === 'lambda-var') {
-    return a.name === b.name
+    return a.name === b.name;
   } else if (a.kind === 'typed-lambda-abstraction' &&
     b.kind === 'typed-lambda-abstraction') {
     return typesLitEq(a.ty, b.ty) &&
       a.varName === b.varName &&
-      typedTermsLitEq(a.body, b.body)
+      typedTermsLitEq(a.body, b.body);
   } else if (a.kind === 'non-terminal' && b.kind === 'non-terminal') {
-    return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt)
+    return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt);
   } else {
-    return false
+    return false;
   }
-}
+};

@@ -1,9 +1,8 @@
-import { convertLambda } from '../conversion/converter'
-import { apply } from '../ski/expression'
-import { predLambda } from './lambdas'
-import { parseSKI } from '../parser/ski'
-
-import { S, K, I } from '../ski/terminal'
+import { convertLambda } from '../conversion/converter.ts';
+import { parseSKI } from '../parser/ski.ts';
+import { apply } from '../ski/expression.ts';
+import { K, I, S } from '../ski/terminal.ts';
+import { predLambda } from './lambdas.ts';
 
 /*
  * Zero. apply a function to its arguments zero times.
@@ -16,8 +15,8 @@ import { S, K, I } from '../ski/terminal'
  *
  * λfx.x ≡ KI
  */
-export const Zero = apply(K, I)
-export const Snd = Zero
+export const Zero = apply(K, I);
+export const Snd = Zero;
 
 /*
  * false is the second alternative of two arguments
@@ -26,7 +25,7 @@ export const Snd = Zero
  *
  * λab.b ≡ KI ≡ False
  */
-export const False = Zero
+export const False = Zero;
 
 /*
  * true is the first alternative of two arguments
@@ -35,8 +34,8 @@ export const False = Zero
  *
  * λab.a ≡ K ≡ True
  */
-export const True = K
-export const Fst = True
+export const True = K;
+export const Fst = True;
 
 /*
  * One. apply a function to its arguments once.
@@ -48,7 +47,7 @@ export const Fst = True
  *
  * λx.x ≡ I
  */
-export const One = I
+export const One = I;
 
 /*
  * Composition function
@@ -63,7 +62,7 @@ export const One = I
  *
  * λnfx.n(fx) ≡ B
  */
-export const B = parseSKI('S(KS)K')
+export const B = parseSKI('S(KS)K');
 
 /*
  * Successor function
@@ -86,7 +85,7 @@ export const B = parseSKI('S(KS)K')
  *
  * this acts as the successor function for Church numerals
  */
-export const Succ = apply(S, B)
+export const Succ = apply(S, B);
 
 /*
  * Binary addition
@@ -102,7 +101,7 @@ export const Succ = apply(S, B)
  *
  * λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
  */
-export const Plus = apply(B, S, apply(B, B))
+export const Plus = apply(B, S, apply(B, B));
 
 /*
  * Cardinal
@@ -120,7 +119,7 @@ export const Plus = apply(B, S, apply(B, B))
  *
  * λxyz.xzy ≡ S(BBS)(KK)
  */
-export const C = apply(S, apply(B, B, S), apply(K, K))
+export const C = apply(S, apply(B, B, S), apply(K, K));
 
 /*
  * Thrush
@@ -135,7 +134,7 @@ export const C = apply(S, apply(B, B, S), apply(K, K))
  *
  * λxy.yx ≡ CI ≡ flip
  */
-export const T = apply(C, I)
+export const T = apply(C, I);
 
 /*
  * Vireo
@@ -155,7 +154,7 @@ export const T = apply(C, I)
  *
  * Sometimes called a cons cell.
  */
-export const V = apply(B, C, T)
+export const V = apply(B, C, T);
 
 /*
  * Mockingbird
@@ -169,7 +168,7 @@ export const V = apply(B, C, T)
  *
  * λa.aa ≡ M
  */
-export const M = parseSKI('SII')
+export const M = parseSKI('SII');
 
 /*
  * Retrieve the first element in a Cons cell.
@@ -183,7 +182,7 @@ export const M = parseSKI('SII')
  * p K
  * a
  */
-export const Car = apply(T, Fst)
+export const Car = apply(T, Fst);
 
 /*
  * Retrieve the second element in a Cons cell.
@@ -197,7 +196,7 @@ export const Car = apply(T, Fst)
  * p KI
  * b
  */
-export const Cdr = apply(T, Snd)
+export const Cdr = apply(T, Snd);
 
 /*
  * Duplicate the second argument of a function.
@@ -212,19 +211,19 @@ export const Cdr = apply(T, Snd)
  *
  * λxy.xyy ≡ W
  */
-export const W = parseSKI('SS(SK)')
+export const W = parseSKI('SS(SK)');
 
 // λabcd.a(bcd)
-export const Blk = apply(B, B, B)
+export const Blk = apply(B, B, B);
 
 // λabcde.ab(cde)
-export const E = apply(B, apply(B, B, B))
+export const E = apply(B, apply(B, B, B));
 
 // λabc.cba
-export const F = apply(E, T, T, E, T)
+export const F = apply(E, T, T, E, T);
 
 // λf.(λx.f(x x))(λx.f(x x))
-export const Y = parseSKI('S(K(SII))(S(S(KS)K)(K(SII)))')
+export const Y = parseSKI('S(K(SII))(S(S(KS)K)(K(SII)))');
 
 // note: this is a crossover
-export const pred = convertLambda(predLambda)
+export const pred = convertLambda(predLambda);

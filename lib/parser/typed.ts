@@ -1,116 +1,116 @@
-import { mkVar } from '../lambda/lambda'
-import { nt } from '../nonterminal'
-import { TypedLambda, mkTypedAbs } from '../typed/typedLambda'
-import { Type, arrow, mkTypeVar } from '../typed/types'
-import { ParseError } from './parseError'
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer'
+import { cons } from '../cons.ts';
+import { mkVar } from '../lambda/lambda.ts';
+import { TypedLambda, mkTypedAbs } from '../typed/typedLambda.ts';
+import { Type, arrow, mkTypeVar } from '../typed/types.ts';
+import { ParseError } from './parseError.ts';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 
-function parseApp (rdb: RecursiveDescentBuffer): [string, TypedLambda] {
+function parseApp(rdb: RecursiveDescentBuffer): [string, TypedLambda] {
   if (rdb.peek() === '(') {
-    rdb.matchLP()
-    const lft = rdb.parseVariable()
-    const rgt = rdb.parseVariable()
-    rdb.matchRP()
-    return [`(${lft}${rgt})`, nt(mkVar(lft), mkVar(rgt))]
+    rdb.matchLP();
+    const lft = rdb.parseVariable();
+    const rgt = rdb.parseVariable();
+    rdb.matchRP();
+    return [`(${lft}${rgt})`, cons(mkVar(lft), mkVar(rgt))];
   } else {
-    const varStr = rdb.parseVariable()
-    return [varStr, mkVar(varStr)]
+    const varStr = rdb.parseVariable();
+    return [varStr, mkVar(varStr)];
   }
 }
 
-function parseTypeInternal (rdb: RecursiveDescentBuffer): [string, Type] {
+function parseTypeInternal(rdb: RecursiveDescentBuffer): [string, Type] {
   if (rdb.peek() === '(') {
-    rdb.matchLP()
-    const [leftTypeLit, leftTy] = parseTypeInternal(rdb)
+    rdb.matchLP();
+    const [leftTypeLit, leftTy] = parseTypeInternal(rdb);
 
     if ((rdb.peek() === '→')) {
-      rdb.consume()
-      const [rightTypeLit, rightTy] = parseTypeInternal(rdb)
+      rdb.consume();
+      const [rightTypeLit, rightTy] = parseTypeInternal(rdb);
 
-      if (rdb.peek() !== ')') throw new ParseError('expected a )')
-      rdb.matchRP()
+      if (rdb.peek() !== ')') throw new ParseError('expected a )');
+      rdb.matchRP();
 
       // '(' <ty_1> '→' <ty_2> ')' )
-      return [`(${leftTypeLit}→${rightTypeLit})`, arrow(leftTy, rightTy)]
+      return [`(${leftTypeLit}→${rightTypeLit})`, arrow(leftTy, rightTy)];
     } else if (rdb.peek() === ')') {
-      rdb.consume()
+      rdb.consume();
 
       if (rdb.peek() === '→') {
-        rdb.consume()
-        const [nextTypeLit, nextTy] = parseTypeInternal(rdb)
+        rdb.consume();
+        const [nextTypeLit, nextTy] = parseTypeInternal(rdb);
 
         // '(' <ty_1> ')' '→' <ty_2>
-        return [`(${leftTypeLit})→${nextTypeLit}`, arrow(leftTy, nextTy)]
+        return [`(${leftTypeLit})→${nextTypeLit}`, arrow(leftTy, nextTy)];
       } else {
         // '(' <ty_1> NOT('→', ')')
-        return [leftTypeLit, leftTy]
+        return [leftTypeLit, leftTy];
       }
     } else {
-      throw new ParseError('expected a → or ) after ( Type')
+      throw new ParseError('expected a → or ) after ( Type');
     }
   } else {
-    const varLit = rdb.parseVariable()
+    const varLit = rdb.parseVariable();
 
     if (rdb.peek() === '→') {
-      rdb.consume()
-      const [nextTypeLit, t2] = parseTypeInternal(rdb)
+      rdb.consume();
+      const [nextTypeLit, t2] = parseTypeInternal(rdb);
 
       // <var> '→' <ty>
-      return [`${varLit}→${nextTypeLit}`, arrow(mkTypeVar(varLit), t2)]
+      return [`${varLit}→${nextTypeLit}`, arrow(mkTypeVar(varLit), t2)];
     } else {
       // <var> NOT('→')
-      return [varLit, mkTypeVar(varLit)]
+      return [varLit, mkTypeVar(varLit)];
     }
   }
 }
 
-function parseTypedLambdaInternal (rdb: RecursiveDescentBuffer):
+function parseTypedLambdaInternal(rdb: RecursiveDescentBuffer):
 [string, TypedLambda] {
-  let resultStr = ''
-  let resultExpr: TypedLambda | undefined
+  let resultStr = '';
+  let resultExpr: TypedLambda | undefined;
 
   while (rdb.remaining()) {
-    let nextTerm: TypedLambda
+    let nextTerm: TypedLambda;
 
     if (rdb.peek() === 'λ') {
-      rdb.matchCh('λ')
-      const varLit = rdb.parseVariable()
-      rdb.matchCh(':')
-      const [typeLit, ty] = parseTypeInternal(rdb)
-      rdb.matchCh('.')
-      const [bodyLit, term] = parseTypedLambdaInternal(rdb)
+      rdb.matchCh('λ');
+      const varLit = rdb.parseVariable();
+      rdb.matchCh(':');
+      const [typeLit, ty] = parseTypeInternal(rdb);
+      rdb.matchCh('.');
+      const [bodyLit, term] = parseTypedLambdaInternal(rdb);
       const [lambdaLit, lambdaTerm] = [
         `λ${varLit}:${typeLit}.${bodyLit}`,
         mkTypedAbs(varLit, ty, term)
-      ]
-      nextTerm = lambdaTerm
-      resultStr += lambdaLit
+      ];
+      nextTerm = lambdaTerm;
+      resultStr += lambdaLit;
     } else {
-      const [appLit, appTerm] = parseApp(rdb)
-      nextTerm = appTerm
-      resultStr += appLit
+      const [appLit, appTerm] = parseApp(rdb);
+      nextTerm = appTerm;
+      resultStr += appLit;
     }
 
     if (resultExpr === undefined) {
-      resultExpr = nextTerm
+      resultExpr = nextTerm;
     } else {
-      resultExpr = nt(resultExpr, nextTerm)
+      resultExpr = cons(resultExpr, nextTerm);
     }
   }
 
   if (resultExpr === undefined) {
-    throw new ParseError('expected a term')
+    throw new ParseError('expected a term');
   }
 
-  return [resultStr, resultExpr]
+  return [resultStr, resultExpr];
 }
 
-export function parseType (input: string): [string, Type] {
-  const rdb = new RecursiveDescentBuffer(input)
-  return parseTypeInternal(rdb)
+export function parseType(input: string): [string, Type] {
+  const rdb = new RecursiveDescentBuffer(input);
+  return parseTypeInternal(rdb);
 }
 
-export function parseTypedLambda (input: string): [string, TypedLambda] {
-  const rdb = new RecursiveDescentBuffer(input)
-  return parseTypedLambdaInternal(rdb)
+export function parseTypedLambda(input: string): [string, TypedLambda] {
+  const rdb = new RecursiveDescentBuffer(input);
+  return parseTypedLambdaInternal(rdb);
 }

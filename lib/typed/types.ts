@@ -1,7 +1,6 @@
-import { UntypedLambda } from '../lambda/lambda'
-import { NonTerminal, nt } from '../nonterminal'
-import { Context, TypedLambda, mkTypedAbs, typecheck } from './typedLambda'
-import { TypeError } from './typeError'
+import { ConsCell, cons } from '../cons.ts';
+import { UntypedLambda } from '../lambda/lambda.ts';
+import { TypedLambda, typecheck, mkTypedAbs, Context } from './typedLambda.ts';
 
 export interface TypeVariable {
   kind: 'type-var',
@@ -10,22 +9,22 @@ export interface TypeVariable {
 
 export type Type
   = TypeVariable
-  | NonTerminal<Type>
+  | ConsCell<Type>;
 
 export const mkTypeVar = (name: string): TypeVariable => ({
   kind: 'type-var',
   typeName: name
-})
+});
 
-export const arrow = (a: Type, b: Type): Type => nt<Type>(a, b)
+export const arrow = (a: Type, b: Type): Type => cons<Type>(a, b);
 
 // a b c
 // a (b c)
 // (a (b c))
 // NOTE: type application is right associative
 export const arrows = (...tys: Type[]): Type => tys.reduceRight(
-  (acc, ty) => nt<Type>(ty, acc)
-)
+  (acc, ty) => cons<Type>(ty, acc)
+);
 
 /**
  * @param a some type
@@ -35,21 +34,21 @@ export const arrows = (...tys: Type[]): Type => tys.reduceRight(
  */
 export const typesLitEq = (a: Type, b: Type): boolean => {
   if (a.kind === 'type-var' && b.kind === 'type-var') {
-    return a.typeName === b.typeName
+    return a.typeName === b.typeName;
   } else if (a.kind === 'non-terminal' && b.kind === 'non-terminal') {
-    return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt)
+    return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt);
   } else {
-    return false
+    return false;
   }
-}
+};
 
 export const prettyPrintTy = (ty: Type): string => {
   if (ty.kind === 'type-var') {
-    return ty.typeName
+    return ty.typeName;
   } else {
-    return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`
+    return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`;
   }
-}
+};
 
 /**
  * This function runs a simplified variant of Algorithm W.
@@ -62,27 +61,27 @@ export const prettyPrintTy = (ty: Type): string => {
 export const inferType = (
   term: UntypedLambda
 ): [TypedLambda, Type] => {
-  const absBindings = new Map<string, Type>()
-  const inferredContext = new Map<string, Type>()
-  let inferred = algorithmW(term, tyVars(), absBindings, inferredContext)
+  const absBindings = new Map<string, Type>();
+  const inferredContext = new Map<string, Type>();
+  let inferred = algorithmW(term, tyVars(), absBindings, inferredContext);
 
   inferredContext.forEach((combinedTy, termName) => {
-    const originalTy = absBindings.get(termName)
+    const originalTy = absBindings.get(termName);
     if (originalTy !== undefined && !typesLitEq(combinedTy, originalTy)) {
-      inferred = substituteType(inferred, originalTy, combinedTy)
+      inferred = substituteType(inferred, originalTy, combinedTy);
     }
-  })
+  });
 
-  const normalizationMappings = new Map<string, string>()
-  const vars = tyVars()
+  const normalizationMappings = new Map<string, string>();
+  const vars = tyVars();
   inferredContext.forEach((ty, termName) => {
-    inferredContext.set(termName, normalizeTy(ty, normalizationMappings, vars))
-  })
+    inferredContext.set(termName, normalizeTy(ty, normalizationMappings, vars));
+  });
 
-  const typedTerm = attachTypes(term, inferredContext)
+  const typedTerm = attachTypes(term, inferredContext);
 
-  return [typedTerm, typecheck(typedTerm)]
-}
+  return [typedTerm, typecheck(typedTerm)];
+};
 
 const algorithmW = (
   term: UntypedLambda,
@@ -91,30 +90,30 @@ const algorithmW = (
   constraints: Context): Type => {
   switch (term.kind) {
     case 'lambda-var': {
-      const contextType = varBindings.get(term.name)
+      const contextType = varBindings.get(term.name);
       if (contextType !== undefined) {
-        return contextType
+        return contextType;
       } else {
-        return nextVar()
+        return nextVar();
       }
     }
     case 'lambda-abs': {
-      const paramType = nextVar()
-      varBindings.set(term.name, paramType)
-      constraints.set(term.name, paramType)
-      const bodyType = algorithmW(term.body, nextVar, varBindings, constraints)
-      return arrow(paramType, bodyType)
+      const paramType = nextVar();
+      varBindings.set(term.name, paramType);
+      constraints.set(term.name, paramType);
+      const bodyType = algorithmW(term.body, nextVar, varBindings, constraints);
+      return arrow(paramType, bodyType);
     }
 
     case 'non-terminal': {
-      const leftTy = algorithmW(term.lft, nextVar, varBindings, constraints)
-      const rgtTy = algorithmW(term.rgt, nextVar, varBindings, constraints)
-      const result = nextVar()
-      unify(leftTy, arrow(rgtTy, result), constraints)
-      return result
+      const leftTy = algorithmW(term.lft, nextVar, varBindings, constraints);
+      const rgtTy = algorithmW(term.rgt, nextVar, varBindings, constraints);
+      const result = nextVar();
+      unify(leftTy, arrow(rgtTy, result), constraints);
+      return result;
     }
   }
-}
+};
 
 const unify = (
   lft: Type,
@@ -122,53 +121,53 @@ const unify = (
   unified: Context
 ): void => {
   unified.forEach((contextType, termName) => {
-    const substituted = substituteType(contextType, lft, rgt)
-    unified.set(termName, substituted)
-  })
-}
+    const substituted = substituteType(contextType, lft, rgt);
+    unified.set(termName, substituted);
+  });
+};
 
 const substituteType = (original: Type, lft: Type, rgt: Type): Type => {
   if (typesLitEq(lft, original)) {
-    return rgt
+    return rgt;
   }
 
   switch (original.kind) {
     case 'type-var':
-      return original
+      return original;
 
     case 'non-terminal':
-      return nt(
+      return cons(
         substituteType(original.lft, lft, rgt),
         substituteType(original.rgt, lft, rgt)
-      )
+      );
   }
-}
+};
 
-function monoInts (): () => number {
-  let num = 0
+function monoInts(): () => number {
+  let num = 0;
 
   const generator = () => {
-    const ret = num
-    num = num + 1
-    return ret
-  }
+    const ret = num;
+    num = num + 1;
+    return ret;
+  };
 
-  return generator
+  return generator;
 }
 
-function tyVars (): () => TypeVariable {
-  const ordinals = monoInts()
+function tyVars(): () => TypeVariable {
+  const ordinals = monoInts();
 
   const generator = () => {
-    const offset = ordinals()
+    const offset = ordinals();
     if (offset > 25) {
-      throw new Error('too many variables')
+      throw new Error('too many variables');
     }
-    const str = String.fromCharCode(97 + offset)
-    return mkTypeVar(str)
-  }
+    const str = String.fromCharCode(97 + offset);
+    return mkTypeVar(str);
+  };
 
-  return generator
+  return generator;
 }
 
 const normalizeTy = (
@@ -177,23 +176,23 @@ const normalizeTy = (
   vars: () => TypeVariable): Type => {
   switch (ty.kind) {
     case 'type-var': {
-      const mapped = mapping.get(ty.typeName)
+      const mapped = mapping.get(ty.typeName);
 
       if (mapped === undefined) {
-        const newVar = vars()
-        mapping.set(ty.typeName, newVar.typeName)
-        return newVar
+        const newVar = vars();
+        mapping.set(ty.typeName, newVar.typeName);
+        return newVar;
       } else {
-        return mkTypeVar(mapped)
+        return mkTypeVar(mapped);
       }
     }
     case 'non-terminal':
-      return nt(
+      return cons(
         normalizeTy(ty.lft, mapping, vars),
         normalizeTy(ty.rgt, mapping, vars)
-      )
+      );
   }
-}
+};
 
 const attachTypes = (
   untyped: UntypedLambda,
@@ -201,24 +200,24 @@ const attachTypes = (
 ): TypedLambda => {
   switch (untyped.kind) {
     case 'lambda-var':
-      return untyped
+      return untyped;
     case 'lambda-abs': {
-      const ty = types.get(untyped.name)
+      const ty = types.get(untyped.name);
 
       if (ty === undefined) {
-        throw new TypeError('missing a type for term: ' + untyped.name)
+        throw new TypeError('missing a type for term: ' + untyped.name);
       }
 
       return mkTypedAbs(
         untyped.name,
         ty,
         attachTypes(untyped.body, types)
-      )
+      );
     }
     case 'non-terminal':
-      return nt(
+      return cons(
         attachTypes(untyped.lft, types),
         attachTypes(untyped.rgt, types)
-      )
+      );
   }
-}
+};

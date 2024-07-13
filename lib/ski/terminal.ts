@@ -1,4 +1,4 @@
-import { RandomSeed } from 'random-seed'
+import { RandomSeed } from 'random-seed';
 
 export enum SKITerminalSymbol {
   S = 'S',
@@ -14,26 +14,26 @@ export interface SKITerminal {
 export const term = (sym: SKITerminalSymbol): SKITerminal => ({
   kind: 'terminal',
   sym
-})
+});
 
-export const S = term(SKITerminalSymbol.S)
-export const K = term(SKITerminalSymbol.K)
-export const I = term(SKITerminalSymbol.I)
+export const S = term(SKITerminalSymbol.S);
+export const K = term(SKITerminalSymbol.K);
+export const I = term(SKITerminalSymbol.I);
 
 /**
  * @param rs the random seed to use.
  * @returns a randomly selected terminal symbol.
  */
 export function generate (rs: RandomSeed): SKITerminal {
-  const die = rs.intBetween(1, 3)
+  const die = rs.intBetween(1, 3);
 
   if (die === 1) {
-    return S
+    return S;
   } else if (die === 2) {
-    return K
+    return K;
   } else if (die === 3) {
-    return I
+    return I;
   } else {
-    throw new Error('error on line twenty eight')
+    throw new Error('error on line twenty eight');
   }
 }

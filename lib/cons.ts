@@ -1,4 +1,4 @@
-export interface NonTerminal <E> {
+export interface ConsCell<E> {
   kind: 'non-terminal'
   lft: E
   rgt: E
@@ -9,8 +9,8 @@ export interface NonTerminal <E> {
  * @param rgt the right subtree.
  * @returns a new non-terminal node, with E as the type of each branch.
  */
-export const nt = <E, >(lft: E, rgt: E): NonTerminal<E> => ({
+export const cons = <E,>(lft: E, rgt: E): ConsCell<E> => ({
   kind: 'non-terminal',
   lft,
   rgt
-})
+});

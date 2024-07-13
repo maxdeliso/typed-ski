@@ -1,4 +1,4 @@
-import { NonTerminal, nt } from '../nonterminal'
+import { ConsCell, cons } from '../cons.ts';
 
 /**
  * This is a single term variable with a name.
@@ -13,7 +13,7 @@ export interface LambdaVar {
 export const mkVar = (name: string): LambdaVar => ({
   kind: 'lambda-var',
   name
-})
+});
 
 // λx.<body>, where x is a name
 interface UntypedLambdaAbs {
@@ -27,7 +27,7 @@ export const mkUntypedAbs =
     kind: 'lambda-abs',
     name,
     body
-  })
+  });
 
 /**
  * The legal terms of the untyped lambda calculus.
@@ -36,19 +36,19 @@ export const mkUntypedAbs =
 export type UntypedLambda
   = LambdaVar
   | UntypedLambdaAbs
-  | NonTerminal<UntypedLambda>
+  | ConsCell<UntypedLambda>;
 
 export const typelessApp = (...uts: UntypedLambda[]) =>
-  uts.reduce(nt<UntypedLambda>)
+  uts.reduce(cons<UntypedLambda>);
 
 export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
   switch (ut.kind) {
     case 'lambda-var':
-      return ut.name
+      return ut.name;
     case 'lambda-abs':
-      return `λ${ut.name}.${prettyPrintUntypedLambda(ut.body)}`
+      return `λ${ut.name}.${prettyPrintUntypedLambda(ut.body)}`;
     case 'non-terminal':
       return `(${prettyPrintUntypedLambda(ut.lft)}` +
-        `${prettyPrintUntypedLambda(ut.rgt)})`
+        `${prettyPrintUntypedLambda(ut.rgt)})`;
   }
-}
+};

@@ -1,19 +1,19 @@
-import { SKIExpression } from './expression'
-import { nt } from '../nonterminal'
-import { term, SKITerminalSymbol } from './terminal'
+import { cons } from '../cons.ts';
+import { SKIExpression } from './expression.ts';
+import { SKITerminalSymbol, term } from './terminal.ts';
 
 export type SymbolHeap = (SKITerminalSymbol | undefined)[];
 
-export type BinaryHeap = Uint8Array
+export type BinaryHeap = Uint8Array;
 
-const rootIndex = 0
+const rootIndex = 0;
 
-function lftIndex (heapIdx: number): number {
-  return 2 * heapIdx + 1
+function lftIndex(heapIdx: number): number {
+  return 2 * heapIdx + 1;
 }
 
-function rgtIndex (heapIdx: number): number {
-  return 2 * heapIdx + 2
+function rgtIndex(heapIdx: number): number {
+  return 2 * heapIdx + 2;
 }
 
 /**
@@ -22,69 +22,69 @@ function rgtIndex (heapIdx: number): number {
  * @param exp an expression.
  * @returns a symbol heap.
  */
-export function heapify (exp: SKIExpression): SymbolHeap {
-  const heapLength = maxHeapIndex(exp) + 1
-  const result = new Array<SKITerminalSymbol | undefined>(heapLength)
-  const indexes = [rootIndex]
-  const nodes = [exp]
+export function heapify(exp: SKIExpression): SymbolHeap {
+  const heapLength = maxHeapIndex(exp) + 1;
+  const result = new Array<SKITerminalSymbol | undefined>(heapLength);
+  const indexes = [rootIndex];
+  const nodes = [exp];
 
   while (indexes.length > 0) {
-    const idx = indexes.pop()
-    const node = nodes.pop()
+    const idx = indexes.pop();
+    const node = nodes.pop();
 
     if (idx === undefined || node === undefined) {
-      throw new Error('stack elements must be defined')
+      throw new Error('stack elements must be defined');
     } else if (node.kind === 'non-terminal') {
-      indexes.push(lftIndex(idx))
-      nodes.push(node.lft)
+      indexes.push(lftIndex(idx));
+      nodes.push(node.lft);
 
-      indexes.push(rgtIndex(idx))
-      nodes.push(node.rgt)
+      indexes.push(rgtIndex(idx));
+      nodes.push(node.rgt);
     } else {
-      result[idx] = node.sym
+      result[idx] = node.sym;
     }
   }
 
-  return result
+  return result;
 }
 
-export function maxHeapIndex (exp: SKIExpression): number {
-  return maxHeapIndexInternal(exp, 0)
+export function maxHeapIndex(exp: SKIExpression): number {
+  return maxHeapIndexInternal(exp, 0);
 }
 
-function maxHeapIndexInternal (exp: SKIExpression, acc: number): number {
+function maxHeapIndexInternal(exp: SKIExpression, acc: number): number {
   if (exp.kind === 'non-terminal') {
     return Math.max(
       maxHeapIndexInternal(exp.lft, lftIndex(acc)),
       maxHeapIndexInternal(exp.rgt, rgtIndex(acc))
-    )
+    );
   } else {
-    return acc
+    return acc;
   }
 }
 
-export function unheapify (heapSyms: SymbolHeap): SKIExpression {
+export function unheapify(heapSyms: SymbolHeap): SKIExpression {
   if (heapSyms.length === 0) {
-    throw new Error('expression must be non-empty')
+    throw new Error('expression must be non-empty');
   }
 
-  return unheapifyFrom(heapSyms, 0)
+  return unheapifyFrom(heapSyms, 0);
 }
 
-function unheapifyFrom (heapSyms: SymbolHeap, heapIdx: number): SKIExpression {
+function unheapifyFrom(heapSyms: SymbolHeap, heapIdx: number): SKIExpression {
   if (heapIdx >= heapSyms.length) {
-    throw new Error(`heap index exceeded: ${heapIdx.toString()}. input is corrupt.`)
+    throw new Error(`heap index exceeded: ${heapIdx.toString()}. input is corrupt.`);
   }
 
-  const heapValue = heapSyms[heapIdx]
+  const heapValue = heapSyms[heapIdx];
 
   if (heapValue) {
-    return term(heapValue)
+    return term(heapValue);
   } else {
-    return nt(
+    return cons(
       unheapifyFrom(heapSyms, lftIndex(heapIdx)),
       unheapifyFrom(heapSyms, rgtIndex(heapIdx))
-    )
+    );
   }
 }
 
@@ -99,15 +99,15 @@ function unheapifyFrom (heapSyms: SymbolHeap, heapIdx: number): SKIExpression {
  *
  * NOTE: here ∅ represents the empty set, or lack of a value.
  */
-function packSymbol (sym: SKITerminalSymbol | undefined): number {
+function packSymbol(sym: SKITerminalSymbol | undefined): number {
   if (sym === undefined) {
-    return 0b00
+    return 0b00;
   } else if (sym === SKITerminalSymbol.S) {
-    return 0b01
+    return 0b01;
   } else if (sym === SKITerminalSymbol.K) {
-    return 0b10
+    return 0b10;
   } else {
-    return 0b11
+    return 0b11;
   }
 }
 
@@ -119,17 +119,17 @@ function packSymbol (sym: SKITerminalSymbol | undefined): number {
  *
  * @see packSymbol
  */
-function unpackSymbol (n: number): SKITerminalSymbol | undefined {
+function unpackSymbol(n: number): SKITerminalSymbol | undefined {
   if (n === 0b00) {
-    return undefined
+    return undefined;
   } else if (n === 0b01) {
-    return SKITerminalSymbol.S
+    return SKITerminalSymbol.S;
   } else if (n === 0b10) {
-    return SKITerminalSymbol.K
+    return SKITerminalSymbol.K;
   } else if (n === 0b11) {
-    return SKITerminalSymbol.I
+    return SKITerminalSymbol.I;
   } else {
-    throw new Error(`The number ${n.toString()} does not correspond to a symbol in SKI.`)
+    throw new Error(`The number ${n.toString()} does not correspond to a symbol in SKI.`);
   }
 }
 
@@ -138,7 +138,7 @@ function unpackSymbol (n: number): SKITerminalSymbol | undefined {
  * @param ts the symbol heap.
  * @returns the binary heap.
  */
-export function packSymbolHeap (ts: SymbolHeap): BinaryHeap {
+export function packSymbolHeap(ts: SymbolHeap): BinaryHeap {
   /*
    * ts byteCount /4 %4 /4+1 %4!=0
    * 0  0         0  0  1    0
@@ -152,21 +152,21 @@ export function packSymbolHeap (ts: SymbolHeap): BinaryHeap {
    * 8  2         2  0  2    0
    * 9  3         2  1  3    1
    */
-  const lenDivFour : number = ts.length / 4 >> 0
-  const lenModFourOdd : boolean = ts.length % 4 !== 0
-  const packedLength : number = lenDivFour + (lenModFourOdd ? 1 : 0)
-  const result = new Uint8Array(packedLength) // note: initialized to zero
+  const lenDivFour: number = ts.length / 4 >> 0;
+  const lenModFourOdd: boolean = ts.length % 4 !== 0;
+  const packedLength: number = lenDivFour + (lenModFourOdd ? 1 : 0);
+  const result = new Uint8Array(packedLength); // note: initialized to zero
 
   for (let i = 0; i < ts.length; i++) {
-    const maybeValue = ts[i]
-    const symBits = packSymbol(maybeValue)
-    const block = (i / 4) >> 0 // prevents a floating point index
-    const shift = (3 - (i % 4)) * 2
+    const maybeValue = ts[i];
+    const symBits = packSymbol(maybeValue);
+    const block = (i / 4) >> 0; // prevents a floating point index
+    const shift = (3 - (i % 4)) * 2;
 
-    result[block] |= (symBits << shift)
+    result[block] |= (symBits << shift);
   }
 
-  return result
+  return result;
 }
 
 /**
@@ -175,8 +175,8 @@ export function packSymbolHeap (ts: SymbolHeap): BinaryHeap {
  * @param inputBytes a sequence of bytes that contains an encoded symbol heap.
  * @returns the corresponding symbol heap.
  */
-export function unpackBinaryHeap (inputBytes: BinaryHeap): SymbolHeap {
-  const result: SymbolHeap = []
+export function unpackBinaryHeap(inputBytes: BinaryHeap): SymbolHeap {
+  const result: SymbolHeap = [];
 
   for (const by of inputBytes) {
     /*
@@ -190,14 +190,14 @@ export function unpackBinaryHeap (inputBytes: BinaryHeap): SymbolHeap {
       (by & 0x30) >> 4,
       (by & 0x0C) >> 2,
       (by & 0x03) >> 0
-    ]
+    ];
 
     fourSnakeEyes
       .map(unpackSymbol)
-      .forEach(maybeSym => result.push(maybeSym))
+      .forEach(maybeSym => result.push(maybeSym));
   }
 
-  return result
+  return result;
 }
 
 /**
@@ -205,8 +205,8 @@ export function unpackBinaryHeap (inputBytes: BinaryHeap): SymbolHeap {
  * @param exp the input expression.
  * @returns a binary heap packed result.
  */
-export function packHeap (exp: SKIExpression): BinaryHeap {
-  return packSymbolHeap(heapify(exp))
+export function packHeap(exp: SKIExpression): BinaryHeap {
+  return packSymbolHeap(heapify(exp));
 }
 
 /**
@@ -214,6 +214,6 @@ export function packHeap (exp: SKIExpression): BinaryHeap {
  * @param heapBytes the input binary heap.
  * @returns an expression.
  */
-export function unpackHeap (heapBytes: BinaryHeap): SKIExpression {
-  return unheapify(unpackBinaryHeap(heapBytes))
+export function unpackHeap(heapBytes: BinaryHeap): SKIExpression {
+  return unheapify(unpackBinaryHeap(heapBytes));
 }

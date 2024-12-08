@@ -12,7 +12,6 @@ export interface SKIResult<E> {
   expr: E;
 }
 
-// eslint-disable-next-line no-unused-vars
 type ExtractStep<E> = (expr: E) => E | false;
 
 const stepMany = (expr: SKIExpression): SKIExpression => {
@@ -139,7 +138,7 @@ function extractStep(
   }
 }
 
-// eslint-disable-next-line no-unused-vars
+
 type SKIStep<E> = (input: E) => SKIResult<E>;
 
 /*

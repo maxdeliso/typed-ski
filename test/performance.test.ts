@@ -1,8 +1,10 @@
 import { compute } from '../lib/ski/expression.ts';
 
 import { hrtime } from 'process';
+
 import { Readable } from 'stream';
-import { create } from 'random-seed';
+
+import randomSeed from 'random-seed';
 
 describe('evaluator performance', () => {
   const S = 64; // symbol count in each randomly generated expression
@@ -10,7 +12,7 @@ describe('evaluator performance', () => {
 
   it('is estimated by measuring the rate of reductions', () => {
     const seed = hrtime.bigint.toString();
-    const rs = create(seed);
+    const rs = randomSeed.create(seed);
     const start = hrtime.bigint();
     const testOutput = new Readable();
     let generations = 1; // generate upon unaltered evaluation

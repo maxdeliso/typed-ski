@@ -1,6 +1,7 @@
 import { Zero, One, Succ, True, False } from '../consts/combinators.ts';
 import { apply, SKIExpression } from './expression.ts';
 import { SKITerminalSymbol } from './terminal.ts';
+import { reduceSKI } from '../evaluator/skiEvaluator.ts';
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding
@@ -29,9 +30,20 @@ export const ChurchN = (n: number): SKIExpression => {
  * represents a given Church numeral, regardless of which one it is. This is
  * the notion of extensional equality.
  */
-export const UnChurch = (exp: SKIExpression): number => {
+export const UnChurchNumber = (exp: SKIExpression): number => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
   return toLambda(exp)((x: number) => x + 1)(0);
+};
+
+/**
+ * UnChurchBoolean applies the Church boolean expression (which is expected to be in normal form)
+ * to two Church numerals (here ChurchN(1) and ChurchN(0)) and then uses UnChurch to obtain a number.
+ * If the result is 1, then the Church boolean was true; if 0, then it was false.
+ */
+export const UnChurchBoolean = (expr: SKIExpression): boolean => {
+  // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
+  const testExpr = reduceSKI(apply(expr, ChurchN(1), ChurchN(0)));
+  return UnChurchNumber(testExpr) === 1;
 };
 
 export const ChurchB = (b: boolean): SKIExpression => b ? True : False;
@@ -51,7 +63,7 @@ const toLambda = (exp: SKIExpression): any => {
   } else {
     switch (exp.sym) {
       case SKITerminalSymbol.S:
-        return (x: (_: unknown) => { (_: unknown): unknown; _: unknown }) =>
+        return (x: (_: unknown) => ((_: unknown) => unknown)) =>
           (y: (_: unknown) => unknown) =>
             (z: unknown) =>
               x(z)(y(z));

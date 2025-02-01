@@ -136,3 +136,5 @@ SKIExpression => {
     return cons(expr.lft, splat(randomSeed, expr.rgt, term));
   }
 };
+
+export { reduceSKI } from '../evaluator/skiEvaluator.ts';

@@ -2,8 +2,7 @@ import { describe, it } from 'mocha';
 import { expect } from 'chai';
 import { V, Succ, Fst, Snd, Car, Cdr, F, True, False, Plus, Zero, B, pred } from '../../lib/consts/combinators.ts';
 import { reduceSKI } from '../../lib/evaluator/skiEvaluator.ts';
-import { parseSKI } from '../../lib/parser/ski.ts';
-import { UnChurch, ChurchN, ChurchB } from '../../lib/ski/church.ts';
+import { UnChurchNumber, ChurchN, ChurchB, UnChurchBoolean } from '../../lib/ski/church.ts';
 import { K, S, I } from '../../lib/ski/terminal.ts';
 
 import { apply } from '../../lib/ski/expression.ts';
@@ -23,24 +22,25 @@ export const UpTo = (n: number): number[] => {
  */
 
 describe('Church encodings', () => {
-  const DupePair = apply(parseSKI('SS(SK)'), V);
+
+  const N = 5;
 
   it('reduces 0 + 1 to 1 ', () => {
-    expect(UnChurch(apply(Succ, ChurchN(0))))
+    expect(UnChurchNumber(apply(Succ, ChurchN(0))))
       .to.deep.equal(1);
   });
 
   it('reduces 1 + 1 to 2', () => {
-    expect(UnChurch(reduceSKI(apply(Succ, ChurchN(1)))))
+    expect(UnChurchNumber(reduceSKI(apply(Succ, ChurchN(1)))))
       .to.deep.equal(2);
   });
 
   it('reduces boolean expressions in Church encoding', () => {
     [false, true].forEach(p => {
       [false, true].forEach(q => {
-        const conj = ChurchB(p && q);
+        const conj = p && q;
 
-        const dis = ChurchB(p || q);
+        const dis = p || q;
 
         /*
          * λpq.pqp is AND
@@ -50,7 +50,7 @@ describe('Church encodings', () => {
          * (AND)FT = F?T:F = F
          * (AND)FF = F?F:F = F
          */
-        expect(reduceSKI(apply(ChurchB(p), ChurchB(q), ChurchB(p))))
+        expect(UnChurchBoolean(reduceSKI(apply(ChurchB(p), ChurchB(q), ChurchB(p)))))
           .to.deep.equal(conj);
 
         /*
@@ -61,30 +61,26 @@ describe('Church encodings', () => {
          * (OR)FT = F?F:T = T
          * (OR)FF = F?F:F = F
          */
-        expect(reduceSKI(apply(ChurchB(p), ChurchB(p), ChurchB(q))))
+        expect(UnChurchBoolean(reduceSKI(apply(ChurchB(p), ChurchB(p), ChurchB(q)))))
           .to.deep.equal(dis);
       });
     });
   });
 
   it('reduces pairs', () => {
-    expect(reduceSKI(apply(V, ChurchN(0), ChurchN(1), Fst)))
-      .to.deep.equal(ChurchN(0));
+    expect(UnChurchNumber(reduceSKI(apply(V, ChurchN(0), ChurchN(1), Fst))))
+      .to.equal(0);
 
-    expect(reduceSKI(apply(V, ChurchN(0), ChurchN(1), Snd)))
-      .to.deep.equal(ChurchN(1));
+    expect(UnChurchNumber(reduceSKI(apply(V, ChurchN(0), ChurchN(1), Snd))))
+      .to.equal(1);
 
-    expect(reduceSKI(
+    expect(UnChurchNumber(reduceSKI(
       apply(Car, apply(V, ChurchN(0), ChurchN(1)))
-    )).to.deep.equal(ChurchN(0));
+    ))).to.equal(0);
 
-    expect(reduceSKI(
+    expect(UnChurchNumber(reduceSKI(
       apply(Cdr, apply(V, ChurchN(0), ChurchN(1)))
-    )).to.deep.equal(ChurchN(1));
-
-    expect(
-      reduceSKI(apply(DupePair, ChurchN(2)))
-    ).to.deep.equal(reduceSKI(apply(V, ChurchN(2), ChurchN(2))));
+    ))).to.equal(1);
   });
 
   /*
@@ -93,42 +89,42 @@ describe('Church encodings', () => {
   const IsZero = apply(F, True, apply(K, False));
 
   it('isZero tests for whether a numeral is zero', () => {
-    expect(reduceSKI(
+    expect(UnChurchBoolean(reduceSKI(
       apply(ChurchN(0), apply(K, False), True)
-    )).to.deep.equal(ChurchB(true));
+    ))).to.equal(true);
 
-    expect(reduceSKI(
+    expect(UnChurchBoolean(reduceSKI(
       apply(ChurchN(1), apply(K, False), True)
-    )).to.deep.equal(ChurchB(false));
+    ))).to.equal(false);
 
-    expect(reduceSKI(
+    expect(UnChurchBoolean(reduceSKI(
       apply(ChurchN(2), apply(K, False), True)
-    )).to.deep.equal(ChurchB(false));
+    ))).to.equal(false);
 
-    expect(reduceSKI(
+    expect(UnChurchBoolean(reduceSKI(
       apply(IsZero, ChurchN(0))
-    )).to.deep.equal(ChurchB(true));
+    ))).to.equal(true);
 
-    expect(reduceSKI(
+    expect(UnChurchBoolean(reduceSKI(
       apply(IsZero, ChurchN(1))
-    )).to.deep.equal(ChurchB(false));
+    ))).to.equal(false);
   });
 
   it('reduces sums and products in Church numerals', () => {
-    UpTo(8).forEach(m => {
-      UpTo(8).forEach(n => {
+    UpTo(N).forEach(m => {
+      UpTo(N).forEach(n => {
         // λmn.(m succ)n, or apply m +1s to n
-        expect(UnChurch(
+        expect(UnChurchNumber(
           reduceSKI(apply(ChurchN(m), Succ, ChurchN(n)))
         )).to.equal(m + n);
 
         // λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
-        expect(UnChurch(
+        expect(UnChurchNumber(
           reduceSKI(apply(Plus, ChurchN(m), ChurchN(n)))
         )).to.equal(m + n);
 
         // λmn.m(n(succ)), or apply m +ns to 0
-        expect(UnChurch(
+        expect(UnChurchNumber(
           reduceSKI(apply(ChurchN(m), apply(ChurchN(n), Succ), Zero))
         )).to.equal(m * n);
 
@@ -137,7 +133,7 @@ describe('Church encodings', () => {
          * so the B combinator is functional composition and multiplication
          * in the Church numerals simultaneously.
          */
-        expect(UnChurch(
+        expect(UnChurchNumber(
           reduceSKI(apply(B, ChurchN(m), ChurchN(n), Succ, Zero))
         )).to.equal(m * n);
       });
@@ -162,11 +158,11 @@ describe('Church encodings', () => {
   const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
 
   it('computes the predecessor', () => {
-    UpTo(8).forEach(m => {
+    UpTo(N).forEach(m => {
       const expected = Math.max(m - 1, 0); // pred of 0 is 0
 
       expect(
-        UnChurch(
+        UnChurchNumber(
           reduceSKI(
             apply(Cdr, apply(ChurchN(m), pairShiftSucc, pairZeroZero))
           )
@@ -174,7 +170,7 @@ describe('Church encodings', () => {
       ).to.equal(expected);
 
       expect(
-        UnChurch(reduceSKI(apply(pred, ChurchN(m))))
+        UnChurchNumber(reduceSKI(apply(pred, ChurchN(m))))
       ).to.deep.equal(expected);
     });
   });

@@ -1,5 +1,5 @@
-import { cons } from '../cons.ts';
-import { SKIExpression } from '../ski/expression.ts';
+import { cons, ConsCell } from '../cons.ts';
+import { prettyPrint, SKIExpression } from '../ski/expression.ts';
 import { SKITerminalSymbol } from '../ski/terminal.ts';
 
 /**
@@ -14,14 +14,22 @@ export interface SKIResult<E> {
 
 type ExtractStep<E> = (expr: E) => E | false;
 
+/**
+ * Repeatedly applies SKI reduction steps until no further reductions are possible.
+ * WARNING: This function may not terminate if the expression has an infinite reduction sequence.
+ * @param expr the input SKI expression
+ * @returns the fully reduced expression
+ */
 const stepMany = (expr: SKIExpression): SKIExpression => {
-  const result = stepOnceSKI(expr);
-
-  if (result.altered) {
-    return stepMany(result.expr);
-  } else {
-    return result.expr;
+  let current = expr;
+  for (;;) {
+    const result = stepOnceSKI(current);
+    if (!result.altered) {
+      break;
+    }
+    current = result.expr;
   }
+  return current;
 };
 
 /**
@@ -76,53 +84,120 @@ const scanStep = (
   };
 };
 
+// Frames only ever hold non-terminals.
+interface Frame {
+  node: ConsCell<SKIExpression>;
+  phase: 'left' | 'right';
+  // When phase is 'right', leftResult holds the result for the left subtree.
+  leftResult?: SKIResult<SKIExpression>;
+}
+
 /**
- * @param expr the input expression
- * @param step a stepper
- * @returns the result of traversing the tree to determine if the step
- * resulted in an altering.
+ * This function iterates through a tree of SKI exprsesions applying a step function
+ * to each non-terminal node.
  *
- * NOTE: this is an implementation of DFS where the expression
- * is the input and a singular function that processes an expression
- * and returns either nothing or some result, returning eagerly.
+ * It simulates the recursive DFS:
+ *
+ *    treeStep(expr):
+ *      if expr is terminal, return {altered: false, expr}
+ *      else try to rewrite at expr with step;
+ *           if rewrite succeeds, return the result;
+ *           else let L = treeStep(expr.lft);
+ *                if L.altered, return {altered: true, expr: cons(L.expr, expr.rgt)}
+ *                else let R = treeStep(expr.rgt)
+ *                     return {altered: R.altered, expr: cons(expr.lft, R.expr)}
+ *
+ * Iterative DFS that applies the combinator rewrite function (step)
+ * while memoizing evaluated subtrees (using prettyPrint as a canonical key).
+ *
+ * If a node’s string representation is seen before, its previously computed
+ * result is immediately returned, thus preventing cycles or re‑evaluation.
  */
 function treeStep(
   expr: SKIExpression,
   step: SKIStep<SKIExpression>
-):
-  SKIResult<SKIExpression> {
-  switch (expr.kind) {
-    case 'terminal':
-      return ({
-        altered: false,
-        expr
-      });
+): SKIResult<SKIExpression> {
+  const memo = new Map<string, SKIResult<SKIExpression>>();
+  const stack: Frame[] = [];
+  let current: SKIExpression = expr;
+  let result: SKIResult<SKIExpression>;
 
-    case 'non-terminal': {
-      const currentResult = step(expr);
-
-      if (currentResult.altered) {
-        return currentResult;
+  for(;;) {
+    const key = prettyPrint(current);
+    if (memo.has(key)) {
+      // If we've already computed the result for this subtree, use it.
+      const cached = memo.get(key);
+      if (!cached) {
+        throw new Error('missing cached result');
       }
-
-      const lftStepResult = treeStep(expr.lft, step);
-
-      if (lftStepResult.altered) {
-        return ({
-          altered: true,
-          expr: cons(lftStepResult.expr, expr.rgt)
-        });
+      result = cached;
+    } else {
+      if (current.kind === 'terminal') {
+        // Terminal nodes are already in normal form.
+        result = { altered: false, expr: current };
+      } else {
+        // Attempt to rewrite this non-terminal node.
+        const stepResult = step(current);
+        if (stepResult.altered) {
+          result = stepResult;
+        } else {
+          // No rewrite occurred; we must process the left subtree.
+          stack.push({ node: current, phase: 'left' });
+          current = current.lft;
+          continue; // descend into left child
+        }
       }
-
-      const rgtStepResult = treeStep(expr.rgt, step);
-
-      return {
-        altered: rgtStepResult.altered,
-        expr: cons(expr.lft, rgtStepResult.expr)
-      };
+      // Memoize the result for current's canonical key.
+      memo.set(key, result);
     }
+
+    // If there's nothing on the stack, we're done.
+    if (stack.length === 0) {
+      return result;
+    }
+
+    // Otherwise, pop a frame from the stack.
+    const frame = stack.pop();
+    if (!frame) {
+      throw new Error('stack underflow');
+    } else if (frame.phase === 'left') {
+      // We have just finished processing the left subtree.
+      if (result.altered) {
+        // According to the rewrite rules, if the left subtree changed,
+        // the whole node becomes cons(rewrittenLeft, original right)
+        result = { altered: true, expr: cons(result.expr, frame.node.rgt) };
+        // Memoize the combined result using the parent's key.
+        memo.set(prettyPrint(frame.node), result);
+      } else {
+        // Left subtree was unchanged.
+        // Save the left result in the frame and now descend into the right child.
+        stack.push({ node: frame.node, phase: 'right', leftResult: { altered: false, expr: frame.node.lft } });
+        current = frame.node.rgt;
+        continue; // descend into right child
+      }
+    } else {
+      // frame.phase === 'right'
+      // We have finished processing the right subtree. Combine the left and right results.
+
+      if (!frame.leftResult) {
+        throw new Error('missing left result');
+      }
+
+      result = { altered: result.altered, expr: cons(frame.leftResult.expr, result.expr) };
+      // Memoize the result for the parent node.
+      memo.set(prettyPrint(frame.node), result);
+    }
+
+    // Check if there are any remaining frames; if not, return the result.
+    if (stack.length === 0) {
+      return result;
+    }
+
+    // Otherwise, continue processing: set current to the just-combined expression.
+    current = result.expr;
   }
 }
+
 
 function extractStep(
   expr: SKIExpression,
@@ -149,9 +224,9 @@ const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) =>
   extractStep(
     expr, (expr: SKIExpression) =>
       expr.kind === 'non-terminal' &&
-    expr.lft.kind === 'terminal' &&
-    expr.lft.sym === SKITerminalSymbol.I &&
-    expr.rgt
+      expr.lft.kind === 'terminal' &&
+      expr.lft.sym === SKITerminalSymbol.I &&
+      expr.rgt
   );
 
 /*

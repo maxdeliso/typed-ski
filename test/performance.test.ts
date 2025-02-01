@@ -1,38 +1,35 @@
-import { compute } from '../lib/ski/expression.ts';
-
+import { generateExpr, SKIExpression } from '../lib/ski/expression.ts';
 import { hrtime } from 'process';
-
-import { Readable } from 'stream';
-
 import randomSeed from 'random-seed';
+import { stepOnceSKI } from '../lib/evaluator/skiEvaluator.ts';
 
 describe('evaluator performance', () => {
-  const S = 64; // symbol count in each randomly generated expression
-  const N = 256; // the total number of reductions to complete
+  const S = 64; // symbol count in each generated expression
+  const N = 1024; // number of reductions to perform
 
-  it('is estimated by measuring the rate of reductions', () => {
-    const seed = hrtime.bigint.toString();
+  it('is estimated by measuring the rate of reductions (excluding tree generation)', () => {
+    const seed = hrtime.bigint().toString();
     const rs = randomSeed.create(seed);
+
+    // Pre-generate N SKI expressions.
+    const expressions: SKIExpression[] = [];
+    for (let i = 0; i < N; i++) {
+      expressions.push(generateExpr(rs, S));
+    }
+
+    // Now measure the time spent reducing the pre-generated trees.
     const start = hrtime.bigint();
-    const testOutput = new Readable();
-    let generations = 1; // generate upon unaltered evaluation
-
-    compute(S, N, rs,
-      () => testOutput.push('.'),
-      () => {
-        testOutput.push('!');
-        generations++;
-      });
-
-    const final = hrtime.bigint();
-    const elapsedNs = final - start;
+    for (const expr of expressions) {
+      stepOnceSKI(expr);
+    }
+    const end = hrtime.bigint();
+    const elapsedNs = end - start;
     const estimatedReductionDurationNs = elapsedNs / BigInt(N);
 
-    testOutput.push(
-      `\ncompleted in ${elapsedNs.toString()} ns
-for an estimated ${estimatedReductionDurationNs.toString()} ns per reduction
-with random seed ${seed} and ${generations.toString()} generations.`);
-    testOutput.push(null);
-    testOutput.pipe(process.stdout);
+    console.log(
+      `\ncompleted in ${elapsedNs.toString()} ns\n` +
+      `for an estimated ${estimatedReductionDurationNs.toString()} ns per reduction step\n` +
+      `with random seed ${seed} and ${N.toString()} reductions.`
+    );
   });
 });

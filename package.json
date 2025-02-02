@@ -4,6 +4,7 @@
   "description": "SKI combinators in Typescript",
   "scripts": {
     "test": "mocha test/**/*.test.ts",
+    "test:performance": "mocha test/performance.test.ts",
     "build": "tsc",
     "lint": "yarn eslint lib test",
     "lint:fix": "yarn eslint lib test --fix",
@@ -27,8 +28,8 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.16.0",
-    "@stylistic/eslint-plugin": "^2.3.0",
-    "@stylistic/eslint-plugin-ts": "^2.3.0",
+    "@stylistic/eslint-plugin": "3.0.1",
+    "@stylistic/eslint-plugin-ts": "3.0.1",
     "@types/chai": "^5.0.1",
     "@types/eslint__js": "^8.42.3",
     "@types/jest": "^29.5.11",

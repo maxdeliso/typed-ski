@@ -25,20 +25,36 @@ export type SKIExpression = SKITerminal | ConsCell<SKIExpression>;
   * @returns a pretty printed expression.
   */
 export function prettyPrint(expr: SKIExpression): string {
-  switch (expr.kind) {
-    case 'terminal':
-      return expr.sym;
-    case 'non-terminal': {
-      const printed = [
-        '(',
-        prettyPrint(expr.lft),
-        prettyPrint(expr.rgt),
-        ')'
-      ];
+  // We'll build the output in parts.
+  const resultParts: string[] = [];
+  // Our stack will contain either SKIExpression nodes or literal strings.
+  const stack: (SKIExpression | string)[] = [expr];
 
-      return printed.join('');
+  while (stack.length > 0) {
+    const item = stack.pop();
+    if (!item) {
+      throw new Error('stack underflow');
+    }
+
+    if (typeof item === 'string') {
+      // A literal string (like "(" or ")") is appended immediately.
+      resultParts.push(item);
+    } else if (item.kind === 'terminal') {
+      // For terminal nodes, simply output the symbol.
+      resultParts.push(item.sym);
+    } else {
+      // For non-terminal nodes, we want to output:
+      // "(" + prettyPrint(lft) + prettyPrint(rgt) + ")"
+      // Because we are using a stack (LIFO), we push the components in reverse order.
+      stack.push(')');         // Will be printed last.
+      stack.push(item.rgt);      // Right subtree.
+      stack.push(item.lft);      // Left subtree.
+      stack.push('(');           // Will be printed first.
     }
   }
+
+  // The result parts are collected in order, so join them into the final string.
+  return resultParts.join('');
 }
 
 export const generateExpr = (rs: RandomSeed, n: number): SKIExpression => {

@@ -42,6 +42,65 @@ export const reduceSKI = (
 ): SKIExpression => stepMany(exp);
 
 /**
+ * Run β reduction on a SKI expression until it terminates.
+ * @param exp the input expression.
+ * @returns the evaluation result.
+ */
+export const reduceSKIImmediate = (exp: SKIExpression): SKIExpression => {
+  let current = exp;
+  for(;;) {
+    const result = stepOnceImmediate(current);
+    if (!result.altered) break;
+    current = result.expr;
+  }
+  return current;
+};
+
+/**
+ * A simple step-once function that performs exactly one reduction
+ * using a normal-order (leftmost‑outermost) strategy.
+ *
+ * This function is separate from the memoizing treeStep:
+ * it stops immediately upon applying the first reduction.
+ */
+export const stepOnceImmediate = (expr: SKIExpression): SKIResult<SKIExpression> => {
+  // If the current node is a terminal, there’s nothing to reduce.
+  if (expr.kind === 'terminal') {
+    return { altered: false, expr };
+  }
+
+  const iStep = stepI(expr);
+  if (iStep.altered) {
+    return iStep;
+  }
+
+  const kStep = stepK(expr);
+  if (kStep.altered) {
+    return kStep;
+  }
+
+  const sStep = stepS(expr);
+  if (sStep.altered) {
+    return sStep;
+  }
+
+  // No redex at this node. If it's non‑terminal, try reducing its left subtree.
+  const leftResult = stepOnceImmediate(expr.lft);
+  if (leftResult.altered) {
+    return { altered: true, expr: cons(leftResult.expr, expr.rgt) };
+  }
+
+  // Left subtree didn't reduce; try the right subtree.
+  const rightResult = stepOnceImmediate(expr.rgt);
+  if (rightResult.altered) {
+    return { altered: true, expr: cons(expr.lft, rightResult.expr) };
+  }
+
+  // If neither subtree reduced, no reduction is possible.
+  return { altered: false, expr };
+};
+
+/**
  * the SKI combinator single step reduction function.
  * @param expr the input expression.
  * @returns the evaluation result after one step.
@@ -110,8 +169,11 @@ interface Frame {
  * Iterative DFS that applies the combinator rewrite function (step)
  * while memoizing evaluated subtrees (using prettyPrint as a canonical key).
  *
- * If a node’s string representation is seen before, its previously computed
+ * If a node's string representation is seen before, its previously computed
  * result is immediately returned, thus preventing cycles or re‑evaluation.
+ *
+ * However this evaluation strategy may not terminate if the expression has an
+ * infinite reduction sequence.
  */
 function treeStep(
   expr: SKIExpression,

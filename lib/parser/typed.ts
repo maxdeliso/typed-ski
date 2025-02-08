@@ -1,9 +1,8 @@
 import { mkVar } from '../lambda/lambda.ts';
 import { TypedLambda, mkTypedAbs } from '../typed/typedLambda.ts';
-import { Type, arrow, mkTypeVar } from '../typed/types.ts';
-import { ParseError } from './parseError.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { parseLambdaChain } from './chain.ts';
+import { parseArrowType } from './type.ts';
 
 function parseAtomicTypedLambda(
   rdb: RecursiveDescentBuffer
@@ -15,7 +14,7 @@ function parseAtomicTypedLambda(
     rdb.matchCh('λ');
     const varLit = rdb.parseVariable();
     rdb.matchCh(':');
-    const [typeLit, ty] = parseTypeInternal(rdb);
+    const [typeLit, ty] = parseArrowType(rdb);
     rdb.matchCh('.');
     const [bodyLit, bodyTerm] = parseTypedLambdaInternal(rdb);
     return [`λ${varLit}:${typeLit}.${bodyLit}`, mkTypedAbs(varLit, ty, bodyTerm)];
@@ -32,64 +31,13 @@ function parseAtomicTypedLambda(
   }
 }
 
-function parseTypeInternal(rdb: RecursiveDescentBuffer): [string, Type] {
-  if (rdb.peek() === '(') {
-    rdb.matchLP();
-    const [leftTypeLit, leftTy] = parseTypeInternal(rdb);
-
-    if ((rdb.peek() === '→')) {
-      rdb.consume();
-      const [rightTypeLit, rightTy] = parseTypeInternal(rdb);
-
-      if (rdb.peek() !== ')') throw new ParseError('expected a )');
-      rdb.matchRP();
-
-      // '(' <ty_1> '→' <ty_2> ')' )
-      return [`(${leftTypeLit}→${rightTypeLit})`, arrow(leftTy, rightTy)];
-    } else if (rdb.peek() === ')') {
-      rdb.consume();
-
-      if (rdb.peek() === '→') {
-        rdb.consume();
-        const [nextTypeLit, nextTy] = parseTypeInternal(rdb);
-
-        // '(' <ty_1> ')' '→' <ty_2>
-        return [`(${leftTypeLit})→${nextTypeLit}`, arrow(leftTy, nextTy)];
-      } else {
-        // '(' <ty_1> NOT('→', ')')
-        return [leftTypeLit, leftTy];
-      }
-    } else {
-      throw new ParseError('expected a → or ) after ( Type');
-    }
-  } else {
-    const varLit = rdb.parseVariable();
-
-    if (rdb.peek() === '→') {
-      rdb.consume();
-      const [nextTypeLit, t2] = parseTypeInternal(rdb);
-
-      // <var> '→' <ty>
-      return [`${varLit}→${nextTypeLit}`, arrow(mkTypeVar(varLit), t2)];
-    } else {
-      // <var> NOT('→')
-      return [varLit, mkTypeVar(varLit)];
-    }
-  }
-}
-
-export function parseType(input: string): [string, Type] {
-  const rdb = new RecursiveDescentBuffer(input);
-  return parseTypeInternal(rdb);
+function parseTypedLambdaInternal(
+  rdb: RecursiveDescentBuffer
+): [string, TypedLambda] {
+  return parseLambdaChain<TypedLambda>(rdb, parseAtomicTypedLambda);
 }
 
 export function parseTypedLambda(input: string): [string, TypedLambda] {
   const rdb = new RecursiveDescentBuffer(input);
   return parseTypedLambdaInternal(rdb);
-}
-
-function parseTypedLambdaInternal(
-  rdb: RecursiveDescentBuffer
-): [string, TypedLambda] {
-  return parseLambdaChain<TypedLambda>(rdb, parseAtomicTypedLambda);
 }

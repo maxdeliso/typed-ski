@@ -1,7 +1,8 @@
 import { cons } from '../../lib/cons.ts';
 import { mkVar } from '../../lib/lambda/lambda.ts';
 import { ParseError } from '../../lib/parser/parseError.ts';
-import { parseTypedLambda, parseType } from '../../lib/parser/typed.ts';
+import { parseTypedLambda } from '../../lib/parser/typed.ts';
+import { parseType } from '../../lib/parser/type.ts';
 import { typedTermsLitEq, mkTypedAbs } from '../../lib/typed/typedLambda.ts';
 import { typesLitEq, arrow, mkTypeVar, arrows } from '../../lib/typed/types.ts';
 

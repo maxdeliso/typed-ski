@@ -2,11 +2,6 @@ import { UntypedLambda, mkUntypedAbs, mkVar } from '../lambda/lambda.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { parseLambdaChain } from './chain.ts';
 
-export function parseLambda(input: string): [string, UntypedLambda] {
-  const rdb = new RecursiveDescentBuffer(input);
-  return parseUntypedLambdaInternal(rdb);
-}
-
 function parseUntypedLambdaInternal(
   rdb: RecursiveDescentBuffer
 ): [string, UntypedLambda] {
@@ -36,4 +31,9 @@ export function parseAtomicUntypedLambda(
     const varLit = rdb.parseVariable();
     return [varLit, mkVar(varLit)];
   }
+}
+
+export function parseLambda(input: string): [string, UntypedLambda] {
+  const rdb = new RecursiveDescentBuffer(input);
+  return parseUntypedLambdaInternal(rdb);
 }

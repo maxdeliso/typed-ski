@@ -1,6 +1,6 @@
 import { ConsCell } from '../cons.ts';
 import { LambdaVar } from '../terms/lambda.ts';
-import { Type, arrow, typesLitEq, prettyPrintTy } from './types.ts';
+import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.ts';
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -20,7 +20,7 @@ import { Type, arrow, typesLitEq, prettyPrintTy } from './types.ts';
 export interface TypedLambdaAbs {
   kind: 'typed-lambda-abstraction',
   varName: string,
-  ty: Type,
+  ty: BaseType,
   body: TypedLambda
 }
 
@@ -33,7 +33,7 @@ export type TypedLambda
   | ConsCell<TypedLambda>;
 
 export const mkTypedAbs = (
-  varName: string, ty: Type, body: TypedLambda
+  varName: string, ty: BaseType, body: TypedLambda
 ): TypedLambdaAbs => ({
   kind: 'typed-lambda-abstraction',
   varName,
@@ -44,10 +44,10 @@ export const mkTypedAbs = (
 /**
  * Γ, or capital Gamma, represents the set of mappings from names to types.
  */
-export type Context = Map<string, Type>;
+export type Context = Map<string, BaseType>;
 
 export const addBinding =
-  (ctx: Context, name: string, ty: Type): Context => {
+  (ctx: Context, name: string, ty: BaseType): Context => {
     if (ctx.get(name)) {
       throw new TypeError('duplicated binding for name: ' + name);
     }
@@ -55,8 +55,8 @@ export const addBinding =
     return ctx.set(name, ty);
   };
 
-export const typecheck = (typedTerm: TypedLambda): Type => {
-  return typecheckGiven(new Map<string, Type>(), typedTerm);
+export const typecheck = (typedTerm: TypedLambda): BaseType => {
+  return typecheckGiven(new Map<string, BaseType>(), typedTerm);
 };
 
 /**
@@ -67,7 +67,7 @@ export const typecheck = (typedTerm: TypedLambda): Type => {
  * @param typedTerm a lambda term annotated with an input type
  * @returns the type of the entire term
  */
-export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): Type => {
+export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): BaseType => {
   switch (typedTerm.kind) {
     case 'lambda-var': {
       const termName = typedTerm.name;

@@ -1,58 +1,45 @@
 import { ConsCell, cons } from '../cons.ts';
 
-/**
- * The type variable node.
- */
 export interface TypeVariable {
   kind: 'type-var';
   typeName: string;
 }
 
-/**
- * A type is either a type variable or an arrow type
- * (represented as a cons cell of types).
- */
-export type Type = TypeVariable | ConsCell<Type>;
+export interface ForallType {
+  kind: 'forall';
+  typeVar: string;
+  body: BaseType;
+}
 
-/**
- * Constructor for a type variable.
- */
+export type BaseType = TypeVariable | ConsCell<BaseType> | ForallType;
+
 export const mkTypeVariable = (name: string): TypeVariable => ({
   kind: 'type-var',
   typeName: name,
 });
 
-/**
- * Constructs an arrow type A→B as a cons cell.
- */
-export const arrow = (a: Type, b: Type): Type => cons<Type>(a, b);
+export const arrow = (a: BaseType, b: BaseType): ConsCell<BaseType> => cons(a, b);
 
-/**
- * Given a list of types, builds a right–associative arrow type.
- * For example, arrows(a, b, c) produces a→(b→c).
- */
-export const arrows = (...tys: Type[]): Type =>
-  tys.reduceRight((acc, ty) => cons<Type>(ty, acc));
+export const arrows = (...tys: BaseType[]): BaseType =>
+  tys.reduceRight((acc, ty) => cons(ty, acc));
 
-/**
- * Compares two types for literal equality.
- */
-export const typesLitEq = (a: Type, b: Type): boolean => {
+export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
   if (a.kind === 'type-var' && b.kind === 'type-var') {
     return a.typeName === b.typeName;
-  } else if (a.kind === 'non-terminal' && b.kind === 'non-terminal') {
+  } else if (a.kind === 'forall' && b.kind === 'forall') {
+    return a.typeVar === b.typeVar && typesLitEq(a.body, b.body);
+  } else if ('lft' in a && 'rgt' in a && 'lft' in b && 'rgt' in b) {
     return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt);
   } else {
     return false;
   }
 };
 
-/**
- * Pretty–prints a type.
- */
-export const prettyPrintTy = (ty: Type): string => {
+export const prettyPrintTy = (ty: BaseType): string => {
   if (ty.kind === 'type-var') {
     return ty.typeName;
+  } else if (ty.kind === 'forall') {
+    return `∀${ty.typeVar}.${prettyPrintTy(ty.body)}`;
   } else {
     return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`;
   }

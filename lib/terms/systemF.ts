@@ -71,6 +71,9 @@ export const mkSystemFTypeApp = (
   typeArg,
 });
 
+export const mkSystemFApp = (lft: SystemFTerm, rgt: SystemFTerm): SystemFTerm =>
+  ({ kind: 'non-terminal', lft, rgt });
+
 /**
  * A System F term is one of:
  *  - a variable,

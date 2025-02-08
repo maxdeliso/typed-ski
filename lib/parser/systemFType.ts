@@ -1,5 +1,5 @@
-import { SystemFType, arrow, forall } from '../types/systemF.ts';
-import { mkTypeVariable } from '../types/types.ts';
+import { SystemFType, forall } from '../types/systemF.ts';
+import { arrow, mkTypeVariable } from '../types/types.ts';
 import { ParseError } from './parseError.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 

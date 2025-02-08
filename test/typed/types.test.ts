@@ -8,7 +8,7 @@ import {
   mkTypeVariable,
   typesLitEq,
   arrow,
-  Type
+  BaseType
 } from '../../lib/types/types.ts';
 import {
   inferType,
@@ -157,7 +157,7 @@ describe('Types', () => {
         const a = mkTypeVariable('a');
         const b = mkTypeVariable('b');
         const funType = arrow(a, b);
-        const context = new Map<string, Type>();
+        const context = new Map<string, BaseType>();
 
         context.set('x', a);
 
@@ -176,11 +176,11 @@ describe('Types', () => {
         const t1 = arrow(a, a);
         const t2 = arrow(b, c);
 
-        const context = new Map<string, Type>();
+        const context = new Map<string, BaseType>();
         context.set('x', t1);
         unify(t1, t2, context);
 
-        expect(context.get('x')).to.satisfy((ty: { lft: Type; rgt: Type; }) => {
+        expect(context.get('x')).to.satisfy((ty: { lft: BaseType; rgt: BaseType; }) => {
           return typesLitEq(ty.lft, ty.rgt);
         });
       });

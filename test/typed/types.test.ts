@@ -8,14 +8,16 @@ import {
   mkTypeVariable,
   typesLitEq,
   arrow,
+  Type
+} from '../../lib/types/types.ts';
+import {
   inferType,
   substituteType,
-  unify,
-  Type,
-  normalize
-} from '../../lib/types/types.ts';
+  unify
+} from '../../lib/types/inference.ts';
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
+import { normalize } from '../../lib/types/normalization.ts';
 
 describe('Types', () => {
   describe('basic type operations', () => {

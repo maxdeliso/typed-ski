@@ -1,10 +1,24 @@
 import { cons } from '../../lib/cons.ts';
 import { mkVar } from '../../lib/lambda/lambda.ts';
-import { mkTypedAbs, typecheck } from '../../lib/typed/typedLambda.ts';
-import { mkTypeVar, arrow, typesLitEq, arrows } from '../../lib/typed/types.ts';
+import { addBinding, mkTypedAbs, typecheck } from '../../lib/typed/typedLambda.ts';
+import { mkTypeVar, arrow, typesLitEq, arrows, TypeVariable } from '../../lib/typed/types.ts';
 
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
+
+describe('type checking errors', () => {
+  it('throws an error for free variables', () => {
+    // Create a term with a free variable: just the variable "x" with no binding.
+    expect(() => typecheck(mkVar('x'))).to.throw(/unknown term named: x/);
+  });
+
+  it('throws an error on duplicate binding', () => {
+    const ctx = new Map<string, TypeVariable>();
+    addBinding(ctx, 'x', mkTypeVar('a'));
+    expect(() => addBinding(ctx, 'x', mkTypeVar('b')))
+      .to.throw(/duplicated binding for name: x/);
+  });
+});
 
 describe('type checking', () => {
   it('typechecks the I combinator', () => {

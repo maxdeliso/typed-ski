@@ -2,8 +2,17 @@ import { cons } from '../../lib/cons.ts';
 import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/lambda/lambda.ts';
 import { parseTypedLambda, parseType } from '../../lib/parser/typed.ts';
 import { typedTermsLitEq } from '../../lib/typed/typedLambda.ts';
-import { arrows, mkTypeVar, typesLitEq, arrow, inferType } from '../../lib/typed/types.ts';
-
+import {
+  arrows,
+  mkTypeVar,
+  typesLitEq,
+  arrow,
+  inferType,
+  substituteType,
+  unify,
+  Type,
+  normalize
+} from '../../lib/typed/types.ts';
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
@@ -86,7 +95,7 @@ describe('type inference', () => {
 
   it('fails to infer type of λx.xx', () => {
     expect(() => inferType(mkUntypedAbs('x', cons(mkVar('x'), mkVar('x')))))
-      .to.throw(/type mismatch/);
+      .to.throw(/Occurs check failed/);
   });
 
   it('fails at inferring the type λx.λy.(xy)x', () => {
@@ -97,6 +106,76 @@ describe('type inference', () => {
             mkVar('x'),
             mkVar('y')),
           mkVar('x')))))
-    ).to.throw(/type mismatch/);
+    ).to.throw(/Occurs check failed/);
+  });
+});
+
+describe('occurs check in substitution', () => {
+  it('throws an error when a type variable occurs in its own substitution', () => {
+    const a = mkTypeVar('a');
+    const b = mkTypeVar('b');
+    const funType = arrow(a, b);
+
+    expect(() => substituteType(a, a, funType))
+      .to.throw(/Occurs check failed/);
+  });
+});
+
+describe('normalize', () => {
+  it('normalizes a type with repeated variables correctly', () => {
+    const nonNormalized = arrow(mkTypeVar('q'), arrow(mkTypeVar('p'), mkTypeVar('q')));
+    const expected = arrow(mkTypeVar('a'), arrow(mkTypeVar('b'), mkTypeVar('a')));
+
+    const normalized = normalize(nonNormalized);
+
+    expect(typesLitEq(normalized, expected)).to.equal(true);
+  });
+
+  it('normalizes a chain of arrow types assigning fresh names in order of appearance', () => {
+    const nonNormalized = arrows(mkTypeVar('x'), mkTypeVar('y'), mkTypeVar('z'));
+    const expected = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c'));
+    const normalized = normalize(nonNormalized);
+
+    expect(typesLitEq(normalized, expected)).to.equal(true);
+  });
+
+  it('leaves an already normalized type unchanged', () => {
+    const normalizedInput = arrow(mkTypeVar('a'), arrow(mkTypeVar('b'), mkTypeVar('a')));
+    const normalizedOutput = normalize(normalizedInput);
+
+    expect(typesLitEq(normalizedInput, normalizedOutput)).to.equal(true);
+  });
+
+});
+
+describe('advanced unification', () => {
+  it('throws an error when trying to unify a variable with a type that contains it (circular)', () => {
+    const a = mkTypeVar('a');
+    const b = mkTypeVar('b');
+    const funType = arrow(a, b);
+    const context = new Map<string, Type>();
+
+    context.set('x', a);
+
+    expect(() => {
+      unify(a, funType, context);
+    }).to.throw(/Occurs check failed/);
+  });
+
+  it('unifies two arrow types by decomposing their structure', () => {
+    const a = mkTypeVar('a');
+    const b = mkTypeVar('b');
+    const c = mkTypeVar('c');
+
+    const t1 = arrow(a, a);
+    const t2 = arrow(b, c);
+
+    const context = new Map<string, Type>();
+    context.set('x', t1);
+    unify(t1, t2, context);
+
+    expect(context.get('x')).to.satisfy((ty: { lft: Type; rgt: Type; }) => {
+      return typesLitEq(ty.lft, ty.rgt);
+    });
   });
 });

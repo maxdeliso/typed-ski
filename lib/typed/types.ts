@@ -1,6 +1,6 @@
 import { ConsCell, cons } from '../cons.ts';
 import { UntypedLambda } from '../lambda/lambda.ts';
-import { TypedLambda, typecheck, mkTypedAbs, Context } from './typedLambda.ts';
+import { TypedLambda, mkTypedAbs, Context } from './typedLambda.ts';
 
 export interface TypeVariable {
   kind: 'type-var',
@@ -63,10 +63,12 @@ export const inferType = (
 ): [TypedLambda, Type] => {
   const absBindings = new Map<string, Type>();
   const inferredContext = new Map<string, Type>();
+
   let inferred = algorithmW(term, tyVars(), absBindings, inferredContext);
 
   inferredContext.forEach((combinedTy, termName) => {
     const originalTy = absBindings.get(termName);
+
     if (originalTy !== undefined && !typesLitEq(combinedTy, originalTy)) {
       inferred = substituteType(inferred, originalTy, combinedTy);
     }
@@ -77,10 +79,10 @@ export const inferType = (
   inferredContext.forEach((ty, termName) => {
     inferredContext.set(termName, normalizeTy(ty, normalizationMappings, vars));
   });
+  const normalizedType = normalizeTy(inferred, normalizationMappings, vars);
 
   const typedTerm = attachTypes(term, inferredContext);
-
-  return [typedTerm, typecheck(typedTerm)];
+  return [typedTerm, normalizedType];
 };
 
 const algorithmW = (
@@ -115,26 +117,56 @@ const algorithmW = (
   }
 };
 
-const unify = (
-  lft: Type,
-  rgt: Type,
-  unified: Context
-): void => {
-  unified.forEach((contextType, termName) => {
-    const substituted = substituteType(contextType, lft, rgt);
-    unified.set(termName, substituted);
-  });
+export const unify = (t1: Type, t2: Type, context: Context): void => {
+  if (typesLitEq(t1, t2)) {
+    return;
+  }
+
+  // If t1 is a type variable, bind it to t2 (after an occurs check).
+  if (t1.kind === 'type-var') {
+    // occursIn will throw if t1 occurs in t2.
+    if (occursIn(t1, t2)) {
+      throw new TypeError(
+        `Occurs check failed: ${t1.typeName} occurs in ${prettyPrintTy(t2)}`
+      );
+    }
+    // Apply the substitution in the entire context.
+    for (const [key, ty] of context.entries()) {
+      context.set(key, substituteType(ty, t1, t2));
+    }
+    return;
+  }
+
+  // Similarly, if t2 is a type variable, bind it to t1.
+  if (t2.kind === 'type-var') {
+    if (occursIn(t2, t1)) {
+      throw new TypeError(
+        `Occurs check failed: ${t2.typeName} occurs in ${prettyPrintTy(t1)}`
+      );
+    }
+    for (const [key, ty] of context.entries()) {
+      context.set(key, substituteType(ty, t2, t1));
+    }
+    return;
+  }
+
+  unify(t1.lft, t2.lft, context);
+  unify(t1.rgt, t2.rgt, context);
 };
 
-const substituteType = (original: Type, lft: Type, rgt: Type): Type => {
+export const substituteType = (original: Type, lft: Type, rgt: Type): Type => {
   if (typesLitEq(lft, original)) {
+    if (lft.kind === 'type-var' && occursIn(lft, rgt)) {
+      throw new TypeError(
+        `Occurs check failed: ${lft.typeName} occurs in ${prettyPrintTy(rgt)}`
+      );
+    }
     return rgt;
   }
 
   switch (original.kind) {
     case 'type-var':
       return original;
-
     case 'non-terminal':
       return cons(
         substituteType(original.lft, lft, rgt),
@@ -169,6 +201,14 @@ function tyVars(): () => TypeVariable {
 
   return generator;
 }
+
+const occursIn = (tv: TypeVariable, ty: Type): boolean => {
+  if (ty.kind === 'type-var') {
+    return ty.typeName === tv.typeName;
+  } else {
+    return occursIn(tv, ty.lft) || occursIn(tv, ty.rgt);
+  }
+};
 
 const normalizeTy = (
   ty: Type,
@@ -220,4 +260,10 @@ const attachTypes = (
         attachTypes(untyped.rgt, types)
       );
   }
+};
+
+export const normalize = (ty: Type): Type => {
+  const mapping = new Map<string, string>();
+  const vars = tyVars();
+  return normalizeTy(ty, mapping, vars);
 };

@@ -1,4 +1,4 @@
-import { typelessApp, mkVar, mkUntypedAbs, prettyPrintUntypedLambda } from '../../lib/lambda/lambda.ts';
+import { typelessApp, mkVar, mkUntypedAbs, prettyPrintUntypedLambda } from '../../lib/terms/lambda.ts';
 import { parseLambda } from '../../lib/parser/untyped.ts';
 
 import { expect } from 'chai';

@@ -1,5 +1,5 @@
 import { ConsCell } from '../cons.ts';
-import { LambdaVar } from '../lambda/lambda.ts';
+import { LambdaVar } from '../terms/lambda.ts';
 import { Type, arrow, typesLitEq, prettyPrintTy } from './types.ts';
 
 /**

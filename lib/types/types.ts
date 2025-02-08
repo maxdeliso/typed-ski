@@ -1,5 +1,5 @@
 import { ConsCell, cons } from '../cons.ts';
-import { UntypedLambda } from '../lambda/lambda.ts';
+import { UntypedLambda } from '../terms/lambda.ts';
 import { TypedLambda, mkTypedAbs, Context } from './typedLambda.ts';
 
 export interface TypeVariable {
@@ -11,7 +11,7 @@ export type Type
   = TypeVariable
   | ConsCell<Type>;
 
-export const mkTypeVar = (name: string): TypeVariable => ({
+export const mkTypeVariable = (name: string): TypeVariable => ({
   kind: 'type-var',
   typeName: name
 });
@@ -196,7 +196,7 @@ function tyVars(): () => TypeVariable {
       throw new Error('too many type variables');
     }
     const str = String.fromCharCode(97 + offset);
-    return mkTypeVar(str);
+    return mkTypeVariable(str);
   };
 
   return generator;
@@ -223,7 +223,7 @@ const normalizeTy = (
         mapping.set(ty.typeName, newVar.typeName);
         return newVar;
       } else {
-        return mkTypeVar(mapped);
+        return mkTypeVariable(mapped);
       }
     }
     case 'non-terminal':

@@ -1,5 +1,5 @@
-import { mkVar } from '../lambda/lambda.ts';
-import { TypedLambda, mkTypedAbs } from '../typed/typedLambda.ts';
+import { mkVar } from '../terms/lambda.ts';
+import { TypedLambda, mkTypedAbs } from '../types/typedLambda.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { parseLambdaChain } from './chain.ts';
 import { parseArrowType } from './type.ts';

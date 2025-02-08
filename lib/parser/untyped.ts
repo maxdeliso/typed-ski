@@ -1,4 +1,4 @@
-import { UntypedLambda, mkUntypedAbs, mkVar } from '../lambda/lambda.ts';
+import { UntypedLambda, mkUntypedAbs, mkVar } from '../terms/lambda.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { parseLambdaChain } from './chain.ts';
 import { parseWithEOF } from './eof.ts';

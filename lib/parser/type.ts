@@ -1,6 +1,6 @@
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { ParseError } from './parseError.ts';
-import { Type, arrow, mkTypeVar } from '../typed/types.ts';
+import { Type, arrow, mkTypeVariable } from '../types/types.ts';
 import { parseWithEOF } from './eof.ts';
 
 /**
@@ -20,7 +20,7 @@ export function parseSimpleType(rdb: RecursiveDescentBuffer): [string, Type] {
   } else {
     // A variable.
     const varLit = rdb.parseVariable();
-    return [varLit, mkTypeVar(varLit)];
+    return [varLit, mkTypeVariable(varLit)];
   }
 }
 

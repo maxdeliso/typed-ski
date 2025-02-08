@@ -1,11 +1,11 @@
 import { cons } from '../../lib/cons.ts';
-import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/lambda/lambda.ts';
+import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/terms/lambda.ts';
 import { parseType } from '../../lib/parser/type.ts';
 import { parseTypedLambda } from '../../lib/parser/typed.ts';
-import { typedTermsLitEq } from '../../lib/typed/typedLambda.ts';
+import { typedTermsLitEq } from '../../lib/types/typedLambda.ts';
 import {
   arrows,
-  mkTypeVar,
+  mkTypeVariable,
   typesLitEq,
   arrow,
   inferType,
@@ -13,16 +13,16 @@ import {
   unify,
   Type,
   normalize
-} from '../../lib/typed/types.ts';
+} from '../../lib/types/types.ts';
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
 describe('Types', () => {
   describe('basic type operations', () => {
     describe('type construction and equivalence', () => {
-      const t1 = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c'));
-      const t2 = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('d'));
-      const t3 = arrows(mkTypeVar('d'), mkTypeVar('e'), mkTypeVar('f'));
+      const t1 = arrows(mkTypeVariable('a'), mkTypeVariable('b'), mkTypeVariable('c'));
+      const t2 = arrows(mkTypeVariable('a'), mkTypeVariable('b'), mkTypeVariable('d'));
+      const t3 = arrows(mkTypeVariable('d'), mkTypeVariable('e'), mkTypeVariable('f'));
 
       it('recursively checks for literal type equivalence', () => {
         expect(typesLitEq(t1, t1)).to.equal(true);
@@ -35,8 +35,8 @@ describe('Types', () => {
       it('associates type construction to the right', () => {
         expect(
           typesLitEq(
-            arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c')),
-            arrow(mkTypeVar('a'), arrow(mkTypeVar('b'), mkTypeVar('c')))
+            arrows(mkTypeVariable('a'), mkTypeVariable('b'), mkTypeVariable('c')),
+            arrow(mkTypeVariable('a'), arrow(mkTypeVariable('b'), mkTypeVariable('c')))
           )
         ).to.equal(true);
       });
@@ -44,21 +44,21 @@ describe('Types', () => {
 
     describe('type normalization', () => {
       it('normalizes a type with repeated variables correctly', () => {
-        const nonNormalized = arrow(mkTypeVar('q'), arrow(mkTypeVar('p'), mkTypeVar('q')));
-        const expected = arrow(mkTypeVar('a'), arrow(mkTypeVar('b'), mkTypeVar('a')));
+        const nonNormalized = arrow(mkTypeVariable('q'), arrow(mkTypeVariable('p'), mkTypeVariable('q')));
+        const expected = arrow(mkTypeVariable('a'), arrow(mkTypeVariable('b'), mkTypeVariable('a')));
         const normalized = normalize(nonNormalized);
         expect(typesLitEq(normalized, expected)).to.equal(true);
       });
 
       it('normalizes a chain of arrow types assigning fresh names in order of appearance', () => {
-        const nonNormalized = arrows(mkTypeVar('x'), mkTypeVar('y'), mkTypeVar('z'));
-        const expected = arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c'));
+        const nonNormalized = arrows(mkTypeVariable('x'), mkTypeVariable('y'), mkTypeVariable('z'));
+        const expected = arrows(mkTypeVariable('a'), mkTypeVariable('b'), mkTypeVariable('c'));
         const normalized = normalize(nonNormalized);
         expect(typesLitEq(normalized, expected)).to.equal(true);
       });
 
       it('leaves an already normalized type unchanged', () => {
-        const normalizedInput = arrow(mkTypeVar('a'), arrow(mkTypeVar('b'), mkTypeVar('a')));
+        const normalizedInput = arrow(mkTypeVariable('a'), arrow(mkTypeVariable('b'), mkTypeVariable('a')));
         const normalizedOutput = normalize(normalizedInput);
         expect(typesLitEq(normalizedInput, normalizedOutput)).to.equal(true);
       });
@@ -143,8 +143,8 @@ describe('Types', () => {
   describe('unification', () => {
     describe('occurs check', () => {
       it('throws an error when a type variable occurs in its own substitution', () => {
-        const a = mkTypeVar('a');
-        const b = mkTypeVar('b');
+        const a = mkTypeVariable('a');
+        const b = mkTypeVariable('b');
         const funType = arrow(a, b);
 
         expect(() => substituteType(a, a, funType))
@@ -152,8 +152,8 @@ describe('Types', () => {
       });
 
       it('throws an error when trying to unify a variable with a type that contains it (circular)', () => {
-        const a = mkTypeVar('a');
-        const b = mkTypeVar('b');
+        const a = mkTypeVariable('a');
+        const b = mkTypeVariable('b');
         const funType = arrow(a, b);
         const context = new Map<string, Type>();
 
@@ -167,9 +167,9 @@ describe('Types', () => {
 
     describe('arrow type unification', () => {
       it('unifies two arrow types by decomposing their structure', () => {
-        const a = mkTypeVar('a');
-        const b = mkTypeVar('b');
-        const c = mkTypeVar('c');
+        const a = mkTypeVariable('a');
+        const b = mkTypeVariable('b');
+        const c = mkTypeVariable('c');
 
         const t1 = arrow(a, a);
         const t2 = arrow(b, c);

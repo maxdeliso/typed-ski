@@ -1,10 +1,10 @@
 import { cons } from '../../lib/cons.ts';
-import { mkVar } from '../../lib/lambda/lambda.ts';
+import { mkVar } from '../../lib/terms/lambda.ts';
 import { ParseError } from '../../lib/parser/parseError.ts';
 import { parseTypedLambda } from '../../lib/parser/typed.ts';
 import { parseType } from '../../lib/parser/type.ts';
-import { typedTermsLitEq, mkTypedAbs } from '../../lib/typed/typedLambda.ts';
-import { typesLitEq, arrow, mkTypeVar, arrows } from '../../lib/typed/types.ts';
+import { typedTermsLitEq, mkTypedAbs } from '../../lib/types/typedLambda.ts';
+import { typesLitEq, arrow, mkTypeVariable, arrows } from '../../lib/types/types.ts';
 
 import { expect } from 'chai';
 
@@ -14,7 +14,7 @@ describe('Parser Tests', () => {
       const parseInput = 'a';
       const [typeLit, type] = parseType(parseInput);
       expect(typeLit).to.equal(parseInput);
-      expect(typesLitEq(type, mkTypeVar('a'))).to.equal(true);
+      expect(typesLitEq(type, mkTypeVariable('a'))).to.equal(true);
     });
 
     it('parses the type a→b', () => {
@@ -22,7 +22,7 @@ describe('Parser Tests', () => {
       const [typeLit, type] = parseType(parseInput);
 
       expect(typeLit).to.equal(parseInput);
-      expect(typesLitEq(type, arrow(mkTypeVar('a'), mkTypeVar('b'))));
+      expect(typesLitEq(type, arrow(mkTypeVariable('a'), mkTypeVariable('b')))).to.equal(true);
     });
 
     it('parses the type a→b→c', () => {
@@ -30,8 +30,8 @@ describe('Parser Tests', () => {
       const [typeLit, type] = parseType(parseInput);
 
       const expectedTy = arrow(
-        mkTypeVar('a'),
-        arrow(mkTypeVar('b'), mkTypeVar('c'))
+        mkTypeVariable('a'),
+        arrow(mkTypeVariable('b'), mkTypeVariable('c'))
       );
 
       expect(typeLit).to.equal(parseInput);
@@ -44,8 +44,9 @@ describe('Parser Tests', () => {
 
       const expectedTy =
         arrow(
-          arrow(mkTypeVar('a'), mkTypeVar('b')),
-          arrow(mkTypeVar('a'), mkTypeVar('b')));
+          arrow(mkTypeVariable('a'), mkTypeVariable('b')),
+          arrow(mkTypeVariable('a'), mkTypeVariable('b'))
+        );
 
       expect(typeLit).to.equal(parseInput);
       expect(typesLitEq(type, expectedTy)).to.equal(true);
@@ -57,10 +58,11 @@ describe('Parser Tests', () => {
 
       const expectedTy =
         arrows(
-          mkTypeVar('a'),
-          mkTypeVar('b'),
-          mkTypeVar('a'),
-          mkTypeVar('b'));
+          mkTypeVariable('a'),
+          mkTypeVariable('b'),
+          mkTypeVariable('a'),
+          mkTypeVariable('b')
+        );
 
       expect(typeLit).to.equal(parseInput);
       expect(typesLitEq(type, expectedTy)).to.equal(true);
@@ -71,11 +73,21 @@ describe('Parser Tests', () => {
       const [typeLit, type] = parseType(parseInput);
 
       const expectedType = arrow(
-        arrow(arrow(mkTypeVar('a'), mkTypeVar('b')), mkTypeVar('c')),
-        mkTypeVar('d')
+        arrow(arrow(mkTypeVariable('a'), mkTypeVariable('b')), mkTypeVariable('c')),
+        mkTypeVariable('d')
       );
       expect(typeLit).to.equal(parseInput);
       expect(typesLitEq(type, expectedType)).to.equal(true);
+    });
+
+    // New test to verify whitespace skipping in types.
+    it('parses a type with extra whitespace', () => {
+      const parseInput = '   a   →    b   ';
+      // The parser should skip the extra spaces so that the literal is equivalent to "a→b"
+      const [typeLit, type] = parseType(parseInput);
+      const expectedTy = arrow(mkTypeVariable('a'), mkTypeVariable('b'));
+      expect(typeLit).to.equal('a→b');
+      expect(typesLitEq(type, expectedTy)).to.equal(true);
     });
   });
 
@@ -107,7 +119,7 @@ describe('Parser Tests', () => {
 
         const parsed =
           mkTypedAbs('x',
-            mkTypeVar('a'),
+            mkTypeVariable('a'),
             cons(mkVar('x'), mkVar('x')));
 
         expect(inputLit).to.equal(parseInput);
@@ -120,9 +132,9 @@ describe('Parser Tests', () => {
 
         const parsed =
           mkTypedAbs('x',
-            mkTypeVar('a'),
+            mkTypeVariable('a'),
             mkTypedAbs('y',
-              mkTypeVar('b'),
+              mkTypeVariable('b'),
               mkVar('x')));
 
         expect(inputLit).to.equal(parseInput);
@@ -135,10 +147,10 @@ describe('Parser Tests', () => {
 
         const parsed =
           mkTypedAbs('x',
-            arrows(mkTypeVar('a'), mkTypeVar('b'), mkTypeVar('c')),
+            arrows(mkTypeVariable('a'), mkTypeVariable('b'), mkTypeVariable('c')),
             mkTypedAbs('y',
-              arrow(mkTypeVar('a'), mkTypeVar('b')),
-              mkTypedAbs('z', mkTypeVar('a'),
+              arrow(mkTypeVariable('a'), mkTypeVariable('b')),
+              mkTypedAbs('z', mkTypeVariable('a'),
                 cons(cons(mkVar('x'), mkVar('z')), cons(mkVar('y'), mkVar('z'))))));
 
         expect(parsedLit).to.equal(parseInput);
@@ -149,7 +161,7 @@ describe('Parser Tests', () => {
         const parseInput = '(λx:a.x)';
         const [parsedLit, term] = parseTypedLambda(parseInput);
 
-        const expected = mkTypedAbs('x', mkTypeVar('a'), mkVar('x'));
+        const expected = mkTypedAbs('x', mkTypeVariable('a'), mkVar('x'));
         expect(parsedLit).to.equal(parseInput);
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
@@ -160,10 +172,21 @@ describe('Parser Tests', () => {
 
         const expected = mkTypedAbs(
           'x',
-          arrow(arrow(mkTypeVar('a'), mkTypeVar('b')), mkTypeVar('c')),
+          arrow(arrow(mkTypeVariable('a'), mkTypeVariable('b')), mkTypeVariable('c')),
           mkVar('x')
         );
         expect(parsedLit).to.equal(parseInput);
+        expect(typedTermsLitEq(term, expected)).to.equal(true);
+      });
+
+      // New test to verify whitespace skipping in typed lambda expressions.
+      it('parses a typed lambda with extra whitespace', () => {
+        const parseInput = '  λ   x  :  a   .   x   ';
+        // The parser should ignore the extra spaces, returning a literal without them.
+        const [inputLit, term] = parseTypedLambda(parseInput);
+
+        const expected = mkTypedAbs('x', mkTypeVariable('a'), mkVar('x'));
+        expect(inputLit).to.equal('λx:a.x');
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
     });

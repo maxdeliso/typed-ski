@@ -1,6 +1,6 @@
 import { ConsCell, cons } from '../cons.ts';
 import { C, B } from '../consts/combinators.ts';
-import { LambdaVar } from '../lambda/lambda.ts';
+import { LambdaVar } from '../terms/lambda.ts';
 import { SKIExpression } from '../ski/expression.ts';
 import { I, K, S, SKITerminal } from '../ski/terminal.ts';
 import { ConversionError } from './conversionError.ts';

@@ -1,7 +1,7 @@
 import { cons } from '../../lib/cons.ts';
 import { predLambda } from '../../lib/consts/lambdas.ts';
 import { reduceSKI } from '../../lib/evaluator/skiEvaluator.ts';
-import { mkVar, prettyPrintUntypedLambda } from '../../lib/lambda/lambda.ts';
+import { mkVar, prettyPrintUntypedLambda } from '../../lib/terms/lambda.ts';
 import { UnChurchNumber, ChurchN } from '../../lib/ski/church.ts';
 import { apply } from '../../lib/ski/expression.ts';
 import { I } from '../../lib/ski/terminal.ts';

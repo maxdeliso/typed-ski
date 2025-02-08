@@ -1,7 +1,7 @@
-import { stepOnceSKI } from "../lib/evaluator/skiEvaluator.js";
-import { generateExpr, SKIExpression } from "../lib/ski/expression.js";
-import { SKITerminalSymbol } from "../lib/ski/terminal.js";
-import { hrtime } from "process";
+import { stepOnceSKI } from '../lib/evaluator/skiEvaluator.js';
+import { generateExpr, SKIExpression } from '../lib/ski/expression.js';
+import { SKITerminalSymbol } from '../lib/ski/terminal.js';
+import { hrtime } from 'process';
 
 import rsexport from 'random-seed';
 const { create } = rsexport;

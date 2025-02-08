@@ -1,6 +1,7 @@
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { ParseError } from './parseError.ts';
 import { Type, arrow, mkTypeVar } from '../typed/types.ts';
+import { parseWithEOF } from './eof.ts';
 
 /**
  * Parses a "simple" type.
@@ -42,6 +43,5 @@ export function parseArrowType(rdb: RecursiveDescentBuffer): [string, Type] {
 }
 
 export function parseType(input: string): [string, Type] {
-  const rdb = new RecursiveDescentBuffer(input);
-  return parseArrowType(rdb);
+  return parseWithEOF(input, parseArrowType);
 }

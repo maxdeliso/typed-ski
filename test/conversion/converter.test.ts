@@ -5,7 +5,6 @@ import { mkVar, prettyPrintUntypedLambda } from '../../lib/lambda/lambda.ts';
 import { UnChurchNumber, ChurchN } from '../../lib/ski/church.ts';
 import { apply } from '../../lib/ski/expression.ts';
 import { I } from '../../lib/ski/terminal.ts';
-import { UpTo } from '../ski/church.test.ts';
 
 import { describe, it } from 'mocha';
 import { expect } from 'chai';
@@ -30,14 +29,14 @@ describe('Lambda conversion', () => {
 
   it('should convert λx.λy.x to something that acts like K', () => {
     // The K combinator should return its first argument.
-    UpTo(N).forEach(a => {
-      UpTo(N).forEach(b => {
+    for (let a = 0; a < N; a++) {
+      for (let b = 0; b < N; b++) {
         const result = UnChurchNumber(
           reduceSKI(apply(convertLambda(konst), ChurchN(a), ChurchN(b)))
         );
         expect(result).to.equal(a);
-      });
-    });
+      }
+    }
   });
 
   it('should convert λx.λy.y x to something that acts like T', () => {
@@ -55,24 +54,24 @@ describe('Lambda conversion', () => {
      *
      * Therefore, semantically, flip a b should evaluate to aᵇ.
      */
-    UpTo(N).forEach(a => {
-      UpTo(N).forEach(b => {
+    for (let a = 0; a < N; a++) {
+      for (let b = 0; b < N; b++) {
         const expected = a ** b; // exponentiation: a^b
         const result = UnChurchNumber(
           reduceSKI(apply(convertLambda(flip), ChurchN(a), ChurchN(b)))
         );
         expect(result).to.equal(expected);
-      });
-    });
+      }
+    }
   });
 
   it(`should convert ${prettyPrintUntypedLambda(predLambda)} to pred`, () => {
-    UpTo(N).forEach(n => {
+    for (let n = 0; n < N; n++) {
       const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
       const result = UnChurchNumber(
         reduceSKI(apply(convertLambda(predLambda), ChurchN(n)))
       );
       expect(result).to.equal(expected);
-    });
+    }
   });
 });

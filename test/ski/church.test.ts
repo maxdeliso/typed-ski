@@ -7,14 +7,6 @@ import { K, S, I } from '../../lib/ski/terminal.ts';
 
 import { apply } from '../../lib/ski/expression.ts';
 
-export const UpTo = (n: number): number[] => {
-  const result = [];
-  for (let i = 0; i < n; i++) {
-    result.push(i);
-  }
-  return result;
-};
-
 /*
  * This test verifies that numeral systems and boolean logic can be encoded
  * using only combinators. See https://www.youtube.com/watch?v=6BnVo7EHO_8 this
@@ -111,8 +103,9 @@ describe('Church encodings', () => {
   });
 
   it('reduces sums and products in Church numerals', () => {
-    UpTo(N).forEach(m => {
-      UpTo(N).forEach(n => {
+    // Test all combinations of numbers from 0 to N-1
+    for (let m = 0; m < N; m++) {
+      for (let n = 0; n < N; n++) {
         // λmn.(m succ)n, or apply m +1s to n
         expect(UnChurchNumber(
           reduceSKI(apply(ChurchN(m), Succ, ChurchN(n)))
@@ -136,8 +129,8 @@ describe('Church encodings', () => {
         expect(UnChurchNumber(
           reduceSKI(apply(B, ChurchN(m), ChurchN(n), Succ, Zero))
         )).to.equal(m * n);
-      });
-    });
+      }
+    }
   });
 
   /*
@@ -158,7 +151,8 @@ describe('Church encodings', () => {
   const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
 
   it('computes the predecessor', () => {
-    UpTo(N).forEach(m => {
+    // Test numbers from 0 to N-1
+    for (let m = 0; m < N; m++) {
       const expected = Math.max(m - 1, 0); // pred of 0 is 0
 
       expect(
@@ -172,6 +166,6 @@ describe('Church encodings', () => {
       expect(
         UnChurchNumber(reduceSKI(apply(pred, ChurchN(m))))
       ).to.deep.equal(expected);
-    });
+    }
   });
 });

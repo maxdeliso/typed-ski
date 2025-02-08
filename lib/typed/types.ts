@@ -127,7 +127,7 @@ export const unify = (t1: Type, t2: Type, context: Context): void => {
     // occursIn will throw if t1 occurs in t2.
     if (occursIn(t1, t2)) {
       throw new TypeError(
-        `Occurs check failed: ${t1.typeName} occurs in ${prettyPrintTy(t2)}`
+        `occurs check failed: ${t1.typeName} occurs in ${prettyPrintTy(t2)}`
       );
     }
     // Apply the substitution in the entire context.
@@ -141,7 +141,7 @@ export const unify = (t1: Type, t2: Type, context: Context): void => {
   if (t2.kind === 'type-var') {
     if (occursIn(t2, t1)) {
       throw new TypeError(
-        `Occurs check failed: ${t2.typeName} occurs in ${prettyPrintTy(t1)}`
+        `occurs check failed: ${t2.typeName} occurs in ${prettyPrintTy(t1)}`
       );
     }
     for (const [key, ty] of context.entries()) {
@@ -158,7 +158,7 @@ export const substituteType = (original: Type, lft: Type, rgt: Type): Type => {
   if (typesLitEq(lft, original)) {
     if (lft.kind === 'type-var' && occursIn(lft, rgt)) {
       throw new TypeError(
-        `Occurs check failed: ${lft.typeName} occurs in ${prettyPrintTy(rgt)}`
+        `occurs check failed: ${lft.typeName} occurs in ${prettyPrintTy(rgt)}`
       );
     }
     return rgt;
@@ -193,7 +193,7 @@ function tyVars(): () => TypeVariable {
   const generator = () => {
     const offset = ordinals();
     if (offset > 25) {
-      throw new Error('too many variables');
+      throw new Error('too many type variables');
     }
     const str = String.fromCharCode(97 + offset);
     return mkTypeVar(str);
@@ -245,7 +245,7 @@ const attachTypes = (
       const ty = types.get(untyped.name);
 
       if (ty === undefined) {
-        throw new TypeError('missing a type for term: ' + untyped.name);
+        throw new TypeError('missing type for term: ' + untyped.name);
       }
 
       return mkTypedAbs(

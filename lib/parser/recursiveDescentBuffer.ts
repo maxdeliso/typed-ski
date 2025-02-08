@@ -29,7 +29,7 @@ export class RecursiveDescentBuffer {
 
   matchCh(ch: string): void {
     if (this.peek() !== ch) {
-      throw new ParseError(`Expected ${ch} but found ${this.peek() ?? 'null'}'`);
+      throw new ParseError(`expected ${ch} but found ${this.peek() ?? 'null'}'`);
     }
 
     this.consume();

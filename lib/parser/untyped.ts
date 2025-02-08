@@ -1,6 +1,7 @@
 import { UntypedLambda, mkUntypedAbs, mkVar } from '../lambda/lambda.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { parseLambdaChain } from './chain.ts';
+import { parseWithEOF } from './eof.ts';
 
 function parseUntypedLambdaInternal(
   rdb: RecursiveDescentBuffer
@@ -34,6 +35,5 @@ export function parseAtomicUntypedLambda(
 }
 
 export function parseLambda(input: string): [string, UntypedLambda] {
-  const rdb = new RecursiveDescentBuffer(input);
-  return parseUntypedLambdaInternal(rdb);
+  return parseWithEOF(input, parseUntypedLambdaInternal);
 }

@@ -3,6 +3,7 @@ import { TypedLambda, mkTypedAbs } from '../typed/typedLambda.ts';
 import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { parseLambdaChain } from './chain.ts';
 import { parseArrowType } from './type.ts';
+import { parseWithEOF } from './eof.ts';
 
 function parseAtomicTypedLambda(
   rdb: RecursiveDescentBuffer
@@ -38,6 +39,5 @@ function parseTypedLambdaInternal(
 }
 
 export function parseTypedLambda(input: string): [string, TypedLambda] {
-  const rdb = new RecursiveDescentBuffer(input);
-  return parseTypedLambdaInternal(rdb);
+  return parseWithEOF(input, parseTypedLambdaInternal);
 }

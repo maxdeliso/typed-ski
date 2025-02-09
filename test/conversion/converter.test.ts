@@ -1,27 +1,21 @@
 import { cons } from '../../lib/cons.ts';
 import { predLambda } from '../../lib/consts/lambdas.ts';
 import { reduceSKI } from '../../lib/evaluator/skiEvaluator.ts';
-import { mkVar, prettyPrintUntypedLambda } from '../../lib/terms/lambda.ts';
+import { mkUntypedAbs, mkVar, prettyPrintUntypedLambda } from '../../lib/terms/lambda.ts';
 import { UnChurchNumber, ChurchN } from '../../lib/ski/church.ts';
 import { apply } from '../../lib/ski/expression.ts';
 import { I } from '../../lib/ski/terminal.ts';
 
 import { describe, it } from 'mocha';
 import { expect } from 'chai';
-import { convertLambda, Lambda } from '../../lib/conversion/converter.ts';
+import { convertLambda } from '../../lib/conversion/converter.ts';
 
 describe('Lambda conversion', () => {
-  const mkAbs = (name: string, body: Lambda): Lambda => ({
-    kind: 'lambda-abs',
-    name,
-    body,
-  });
-
   const N = 5;
 
-  const id = mkAbs('x', mkVar('x'));
-  const konst = mkAbs('x', mkAbs('y', mkVar('x')));
-  const flip  = mkAbs('x', mkAbs('y', cons(mkVar('y'), mkVar('x'))));
+  const id = mkUntypedAbs('x', mkVar('x'));
+  const konst = mkUntypedAbs('x', mkUntypedAbs('y', mkVar('x')));
+  const flip  = mkUntypedAbs('x', mkUntypedAbs('y', cons(mkVar('y'), mkVar('x'))));
 
   it('should convert λx.x to I', () => {
     expect(convertLambda(id)).to.deep.equal(I);

@@ -1,3 +1,6 @@
+import { expect } from 'chai';
+import { describe, it } from 'mocha';
+
 import { cons } from '../../lib/cons.ts';
 import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/terms/lambda.ts';
 import { parseType } from '../../lib/parser/type.ts';
@@ -15,8 +18,6 @@ import {
   substituteType,
   unify
 } from '../../lib/types/inference.ts';
-import { expect } from 'chai';
-import { describe, it } from 'mocha';
 import { normalize } from '../../lib/types/normalization.ts';
 
 describe('Types', () => {

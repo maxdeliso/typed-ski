@@ -1,106 +1,389 @@
-import { stepOnceSKI } from '../lib/evaluator/skiEvaluator.js';
-import { generateExpr, SKIExpression } from '../lib/ski/expression.js';
-import { SKITerminalSymbol } from '../lib/ski/terminal.js';
 import { hrtime } from 'process';
-
 import rsexport from 'random-seed';
-const { create } = rsexport;
-
 import tkexport from 'terminal-kit';
-import Terminal from 'terminal-kit/Terminal.js';
+
+const { create } = rsexport;
 const { terminal } = tkexport;
 
-function colorizeSymbol(sym: SKITerminalSymbol): string {
-  switch (sym) {
-    case SKITerminalSymbol.S:
-      return ' ^[red]S^ ';
-    case SKITerminalSymbol.K:
-      return ' ^[green]K^ ';
-    case SKITerminalSymbol.I:
-      return ' ^[blue]I^ ';
-    default:
-      return '?';
-  }
+import { stepOnceImmediate, stepOnceSKI } from '../lib/evaluator/skiEvaluator.js';
+import { generateExpr, SKIExpression, prettyPrint as prettyPrintSKI } from '../lib/ski/expression.js';
+import { parseSKI } from '../lib/parser/ski.js';
+import { prettyPrintUntypedLambda, UntypedLambda } from '../lib/terms/lambda.js';
+import { parseLambda } from '../lib/parser/untyped.js';
+import { prettyPrintSystemF, SystemFTerm } from '../lib/terms/systemF.js';
+import { parseSystemF } from '../lib/parser/systemFTerm.js';
+import { eraseTypedLambda, prettyPrintTypedLambda, TypedLambda } from '../lib/types/typedLambda.js';
+import { parseTypedLambda } from '../lib/parser/typed.js';
+import { eraseSystemF, prettyPrintSystemFType } from '../lib/types/systemF.js';
+import { convertLambda } from '../lib/conversion/converter.js';
+import { typecheck as typecheckTyped } from '../lib/types/typedLambda.js';
+import { typecheck as typecheckSystemF } from '../lib/types/systemF.js';
+import { prettyPrintTy } from '../lib/types/types.ts';
+
+enum Mode {
+  SKI = 'SKI',
+  Lambda = 'Lambda',
+  TypedLambda = 'TypedLambda',
+  SystemF = 'SystemF'
 }
 
-function colorizeExpression(expr: SKIExpression): string {
-  switch (expr.kind) {
-    case 'terminal':
-      return colorizeSymbol(expr.sym);
-    case 'non-terminal': {
-      return [
-        '(',
-        colorizeExpression(expr.lft),
-        colorizeExpression(expr.rgt),
-        ')'
-      ].join('');
+let currentMode: Mode = Mode.SKI;
+let currentSKI: SKIExpression = generateExpr(create(hrtime.bigint().toString()), 32);
+let currentLambda: UntypedLambda | null = null;
+let currentTypedLambda: TypedLambda | null = null;
+let currentSystemF: SystemFTerm | null = null;
+let commandHistory: string[] = [];
+let historyIndex: number = -1;
+let currentInput: string = '';
+
+function printGreen(msg: string): void {
+  terminal('\n');
+  terminal.green(msg + '\n');
+}
+function printCyan(msg: string): void {
+  terminal('\n');
+  terminal.cyan(msg + '\n');
+}
+function printYellow(msg: string): void {
+  terminal('\n');
+  terminal.yellow(msg + '\n');
+}
+function printRed(msg: string): void {
+  terminal('\n');
+  terminal.red(msg + '\n');
+}
+
+try {
+  const lambdaResult = parseLambda('λx.x');
+  currentLambda = lambdaResult[1];
+  const typedLambdaResult = parseTypedLambda('λx:X.x');
+  currentTypedLambda = typedLambdaResult[1];
+  const sysFResult = parseSystemF('ΛX.λx:X.x');
+  currentSystemF = sysFResult[1];
+} catch (e) {
+  printRed('error parsing default terms: ' + String(e));
+}
+
+function ensureSKIMode(): boolean {
+  if (currentMode === Mode.SKI) {
+    return true;
+  }
+  try {
+    if (currentMode === Mode.Lambda && currentLambda !== null) {
+      currentSKI = convertLambda(currentLambda);
+    } else if (currentMode === Mode.TypedLambda && currentTypedLambda !== null) {
+      const erasedLambda = eraseTypedLambda(currentTypedLambda);
+      if (erasedLambda === null) {
+        throw new Error('failed to erase typed lambda term');
+      }
+      currentSKI = convertLambda(erasedLambda);
+    } else if (currentMode === Mode.SystemF && currentSystemF !== null) {
+      const erasedTypedLambda = eraseSystemF(currentSystemF);
+      if (!erasedTypedLambda) {
+        throw new Error('failed to erase System F term');
+      }
+      const erasedLambda = eraseTypedLambda(erasedTypedLambda);
+      if (erasedLambda === null) {
+        throw new Error('failed to erase typed lambda term');
+      }
+      currentSKI = convertLambda(erasedLambda);
+    } else {
+      throw new Error('current term is null');
     }
+    printCyan('converted term to SKI: ' + prettyPrintSKI(currentSKI));
+    currentMode = Mode.SKI;
+    return true;
+  } catch (e) {
+    printRed('conversion to SKI failed: ' + String(e));
+    return false;
   }
 }
 
-function formatted(expr: SKIExpression): string {
-  return '> ' + colorizeExpression(expr) + '\n';
+function printCurrentTerm(): void {
+  switch (currentMode) {
+    case Mode.SKI:
+      printGreen('SKI Expression: ' + prettyPrintSKI(currentSKI));
+      break;
+    case Mode.Lambda:
+      if (currentLambda !== null) {
+        printGreen('Lambda Term: ' + prettyPrintUntypedLambda(currentLambda));
+      }
+      break;
+    case Mode.TypedLambda:
+      if (currentTypedLambda !== null) {
+        printGreen('Typed Lambda Term: ' + prettyPrintTypedLambda(currentTypedLambda));
+      }
+      break;
+    case Mode.SystemF:
+      if (currentSystemF !== null) {
+        printGreen('System F Term: ' + prettyPrintSystemF(currentSystemF));
+      }
+      break;
+  }
 }
 
-function runTUI(): number {
-  const term: Terminal = terminal;
-  const seed = hrtime.bigint();
-  const rs = create(seed.toString());
-  const N = 32;
+function skiStepOnce(): void {
+  const result = stepOnceImmediate(currentSKI);
+  if (result.altered) {
+    currentSKI = result.expr;
+    printGreen('stepped: ' + prettyPrintSKI(currentSKI));
+  } else {
+    printYellow('no further reduction possible.');
+  }
+}
+
+function skiStepMany(): void {
   const MAX_ITER = 100;
+  let iterations = 0;
+  while (iterations < MAX_ITER) {
+    const result = stepOnceSKI(currentSKI);
+    if (result.altered) {
+      currentSKI = result.expr;
+      printGreen(`step ${iterations + 1}: ${prettyPrintSKI(currentSKI)}`);
+    } else {
+      printYellow(`no further reduction after ${iterations} step(s).`);
+      break;
+    }
+    iterations++;
+  }
+  if (iterations === MAX_ITER) {
+    printRed('stopped after reaching maximum iterations.');
+  }
+}
 
-  let expression = generateExpr(rs, N);
+function skiRegenerate(): void {
+  const rs = create(hrtime.bigint().toString());
+  currentSKI = generateExpr(rs, 32);
+  printGreen('generated new SKI expression: ' + prettyPrintSKI(currentSKI));
+}
 
-  term.cyan('Control C or q or Q exits. ' +
-    's steps once. ' +
-    'm steps many. ' +
-    'g regenerates a new expression. \n');
-
-  term.grabInput({});
-  term.on('key', (keyName: string) => {
-    switch (keyName) {
-      case 'CTRL_C':
-      case 'q':
-      case 'Q':
-        term.grabInput(false);
-        break;
-      case 's': {
-        const stepResult = stepOnceSKI(expression);
-        expression = stepResult.expr;
-        term(formatted(expression));
+function setNewTerm(input: string): void {
+  try {
+    switch (currentMode) {
+      case Mode.SKI: {
+        const skiTerm = parseSKI(input);
+        currentSKI = skiTerm;
+        printGreen('set new SKI expression: ' + prettyPrintSKI(currentSKI));
         break;
       }
-      case 'm': {
-        let loop = true;
-        let iterations = 0;
+      case Mode.Lambda: {
+        const lambdaResult = parseLambda(input);
+        currentLambda = lambdaResult[1];
+        printGreen('set new Lambda term: ' + prettyPrintUntypedLambda(currentLambda));
+        break;
+      }
+      case Mode.TypedLambda: {
+        const typedResult = parseTypedLambda(input);
+        currentTypedLambda = typedResult[1];
+        printGreen('set new Typed Lambda term: ' + prettyPrintTypedLambda(currentTypedLambda));
+        break;
+      }
+      case Mode.SystemF: {
+        const sysFResult = parseSystemF(input);
+        currentSystemF = sysFResult[1];
+        printGreen('set new System F term: ' + prettyPrintSystemF(currentSystemF));
+        break;
+      }
+    }
+  } catch (e) {
+    printRed('error parsing term: ' + e);
+  }
+}
 
-        while (loop && iterations < MAX_ITER) {
-          const stepResult = stepOnceSKI(expression);
-          expression = stepResult.expr;
-          if (stepResult.altered) {
-            term(formatted(expression));
+function getPrompt(): string {
+  return `\n[${currentMode}] > `;
+}
+
+function processCommand(input: string): void {
+  if (input === '') return;
+
+  if (input.startsWith(':')) {
+    // Remove the colon prefix and trim whitespace.
+    const commandLine = input.slice(1).trim();
+    const parts = commandLine.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+
+    if (cmd === 'mode') {
+      if (parts.length < 2) {
+        printYellow('usage: :mode [ski|lambda|typed|systemf]');
+      } else {
+        const newMode = parts[1].toLowerCase();
+        switch (newMode) {
+          case 'ski':
+            currentMode = Mode.SKI;
+            printCyan('switched to SKI mode.');
+            break;
+          case 'lambda':
+            currentMode = Mode.Lambda;
+            printCyan('switched to Lambda mode.');
+            break;
+          case 'typed':
+            currentMode = Mode.TypedLambda;
+            printCyan('switched to Typed Lambda mode.');
+            break;
+          case 'systemf':
+            currentMode = Mode.SystemF;
+            printCyan('switched to System F mode.');
+            break;
+          default:
+            printRed('unknown mode: ' + parts[1]);
+        }
+      }
+    } else if (cmd === 'help') {
+      printHelp();
+    } else if (cmd === 'quit') {
+      printGreen('exiting REPL.');
+      process.exit(0);
+    } else if (cmd === 's' || cmd === 'step') {
+      if (currentMode !== Mode.SKI && !ensureSKIMode()) return;
+      skiStepOnce();
+    } else if (cmd === 'm' || cmd === 'stepmany') {
+      if (currentMode !== Mode.SKI && !ensureSKIMode()) return;
+      skiStepMany();
+    } else if (cmd === 'g' || cmd === 'generate') {
+      if (currentMode === Mode.SKI) {
+        skiRegenerate();
+      } else {
+        printYellow('generate command only available in SKI mode.');
+      }
+    } else if (cmd === 'p' || cmd === 'print') {
+      printCurrentTerm();
+    } else if (cmd === 'tc' || cmd === 'typecheck') {
+      // New typecheck command
+      switch (currentMode) {
+        case Mode.SKI:
+          printYellow('Type checking not available in SKI mode.');
+          break;
+        case Mode.Lambda:
+          printYellow('Type checking not available in Lambda mode. Use TypedLambda or SystemF mode.');
+          break;
+        case Mode.TypedLambda:
+          if (currentTypedLambda !== null) {
+            try {
+              const typeResult = prettyPrintTy(typecheckTyped(currentTypedLambda));
+              printGreen('Type of current Typed Lambda term: ' + typeResult.toString());
+            } catch (e) {
+              printRed('Typechecking error: ' + String(e));
+            }
+          } else {
+            printRed('No current Typed Lambda term available.');
           }
-          loop = stepResult.altered;
-          iterations = iterations + 1;
-        }
-
-        if (iterations === MAX_ITER) {
-          term.red(`stopped evaluating after ${iterations.toString()} iterations. \n`);
-        }
-
-        break;
+          break;
+        case Mode.SystemF:
+          if (currentSystemF !== null) {
+            try {
+              const typeResult = prettyPrintSystemFType(typecheckSystemF(currentSystemF));
+              printGreen('Type of current System F term: ' + typeResult.toString());
+            } catch (e) {
+              printRed('Typechecking error: ' + String(e));
+            }
+          } else {
+            printRed('No current System F term available.');
+          }
+          break;
       }
-      case 'g': {
-        expression = generateExpr(rs, N);
-        term(formatted(expression));
-        break;
+    } else {
+      printYellow('unknown command: ' + input);
+    }
+  } else {
+    // Any input that does not start with ':' is interpreted as a new term.
+    setNewTerm(input);
+  }
+}
+
+function printHelp(): void {
+  printGreen(`
+Available commands:
+  :mode [ski|lambda|typed|systemf]  -- switch mode
+  :help                             -- display this help message
+  :quit                             -- exit the REPL
+Evaluation commands (in SKI mode):
+  :s or :step         -- step once (converts to SKI if necessary)
+  :m or :stepmany     -- step many (max 100 iterations, in SKI mode)
+  :g or :generate     -- generate a new SKI expression (SKI mode only)
+  :p or :print        -- print the current term
+Typechecking commands:
+  :tc or :typecheck   -- typecheck the current term (only available in TypedLambda and SystemF modes)
+
+Any other input is interpreted as a new term for the current mode.
+Press CTRL+C or type :quit to exit.`);
+}
+
+function repl(): void {
+  terminal(getPrompt());
+
+  // Save the current terminal line state
+  let currentLine = '';
+
+  terminal.inputField(
+    {
+      history: commandHistory,
+      autoComplete: (input: string) => {
+        // could add command autocompletion here
+        return [];
+      },
+      autoCompleteHint: false,
+      autoCompleteMenu: false,
+    },
+    (error, input) => {
+      if (error) {
+        printRed('error: ' + error);
+        process.exit(1);
       }
-      default:
-        term.red('unrecognized command key: ' + keyName + '\n');
+
+      const trimmedInput = (input || '').trim();
+      if (trimmedInput) {
+        // Add non-empty commands to history
+        commandHistory.push(trimmedInput);
+        // Reset history position
+        historyIndex = -1;
+      }
+
+      processCommand(trimmedInput);
+      repl();
+    }
+  );
+
+  // Handle up/down keys for history navigation
+  terminal.on('key', (name: string, matches: any, data: any) => {
+    if (name === 'UP') {
+      if (historyIndex === -1) {
+        // Save current input before navigating history
+        currentInput = currentLine;
+      }
+
+      if (historyIndex < commandHistory.length - 1) {
+        historyIndex++;
+        currentLine = commandHistory[commandHistory.length - 1 - historyIndex];
+        terminal.eraseLine();
+        terminal(getPrompt() + currentLine);
+      }
+    }
+    else if (name === 'DOWN') {
+      if (historyIndex > -1) {
+        historyIndex--;
+        if (historyIndex === -1) {
+          currentLine = currentInput;
+        } else {
+          currentLine = commandHistory[commandHistory.length - 1 - historyIndex];
+        }
+        terminal.eraseLine();
+        terminal(getPrompt() + currentLine);
+      }
     }
   });
-
-  return 0;
 }
 
-process.exitCode = runTUI();
+terminal.grabInput({ mouse: 'button' });
+terminal.on('key', (name: string) => {
+  if (name === 'CTRL_C') {
+    printGreen('exiting REPL.');
+    process.exit(0);
+  }
+});
+
+terminal.clear();
+terminal.bold.cyan('\nmodal Term Calculator REPL');
+terminal.cyan('\nsupported input modes: SKI, Lambda, TypedLambda, SystemF');
+terminal.cyan('\ntype :help for a list of commands.');
+repl();

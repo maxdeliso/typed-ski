@@ -1,5 +1,6 @@
 import { strict as assert } from 'assert';
 import { parseSystemF } from '../../lib/parser/systemFTerm.ts';
+import { prettyPrintSystemF } from '../../lib/terms/systemF.ts';
 
 describe('System F Parser', () => {
   it('parses a single variable', () => {
@@ -124,5 +125,31 @@ describe('System F Parser', () => {
         parseSystemF(input);
       }, Error, `Expected an error for input: ${input}`);
     });
+  });
+
+  it('round-trips a well-formed expression through pretty printer and parser', () => {
+    // Use a well–formed expression (here the polymorphic identity)
+    const input = 'ΛX. λx: X. x';
+    // Parse the input to get its AST.
+    const [, ast] = parseSystemF(input);
+    // Pretty–print the AST to obtain a normalized string.
+    const pretty = prettyPrintSystemF(ast);
+
+    // Now re-parse the pretty printed output.
+    const [roundTripLit, roundTripAst] = parseSystemF(pretty);
+
+    // Compare the literal strings (ignoring whitespace).
+    assert.equal(
+      roundTripLit.replace(/\s+/g, ''),
+      pretty.replace(/\s+/g, ''),
+      'Round-tripped literal should match pretty printed output (modulo whitespace)'
+    );
+
+    const prettyRoundTrip = prettyPrintSystemF(roundTripAst);
+    assert.equal(
+      prettyRoundTrip.replace(/\s+/g, ''),
+      pretty.replace(/\s+/g, ''),
+      'Pretty printed round-trip AST should match original pretty printed output (modulo whitespace)'
+    );
   });
 });

@@ -1,12 +1,11 @@
+import { assert } from 'chai';
+import { describe, it } from 'mocha';
+import rsexport from 'random-seed';
+const { create } = rsexport;
+
 import { parseSKI } from '../../lib/parser/ski.ts';
 import { SKIExpression, size, compute } from '../../lib/ski/expression.ts';
 import { BinaryHeap, packHeap, unpackHeap, maxHeapIndex } from '../../lib/ski/packer.ts';
-
-import { assert } from 'chai';
-import { describe, it } from 'mocha';
-
-import rsexport from 'random-seed';
-const { create } = rsexport;
 
 describe('packHeap and unpackHeap', () => {
   const eye = parseSKI('I');

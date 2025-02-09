@@ -1,8 +1,6 @@
-import { convertLambda } from '../conversion/converter.ts';
 import { parseSKI } from '../parser/ski.ts';
 import { apply } from '../ski/expression.ts';
 import { K, I, S } from '../ski/terminal.ts';
-import { predLambda } from './lambdas.ts';
 
 /*
  * Zero. apply a function to its arguments zero times.
@@ -224,6 +222,3 @@ export const F = apply(E, T, T, E, T);
 
 // λf.(λx.f(x x))(λx.f(x x))
 export const Y = parseSKI('S(K(SII))(S(S(KS)K)(K(SII)))');
-
-// note: this is a crossover
-export const pred = convertLambda(predLambda);

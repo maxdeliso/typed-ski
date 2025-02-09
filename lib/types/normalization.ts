@@ -27,7 +27,6 @@ export const normalizeTy = (
         normalizeTy(ty.rgt, mapping, vars)
       );
     case 'forall': {
-      // Normalize the bound variable (you might want to leave it as is or rename it)
       // For simplicity, we leave the bound variable unchanged but normalize the body.
       return {
         kind: 'forall',

@@ -1,3 +1,5 @@
+import { expect } from 'chai';
+
 import { cons } from '../../lib/cons.ts';
 import { mkVar } from '../../lib/terms/lambda.ts';
 import { ParseError } from '../../lib/parser/parseError.ts';
@@ -5,8 +7,6 @@ import { parseTypedLambda } from '../../lib/parser/typed.ts';
 import { parseType } from '../../lib/parser/type.ts';
 import { typedTermsLitEq, mkTypedAbs } from '../../lib/types/typedLambda.ts';
 import { typesLitEq, arrow, mkTypeVariable, arrows } from '../../lib/types/types.ts';
-
-import { expect } from 'chai';
 
 describe('Parser Tests', () => {
   describe('parseType', () => {

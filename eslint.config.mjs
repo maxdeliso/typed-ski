@@ -7,7 +7,7 @@ export default tseslint.config(
     files: ['**/*.ts']
   },
   {
-    ignores: ['**/build/**', '**/node_modules/**'],
+    ignores: ['**/build/**', '**/node_modules/**', 'bin/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,

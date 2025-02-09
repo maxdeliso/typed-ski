@@ -1,11 +1,10 @@
+import { assert } from 'chai';
+import rsexport, { RandomSeed } from 'random-seed';
+const { create } = rsexport;
+
 import { cons } from '../../lib/cons.ts';
 import { SKIExpression, generateExpr, prettyPrint, size } from '../../lib/ski/expression.ts';
 import { S, K } from '../../lib/ski/terminal.ts';
-
-import { assert } from 'chai';
-
-import rsexport, { RandomSeed } from 'random-seed';
-const { create } = rsexport;
 
 describe('prettyPrint', () => {
   const expr = cons<SKIExpression>(cons<SKIExpression>(S, K), K);

@@ -1,5 +1,5 @@
-import { ConsCell } from '../cons.ts';
-import { LambdaVar } from '../terms/lambda.ts';
+import { cons, ConsCell } from '../cons.ts';
+import { LambdaVar, mkUntypedAbs, UntypedLambda } from '../terms/lambda.ts';
 import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.ts';
 
 /**
@@ -138,5 +138,20 @@ export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
     return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt);
   } else {
     return false;
+  }
+};
+
+/**
+ * @param t The typechecked lambda expression to erase types from.
+ * @returns An equivalent untyped lambda expression.
+ */
+export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
+  switch (t.kind) {
+    case 'lambda-var':
+      return t;
+    case 'typed-lambda-abstraction':
+      return mkUntypedAbs(t.varName, eraseTypedLambda(t.body));
+    case 'non-terminal':
+      return cons(eraseTypedLambda(t.lft), eraseTypedLambda(t.rgt));
   }
 };

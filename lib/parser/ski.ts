@@ -1,39 +1,67 @@
 import { SKIExpression } from '../ski/expression.ts';
-import { SKITerminalSymbol, term } from '../ski/terminal.ts';
-import { Appendable } from './appendable.ts';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
 import { ParseError } from './parseError.ts';
+import { parseWithEOF } from './eof.ts';
+import { cons } from '../cons.ts';
+import { SKITerminalSymbol, term } from '../ski/terminal.ts';
 
 /**
- * @param input a string with an SKI expression to parse.
- * @returns an abstract expression corresponding to the parsed input string,
- * should one exist.
- * @throws {ParseError} if the input string is not a well formed expression.
+ * Parses a chain of SKI atomic terms (term { term }).
+ * For example, the input "SII" will be parsed as:
+ *    mkApp(mkApp(S, I), I)
  */
-export function parseSKI(input: string): SKIExpression {
-  const app = new Appendable();
-  let parenLevel = 0;
-
-  for (const ch of input) {
-    if (ch === '(') {
-      app.appendEmptyBranch();
-      parenLevel++;
-    } else if (ch === ')') {
-      parenLevel--;
-
-      if (parenLevel < 0) {
-        throw new ParseError('mismatched parens! (early)');
-      }
-    } else if (Object.values(SKITerminalSymbol)
-      .includes(ch as SKITerminalSymbol)) {
-      app.appendSymbol(term(ch as SKITerminalSymbol));
-    } else {
-      throw new ParseError('unrecognized char: ' + ch);
+function parseSKIChain(rdb: RecursiveDescentBuffer): [string, SKIExpression] {
+  let [lit, expr] = parseAtomicSKI(rdb);
+  // While the next token is one that can begin an atomic SKI term,
+  // continue parsing and left‐associatively combine.
+  for (;;) {
+    const next = rdb.peek();
+    if (
+      next === null ||
+      (next !== '(' && !['S', 'K', 'I'].includes(next.toUpperCase()))
+    ) {
+      break;
     }
+    const [nextLit, nextExpr] = parseAtomicSKI(rdb);
+    lit = `${lit} ${nextLit}`;
+    expr = cons(expr, nextExpr);
   }
+  return [lit, expr];
+}
 
-  if (parenLevel !== 0) {
-    throw new ParseError('mismatched parens! (late)');
+/**
+ * Parses an atomic SKI term.
+ * This is either one of the terminals S, K, I or a parenthesized SKI expression.
+ */
+export function parseAtomicSKI(rdb: RecursiveDescentBuffer): [string, SKIExpression] {
+  const peeked = rdb.peek();
+  if (peeked === '(') {
+    // Parse a parenthesized expression.
+    rdb.matchLP();
+    // Inside parentheses we parse a whole chain.
+    const [innerLit, innerExpr] = parseSKIChain(rdb);
+    rdb.matchRP();
+    return [`(${innerLit})`, innerExpr];
+  } else if (peeked?.toUpperCase() === 'S' || peeked?.toUpperCase() === 'K' || peeked?.toUpperCase() === 'I') {
+    const token = peeked.toUpperCase();
+    rdb.consume();
+    return [peeked, term(token as SKITerminalSymbol)];
+  } else {
+    const unexpected = peeked === null ? 'EOF' : `"${peeked}"`;
+    throw new ParseError(`unexpected token ${unexpected} when expecting an SKI term`);
   }
+}
 
-  return app.flatten();
+/**
+ * Parses a full SKI expression.
+ * (This is just a wrapper around parseSKIChain, which implements the
+ * left-associative application.)
+ */
+export function parseSKIInternal(rdb: RecursiveDescentBuffer): [string, SKIExpression] {
+  return parseSKIChain(rdb);
+}
+
+export function parseSKI(input: string): SKIExpression {
+  const result = parseWithEOF(input, parseSKIInternal);
+  return result[1];
 }

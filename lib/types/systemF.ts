@@ -1,6 +1,7 @@
 import { BaseType, arrow, prettyPrintTy, typesLitEq, ForallType } from './types.ts';
 import { cons } from '../cons.ts';
 import { SystemFTerm } from '../terms/systemF.ts';
+import { TypedLambda, mkTypedAbs } from './typedLambda.ts';
 
 /*
  * https://en.wikipedia.org/wiki/System_F
@@ -60,6 +61,14 @@ export const emptySystemFContext = (): SystemFContext => ({
   termCtx: new Map<string, SystemFType>(),
   typeVars: new Set<string>()
 });
+
+/**
+ * Typechecks a System F term.
+ * Returns the type of the term.
+ */
+export const typecheck = (term: SystemFTerm): SystemFType => {
+  return typecheckSystemF(emptySystemFContext(), term);
+};
 
 /**
  * Typechecks a System F term under the given context.
@@ -148,4 +157,46 @@ export const prettyPrintSystemFType = (ty: SystemFType): string => {
   }
   // Must be forall type
   return `(∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)})`;
+};
+
+/**
+ * Transforms a well–typed System F term into a simply typed lambda term.
+ *
+ * The conversion proceeds as follows:
+ * - A System F variable (systemF-var) becomes a lambda variable.
+ * - A term abstraction (systemF-abs) is translated to a typed lambda abstraction,
+ *   preserving the annotation.
+ * - A type abstraction (systemF-type-abs) is dropped (erased) and the conversion
+ *   continues with its body.
+ * - A type application (systemF-type-app) is likewise dropped.
+ * - A term application (represented as a cons cell, i.e. a "non-terminal")
+ *   is recursively converted.
+ *
+ * @param term A System F term.
+ * @returns An equivalent term in the simply typed lambda calculus.
+ */
+export const eraseSystemF = (term: SystemFTerm): TypedLambda => {
+  switch (term.kind) {
+    case 'systemF-var':
+      // Convert a System F variable to a lambda variable.
+      return { kind: 'lambda-var', name: term.name };
+    case 'systemF-abs':
+      // Convert a term abstraction to a typed lambda abstraction.
+      return mkTypedAbs(
+        term.name,
+        term.typeAnnotation,
+        eraseSystemF(term.body)
+      );
+    case 'systemF-type-abs':
+      // Erase the type abstraction by converting its body.
+      return eraseSystemF(term.body);
+    case 'systemF-type-app':
+      // Erase the type application by converting the term part.
+      return eraseSystemF(term.term);
+    default:
+      return cons(
+        eraseSystemF(term.lft),
+        eraseSystemF(term.rgt)
+      );
+  }
 };

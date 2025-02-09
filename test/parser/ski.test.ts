@@ -27,7 +27,7 @@ describe('parseSKI', () => {
   });
 
   it('should fail to parse an unrecognized literal', () => {
-    expect(() => parseSKI('(Q')).to.throw(ParseError, /unrecognized/);
+    expect(() => parseSKI('(Q')).to.throw(ParseError, /unexpected token/);
   });
 
   it(`should parse ${secondLiteral} and variations`, () => {
@@ -53,9 +53,9 @@ describe('parseSKI', () => {
   });
 
   it('should fail to parse mismatched parens', () => {
-    expect(() => parseSKI('(())(')).to.throw(ParseError, /mismatched/);
-    expect(() => parseSKI('(')).to.throw(ParseError, /mismatched/);
-    expect(() => parseSKI('()())')).to.throw(ParseError, /mismatched/);
+    expect(() => parseSKI('(())(')).to.throw(ParseError, /unexpected token/);
+    expect(() => parseSKI('(')).to.throw(ParseError, /unexpected token/);
+    expect(() => parseSKI('()())')).to.throw(ParseError, /unexpected token/);
   });
 
   it('should parse the Y combinator', () => {
@@ -77,5 +77,31 @@ describe('parseSKI', () => {
     assertReparse('SK(SKK)SI');
     assertReparse('SKI');
     assertReparse('(IIII)');
+  });
+
+  it('should parse mixed-case input correctly', () => {
+    // Lowercase letters should be accepted, and converted to uppercase.
+    const upper = parseSKI('SKI');
+    const lower = parseSKI('ski');
+    const mixed = parseSKI('sKi');
+    assert.deepStrictEqual(upper, lower);
+    assert.deepStrictEqual(upper, mixed);
+  });
+
+  it('should parse input with extra whitespace', () => {
+    const noSpaces = parseSKI('SKI');
+    const withSpaces = parseSKI('S k I');
+    assert.deepStrictEqual(withSpaces, noSpaces);
+  });
+
+  it('should parse a complex expression with mixed-case and spaces', () => {
+    const expr1 = parseSKI(' s ( K ( s I i ) ) ');
+    const expr2 = parseSKI('S(K(SII))');
+    assert.deepStrictEqual(expr1, expr2);
+  });
+
+  it('should fail on invalid mixed-case literal', () => {
+    expect(() => parseSKI('sX')).to.throw(ParseError, /unexpected extra/);
+    expect(() => parseSKI('Xsi')).to.throw(ParseError, /unexpected token/);
   });
 });

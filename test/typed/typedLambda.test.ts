@@ -1,10 +1,10 @@
+import { expect } from 'chai';
+import { describe, it } from 'mocha';
+
 import { cons } from '../../lib/cons.ts';
 import { mkVar } from '../../lib/terms/lambda.ts';
 import { addBinding, mkTypedAbs, typecheck } from '../../lib/types/typedLambda.ts';
 import { mkTypeVariable, arrow, typesLitEq, arrows, TypeVariable } from '../../lib/types/types.ts';
-
-import { expect } from 'chai';
-import { describe, it } from 'mocha';
 
 describe('type checking errors', () => {
   it('throws an error for free variables', () => {

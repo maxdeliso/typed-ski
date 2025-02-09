@@ -1,7 +1,7 @@
+import { expect } from 'chai';
+
 import { typelessApp, mkVar, mkUntypedAbs, prettyPrintUntypedLambda } from '../../lib/terms/lambda.ts';
 import { parseLambda } from '../../lib/parser/untyped.ts';
-
-import { expect } from 'chai';
 
 describe('Parser Tests', () => {
   describe('parseLambda', () => {

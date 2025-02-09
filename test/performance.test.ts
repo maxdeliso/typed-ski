@@ -1,6 +1,7 @@
-import { generateExpr, SKIExpression } from '../lib/ski/expression.ts';
 import { hrtime } from 'process';
 import randomSeed from 'random-seed';
+
+import { generateExpr, SKIExpression } from '../lib/ski/expression.ts';
 import { stepOnceImmediate } from '../lib/evaluator/skiEvaluator.ts';
 
 describe('evaluator performance', () => {

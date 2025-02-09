@@ -147,6 +147,18 @@ describe('System F Type Checker', () => {
       const term: SystemFTerm = mkSystemFApp(f, mkSystemFVar('a'));
       expect(() => typecheckSystemF(ctx, term)).to.throw(Error, /function argument type mismatch/);
     });
+
+    it('should fail when a term is applied to itself with non-arrow type', () => {
+      // Ill-typed term: λx:X. x x
+      // Here, x is bound to type X, but x is applied to itself,
+      // which requires x to have an arrow type. Since X is not a function type,
+      // typechecking should fail.
+      const term: SystemFTerm = mkSystemFAbs('x', mkTypeVariable('X'),
+        mkSystemFApp(mkSystemFVar('x'), mkSystemFVar('x'))
+      );
+      const ctx: SystemFContext = emptySystemFContext();
+      expect(() => typecheckSystemF(ctx, term)).to.throw(Error, /expected an arrow type/);
+    });
   });
 
   describe('Integration with Parser and Pretty Printer', () => {

@@ -1,6 +1,6 @@
-import { cons } from '../cons.ts';
-import { SKIExpression } from './expression.ts';
-import { SKITerminalSymbol, term } from './terminal.ts';
+import { cons } from '../cons.js';
+import { SKIExpression } from './expression.js';
+import { SKITerminalSymbol, term } from './terminal.js';
 
 export type SymbolHeap = (SKITerminalSymbol | undefined)[];
 

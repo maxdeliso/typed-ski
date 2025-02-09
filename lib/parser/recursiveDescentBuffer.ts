@@ -1,4 +1,4 @@
-import { ParseError } from './parseError.ts';
+import { ParseError } from './parseError.js';
 
 export class RecursiveDescentBuffer {
   buf!: string;

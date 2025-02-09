@@ -1,7 +1,7 @@
-import { UntypedLambda, mkUntypedAbs, mkVar } from '../terms/lambda.ts';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
-import { parseLambdaChain } from './chain.ts';
-import { parseWithEOF } from './eof.ts';
+import { UntypedLambda, mkUntypedAbs, mkVar } from '../terms/lambda.js';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { parseLambdaChain } from './chain.js';
+import { parseWithEOF } from './eof.js';
 
 function parseUntypedLambdaInternal(
   rdb: RecursiveDescentBuffer

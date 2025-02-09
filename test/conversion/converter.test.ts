@@ -1,14 +1,14 @@
-import { cons } from '../../lib/cons.ts';
-import { predLambda } from '../../lib/consts/lambdas.ts';
-import { reduceSKI } from '../../lib/evaluator/skiEvaluator.ts';
-import { mkUntypedAbs, mkVar, prettyPrintUntypedLambda } from '../../lib/terms/lambda.ts';
-import { UnChurchNumber, ChurchN } from '../../lib/ski/church.ts';
-import { apply } from '../../lib/ski/expression.ts';
-import { I } from '../../lib/ski/terminal.ts';
-
 import { describe, it } from 'mocha';
 import { expect } from 'chai';
-import { convertLambda } from '../../lib/conversion/converter.ts';
+
+import { cons } from '../../lib/cons.js';
+import { predLambda } from '../../lib/consts/lambdas.js';
+import { reduceSKI } from '../../lib/evaluator/skiEvaluator.js';
+import { mkUntypedAbs, mkVar, prettyPrintUntypedLambda } from '../../lib/terms/lambda.js';
+import { UnChurchNumber, ChurchN } from '../../lib/ski/church.js';
+import { apply } from '../../lib/ski/expression.js';
+import { I } from '../../lib/ski/terminal.js';
+import { convertLambda } from '../../lib/conversion/converter.js';
 
 describe('Lambda conversion', () => {
   const N = 5;

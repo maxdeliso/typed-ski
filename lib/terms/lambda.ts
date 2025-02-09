@@ -1,4 +1,4 @@
-import { ConsCell, cons } from '../cons.ts';
+import { ConsCell, cons } from '../cons.js';
 
 /**
  * This is a single term variable with a name.

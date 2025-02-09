@@ -1,24 +1,24 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
-import { cons } from '../../lib/cons.ts';
-import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/terms/lambda.ts';
-import { parseType } from '../../lib/parser/type.ts';
-import { parseTypedLambda } from '../../lib/parser/typed.ts';
-import { typedTermsLitEq } from '../../lib/types/typedLambda.ts';
+import { cons } from '../../lib/cons.js';
+import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/terms/lambda.js';
+import { parseType } from '../../lib/parser/type.js';
+import { parseTypedLambda } from '../../lib/parser/typed.js';
+import { typedTermsLitEq } from '../../lib/types/typedLambda.js';
 import {
   arrows,
   mkTypeVariable,
   typesLitEq,
   arrow,
   BaseType
-} from '../../lib/types/types.ts';
+} from '../../lib/types/types.js';
 import {
   inferType,
   substituteType,
   unify
-} from '../../lib/types/inference.ts';
-import { normalize } from '../../lib/types/normalization.ts';
+} from '../../lib/types/inference.js';
+import { normalize } from '../../lib/types/normalization.js';
 
 describe('Types', () => {
   describe('basic type operations', () => {

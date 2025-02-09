@@ -1,5 +1,5 @@
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
-import { ParseError } from './parseError.ts';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { ParseError } from './parseError.js';
 
 /**
  * Wraps a parser function so that after parsing the input,

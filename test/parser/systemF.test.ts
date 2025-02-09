@@ -1,6 +1,6 @@
 import { strict as assert } from 'assert';
-import { parseSystemF } from '../../lib/parser/systemFTerm.ts';
-import { prettyPrintSystemF } from '../../lib/terms/systemF.ts';
+import { parseSystemF } from '../../lib/parser/systemFTerm.js';
+import { prettyPrintSystemF } from '../../lib/terms/systemF.js';
 
 describe('System F Parser', () => {
   it('parses a single variable', () => {

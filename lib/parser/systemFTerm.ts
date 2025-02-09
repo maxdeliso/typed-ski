@@ -1,9 +1,9 @@
-import { cons } from '../cons.ts';
-import { SystemFTerm, mkSystemFAbs, mkSystemFTAbs, mkSystemFVar, mkSystemFTypeApp } from '../terms/systemF.ts';
-import { parseWithEOF } from './eof.ts';
-import { ParseError } from './parseError.ts';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
-import { parseSystemFType } from './systemFType.ts';
+import { cons } from '../cons.js';
+import { SystemFTerm, mkSystemFAbs, mkSystemFTAbs, mkSystemFVar, mkSystemFTypeApp } from '../terms/systemF.js';
+import { parseWithEOF } from './eof.js';
+import { ParseError } from './parseError.js';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { parseSystemFType } from './systemFType.js';
 
 /**
  * Parses an atomic System F term.

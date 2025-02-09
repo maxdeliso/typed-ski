@@ -1,13 +1,13 @@
 import { describe, it } from 'mocha';
 import { expect } from 'chai';
 
-import { V, Succ, Fst, Snd, Car, Cdr, F, True, False, Plus, Zero, B } from '../../lib/consts/combinators.ts';
-import { reduceSKI } from '../../lib/evaluator/skiEvaluator.ts';
-import { UnChurchNumber, ChurchN, ChurchB, UnChurchBoolean } from '../../lib/ski/church.ts';
-import { S, K, I } from '../../lib/ski/terminal.ts';
-import { convertLambda } from '../../lib/conversion/converter.ts';
-import { predLambda } from '../../lib/consts/lambdas.ts';
-import { apply } from '../../lib/ski/expression.ts';
+import { V, Succ, Fst, Snd, Car, Cdr, F, True, False, Plus, Zero, B } from '../../lib/consts/combinators.js';
+import { reduceSKI } from '../../lib/evaluator/skiEvaluator.js';
+import { UnChurchNumber, ChurchN, ChurchB, UnChurchBoolean } from '../../lib/ski/church.js';
+import { S, K, I } from '../../lib/ski/terminal.js';
+import { convertLambda } from '../../lib/conversion/converter.js';
+import { predLambda } from '../../lib/consts/lambdas.js';
+import { apply } from '../../lib/ski/expression.js';
 
 /*
  * This test verifies that numeral systems and boolean logic can be encoded

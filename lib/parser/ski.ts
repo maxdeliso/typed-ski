@@ -1,9 +1,9 @@
-import { SKIExpression } from '../ski/expression.ts';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
-import { ParseError } from './parseError.ts';
-import { parseWithEOF } from './eof.ts';
-import { cons } from '../cons.ts';
-import { SKITerminalSymbol, term } from '../ski/terminal.ts';
+import { SKIExpression } from '../ski/expression.js';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { ParseError } from './parseError.js';
+import { parseWithEOF } from './eof.js';
+import { cons } from '../cons.js';
+import { SKITerminalSymbol, term } from '../ski/terminal.js';
 
 /**
  * Parses a chain of SKI atomic terms (term { term }).

@@ -1,6 +1,6 @@
-import { parseSKI } from '../parser/ski.ts';
-import { apply } from '../ski/expression.ts';
-import { K, I, S } from '../ski/terminal.ts';
+import { parseSKI } from '../parser/ski.js';
+import { apply } from '../ski/expression.js';
+import { S, K, I } from '../ski/terminal.js';
 
 /*
  * Zero. apply a function to its arguments zero times.

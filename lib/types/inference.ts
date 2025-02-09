@@ -1,9 +1,9 @@
-import { cons } from '../cons.ts';
-import { BaseType, arrow, typesLitEq, prettyPrintTy, TypeVariable, mkTypeVariable } from './types.ts';
-import { UntypedLambda } from '../terms/lambda.ts';
-import { TypedLambda, mkTypedAbs, Context } from './typedLambda.ts';
-import { varSource } from './varSource.ts';
-import { normalizeTy } from './normalization.ts';
+import { cons } from '../cons.js';
+import { BaseType, arrow, typesLitEq, prettyPrintTy, TypeVariable, mkTypeVariable } from './types.js';
+import { UntypedLambda } from '../terms/lambda.js';
+import { TypedLambda, mkTypedAbs, Context } from './typedLambda.js';
+import { varSource } from './varSource.js';
+import { normalizeTy } from './normalization.js';
 
 /**
  * Checks whether the type variable tv occurs in ty.
@@ -60,8 +60,6 @@ export const substituteType = (
           body: substituteType(original.body, lft, rgt)
         };
       }
-    default:
-      throw new Error('unhandled type in substitution');
   }
 };
 

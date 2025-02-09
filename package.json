@@ -3,14 +3,27 @@
   "version": "1.0.6",
   "description": "SKI combinators in Typescript",
   "scripts": {
+    "clean": "rimraf build/",
     "test": "mocha test/**/*.test.ts",
     "test:performance": "mocha test/performance.test.ts",
-    "build": "tsc",
+    "build": "yarn clean && tsc",
     "lint": "yarn eslint lib test",
     "lint:fix": "yarn eslint lib test --fix",
     "ski": "yarn tsx bin/ski.ts"
   },
   "type": "module",
+  "main": "./build/lib/index.js",
+  "module": "./build/lib/index.js",
+  "types": "./build/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/lib/index.d.ts",
+      "import": "./build/lib/index.js"
+    }
+  },
+  "files": [
+    "build/lib/"
+  ],
   "repository": {
     "type": "git",
     "url": "git@github.com:maxdeliso/typed-ski.git"
@@ -41,6 +54,7 @@
     "eslint": "^9.16.0",
     "jest": "^29.7.0",
     "mocha": "^11.0.1",
+    "rimraf": "^6.0.1",
     "tsx": "^4.16.2",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.17.0"

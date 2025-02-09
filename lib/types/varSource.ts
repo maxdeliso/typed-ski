@@ -1,4 +1,4 @@
-import { mkTypeVariable } from './types.ts';
+import { mkTypeVariable } from './types.js';
 
 /**
  * Returns a generator that yields sequential numbers.

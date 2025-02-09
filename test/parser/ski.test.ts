@@ -1,11 +1,11 @@
-import { cons } from '../../lib/cons.ts';
-import { Y } from '../../lib/consts/combinators.ts';
-import { ParseError } from '../../lib/parser/parseError.ts';
-import { parseSKI } from '../../lib/parser/ski.ts';
-import { SKIExpression, prettyPrint } from '../../lib/ski/expression.ts';
-import { S, K, I } from '../../lib/ski/terminal.ts';
-
 import { assert, expect } from 'chai';
+
+import { cons } from '../../lib/cons.js';
+import { Y } from '../../lib/consts/combinators.js';
+import { ParseError } from '../../lib/parser/parseError.js';
+import { parseSKI } from '../../lib/parser/ski.js';
+import { SKIExpression, prettyPrint } from '../../lib/ski/expression.js';
+import { S, K, I } from '../../lib/ski/terminal.js';
 
 describe('parseSKI', () => {
   const firstLiteral = '(I(SK))';

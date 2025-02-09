@@ -1,6 +1,6 @@
-import { cons, ConsCell } from '../cons.ts';
-import { prettyPrint, SKIExpression } from '../ski/expression.ts';
-import { SKITerminalSymbol } from '../ski/terminal.ts';
+import { cons, ConsCell } from '../cons.js';
+import { prettyPrint, SKIExpression } from '../ski/expression.js';
+import { SKITerminalSymbol } from '../ski/terminal.js';
 
 /**
   * the shape of an evaluation result.

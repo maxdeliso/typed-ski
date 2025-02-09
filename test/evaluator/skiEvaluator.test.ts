@@ -1,7 +1,8 @@
 import { assert } from 'chai';
-import { stepOnceSKI } from '../../lib/evaluator/skiEvaluator.ts';
-import { parseSKI } from '../../lib/parser/ski.ts';
-import { SKIExpression, prettyPrint } from '../../lib/ski/expression.ts';
+
+import { stepOnceSKI } from '../../lib/evaluator/skiEvaluator.js';
+import { parseSKI } from '../../lib/parser/ski.js';
+import { SKIExpression, prettyPrint } from '../../lib/ski/expression.js';
 
 describe('stepOnce', () => {
   const first = parseSKI('III');

@@ -1,9 +1,9 @@
-import { ConsCell, cons } from '../cons.ts';
-import { C, B } from '../consts/combinators.ts';
-import { LambdaVar, UntypedLambda } from '../terms/lambda.ts';
-import { SKIExpression } from '../ski/expression.ts';
-import { S, K, I, SKITerminal } from '../ski/terminal.ts';
-import { ConversionError } from './conversionError.ts';
+import { ConsCell, cons } from '../cons.js';
+import { C, B } from '../consts/combinators.js';
+import { LambdaVar, UntypedLambda } from '../terms/lambda.js';
+import { SKIExpression } from '../ski/expression.js';
+import { S, K, I, SKITerminal } from '../ski/terminal.js';
+import { ConversionError } from './conversionError.js';
 
 /**
  * Internal mixed-domain lambda abstraction.

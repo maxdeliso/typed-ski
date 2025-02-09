@@ -1,6 +1,6 @@
-import { cons, ConsCell } from '../cons.ts';
-import { LambdaVar, mkUntypedAbs, UntypedLambda } from '../terms/lambda.ts';
-import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.ts';
+import { cons, ConsCell } from '../cons.js';
+import { LambdaVar, mkUntypedAbs, UntypedLambda } from '../terms/lambda.js';
+import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.js';
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -129,11 +129,8 @@ export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
 export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
   if (a.kind === 'lambda-var' && b.kind === 'lambda-var') {
     return a.name === b.name;
-  } else if (a.kind === 'typed-lambda-abstraction' &&
-    b.kind === 'typed-lambda-abstraction') {
-    return typesLitEq(a.ty, b.ty) &&
-      a.varName === b.varName &&
-      typedTermsLitEq(a.body, b.body);
+  } else if (a.kind === 'typed-lambda-abstraction' && b.kind === 'typed-lambda-abstraction') {
+    return typesLitEq(a.ty, b.ty) && a.varName === b.varName && typedTermsLitEq(a.body, b.body);
   } else if (a.kind === 'non-terminal' && b.kind === 'non-terminal') {
     return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt);
   } else {

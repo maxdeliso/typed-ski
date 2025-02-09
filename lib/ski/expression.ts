@@ -1,7 +1,8 @@
 import { RandomSeed } from 'random-seed';
-import { ConsCell, cons } from '../cons.ts';
-import { stepOnceSKI } from '../evaluator/skiEvaluator.ts';
-import { SKITerminal, generate } from './terminal.ts';
+
+import { ConsCell, cons } from '../cons.js';
+import { stepOnceSKI } from '../evaluator/skiEvaluator.js';
+import { SKITerminal, generate } from './terminal.js';
 
 /*
  * EBNF grammar:
@@ -153,4 +154,4 @@ SKIExpression => {
   }
 };
 
-export { reduceSKI } from '../evaluator/skiEvaluator.ts';
+export { reduceSKI } from '../evaluator/skiEvaluator.js';

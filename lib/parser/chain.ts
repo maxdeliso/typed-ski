@@ -1,6 +1,6 @@
-import { cons } from '../cons.ts';
-import { ParseError } from './parseError.ts';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
+import { cons } from '../cons.js';
+import { ParseError } from './parseError.js';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
 
 export function parseLambdaChain<T>(
   rdb: RecursiveDescentBuffer,

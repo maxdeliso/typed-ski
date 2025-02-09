@@ -1,4 +1,4 @@
-import { ConsCell, cons } from '../cons.ts';
+import { ConsCell, cons } from '../cons.js';
 
 export interface TypeVariable {
   kind: 'type-var';

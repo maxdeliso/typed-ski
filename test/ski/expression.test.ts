@@ -2,9 +2,9 @@ import { assert } from 'chai';
 import rsexport, { RandomSeed } from 'random-seed';
 const { create } = rsexport;
 
-import { cons } from '../../lib/cons.ts';
-import { SKIExpression, generateExpr, prettyPrint, size } from '../../lib/ski/expression.ts';
-import { S, K } from '../../lib/ski/terminal.ts';
+import { cons } from '../../lib/cons.js';
+import { SKIExpression, generateExpr, prettyPrint, size } from '../../lib/ski/expression.js';
+import { S, K } from '../../lib/ski/terminal.js';
 
 describe('prettyPrint', () => {
   const expr = cons<SKIExpression>(cons<SKIExpression>(S, K), K);

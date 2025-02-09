@@ -1,7 +1,7 @@
-import { SystemFType, forall } from '../types/systemF.ts';
-import { arrow, mkTypeVariable } from '../types/types.ts';
-import { ParseError } from './parseError.ts';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
+import { SystemFType, forall } from '../types/systemF.js';
+import { arrow, mkTypeVariable } from '../types/types.js';
+import { ParseError } from './parseError.js';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
 
 /**
  * Parses a System F type.

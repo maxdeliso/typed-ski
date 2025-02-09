@@ -1,7 +1,7 @@
-import { Zero, One, Succ, True, False } from '../consts/combinators.ts';
-import { apply, SKIExpression } from './expression.ts';
-import { SKITerminalSymbol } from './terminal.ts';
-import { reduceSKI } from '../evaluator/skiEvaluator.ts';
+import { Zero, One, Succ, True, False } from '../consts/combinators.js';
+import { apply, SKIExpression } from './expression.js';
+import { SKITerminalSymbol } from './terminal.js';
+import { reduceSKI } from '../evaluator/skiEvaluator.js';
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding

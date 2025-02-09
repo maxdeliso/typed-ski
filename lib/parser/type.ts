@@ -1,7 +1,7 @@
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
-import { ParseError } from './parseError.ts';
-import { BaseType, arrow, mkTypeVariable } from '../types/types.ts';
-import { parseWithEOF } from './eof.ts';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { ParseError } from './parseError.js';
+import { BaseType, arrow, mkTypeVariable } from '../types/types.js';
+import { parseWithEOF } from './eof.js';
 
 /**
  * Parses a "simple" type.

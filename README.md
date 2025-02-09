@@ -8,8 +8,8 @@ In the checkout directory:
 
 ```bash
 yarn install
-yarn run build
-yarn run ski
+yarn build
+yarn ski
 ```
 
 ## Books

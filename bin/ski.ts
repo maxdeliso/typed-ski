@@ -5,20 +5,40 @@ import tkexport from 'terminal-kit';
 const { create } = rsexport;
 const { terminal } = tkexport;
 
-import { stepOnceImmediate, stepOnceSKI } from '../lib/evaluator/skiEvaluator.js';
-import { generateExpr, SKIExpression, prettyPrint as prettyPrintSKI } from '../lib/ski/expression.js';
-import { parseSKI } from '../lib/parser/ski.js';
-import { prettyPrintUntypedLambda, UntypedLambda } from '../lib/terms/lambda.js';
-import { parseLambda } from '../lib/parser/untyped.js';
-import { prettyPrintSystemF, SystemFTerm } from '../lib/terms/systemF.js';
-import { parseSystemF } from '../lib/parser/systemFTerm.js';
-import { eraseTypedLambda, prettyPrintTypedLambda, TypedLambda } from '../lib/types/typedLambda.js';
-import { parseTypedLambda } from '../lib/parser/typed.js';
-import { eraseSystemF, prettyPrintSystemFType } from '../lib/types/systemF.js';
-import { convertLambda } from '../lib/conversion/converter.js';
-import { typecheck as typecheckTyped } from '../lib/types/typedLambda.js';
-import { typecheck as typecheckSystemF } from '../lib/types/systemF.js';
-import { prettyPrintTy } from '../lib/types/types.ts';
+import {
+  // SKI evaluator
+  stepOnceImmediate,
+  stepOnceSKI,
+  // SKI expressions
+  generateExpr,
+  prettyPrintSKI,
+  type SKIExpression,
+  // Parsers
+  parseSKI,
+  parseLambda,
+  parseSystemF,
+  parseTypedLambda,
+  // Lambda terms
+  prettyPrintUntypedLambda,
+  type UntypedLambda,
+  // System F
+  prettyPrintSystemF,
+  type SystemFTerm,
+  // Typed Lambda
+  eraseTypedLambda,
+  prettyPrintTypedLambda,
+  type TypedLambda,
+  typecheckTyped,
+  // System F types
+  eraseSystemF,
+  prettyPrintSystemFType,
+  typecheckSystemF,
+  // Conversion
+  convertLambda,
+  // Types
+  prettyPrintTy,
+  inferType
+} from '../lib/index.js';
 
 enum Mode {
   SKI = 'SKI',
@@ -282,6 +302,25 @@ function processCommand(input: string): void {
           }
           break;
       }
+    }
+    else if (cmd === 'infer' || cmd === 'i') {
+      // This command infers the type for the current untyped Lambda expression.
+      if (currentMode !== Mode.Lambda) {
+        printYellow('Type inference is only available in Lambda mode.');
+      } else if (currentLambda === null) {
+        printRed('No current Lambda term available for type inference.');
+      } else {
+        try {
+          const [typed, inferredType] = inferType(currentLambda);
+          currentTypedLambda = typed;
+          // Switch to TypedLambda mode since we now have a typed term.
+          currentMode = Mode.TypedLambda;
+          printGreen('Inferred Typed Lambda term: ' + prettyPrintTypedLambda(currentTypedLambda));
+          printGreen('Inferred type: ' + prettyPrintTy(inferredType));
+        } catch (e) {
+          printRed('Type inference error: ' + String(e));
+        }
+      }
     } else {
       printYellow('unknown command: ' + input);
     }
@@ -297,13 +336,12 @@ Available commands:
   :mode [ski|lambda|typed|systemf]  -- switch mode
   :help                             -- display this help message
   :quit                             -- exit the REPL
-Evaluation commands (in SKI mode):
-  :s or :step         -- step once (converts to SKI if necessary)
-  :m or :stepmany     -- step many (max 100 iterations, in SKI mode)
-  :g or :generate     -- generate a new SKI expression (SKI mode only)
-  :p or :print        -- print the current term
-Typechecking commands:
-  :tc or :typecheck   -- typecheck the current term (only available in TypedLambda and SystemF modes)
+  :s or :step                       -- step once (converts to SKI if necessary)
+  :m or :stepmany                   -- step many (max 100 iterations, in SKI mode)
+  :g or :generate                   -- generate a new SKI expression (SKI mode only)
+  :p or :print                      -- print the current term
+  :tc or :typecheck                 -- typecheck the current term (only available in TypedLambda and SystemF modes)
+  :infer or :i                      -- infer the type for the current untyped Lambda term and switch to TypedLambda mode
 
 Any other input is interpreted as a new term for the current mode.
 Press CTRL+C or type :quit to exit.`);

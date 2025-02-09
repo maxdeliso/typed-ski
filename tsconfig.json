@@ -5,11 +5,11 @@
     ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "target": "ES2023",
+    "target": "ES6",
     "strict": true,
     "esModuleInterop": true,
-    "allowImportingTsExtensions": true,
-    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": false,
+    "emitDeclarationOnly": false,
     "skipLibCheck": true,
     "allowJs": false,
     "outDir": "./build",
@@ -17,4 +17,8 @@
     "declaration": true,
     "declarationMap": true
   },
+  "exclude": [
+    "test/**/*",
+    "**/*.test.ts"
+  ]
 }

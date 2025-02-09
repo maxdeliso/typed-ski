@@ -7,11 +7,11 @@ import {
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFApp
-} from '../../lib/terms/systemF.ts';
+} from '../../lib/terms/systemF.js';
 
-import { mkTypeVariable, arrow, prettyPrintTy } from '../../lib/types/types.ts';
-import { emptySystemFContext, typecheckSystemF, SystemFContext } from '../../lib/types/systemF.ts';
-import { parseSystemF } from '../../lib/parser/systemFTerm.ts';
+import { mkTypeVariable, arrow, prettyPrintTy } from '../../lib/types/types.js';
+import { emptySystemFContext, typecheckSystemF, SystemFContext } from '../../lib/types/systemF.js';
+import { parseSystemF } from '../../lib/parser/systemFTerm.js';
 
 describe('System F Type Checker', () => {
   describe('Positive Cases', () => {

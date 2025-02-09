@@ -1,5 +1,5 @@
-import { ConsCell } from '../cons.ts';
-import { SystemFType } from '../types/systemF.ts';
+import { ConsCell } from '../cons.js';
+import { SystemFType } from '../types/systemF.js';
 
 /**
  * A term variable.

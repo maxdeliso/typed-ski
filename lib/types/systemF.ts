@@ -1,7 +1,7 @@
-import { BaseType, arrow, prettyPrintTy, typesLitEq, ForallType } from './types.ts';
-import { cons } from '../cons.ts';
-import { SystemFTerm } from '../terms/systemF.ts';
-import { TypedLambda, mkTypedAbs } from './typedLambda.ts';
+import { BaseType, arrow, prettyPrintTy, typesLitEq, ForallType } from './types.js';
+import { cons } from '../cons.js';
+import { SystemFTerm } from '../terms/systemF.js';
+import { TypedLambda, mkTypedAbs } from './typedLambda.js';
 
 /*
  * https://en.wikipedia.org/wiki/System_F

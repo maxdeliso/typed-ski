@@ -1,8 +1,8 @@
 import { hrtime } from 'process';
 import randomSeed from 'random-seed';
 
-import { generateExpr, SKIExpression } from '../lib/ski/expression.ts';
-import { stepOnceImmediate } from '../lib/evaluator/skiEvaluator.ts';
+import { generateExpr, SKIExpression } from '../lib/ski/expression.js';
+import { stepOnceImmediate } from '../lib/evaluator/skiEvaluator.js';
 
 describe('evaluator performance', () => {
   const S = 128; // symbol count in each generated expression

@@ -1,9 +1,9 @@
-import { mkVar } from '../terms/lambda.ts';
-import { TypedLambda, mkTypedAbs } from '../types/typedLambda.ts';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.ts';
-import { parseLambdaChain } from './chain.ts';
-import { parseArrowType } from './type.ts';
-import { parseWithEOF } from './eof.ts';
+import { mkVar } from '../terms/lambda.js';
+import { TypedLambda, mkTypedAbs } from '../types/typedLambda.js';
+import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { parseLambdaChain } from './chain.js';
+import { parseArrowType } from './type.js';
+import { parseWithEOF } from './eof.js';
 
 function parseAtomicTypedLambda(
   rdb: RecursiveDescentBuffer

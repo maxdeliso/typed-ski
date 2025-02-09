@@ -3,9 +3,9 @@ import { describe, it } from 'mocha';
 import rsexport from 'random-seed';
 const { create } = rsexport;
 
-import { parseSKI } from '../../lib/parser/ski.ts';
-import { SKIExpression, size, compute } from '../../lib/ski/expression.ts';
-import { BinaryHeap, packHeap, unpackHeap, maxHeapIndex } from '../../lib/ski/packer.ts';
+import { parseSKI } from '../../lib/parser/ski.js';
+import { SKIExpression, size, compute } from '../../lib/ski/expression.js';
+import { BinaryHeap, packHeap, unpackHeap, maxHeapIndex } from '../../lib/ski/packer.js';
 
 describe('packHeap and unpackHeap', () => {
   const eye = parseSKI('I');

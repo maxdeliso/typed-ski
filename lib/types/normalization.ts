@@ -1,6 +1,6 @@
-import { cons } from '../cons.ts';
-import { BaseType, mkTypeVariable } from './types.ts';
-import { varSource } from './varSource.ts';
+import { cons } from '../cons.js';
+import { BaseType, mkTypeVariable } from './types.js';
+import { varSource } from './varSource.js';
 
 /**
  * Recursively renames type variables to produce a normalized type.

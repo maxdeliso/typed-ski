@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import { cons } from '../../lib/cons.js';
 import { mkVar } from '../../lib/terms/lambda.js';
 import { ParseError } from '../../lib/parser/parseError.js';
-import { parseTypedLambda } from '../../lib/parser/typed.js';
+import { parseTypedLambda } from '../../lib/parser/typedLambda.js';
 import { parseType } from '../../lib/parser/type.js';
 import { typedTermsLitEq, mkTypedAbs } from '../../lib/types/typedLambda.js';
 import { typesLitEq, arrow, mkTypeVariable, arrows } from '../../lib/types/types.js';

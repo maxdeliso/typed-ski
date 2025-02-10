@@ -1,9 +1,8 @@
 // Core evaluator exports
-export { stepOnceImmediate, stepOnceSKI } from './evaluator/skiEvaluator.js';
+export { stepOnceImmediate, reduce } from './evaluator/skiEvaluator.js';
 
 // SKI expression exports
 export {
-  generateExpr,
   prettyPrint as prettyPrintSKI,
   type SKIExpression
 } from './ski/expression.js';
@@ -12,7 +11,7 @@ export {
 export { parseSKI } from './parser/ski.js';
 export { parseLambda } from './parser/untyped.js';
 export { parseSystemF } from './parser/systemFTerm.js';
-export { parseTypedLambda } from './parser/typed.js';
+export { parseTypedLambda } from './parser/typedLambda.js';
 
 // Lambda terms exports
 export {

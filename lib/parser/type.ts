@@ -1,4 +1,4 @@
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { ParserState, peek, matchLP, matchRP, parseVariable, consume } from './parserState.js';
 import { ParseError } from './parseError.js';
 import { BaseType, arrow, mkTypeVariable } from '../types/types.js';
 import { parseWithEOF } from './eof.js';
@@ -6,21 +6,26 @@ import { parseWithEOF } from './eof.js';
 /**
  * Parses a "simple" type.
  * Simple types are either a variable or a parenthesized type.
+ *
+ * Returns a triple: [literal, BaseType, updatedState]
  */
-export function parseSimpleType(rdb: RecursiveDescentBuffer): [string, BaseType] {
-  if (rdb.peek() === '(') {
-    rdb.matchLP();
-    // Recursively parse a full type inside parentheses.
-    const [innerLit, innerType] = parseArrowType(rdb);
-    if (rdb.peek() !== ')') {
+export function parseSimpleType(state: ParserState): [string, BaseType, ParserState] {
+  const [ch, s] = peek(state);
+  if (ch === '(') {
+    // Parenthesized type.
+    const stateAfterLP = matchLP(s);
+    // Recursively parse a full type inside the parentheses.
+    const [innerLit, innerType, stateAfterInner] = parseArrowType(stateAfterLP);
+    const [next, sAfterInner] = peek(stateAfterInner);
+    if (next !== ')') {
       throw new ParseError('expected \')\' after type expression');
     }
-    rdb.matchRP();
-    return [`(${innerLit})`, innerType];
+    const stateAfterRP = matchRP(sAfterInner);
+    return [`(${innerLit})`, innerType, stateAfterRP];
   } else {
-    // A variable.
-    const varLit = rdb.parseVariable();
-    return [varLit, mkTypeVariable(varLit)];
+    // A type variable.
+    const [varLit, stateAfterVar] = parseVariable(s);
+    return [varLit, mkTypeVariable(varLit), stateAfterVar];
   }
 }
 
@@ -28,20 +33,26 @@ export function parseSimpleType(rdb: RecursiveDescentBuffer): [string, BaseType]
  * Parses an arrow type.
  * This function implements right associativity: it checks for an arrow following a simple type,
  * and if present, recursively parses the right–hand side.
+ *
+ * Returns a triple: [literal, BaseType, updatedState]
  */
-export function parseArrowType(rdb: RecursiveDescentBuffer): [string, BaseType] {
-  const [leftLit, leftType] = parseSimpleType(rdb);
-
-  // If an arrow follows, then parse the rest as an ArrowType.
-  if (rdb.peek() === '→') {
-    rdb.consume();
-    const [rightLit, rightType] = parseArrowType(rdb);
-    return [`${leftLit}→${rightLit}`, arrow(leftType, rightType)];
+export function parseArrowType(state: ParserState): [string, BaseType, ParserState] {
+  const [leftLit, leftType, stateAfterLeft] = parseSimpleType(state);
+  const [next, sAfterLeft] = peek(stateAfterLeft);
+  if (next === '→') {
+    // Consume the arrow.
+    const stateAfterArrow = consume(sAfterLeft); // or: matchCh(sAfterLeft, '→')
+    const [rightLit, rightType, stateAfterRight] = parseArrowType(stateAfterArrow);
+    return [`${leftLit}→${rightLit}`, arrow(leftType, rightType), stateAfterRight];
   } else {
-    return [leftLit, leftType];
+    return [leftLit, leftType, stateAfterLeft];
   }
 }
 
+/**
+ * Parses a complete type from an input string.
+ */
 export function parseType(input: string): [string, BaseType] {
-  return parseWithEOF(input, parseArrowType);
+  const [lit, type] = parseWithEOF(input, parseArrowType);
+  return [lit, type];
 }

@@ -4,7 +4,7 @@ import { describe, it } from 'mocha';
 import { cons } from '../../lib/cons.js';
 import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/terms/lambda.js';
 import { parseType } from '../../lib/parser/type.js';
-import { parseTypedLambda } from '../../lib/parser/typed.js';
+import { parseTypedLambda } from '../../lib/parser/typedLambda.js';
 import { typedTermsLitEq } from '../../lib/types/typedLambda.js';
 import {
   arrows,

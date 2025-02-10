@@ -8,9 +8,7 @@ const { terminal } = tkexport;
 import {
   // SKI evaluator
   stepOnceImmediate,
-  stepOnceSKI,
   // SKI expressions
-  generateExpr,
   prettyPrintSKI,
   type SKIExpression,
   // Parsers
@@ -37,8 +35,10 @@ import {
   convertLambda,
   // Types
   prettyPrintTy,
-  inferType
+  inferType,
+  reduce
 } from '../lib/index.js';
+import { randExpression } from '../lib/ski/generator.js';
 
 enum Mode {
   SKI = 'SKI',
@@ -48,7 +48,7 @@ enum Mode {
 }
 
 let currentMode: Mode = Mode.SKI;
-let currentSKI: SKIExpression = generateExpr(create(hrtime.bigint().toString()), 32);
+let currentSKI: SKIExpression = randExpression(create(hrtime.bigint().toString()), 32);
 let currentLambda: UntypedLambda | null = null;
 let currentTypedLambda: TypedLambda | null = null;
 let currentSystemF: SystemFTerm | null = null;
@@ -154,26 +154,13 @@ function skiStepOnce(): void {
 
 function skiStepMany(): void {
   const MAX_ITER = 100;
-  let iterations = 0;
-  while (iterations < MAX_ITER) {
-    const result = stepOnceSKI(currentSKI);
-    if (result.altered) {
-      currentSKI = result.expr;
-      printGreen(`step ${iterations + 1}: ${prettyPrintSKI(currentSKI)}`);
-    } else {
-      printYellow(`no further reduction after ${iterations} step(s).`);
-      break;
-    }
-    iterations++;
-  }
-  if (iterations === MAX_ITER) {
-    printRed('stopped after reaching maximum iterations.');
-  }
+  const result = reduce(currentSKI, MAX_ITER);
+  printGreen(`stepped many (with max of ${MAX_ITER}): ` + prettyPrintSKI(result));
 }
 
 function skiRegenerate(): void {
   const rs = create(hrtime.bigint().toString());
-  currentSKI = generateExpr(rs, 32);
+  currentSKI = randExpression(rs, 32);
   printGreen('generated new SKI expression: ' + prettyPrintSKI(currentSKI));
 }
 
@@ -269,7 +256,6 @@ function processCommand(input: string): void {
     } else if (cmd === 'p' || cmd === 'print') {
       printCurrentTerm();
     } else if (cmd === 'tc' || cmd === 'typecheck') {
-      // New typecheck command
       switch (currentMode) {
         case Mode.SKI:
           printYellow('Type checking not available in SKI mode.');
@@ -303,7 +289,7 @@ function processCommand(input: string): void {
           break;
       }
     }
-    else if (cmd === 'infer' || cmd === 'i') {
+    else if (cmd === 'i' || cmd === 'infer') {
       // This command infers the type for the current untyped Lambda expression.
       if (currentMode !== Mode.Lambda) {
         printYellow('Type inference is only available in Lambda mode.');
@@ -341,7 +327,7 @@ Available commands:
   :g or :generate                   -- generate a new SKI expression (SKI mode only)
   :p or :print                      -- print the current term
   :tc or :typecheck                 -- typecheck the current term (only available in TypedLambda and SystemF modes)
-  :infer or :i                      -- infer the type for the current untyped Lambda term and switch to TypedLambda mode
+  :i or :infer                      -- infer the type for the current untyped Lambda term and switch to TypedLambda mode
 
 Any other input is interpreted as a new term for the current mode.
 Press CTRL+C or type :quit to exit.`);

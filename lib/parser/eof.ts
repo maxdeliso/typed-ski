@@ -1,4 +1,4 @@
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { ParserState, createParserState, remaining } from './parserState.js';
 import { ParseError } from './parseError.js';
 
 /**
@@ -6,18 +6,22 @@ import { ParseError } from './parseError.js';
  * any extra (unconsumed) input causes an error.
  *
  * @param input the input string to parse
- * @param parser a function that parses from a RecursiveDescentBuffer
- * @returns the result of the parser
+ * @param parser a function that parses from an RDB and returns a tuple:
+ *               [literal, result, updatedState]
+ * @returns the result of the parser along with its literal and final state
  * @throws ParseError if there is leftover input after parsing
  */
 export function parseWithEOF<T>(
   input: string,
-  parser: (rdb: RecursiveDescentBuffer) => [string, T]
-): [string, T] {
-  const rdb = new RecursiveDescentBuffer(input);
-  const result = parser(rdb);
-  if (rdb.remaining()) {
-    throw new ParseError(`unexpected extra input: "${rdb.buf.slice(rdb.idx)}"`);
+  parser: (rdb: ParserState) => [string, T, ParserState]
+): [string, T, ParserState] {
+  const initialState = createParserState(input);
+  const [lit, result, updatedState] = parser(initialState);
+  const [hasRemaining, finalState] = remaining(updatedState);
+  if (hasRemaining) {
+    throw new ParseError(
+      `unexpected extra input: "${finalState.buf.slice(finalState.idx)}"`
+    );
   }
-  return result;
+  return [lit, result, finalState];
 }

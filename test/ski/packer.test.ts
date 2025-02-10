@@ -1,10 +1,8 @@
 import { assert } from 'chai';
 import { describe, it } from 'mocha';
-import rsexport from 'random-seed';
-const { create } = rsexport;
 
 import { parseSKI } from '../../lib/parser/ski.js';
-import { SKIExpression, size, compute } from '../../lib/ski/expression.js';
+import { SKIExpression, size } from '../../lib/ski/expression.js';
 import { BinaryHeap, packHeap, unpackHeap, maxHeapIndex } from '../../lib/ski/packer.js';
 
 describe('packHeap and unpackHeap', () => {
@@ -42,17 +40,6 @@ describe('packHeap and unpackHeap', () => {
   it('packs and unpacks a simple small expression symmetrically',
     () => assertRepack(quattro)
   );
-
-  const S = 8; // symbol count in each randomly generated expression
-  const N = 128; // the total number of reductions to complete
-
-  it('packs and unpacks many randomly generated expressions', () => {
-    const rs = create('testing');
-
-    compute(S, N, rs,
-      (expr) => assertRepack(expr),
-      (expr) => assertRepack(expr));
-  });
 });
 
 describe('maxHeapIndex', () => {

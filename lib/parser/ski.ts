@@ -1,5 +1,5 @@
 import { SKIExpression } from '../ski/expression.js';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import { ParserState, peek, consume, matchLP, matchRP } from './parserState.js';
 import { ParseError } from './parseError.js';
 import { parseWithEOF } from './eof.js';
 import { cons } from '../cons.js';
@@ -9,43 +9,50 @@ import { SKITerminalSymbol, term } from '../ski/terminal.js';
  * Parses a chain of SKI atomic terms (term { term }).
  * For example, the input "SII" will be parsed as:
  *    mkApp(mkApp(S, I), I)
+ *
+ * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
  */
-function parseSKIChain(rdb: RecursiveDescentBuffer): [string, SKIExpression] {
-  let [lit, expr] = parseAtomicSKI(rdb);
-  // While the next token is one that can begin an atomic SKI term,
-  // continue parsing and left‐associatively combine.
+function parseSKIChain(rdb: ParserState): [string, SKIExpression, ParserState] {
+  let [lit, expr, state] = parseAtomicSKI(rdb);
   for (;;) {
-    const next = rdb.peek();
+    const [next, newState] = peek(state);
     if (
       next === null ||
       (next !== '(' && !['S', 'K', 'I'].includes(next.toUpperCase()))
     ) {
-      break;
+      return [lit, expr, newState];
     }
-    const [nextLit, nextExpr] = parseAtomicSKI(rdb);
+    const [nextLit, nextExpr, updatedState] = parseAtomicSKI(newState);
     lit = `${lit} ${nextLit}`;
     expr = cons(expr, nextExpr);
+    state = updatedState;
   }
-  return [lit, expr];
 }
 
 /**
  * Parses an atomic SKI term.
  * This is either one of the terminals S, K, I or a parenthesized SKI expression.
+ *
+ * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
  */
-export function parseAtomicSKI(rdb: RecursiveDescentBuffer): [string, SKIExpression] {
-  const peeked = rdb.peek();
+export function parseAtomicSKI(rdb: ParserState): [string, SKIExpression, ParserState] {
+  const [peeked, state] = peek(rdb);
   if (peeked === '(') {
     // Parse a parenthesized expression.
-    rdb.matchLP();
+    const stateAfterLP = matchLP(state);
     // Inside parentheses we parse a whole chain.
-    const [innerLit, innerExpr] = parseSKIChain(rdb);
-    rdb.matchRP();
-    return [`(${innerLit})`, innerExpr];
-  } else if (peeked?.toUpperCase() === 'S' || peeked?.toUpperCase() === 'K' || peeked?.toUpperCase() === 'I') {
+    const [innerLit, innerExpr, stateAfterChain] = parseSKIChain(stateAfterLP);
+    const stateAfterRP = matchRP(stateAfterChain);
+    return [`(${innerLit})`, innerExpr, stateAfterRP];
+  } else if (
+    peeked &&
+    (peeked.toUpperCase() === 'S' ||
+      peeked.toUpperCase() === 'K' ||
+      peeked.toUpperCase() === 'I')
+  ) {
     const token = peeked.toUpperCase();
-    rdb.consume();
-    return [peeked, term(token as SKITerminalSymbol)];
+    const stateAfterConsume = consume(state);
+    return [peeked, term(token as SKITerminalSymbol), stateAfterConsume];
   } else {
     const unexpected = peeked === null ? 'EOF' : `"${peeked}"`;
     throw new ParseError(`unexpected token ${unexpected} when expecting an SKI term`);
@@ -54,14 +61,18 @@ export function parseAtomicSKI(rdb: RecursiveDescentBuffer): [string, SKIExpress
 
 /**
  * Parses a full SKI expression.
- * (This is just a wrapper around parseSKIChain, which implements the
- * left-associative application.)
+ * (This is just a wrapper around parseSKIChain, which implements the left‐associative application.)
+ *
+ * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
  */
-export function parseSKIInternal(rdb: RecursiveDescentBuffer): [string, SKIExpression] {
+export function parseSKIInternal(rdb: ParserState): [string, SKIExpression, ParserState] {
   return parseSKIChain(rdb);
 }
 
+/**
+ * Parses an input string into an SKI expression.
+ */
 export function parseSKI(input: string): SKIExpression {
-  const result = parseWithEOF(input, parseSKIInternal);
-  return result[1];
+  const [, expr] = parseWithEOF(input, parseSKIInternal);
+  return expr;
 }

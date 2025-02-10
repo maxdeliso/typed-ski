@@ -3,8 +3,9 @@ import rsexport, { RandomSeed } from 'random-seed';
 const { create } = rsexport;
 
 import { cons } from '../../lib/cons.js';
-import { SKIExpression, generateExpr, prettyPrint, size } from '../../lib/ski/expression.js';
+import { SKIExpression, prettyPrint, size } from '../../lib/ski/expression.js';
 import { S, K } from '../../lib/ski/terminal.js';
+import { randExpression } from '../../lib/ski/generator.js';
 
 describe('prettyPrint', () => {
   const expr = cons<SKIExpression>(cons<SKIExpression>(S, K), K);
@@ -21,7 +22,7 @@ describe('generate', () => {
 
   it('generates a random expression with the specified size', () => {
     const rs: RandomSeed = create(testSeed);
-    const generated = generateExpr(rs, n);
+    const generated = randExpression(rs, n);
 
     assert.deepStrictEqual(n, size(generated));
   });

@@ -1,7 +1,14 @@
 import { SystemFType, forall } from '../types/systemF.js';
 import { arrow, mkTypeVariable } from '../types/types.js';
 import { ParseError } from './parseError.js';
-import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
+import {
+  ParserState,
+  peek,
+  matchCh,
+  matchLP,
+  matchRP,
+  parseVariable,
+} from './parserState.js';
 
 /**
  * Parses a System F type.
@@ -13,50 +20,57 @@ import { RecursiveDescentBuffer } from './recursiveDescentBuffer.js';
  *   ArrowType  ::= SimpleType ("→" Type)?
  *
  *   SimpleType ::= type-variable | "(" Type ")"
+ *
+ * Returns a triple: [literal, SystemFType, updatedState]
  */
 export function parseSystemFType(
-  rdb: RecursiveDescentBuffer
-): [string, SystemFType] {
-  if (rdb.peek() === '∀') {
+  state: ParserState
+): [string, SystemFType, ParserState] {
+  const [ch, s] = peek(state);
+  if (ch === '∀') {
     // Parse universal type: ∀X. T
-    rdb.consume(); // consume '∀'
-    const typeVar = rdb.parseVariable();
-    rdb.matchCh('.'); // expect a dot after the type variable
-    const [bodyLit, bodyType] = parseSystemFType(rdb);
-    return [`∀${typeVar}.${bodyLit}`, forall(typeVar, bodyType)];
+    const stateAfterForall = matchCh(s, '∀'); // consume '∀'
+    const [typeVar, stateAfterVar] = parseVariable(stateAfterForall);
+    const stateAfterDot = matchCh(stateAfterVar, '.'); // expect a dot
+    const [bodyLit, bodyType, stateAfterBody] = parseSystemFType(stateAfterDot);
+    return [`∀${typeVar}.${bodyLit}`, forall(typeVar, bodyType), stateAfterBody];
   } else {
     // Parse an arrow type.
-    const [leftLit, leftType] = parseSimpleSystemFType(rdb);
-    if (rdb.peek() === '→') {
-      rdb.consume(); // consume the arrow
-      const [rightLit, rightType] = parseSystemFType(rdb);
-      // Represent the arrow type as a cons cell.
-      return [`${leftLit}→${rightLit}`, arrow(leftType, rightType)];
+    const [leftLit, leftType, stateAfterLeft] = parseSimpleSystemFType(s);
+    const [next, sAfterLeft] = peek(stateAfterLeft);
+    if (next === '→') {
+      const stateAfterArrow = matchCh(sAfterLeft, '→'); // consume the arrow
+      const [rightLit, rightType, stateAfterRight] = parseSystemFType(stateAfterArrow);
+      return [`${leftLit}→${rightLit}`, arrow(leftType, rightType), stateAfterRight];
     } else {
-      return [leftLit, leftType];
+      return [leftLit, leftType, stateAfterLeft];
     }
   }
 }
 
 /**
-   * Parses a simple System F type.
-   *
-   * SimpleType ::= type-variable | "(" Type ")"
-   */
+ * Parses a simple System F type.
+ *
+ * SimpleType ::= type-variable | "(" Type ")"
+ *
+ * Returns a triple: [literal, SystemFType, updatedState]
+ */
 function parseSimpleSystemFType(
-  rdb: RecursiveDescentBuffer
-): [string, SystemFType] {
-  if (rdb.peek() === '(') {
-    rdb.matchLP();
-    const [innerLit, innerType] = parseSystemFType(rdb);
-    if (rdb.peek() !== ')') {
+  state: ParserState
+): [string, SystemFType, ParserState] {
+  const [ch, s] = peek(state);
+  if (ch === '(') {
+    const stateAfterLP = matchLP(s);
+    const [innerLit, innerType, stateAfterInner] = parseSystemFType(stateAfterLP);
+    const [closing, sAfterInner] = peek(stateAfterInner);
+    if (closing !== ')') {
       throw new ParseError('expected \')\' after type expression');
     }
-    rdb.matchRP();
-    return [`(${innerLit})`, innerType];
+    const stateAfterRP = matchRP(sAfterInner);
+    return [`(${innerLit})`, innerType, stateAfterRP];
   } else {
     // Must be a type variable (a single letter).
-    const varLit = rdb.parseVariable();
-    return [varLit, mkTypeVariable(varLit)];
+    const [varLit, stateAfterVar] = parseVariable(s);
+    return [varLit, mkTypeVariable(varLit), stateAfterVar];
   }
 }

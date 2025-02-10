@@ -1,8 +1,9 @@
 import { hrtime } from 'process';
 import randomSeed from 'random-seed';
 
-import { generateExpr, SKIExpression } from '../lib/ski/expression.js';
+import { SKIExpression } from '../lib/ski/expression.js';
 import { stepOnceImmediate } from '../lib/evaluator/skiEvaluator.js';
+import { randExpression } from '../lib/ski/generator.js';
 
 describe('evaluator performance', () => {
   const S = 128; // symbol count in each generated expression
@@ -17,7 +18,7 @@ describe('evaluator performance', () => {
     // Pre-generate N SKI expressions.
     const expressions: SKIExpression[] = [];
     for (let i = 0; i < N; i++) {
-      expressions.push(generateExpr(rs, S));
+      expressions.push(randExpression(rs, S));
     }
 
     // Now measure the time spent reducing the pre-generated trees.

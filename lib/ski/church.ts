@@ -1,7 +1,7 @@
 import { Zero, One, Succ, True, False } from '../consts/combinators.js';
 import { apply, SKIExpression } from './expression.js';
 import { SKITerminalSymbol } from './terminal.js';
-import { reduceSKI } from '../evaluator/skiEvaluator.js';
+import { reduce } from '../evaluator/skiEvaluator.js';
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding
@@ -42,7 +42,7 @@ export const UnChurchNumber = (exp: SKIExpression): number => {
  */
 export const UnChurchBoolean = (expr: SKIExpression): boolean => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
-  const testExpr = reduceSKI(apply(expr, ChurchN(1), ChurchN(0)));
+  const testExpr = reduce(apply(expr, ChurchN(1), ChurchN(0)));
   return UnChurchNumber(testExpr) === 1;
 };
 

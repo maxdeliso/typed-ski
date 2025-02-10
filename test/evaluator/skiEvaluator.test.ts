@@ -1,6 +1,6 @@
 import { assert } from 'chai';
 
-import { stepOnceSKI } from '../../lib/evaluator/skiEvaluator.js';
+import { stepOnceImmediate } from '../../lib/evaluator/skiEvaluator.js';
 import { parseSKI } from '../../lib/parser/ski.js';
 import { SKIExpression, prettyPrint } from '../../lib/ski/expression.js';
 
@@ -21,7 +21,7 @@ describe('stepOnce', () => {
   it(`evaluates ${prettyPrint(second)}
       =>
       ${prettyPrint(third)}`, () => {
-    const result = stepOnceSKI(second);
+    const result = stepOnceImmediate(second);
     assert(result.altered);
     compareExpressions(result.expr, third);
   });
@@ -30,15 +30,17 @@ describe('stepOnce', () => {
       =>
       ${prettyPrint(third)}`,
   () => {
-    const result = stepOnceSKI(stepOnceSKI(first).expr);
-    assert(result.altered);
-    compareExpressions(result.expr, third);
+    const firstStep = stepOnceImmediate(first);
+    assert(firstStep.altered);
+    const secondStep = stepOnceImmediate(firstStep.expr);
+    assert(secondStep.altered);
+    compareExpressions(secondStep.expr, third);
   });
 
   it(`evaluates ${prettyPrint(fourth)}
       =>
       ${prettyPrint(third)}`, () => {
-    const result = stepOnceSKI(fourth);
+    const result = stepOnceImmediate(fourth);
     assert(result.altered);
     compareExpressions(result.expr, third);
   });
@@ -47,7 +49,7 @@ describe('stepOnce', () => {
       ${prettyPrint(fifth)}
       =>
       ${prettyPrint(seventh)}`, () => {
-    const first = stepOnceSKI(fifth);
+    const first = stepOnceImmediate(fifth);
     assert(first.altered);
     compareExpressions(first.expr, seventh);
   });
@@ -56,11 +58,11 @@ describe('stepOnce', () => {
       =>
       ${prettyPrint(third)}`,
   () => {
-    const firstStep = stepOnceSKI(sixth);
+    const firstStep = stepOnceImmediate(sixth);
     assert(firstStep.altered);
-    const secondStep = stepOnceSKI(firstStep.expr);
+    const secondStep = stepOnceImmediate(firstStep.expr);
     assert(secondStep.altered);
-    const thirdStep = stepOnceSKI(secondStep.expr);
+    const thirdStep = stepOnceImmediate(secondStep.expr);
     assert(thirdStep.altered);
     compareExpressions(thirdStep.expr, third);
   });

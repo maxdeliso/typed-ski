@@ -1,8 +1,5 @@
-import { RandomSeed } from 'random-seed';
-
 import { ConsCell, cons } from '../cons.js';
-import { stepOnceSKI } from '../evaluator/skiEvaluator.js';
-import { SKITerminal, generate } from './terminal.js';
+import { SKITerminal } from './terminal.js';
 
 /*
  * EBNF grammar:
@@ -20,57 +17,75 @@ import { SKITerminal, generate } from './terminal.js';
  * terminal | non-terminal | expression
  */
 export type SKIExpression = SKITerminal | ConsCell<SKIExpression>;
+export type SKIChar = 'S' | 'K' | 'I' | '(' | ')';
+export type SKIKey = SKIChar[];
 
 /**
-  * @param expr an expression to pretty print.
-  * @returns a pretty printed expression.
-  */
-export function prettyPrint(expr: SKIExpression): string {
-  // We'll build the output in parts.
-  const resultParts: string[] = [];
-  // Our stack will contain either SKIExpression nodes or literal strings.
-  const stack: (SKIExpression | string)[] = [expr];
+ * Maps an SKI character to its corresponding index:
+ *   "S" -> 0
+ *   "K" -> 1
+ *   "I" -> 2
+ *   "(" -> 3
+ *   ")" -> 4
+ */
+export function charToIndex(ch: SKIChar): 0 | 1 | 2 | 3 | 4 {
+  switch (ch) {
+    case 'S': return 0;
+    case 'K': return 1;
+    case 'I': return 2;
+    case '(' : return 3;
+    case ')' : return 4;
+  }
+}
+
+/**
+ * Converts a SKI expression to its canonical key,
+ * represented as an array of SKIChar.
+ *
+ * This function mimics the original pretty-printing algorithm,
+ * but builds an SKIKey instead.
+ */
+export function toSKIKey(expr: SKIExpression): SKIKey {
+  const key: SKIKey = [];
+  // The stack can hold either expressions or literal SKIChar values.
+  const stack: (SKIExpression | SKIChar)[] = [expr];
 
   while (stack.length > 0) {
     const item = stack.pop();
-    if (!item) {
+    if (item === undefined) {
       throw new Error('stack underflow');
     }
 
     if (typeof item === 'string') {
-      // A literal string (like "(" or ")") is appended immediately.
-      resultParts.push(item);
+      // If the item is a literal SKIChar, append it to the key.
+      key.push(item);
     } else if (item.kind === 'terminal') {
-      // For terminal nodes, simply output the symbol.
-      resultParts.push(item.sym);
+      // For terminal nodes, simply push the symbol.
+      key.push(item.sym);
     } else {
       // For non-terminal nodes, we want to output:
-      // "(" + prettyPrint(lft) + prettyPrint(rgt) + ")"
-      // Because we are using a stack (LIFO), we push the components in reverse order.
-      stack.push(')');         // Will be printed last.
+      // "(" + [key for left subtree] + [key for right subtree] + ")"
+      // Push the components in reverse order (LIFO) so that '(' comes first.
+      stack.push(')');         // Will be appended last.
       stack.push(item.rgt);      // Right subtree.
       stack.push(item.lft);      // Left subtree.
-      stack.push('(');           // Will be printed first.
+      stack.push('(');           // Will be appended first.
     }
   }
 
-  // The result parts are collected in order, so join them into the final string.
-  return resultParts.join('');
+  return key;
 }
 
-export const generateExpr = (rs: RandomSeed, n: number): SKIExpression => {
-  if (n <= 0) {
-    throw new Error('A valid expression must contain at least one symbol.');
-  }
+/**
+ * Returns the string representation of a SKI expression.
+ *
+ * This function calls toSKIKey to produce the key and then joins
+ * the key array into a string.
+ */
+export function prettyPrint(expr: SKIExpression): string {
+  return toSKIKey(expr).join('');
+}
 
-  let result: SKIExpression = generate(rs);
-
-  for (let i = 0; i < n - 1; i++) {
-    result = splat(rs, result, generate(rs));
-  }
-
-  return result;
-};
 
 /**
   * @param exp an abstract expression.
@@ -93,65 +108,3 @@ export const apply = (...exps: SKIExpression[]): SKIExpression => {
     return exps.reduce(cons<SKIExpression>);
   }
 };
-
-/**
- * Run reductions continuously, with the supplied parameters.
- * Note: when an expression can no longer be reduced, a new
- * expression is generated.
- *
- * @param S the number of symbols in each generated expression.
- * @param N the number of reduction steps to take.
- * @param rs the random seed to use to regenerate the expr.
- * @param onStep a callback function for when a step occurs.
- * @param onRegenerate a callback function for when a regeneration occurs.
- */
-export function compute(
-  S: number,
-  N: number,
-  rs: RandomSeed,
-  onStep: (_: SKIExpression) => void,
-  onRegenerate: (_: SKIExpression) => void): SKIExpression {
-  let exp = generateExpr(rs, S);
-
-  for (let i = 0; i < N; i++) {
-    const stepResult = stepOnceSKI(exp);
-
-    if (stepResult.altered) {
-      exp = stepResult.expr;
-      onStep(exp);
-    } else {
-      exp = generateExpr(rs, S);
-      onRegenerate(exp);
-    }
-  }
-
-  return exp;
-}
-
-/**
- * Splat a combinator in there randomly.
- *
- * @param randomSeed entropy source
- * @param expr expression
- * @param term the combinator to insert.
- * @returns an expression with the symbol t added in a "random" but deserving
- * location.
- */
-const splat = (randomSeed: RandomSeed, expr: SKIExpression, term: SKITerminal):
-SKIExpression => {
-  const direction = randomSeed.intBetween(0, 1) === 1;
-
-  if (expr.kind === 'terminal') {
-    if (direction) {
-      return cons(expr, term);
-    } else {
-      return cons(term, expr);
-    }
-  } else if (direction) {
-    return cons(splat(randomSeed, expr.lft, term), expr.rgt);
-  } else {
-    return cons(expr.lft, splat(randomSeed, expr.rgt, term));
-  }
-};
-
-export { reduceSKI } from '../evaluator/skiEvaluator.js';

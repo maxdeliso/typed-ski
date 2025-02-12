@@ -1,4 +1,6 @@
 import { cons, ConsCell } from '../cons.js';
+import { AVLTree, createEmptyAVL, insertAVL, searchAVL } from '../data/avl/avlNode.js';
+import { compareStrings } from '../data/map/stringMap.js';
 import { LambdaVar, mkUntypedAbs, UntypedLambda } from '../terms/lambda.js';
 import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.js';
 
@@ -44,19 +46,24 @@ export const mkTypedAbs = (
 /**
  * Γ, or capital Gamma, represents the set of mappings from names to types.
  */
-export type Context = Map<string, BaseType>;
+export type Context = AVLTree<string, BaseType>;
+
+/** Create an empty string->string AVL tree. */
+export function emptyContext(): Context {
+  return createEmptyAVL<string, BaseType>();
+}
 
 export const addBinding =
   (ctx: Context, name: string, ty: BaseType): Context => {
-    if (ctx.get(name)) {
+    if (searchAVL(ctx, name, compareStrings) !== undefined) {
       throw new TypeError('duplicated binding for name: ' + name);
     }
 
-    return ctx.set(name, ty);
+    return insertAVL(ctx, name, ty, compareStrings);
   };
 
 export const typecheck = (typedTerm: TypedLambda): BaseType => {
-  return typecheckGiven(new Map<string, BaseType>(), typedTerm);
+  return typecheckGiven(emptyContext(), typedTerm);
 };
 
 /**
@@ -71,7 +78,7 @@ export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): BaseType =
   switch (typedTerm.kind) {
     case 'lambda-var': {
       const termName = typedTerm.name;
-      const lookedUp = ctx.get(termName);
+      const lookedUp = searchAVL(ctx, termName, compareStrings);
 
       if (lookedUp === undefined) {
         throw new TypeError('unknown term named: ' + termName);
@@ -96,7 +103,11 @@ export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): BaseType =
       const gives = tyLft.rgt;
 
       if (!typesLitEq(tyRgt, takes)) {
-        throw new TypeError('type mismatch');
+        throw new TypeError(
+          'Type mismatch in function application:\n' +
+          `Expected: ${prettyPrintTy(takes)}\n` +
+          `Got: ${prettyPrintTy(tyRgt)}`
+        );
       }
 
       return gives;

@@ -77,6 +77,20 @@ export function toSKIKey(expr: SKIExpression): SKIKey {
 }
 
 /**
+ * Compare two SKI expressions for structural equivalence.
+ * (Uses the canonical key produced by `toSKIKey`.)
+ */
+export function expressionEquivalent(a: SKIExpression, b: SKIExpression): boolean {
+  const keyA = toSKIKey(a);
+  const keyB = toSKIKey(b);
+  if (keyA.length !== keyB.length) return false;
+  for (let i = 0; i < keyA.length; i++) {
+    if (keyA[i] !== keyB[i]) return false;
+  }
+  return true;
+}
+
+/**
  * Returns the string representation of a SKI expression.
  *
  * This function calls toSKIKey to produce the key and then joins

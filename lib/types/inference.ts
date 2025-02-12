@@ -1,9 +1,21 @@
 import { cons } from '../cons.js';
 import { BaseType, arrow, typesLitEq, prettyPrintTy, TypeVariable, mkTypeVariable } from './types.js';
 import { UntypedLambda } from '../terms/lambda.js';
-import { TypedLambda, mkTypedAbs, Context } from './typedLambda.js';
+import { TypedLambda, mkTypedAbs, Context, emptyContext } from './typedLambda.js';
 import { varSource } from './varSource.js';
 import { normalizeTy } from './normalization.js';
+import { insertAVL, keyValuePairs, searchAVL } from '../data/avl/avlNode.js';
+import { compareStrings, createStringMap } from '../data/map/stringMap.js';
+
+interface InferenceState {
+  varBindings: Context;
+  constraints: Context;
+}
+
+interface InferenceResult {
+  type: BaseType;
+  state: InferenceState;
+}
 
 /**
  * Checks whether the type variable tv occurs in ty.
@@ -24,8 +36,7 @@ const occursIn = (tv: TypeVariable, ty: BaseType): boolean => {
 };
 
 /**
- * Substitute in the type “original” all free occurrences of the type pattern `lft`
- * with the replacement type `rgt`.
+ * Substitutes all instances of `lft` with `rgt` in `original`.
  */
 export const substituteType = (
   original: BaseType,
@@ -66,34 +77,56 @@ export const substituteType = (
 /**
  * The heart of Algorithm W.
  */
-const algorithmW = (
+export const algorithmW = (
   term: UntypedLambda,
   nextVar: () => TypeVariable,
-  varBindings: Context,
-  constraints: Context
-): BaseType => {
+  state: InferenceState
+): InferenceResult => {
   switch (term.kind) {
     case 'lambda-var': {
-      const contextType = varBindings.get(term.name);
+      const contextType = searchAVL(state.varBindings, term.name, compareStrings);
       if (contextType !== undefined) {
-        return contextType;
+        return {
+          type: contextType,
+          state
+        };
       } else {
-        return nextVar();
+        return {
+          type: nextVar(),
+          state
+        };
       }
     }
     case 'lambda-abs': {
       const paramType = nextVar();
-      varBindings.set(term.name, paramType);
-      constraints.set(term.name, paramType);
-      const bodyType = algorithmW(term.body, nextVar, varBindings, constraints);
-      return arrow(paramType, bodyType);
+      const newState = {
+        varBindings: insertAVL(state.varBindings, term.name, paramType, compareStrings),
+        constraints: insertAVL(state.constraints, term.name, paramType, compareStrings)
+      };
+
+      const result = algorithmW(term.body, nextVar, newState);
+      return {
+        type: arrow(paramType, result.type),
+        state: result.state
+      };
     }
     case 'non-terminal': {
-      const leftTy = algorithmW(term.lft, nextVar, varBindings, constraints);
-      const rgtTy = algorithmW(term.rgt, nextVar, varBindings, constraints);
-      const result = nextVar();
-      unify(leftTy, arrow(rgtTy, result), constraints);
-      return result;
+      const leftResult = algorithmW(term.lft, nextVar, state);
+      const rightResult = algorithmW(term.rgt, nextVar, leftResult.state);
+      const resultType = nextVar();
+      const newConstraints = unify(
+        leftResult.type,
+        arrow(rightResult.type, resultType),
+        rightResult.state.constraints
+      );
+
+      return {
+        type: resultType,
+        state: {
+          ...rightResult.state,
+          constraints: newConstraints
+        }
+      };
     }
   }
 };
@@ -101,9 +134,9 @@ const algorithmW = (
 /**
  * Unifies two types t1 and t2 within the given context.
  */
-export const unify = (t1: BaseType, t2: BaseType, context: Context): void => {
+export const unify = (t1: BaseType, t2: BaseType, context: Context): Context => {
   // If they are literally equal, we're done.
-  if (typesLitEq(t1, t2)) return;
+  if (typesLitEq(t1, t2)) return context;
 
   // Handle universal types.
   if (t1.kind === 'forall' || t2.kind === 'forall') {
@@ -115,9 +148,8 @@ export const unify = (t1: BaseType, t2: BaseType, context: Context): void => {
         mkTypeVariable(t2.typeVar),
         mkTypeVariable(t1.typeVar)
       );
-        // Now unify the bodies.
-      unify(t1.body, t2RenamedBody, context);
-      return;
+
+      return unify(t1.body, t2RenamedBody, context);
     } else {
       // You cannot unify a universal type with a non–universal type.
       throw new TypeError(
@@ -133,10 +165,11 @@ export const unify = (t1: BaseType, t2: BaseType, context: Context): void => {
         `occurs check failed: ${t1.typeName} occurs in ${prettyPrintTy(t2)}`
       );
     }
-    for (const [key, ty] of context.entries()) {
-      context.set(key, substituteType(ty, t1, t2));
+    for (const [key, ty] of keyValuePairs(context)) {
+      context = insertAVL(context, key, substituteType(ty, t1, t2), compareStrings);
     }
-    return;
+    context = insertAVL(context, t1.typeName, t2, compareStrings);
+    return context;
   }
 
   if (t2.kind === 'type-var') {
@@ -145,17 +178,19 @@ export const unify = (t1: BaseType, t2: BaseType, context: Context): void => {
         `occurs check failed: ${t2.typeName} occurs in ${prettyPrintTy(t1)}`
       );
     }
-    for (const [key, ty] of context.entries()) {
-      context.set(key, substituteType(ty, t2, t1));
+
+    for (const [key, ty] of keyValuePairs(context)) {
+      context = insertAVL(context, key, substituteType(ty, t2, t1), compareStrings);
     }
-    return;
+    context = insertAVL(context, t2.typeName, t1, compareStrings);
+    return context;
   }
 
   // At this point, both t1 and t2 are non-terminal (arrow) types.
   // Ensure that both have lft and rgt.
   if ('lft' in t1 && 'lft' in t2) {
-    unify(t1.lft, t2.lft, context);
-    unify(t1.rgt, t2.rgt, context);
+    const context1 = unify(t1.lft, t2.lft, context);
+    return unify(t1.rgt, t2.rgt, context1);
   } else {
     throw new TypeError(
       `cannot unify types: ${prettyPrintTy(t1)} and ${prettyPrintTy(t2)}`
@@ -172,7 +207,7 @@ const attachTypes = (untyped: UntypedLambda, types: Context): TypedLambda => {
     case 'lambda-var':
       return untyped;
     case 'lambda-abs': {
-      const ty = types.get(untyped.name);
+      const ty = searchAVL(types, untyped.name, compareStrings);
       if (ty === undefined) {
         throw new TypeError('missing type for term: ' + untyped.name);
       }
@@ -197,25 +232,38 @@ const attachTypes = (untyped: UntypedLambda, types: Context): TypedLambda => {
 export const inferType = (
   term: UntypedLambda
 ): [TypedLambda, BaseType] => {
-  const absBindings = new Map<string, BaseType>();
-  const inferredContext = new Map<string, BaseType>();
-  let inferred = algorithmW(term, varSource(), absBindings, inferredContext);
+  const initialState: InferenceState = {
+    varBindings: emptyContext(),
+    constraints: emptyContext()
+  };
 
-  inferredContext.forEach((combinedTy, termName) => {
-    const originalTy = absBindings.get(termName);
+  const result = algorithmW(term, varSource(), initialState);
+  // eslint-disable-next-line prefer-const
+  let { type, state } = result;
+
+  // Apply substitutions from constraints to the type
+  for (const [key, combinedTy] of keyValuePairs(state.constraints)) {
+    const originalTy = searchAVL(state.varBindings, key, compareStrings);
     if (originalTy !== undefined && !typesLitEq(combinedTy, originalTy)) {
-      inferred = substituteType(inferred, originalTy, combinedTy);
+      type = substituteType(type, originalTy, combinedTy);
     }
-  });
+  }
 
-  // Normalize both the context and the final inferred type.
-  const normalizationMappings = new Map<string, string>();
+  // Normalize types
+  let normalizationMappings = createStringMap();
   const vars = varSource();
-  inferredContext.forEach((ty, termName) => {
-    inferredContext.set(termName, normalizeTy(ty, normalizationMappings, vars));
-  });
-  const normalizedType = normalizeTy(inferred, normalizationMappings, vars);
 
-  const typedTerm = attachTypes(term, inferredContext);
+  // Normalize context
+  const normalizedContext = keyValuePairs(state.constraints).reduce(
+    (ctx, [termName, ty]) => {
+      const [nty, nvars] = normalizeTy(ty, normalizationMappings, vars);
+      normalizationMappings = nvars;
+      return insertAVL(ctx, termName, nty, compareStrings);
+    },
+    emptyContext()
+  );
+  // Normalize final type
+  const [normalizedType] = normalizeTy(type, normalizationMappings, vars);
+  const typedTerm = attachTypes(term, normalizedContext);
   return [typedTerm, normalizedType];
 };

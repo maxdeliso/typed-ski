@@ -2,6 +2,9 @@ import { BaseType, arrow, prettyPrintTy, typesLitEq, ForallType } from './types.
 import { cons } from '../cons.js';
 import { SystemFTerm } from '../terms/systemF.js';
 import { TypedLambda, mkTypedAbs } from './typedLambda.js';
+import { AVLTree, createEmptyAVL, insertAVL, searchAVL } from '../data/avl/avlNode.js';
+import { compareStrings } from '../data/map/stringMap.js';
+import { Set, createSet, insertSet } from '../data/set/set.js';
 
 /*
  * https://en.wikipedia.org/wiki/System_F
@@ -16,41 +19,40 @@ export const forall = (typeVar: string, body: SystemFType): ForallType => ({
 });
 
 /**
- * Substitute in the type “original” the sub–type lft with rgt.
+ * Substitute in the type "original" the sub–type lft with rgt.
  */
 export const substituteSystemFType = (
   original: SystemFType,
   targetVarName: string,
   replacement: SystemFType
 ): SystemFType => {
-  if (original.kind === 'type-var') {
-    return original.typeName === targetVarName ? replacement : original;
-  }
-  if ('lft' in original && 'rgt' in original) {
-    return cons(
-      substituteSystemFType(original.lft, targetVarName, replacement),
-      substituteSystemFType(original.rgt, targetVarName, replacement)
-    );
-  }
-
-  if (original.typeVar === targetVarName) {
-    return original;
-  } else {
-    return {
-      kind: 'forall',
-      typeVar: original.typeVar,
-      body: substituteSystemFType(original.body, targetVarName, replacement)
-    };
+  switch (original.kind) {
+    case 'type-var':
+      return original.typeName === targetVarName ? replacement : original;
+    case 'non-terminal':
+      return cons(
+        substituteSystemFType(original.lft, targetVarName, replacement),
+        substituteSystemFType(original.rgt, targetVarName, replacement)
+      );
+    case 'forall':
+      if (original.typeVar === targetVarName) {
+        return original;
+      }
+      return {
+        kind: 'forall',
+        typeVar: original.typeVar,
+        body: substituteSystemFType(original.body, targetVarName, replacement)
+      };
   }
 };
 
 /**
  * The type checking context for System F.
- * termCtx maps term variables to their types.
- * typeVars is the set of bound type variables.
+ * - termCtx maps term variables (strings) to their types (SystemFType) using a persistent AVL tree.
+ * - typeVars is the set of bound type variables using our persistent AVLSet.
  */
 export interface SystemFContext {
-  termCtx: Map<string, SystemFType>;
+  termCtx: AVLTree<string, SystemFType>;
   typeVars: Set<string>;
 }
 
@@ -58,96 +60,98 @@ export interface SystemFContext {
  * Returns an empty System F context.
  */
 export const emptySystemFContext = (): SystemFContext => ({
-  termCtx: new Map<string, SystemFType>(),
-  typeVars: new Set<string>()
+  termCtx: createEmptyAVL<string, SystemFType>(),
+  typeVars: createSet<string>(compareStrings)
 });
 
 /**
  * Typechecks a System F term.
- * Returns the type of the term.
+ * Returns just the type (discarding the final context).
  */
 export const typecheck = (term: SystemFTerm): SystemFType => {
-  return typecheckSystemF(emptySystemFContext(), term);
+  return typecheckSystemF(emptySystemFContext(), term)[0];
 };
 
 /**
  * Typechecks a System F term under the given context.
- * Returns the type of the term.
+ * Returns a tuple of [type, updatedContext] so that context mutations propagate
+ * to subsequent recursive invocations.
  *
  * Rules:
  * - For a variable, look up its type.
- * - For a term abstraction: if term is λx:T. t, then typecheck t under the
- *   context extended with x:T and return arrow(T, U).
- * - For a type abstraction: if term is ΛX. t, then extend the type variable context
- *   and return the universal type ∀X. U.
- * - For a term application: if term is t u, then typecheck t to get an arrow type T→U,
- *   typecheck u, and ensure its type matches T.
- * - For a type application: if term is t [T], then typecheck t which should yield
- *   a universal type ∀X. U; then substitute T for X in U.
+ * - For a term abstraction (λx:T. t): extend the context with x:T when typechecking t,
+ *   then return arrow(T, U) while discarding the local binding.
+ * - For a type abstraction (ΛX. t): extend the type variable context when typechecking t,
+ *   then return ∀X. U while discarding the local type variable.
+ * - For a term application (t u): typecheck t, then typecheck u with the updated context
+ *   from t, ensuring t's type is an arrow type whose input matches u's type.
+ * - For a type application (t [T]): typecheck t and substitute T for the bound type variable.
  */
 export const typecheckSystemF = (
   ctx: SystemFContext,
   term: SystemFTerm
-): SystemFType => {
+): [SystemFType, SystemFContext] => {
   switch (term.kind) {
     case 'systemF-var': {
-      const ty = ctx.termCtx.get(term.name);
-      if (!ty) {
+      const ty = searchAVL(ctx.termCtx, term.name, compareStrings);
+      if (ty === undefined) {
         throw new TypeError(`unknown variable: ${term.name}`);
       }
-      return ty;
+      return [ty, ctx];
     }
     case 'systemF-abs': {
-      // The annotation must be a well–formed SystemFType.
-      const newCtx: SystemFContext = {
-        termCtx: new Map(ctx.termCtx),
-        typeVars: new Set(ctx.typeVars)
+      // Extend the term context locally with x:T.
+      const newTermCtx = insertAVL(ctx.termCtx, term.name, term.typeAnnotation, compareStrings);
+      const localCtx: SystemFContext = {
+        termCtx: newTermCtx,
+        typeVars: ctx.typeVars // persistent: no need to copy
       };
-      newCtx.termCtx.set(term.name, term.typeAnnotation);
-      const bodyTy = typecheckSystemF(newCtx, term.body);
-      return arrow(term.typeAnnotation, bodyTy);
+      const [bodyTy] = typecheckSystemF(localCtx, term.body);
+      // The local binding for x is scoped; we return the parent context.
+      return [arrow(term.typeAnnotation, bodyTy), ctx];
     }
     case 'non-terminal': {
-      const funTy = typecheckSystemF(ctx, term.lft);
-      const argTy = typecheckSystemF(ctx, term.rgt);
-      // funTy must be an arrow type. We check by pattern matching.
+      // Sequentially propagate context updates.
+      const [funTy, ctxAfterLeft] = typecheckSystemF(ctx, term.lft);
+      const [argTy, ctxAfterRight] = typecheckSystemF(ctxAfterLeft, term.rgt);
       if (funTy.kind !== 'non-terminal') {
-        throw new TypeError(`expected an arrow type in function application, but got: ${prettyPrintTy(funTy)}`);
+        throw new TypeError(
+          `expected an arrow type in function application, but got: ${prettyPrintTy(funTy)}`
+        );
       }
-      // The input part of funTy must equal argTy.
       if (!typesLitEq(funTy.lft, argTy)) {
         throw new TypeError(
           `function argument type mismatch: expected ${prettyPrintTy(funTy.lft)}, got ${prettyPrintTy(argTy)}`
         );
       }
-      return funTy.rgt;
+      return [funTy.rgt, ctxAfterRight];
     }
     case 'systemF-type-abs': {
-      // Extend the type variable context.
-      const newCtx: SystemFContext = {
-        termCtx: new Map(ctx.termCtx),
-        typeVars: new Set(ctx.typeVars)
+      // Extend the type variable context locally using our AVLSet.
+      const localCtx: SystemFContext = {
+        termCtx: ctx.termCtx,
+        typeVars: insertSet(ctx.typeVars, term.typeVar)
       };
-      newCtx.typeVars.add(term.typeVar);
-      const bodyTy = typecheckSystemF(newCtx, term.body);
-      return forall(term.typeVar, bodyTy);
+      const [bodyTy] = typecheckSystemF(localCtx, term.body);
+      // The local type variable binding is scoped; return the parent context.
+      return [forall(term.typeVar, bodyTy), ctx];
     }
     case 'systemF-type-app': {
-      const funTy = typecheckSystemF(ctx, term.term);
-      // funTy must be a universal type.
+      const [funTy, updatedCtx] = typecheckSystemF(ctx, term.term);
       if (funTy.kind !== 'forall') {
         throw new TypeError(
           `type application expected a universal type, but got: ${prettyPrintTy(funTy)}`
         );
       }
-      // It is natural to check that the type argument is well formed.
-      // (We assume here that any type is well formed provided it is built from our shared constructs.)
-      // Substitute term.funTy.typeVar with term.typeArg in funTy.body.
-      return substituteSystemFType(funTy.body, funTy.typeVar, term.typeArg);
+      const resultType = substituteSystemFType(funTy.body, funTy.typeVar, term.typeArg);
+      return [resultType, updatedCtx];
     }
   }
 };
 
+/**
+ * Pretty prints a System F type.
+ */
 export const prettyPrintSystemFType = (ty: SystemFType): string => {
   if (ty.kind === 'type-var') {
     return ty.typeName;
@@ -155,7 +159,7 @@ export const prettyPrintSystemFType = (ty: SystemFType): string => {
   if (ty.kind === 'non-terminal') {
     return `(${prettyPrintSystemFType(ty.lft)}→${prettyPrintSystemFType(ty.rgt)})`;
   }
-  // Must be forall type
+  // Must be a forall type.
   return `(∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)})`;
 };
 
@@ -178,20 +182,16 @@ export const prettyPrintSystemFType = (ty: SystemFType): string => {
 export const eraseSystemF = (term: SystemFTerm): TypedLambda => {
   switch (term.kind) {
     case 'systemF-var':
-      // Convert a System F variable to a lambda variable.
       return { kind: 'lambda-var', name: term.name };
     case 'systemF-abs':
-      // Convert a term abstraction to a typed lambda abstraction.
       return mkTypedAbs(
         term.name,
         term.typeAnnotation,
         eraseSystemF(term.body)
       );
     case 'systemF-type-abs':
-      // Erase the type abstraction by converting its body.
       return eraseSystemF(term.body);
     case 'systemF-type-app':
-      // Erase the type application by converting the term part.
       return eraseSystemF(term.term);
     default:
       return cons(

@@ -12,8 +12,10 @@ import {
 import { mkTypeVariable, arrow, prettyPrintTy } from '../../lib/types/types.js';
 import { emptySystemFContext, typecheckSystemF, SystemFContext } from '../../lib/types/systemF.js';
 import { parseSystemF } from '../../lib/parser/systemFTerm.js';
+import { insertAVL } from '../../lib/data/avl/avlNode.js';
+import { compareStrings } from '../../lib/data/map/stringMap.js';
 
-describe('System F Type Checker', () => {
+describe('System F Type Checker (using AVL context)', () => {
   describe('Positive Cases', () => {
     it('should typecheck the polymorphic identity function', () => {
       // Polymorphic identity: ΛX. λx: X. x
@@ -21,14 +23,13 @@ describe('System F Type Checker', () => {
         mkSystemFAbs('x', mkTypeVariable('X'), mkSystemFVar('x'))
       );
       const ctx: SystemFContext = emptySystemFContext();
-      const ty = typecheckSystemF(ctx, id);
+      const [ty] = typecheckSystemF(ctx, id);
 
       // Expected type: ∀X. (X → X)
       expect(ty.kind).to.equal('forall');
       if (ty.kind === 'forall') {
         expect(ty.typeVar).to.equal('X');
-        // The body of the forall should be an arrow type.
-        // (Arrow types are represented as cons cells.)
+        // The body of the forall should be an arrow type (represented as a cons cell).
         expect(ty.body.kind).to.equal('non-terminal');
         if ('lft' in ty.body && 'rgt' in ty.body) {
           expect(ty.body.lft.kind).to.equal('type-var');
@@ -51,12 +52,11 @@ describe('System F Type Checker', () => {
         )
       );
       const ctx: SystemFContext = emptySystemFContext();
-      const ty = typecheckSystemF(ctx, K);
+      const [ty] = typecheckSystemF(ctx, K);
 
       // Expected type: ∀X. ∀Y. (X → (Y → X))
       expect(ty.kind).to.equal('forall');
       const printed = prettyPrintTy(ty);
-      // Check that the printed type contains the expected structure.
       expect(printed).to.match(/∀X\..*∀Y\..*X→\(Y→X\)/);
     });
 
@@ -67,11 +67,17 @@ describe('System F Type Checker', () => {
       );
       // Build type application: id [A]
       const idA: SystemFTerm = mkSystemFTypeApp(id, mkTypeVariable('A'));
-      // Build term application: (id [A]) a using our new builder.
+      // Build term application: (id [A]) a
       const term: SystemFTerm = mkSystemFApp(idA, mkSystemFVar('a'));
-      const ctx: SystemFContext = emptySystemFContext();
-      ctx.termCtx.set('a', mkTypeVariable('A'));
-      const ty = typecheckSystemF(ctx, term);
+
+      // Update the context using the AVL tree: add binding for "a" : A
+      let ctx: SystemFContext = emptySystemFContext();
+      ctx = {
+        ...ctx,
+        termCtx: insertAVL(ctx.termCtx, 'a', mkTypeVariable('A'), compareStrings)
+      };
+
+      const [ty] = typecheckSystemF(ctx, term);
       // Expect the result type to be A.
       expect(ty.kind).to.equal('type-var');
       if (ty.kind === 'type-var') {
@@ -80,7 +86,7 @@ describe('System F Type Checker', () => {
     });
 
     it('should typecheck the S combinator', () => {
-      // Build the S combinator:
+      // S combinator:
       // S = ΛA. ΛB. ΛC. λx: (A → B → C). λy: (A → B). λz: A. ((x z) (y z))
       const S: SystemFTerm = mkSystemFTAbs('A',
         mkSystemFTAbs('B',
@@ -99,13 +105,10 @@ describe('System F Type Checker', () => {
         )
       );
 
-      // Typecheck S in an empty System F context.
       const ctx: SystemFContext = emptySystemFContext();
-      const ty = typecheckSystemF(ctx, S);
+      const [ty] = typecheckSystemF(ctx, S);
 
-      // Expected type: ∀A. ∀B. ∀C. ((A → B → C) → (A → B) → (A → C))
-      // We check that the outermost type is a universal type and that the printed version
-      // contains the expected structure.
+      // Expected type: ∀A. ∀B. ∀C. ((A → (B → C)) → ((A → B) → (A → C)))
       expect(ty.kind).to.equal('forall');
       const printed = prettyPrintTy(ty);
       expect(printed).to.equal('∀A.∀B.∀C.((A→(B→C))→((A→B)→(A→C)))');
@@ -120,19 +123,20 @@ describe('System F Type Checker', () => {
     });
 
     it('should fail when applying a non-arrow', () => {
-      // Let a have type A (which is not a function) and b have type B.
-      const ctx: SystemFContext = emptySystemFContext();
-      ctx.termCtx.set('a', mkTypeVariable('A'));
-      ctx.termCtx.set('b', mkTypeVariable('B'));
-      // Application: a b is represented as a term application.
+      let ctx: SystemFContext = emptySystemFContext();
+      // Insert bindings using the AVL helper.
+      ctx = { ...ctx, termCtx: insertAVL(ctx.termCtx, 'a', mkTypeVariable('A'), compareStrings) };
+      ctx = { ...ctx, termCtx: insertAVL(ctx.termCtx, 'b', mkTypeVariable('B'), compareStrings) };
+
+      // Application: a b
       const term: SystemFTerm = mkSystemFApp(mkSystemFVar('a'), mkSystemFVar('b'));
       expect(() => typecheckSystemF(ctx, term)).to.throw(Error, /expected an arrow type/);
     });
 
     it('should fail when a type application is used on a non-universal type', () => {
-      const ctx: SystemFContext = emptySystemFContext();
-      ctx.termCtx.set('a', mkTypeVariable('A'));
-      // Attempting a type application on a variable of type A.
+      let ctx: SystemFContext = emptySystemFContext();
+      ctx = { ...ctx, termCtx: insertAVL(ctx.termCtx, 'a', mkTypeVariable('A'), compareStrings) };
+      // Attempt a type application on a variable of type A.
       const term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar('a'), mkTypeVariable('B'));
       expect(() => typecheckSystemF(ctx, term)).to.throw(Error, /type application expected a universal type/);
     });
@@ -140,19 +144,17 @@ describe('System F Type Checker', () => {
     it('should fail when a function argument type does not match', () => {
       // f = λx: A. x, so f: A → A; try to apply it to an argument of type B.
       const f: SystemFTerm = mkSystemFAbs('x', mkTypeVariable('A'), mkSystemFVar('x'));
-      const ctx: SystemFContext = emptySystemFContext();
-      ctx.termCtx.set('f', arrow(mkTypeVariable('A'), mkTypeVariable('A')));
-      ctx.termCtx.set('a', mkTypeVariable('B'));
-      // Application: f a represented as a term application.
+      let ctx: SystemFContext = emptySystemFContext();
+      ctx = { ...ctx, termCtx: insertAVL(ctx.termCtx, 'f', arrow(mkTypeVariable('A'), mkTypeVariable('A')), compareStrings) };
+      ctx = { ...ctx, termCtx: insertAVL(ctx.termCtx, 'a', mkTypeVariable('B'), compareStrings) };
+
+      // Application: f a
       const term: SystemFTerm = mkSystemFApp(f, mkSystemFVar('a'));
       expect(() => typecheckSystemF(ctx, term)).to.throw(Error, /function argument type mismatch/);
     });
 
     it('should fail when a term is applied to itself with non-arrow type', () => {
-      // Ill-typed term: λx:X. x x
-      // Here, x is bound to type X, but x is applied to itself,
-      // which requires x to have an arrow type. Since X is not a function type,
-      // typechecking should fail.
+      // Ill-typed term: λx: X. x x
       const term: SystemFTerm = mkSystemFAbs('x', mkTypeVariable('X'),
         mkSystemFApp(mkSystemFVar('x'), mkSystemFVar('x'))
       );
@@ -165,13 +167,13 @@ describe('System F Type Checker', () => {
     it('should round-trip a well-formed System F term', () => {
       // Example term: polymorphic identity: ΛX. λx: X. x
       const input = 'ΛX. λx: X. x';
-      // Assume parseSystemF returns a tuple [normalizedLiteral, SystemFTerm]
+      // Assume parseSystemF returns a tuple [parsedLiteral, SystemFTerm]
       const [parsedLit, term] = parseSystemF(input);
       const ctx: SystemFContext = emptySystemFContext();
-      const ty = typecheckSystemF(ctx, term);
+      const [ty] = typecheckSystemF(ctx, term);
       const printedType = prettyPrintTy(ty);
       expect(printedType).to.match(/∀X\..*X→X/);
-      // Check that the parsed literal, once whitespace is removed, matches the input.
+      // Check that the parsed literal, after removing whitespace, matches the input.
       expect(parsedLit.replace(/\s+/g, '')).to.equal(input.replace(/\s+/g, ''));
     });
   });

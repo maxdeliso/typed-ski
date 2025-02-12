@@ -3,8 +3,8 @@ import { describe, it } from 'mocha';
 
 import { cons } from '../../lib/cons.js';
 import { mkVar } from '../../lib/terms/lambda.js';
-import { addBinding, mkTypedAbs, typecheck } from '../../lib/types/typedLambda.js';
-import { mkTypeVariable, arrow, typesLitEq, arrows, TypeVariable } from '../../lib/types/types.js';
+import { addBinding, emptyContext, mkTypedAbs, typecheck } from '../../lib/types/typedLambda.js';
+import { mkTypeVariable, arrow, typesLitEq, arrows } from '../../lib/types/types.js';
 
 describe('type checking errors', () => {
   it('throws an error for free variables', () => {
@@ -13,8 +13,8 @@ describe('type checking errors', () => {
   });
 
   it('throws an error on duplicate binding', () => {
-    const ctx = new Map<string, TypeVariable>();
-    addBinding(ctx, 'x', mkTypeVariable('a'));
+    let ctx = emptyContext();
+    ctx = addBinding(ctx, 'x', mkTypeVariable('a'));
     expect(() => addBinding(ctx, 'x', mkTypeVariable('b')))
       .to.throw(/duplicated binding for name: x/);
   });

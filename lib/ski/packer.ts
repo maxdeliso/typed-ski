@@ -24,7 +24,7 @@ function rgtIndex(heapIdx: number): number {
  */
 export function heapify(exp: SKIExpression): SymbolHeap {
   const heapLength = maxHeapIndex(exp) + 1;
-  const result = new Array<SKITerminalSymbol | undefined>(heapLength);
+  const result = new Array<SKITerminalSymbol | undefined>(heapLength).fill(undefined);
   const indexes = [rootIndex];
   const nodes = [exp];
 

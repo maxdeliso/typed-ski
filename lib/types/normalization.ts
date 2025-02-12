@@ -1,4 +1,6 @@
 import { cons } from '../cons.js';
+import { AVLTree } from '../data/avl/avlNode.js';
+import { createStringMap, insertStringMap, searchStringMap } from '../data/map/stringMap.js';
 import { BaseType, mkTypeVariable } from './types.js';
 import { varSource } from './varSource.js';
 
@@ -7,40 +9,40 @@ import { varSource } from './varSource.js';
  */
 export const normalizeTy = (
   ty: BaseType,
-  mapping: Map<string, string> = new Map<string, string>(),
+  mapping: AVLTree<string, string> = createStringMap(),
   vars: () => ReturnType<typeof mkTypeVariable>
-): BaseType => {
+): [BaseType, AVLTree<string, string>] => {
   switch (ty.kind) {
     case 'type-var': {
-      const mapped = mapping.get(ty.typeName);
+      const mapped = searchStringMap(mapping, ty.typeName);
       if (mapped === undefined) {
         const newVar = vars();
-        mapping.set(ty.typeName, newVar.typeName);
-        return newVar;
+        const newMapping = insertStringMap(mapping, ty.typeName, newVar.typeName);
+        return [mkTypeVariable(newVar.typeName), newMapping];
       } else {
-        return mkTypeVariable(mapped);
+        return [mkTypeVariable(mapped), mapping];
       }
     }
-    case 'non-terminal':
-      return cons(
-        normalizeTy(ty.lft, mapping, vars),
-        normalizeTy(ty.rgt, mapping, vars)
-      );
-    case 'forall': {
-      // For simplicity, we leave the bound variable unchanged but normalize the body.
-      return {
-        kind: 'forall',
-        typeVar: ty.typeVar,
-        body: normalizeTy(ty.body, mapping, vars)
-      };
+    case 'non-terminal': {
+      const [lftType, lftMapping] = normalizeTy(ty.lft, mapping, vars);
+      const [rgtType, rgtMapping] = normalizeTy(ty.rgt, lftMapping, vars);
+      return [cons(lftType, rgtType), rgtMapping];
     }
-    default:
-      throw new Error('Unhandled type case in normalizeTy');
+    case 'forall': {
+      const newVar = vars();
+      const newMapping = insertStringMap(mapping, ty.typeVar, newVar.typeName);
+      const [bodyType, bodyMapping] = normalizeTy(ty.body, newMapping, vars);
+      return [{
+        kind: 'forall',
+        typeVar: newVar.typeName,
+        body: bodyType
+      }, bodyMapping];
+    }
   }
 };
 
 export const normalize = (ty: BaseType): BaseType => {
-  const mapping = new Map<string, string>();
+  const mapping = createStringMap();
   const vars = varSource();
-  return normalizeTy(ty, mapping, vars);
+  return normalizeTy(ty, mapping, vars)[0];
 };

@@ -5,13 +5,14 @@ import { cons } from '../../lib/cons.js';
 import { mkUntypedAbs, mkVar, UntypedLambda } from '../../lib/terms/lambda.js';
 import { parseType } from '../../lib/parser/type.js';
 import { parseTypedLambda } from '../../lib/parser/typedLambda.js';
-import { typedTermsLitEq } from '../../lib/types/typedLambda.js';
+import { emptyContext, typedTermsLitEq } from '../../lib/types/typedLambda.js';
 import {
   arrows,
   mkTypeVariable,
   typesLitEq,
   arrow,
-  BaseType
+  BaseType,
+  prettyPrintTy
 } from '../../lib/types/types.js';
 import {
   inferType,
@@ -19,6 +20,8 @@ import {
   unify
 } from '../../lib/types/inference.js';
 import { normalize } from '../../lib/types/normalization.js';
+import { insertAVL, searchAVL } from '../../lib/data/avl/avlNode.js';
+import { compareStrings } from '../../lib/data/map/stringMap.js';
 
 describe('Types', () => {
   describe('basic type operations', () => {
@@ -50,7 +53,7 @@ describe('Types', () => {
         const nonNormalized = arrow(mkTypeVariable('q'), arrow(mkTypeVariable('p'), mkTypeVariable('q')));
         const expected = arrow(mkTypeVariable('a'), arrow(mkTypeVariable('b'), mkTypeVariable('a')));
         const normalized = normalize(nonNormalized);
-        expect(typesLitEq(normalized, expected)).to.equal(true);
+        expect(prettyPrintTy(normalized)).to.equal(prettyPrintTy(expected));
       });
 
       it('normalizes a chain of arrow types assigning fresh names in order of appearance', () => {
@@ -76,7 +79,7 @@ describe('Types', () => {
         const [, parsedIType] = parseType('a→a');
 
         expect(typedTermsLitEq(termI, parsedTypedI)).to.equal(true);
-        expect(typesLitEq(typeofI, parsedIType)).to.equal(true);
+        expect(prettyPrintTy(typeofI)).to.equal(prettyPrintTy(parsedIType));
       });
 
       it('infers the type of the K combinator', () => {
@@ -89,7 +92,7 @@ describe('Types', () => {
         const [, parsedKType] = parseType('a→b→a');
 
         expect(typedTermsLitEq(termK, parsedTypedK)).to.equal(true);
-        expect(typesLitEq(typeofK, parsedKType)).to.equal(true);
+        expect(prettyPrintTy(typeofK)).to.equal(prettyPrintTy(parsedKType));
       });
 
       it('infers the type of the S combinator', () => {
@@ -107,8 +110,8 @@ describe('Types', () => {
         const [, parsedTypedS] = parseTypedLambda('λx:a→b→c.λy:a→b.λz:a.xz(yz)');
         const [, parsedSType] = parseType('(a→b→c)→(a→b)→a→c');
 
+        expect(prettyPrintTy(typeofS)).to.equal(prettyPrintTy(parsedSType));
         expect(typedTermsLitEq(termS, parsedTypedS)).to.equal(true);
-        expect(typesLitEq(typeofS, parsedSType)).to.equal(true);
       });
 
       it('succeeds at inferring the type of λx.λy.xy', () => {
@@ -119,8 +122,8 @@ describe('Types', () => {
         const [, parsedTypedT] = parseTypedLambda('λx:a→b.λy:a.xy');
         const [, parsedTType] = parseType('(a→b)→(a→b)');
 
+        expect(prettyPrintTy(typeofT)).to.equal(prettyPrintTy(parsedTType));
         expect(typedTermsLitEq(termT, parsedTypedT)).to.equal(true);
-        expect(typesLitEq(typeofT, parsedTType)).to.equal(true);
       });
     });
 
@@ -158,9 +161,9 @@ describe('Types', () => {
         const a = mkTypeVariable('a');
         const b = mkTypeVariable('b');
         const funType = arrow(a, b);
-        const context = new Map<string, BaseType>();
+        let context = emptyContext();
 
-        context.set('x', a);
+        context = insertAVL(context, 'x', a, compareStrings);
 
         expect(() => {
           unify(a, funType, context);
@@ -177,11 +180,12 @@ describe('Types', () => {
         const t1 = arrow(a, a);
         const t2 = arrow(b, c);
 
-        const context = new Map<string, BaseType>();
-        context.set('x', t1);
-        unify(t1, t2, context);
+        let context = emptyContext();
+        context = insertAVL(context, 'x', t1, compareStrings);
+        context = unify(t1, t2, context);
 
-        expect(context.get('x')).to.satisfy((ty: { lft: BaseType; rgt: BaseType; }) => {
+        expect(searchAVL(context, 'x', compareStrings)).to.satisfy((ty: BaseType) => {
+          if (ty.kind !== 'non-terminal') return false;
           return typesLitEq(ty.lft, ty.rgt);
         });
       });

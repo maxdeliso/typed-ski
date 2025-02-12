@@ -1,7 +1,7 @@
 import { cons, ConsCell } from '../cons.js';
-import { SKIExpression, toSKIKey } from '../ski/expression.js';
+import { expressionEquivalent, SKIExpression, toSKIKey } from '../ski/expression.js';
 import { SKITerminalSymbol } from '../ski/terminal.js';
-import { createSKITrie, getSKITrie, setSKITrie, SKITrie } from '../data/skiTrie.js';
+import { createMap, searchMap, insertMap, SKIMap } from '../data/map/skiMap.js';
 
 /**
  * The internal shape of an evaluation result.
@@ -15,20 +15,6 @@ interface SKIResult<E> {
 
 type ExtractStep<E> = (expr: E) => E | false;
 type SKIStep<E> = (input: E) => SKIResult<E>;
-
-/**
- * Compare two SKI expressions for structural equivalence.
- * (Uses the canonical key produced by `toSKIKey`.)
- */
-function expressionEquivalent(a: SKIExpression, b: SKIExpression): boolean {
-  const keyA = toSKIKey(a);
-  const keyB = toSKIKey(b);
-  if (keyA.length !== keyB.length) return false;
-  for (let i = 0; i < keyA.length; i++) {
-    if (keyA[i] !== keyB[i]) return false;
-  }
-  return true;
-}
 
 /**
  * Helper that applies a step function; if the extraction function returns a new expression,
@@ -92,7 +78,7 @@ interface Frame {
 /**
  * Global memoization cache.
  */
-let globalMemo: SKITrie = createSKITrie();
+let globalMemo: SKIMap = createMap();
 
 /**
  * DFS‑based tree-step that uses the global memoization cache.
@@ -108,7 +94,7 @@ function treeStep(
 
   for (;;) {
     const key = toSKIKey(current);
-    const memoized = getSKITrie(globalMemo, key);
+    const memoized = searchMap(globalMemo, key);
     if (memoized !== undefined) {
       const memoDiff = !expressionEquivalent(current, memoized);
       result = { altered: memoDiff, expr: memoized };
@@ -127,7 +113,7 @@ function treeStep(
         }
       }
       // Cache the result.
-      globalMemo = setSKITrie(globalMemo, key, result.expr);
+      globalMemo = insertMap(globalMemo, key, result.expr);
     }
 
     if (stack.length === 0) {
@@ -142,7 +128,7 @@ function treeStep(
     if (frame.phase === 'left') {
       if (result.altered) {
         result = { altered: true, expr: cons(result.expr, frame.node.rgt) };
-        globalMemo = setSKITrie(globalMemo, toSKIKey(frame.node), result.expr);
+        globalMemo = insertMap(globalMemo, toSKIKey(frame.node), result.expr);
       } else {
         stack.push({
           node: frame.node,
@@ -155,7 +141,7 @@ function treeStep(
     } else { // frame.phase === 'right'
       if (!frame.leftResult) throw new Error('missing left result');
       result = { altered: result.altered, expr: cons(frame.leftResult.expr, result.expr) };
-      globalMemo = setSKITrie(globalMemo, toSKIKey(frame.node), result.expr);
+      globalMemo = insertMap(globalMemo, toSKIKey(frame.node), result.expr);
     }
     if (stack.length === 0) return result;
     current = result.expr;

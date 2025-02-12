@@ -9,8 +9,11 @@ import { reduce } from '../evaluator/skiEvaluator.js';
  * @returns an extensionally equivalent Church numeral.
  */
 export const ChurchN = (n: number): SKIExpression => {
+  if (!Number.isInteger(n)) {
+    throw new Error('ChurchN only accepts integers');
+  }
   if (n < 0) {
-    throw new Error('only positive integers represented');
+    throw new Error('only non-negative integers are supported');
   } else if (n === 0) {
     return Zero;
   } else if (n === 1) {

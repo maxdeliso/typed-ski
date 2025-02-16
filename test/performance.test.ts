@@ -2,7 +2,7 @@ import { hrtime } from 'process';
 import randomSeed from 'random-seed';
 
 import { SKIExpression } from '../lib/ski/expression.js';
-import { stepOnceImmediate } from '../lib/evaluator/skiEvaluator.js';
+import { stepOnce } from '../lib/evaluator/skiEvaluator.js';
 import { randExpression } from '../lib/ski/generator.js';
 
 describe('evaluator performance', () => {
@@ -24,7 +24,7 @@ describe('evaluator performance', () => {
     // Now measure the time spent reducing the pre-generated trees.
     const start = hrtime.bigint();
     for (const expr of expressions) {
-      stepOnceImmediate(expr);
+      stepOnce(expr);
     }
     const end = hrtime.bigint();
     const elapsedNs = end - start;

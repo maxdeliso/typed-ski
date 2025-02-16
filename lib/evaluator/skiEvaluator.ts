@@ -13,201 +13,193 @@ interface SKIResult<E> {
   expr: E;
 }
 
-type ExtractStep<E> = (expr: E) => E | false;
+/**
+ * A step function type.
+ */
 type SKIStep<E> = (input: E) => SKIResult<E>;
 
-/**
- * Helper that applies a step function; if the extraction function returns a new expression,
- * we mark the step as having altered the expression.
- */
-function extractStep(
-  expr: SKIExpression,
-  extractFn: ExtractStep<SKIExpression>
-): SKIResult<SKIExpression> {
-  const extractionResult = extractFn(expr);
-  return extractionResult
-    ? { altered: true, expr: extractionResult }
-    : { altered: false, expr };
-}
+const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) => {
+  if (
+    expr.kind === 'non-terminal' &&
+    expr.lft.kind === 'terminal' &&
+    expr.lft.sym === SKITerminalSymbol.I
+  ) {
+    return { altered: true, expr: expr.rgt };
+  }
+  return { altered: false, expr };
+};
 
-const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) =>
-  extractStep(expr, (e: SKIExpression) =>
-    e.kind === 'non-terminal' &&
-    e.lft.kind === 'terminal' &&
-    e.lft.sym === SKITerminalSymbol.I &&
-    e.rgt
-  );
+const stepK: SKIStep<SKIExpression> = (expr: SKIExpression) => {
+  if (
+    expr.kind === 'non-terminal' &&
+    expr.lft.kind === 'non-terminal' &&
+    expr.lft.lft.kind === 'terminal' &&
+    expr.lft.lft.sym === SKITerminalSymbol.K
+  ) {
+    return { altered: true, expr: expr.lft.rgt };
+  }
+  return { altered: false, expr };
+};
 
-const stepK: SKIStep<SKIExpression> = (expr: SKIExpression) =>
-  extractStep(expr, (e: SKIExpression) =>
-    e.kind === 'non-terminal' &&
-    e.lft.kind === 'non-terminal' &&
-    e.lft.lft.kind === 'terminal' &&
-    e.lft.lft.sym === SKITerminalSymbol.K &&
-    e.lft.rgt
-  );
-
-const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) =>
-  extractStep(expr, (e: SKIExpression) => {
-    if (
-      e.kind === 'non-terminal' &&
-      e.lft.kind === 'non-terminal' &&
-      e.lft.lft.kind === 'non-terminal' &&
-      e.lft.lft.lft.kind === 'terminal' &&
-      e.lft.lft.lft.sym === SKITerminalSymbol.S
-    ) {
-      const x = e.lft.lft.rgt;
-      const y = e.lft.rgt;
-      const z = e.rgt;
-      return cons(cons(x, z), cons(y, z));
-    } else {
-      return false;
-    }
-  });
+const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) => {
+  if (
+    expr.kind === 'non-terminal' &&
+    expr.lft.kind === 'non-terminal' &&
+    expr.lft.lft.kind === 'non-terminal' &&
+    expr.lft.lft.lft.kind === 'terminal' &&
+    expr.lft.lft.lft.sym === SKITerminalSymbol.S
+  ) {
+    const x = expr.lft.lft.rgt;
+    const y = expr.lft.rgt;
+    const z = expr.rgt;
+    return { altered: true, expr: cons(cons(x, z), cons(y, z)) };
+  }
+  return { altered: false, expr };
+};
 
 /**
- * A frame used for DFS during the memoized (cached) tree‐step.
+ * A frame for the iterative DFS.
+ *
+ * - phase "left" means we are about to reduce the left child.
+ * - phase "right" means the left child is done (its result is in `leftResult`)
+ *   and we now need to reduce the right child.
  */
 interface Frame {
   node: ConsCell<SKIExpression>;
   phase: 'left' | 'right';
-  // When phase is 'right', `leftResult` holds the reduced left subtree.
-  leftResult?: SKIResult<SKIExpression>;
+  leftResult?: SKIExpression;
 }
 
 /**
- * Global memoization cache.
+ * expressionCache stores associations between an expression's canonical key and its
+ * intermediate reduction.
  */
-let globalMemo: SKIMap = createMap();
+let expressionCache: SKIMap = createMap();
 
 /**
- * DFS‑based tree-step that uses the global memoization cache.
- * If a node's canonical key is already cached, its result is reused.
+ * evaluationCache stores associations between an expression's canonical key and its
+ * fully reduced (normalized) form.
  */
-function treeStep(
-  expr: SKIExpression,
-  step: SKIStep<SKIExpression>
-): SKIResult<SKIExpression> {
-  const stack: Frame[] = [];
-  let current: SKIExpression = expr;
-  let result: SKIResult<SKIExpression>;
+let evaluationCache: SKIMap = createMap();
 
-  for (;;) {
+/**
+ * Iteratively performs one DFS-based tree step (one “step‐once”),
+ * trying the S, K, and I rules at each node.
+ *
+ * Uses the evaluation cache only at the very beginning (to avoid work on a fully
+ * normalized input) and at the very end (to cache a fully normalized result),
+ * while using only the intermediate expressionCache during the DFS.
+ */
+const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
+  const orig = expr;
+  const origKey = toSKIKey(orig);
+  const evalCached = searchMap(evaluationCache, origKey);
+
+  if (evalCached !== undefined) {
+    return { altered: !expressionEquivalent(orig, evalCached), expr: evalCached };
+  }
+
+  let current: SKIExpression = expr;
+  let next: SKIExpression;
+  const stack: Frame[] = [];
+
+  for(;;) {
     const key = toSKIKey(current);
-    const memoized = searchMap(globalMemo, key);
-    if (memoized !== undefined) {
-      const memoDiff = !expressionEquivalent(current, memoized);
-      result = { altered: memoDiff, expr: memoized };
+    const cached = searchMap(expressionCache, key);
+    if (cached !== undefined) {
+      next = cached;
     } else {
       if (current.kind === 'terminal') {
-        result = { altered: false, expr: current };
+        next = current;
       } else {
-        const stepResult = step(current);
+        let stepResult = stepI(current);
+        if (!stepResult.altered) {
+          stepResult = stepK(current);
+        }
+        if (!stepResult.altered) {
+          stepResult = stepS(current);
+        }
         if (stepResult.altered) {
-          result = stepResult;
+          next = stepResult.expr;
+          expressionCache = insertMap(expressionCache, key, next);
         } else {
-          // No reduction at this node; descend into the left subtree.
+          // No rule applied here; continue DFS by descending into the left child.
           stack.push({ node: current, phase: 'left' });
           current = current.lft;
           continue;
         }
       }
-      // Cache the result.
-      globalMemo = insertMap(globalMemo, key, result.expr);
     }
 
+    // If there are no frames left, we are at the top level.
     if (stack.length === 0) {
-      return result;
+      // Determine if the top-level expression changed.
+      const changed = !expressionEquivalent(orig, next);
+      // If no change occurred, then newExpr is fully normalized; cache it.
+      if (!changed) {
+        evaluationCache = insertMap(evaluationCache, origKey, next);
+      }
+      return { altered: changed, expr: next };
     }
 
-    // Pop a frame and combine results.
-    const frame = stack.pop();
-    if (!frame) {
-      throw new Error('Expected stack frame but got undefined');
-    }
+    // Pop a frame and combine the result with its parent.
+    const frame = stack.pop()!;
     if (frame.phase === 'left') {
-      if (result.altered) {
-        result = { altered: true, expr: cons(result.expr, frame.node.rgt) };
-        globalMemo = insertMap(globalMemo, toSKIKey(frame.node), result.expr);
+      if (!expressionEquivalent(frame.node.lft, next)) {
+        // The left subtree was reduced. Rebuild the parent's node.
+        next = cons(next, frame.node.rgt);
+        expressionCache = insertMap(expressionCache, toSKIKey(frame.node), next);
       } else {
-        stack.push({
-          node: frame.node,
-          phase: 'right',
-          leftResult: { altered: false, expr: frame.node.lft }
-        });
+        // The left branch is fully normalized.
+        // Now prepare to reduce the right branch by pushing a frame with phase 'right'
+        frame.phase = 'right';
+        frame.leftResult = next;
+        stack.push(frame);
         current = frame.node.rgt;
         continue;
       }
     } else { // frame.phase === 'right'
-      if (!frame.leftResult) throw new Error('missing left result');
-      result = { altered: result.altered, expr: cons(frame.leftResult.expr, result.expr) };
-      globalMemo = insertMap(globalMemo, toSKIKey(frame.node), result.expr);
+      // Now combine the left result (already normalized) with the just-reduced right branch.
+      next = cons(frame.leftResult!, next);
+      expressionCache = insertMap(expressionCache, toSKIKey(frame.node), next);
     }
-    if (stack.length === 0) return result;
-    current = result.expr;
+    // Propagate the new (combined) expression upward.
+    current = next;
   }
-}
-
-/**
- * Helper that tries a list of step functions (in order) on the given expression.
- */
-function scanStep(
-  expr: SKIExpression,
-  steppers: SKIStep<SKIExpression>[]
-): SKIResult<SKIExpression> {
-  for (const step of steppers) {
-    const result = step(expr);
-    if (result.altered) {
-      return result;
-    }
-  }
-  return { altered: false, expr };
-}
-
-/**
- * Step‑once (cached version) using the DFS tree step and global memoization.
- */
-const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> =>
-  scanStep(expr, [e => treeStep(e, stepS), e => treeStep(e, stepK), e => treeStep(e, stepI)]);
-
-/**
- * Step‑once (immediate version) that does not use caching.
- */
-export const stepOnceImmediate = (expr: SKIExpression): SKIResult<SKIExpression> => {
-  if (expr.kind === 'terminal') return { altered: false, expr };
-  const iStep = stepI(expr);
-  if (iStep.altered) return iStep;
-  const kStep = stepK(expr);
-  if (kStep.altered) return kStep;
-  const sStep = stepS(expr);
-  if (sStep.altered) return sStep;
-  const leftResult = stepOnceImmediate(expr.lft);
-  if (leftResult.altered) return { altered: true, expr: cons(leftResult.expr, expr.rgt) };
-  const rightResult = stepOnceImmediate(expr.rgt);
-  if (rightResult.altered) return { altered: true, expr: cons(expr.lft, rightResult.expr) };
-  return { altered: false, expr };
 };
 
 /**
- * Repeatedly applies cached reduction steps until no more changes occur
- * or until the maximum number of iterations is reached.
+ * Repeatedly applies reduction steps until no further reduction is possible
+ * (or until the maximum number of iterations is reached), then returns the result.
  *
  * @param exp the initial SKI expression.
  * @param maxIterations (optional) the maximum number of reduction iterations.
- *                      If omitted, the reduction will continue until a fixed point is reached.
  * @returns the reduced SKI expression.
  */
 export const reduce = (exp: SKIExpression, maxIterations?: number): SKIExpression => {
   let current = exp;
-  let result = stepOnceMemoized(current);
-  let iterations = 0;
   const maxIter = maxIterations ?? Infinity;
-
-  while (result.altered && iterations < maxIter) {
+  for (let i = 0; i < maxIter; i++) {
+    const result = stepOnceMemoized(current);
+    if (!result.altered) {
+      return result.expr;
+    }
     current = result.expr;
-    result = stepOnceMemoized(current);
-    iterations++;
   }
-
   return current;
+};
+
+export const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
+  if (expr.kind === 'terminal') return { altered: false, expr };
+  let result = stepI(expr);
+  if (result.altered) return result;
+  result = stepK(expr);
+  if (result.altered) return result;
+  result = stepS(expr);
+  if (result.altered) return result;
+  result = stepOnce(expr.lft);
+  if (result.altered) return { altered: true, expr: cons(result.expr, expr.rgt) };
+  result = stepOnce(expr.rgt);
+  if (result.altered) return { altered: true, expr: cons(expr.lft, result.expr) };
+  return { altered: false, expr };
 };

@@ -7,7 +7,7 @@ const { terminal } = tkexport;
 
 import {
   // SKI evaluator
-  stepOnceImmediate,
+  stepOnce,
   // SKI expressions
   prettyPrintSKI,
   type SKIExpression,
@@ -47,8 +47,9 @@ enum Mode {
   SystemF = 'SystemF'
 }
 
+const N = 8;
 let currentMode: Mode = Mode.SKI;
-let currentSKI: SKIExpression = randExpression(create(hrtime.bigint().toString()), 32);
+let currentSKI: SKIExpression = randExpression(create(hrtime.bigint().toString()), N);
 let currentLambda: UntypedLambda | null = null;
 let currentTypedLambda: TypedLambda | null = null;
 let currentSystemF: SystemFTerm | null = null;
@@ -143,7 +144,7 @@ function printCurrentTerm(): void {
 }
 
 function skiStepOnce(): void {
-  const result = stepOnceImmediate(currentSKI);
+  const result = stepOnce(currentSKI);
   if (result.altered) {
     currentSKI = result.expr;
     printGreen('stepped: ' + prettyPrintSKI(currentSKI));
@@ -155,12 +156,13 @@ function skiStepOnce(): void {
 function skiStepMany(): void {
   const MAX_ITER = 100;
   const result = reduce(currentSKI, MAX_ITER);
+  currentSKI = result;
   printGreen(`stepped many (with max of ${MAX_ITER}): ` + prettyPrintSKI(result));
 }
 
 function skiRegenerate(): void {
   const rs = create(hrtime.bigint().toString());
-  currentSKI = randExpression(rs, 32);
+  currentSKI = randExpression(rs, N);
   printGreen('generated new SKI expression: ' + prettyPrintSKI(currentSKI));
 }
 

@@ -1,4 +1,4 @@
-import { ParserState, peek, matchLP, matchRP, parseVariable, consume } from './parserState.js';
+import { ParserState, peek, matchLP, matchRP, consume, parseIdentifier } from './parserState.js';
 import { ParseError } from './parseError.js';
 import { BaseType, arrow, mkTypeVariable } from '../types/types.js';
 import { parseWithEOF } from './eof.js';
@@ -23,8 +23,7 @@ export function parseSimpleType(state: ParserState): [string, BaseType, ParserSt
     const stateAfterRP = matchRP(sAfterInner);
     return [`(${innerLit})`, innerType, stateAfterRP];
   } else {
-    // A type variable.
-    const [varLit, stateAfterVar] = parseVariable(s);
+    const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkTypeVariable(varLit), stateAfterVar];
   }
 }
@@ -40,8 +39,7 @@ export function parseArrowType(state: ParserState): [string, BaseType, ParserSta
   const [leftLit, leftType, stateAfterLeft] = parseSimpleType(state);
   const [next, sAfterLeft] = peek(stateAfterLeft);
   if (next === '→') {
-    // Consume the arrow.
-    const stateAfterArrow = consume(sAfterLeft); // or: matchCh(sAfterLeft, '→')
+    const stateAfterArrow = consume(sAfterLeft);
     const [rightLit, rightType, stateAfterRight] = parseArrowType(stateAfterArrow);
     return [`${leftLit}→${rightLit}`, arrow(leftType, rightType), stateAfterRight];
   } else {

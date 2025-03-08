@@ -33,7 +33,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'error',
       '@stylistic/ts/semi': 'error',
       '@stylistic/ts/indent': ['error', 2],
-      '@stylistic/ts/quotes': ['error', 'single']
+      '@stylistic/ts/quotes': ['error', 'single'],
+      'linebreak-style': ['error', 'unix']
     },
   }
 );

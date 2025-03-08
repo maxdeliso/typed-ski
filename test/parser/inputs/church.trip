@@ -1,0 +1,9 @@
+type Nat = ∀X.(X→X)→X→X
+
+poly id = ΛA.λx:A.x
+
+combinator complex = S(K(SII))(S(S(KS)K)(K(SII)))
+
+typed two : Nat = succ (succ zero)
+
+typed main : Nat = two

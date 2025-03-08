@@ -1,9 +1,10 @@
 import { mkVar } from '../terms/lambda.js';
 import { TypedLambda, mkTypedAbs } from '../types/typedLambda.js';
-import { ParserState, peek, matchCh, matchLP, matchRP, parseVariable } from './parserState.js';
+import { ParserState, peek, matchCh, matchLP, matchRP, parseIdentifier } from './parserState.js';
 import { parseChain } from './chain.js';
 import { parseArrowType } from './type.js';
 import { parseWithEOF } from './eof.js';
+import { ParseError } from './parseError.js';
 
 /**
  * Parses an atomic typed lambda term.
@@ -22,7 +23,11 @@ export function parseAtomicTypedLambda(
   if (peeked === 'λ') {
     // Parse a typed lambda abstraction: λx : <type> . <body>
     const stateAfterLambda = matchCh(s, 'λ');
-    const [varLit, stateAfterVar] = parseVariable(stateAfterLambda);
+    const [next] = peek(stateAfterLambda);
+    if (next === ':') {
+      throw new ParseError('expected an identifier');
+    }
+    const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
     const stateAfterColon = matchCh(stateAfterVar, ':');
     const [typeLit, ty, stateAfterType] = parseArrowType(stateAfterColon);
     const stateAfterDot = matchCh(stateAfterType, '.');
@@ -39,8 +44,7 @@ export function parseAtomicTypedLambda(
     const stateAfterRP = matchRP(stateAfterInner);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
   } else {
-    // Parse a variable.
-    const [varLit, stateAfterVar] = parseVariable(s);
+    const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkVar(varLit), stateAfterVar];
   }
 }
@@ -50,7 +54,7 @@ export function parseAtomicTypedLambda(
  *
  * Returns a triple: [literal, TypedLambda, updated ParserState]
  */
-function parseTypedLambdaInternal(
+export function parseTypedLambdaInternal(
   state: ParserState
 ): [string, TypedLambda, ParserState] {
   return parseChain<TypedLambda>(state, parseAtomicTypedLambda);
@@ -66,3 +70,5 @@ export function parseTypedLambda(input: string): [string, TypedLambda] {
   const [lit, term] = parseWithEOF(input, parseTypedLambdaInternal);
   return [lit, term];
 }
+
+export { parseArrowType };

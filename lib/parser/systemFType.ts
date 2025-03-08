@@ -7,7 +7,7 @@ import {
   matchCh,
   matchLP,
   matchRP,
-  parseVariable,
+  parseIdentifier
 } from './parserState.js';
 
 /**
@@ -30,7 +30,7 @@ export function parseSystemFType(
   if (ch === '∀') {
     // Parse universal type: ∀X. T
     const stateAfterForall = matchCh(s, '∀'); // consume '∀'
-    const [typeVar, stateAfterVar] = parseVariable(stateAfterForall);
+    const [typeVar, stateAfterVar] = parseIdentifier(stateAfterForall);
     const stateAfterDot = matchCh(stateAfterVar, '.'); // expect a dot
     const [bodyLit, bodyType, stateAfterBody] = parseSystemFType(stateAfterDot);
     return [`∀${typeVar}.${bodyLit}`, forall(typeVar, bodyType), stateAfterBody];
@@ -70,7 +70,7 @@ function parseSimpleSystemFType(
     return [`(${innerLit})`, innerType, stateAfterRP];
   } else {
     // Must be a type variable (a single letter).
-    const [varLit, stateAfterVar] = parseVariable(s);
+    const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkTypeVariable(varLit), stateAfterVar];
   }
 }

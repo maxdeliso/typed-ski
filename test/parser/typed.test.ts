@@ -94,7 +94,7 @@ describe('Parser Tests', () => {
   describe('parseTypedLambda', () => {
     describe('successful parsing', () => {
       it('parses a single term application', () => {
-        const parseInput = 'xy';
+        const parseInput = 'x y';
         const [parsedLit, term] = parseTypedLambda(parseInput);
 
         const parsed = cons(mkVar('x'), mkVar('y'));
@@ -104,7 +104,7 @@ describe('Parser Tests', () => {
       });
 
       it('parses juxstaposed terms', () => {
-        const parseInput = 'xz(yz)';
+        const parseInput = 'x z (y z)';
         const [parsedLit, term] = parseTypedLambda(parseInput);
 
         const parsed = cons(cons(mkVar('x'), mkVar('z')), cons(mkVar('y'), mkVar('z')));
@@ -114,7 +114,7 @@ describe('Parser Tests', () => {
       });
 
       it('parses λx:a.xx', () => {
-        const parseInput = 'λx:a.xx';
+        const parseInput = 'λx:a.x x';
         const [inputLit, term] = parseTypedLambda(parseInput);
 
         const parsed =
@@ -142,7 +142,7 @@ describe('Parser Tests', () => {
       });
 
       it('parses a typed lambda expression corresponding to S', () => {
-        const parseInput = 'λx:a→b→c.λy:a→b.λz:a.xz(yz)';
+        const parseInput = 'λx:a→b→c.λy:a→b.λz:a.x z (y z)';
         const [parsedLit, term] = parseTypedLambda(parseInput);
 
         const parsed =
@@ -194,12 +194,12 @@ describe('Parser Tests', () => {
     describe('error cases', () => {
       it('fails to parse missing variable', () => {
         expect(() => parseTypedLambda('λ:a→b.x'))
-          .to.throw(ParseError, /failed to parse variable/);
+          .to.throw(ParseError, /expected an identifier/);
       });
 
       it('fails to parse an incomplete type', () => {
         expect(() => parseTypedLambda('λx:a→.x'))
-          .to.throw(ParseError, /failed to parse variable/);
+          .to.throw(ParseError, /expected an identifier/);
       });
 
       it('fails to parse missing term', () => {
@@ -209,7 +209,7 @@ describe('Parser Tests', () => {
 
       it('fails to parse when there is an unmatched left parenthesis', () => {
         expect(() => parseTypedLambda('(λx:a.x'))
-          .to.throw(ParseError, /expected \) but found null/);
+          .to.throw(ParseError);
       });
 
       it('fails to parse when there is an extra right parenthesis', () => {

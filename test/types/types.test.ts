@@ -107,7 +107,7 @@ describe('Types', () => {
             )
           ));
 
-        const [, parsedTypedS] = parseTypedLambda('λx:a→b→c.λy:a→b.λz:a.xz(yz)');
+        const [, parsedTypedS] = parseTypedLambda('λx:a→b→c.λy:a→b.λz:a.x z(y z)');
         const [, parsedSType] = parseType('(a→b→c)→(a→b)→a→c');
 
         expect(prettyPrintTy(typeofS)).to.equal(prettyPrintTy(parsedSType));
@@ -119,7 +119,7 @@ describe('Types', () => {
           mkUntypedAbs('x', mkUntypedAbs('y', cons(mkVar('x'), mkVar('y'))))
         );
 
-        const [, parsedTypedT] = parseTypedLambda('λx:a→b.λy:a.xy');
+        const [, parsedTypedT] = parseTypedLambda('λx:a→b.λy:a.x y');
         const [, parsedTType] = parseType('(a→b)→(a→b)');
 
         expect(prettyPrintTy(typeofT)).to.equal(prettyPrintTy(parsedTType));

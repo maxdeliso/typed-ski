@@ -49,6 +49,6 @@ export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
       return `λ${ut.name}.${prettyPrintUntypedLambda(ut.body)}`;
     case 'non-terminal':
       return `(${prettyPrintUntypedLambda(ut.lft)}` +
-        `${prettyPrintUntypedLambda(ut.rgt)})`;
+        ` ${prettyPrintUntypedLambda(ut.rgt)})`;
   }
 };

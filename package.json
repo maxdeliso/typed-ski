@@ -6,9 +6,10 @@
     "clean": "rimraf build/",
     "test": "mocha test/**/*.test.ts",
     "test:performance": "mocha test/performance.test.ts",
-    "build": "yarn clean && tsc",
     "lint": "yarn eslint lib test",
     "lint:fix": "yarn eslint lib test --fix",
+    "prebuild": "yarn lint",
+    "build": "yarn clean && tsc",
     "ski": "yarn tsx bin/ski.ts"
   },
   "type": "module",

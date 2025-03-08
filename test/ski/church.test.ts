@@ -16,7 +16,6 @@ import { apply } from '../../lib/ski/expression.js';
  */
 
 describe('Church encodings', () => {
-  const pred = convertLambda(predLambda);
   const N = 5;
 
   it('reduces 0 + 1 to 1 ', () => {
@@ -153,6 +152,8 @@ describe('Church encodings', () => {
   const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
 
   it('computes the predecessor', () => {
+    const pred = convertLambda(predLambda);
+
     // Test numbers from 0 to N-1
     for (let m = 0; m < N; m++) {
       const expected = Math.max(m - 1, 0); // pred of 0 is 0

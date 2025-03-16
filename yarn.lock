@@ -4807,7 +4807,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tsx@npm:^4.16.2":
+"tsx@npm:^4.19.3":
   version: 4.19.3
   resolution: "tsx@npm:4.19.3"
   dependencies:
@@ -4869,7 +4869,7 @@ __metadata:
     random-seed: "npm:^0.3.0"
     rimraf: "npm:^6.0.1"
     terminal-kit: "npm:^3.0.1"
-    tsx: "npm:^4.16.2"
+    tsx: "npm:^4.19.3"
     typescript: "npm:^5.5.3"
     typescript-eslint: "npm:^8.17.0"
   languageName: unknown

@@ -36,19 +36,34 @@ jobs:
       - name: Run tests with coverage
         run: yarn test:coverage
 
+      - name: Debug environment
+        run: |
+          echo "Node version: $(node -v)"
+          echo "Yarn version: $(yarn -v)"
+          echo "NPM version: $(npm -v)"
+          echo "HOME directory: $HOME"
+          echo "Working directory: $(pwd)"
+          echo "GitHub token available: ${{ secrets.GITHUB_TOKEN != '' }}"
+          echo "Registry configuration:"
+          npm config get registry
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
       - name: Setup for publishing
         run: |
-          # Create .npmrc for GitHub Packages
-          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-          echo "@maxdeliso:registry=https://npm.pkg.github.com" >> .npmrc
-
-          # Configure Yarn with the token
-          yarn config set npmAuthToken "${NODE_AUTH_TOKEN}"
-          yarn config set npmRegistryServer "https://npm.pkg.github.com"
+          # Configure Yarn to use GitHub Packages
+          yarn config set npmScopes.maxdeliso.npmRegistryServer "https://npm.pkg.github.com"
+          yarn config set npmScopes.maxdeliso.npmAlwaysAuth true
+          yarn config set npmScopes.maxdeliso.npmAuthToken "${NODE_AUTH_TOKEN}"
         env:
           NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
       - name: Publish package
-        run: yarn npm publish --access=public
+        run: |
+          echo "Attempting to publish with Yarn..."
+          if ! yarn npm publish --access=public; then
+            echo "Yarn publish failed, trying with npm directly..."
+            npm publish --access=public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}

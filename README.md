@@ -12,6 +12,26 @@ yarn build
 yarn ski
 ```
 
+## Testing
+
+Run the test suite:
+
+```bash
+yarn test
+```
+
+### Test Coverage
+
+Generate test coverage report:
+
+```bash
+# Generate text-only coverage report
+yarn test:coverage
+
+# Generate HTML coverage report (available in the coverage/ directory)
+yarn test:coverage:report
+```
+
 ## Books
 
 * [Combinators: A Centennial View, Stephen Wolfram](https://www.amazon.com/dp/1579550436)
@@ -20,8 +40,8 @@ yarn ski
 
 ## Papers
 
-* Turner, David. “A new implementation technique for applicative languages.” Software: Practice and Experience 9 (1979): n. pag.
-* Stoye, William et al. “Some practical methods for rapid combinator reduction.” LFP '84 (1984).
+* D. A. Turner, "A new implementation technique for applicative languages," Software: Practice and Experience, vol. 9, no. 1, pp. 31-49, 1979. DOI: 10.1002/spe.4380090105
+* W. Stoye, T. J. W. Clarke, and A. C. Norman, "Some practical methods for rapid combinator reduction," in Proceedings of the 1984 ACM Symposium on LISP and functional programming (LFP '84), ACM, New York, NY, USA, pp. 159-166, 1984. DOI: 10.1145/800055.802038
 
 ## Status
 

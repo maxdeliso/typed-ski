@@ -30,7 +30,7 @@ export function parseTripLangDefinition(state: ParserState): [TripLangTerm, Pars
   let finalState;
   switch (kind) {
     case 'poly':
-      [,term, finalState] = parseSystemFTerm(currentState);
+      [, term, finalState] = parseSystemFTerm(currentState);
       return [{ kind: 'poly', name, term }, skipWhitespace(finalState)];
 
     case 'typed':

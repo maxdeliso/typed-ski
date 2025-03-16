@@ -9,3 +9,4 @@ build/
 !.yarn/sdks
 !.yarn/versions
 *.tgz
+coverage/

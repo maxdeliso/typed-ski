@@ -4,30 +4,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: ["22.13.1 "]
+    container:
+      image: node:22.14.0-slim
 
     steps:
-      - uses: actions/checkout@v2
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v2
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: "npm"
-      - name: Run yarn install
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: install --frozen-lockfile
+      - uses: actions/checkout@v4
+
+      - name: Setup Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@4.7.0 --activate
+          yarn --version
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
       - name: Run lint
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: run lint
+        run: yarn run lint
+
       - name: Run build
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: build
-      - name: Run test
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: test
+        run: yarn build
+
+      - name: Run tests with coverage
+        run: yarn test:coverage

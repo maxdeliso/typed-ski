@@ -2,7 +2,7 @@ name: Publish Package to GitHub Packages
 
 on:
   release:
-    types: [published, released, created, edited]
+    types: [released]
 
 jobs:
   build-and-publish:

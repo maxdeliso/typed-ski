@@ -1,5 +1,5 @@
 {
-  "name": "typed-ski",
+  "name": "@maxdeliso/typed-ski",
   "version": "1.0.7",
   "description": "SKI combinators in Typescript",
   "scripts": {
@@ -29,7 +29,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:maxdeliso/typed-ski.git"
+    "url": "git+https://github.com/maxdeliso/typed-ski.git"
   },
   "keywords": [
     "SKI",
@@ -67,5 +67,8 @@
     "random-seed": "^0.3.0",
     "terminal-kit": "^3.0.1"
   },
-  "packageManager": "yarn@4.7.0"
+  "packageManager": "yarn@4.7.0",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
 }

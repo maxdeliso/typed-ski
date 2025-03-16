@@ -1,0 +1,47 @@
+name: Publish Package to GitHub Packages
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    container:
+      image: node:22.14.0-slim
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@4.7.0 --activate
+          yarn --version
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run lint
+        run: yarn run lint
+
+      - name: Run build
+        run: yarn build
+
+      - name: Run tests with coverage
+        run: yarn test:coverage
+
+      - name: Setup npm registry
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          echo "@maxdeliso:registry=https://npm.pkg.github.com" >> .npmrc
+
+      - name: Publish package
+        run: yarn npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}

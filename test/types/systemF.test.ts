@@ -10,7 +10,7 @@ import {
 } from '../../lib/terms/systemF.js';
 
 import { mkTypeVariable, arrow, prettyPrintTy } from '../../lib/types/types.js';
-import { emptySystemFContext, typecheckSystemF, SystemFContext } from '../../lib/types/systemF.js';
+import { emptySystemFContext, typecheckSystemF, SystemFContext, eraseSystemF } from '../../lib/types/systemF.js';
 import { parseSystemF } from '../../lib/parser/systemFTerm.js';
 import { insertAVL } from '../../lib/data/avl/avlNode.js';
 import { compareStrings } from '../../lib/data/map/stringMap.js';
@@ -175,6 +175,179 @@ describe('System F Type Checker (using AVL context)', () => {
       expect(printedType).to.match(/∀X\..*X→X/);
       // Check that the parsed literal, after removing whitespace, matches the input.
       expect(parsedLit.replace(/\s+/g, '')).to.equal(input.replace(/\s+/g, ''));
+    });
+  });
+});
+
+describe('SystemF Additional Tests', () => {
+  describe('eraseSystemF', () => {
+    it('should erase types from System F terms', () => {
+      // Term: ΛX.λx:X.x (System F identity function)
+      const term: SystemFTerm = mkSystemFTAbs(
+        'X',
+        mkSystemFAbs('x', mkTypeVariable('X'), mkSystemFVar('x'))
+      );
+
+      const erased = eraseSystemF(term);
+
+      // After erasure: λx.x (untyped identity function)
+      expect(erased.kind).to.equal('typed-lambda-abstraction');
+      if (erased.kind === 'typed-lambda-abstraction') {
+        expect(erased.varName).to.equal('x');
+        expect(erased.body.kind).to.equal('lambda-var');
+        if (erased.body.kind === 'lambda-var') {
+          expect(erased.body.name).to.equal('x');
+        }
+      }
+    });
+
+    it('should correctly erase nested type applications', () => {
+      // Term: ΛX.ΛY.λf:X→Y.λx:X.(f x)
+      const identity: SystemFTerm = mkSystemFTAbs(
+        'X',
+        mkSystemFTAbs(
+          'Y',
+          mkSystemFAbs(
+            'f',
+            arrow(mkTypeVariable('X'), mkTypeVariable('Y')),
+            mkSystemFAbs(
+              'x',
+              mkTypeVariable('X'),
+              mkSystemFApp(
+                mkSystemFVar('f'),
+                mkSystemFVar('x')
+              )
+            )
+          )
+        )
+      );
+
+      // Apply this to two types: int and bool
+      const applied: SystemFTerm = mkSystemFTypeApp(
+        mkSystemFTypeApp(
+          identity,
+          mkTypeVariable('int')
+        ),
+        mkTypeVariable('bool')
+      );
+
+      const erased = eraseSystemF(applied);
+
+      // After erasure: λf.λx.(f x) (the types are erased)
+      expect(erased.kind).to.equal('typed-lambda-abstraction');
+      if (erased.kind === 'typed-lambda-abstraction') {
+        expect(erased.varName).to.equal('f');
+        expect(erased.body.kind).to.equal('typed-lambda-abstraction');
+        if (erased.body.kind === 'typed-lambda-abstraction') {
+          expect(erased.body.varName).to.equal('x');
+          expect(erased.body.body.kind).to.equal('non-terminal');
+        }
+      }
+    });
+  });
+
+  describe('typecheckSystemF edge cases', () => {
+    it('should handle nested type abstractions', () => {
+      // Term: ΛX.ΛY.λx:X.λy:Y.x (K combinator in System F)
+      const term: SystemFTerm = mkSystemFTAbs(
+        'X',
+        mkSystemFTAbs(
+          'Y',
+          mkSystemFAbs(
+            'x',
+            mkTypeVariable('X'),
+            mkSystemFAbs(
+              'y',
+              mkTypeVariable('Y'),
+              mkSystemFVar('x')
+            )
+          )
+        )
+      );
+
+      const ctx = emptySystemFContext();
+      const [type] = typecheckSystemF(ctx, term);
+
+      // Should have type ∀X.∀Y.X→Y→X
+      expect(type.kind).to.equal('forall');
+      if (type.kind === 'forall') {
+        expect(type.body.kind).to.equal('forall');
+      }
+    });
+
+    it('should typecheck with a non-empty initial context', () => {
+      // Create a context with predefined variables
+      let ctx = emptySystemFContext();
+
+      // Add binding: x: A
+      ctx = {
+        ...ctx,
+        termCtx: insertAVL(
+          ctx.termCtx,
+          'x',
+          mkTypeVariable('A'),
+          compareStrings
+        )
+      };
+
+      // Add binding: f: A→B
+      ctx = {
+        ...ctx,
+        termCtx: insertAVL(
+          ctx.termCtx,
+          'f',
+          arrow(mkTypeVariable('A'), mkTypeVariable('B')),
+          compareStrings
+        )
+      };
+
+      // Term: f x (should type check with existing context)
+      const term: SystemFTerm = mkSystemFApp(
+        mkSystemFVar('f'),
+        mkSystemFVar('x')
+      );
+
+      const [type] = typecheckSystemF(ctx, term);
+
+      // Should have type B
+      expect(type.kind).to.equal('type-var');
+      if (type.kind === 'type-var') {
+        expect(type.typeName).to.equal('B');
+      }
+    });
+
+    it('should typecheck combined term and type application', () => {
+      // Define the polymorphic identity function
+      const polyId: SystemFTerm = mkSystemFTAbs(
+        'X',
+        mkSystemFAbs('x', mkTypeVariable('X'), mkSystemFVar('x'))
+      );
+
+      // Term: (ΛX.λx:X.x)[A] y
+      const term: SystemFTerm = mkSystemFApp(
+        mkSystemFTypeApp(polyId, mkTypeVariable('A')),
+        mkSystemFVar('y')
+      );
+
+      // Create a context with y: A
+      let ctx = emptySystemFContext();
+      ctx = {
+        ...ctx,
+        termCtx: insertAVL(
+          ctx.termCtx,
+          'y',
+          mkTypeVariable('A'),
+          compareStrings
+        )
+      };
+
+      const [type] = typecheckSystemF(ctx, term);
+
+      // Should have type A
+      expect(type.kind).to.equal('type-var');
+      if (type.kind === 'type-var') {
+        expect(type.typeName).to.equal('A');
+      }
     });
   });
 });

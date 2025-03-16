@@ -36,12 +36,19 @@ jobs:
       - name: Run tests with coverage
         run: yarn test:coverage
 
-      - name: Setup npm registry
+      - name: Setup for publishing
         run: |
+          # Create .npmrc for GitHub Packages
           echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
           echo "@maxdeliso:registry=https://npm.pkg.github.com" >> .npmrc
 
+          # Configure Yarn with the token
+          yarn config set npmAuthToken "${NODE_AUTH_TOKEN}"
+          yarn config set npmRegistryServer "https://npm.pkg.github.com"
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
       - name: Publish package
-        run: yarn npm publish
+        run: yarn npm publish --access=public
         env:
           NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}

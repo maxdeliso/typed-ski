@@ -2,6 +2,7 @@ import { cons, ConsCell } from '../cons.js';
 import { expressionEquivalent, SKIExpression, toSKIKey } from '../ski/expression.js';
 import { SKITerminalSymbol } from '../ski/terminal.js';
 import { createMap, searchMap, insertMap, SKIMap } from '../data/map/skiMap.js';
+import { Evaluator } from './evaluator.js';
 
 /**
  * The internal shape of an evaluation result.
@@ -176,7 +177,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
  * @param maxIterations (optional) the maximum number of reduction iterations.
  * @returns the reduced SKI expression.
  */
-export const reduce = (exp: SKIExpression, maxIterations?: number): SKIExpression => {
+const reduce = (exp: SKIExpression, maxIterations?: number): SKIExpression => {
   let current = exp;
   const maxIter = maxIterations ?? Infinity;
   for (let i = 0; i < maxIter; i++) {
@@ -189,7 +190,13 @@ export const reduce = (exp: SKIExpression, maxIterations?: number): SKIExpressio
   return current;
 };
 
-export const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
+/**
+ * Performs exactly one symbolic reduction step.
+ *
+ * @param expr the input SKI expression
+ * @returns whether the reduction step changed the input, and the result
+ */
+const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
   if (expr.kind === 'terminal') return { altered: false, expr };
   let result = stepI(expr);
   if (result.altered) return result;
@@ -202,4 +209,9 @@ export const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
   result = stepOnce(expr.rgt);
   if (result.altered) return { altered: true, expr: cons(expr.lft, result.expr) };
   return { altered: false, expr };
+};
+
+export const symbolicEvaluator: Evaluator<SKIExpression> = {
+  stepOnce,
+  reduce,
 };

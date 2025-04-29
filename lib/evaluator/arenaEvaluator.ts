@@ -17,6 +17,15 @@ const bucketShift = 16; // 65 536 buckets
 const buckets     = new Uint32Array(1 << bucketShift).fill(EMPTY);
 const mask      = (1 << bucketShift) - 1;
 
+function alloc(): ArenaNodeId {
+  if (top >= CAP) {
+    throw new RangeError(
+      `Arena exhausted: reached CAP = ${CAP.toString()} nodes`,
+    );
+  }
+  return top++;
+}
+
 // see https://github.com/aappleby/smhasher
 // this is a fast integer scrambler with nice distribution properties
 function avalanche32(x: number): number {
@@ -44,7 +53,7 @@ function arenaTerminal(symVal: ArenaSym): ArenaNodeId {
   const cached = termIds[symVal];
   if (cached !== undefined) return cached; // ← reuse
 
-  const id = top++;
+  const id = alloc();
   kind[id]   = ArenaKind.Terminal;
   sym[id]    = symVal;
   hash32[id] = symVal; // injective over {1,2,3}
@@ -62,7 +71,7 @@ function arenaCons(l: ArenaNodeId, r: ArenaNodeId): ArenaNodeId {
   }
 
   /* miss → allocate */
-  const id = top++;
+  const id = alloc();
   kind[id]    = ArenaKind.NonTerm;
   leftId[id]  = l;
   rightId[id] = r;

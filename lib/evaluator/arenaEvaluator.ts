@@ -73,7 +73,7 @@ function arenaCons(l: ArenaNodeId, r: ArenaNodeId): ArenaNodeId {
 }
 
 function arenaKernelStep(expr: ArenaNodeId): { altered: boolean; expr: ArenaNodeId } {
-  if(isTerminal(expr)) {
+  if (isTerminal(expr)) {
     return {
       altered: false,
       expr

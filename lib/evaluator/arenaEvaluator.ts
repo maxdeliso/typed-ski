@@ -35,8 +35,7 @@ const rightOf    = (n: ArenaNodeId) => rightId[n];
 
 // Donald Knuth’s multiplicative-hash suggestion in The Art of Computer Programming, Vol 3 (section 6.4, 2nd ed., §3.2).
 const GOLD = 0x9e3779b9;
-const mix = (a: number, b: number) =>
-  avalanche32((a + GOLD + ((b << 6) >>> 0) + (b >>> 2)) >>> 0);
+const mix = (a: number, b: number) => avalanche32((a ^ (b * GOLD)) >>> 0);
 
 // make identical leaves pointer-equal
 const termIds: Partial<Record<ArenaSym, ArenaNodeId>> = {};

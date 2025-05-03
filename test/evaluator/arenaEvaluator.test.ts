@@ -72,7 +72,7 @@ const NORMALISE_TESTS = 19;
 const MIN_LENGTH = 5;
 const MAX_LENGTH = 12;
 
-describe('stepOnce loop vs. reduce()', () => {
+describe('symbolic and arena reduction equivalence', () => {
   const rs: RandomSeed = create(seed);
 
   it(`runs ${NORMALISE_TESTS.toString()} normalization tests with random expressions`, () => {

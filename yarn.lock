@@ -1034,6 +1034,7 @@ __metadata:
     "@types/node": "npm:^22.10.1"
     "@types/random-seed": "npm:^0.3.5"
     "@types/terminal-kit": "npm:^2.5.6"
+    assemblyscript: "npm:^0.27.36"
     c8: "npm:^10.1.3"
     chai: "npm:^5.1.2"
     eslint: "npm:^9.16.0"
@@ -1588,6 +1589,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"assemblyscript@npm:^0.27.36":
+  version: 0.27.36
+  resolution: "assemblyscript@npm:0.27.36"
+  dependencies:
+    binaryen: "npm:116.0.0-nightly.20240114"
+    long: "npm:^5.2.4"
+  bin:
+    asc: bin/asc.js
+    asinit: bin/asinit.js
+  checksum: 10c0/f3477bb36533294552032aadf377db10db76ea1852199aa49ac9b9f107c159805401b9d2cc4e14f170fbb3f9e39a1560c5f5a7c402303ddb94362bb51e4a8fa4
+  languageName: node
+  linkType: hard
+
 "assertion-error@npm:^2.0.1":
   version: 2.0.1
   resolution: "assertion-error@npm:2.0.1"
@@ -1685,6 +1699,16 @@ __metadata:
   version: 2.3.0
   resolution: "binary-extensions@npm:2.3.0"
   checksum: 10c0/75a59cafc10fb12a11d510e77110c6c7ae3f4ca22463d52487709ca7f18f69d886aa387557cc9864fbdb10153d0bdb4caacabf11541f55e89ed6e18d12ece2b5
+  languageName: node
+  linkType: hard
+
+"binaryen@npm:116.0.0-nightly.20240114":
+  version: 116.0.0-nightly.20240114
+  resolution: "binaryen@npm:116.0.0-nightly.20240114"
+  bin:
+    wasm-opt: bin/wasm-opt
+    wasm2js: bin/wasm2js
+  checksum: 10c0/95e14b87c27fef94fb4008dcd63fa61ea66f69bcb179f7f73f56dfb39aed58afec6957ef18acacfce15e4874a0da402b0fc3d47ee392a9b906a97e7634bbbad3
   languageName: node
   linkType: hard
 
@@ -3669,6 +3693,13 @@ __metadata:
     chalk: "npm:^4.1.0"
     is-unicode-supported: "npm:^0.1.0"
   checksum: 10c0/67f445a9ffa76db1989d0fa98586e5bc2fd5247260dafb8ad93d9f0ccd5896d53fb830b0e54dade5ad838b9de2006c826831a3c528913093af20dff8bd24aca6
+  languageName: node
+  linkType: hard
+
+"long@npm:^5.2.4":
+  version: 5.3.2
+  resolution: "long@npm:5.3.2"
+  checksum: 10c0/7130fe1cbce2dca06734b35b70d380ca3f70271c7f8852c922a7c62c86c4e35f0c39290565eca7133c625908d40e126ac57c02b1b1a4636b9457d77e1e60b981
   languageName: node
   linkType: hard
 

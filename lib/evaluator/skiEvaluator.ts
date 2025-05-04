@@ -84,7 +84,7 @@ let expressionCache: SKIMap = createMap();
 let evaluationCache: SKIMap = createMap();
 
 /**
- * Iteratively performs one DFS-based tree step (one “step‐once”),
+ * Iteratively performs one DFS-based tree step (one "step‐once"),
  * trying the S, K, and I rules at each node.
  *
  * Uses the evaluation cache only at the very beginning (to avoid work on a fully
@@ -211,7 +211,7 @@ const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
   return { altered: false, expr };
 };
 
-export const symbolicEvaluator: Evaluator<SKIExpression> = {
+export const symbolicEvaluator: Evaluator = {
   stepOnce,
   reduce,
 };

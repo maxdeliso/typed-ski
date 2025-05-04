@@ -86,30 +86,25 @@ function reduceByLoop(expr: SKIExpression, maxIter = MAX_ITER) {
   throw new Error('stepOnce failed to normalise within maxIter');
 }
 
-const seed = 'df394b';
-const NORMALISE_TESTS = 19;
-const MIN_LENGTH = 5;
-const MAX_LENGTH = 12;
-
 describe('stepOnce loop vs. reduce()', () => {
+  const seed = 'df394b';
+  const normalizeTests = 19;
+  const minLength = 5;
+  const maxLength = 12;
   const rs: RandomSeed = create(seed);
 
-  it(`runs ${NORMALISE_TESTS.toString()} normalization tests with random expressions`, () => {
-    [...Array(NORMALISE_TESTS).keys()].forEach((testNum) => {
-      const length = rs.intBetween(MIN_LENGTH, MAX_LENGTH);
+  it(`runs ${normalizeTests.toString()} normalization tests with random expressions`, () => {
+    [...Array(normalizeTests).keys()].forEach(() => {
+      const length = rs.intBetween(minLength, maxLength);
       const fresh = randExpression(rs, length);
-      const normal1 = symbolicEvaluator.reduce(fresh);
-      const { expr: normal2, steps } = reduceByLoop(fresh);
+      const reducedOnce = symbolicEvaluator.reduce(fresh);
+      const { expr: reducedMany } = reduceByLoop(fresh);
 
       assert.deepStrictEqual(
-        prettyPrint(normal2),
-        prettyPrint(normal1),
-        `Test ${(testNum + 1).toString()}/${NORMALISE_TESTS.toString()} failed: mismatch after ${steps.toString()} stepOnce iterations\n` +
-        `Input length: ${length.toString()}\n` +
-        `Input expression: ${prettyPrint(fresh)}`
+        prettyPrint(reducedOnce),
+        prettyPrint(reducedMany),
+        `expected: ${prettyPrint(reducedOnce)}, got: ${prettyPrint(reducedMany)}`
       );
-
-      console.log(`${prettyPrint(fresh)} normalised in ${steps.toString()} steps`);
     });
   });
 });

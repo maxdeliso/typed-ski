@@ -1,191 +1,149 @@
+import { promises as fs } from 'node:fs';
+
 import { cons } from '../cons.js';
-import { EMPTY, ArenaKind, ArenaNodeId as ArenaNodeId, ArenaSym } from '../ski/arena.js';
 import { SKIExpression } from '../ski/expression.js';
-import { I, K, S, SKITerminalSymbol } from '../ski/terminal.js';
+import { S, K, I, SKITerminalSymbol } from '../ski/terminal.js';
 import { Evaluator } from './evaluator.js';
+import { ArenaKind, ArenaSym, ArenaNodeId } from '../shared/arena.js';
 
-const CAP = 1 << 22;
-const kind      = new Uint8Array(CAP);
-const sym       = new Uint8Array(CAP);
-const leftId    = new Uint32Array(CAP);
-const rightId   = new Uint32Array(CAP);
-const hash32    = new Uint32Array(CAP);
-const nextIdx   = new Uint32Array(CAP);
-let   top       = 0; // bump pointer
+interface ArenaWasmExports {
+  memory: WebAssembly.Memory;
 
-const bucketShift = 16; // 65 536 buckets
-const buckets     = new Uint32Array(1 << bucketShift).fill(EMPTY);
-const mask      = (1 << bucketShift) - 1;
+  /* arena API */
+  reset(): void;
+  allocTerminal(sym: number): number;
+  allocCons(l: number, r: number): number;
+  arenaKernelStep(expr: number): number;
+  reduce(expr: number, max: number): number;
 
-function alloc(): ArenaNodeId {
-  if (top >= CAP) {
-    throw new RangeError(
-      `Arena exhausted: reached CAP = ${CAP.toString()} nodes`,
+  kindOf(id: number): number;
+  symOf(id: number): number;
+  leftOf(id: number): number;
+  rightOf(id: number): number;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+function assertFn(obj: unknown, name: string): asserts obj is Function {
+  if (typeof obj !== 'function') {
+    throw new TypeError(`WASM export \`${name}\` is missing or not a function`);
+  }
+}
+
+function assertMemory(obj: unknown, name: string): asserts obj is WebAssembly.Memory {
+  if (!(obj instanceof WebAssembly.Memory)) {
+    throw new TypeError(`WASM export \`${name}\` is missing or not a WebAssembly.Memory`);
+  }
+}
+
+export class ArenaEvaluatorWasm implements Evaluator {
+  private readonly $: ArenaWasmExports;
+
+  private constructor(exports: ArenaWasmExports) {
+    this.$ = exports;
+  }
+
+  static async instantiate(wasmPath: string | URL): Promise<ArenaEvaluatorWasm> {
+    const bytes = await fs.readFile(wasmPath);
+    const importObject = {
+      env: {
+        // NOTE: currently unused, but a callable is required by the WASM loader
+        abort(msgPtr: number, filePtr: number, line: number, col: number) {
+          console.error('abort called at', { line, col });
+        },
+      },
+    };
+    const { instance } = await WebAssembly.instantiate(bytes, importObject);
+    const ex = instance.exports as Record<string, unknown>;
+
+    const required = [
+      'memory',
+      'reset',
+      'allocTerminal',
+      'allocCons',
+      'arenaKernelStep',
+      'reduce',
+      'kindOf',
+      'symOf',
+      'leftOf',
+      'rightOf',
+    ] as const;
+
+    required.forEach((k) => {
+      if (!(k in ex)) throw new Error(`WASM export \`${k}\` is missing`);
+    });
+
+    assertMemory(ex.memory, 'memory');
+    assertFn(ex.reset, 'reset');
+    assertFn(ex.allocTerminal, 'allocTerminal');
+    assertFn(ex.allocCons, 'allocCons');
+    assertFn(ex.arenaKernelStep, 'arenaKernelStep');
+    assertFn(ex.reduce, 'reduce');
+    assertFn(ex.kindOf, 'kindOf');
+    assertFn(ex.symOf, 'symOf');
+    assertFn(ex.leftOf, 'leftOf');
+    assertFn(ex.rightOf, 'rightOf');
+
+    const evaluator = new ArenaEvaluatorWasm(ex as unknown as ArenaWasmExports);
+    evaluator.reset();
+    return evaluator;
+  }
+
+  stepOnce(expr: SKIExpression) {
+    const next = this.$.arenaKernelStep(this.toArena(expr));
+    return {
+      altered: next !== this.toArena(expr),
+      expr: this.fromArena(next)
+    } as const;
+  }
+
+  reduce(expr: SKIExpression, max = 0xffffffff): SKIExpression {
+    return this.fromArena(this.$.reduce(this.toArena(expr), max));
+  }
+
+  reset(): void {
+    this.$.reset();
+  }
+
+  toArena(exp: SKIExpression): ArenaNodeId {
+    switch (exp.kind) {
+      case 'terminal':
+        switch (exp.sym) {
+          case SKITerminalSymbol.S:
+            return this.$.allocTerminal(ArenaSym.S);
+          case SKITerminalSymbol.K:
+            return this.$.allocTerminal(ArenaSym.K);
+          case SKITerminalSymbol.I:
+            return this.$.allocTerminal(ArenaSym.I);
+          default:
+            throw new Error('unrecognised terminal symbol');
+        }
+
+      case 'non-terminal':
+        return this.$.allocCons(this.toArena(exp.lft), this.toArena(exp.rgt));
+    }
+  }
+
+  fromArena(id: ArenaNodeId): SKIExpression {
+    if (this.$.kindOf(id) === ArenaKind.Terminal as number) {
+      switch (this.$.symOf(id) as ArenaSym) {
+        case ArenaSym.S:
+          return S;
+        case ArenaSym.K:
+          return K;
+        case ArenaSym.I:
+          return I;
+        default:
+          throw new Error('corrupt symbol tag in arena');
+      }
+    }
+
+    return cons(
+      this.fromArena(this.$.leftOf(id)),
+      this.fromArena(this.$.rightOf(id))
     );
   }
-  return top++;
 }
 
-// see https://github.com/aappleby/smhasher
-// this is a fast integer scrambler with nice distribution properties
-function avalanche32(x: number): number {
-  x = (x ^ (x >>> 16)) >>> 0;
-  x = (x * 0x7feb352d) >>> 0;
-  x = (x ^ (x >>> 15)) >>> 0;
-  x = (x * 0x846ca68b) >>> 0;
-  x = (x ^ (x >>> 16)) >>> 0;
-  return x >>> 0;
-}
-
-const isTerminal = (n: ArenaNodeId) => (kind[n] as ArenaKind) === ArenaKind.Terminal;
-const symOf      = (n: ArenaNodeId) => sym[n] as ArenaSym;
-const leftOf     = (n: ArenaNodeId) => leftId[n];
-const rightOf    = (n: ArenaNodeId) => rightId[n];
-
-// Donald Knuth’s multiplicative-hash suggestion in The Art of Computer Programming, Vol 3 (section 6.4, 2nd ed., §3.2).
-const GOLD = 0x9e3779b9;
-const mix = (a: number, b: number) => avalanche32((a ^ (b * GOLD)) >>> 0);
-
-// make identical leaves pointer-equal
-const termIds: Partial<Record<ArenaSym, ArenaNodeId>> = {};
-
-function arenaTerminal(symVal: ArenaSym): ArenaNodeId {
-  const cached = termIds[symVal];
-  if (cached !== undefined) return cached; // ← reuse
-
-  const id = alloc();
-  kind[id]   = ArenaKind.Terminal;
-  sym[id]    = symVal;
-  hash32[id] = symVal; // injective over {1,2,3}
-  termIds[symVal] = id; // remember for next time
-  return id;
-}
-
-function arenaCons(l: ArenaNodeId, r: ArenaNodeId): ArenaNodeId {
-  const h = mix(hash32[l], hash32[r]);
-  const b = h & mask;
-
-  /* lookup */
-  for (let i = buckets[b]; i !== EMPTY; i = nextIdx[i]) {
-    if (hash32[i] === h && leftId[i] === l && rightId[i] === r) return i;
-  }
-
-  /* miss → allocate */
-  const id = alloc();
-  kind[id]    = ArenaKind.NonTerm;
-  leftId[id]  = l;
-  rightId[id] = r;
-  hash32[id]  = h;
-  nextIdx[id] = buckets[b];
-  buckets[b]  = id;
-  return id;
-}
-
-function arenaKernelStep(expr: ArenaNodeId): { altered: boolean; expr: ArenaNodeId } {
-  if (isTerminal(expr)) {
-    return {
-      altered: false,
-      expr
-    };
-  }
-
-  if (isTerminal(leftOf(expr)) && symOf(leftOf(expr)) === ArenaSym.I) {
-    return {
-      altered: true,
-      expr: rightOf(expr)
-    };
-  }
-
-  if (!isTerminal(leftOf(expr)) &&
-      isTerminal(leftOf(leftOf(expr))) &&
-      symOf(leftOf(leftOf(expr))) === ArenaSym.K) {
-
-    return {
-      altered: true,
-      expr: rightOf(leftOf(expr))
-    };
-  }
-
-  if (!isTerminal(leftOf(expr)) &&
-      !isTerminal(leftOf(leftOf(expr))) &&
-      isTerminal(leftOf(leftOf(leftOf(expr)))) &&
-      symOf(leftOf(leftOf(leftOf(expr)))) === ArenaSym.S) {
-
-    const x = rightOf(leftOf(leftOf(expr)));
-    const y = rightOf(leftOf(expr));
-    const z = rightOf(expr);
-    return {
-      altered: true,
-      expr: arenaCons(arenaCons(x, z), arenaCons(y, z)),
-    };
-  }
-
-  const leftRes = arenaKernelStep(leftOf(expr));
-
-  if (leftRes.altered) {
-    return {
-      altered: true,
-      expr: arenaCons(leftRes.expr, rightOf(expr)),
-    };
-  }
-
-  const rightRes = arenaKernelStep(rightOf(expr));
-
-  if (rightRes.altered) {
-    return {
-      altered: true,
-      expr: arenaCons(leftOf(expr), rightRes.expr),
-    };
-  }
-
-  return { altered: false, expr };
-}
-
-export const arenaEvaluator: Evaluator<ArenaNodeId> = {
-  stepOnce: arenaKernelStep,
-  reduce(expr: ArenaNodeId, max = Infinity) {
-    let cur = expr;
-    for (let i = 0; i < max; i++) {
-      const r = arenaKernelStep(cur);
-      if (!r.altered) return r.expr;
-      cur = r.expr;
-    }
-    return cur;
-  },
-};
-
-export function toArena(exp: SKIExpression): ArenaNodeId {
-  switch(exp.kind) {
-    case 'terminal':
-      switch (exp.sym) {
-        case SKITerminalSymbol.S:
-          return arenaTerminal(ArenaSym.S);
-        case SKITerminalSymbol.K:
-          return arenaTerminal(ArenaSym.K);
-        case SKITerminalSymbol.I:
-          return arenaTerminal(ArenaSym.I);
-        default:
-          throw new Error('unrecognized terminal');
-      }
-
-    case 'non-terminal':
-      return arenaCons(toArena(exp.lft), toArena(exp.rgt));
-  }
-}
-
-export function fromArena(ni: ArenaNodeId): SKIExpression {
-  if (isTerminal(ni)) {
-    switch(symOf(ni)) {
-      case ArenaSym.S:
-        return S;
-      case ArenaSym.K:
-        return K;
-      case ArenaSym.I:
-        return I;
-      default:
-        throw new Error('corrupt symbol');
-    }
-  }
-
-  return cons(fromArena(leftOf(ni)), fromArena(rightOf(ni)));
+export async function initArenaEvaluator(wasmPath: string | URL) {
+  return ArenaEvaluatorWasm.instantiate(wasmPath);
 }

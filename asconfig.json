@@ -1,0 +1,28 @@
+{
+  "options": {
+    "outFile": "build/trip.wasm",
+    "exports": [
+      "memory",
+      "reset",
+      "allocTerminal",
+      "allocCons",
+      "arenaKernelStep",
+      "reduce",
+      "kindOf",
+      "symOf",
+      "leftOf",
+      "rightOf"
+    ],
+    "exportRuntime": false
+  },
+  "targets": {
+    "debug": {
+      "sourceMap": true,
+      "debug": true
+    },
+    "release": {
+      "optimizeLevel": 3,
+      "shrinkLevel": 0
+    }
+  }
+}

@@ -22,8 +22,8 @@
     "declarationMap": true
   },
   "include": [
-    "src/**/*",
-    "test/**/*"
+    "test/**/*",
+    "lib/**/*"
   ],
   "exclude": [
     "assembly/**",

@@ -1,0 +1,22 @@
+type Nat = ∀X . (X → X) → X → X
+
+poly zero = ΛX . λs : X → X . λz : X . z
+
+poly succ = λn : Nat .
+              Λa . λs : a → a . λz : a .
+                s (n [a] s z)
+
+poly one   = succ zero
+poly two   = succ one
+poly three = succ two
+poly four  = succ three
+poly five  = succ four
+
+poly mul =
+  λm : Nat . λn : Nat .
+    Λa . λs : a → a . λz : a .
+      m [a] (n [a] s) z
+
+poly six = mul two three
+
+poly twentyFour = mul (mul two three) four

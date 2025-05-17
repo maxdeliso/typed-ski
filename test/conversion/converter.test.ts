@@ -7,7 +7,7 @@ import { symbolicEvaluator } from '../../lib/evaluator/skiEvaluator.js';
 import { UnChurchNumber, ChurchN } from '../../lib/ski/church.js';
 import { apply } from '../../lib/ski/expression.js';
 import { I } from '../../lib/ski/terminal.js';
-import { convertLambda } from '../../lib/conversion/converter.js';
+import { bracketLambda } from '../../lib/conversion/converter.js';
 import { mkUntypedAbs, mkVar, prettyPrintUntypedLambda } from '../../lib/terms/lambda.js';
 
 describe('Lambda conversion', () => {
@@ -17,7 +17,7 @@ describe('Lambda conversion', () => {
   const flip  = mkUntypedAbs('x', mkUntypedAbs('y', cons(mkVar('y'), mkVar('x'))));
 
   it('should convert λx.x to I', () => {
-    expect(convertLambda(id)).to.deep.equal(I);
+    expect(bracketLambda(id)).to.deep.equal(I);
   });
 
   it('should convert λx.λy.x to something that acts like K', () => {
@@ -25,7 +25,7 @@ describe('Lambda conversion', () => {
     for (let a = 0; a < N; a++) {
       for (let b = 0; b < N; b++) {
         const result = UnChurchNumber(
-          symbolicEvaluator.reduce(apply(convertLambda(konst), ChurchN(a), ChurchN(b)))
+          symbolicEvaluator.reduce(apply(bracketLambda(konst), ChurchN(a), ChurchN(b)))
         );
         expect(result).to.equal(a);
       }
@@ -51,7 +51,7 @@ describe('Lambda conversion', () => {
       for (let b = 0; b < N; b++) {
         const expected = a ** b; // exponentiation: a^b
         const result = UnChurchNumber(
-          symbolicEvaluator.reduce(apply(convertLambda(flip), ChurchN(a), ChurchN(b)))
+          symbolicEvaluator.reduce(apply(bracketLambda(flip), ChurchN(a), ChurchN(b)))
         );
         expect(result).to.equal(expected);
       }
@@ -62,7 +62,7 @@ describe('Lambda conversion', () => {
     for (let n = 0; n < N; n++) {
       const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
       const result = UnChurchNumber(
-        symbolicEvaluator.reduce(apply(convertLambda(predLambda), ChurchN(n)))
+        symbolicEvaluator.reduce(apply(bracketLambda(predLambda), ChurchN(n)))
       );
       expect(result).to.equal(expected);
     }

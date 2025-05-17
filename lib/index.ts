@@ -30,7 +30,7 @@ export {
   eraseTypedLambda,
   prettyPrintTypedLambda,
   type TypedLambda,
-  typecheck as typecheckTyped
+  typecheckTypedLambda as typecheckTyped
 } from './types/typedLambda.js';
 
 // System F type exports
@@ -41,7 +41,7 @@ export {
 } from './types/systemF.js';
 
 // Conversion exports
-export { convertLambda } from './conversion/converter.js';
+export { bracketLambda } from './conversion/converter.js';
 
 // Type system exports
 export { prettyPrintTy } from './types/types.js';

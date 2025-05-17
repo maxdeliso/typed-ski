@@ -62,7 +62,7 @@ export const addBinding =
     return insertAVL(ctx, name, ty, compareStrings);
   };
 
-export const typecheck = (typedTerm: TypedLambda): BaseType => {
+export const typecheckTypedLambda = (typedTerm: TypedLambda): BaseType => {
   return typecheckGiven(emptyContext(), typedTerm);
 };
 

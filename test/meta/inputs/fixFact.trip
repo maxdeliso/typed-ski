@@ -1,0 +1,69 @@
+type Nat = ∀X . (X → X) → X → X
+
+poly succ =
+  λn : Nat .
+    Λa. λs : a → a . λz : a .
+      s (n [a] s z)
+
+poly zero = ΛX . λs: X → X . λz : X . z
+
+poly one = succ zero
+
+type Bool = ∀B. B → B → B
+
+poly true = ΛB . λt:B . λf:B . t
+
+poly false = ΛB . λt:B . λf:B . f
+
+poly cond =
+  ΛX .
+    λb : Bool .
+    λt : X .
+    λf : X .
+      b [X] t f
+
+poly mul =
+  λm : Nat . λn : Nat .
+    Λa . λs : a → a . λz : a .
+      m [a] (n [a] s) z
+
+poly isZero =
+  λn : Nat .
+    n [Bool]
+     (λb : Bool . false)
+     true
+
+poly pair = ΛA . ΛB . λa :
+  A . λb : B . ΛY . λk :
+  A → B → Y . k a b
+
+poly fst = ΛA . ΛB . λp : ∀Y . (A → B → Y) → Y .
+  p [A] (λx : A . λy : B . x)
+
+poly snd = ΛA . ΛB . λp : ∀Y . (A → B → Y) → Y .
+  p [B] (λx : A . λy : B . y)
+
+poly pred = λn : Nat .
+  fst Nat Nat
+    ( n [∀Y . (Nat → Nat → Y) → Y]
+        ( λp : ∀Y . (Nat → Nat → Y) → Y .
+            pair Nat Nat
+              (snd Nat Nat p)
+              (succ (snd Nat Nat p))
+        )
+        (pair Nat Nat zero zero)
+    )
+
+poly factKernel =
+  (λself : Nat → Nat . λn : Nat .
+    cond
+      [Nat] (isZero n) one
+        (mul n (self (pred n))))
+
+untyped fix = λf.(λx. f (λv. x x v)) (λx. f (λv. x x v))
+
+untyped fact = fix factKernel
+
+poly five = succ(succ(succ(succ(succ(zero)))))
+
+untyped main = fact five

@@ -180,7 +180,7 @@ const assertCombinator = (lm: LambdaMixed): SKIExpression => {
  * Public function.
  * Converts an untyped lambda expression (UntypedLambda) into an SKI expression.
  */
-export const convertLambda = (ut: UntypedLambda): SKIExpression => {
+export const bracketLambda = (ut: UntypedLambda): SKIExpression => {
   const lifted = lift(ut);
   const converted = convertMixed(lifted);
   return assertCombinator(converted);

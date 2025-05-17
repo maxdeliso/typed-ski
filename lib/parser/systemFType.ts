@@ -1,5 +1,5 @@
-import { SystemFType, forall } from '../types/systemF.js';
-import { arrow, mkTypeVariable } from '../types/types.js';
+import { forall } from '../types/systemF.js';
+import { arrow, BaseType, mkTypeVariable } from '../types/types.js';
 import { ParseError } from './parseError.js';
 import {
   ParserState,
@@ -25,7 +25,7 @@ import {
  */
 export function parseSystemFType(
   state: ParserState
-): [string, SystemFType, ParserState] {
+): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
   if (ch === '∀') {
     // Parse universal type: ∀X. T
@@ -57,7 +57,7 @@ export function parseSystemFType(
  */
 function parseSimpleSystemFType(
   state: ParserState
-): [string, SystemFType, ParserState] {
+): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
   if (ch === '(') {
     const stateAfterLP = matchLP(s);

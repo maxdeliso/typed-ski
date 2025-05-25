@@ -7,7 +7,7 @@ const { terminal } = tkexport;
 
 import {
   // SKI evaluator
-  stepOnce,
+  symbolicEvaluator,
   // SKI expressions
   prettyPrintSKI,
   type SKIExpression,
@@ -36,7 +36,6 @@ import {
   // Types
   prettyPrintTy,
   inferType,
-  reduce
 } from '../lib/index.js';
 import { randExpression } from '../lib/ski/generator.js';
 
@@ -144,7 +143,7 @@ function printCurrentTerm(): void {
 }
 
 function skiStepOnce(): void {
-  const result = stepOnce(currentSKI);
+  const result = symbolicEvaluator.stepOnce(currentSKI);
   if (result.altered) {
     currentSKI = result.expr;
     printGreen('stepped: ' + prettyPrintSKI(currentSKI));
@@ -155,7 +154,7 @@ function skiStepOnce(): void {
 
 function skiStepMany(): void {
   const MAX_ITER = 100;
-  const result = reduce(currentSKI, MAX_ITER);
+  const result = symbolicEvaluator.reduce(currentSKI, MAX_ITER);
   currentSKI = result;
   printGreen(`stepped many (with max of ${MAX_ITER}): ` + prettyPrintSKI(result));
 }

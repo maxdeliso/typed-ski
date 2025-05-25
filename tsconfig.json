@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "lib": [
-      "ES2023"
+      "ES2023",
+      "DOM"
+    ],
+    "types": [
+      "node"
     ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -16,5 +20,14 @@
     "declarationDir": "./build",
     "declaration": true,
     "declarationMap": true
-  }
+  },
+  "include": [
+    "test/**/*",
+    "lib/**/*"
+  ],
+  "exclude": [
+    "assembly/**",
+    "build/**",
+    "node_modules"
+  ]
 }

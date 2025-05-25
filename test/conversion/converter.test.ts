@@ -3,7 +3,7 @@ import { expect } from 'chai';
 
 import { cons } from '../../lib/cons.js';
 import { predLambda } from '../../lib/consts/lambdas.js';
-import { reduce } from '../../lib/evaluator/skiEvaluator.js';
+import { symbolicEvaluator } from '../../lib/evaluator/skiEvaluator.js';
 import { UnChurchNumber, ChurchN } from '../../lib/ski/church.js';
 import { apply } from '../../lib/ski/expression.js';
 import { I } from '../../lib/ski/terminal.js';
@@ -25,7 +25,7 @@ describe('Lambda conversion', () => {
     for (let a = 0; a < N; a++) {
       for (let b = 0; b < N; b++) {
         const result = UnChurchNumber(
-          reduce(apply(convertLambda(konst), ChurchN(a), ChurchN(b)))
+          symbolicEvaluator.reduce(apply(convertLambda(konst), ChurchN(a), ChurchN(b)))
         );
         expect(result).to.equal(a);
       }
@@ -51,7 +51,7 @@ describe('Lambda conversion', () => {
       for (let b = 0; b < N; b++) {
         const expected = a ** b; // exponentiation: a^b
         const result = UnChurchNumber(
-          reduce(apply(convertLambda(flip), ChurchN(a), ChurchN(b)))
+          symbolicEvaluator.reduce(apply(convertLambda(flip), ChurchN(a), ChurchN(b)))
         );
         expect(result).to.equal(expected);
       }
@@ -62,7 +62,7 @@ describe('Lambda conversion', () => {
     for (let n = 0; n < N; n++) {
       const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
       const result = UnChurchNumber(
-        reduce(apply(convertLambda(predLambda), ChurchN(n)))
+        symbolicEvaluator.reduce(apply(convertLambda(predLambda), ChurchN(n)))
       );
       expect(result).to.equal(expected);
     }

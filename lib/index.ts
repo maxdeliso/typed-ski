@@ -1,5 +1,5 @@
 // Core evaluator exports
-export { stepOnce, reduce } from './evaluator/skiEvaluator.js';
+export { symbolicEvaluator } from './evaluator/skiEvaluator.js';
 
 // SKI expression exports
 export {

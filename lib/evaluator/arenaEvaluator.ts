@@ -55,7 +55,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
     const importObject = {
       env: { memory, abort: abortFn },
-      "arena-evaluator": { abort: abortFn }
+      'arena-evaluator': { abort: abortFn }
     };
 
     const { instance } = await WebAssembly.instantiate(bytes, importObject);

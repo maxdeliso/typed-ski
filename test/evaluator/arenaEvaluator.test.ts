@@ -21,7 +21,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 before(async () => {
-  const wasmPath = path.resolve(__dirname, '../../build/trip.wasm');
+  const wasmPath = path.resolve(__dirname, '../../build/debug.wasm');
   arenaEval = await initArenaEvaluator(wasmPath);
 });
 

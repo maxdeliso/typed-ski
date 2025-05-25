@@ -44,14 +44,20 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
   static async instantiate(wasmPath: string | URL): Promise<ArenaEvaluatorWasm> {
     const bytes = await fs.readFile(wasmPath);
-    const importObject = {
-      env: {
-        // NOTE: currently unused, but a callable is required by the WASM loader
-        abort(msgPtr: number, filePtr: number, line: number, col: number) {
-          console.error('abort called at', { line, col });
-        },
-      },
+    const memory = new WebAssembly.Memory({
+      initial: 512,      // 32 MiB
+      maximum: 65_536,   // 4 GiB
+    });
+
+    const abortFn = (msgPtr: number, filePtr: number, line: number, col: number) => {
+      console.error('abort', { line, col });
     };
+
+    const importObject = {
+      env: { memory, abort: abortFn },
+      "arena-evaluator": { abort: abortFn }
+    };
+
     const { instance } = await WebAssembly.instantiate(bytes, importObject);
     const ex = instance.exports as Record<string, unknown>;
 

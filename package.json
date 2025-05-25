@@ -13,7 +13,7 @@
     "prebuild": "yarn lint",
     "build": "yarn clean && yarn asbuild && tsc",
     "ski": "yarn tsx bin/ski.ts",
-    "asbuild": "asc --config asconfig.json assembly/index.ts"
+    "asbuild": "asc --config asconfig.json --target debug assembly/index.ts && asc --config asconfig.json --target release assembly/index.ts"
   },
   "type": "module",
   "main": "./build/lib/index.js",

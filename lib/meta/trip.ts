@@ -1,3 +1,4 @@
+import { AVLTree } from '../data/avl/avlNode.js';
 import { SKIExpression } from '../ski/expression.js';
 import { UntypedLambda } from '../terms/lambda.js';
 import { SystemFTerm } from '../terms/systemF.js';
@@ -16,6 +17,13 @@ export type TripLangTerm =
   | CombinatorDefinition
   | TypeDefinition;
 
+export type TripLangDefType =
+  | SystemFTerm
+  | TypedLambda
+  | UntypedLambda
+  | SKIExpression
+  | BaseType;
+
 export interface PolyDefinition {
   kind: 'poly';
   name: string;
@@ -25,7 +33,7 @@ export interface PolyDefinition {
 export interface TypedDefinition {
   kind: 'typed';
   name: string;
-  type: BaseType;
+  type: BaseType | undefined; // note: can be inferred, but only after resolution
   term: TypedLambda;
 }
 
@@ -45,4 +53,9 @@ export interface TypeDefinition {
   kind: 'type';
   name: string;
   type: BaseType;
+}
+
+export interface SymbolTable {
+  terms: AVLTree<string, TripLangTerm>;
+  types: AVLTree<string, TypeDefinition>;
 }

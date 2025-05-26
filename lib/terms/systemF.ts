@@ -1,5 +1,5 @@
 import { ConsCell } from '../cons.js';
-import { SystemFType } from '../types/systemF.js';
+import { BaseType } from '../types/types.js';
 
 /**
  * A term variable.
@@ -20,13 +20,13 @@ export const mkSystemFVar = (name: string): SystemFVar => ({
 export interface SystemFAbs {
   kind: 'systemF-abs';
   name: string;
-  typeAnnotation: SystemFType;
+  typeAnnotation: BaseType;
   body: SystemFTerm;
 }
 
 export const mkSystemFAbs = (
   name: string,
-  typeAnnotation: SystemFType,
+  typeAnnotation: BaseType,
   body: SystemFTerm
 ): SystemFAbs => ({
   kind: 'systemF-abs',
@@ -59,12 +59,12 @@ export const mkSystemFTAbs = (
 export interface SystemFTypeApp {
   kind: 'systemF-type-app';
   term: SystemFTerm;
-  typeArg: SystemFType;
+  typeArg: BaseType;
 }
 
 export const mkSystemFTypeApp = (
   term: SystemFTerm,
-  typeArg: SystemFType
+  typeArg: BaseType
 ): SystemFTypeApp => ({
   kind: 'systemF-type-app',
   term,
@@ -106,7 +106,7 @@ export function prettyPrintSystemF(term: SystemFTerm): string {
   }
 }
 
-function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
+export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
   if (term.kind === 'non-terminal') {
     const leftParts = flattenSystemFApp(term.lft);
     return [...leftParts, term.rgt];
@@ -115,7 +115,7 @@ function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
   }
 }
 
-export function prettyPrintSystemFType(ty: SystemFType): string {
+export function prettyPrintSystemFType(ty: BaseType): string {
   if (ty.kind === 'forall') {
     return `∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)}`;
   } else if (ty.kind === 'non-terminal' && 'lft' in ty && 'rgt' in ty) {

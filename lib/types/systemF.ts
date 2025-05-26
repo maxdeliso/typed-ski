@@ -5,14 +5,13 @@ import { TypedLambda, mkTypedAbs } from './typedLambda.js';
 import { AVLTree, createEmptyAVL, insertAVL, searchAVL } from '../data/avl/avlNode.js';
 import { compareStrings } from '../data/map/stringMap.js';
 import { Set, createSet, insertSet } from '../data/set/set.js';
+import { normalize } from './normalization.js';
 
 /*
  * https://en.wikipedia.org/wiki/System_F
  */
 
-export type SystemFType = BaseType;
-
-export const forall = (typeVar: string, body: SystemFType): ForallType => ({
+export const forall = (typeVar: string, body: BaseType): ForallType => ({
   kind: 'forall',
   typeVar,
   body,
@@ -22,10 +21,10 @@ export const forall = (typeVar: string, body: SystemFType): ForallType => ({
  * Substitute in the type "original" the sub–type lft with rgt.
  */
 export const substituteSystemFType = (
-  original: SystemFType,
+  original: BaseType,
   targetVarName: string,
-  replacement: SystemFType
-): SystemFType => {
+  replacement: BaseType
+): BaseType => {
   switch (original.kind) {
     case 'type-var':
       return original.typeName === targetVarName ? replacement : original;
@@ -46,13 +45,28 @@ export const substituteSystemFType = (
   }
 };
 
+export const referencesVar = (
+  original: BaseType,
+  varName: string
+): boolean => {
+  switch (original.kind) {
+    case 'type-var':
+      return original.typeName === varName;
+    case 'non-terminal':
+      return referencesVar(original.lft, varName) ||
+        referencesVar(original.rgt, varName);
+    case 'forall':
+      return referencesVar(original.body, varName);
+  }
+};
+
 /**
  * The type checking context for System F.
  * - termCtx maps term variables (strings) to their types (SystemFType) using a persistent AVL tree.
  * - typeVars is the set of bound type variables using our persistent AVLSet.
  */
 export interface SystemFContext {
-  termCtx: AVLTree<string, SystemFType>;
+  termCtx: AVLTree<string, BaseType>;
   typeVars: Set<string>;
 }
 
@@ -60,7 +74,7 @@ export interface SystemFContext {
  * Returns an empty System F context.
  */
 export const emptySystemFContext = (): SystemFContext => ({
-  termCtx: createEmptyAVL<string, SystemFType>(),
+  termCtx: createEmptyAVL<string, BaseType>(),
   typeVars: createSet<string>(compareStrings)
 });
 
@@ -68,7 +82,7 @@ export const emptySystemFContext = (): SystemFContext => ({
  * Typechecks a System F term.
  * Returns just the type (discarding the final context).
  */
-export const typecheck = (term: SystemFTerm): SystemFType => {
+export const typecheck = (term: SystemFTerm): BaseType => {
   return typecheckSystemF(emptySystemFContext(), term)[0];
 };
 
@@ -90,7 +104,7 @@ export const typecheck = (term: SystemFTerm): SystemFType => {
 export const typecheckSystemF = (
   ctx: SystemFContext,
   term: SystemFTerm
-): [SystemFType, SystemFContext] => {
+): [BaseType, SystemFContext] => {
   switch (term.kind) {
     case 'systemF-var': {
       const ty = searchAVL(ctx.termCtx, term.name, compareStrings);
@@ -120,9 +134,20 @@ export const typecheckSystemF = (
         );
       }
       if (!typesLitEq(funTy.lft, argTy)) {
-        throw new TypeError(
-          `function argument type mismatch: expected ${prettyPrintTy(funTy.lft)}, got ${prettyPrintTy(argTy)}`
-        );
+        // Only use normalization for forall types (alpha-equivalence)
+        if (funTy.lft.kind === 'forall' && argTy.kind === 'forall') {
+          const normLft = normalize(funTy.lft);
+          const normArg = normalize(argTy);
+          if (!typesLitEq(normLft, normArg)) {
+            throw new TypeError(
+              `function argument type mismatch: expected ${prettyPrintTy(funTy.lft)}, got ${prettyPrintTy(argTy)}`
+            );
+          }
+        } else {
+          throw new TypeError(
+            `function argument type mismatch: expected ${prettyPrintTy(funTy.lft)}, got ${prettyPrintTy(argTy)}`
+          );
+        }
       }
       return [funTy.rgt, ctxAfterRight];
     }
@@ -152,7 +177,7 @@ export const typecheckSystemF = (
 /**
  * Pretty prints a System F type.
  */
-export const prettyPrintSystemFType = (ty: SystemFType): string => {
+export const prettyPrintSystemFType = (ty: BaseType): string => {
   if (ty.kind === 'type-var') {
     return ty.typeName;
   }

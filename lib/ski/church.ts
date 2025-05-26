@@ -1,7 +1,7 @@
 import { Zero, One, Succ, True, False } from '../consts/combinators.js';
 import { apply, SKIExpression } from './expression.js';
-import { SKITerminalSymbol } from './terminal.js';
 import { symbolicEvaluator } from '../evaluator/skiEvaluator.js';
+import { unChurchNumber as unChurchNumberNative } from './native.js';
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding
@@ -34,8 +34,7 @@ export const ChurchN = (n: number): SKIExpression => {
  * the notion of extensional equality.
  */
 export const UnChurchNumber = (exp: SKIExpression): number => {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
-  return toLambda(exp)((x: number) => x + 1)(0);
+  return unChurchNumberNative(exp);
 };
 
 /**
@@ -50,30 +49,3 @@ export const UnChurchBoolean = (expr: SKIExpression): boolean => {
 };
 
 export const ChurchB = (b: boolean): SKIExpression => b ? True : False;
-
-/**
- * This is a somewhat foul construction in TypeScript, which gives insight into
- * the nature of the untyped lambda calculus.
- *
- * @param exp an expression in the SKI combinator language.
- * @returns a Curried TypeScript lambda which is extensionally equivalent to it
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toLambda = (exp: SKIExpression): any => {
-  if (exp.kind === 'non-terminal') {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-    return toLambda(exp.lft)(toLambda(exp.rgt));
-  } else {
-    switch (exp.sym) {
-      case SKITerminalSymbol.S:
-        return (x: (_: unknown) => ((_: unknown) => unknown)) =>
-          (y: (_: unknown) => unknown) =>
-            (z: unknown) =>
-              x(z)(y(z));
-
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      case SKITerminalSymbol.K: return (x: unknown) => (_y: unknown) => x;
-      case SKITerminalSymbol.I: return (x: unknown) => x;
-    }
-  }
-};

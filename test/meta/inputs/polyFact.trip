@@ -1,0 +1,36 @@
+type Nat = ∀X . (X → X) → X → X
+
+poly zero = ΛX . λs: X → X . λz : X . z
+
+poly succ =
+  λn : Nat .
+    Λa. λs : a → a . λz : a .
+      s (n [a] s z)
+
+poly pair = ΛA . ΛB . λa : A . λb : B . ΛY . λk : A → B → Y . k a b
+
+poly fst = ΛA . ΛB . λp : ∀Y . (A→B→Y)→Y .
+  p [A] (λx:A . λy:B . x)
+
+poly snd = ΛA . ΛB . λp : ∀Y . (A→B→Y)→Y .
+  p [B] (λx:A . λy:B . y)
+
+poly mul =
+  λm : Nat . λn : Nat .
+    Λa . λs : a → a . λz : a .
+      m [a] (n [a] s) z
+
+poly one = succ zero
+
+poly fact = λn : Nat .
+  fst Nat Nat
+    (n [∀Y . (Nat → Nat → Y) → Y]
+      (λp : ∀Y . (Nat → Nat → Y) → Y .
+        pair Nat Nat
+          (mul (fst Nat Nat p) (snd Nat Nat p))
+          (succ (snd Nat Nat p))
+      )
+      (pair Nat Nat one one)
+    )
+
+poly main = fact (succ (succ (succ (succ zero))))

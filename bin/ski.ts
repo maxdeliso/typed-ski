@@ -32,7 +32,7 @@ import {
   prettyPrintSystemFType,
   typecheckSystemF,
   // Conversion
-  convertLambda,
+  bracketLambda,
   // Types
   prettyPrintTy,
   inferType,
@@ -90,13 +90,13 @@ function ensureSKIMode(): boolean {
   }
   try {
     if (currentMode === Mode.Lambda && currentLambda !== null) {
-      currentSKI = convertLambda(currentLambda);
+      currentSKI = bracketLambda(currentLambda);
     } else if (currentMode === Mode.TypedLambda && currentTypedLambda !== null) {
       const erasedLambda = eraseTypedLambda(currentTypedLambda);
       if (erasedLambda === null) {
         throw new Error('failed to erase typed lambda term');
       }
-      currentSKI = convertLambda(erasedLambda);
+      currentSKI = bracketLambda(erasedLambda);
     } else if (currentMode === Mode.SystemF && currentSystemF !== null) {
       const erasedTypedLambda = eraseSystemF(currentSystemF);
       if (!erasedTypedLambda) {
@@ -106,7 +106,7 @@ function ensureSKIMode(): boolean {
       if (erasedLambda === null) {
         throw new Error('failed to erase typed lambda term');
       }
-      currentSKI = convertLambda(erasedLambda);
+      currentSKI = bracketLambda(erasedLambda);
     } else {
       throw new Error('current term is null');
     }

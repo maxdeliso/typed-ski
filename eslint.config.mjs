@@ -34,6 +34,7 @@ export default tseslint.config(
       '@stylistic/ts/semi': 'error',
       '@stylistic/ts/indent': ['error', 2],
       '@stylistic/ts/quotes': ['error', 'single'],
+      '@/no-trailing-spaces': ['error', { 'skipBlankLines': false }],
       'linebreak-style': ['error', 'unix'],
       'eol-last': ['error', 'always']
     },

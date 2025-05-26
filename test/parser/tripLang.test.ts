@@ -1,6 +1,5 @@
 import { expect } from 'chai';
-import { readFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { dirname } from 'path';
 import { createParserState } from '../../lib/parser/parserState.js';
 import { parseTripLang, parseTripLangDefinition } from '../../lib/parser/tripLang.js';
 import { fileURLToPath } from 'url';
@@ -10,16 +9,13 @@ import { mkVar } from '../../lib/terms/lambda.js';
 import { TypedLambda } from '../../lib/types/typedLambda.js';
 import { SKIExpression } from '../../lib/ski/expression.js';
 import { S, K, I } from '../../lib/ski/terminal.js';
+import { loadInput } from '../util/fileLoader.js';
 
-function loadInput(filename: string): string {
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const filePath = resolve(__dirname, 'inputs', filename);
-  return readFileSync(filePath, 'utf-8').trim();
-}
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('parseTripLang', () => {
   it('parses polymorphic definitions', () => {
-    const input = loadInput('polyId.trip');
+    const input = loadInput('polyId.trip', __dirname);
     const [term] = parseTripLangDefinition(createParserState(input));
 
     expect(term).to.deep.equal({
@@ -33,7 +29,7 @@ describe('parseTripLang', () => {
   });
 
   it('parses typed definitions with explicit types', () => {
-    const input = loadInput('typedInc.trip');
+    const input = loadInput('typedInc.trip', __dirname);
     const [term] = parseTripLangDefinition(createParserState(input));
 
     expect(term).to.deep.equal({
@@ -56,7 +52,7 @@ describe('parseTripLang', () => {
   });
 
   it('parses untyped definitions', () => {
-    const input = loadInput('untypedDouble.trip');
+    const input = loadInput('untypedDouble.trip', __dirname);
     const [term] = parseTripLangDefinition(createParserState(input));
 
     expect(term).to.deep.equal({
@@ -74,7 +70,7 @@ describe('parseTripLang', () => {
   });
 
   it('parses complex combinator definitions', () => {
-    const input = loadInput('combinatorY.trip');
+    const input = loadInput('combinatorY.trip', __dirname);
     const [term] = parseTripLangDefinition(createParserState(input));
 
     expect(term).to.deep.equal({
@@ -115,7 +111,7 @@ describe('parseTripLang', () => {
   });
 
   it('parses type definitions correctly', () => {
-    const input = loadInput('typeNat.trip');
+    const input = loadInput('typeNat.trip', __dirname);
     const [term] = parseTripLangDefinition(createParserState(input));
 
     const typeVar = (name: string) => ({ kind: 'type-var', typeName: name });
@@ -136,7 +132,7 @@ describe('parseTripLang', () => {
   });
 
   it('parses multiple definitions', () => {
-    const input = loadInput('church.trip');
+    const input = loadInput('church.trip', __dirname);
     const program = parseTripLang(input);
     const typeVar = (name: string) => ({ kind: 'type-var' as const, typeName: name });
     const X = typeVar('X');

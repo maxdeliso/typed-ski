@@ -293,3 +293,23 @@ export function keyValuePairs<TKey, TValue>(
 
   return result;
 }
+
+export function emptyAVL<TKey, TValue>(
+  tr: AVLTree<TKey, TValue>
+): boolean {
+  return keyValuePairs(tr).length === 0;
+}
+
+export function mergeAVL<TKey, TValue>(
+  a: AVLTree<TKey, TValue>,
+  b: AVLTree<TKey, TValue>,
+  compareKeys: (a: TKey, b: TKey) => number
+): AVLTree<TKey, TValue> {
+  let result = a;
+
+  for (const [k, v] of keyValuePairs<TKey, TValue>(b)) {
+    result = insertAVL(result, k, v, compareKeys);
+  }
+
+  return result;
+}

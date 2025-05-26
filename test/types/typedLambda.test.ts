@@ -3,13 +3,13 @@ import { describe, it } from 'mocha';
 
 import { cons } from '../../lib/cons.js';
 import { mkVar } from '../../lib/terms/lambda.js';
-import { addBinding, emptyContext, mkTypedAbs, typecheck } from '../../lib/types/typedLambda.js';
+import { addBinding, emptyContext, mkTypedAbs, typecheckTypedLambda } from '../../lib/types/typedLambda.js';
 import { mkTypeVariable, arrow, typesLitEq, arrows } from '../../lib/types/types.js';
 
 describe('type checking errors', () => {
   it('throws an error for free variables', () => {
     // Create a term with a free variable: just the variable "x" with no binding.
-    expect(() => typecheck(mkVar('x'))).to.throw(/unknown term named: x/);
+    expect(() => typecheckTypedLambda(mkVar('x'))).to.throw(/unknown term named: x/);
   });
 
   it('throws an error on duplicate binding', () => {
@@ -24,7 +24,7 @@ describe('type checking', () => {
   it('typechecks the I combinator', () => {
     // λx : a . x ≡ I : a -> a
     const typedI = mkTypedAbs('x', mkTypeVariable('a'), mkVar('x'));
-    const typeofI = typecheck(typedI);
+    const typeofI = typecheckTypedLambda(typedI);
     const expectedTy = arrow(mkTypeVariable('a'), mkTypeVariable('a'));
     expect(typesLitEq(typeofI, expectedTy)).to.equal(true);
   });
@@ -37,7 +37,7 @@ describe('type checking', () => {
           mkVar('x') // x
         )
       );
-    const typeofK = typecheck(typedK);
+    const typeofK = typecheckTypedLambda(typedK);
     const expectedTy = arrows(mkTypeVariable('a'), mkTypeVariable('b'), mkTypeVariable('a'));
 
     expect(typesLitEq(typeofK, expectedTy)).to.equal(true);
@@ -71,7 +71,7 @@ describe('type checking', () => {
       arrows(mkTypeVariable('a'), mkTypeVariable('c'))
     );
 
-    const typeofS = typecheck(typedS);
+    const typeofS = typecheckTypedLambda(typedS);
 
     expect(typesLitEq(typeofS, expectedTy)).to.equal(true);
   });

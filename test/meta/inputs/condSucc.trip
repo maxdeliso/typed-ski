@@ -1,0 +1,22 @@
+type Nat  = ∀X . (X → X) → X → X
+type Bool = ∀B . B → B → B
+
+poly zero  = ΛX . λs : X → X . λz : X . z
+poly succ  = λn : Nat . Λa . λs : a → a . λz : a . s (n [a] s z)
+
+poly one   = succ zero
+poly two   = succ one
+
+poly true  = ΛB . λt : B . λf : B . t
+poly false = ΛB . λt : B . λf : B . f
+
+poly cond =
+  ΛX .
+    λb : Bool .
+    λt : X .
+    λf : X .
+      b [X] t f
+
+poly pickNat = cond [Nat] false (succ two) one
+
+poly main = succ (succ pickNat)

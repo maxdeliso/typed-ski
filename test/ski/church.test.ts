@@ -5,7 +5,7 @@ import { V, Succ, Fst, Snd, Car, Cdr, F, True, False, Plus, Zero, B } from '../.
 import { symbolicEvaluator } from '../../lib/evaluator/skiEvaluator.js';
 import { UnChurchNumber, ChurchN, ChurchB, UnChurchBoolean } from '../../lib/ski/church.js';
 import { S, K, I } from '../../lib/ski/terminal.js';
-import { convertLambda } from '../../lib/conversion/converter.js';
+import { bracketLambda } from '../../lib/conversion/converter.js';
 import { predLambda } from '../../lib/consts/lambdas.js';
 import { apply } from '../../lib/ski/expression.js';
 
@@ -152,7 +152,7 @@ describe('Church encodings', () => {
   const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
 
   it('computes the predecessor', () => {
-    const pred = convertLambda(predLambda);
+    const pred = bracketLambda(predLambda);
 
     // Test numbers from 0 to N-1
     for (let m = 0; m < N; m++) {

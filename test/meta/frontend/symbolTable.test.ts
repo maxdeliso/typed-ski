@@ -1,6 +1,5 @@
 import { assert } from 'chai';
-import { indexSymbols, resolveDefTerm } from '../../../lib/meta/frontend/symbolTable.js';
-import { TripLangProgram, PolyDefinition, TypedDefinition, TypeDefinition } from '../../../lib/meta/trip.js';
+import { indexSymbols, resolveDefTerm, TripLangProgram, PolyDefinition, TypedDefinition, TypeDefinition } from '../../../lib/index.js';
 import { CompilationError } from '../../../lib/meta/frontend/compilation.js';
 import { searchAVL } from '../../../lib/data/avl/avlNode.js';
 import { compareStrings } from '../../../lib/data/map/stringMap.js';

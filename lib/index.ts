@@ -46,3 +46,21 @@ export { bracketLambda } from './conversion/converter.js';
 // Type system exports
 export { prettyPrintTy } from './types/types.js';
 export { inferType } from './types/inference.js';
+
+// TripLang compiler exports
+export { parseTripLang } from './parser/tripLang.js';
+export { compile } from './meta/frontend.js';
+export {
+  type TripLangProgram,
+  type TripLangTerm,
+  type PolyDefinition,
+  type TypedDefinition,
+  type TypeDefinition
+} from './meta/trip.js';
+export { externalReferences } from './meta/frontend/externalReferences.js';
+export { indexSymbols, resolveDefTerm } from './meta/frontend/symbolTable.js';
+export { resolveRefs } from './meta/frontend/substitution.js';
+
+// Additional utility exports
+export { UnChurchNumber } from './ski/church.js';
+export { searchAVL } from './data/avl/avlNode.js';

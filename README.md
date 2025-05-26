@@ -18,18 +18,7 @@ Run the test suite:
 
 ```bash
 yarn test
-```
-
-### Test Coverage
-
-Generate test coverage report:
-
-```bash
-# Generate text-only coverage report
 yarn test:coverage
-
-# Generate HTML coverage report (available in the coverage/ directory)
-yarn test:coverage:report
 ```
 
 ## Books
@@ -40,8 +29,9 @@ yarn test:coverage:report
 
 ## Papers
 
-* D. A. Turner, "A new implementation technique for applicative languages," Software: Practice and Experience, vol. 9, no. 1, pp. 31-49, 1979. DOI: 10.1002/spe.4380090105
-* W. Stoye, T. J. W. Clarke, and A. C. Norman, "Some practical methods for rapid combinator reduction," in Proceedings of the 1984 ACM Symposium on LISP and functional programming (LFP '84), ACM, New York, NY, USA, pp. 159-166, 1984. DOI: 10.1145/800055.802038
+* D. A. Turner, "A new implementation technique for applicative languages," *Software: Practice and Experience*, vol. 9, no. 1, pp. 31-49, 1979. DOI: 10.1002/spe.4380090105
+* W. Stoye, T. J. W. Clarke, and A. C. Norman, "Some practical methods for rapid combinator reduction," in *Proceedings of the 1984 ACM Symposium on LISP and Functional Programming* (LFP '84), ACM, New York, NY, USA, pp. 159-166, 1984. DOI: 10.1145/800055.802038
+* H. G. Baker, "CONS should not CONS its arguments, or, a lazy alloc is a smart alloc," *ACM SIGPLAN Notices*, vol. 27, no. 3, pp. 24-34, 1992. DOI: 10.1145/130854.130858
 
 ## Status
 

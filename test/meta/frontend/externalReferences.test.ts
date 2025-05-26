@@ -1,8 +1,6 @@
 import { assert } from 'chai';
-import { externalReferences } from '../../../lib/meta/frontend/externalReferences.js';
+import { externalReferences, parseTripLang, resolveDefTerm } from '../../../lib/index.js';
 import { keyValuePairs } from '../../../lib/data/avl/avlNode.js';
-import { parseTripLang } from '../../../lib/parser/tripLang.js';
-import { resolveDefTerm } from '../../../lib/meta/frontend/symbolTable.js';
 
 describe('externalReferences', () => {
   it('identifies external references in a simple lambda abstraction', () => {

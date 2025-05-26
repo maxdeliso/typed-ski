@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "SKI combinators in Typescript",
   "scripts": {
     "clean": "rimraf build/",
@@ -43,33 +43,36 @@
   },
   "homepage": "https://github.com/maxdeliso/typed-ski",
   "devDependencies": {
-    "@eslint/eslintrc": "^3.1.0",
-    "@eslint/js": "^9.16.0",
-    "@stylistic/eslint-plugin": "3.0.1",
-    "@stylistic/eslint-plugin-ts": "3.0.1",
-    "@types/chai": "^5.0.1",
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.27.0",
+    "@stylistic/eslint-plugin": "^3.0.1",
+    "@stylistic/eslint-plugin-ts": "^3.0.1",
+    "@types/chai": "^5.2.2",
     "@types/eslint__js": "^8.42.3",
     "@types/jest": "^29.5.11",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^22.10.1",
+    "@types/node": "^22.15.21",
     "@types/random-seed": "^0.3.5",
     "@types/terminal-kit": "^2.5.6",
     "assemblyscript": "^0.27.36",
     "c8": "^10.1.3",
     "chai": "^5.1.2",
-    "eslint": "^9.16.0",
+    "eslint": "^9.27.0",
     "jest": "^29.7.0",
-    "mocha": "^11.0.1",
+    "mocha": "^11.5.0",
     "rimraf": "^6.0.1",
-    "tsx": "^4.19.3",
+    "tsx": "^4.19.4",
     "typescript": "^5.5.3",
-    "typescript-eslint": "^8.17.0"
+    "typescript-eslint": "^8.32.1"
   },
   "dependencies": {
     "random-seed": "^0.3.0",
     "terminal-kit": "^3.0.1"
   },
   "packageManager": "yarn@4.7.0",
+  "engines": {
+    "node": "22.16.0"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   }

@@ -1,25 +1,25 @@
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { loadInput } from '../util/fileLoader.js';
-import { parseTripLang } from '../../lib/parser/tripLang.js';
+import { assert } from 'chai';
 import {
+  parseTripLang,
+  compile,
+  indexSymbols,
+  resolveRefs,
+  externalReferences,
   eraseSystemF,
   eraseTypedLambda,
   prettyPrintSystemF,
   prettyPrintTy,
   symbolicEvaluator,
-  SystemFTerm
+  SystemFTerm,
+  bracketLambda,
+  UnChurchNumber,
+  parseSystemF,
+  searchAVL
 } from '../../lib/index.js';
-import { assert } from 'chai';
-import { compile } from '../../lib/meta/frontend.js';
-import { indexSymbols } from '../../lib/meta/frontend/symbolTable.js';
-import { resolveRefs } from '../../lib/meta/frontend/substitution.js';
-import { externalReferences } from '../../lib/meta/frontend/externalReferences.js';
 import { keyValuePairs, AVLTree } from '../../lib/data/avl/avlNode.js';
-import { parseSystemF } from '../../lib/parser/systemFTerm.js';
-import { UnChurchNumber } from '../../lib/ski/church.js';
-import { bracketLambda } from '../../lib/conversion/converter.js';
-import { searchAVL } from '../../lib/data/avl/avlNode.js';
 import { compareStrings } from '../../lib/data/map/stringMap.js';
 import { BaseType } from '../../lib/types/types.js';
 import { initArenaEvaluator } from '../../lib/evaluator/arenaEvaluator.js';

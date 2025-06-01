@@ -1,7 +1,5 @@
 import { ArenaKind, ArenaSym } from "../lib/shared/arena";
 
-declare function abort(msgPtr: number, filePtr: number, line: number, col: number): void;
-
 const EMPTY: u32 = 0xffff_ffff; // sentinel
 
 const INITIAL_CAP: u32 = 1 << 20;            // ≈ 1 048 576 nodes  (fits in 32 MiB)
@@ -28,7 +26,6 @@ function ensureCapacity(nodesNeeded: u32 = 1): void {
   if (top + nodesNeeded <= cap) return;
 
   if (cap >= MAX_CAP) {
-    abort(0, 0, 0, 1);
     unreachable();
   }
 

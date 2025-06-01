@@ -1,4 +1,4 @@
-import { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
+import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
 import {
   indexSymbols as indexSymbolsImpl,
   resolveDefTerm,
@@ -7,14 +7,14 @@ import { elaborateTerms } from "./elaboration.ts";
 import { resolveRefs } from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
 import {
-  AVLTree,
+  type AVLTree,
   createEmptyAVL,
   emptyAVL,
   insertAVL,
 } from "../../data/avl/avlNode.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
 import { typecheckSystemF } from "../../index.ts";
-import { BaseType } from "../../types/types.ts";
+import type { BaseType } from "../../types/types.ts";
 import { typecheckTypedLambda } from "../../types/typedLambda.ts";
 import { prettyTerm } from "./prettyPrint.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";

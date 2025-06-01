@@ -1,10 +1,10 @@
 import { assert, assertEquals } from "https://deno.land/std/assert/mod.ts";
 import { dirname, fromFileUrl, join } from "https://deno.land/std/path/mod.ts";
-import rsexport, { RandomSeed } from "npm:random-seed";
+import rsexport, { type RandomSeed } from "npm:random-seed";
 const { create } = rsexport;
 
 import {
-  ArenaEvaluatorWasm,
+  type ArenaEvaluatorWasm,
   initArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -17,7 +17,7 @@ let arenaEval: ArenaEvaluatorWasm;
 async function setupEvaluator() {
   const wasmPath = join(
     dirname(fromFileUrl(import.meta.url)),
-    "../../build/debug.wasm",
+    "../../assembly/build/debug.wasm",
   );
   arenaEval = await initArenaEvaluator(wasmPath);
 }

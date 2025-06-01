@@ -1,11 +1,11 @@
 import { cons } from "../cons.ts";
-import { AVLTree } from "../data/avl/avlNode.ts";
+import type { AVLTree } from "../data/avl/avlNode.ts";
 import {
   createStringMap,
   insertStringMap,
   searchStringMap,
 } from "../data/map/stringMap.ts";
-import { BaseType, mkTypeVariable } from "./types.ts";
+import { type BaseType, mkTypeVariable } from "./types.ts";
 import { varSource } from "./varSource.ts";
 
 /**

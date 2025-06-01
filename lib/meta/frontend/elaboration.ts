@@ -1,13 +1,13 @@
 import { searchAVL } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
-import { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
+import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
 import {
   mkSystemFAbs,
   mkSystemFTAbs,
   mkSystemFTypeApp,
-  SystemFTerm,
+  type SystemFTerm,
 } from "../../terms/systemF.ts";
-import { BaseType } from "../../types/types.ts";
+import type { BaseType } from "../../types/types.ts";
 import { cons } from "../../cons.ts";
 
 export function elaborateTerms(

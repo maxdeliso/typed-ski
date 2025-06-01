@@ -13,8 +13,8 @@ import {
 } from "../../lib/terms/systemF.ts";
 import { cons } from "../../lib/cons.ts";
 import { mkVar } from "../../lib/terms/lambda.ts";
-import { TypedLambda } from "../../lib/types/typedLambda.ts";
-import { SKIExpression } from "../../lib/ski/expression.ts";
+import type { TypedLambda } from "../../lib/types/typedLambda.ts";
+import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
 

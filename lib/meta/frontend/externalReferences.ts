@@ -1,12 +1,12 @@
 import {
-  AVLTree,
+  type AVLTree,
   createEmptyAVL,
   insertAVL,
   searchAVL,
 } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
-import { BaseType } from "../../types/types.ts";
-import { TripLangDefType } from "../trip.ts";
+import type { BaseType } from "../../types/types.ts";
+import type { TripLangDefType } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
 
 export function externalReferences(td: TripLangDefType): [

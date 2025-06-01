@@ -1,7 +1,7 @@
-import { RandomSeed } from "npm:random-seed";
+import type { RandomSeed } from "npm:random-seed";
 import { cons } from "../cons.ts";
-import { SKIExpression } from "./expression.ts";
-import { I, K, S, SKITerminal } from "./terminal.ts";
+import type { SKIExpression } from "./expression.ts";
+import { I, K, S, type SKITerminal } from "./terminal.ts";
 
 export const randExpression = (rs: RandomSeed, n: number): SKIExpression => {
   if (n <= 0) {

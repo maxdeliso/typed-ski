@@ -1,11 +1,11 @@
 import { assert } from "npm:chai";
 import {
   indexSymbols,
-  PolyDefinition,
+  type PolyDefinition,
   resolveDefTerm,
-  TripLangProgram,
-  TypedDefinition,
-  TypeDefinition,
+  type TripLangProgram,
+  type TypedDefinition,
+  type TypeDefinition,
 } from "../../../lib/index.ts";
 import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
 import { searchAVL } from "../../../lib/data/avl/avlNode.ts";

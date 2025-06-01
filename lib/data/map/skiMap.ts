@@ -1,11 +1,11 @@
 import {
-  AVLTree,
+  type AVLTree,
   createEmptyAVL,
   insertAVL,
   searchAVL,
 } from "../avl/avlNode.ts";
 
-import { SKIExpression, SKIKey } from "../../ski/expression.ts";
+import type { SKIExpression, SKIKey } from "../../ski/expression.ts";
 
 function compareSKIKeys(a: SKIKey, b: SKIKey): number {
   const len = Math.min(a.length, b.length);

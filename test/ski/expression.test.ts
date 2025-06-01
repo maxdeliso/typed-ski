@@ -1,9 +1,13 @@
 import { assert } from "npm:chai";
-import rsexport, { RandomSeed } from "npm:random-seed";
+import rsexport, { type RandomSeed } from "npm:random-seed";
 const { create } = rsexport;
 
 import { cons } from "../../lib/cons.ts";
-import { prettyPrint, size, SKIExpression } from "../../lib/ski/expression.ts";
+import {
+  prettyPrint,
+  size,
+  type SKIExpression,
+} from "../../lib/ski/expression.ts";
 import { K, S } from "../../lib/ski/terminal.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 

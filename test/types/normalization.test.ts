@@ -1,7 +1,7 @@
 import { assert, expect } from "npm:chai";
 
 import { normalize } from "../../lib/types/normalization.ts";
-import { arrow, BaseType, mkTypeVariable } from "../../lib/types/types.ts";
+import { arrow, type BaseType, mkTypeVariable } from "../../lib/types/types.ts";
 import { forall as mkUniversal } from "../../lib/types/systemF.ts";
 
 function assertIsTypeVar(

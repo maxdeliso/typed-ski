@@ -1,7 +1,7 @@
 import { keyValuePairs, searchAVL } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
-import { BaseType } from "../../types/types.ts";
-import {
+import type { BaseType } from "../../types/types.ts";
+import type {
   SymbolTable,
   TripLangDefType,
   TripLangProgram,

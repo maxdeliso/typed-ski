@@ -1,4 +1,8 @@
-import { createParserState, ParserState, remaining } from "./parserState.ts";
+import {
+  createParserState,
+  type ParserState,
+  remaining,
+} from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 
 /**

@@ -1,18 +1,18 @@
 import { cons } from "../cons.ts";
 import {
   arrow,
-  BaseType,
+  type BaseType,
   mkTypeVariable,
   prettyPrintTy,
   typesLitEq,
-  TypeVariable,
+  type TypeVariable,
 } from "./types.ts";
-import { UntypedLambda } from "../terms/lambda.ts";
+import type { UntypedLambda } from "../terms/lambda.ts";
 import {
-  Context,
+  type Context,
   emptyContext,
   mkTypedAbs,
-  TypedLambda,
+  type TypedLambda,
 } from "./typedLambda.ts";
 import { varSource } from "./varSource.ts";
 import { normalizeTy } from "./normalization.ts";

@@ -1,10 +1,10 @@
-import { mkUntypedAbs, mkVar, UntypedLambda } from "../terms/lambda.ts";
+import { mkUntypedAbs, mkVar, type UntypedLambda } from "../terms/lambda.ts";
 import {
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
-  ParserState,
+  type ParserState,
   peek,
 } from "./parserState.ts";
 import { parseChain } from "./chain.ts";

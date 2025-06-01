@@ -1,21 +1,21 @@
 import {
   arrow,
-  BaseType,
-  ForallType,
+  type BaseType,
+  type ForallType,
   prettyPrintTy,
   typesLitEq,
 } from "./types.ts";
 import { cons } from "../cons.ts";
-import { SystemFTerm } from "../terms/systemF.ts";
-import { mkTypedAbs, TypedLambda } from "./typedLambda.ts";
+import type { SystemFTerm } from "../terms/systemF.ts";
+import { mkTypedAbs, type TypedLambda } from "./typedLambda.ts";
 import {
-  AVLTree,
+  type AVLTree,
   createEmptyAVL,
   insertAVL,
   searchAVL,
 } from "../data/avl/avlNode.ts";
 import { compareStrings } from "../data/map/stringMap.ts";
-import { createSet, insertSet, Set } from "../data/set/set.ts";
+import { createSet, insertSet, type Set } from "../data/set/set.ts";
 import { normalize } from "./normalization.ts";
 
 /*

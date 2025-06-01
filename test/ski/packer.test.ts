@@ -1,9 +1,9 @@
 import { assert } from "npm:chai";
 
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { size, SKIExpression } from "../../lib/ski/expression.ts";
+import { size, type SKIExpression } from "../../lib/ski/expression.ts";
 import {
-  BinaryHeap,
+  type BinaryHeap,
   maxHeapIndex,
   packHeap,
   unpackHeap,

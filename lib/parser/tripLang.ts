@@ -3,7 +3,7 @@ import {
   matchCh,
   parseIdentifier,
   parseKeyword,
-  ParserState,
+  type ParserState,
   remaining,
   skipWhitespace,
 } from "./parserState.ts";
@@ -12,7 +12,7 @@ import { parseSystemFTerm } from "./systemFTerm.ts";
 import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
 import { parseUntypedLambdaInternal } from "./untyped.ts";
 import { parseSKIInternal } from "./ski.ts";
-import { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
+import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
 import { parseSystemFType } from "./systemFType.ts";
 
 export function parseTripLangDefinition(

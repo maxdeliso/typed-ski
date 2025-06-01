@@ -1,5 +1,5 @@
-import { ConsCell } from "../cons.ts";
-import { BaseType } from "../types/types.ts";
+import type { ConsCell } from "../cons.ts";
+import type { BaseType } from "../types/types.ts";
 
 /**
  * A term variable.

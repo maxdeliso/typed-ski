@@ -1,6 +1,6 @@
 import { bracketLambda, eraseSystemF } from "../../index.ts";
 import { eraseTypedLambda } from "../../types/typedLambda.ts";
-import { TripLangTerm } from "../trip.ts";
+import type { TripLangTerm } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
 
 export function termLevel(dt: TripLangTerm): number {

@@ -1,5 +1,5 @@
 import { cons } from "../cons.ts";
-import { SKIExpression } from "./expression.ts";
+import type { SKIExpression } from "./expression.ts";
 import { SKITerminalSymbol, term } from "./terminal.ts";
 
 export type SymbolHeap = (SKITerminalSymbol | undefined)[];

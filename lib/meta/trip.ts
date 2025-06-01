@@ -1,9 +1,9 @@
-import { AVLTree } from "../data/avl/avlNode.ts";
-import { SKIExpression } from "../ski/expression.ts";
-import { UntypedLambda } from "../terms/lambda.ts";
-import { SystemFTerm } from "../terms/systemF.ts";
-import { TypedLambda } from "../types/typedLambda.ts";
-import { BaseType } from "../types/types.ts";
+import type { AVLTree } from "../data/avl/avlNode.ts";
+import type { SKIExpression } from "../ski/expression.ts";
+import type { UntypedLambda } from "../terms/lambda.ts";
+import type { SystemFTerm } from "../terms/systemF.ts";
+import type { TypedLambda } from "../types/typedLambda.ts";
+import type { BaseType } from "../types/types.ts";
 
 export interface TripLangProgram {
   kind: "program";

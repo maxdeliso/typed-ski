@@ -1,11 +1,11 @@
 import { mkVar } from "../terms/lambda.ts";
-import { mkTypedAbs, TypedLambda } from "../types/typedLambda.ts";
+import { mkTypedAbs, type TypedLambda } from "../types/typedLambda.ts";
 import {
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
-  ParserState,
+  type ParserState,
   peek,
 } from "./parserState.ts";
 import { parseChain } from "./chain.ts";

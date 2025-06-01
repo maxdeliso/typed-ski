@@ -1,5 +1,5 @@
 import {
-  AVLTree,
+  type AVLTree,
   createEmptyAVL,
   insertAVL,
   keyValuePairs,

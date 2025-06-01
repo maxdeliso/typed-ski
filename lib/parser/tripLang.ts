@@ -1,56 +1,70 @@
-import { ParserState, createParserState, matchCh, parseIdentifier, parseKeyword, remaining, skipWhitespace } from './parserState.js';
-import { ParseError } from './parseError.js';
-import { parseSystemFTerm } from './systemFTerm.js';
-import { parseTypedLambdaInternal, parseArrowType } from './typedLambda.js';
-import { parseUntypedLambdaInternal } from './untyped.js';
-import { parseSKIInternal } from './ski.js';
-import { TripLangProgram, TripLangTerm } from '../meta/trip.js';
-import { parseSystemFType } from './systemFType.js';
+import {
+  createParserState,
+  matchCh,
+  parseIdentifier,
+  parseKeyword,
+  ParserState,
+  remaining,
+  skipWhitespace,
+} from "./parserState.ts";
+import { ParseError } from "./parseError.ts";
+import { parseSystemFTerm } from "./systemFTerm.ts";
+import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
+import { parseUntypedLambdaInternal } from "./untyped.ts";
+import { parseSKIInternal } from "./ski.ts";
+import { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
+import { parseSystemFType } from "./systemFType.ts";
 
-export function parseTripLangDefinition(state: ParserState): [TripLangTerm, ParserState] {
-  const [kind, stateAfterKind] = parseKeyword(state,
-    ['poly', 'typed', 'untyped', 'combinator', 'type']
-  );
+export function parseTripLangDefinition(
+  state: ParserState,
+): [TripLangTerm, ParserState] {
+  const [kind, stateAfterKind] = parseKeyword(state, [
+    "poly",
+    "typed",
+    "untyped",
+    "combinator",
+    "type",
+  ]);
 
   const [name, stateAfterName] = parseIdentifier(stateAfterKind);
   let currentState = skipWhitespace(stateAfterName);
   let type;
 
-  if (kind === 'typed') {
-    currentState = matchCh(currentState, ':');
+  if (kind === "typed") {
+    currentState = matchCh(currentState, ":");
     currentState = skipWhitespace(currentState);
     [, type, currentState] = parseArrowType(currentState);
   }
 
   currentState = skipWhitespace(currentState);
-  currentState = matchCh(currentState, '=');
+  currentState = matchCh(currentState, "=");
   currentState = skipWhitespace(currentState);
 
   let term;
   let finalState;
   switch (kind) {
-    case 'poly':
+    case "poly":
       [, term, finalState] = parseSystemFTerm(currentState);
-      return [{ kind: 'poly', name, term }, skipWhitespace(finalState)];
+      return [{ kind: "poly", name, term }, skipWhitespace(finalState)];
 
-    case 'typed':
+    case "typed":
       [, term, finalState] = parseTypedLambdaInternal(currentState);
       if (type === undefined) {
-        throw new ParseError('expected type for typed definition');
+        throw new ParseError("expected type for typed definition");
       }
-      return [{ kind: 'typed', name, type, term }, skipWhitespace(finalState)];
+      return [{ kind: "typed", name, type, term }, skipWhitespace(finalState)];
 
-    case 'untyped':
+    case "untyped":
       [, term, finalState] = parseUntypedLambdaInternal(currentState);
-      return [{ kind: 'untyped', name, term }, skipWhitespace(finalState)];
+      return [{ kind: "untyped", name, term }, skipWhitespace(finalState)];
 
-    case 'combinator':
+    case "combinator":
       [, term, finalState] = parseSKIInternal(currentState);
-      return [{ kind: 'combinator', name, term }, skipWhitespace(finalState)];
+      return [{ kind: "combinator", name, term }, skipWhitespace(finalState)];
 
-    case 'type':
+    case "type":
       [, type, finalState] = parseSystemFType(currentState);
-      return [{ kind: 'type', name, type }, skipWhitespace(finalState)];
+      return [{ kind: "type", name, type }, skipWhitespace(finalState)];
 
     default:
       throw new ParseError(`Unknown definition kind: ${kind}`);
@@ -61,7 +75,7 @@ export function parseTripLang(input: string): TripLangProgram {
   const terms: TripLangTerm[] = [];
   let state = createParserState(input);
 
-  for(;;) {
+  for (;;) {
     state = skipWhitespace(state);
 
     const [hasRemaining] = remaining(state);
@@ -73,5 +87,5 @@ export function parseTripLang(input: string): TripLangProgram {
     state = skipWhitespace(stateAfterTerm);
   }
 
-  return { kind: 'program', terms };
+  return { kind: "program", terms };
 }

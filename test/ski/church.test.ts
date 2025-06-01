@@ -1,174 +1,194 @@
-import { describe, it } from 'mocha';
-import { expect } from 'chai';
+import { expect } from "npm:chai";
 
-import { V, Succ, Fst, Snd, Car, Cdr, F, True, False, Plus, Zero, B } from '../../lib/consts/combinators.js';
-import { symbolicEvaluator } from '../../lib/evaluator/skiEvaluator.js';
-import { UnChurchNumber, ChurchN, ChurchB, UnChurchBoolean } from '../../lib/ski/church.js';
-import { S, K, I } from '../../lib/ski/terminal.js';
-import { bracketLambda } from '../../lib/conversion/converter.js';
-import { predLambda } from '../../lib/consts/lambdas.js';
-import { apply } from '../../lib/ski/expression.js';
+import {
+  B,
+  Car,
+  Cdr,
+  F,
+  False,
+  Fst,
+  Plus,
+  Snd,
+  Succ,
+  True,
+  V,
+  Zero,
+} from "../../lib/consts/combinators.ts";
+import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import {
+  ChurchB,
+  ChurchN,
+  UnChurchBoolean,
+  UnChurchNumber,
+} from "../../lib/ski/church.ts";
+import { I, K, S } from "../../lib/ski/terminal.ts";
+import { bracketLambda } from "../../lib/conversion/converter.ts";
+import { predLambda } from "../../lib/consts/lambdas.ts";
+import { apply } from "../../lib/ski/expression.ts";
 
-/*
- * This test verifies that numeral systems and boolean logic can be encoded
- * using only combinators. See https://www.youtube.com/watch?v=6BnVo7EHO_8 this
- * talk by Gabriel Lebec for an excellent in-depth explanation.
- */
+// isZero ≡ F True (KF)
+const IsZero = apply(F, True, apply(K, False));
 
-describe('Church encodings', () => {
+/* λp. <Succ (Car p), Car p>  — pair-shifting successor */
+const pairShiftSucc = apply(
+  S,
+  apply(apply(B, apply(B, V, Succ)), apply(B, apply(B, I, Car), I)),
+  apply(B, apply(B, I, Car), I),
+);
+
+const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
+
+Deno.test("Church encodings", async (t) => {
   const N = 5;
 
-  it('reduces 0 + 1 to 1 ', () => {
-    expect(UnChurchNumber(apply(Succ, ChurchN(0))))
-      .to.deep.equal(1);
+  await t.step("succ / basic arithmetic", async (t) => {
+    await t.step("0 + 1 = 1", () => {
+      expect(UnChurchNumber(apply(Succ, ChurchN(0)))).to.equal(1);
+    });
+
+    await t.step("1 + 1 = 2", () => {
+      expect(
+        UnChurchNumber(symbolicEvaluator.reduce(apply(Succ, ChurchN(1)))),
+      ).to.equal(2);
+    });
   });
 
-  it('reduces 1 + 1 to 2', () => {
-    expect(UnChurchNumber(symbolicEvaluator.reduce(apply(Succ, ChurchN(1)))))
-      .to.deep.equal(2);
-  });
-
-  it('reduces boolean expressions in Church encoding', () => {
-    [false, true].forEach(p => {
-      [false, true].forEach(q => {
+  await t.step("boolean logic (AND / OR in Church encoding)", () => {
+    [false, true].forEach((p) => {
+      [false, true].forEach((q) => {
         const conj = p && q;
-
         const dis = p || q;
 
-        /*
-         * λpq.pqp is AND
-         *
-         * (AND)TT = T?T:T = T
-         * (AND)TF = T?F:T = F
-         * (AND)FT = F?T:F = F
-         * (AND)FF = F?F:F = F
-         */
-        expect(UnChurchBoolean(symbolicEvaluator.reduce(apply(ChurchB(p), ChurchB(q), ChurchB(p)))))
-          .to.deep.equal(conj);
+        // AND ≡ λpq.p q p
+        expect(
+          UnChurchBoolean(
+            symbolicEvaluator.reduce(apply(ChurchB(p), ChurchB(q), ChurchB(p))),
+          ),
+        ).to.equal(conj);
 
-        /*
-         * λpq.ppq is OR
-         *
-         * (OR)TT = T?T:T = T
-         * (OR)TF = T?T:F = T
-         * (OR)FT = F?F:T = T
-         * (OR)FF = F?F:F = F
-         */
-        expect(UnChurchBoolean(symbolicEvaluator.reduce(apply(ChurchB(p), ChurchB(p), ChurchB(q)))))
-          .to.deep.equal(dis);
+        // OR  ≡ λpq.p p q
+        expect(
+          UnChurchBoolean(
+            symbolicEvaluator.reduce(apply(ChurchB(p), ChurchB(p), ChurchB(q))),
+          ),
+        ).to.equal(dis);
       });
     });
   });
 
-  it('reduces pairs', () => {
-    expect(UnChurchNumber(symbolicEvaluator.reduce(apply(V, ChurchN(0), ChurchN(1), Fst))))
-      .to.equal(0);
+  await t.step("pairs (make, fst, snd, car, cdr)", () => {
+    expect(
+      UnChurchNumber(
+        symbolicEvaluator.reduce(apply(V, ChurchN(0), ChurchN(1), Fst)),
+      ),
+    ).to.equal(0);
 
-    expect(UnChurchNumber(symbolicEvaluator.reduce(apply(V, ChurchN(0), ChurchN(1), Snd))))
-      .to.equal(1);
+    expect(
+      UnChurchNumber(
+        symbolicEvaluator.reduce(apply(V, ChurchN(0), ChurchN(1), Snd)),
+      ),
+    ).to.equal(1);
 
-    expect(UnChurchNumber(symbolicEvaluator.reduce(
-      apply(Car, apply(V, ChurchN(0), ChurchN(1)))
-    ))).to.equal(0);
+    expect(
+      UnChurchNumber(
+        symbolicEvaluator.reduce(
+          apply(Car, apply(V, ChurchN(0), ChurchN(1))),
+        ),
+      ),
+    ).to.equal(0);
 
-    expect(UnChurchNumber(symbolicEvaluator.reduce(
-      apply(Cdr, apply(V, ChurchN(0), ChurchN(1)))
-    ))).to.equal(1);
+    expect(
+      UnChurchNumber(
+        symbolicEvaluator.reduce(
+          apply(Cdr, apply(V, ChurchN(0), ChurchN(1))),
+        ),
+      ),
+    ).to.equal(1);
   });
 
-  /*
-   * F True (KF) n -> n (KF) True
-   */
-  const IsZero = apply(F, True, apply(K, False));
+  await t.step("isZero predicate", () => {
+    // definition-style tests
+    expect(
+      UnChurchBoolean(
+        symbolicEvaluator.reduce(apply(ChurchN(0), apply(K, False), True)),
+      ),
+    ).to.equal(true);
 
-  it('isZero tests for whether a numeral is zero', () => {
-    expect(UnChurchBoolean(symbolicEvaluator.reduce(
-      apply(ChurchN(0), apply(K, False), True)
-    ))).to.equal(true);
+    expect(
+      UnChurchBoolean(
+        symbolicEvaluator.reduce(apply(ChurchN(1), apply(K, False), True)),
+      ),
+    ).to.equal(false);
 
-    expect(UnChurchBoolean(symbolicEvaluator.reduce(
-      apply(ChurchN(1), apply(K, False), True)
-    ))).to.equal(false);
+    // IsZero combinator
+    expect(
+      UnChurchBoolean(symbolicEvaluator.reduce(apply(IsZero, ChurchN(0)))),
+    ).to.equal(true);
 
-    expect(UnChurchBoolean(symbolicEvaluator.reduce(
-      apply(ChurchN(2), apply(K, False), True)
-    ))).to.equal(false);
-
-    expect(UnChurchBoolean(symbolicEvaluator.reduce(
-      apply(IsZero, ChurchN(0))
-    ))).to.equal(true);
-
-    expect(UnChurchBoolean(symbolicEvaluator.reduce(
-      apply(IsZero, ChurchN(1))
-    ))).to.equal(false);
+    expect(
+      UnChurchBoolean(symbolicEvaluator.reduce(apply(IsZero, ChurchN(1)))),
+    ).to.equal(false);
   });
 
-  it('reduces sums and products in Church numerals', () => {
-    // Test all combinations of numbers from 0 to N-1
+  await t.step("sums and products (0‥N-1)", () => {
     for (let m = 0; m < N; m++) {
       for (let n = 0; n < N; n++) {
-        // λmn.(m succ)n, or apply m +1s to n
-        expect(UnChurchNumber(
-          symbolicEvaluator.reduce(apply(ChurchN(m), Succ, ChurchN(n)))
-        )).to.equal(m + n);
+        // m + n   via λmn.(m succ) n
+        expect(
+          UnChurchNumber(
+            symbolicEvaluator.reduce(apply(ChurchN(m), Succ, ChurchN(n))),
+          ),
+        ).to.equal(m + n);
 
-        // λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
-        expect(UnChurchNumber(
-          symbolicEvaluator.reduce(apply(Plus, ChurchN(m), ChurchN(n)))
-        )).to.equal(m + n);
+        // m + n   via Plus combinator
+        expect(
+          UnChurchNumber(
+            symbolicEvaluator.reduce(apply(Plus, ChurchN(m), ChurchN(n))),
+          ),
+        ).to.equal(m + n);
 
-        // λmn.m(n(succ)), or apply m +ns to 0
-        expect(UnChurchNumber(
-          symbolicEvaluator.reduce(apply(ChurchN(m), apply(ChurchN(n), Succ), Zero))
-        )).to.equal(m * n);
+        // m * n   via λmn.m (n succ) 0
+        expect(
+          UnChurchNumber(
+            symbolicEvaluator.reduce(
+              apply(ChurchN(m), apply(ChurchN(n), Succ), Zero),
+            ),
+          ),
+        ).to.equal(m * n);
 
-        /*
-         * Bmnfx yields m(nf)x which is also equivalent to m * n
-         * so the B combinator is functional composition and multiplication
-         * in the Church numerals simultaneously.
-         */
-        expect(UnChurchNumber(
-          symbolicEvaluator.reduce(apply(B, ChurchN(m), ChurchN(n), Succ, Zero))
-        )).to.equal(m * n);
+        // m * n   via B combinator
+        expect(
+          UnChurchNumber(
+            symbolicEvaluator.reduce(
+              apply(B, ChurchN(m), ChurchN(n), Succ, Zero),
+            ),
+          ),
+        ).to.equal(m * n);
       }
     }
   });
 
-  /*
-   * λp.< Succ (Car p), Car p >
-   * where <a, b> is the pair constructor, V
-   *
-   * λ<m, n>.<m+1, m> ≡ S((B(BVN))(B(BIR)I))(B(BIR)I)
-   * where Succ is N
-   * where Car is R
-   */
-  const pairShiftSucc = apply(S,
-    apply(
-      apply(B, apply(B, V, Succ)),
-      apply(B, apply(B, I, Car), I)
-    ),
-    apply(B, apply(B, I, Car), I));
-
-  const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
-
-  it('computes the predecessor', () => {
+  await t.step("predecessor", () => {
     const pred = bracketLambda(predLambda);
 
-    // Test numbers from 0 to N-1
     for (let m = 0; m < N; m++) {
-      const expected = Math.max(m - 1, 0); // pred of 0 is 0
+      const expected = Math.max(m - 1, 0); // pred(0) = 0
 
+      // Pair-shifting definition
       expect(
         UnChurchNumber(
           symbolicEvaluator.reduce(
-            apply(Cdr, apply(ChurchN(m), pairShiftSucc, pairZeroZero))
-          )
-        )
+            apply(Cdr, apply(ChurchN(m), pairShiftSucc, pairZeroZero)),
+          ),
+        ),
       ).to.equal(expected);
 
+      // Lambda derived from book definition
       expect(
-        UnChurchNumber(symbolicEvaluator.reduce(apply(pred, ChurchN(m))))
-      ).to.deep.equal(expected);
+        UnChurchNumber(
+          symbolicEvaluator.reduce(apply(pred, ChurchN(m))),
+        ),
+      ).to.equal(expected);
     }
   });
 });

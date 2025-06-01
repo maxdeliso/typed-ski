@@ -1,6 +1,6 @@
-import { insertAVL, createEmptyAVL, searchAVL } from '../avl/avlNode.js';
+import { createEmptyAVL, insertAVL, searchAVL } from "../avl/avlNode.ts";
 
-import { AVLTree } from '../avl/avlNode.js';
+import { AVLTree } from "../avl/avlNode.ts";
 
 export function compareStrings(a: string, b: string): number {
   if (a < b) return -1;
@@ -17,7 +17,7 @@ export function createStringMap(): AVLTree<string, string> {
 export function insertStringMap(
   tree: AVLTree<string, string>,
   key: string,
-  value: string
+  value: string,
 ): AVLTree<string, string> {
   return insertAVL(tree, key, value, compareStrings);
 }
@@ -25,7 +25,7 @@ export function insertStringMap(
 /** Immutable search for string->string map. */
 export function searchStringMap(
   tree: AVLTree<string, string>,
-  key: string
+  key: string,
 ): string | undefined {
   return searchAVL(tree, key, compareStrings);
 }

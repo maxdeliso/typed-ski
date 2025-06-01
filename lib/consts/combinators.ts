@@ -1,6 +1,6 @@
-import { parseSKI } from '../parser/ski.js';
-import { apply } from '../ski/expression.js';
-import { S, K, I } from '../ski/terminal.js';
+import { parseSKI } from "../parser/ski.ts";
+import { apply } from "../ski/expression.ts";
+import { I, K, S } from "../ski/terminal.ts";
 
 /*
  * Zero. apply a function to its arguments zero times.
@@ -60,7 +60,7 @@ export const One = I;
  *
  * λnfx.n(fx) ≡ B
  */
-export const B = parseSKI('S(KS)K');
+export const B = parseSKI("S(KS)K");
 
 /*
  * Successor function
@@ -166,7 +166,7 @@ export const V = apply(B, C, T);
  *
  * λa.aa ≡ M
  */
-export const M = parseSKI('SII');
+export const M = parseSKI("SII");
 
 /*
  * Retrieve the first element in a Cons cell.
@@ -209,7 +209,7 @@ export const Cdr = apply(T, Snd);
  *
  * λxy.xyy ≡ W
  */
-export const W = parseSKI('SS(SK)');
+export const W = parseSKI("SS(SK)");
 
 // λabcd.a(bcd)
 export const Blk = apply(B, B, B);
@@ -221,4 +221,4 @@ export const E = apply(B, apply(B, B, B));
 export const F = apply(E, T, T, E, T);
 
 // λf.(λx.f(x x))(λx.f(x x))
-export const Y = parseSKI('S(K(SII))(S(S(KS)K)(K(SII)))');
+export const Y = parseSKI("S(K(SII))(S(S(KS)K)(K(SII)))");

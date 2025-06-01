@@ -1,6 +1,6 @@
 export enum ArenaKind {
   Terminal = 1,
-  NonTerm  = 2,
+  NonTerm = 2,
 }
 
 export enum ArenaSym {

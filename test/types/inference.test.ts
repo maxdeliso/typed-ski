@@ -1,117 +1,84 @@
-import { expect } from 'chai';
-import { describe, it } from 'mocha';
+import { expect } from "npm:chai";
 
-import { mkVar, mkUntypedAbs, typelessApp } from '../../lib/terms/lambda.js';
-import {
-  inferType,
-  substituteType,
-} from '../../lib/types/inference.js';
-import {
-  arrow,
-  mkTypeVariable,
-  typesLitEq,
-} from '../../lib/types/types.js';
+import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
+import { inferType, substituteType } from "../../lib/types/inference.ts";
+import { arrow, mkTypeVariable, typesLitEq } from "../../lib/types/types.ts";
 
-describe('Type Inference Tests', () => {
-  describe('substituteType', () => {
-    it('should substitute a type variable with another type', () => {
-      const a = mkTypeVariable('a');
-      const b = mkTypeVariable('b');
-      const c = mkTypeVariable('c');
+Deno.test("Type inference utilities", async (t) => {
+  await t.step("substituteType", async (t) => {
+    await t.step("replaces a variable with another type", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
+      const c = mkTypeVariable("c");
 
-      // Substitute 'a' with 'b' in 'a'
-      const result1 = substituteType(a, a, b);
-      expect(typesLitEq(result1, b)).to.equal(true);
+      const r1 = substituteType(a, a, b);
+      expect(typesLitEq(r1, b)).to.equal(true);
 
-      // Substitute 'a' with 'b' in 'c'
-      const result2 = substituteType(c, a, b);
-      expect(typesLitEq(result2, c)).to.equal(true);
+      const r2 = substituteType(c, a, b);
+      expect(typesLitEq(r2, c)).to.equal(true);
 
-      // Substitute 'a' with 'b' in 'a -> c'
-      const arrowType = arrow(a, c);
-      const result3 = substituteType(arrowType, a, b);
-      expect(typesLitEq(result3, arrow(b, c))).to.equal(true);
+      const r3 = substituteType(arrow(a, c), a, b);
+      expect(typesLitEq(r3, arrow(b, c))).to.equal(true);
     });
 
-    it('should handle substitutions in complex types', () => {
-      const a = mkTypeVariable('a');
-      const b = mkTypeVariable('b');
-      const c = mkTypeVariable('c');
+    await t.step("handles substitutions in complex arrows", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
+      const c = mkTypeVariable("c");
 
-      // (a -> b) -> c
-      const complexType = arrow(arrow(a, b), c);
-      const result = substituteType(complexType, a, c);
+      const complex = arrow(arrow(a, b), c);
+      const out = substituteType(complex, a, c);
 
-      // Should become (c -> b) -> c
-      expect(typesLitEq(result, arrow(arrow(c, b), c))).to.equal(true);
+      expect(typesLitEq(out, arrow(arrow(c, b), c))).to.equal(true);
     });
 
-    it('should handle nested substitutions', () => {
-      const a = mkTypeVariable('a');
-      const b = mkTypeVariable('b');
+    await t.step("handles deeply nested substitutions", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
 
-      // (a -> a) -> (a -> a)
-      const nestedType = arrow(arrow(a, a), arrow(a, a));
-      const result = substituteType(nestedType, a, b);
+      const nested = arrow(arrow(a, a), arrow(a, a));
+      const out = substituteType(nested, a, b);
 
-      // Should become (b -> b) -> (b -> b)
-      expect(typesLitEq(result, arrow(arrow(b, b), arrow(b, b)))).to.equal(true);
+      expect(typesLitEq(out, arrow(arrow(b, b), arrow(b, b)))).to.equal(true);
     });
   });
 
-  // Tests for inferType
-  describe('inferType', () => {
-    it('should infer the type of a variable', () => {
-      // Create a variable term and infer its type
-      // Instead, let's test inferType on a simple lambda abstraction
-      const idTerm = mkUntypedAbs('x', mkVar('x'));
-      const [, ty] = inferType(idTerm);
+  await t.step("inferType", async (t) => {
+    await t.step("infers type for a simple identity function", () => {
+      const id = mkUntypedAbs("x", mkVar("x"));
+      const [, ty] = inferType(id);
 
-      // Should infer the identity function's type (something like t0 -> t0)
-      expect(ty.kind).to.equal('non-terminal');
-      // We should now have a consistently typed result
+      expect(ty.kind).to.equal("non-terminal");
     });
 
-    it('should infer the type of a lambda abstraction', () => {
-      const term = mkUntypedAbs('x', mkVar('x'));
-      const [, ty] = inferType(term);
+    await t.step("infers arrow type with matching ends", () => {
+      const id = mkUntypedAbs("x", mkVar("x"));
+      const [, ty] = inferType(id);
 
-      // Should infer something like t0 -> t0
-      expect(ty.kind).to.equal('non-terminal');
-      // Check that the left and right parts of the arrow are the same type variable
-      if (ty.kind === 'non-terminal' &&
-          ty.lft.kind === 'type-var' &&
-          ty.rgt.kind === 'type-var') {
+      if (
+        ty.kind === "non-terminal" &&
+        ty.lft.kind === "type-var" &&
+        ty.rgt.kind === "type-var"
+      ) {
         expect(ty.lft.typeName).to.equal(ty.rgt.typeName);
       }
     });
 
-    it('should infer the type of an application', () => {
-      // Use the application combinator: λf.λx.(f x)
-      // This is a well-typed term with type (a → b) → a → b
-      const appCombinator = mkUntypedAbs('f',
-        mkUntypedAbs('x',
-          typelessApp(
-            mkVar('f'),
-            mkVar('x')
-          )
-        )
+    await t.step("infers type of the application combinator", () => {
+      const appComb = mkUntypedAbs(
+        "f",
+        mkUntypedAbs("x", typelessApp(mkVar("f"), mkVar("x"))),
       );
+      const [, ty] = inferType(appComb);
 
-      const [, ty] = inferType(appCombinator);
-
-      // The type should be an arrow type (non-terminal)
-      expect(ty.kind).to.equal('non-terminal');
+      expect(ty.kind).to.equal("non-terminal");
     });
 
-    it('should handle complex expressions', () => {
-      // Let's use the K combinator: λx.λy.x
-      const K = mkUntypedAbs('x', mkUntypedAbs('y', mkVar('x')));
+    await t.step("handles a more complex term (K combinator)", () => {
+      const kComb = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
+      const [, ty] = inferType(kComb);
 
-      const [, ty] = inferType(K);
-
-      // K's type is a → b → a, which is a non-terminal (arrow) type
-      expect(ty.kind).to.equal('non-terminal');
+      expect(ty.kind).to.equal("non-terminal");
     });
   });
 });

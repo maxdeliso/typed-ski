@@ -1,10 +1,10 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs } from "node:fs";
 
-import { cons } from '../cons.js';
-import { SKIExpression } from '../ski/expression.js';
-import { S, K, I, SKITerminalSymbol } from '../ski/terminal.js';
-import { Evaluator } from './evaluator.js';
-import { ArenaKind, ArenaSym, ArenaNodeId } from '../shared/arena.js';
+import { cons } from "../cons.ts";
+import { SKIExpression } from "../ski/expression.ts";
+import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
+import { Evaluator } from "./evaluator.ts";
+import { ArenaKind, ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 
 interface ArenaWasmExports {
   memory: WebAssembly.Memory;
@@ -23,15 +23,21 @@ interface ArenaWasmExports {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+// deno-lint-ignore ban-types
 function assertFn(obj: unknown, name: string): asserts obj is Function {
-  if (typeof obj !== 'function') {
+  if (typeof obj !== "function") {
     throw new TypeError(`WASM export \`${name}\` is missing or not a function`);
   }
 }
 
-function assertMemory(obj: unknown, name: string): asserts obj is WebAssembly.Memory {
+function assertMemory(
+  obj: unknown,
+  name: string,
+): asserts obj is WebAssembly.Memory {
   if (!(obj instanceof WebAssembly.Memory)) {
-    throw new TypeError(`WASM export \`${name}\` is missing or not a WebAssembly.Memory`);
+    throw new TypeError(
+      `WASM export \`${name}\` is missing or not a WebAssembly.Memory`,
+    );
   }
 }
 
@@ -42,52 +48,59 @@ export class ArenaEvaluatorWasm implements Evaluator {
     this.$ = exports;
   }
 
-  static async instantiate(wasmPath: string | URL): Promise<ArenaEvaluatorWasm> {
+  static async instantiate(
+    wasmPath: string,
+  ): Promise<ArenaEvaluatorWasm> {
     const bytes = await fs.readFile(wasmPath);
     const memory = new WebAssembly.Memory({
-      initial: 512,      // 32 MiB
-      maximum: 65_536,   // 4 GiB
+      initial: 512, // 32 MiB
+      maximum: 65_536, // 4 GiB
     });
 
-    const abortFn = (msgPtr: number, filePtr: number, line: number, col: number) => {
-      console.error('abort', { line, col });
+    const abortFn = (
+      _msgPtr: number,
+      _filePtr: number,
+      line: number,
+      col: number,
+    ) => {
+      console.error("abort", { line, col });
     };
 
     const importObject = {
       env: { memory, abort: abortFn },
-      'arena-evaluator': { abort: abortFn }
+      "arena-evaluator": { abort: abortFn },
     };
 
     const { instance } = await WebAssembly.instantiate(bytes, importObject);
     const ex = instance.exports as Record<string, unknown>;
 
     const required = [
-      'memory',
-      'reset',
-      'allocTerminal',
-      'allocCons',
-      'arenaKernelStep',
-      'reduce',
-      'kindOf',
-      'symOf',
-      'leftOf',
-      'rightOf',
+      "memory",
+      "reset",
+      "allocTerminal",
+      "allocCons",
+      "arenaKernelStep",
+      "reduce",
+      "kindOf",
+      "symOf",
+      "leftOf",
+      "rightOf",
     ] as const;
 
     required.forEach((k) => {
       if (!(k in ex)) throw new Error(`WASM export \`${k}\` is missing`);
     });
 
-    assertMemory(ex.memory, 'memory');
-    assertFn(ex.reset, 'reset');
-    assertFn(ex.allocTerminal, 'allocTerminal');
-    assertFn(ex.allocCons, 'allocCons');
-    assertFn(ex.arenaKernelStep, 'arenaKernelStep');
-    assertFn(ex.reduce, 'reduce');
-    assertFn(ex.kindOf, 'kindOf');
-    assertFn(ex.symOf, 'symOf');
-    assertFn(ex.leftOf, 'leftOf');
-    assertFn(ex.rightOf, 'rightOf');
+    assertMemory(ex.memory, "memory");
+    assertFn(ex.reset, "reset");
+    assertFn(ex.allocTerminal, "allocTerminal");
+    assertFn(ex.allocCons, "allocCons");
+    assertFn(ex.arenaKernelStep, "arenaKernelStep");
+    assertFn(ex.reduce, "reduce");
+    assertFn(ex.kindOf, "kindOf");
+    assertFn(ex.symOf, "symOf");
+    assertFn(ex.leftOf, "leftOf");
+    assertFn(ex.rightOf, "rightOf");
 
     const evaluator = new ArenaEvaluatorWasm(ex as unknown as ArenaWasmExports);
     evaluator.reset();
@@ -98,7 +111,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const next = this.$.arenaKernelStep(this.toArena(expr));
     return {
       altered: next !== this.toArena(expr),
-      expr: this.fromArena(next)
+      expr: this.fromArena(next),
     } as const;
   }
 
@@ -112,7 +125,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
   toArena(exp: SKIExpression): ArenaNodeId {
     switch (exp.kind) {
-      case 'terminal':
+      case "terminal":
         switch (exp.sym) {
           case SKITerminalSymbol.S:
             return this.$.allocTerminal(ArenaSym.S);
@@ -121,10 +134,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
           case SKITerminalSymbol.I:
             return this.$.allocTerminal(ArenaSym.I);
           default:
-            throw new Error('unrecognised terminal symbol');
+            throw new Error("unrecognised terminal symbol");
         }
 
-      case 'non-terminal':
+      case "non-terminal":
         return this.$.allocCons(this.toArena(exp.lft), this.toArena(exp.rgt));
     }
   }
@@ -139,17 +152,17 @@ export class ArenaEvaluatorWasm implements Evaluator {
         case ArenaSym.I:
           return I;
         default:
-          throw new Error('corrupt symbol tag in arena');
+          throw new Error("corrupt symbol tag in arena");
       }
     }
 
     return cons(
       this.fromArena(this.$.leftOf(id)),
-      this.fromArena(this.$.rightOf(id))
+      this.fromArena(this.$.rightOf(id)),
     );
   }
 }
 
-export async function initArenaEvaluator(wasmPath: string | URL) {
-  return ArenaEvaluatorWasm.instantiate(wasmPath);
+export async function initArenaEvaluator(wasmPath: string) {
+  return await ArenaEvaluatorWasm.instantiate(wasmPath);
 }

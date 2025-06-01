@@ -1,18 +1,29 @@
-import { BaseType, arrow, prettyPrintTy, typesLitEq, ForallType } from './types.js';
-import { cons } from '../cons.js';
-import { SystemFTerm } from '../terms/systemF.js';
-import { TypedLambda, mkTypedAbs } from './typedLambda.js';
-import { AVLTree, createEmptyAVL, insertAVL, searchAVL } from '../data/avl/avlNode.js';
-import { compareStrings } from '../data/map/stringMap.js';
-import { Set, createSet, insertSet } from '../data/set/set.js';
-import { normalize } from './normalization.js';
+import {
+  arrow,
+  BaseType,
+  ForallType,
+  prettyPrintTy,
+  typesLitEq,
+} from "./types.ts";
+import { cons } from "../cons.ts";
+import { SystemFTerm } from "../terms/systemF.ts";
+import { mkTypedAbs, TypedLambda } from "./typedLambda.ts";
+import {
+  AVLTree,
+  createEmptyAVL,
+  insertAVL,
+  searchAVL,
+} from "../data/avl/avlNode.ts";
+import { compareStrings } from "../data/map/stringMap.ts";
+import { createSet, insertSet, Set } from "../data/set/set.ts";
+import { normalize } from "./normalization.ts";
 
 /*
  * https://en.wikipedia.org/wiki/System_F
  */
 
 export const forall = (typeVar: string, body: BaseType): ForallType => ({
-  kind: 'forall',
+  kind: "forall",
   typeVar,
   body,
 });
@@ -23,39 +34,39 @@ export const forall = (typeVar: string, body: BaseType): ForallType => ({
 export const substituteSystemFType = (
   original: BaseType,
   targetVarName: string,
-  replacement: BaseType
+  replacement: BaseType,
 ): BaseType => {
   switch (original.kind) {
-    case 'type-var':
+    case "type-var":
       return original.typeName === targetVarName ? replacement : original;
-    case 'non-terminal':
+    case "non-terminal":
       return cons(
         substituteSystemFType(original.lft, targetVarName, replacement),
-        substituteSystemFType(original.rgt, targetVarName, replacement)
+        substituteSystemFType(original.rgt, targetVarName, replacement),
       );
-    case 'forall':
+    case "forall":
       if (original.typeVar === targetVarName) {
         return original;
       }
       return {
-        kind: 'forall',
+        kind: "forall",
         typeVar: original.typeVar,
-        body: substituteSystemFType(original.body, targetVarName, replacement)
+        body: substituteSystemFType(original.body, targetVarName, replacement),
       };
   }
 };
 
 export const referencesVar = (
   original: BaseType,
-  varName: string
+  varName: string,
 ): boolean => {
   switch (original.kind) {
-    case 'type-var':
+    case "type-var":
       return original.typeName === varName;
-    case 'non-terminal':
+    case "non-terminal":
       return referencesVar(original.lft, varName) ||
         referencesVar(original.rgt, varName);
-    case 'forall':
+    case "forall":
       return referencesVar(original.body, varName);
   }
 };
@@ -75,7 +86,7 @@ export interface SystemFContext {
  */
 export const emptySystemFContext = (): SystemFContext => ({
   termCtx: createEmptyAVL<string, BaseType>(),
-  typeVars: createSet<string>(compareStrings)
+  typeVars: createSet<string>(compareStrings),
 });
 
 /**
@@ -103,72 +114,89 @@ export const typecheck = (term: SystemFTerm): BaseType => {
  */
 export const typecheckSystemF = (
   ctx: SystemFContext,
-  term: SystemFTerm
+  term: SystemFTerm,
 ): [BaseType, SystemFContext] => {
   switch (term.kind) {
-    case 'systemF-var': {
+    case "systemF-var": {
       const ty = searchAVL(ctx.termCtx, term.name, compareStrings);
       if (ty === undefined) {
         throw new TypeError(`unknown variable: ${term.name}`);
       }
       return [ty, ctx];
     }
-    case 'systemF-abs': {
+    case "systemF-abs": {
       // Extend the term context locally with x:T.
-      const newTermCtx = insertAVL(ctx.termCtx, term.name, term.typeAnnotation, compareStrings);
+      const newTermCtx = insertAVL(
+        ctx.termCtx,
+        term.name,
+        term.typeAnnotation,
+        compareStrings,
+      );
       const localCtx: SystemFContext = {
         termCtx: newTermCtx,
-        typeVars: ctx.typeVars // persistent: no need to copy
+        typeVars: ctx.typeVars, // persistent: no need to copy
       };
       const [bodyTy] = typecheckSystemF(localCtx, term.body);
       // The local binding for x is scoped; we return the parent context.
       return [arrow(term.typeAnnotation, bodyTy), ctx];
     }
-    case 'non-terminal': {
+    case "non-terminal": {
       // Sequentially propagate context updates.
       const [funTy, ctxAfterLeft] = typecheckSystemF(ctx, term.lft);
       const [argTy, ctxAfterRight] = typecheckSystemF(ctxAfterLeft, term.rgt);
-      if (funTy.kind !== 'non-terminal') {
+      if (funTy.kind !== "non-terminal") {
         throw new TypeError(
-          `expected an arrow type in function application, but got: ${prettyPrintTy(funTy)}`
+          `expected an arrow type in function application, but got: ${
+            prettyPrintTy(funTy)
+          }`,
         );
       }
       if (!typesLitEq(funTy.lft, argTy)) {
         // Only use normalization for forall types (alpha-equivalence)
-        if (funTy.lft.kind === 'forall' && argTy.kind === 'forall') {
+        if (funTy.lft.kind === "forall" && argTy.kind === "forall") {
           const normLft = normalize(funTy.lft);
           const normArg = normalize(argTy);
           if (!typesLitEq(normLft, normArg)) {
             throw new TypeError(
-              `function argument type mismatch: expected ${prettyPrintTy(funTy.lft)}, got ${prettyPrintTy(argTy)}`
+              `function argument type mismatch: expected ${
+                prettyPrintTy(funTy.lft)
+              }, got ${prettyPrintTy(argTy)}`,
             );
           }
         } else {
           throw new TypeError(
-            `function argument type mismatch: expected ${prettyPrintTy(funTy.lft)}, got ${prettyPrintTy(argTy)}`
+            `function argument type mismatch: expected ${
+              prettyPrintTy(funTy.lft)
+            }, got ${prettyPrintTy(argTy)}`,
           );
         }
       }
       return [funTy.rgt, ctxAfterRight];
     }
-    case 'systemF-type-abs': {
+    case "systemF-type-abs": {
       // Extend the type variable context locally using our AVLSet.
       const localCtx: SystemFContext = {
         termCtx: ctx.termCtx,
-        typeVars: insertSet(ctx.typeVars, term.typeVar)
+        typeVars: insertSet(ctx.typeVars, term.typeVar),
       };
       const [bodyTy] = typecheckSystemF(localCtx, term.body);
       // The local type variable binding is scoped; return the parent context.
       return [forall(term.typeVar, bodyTy), ctx];
     }
-    case 'systemF-type-app': {
+    case "systemF-type-app": {
       const [funTy, updatedCtx] = typecheckSystemF(ctx, term.term);
-      if (funTy.kind !== 'forall') {
+      if (funTy.kind !== "forall") {
         throw new TypeError(
-          `type application expected a universal type, but got: ${prettyPrintTy(funTy)}`
+          `type application expected a universal type, but got: ${
+            prettyPrintTy(funTy)
+          }`,
         );
       }
-      const resultType = substituteSystemFType(funTy.body, funTy.typeVar, term.typeArg);
+      const resultType = substituteSystemFType(
+        funTy.body,
+        funTy.typeVar,
+        term.typeArg,
+      );
       return [resultType, updatedCtx];
     }
   }
@@ -178,11 +206,13 @@ export const typecheckSystemF = (
  * Pretty prints a System F type.
  */
 export const prettyPrintSystemFType = (ty: BaseType): string => {
-  if (ty.kind === 'type-var') {
+  if (ty.kind === "type-var") {
     return ty.typeName;
   }
-  if (ty.kind === 'non-terminal') {
-    return `(${prettyPrintSystemFType(ty.lft)}→${prettyPrintSystemFType(ty.rgt)})`;
+  if (ty.kind === "non-terminal") {
+    return `(${prettyPrintSystemFType(ty.lft)}→${
+      prettyPrintSystemFType(ty.rgt)
+    })`;
   }
   // Must be a forall type.
   return `(∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)})`;
@@ -206,22 +236,22 @@ export const prettyPrintSystemFType = (ty: BaseType): string => {
  */
 export const eraseSystemF = (term: SystemFTerm): TypedLambda => {
   switch (term.kind) {
-    case 'systemF-var':
-      return { kind: 'lambda-var', name: term.name };
-    case 'systemF-abs':
+    case "systemF-var":
+      return { kind: "lambda-var", name: term.name };
+    case "systemF-abs":
       return mkTypedAbs(
         term.name,
         term.typeAnnotation,
-        eraseSystemF(term.body)
+        eraseSystemF(term.body),
       );
-    case 'systemF-type-abs':
+    case "systemF-type-abs":
       return eraseSystemF(term.body);
-    case 'systemF-type-app':
+    case "systemF-type-app":
       return eraseSystemF(term.term);
     default:
       return cons(
         eraseSystemF(term.lft),
-        eraseSystemF(term.rgt)
+        eraseSystemF(term.rgt),
       );
   }
 };

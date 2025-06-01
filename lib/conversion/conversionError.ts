@@ -1,1 +1,1 @@
-export class ConversionError extends Error { }
+export class ConversionError extends Error {}

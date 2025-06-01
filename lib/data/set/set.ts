@@ -1,4 +1,10 @@
-import { AVLTree, createEmptyAVL, insertAVL, searchAVL, keyValuePairs } from '../avl/avlNode.js';
+import {
+  AVLTree,
+  createEmptyAVL,
+  insertAVL,
+  keyValuePairs,
+  searchAVL,
+} from "../avl/avlNode.ts";
 
 /**
  * A generic set implemented on top of an AVL tree.

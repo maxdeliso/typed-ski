@@ -1,134 +1,157 @@
-import { strict as assert } from 'assert';
-import { ChurchN, UnChurchBoolean } from '../../lib/ski/church.js';
-import { S, K, I } from '../../lib/ski/terminal.js';
-import { apply } from '../../lib/ski/expression.js';
-import { mkNativeNum, mkNativeInc, stepOnceNat, reduceNat, unChurchNumber, NativeExpr } from '../../lib/ski/native.js';
-import { cons } from '../../lib/cons.js';
-import { Zero, One, True, False } from '../../lib/consts/combinators.js';
+import { assert } from "npm:chai";
 
-describe('Native Expression Tests', () => {
-  describe('Basic Native Expression Construction', () => {
-    it('constructs a number expression', () => {
+import { ChurchN, UnChurchBoolean } from "../../lib/ski/church.ts";
+import { I, K, S } from "../../lib/ski/terminal.ts";
+import { apply } from "../../lib/ski/expression.ts";
+
+import {
+  mkNativeInc,
+  mkNativeNum,
+  NativeExpr,
+  reduceNat,
+  stepOnceNat,
+  unChurchNumber,
+} from "../../lib/ski/native.ts";
+
+import { cons } from "../../lib/cons.ts";
+import { False, One, True, Zero } from "../../lib/consts/combinators.ts";
+
+function assertIsNum(
+  e: NativeExpr,
+): asserts e is { kind: "num"; value: number } {
+  assert.equal(e.kind, "num", "expected kind 'num'");
+}
+
+function assertIsNonTerm(
+  e: NativeExpr,
+): asserts e is { kind: "non-terminal"; lft: NativeExpr; rgt: NativeExpr } {
+  assert.equal(e.kind, "non-terminal", "expected kind 'non-terminal'");
+}
+
+Deno.test("Native-expression & Church-numeral utilities", async (t) => {
+  await t.step("basic construction helpers", async (t) => {
+    await t.step("mkNativeNum", () => {
       const n = mkNativeNum(42);
-      assert.equal(n.kind, 'num');
+      assert.equal(n.kind, "num");
       assert.equal(n.value, 42);
     });
 
-    it('constructs an increment expression', () => {
+    await t.step("mkNativeInc", () => {
       const inc = mkNativeInc();
-      assert.equal(inc.kind, 'inc');
+      assert.equal(inc.kind, "inc");
     });
 
-    it('constructs an application expression', () => {
-      const app = cons(mkNativeNum(1) as NativeExpr, mkNativeNum(2) as NativeExpr);
-      assert.equal(app.kind, 'non-terminal');
-      assert.equal(app.lft.kind, 'num');
+    await t.step("non-terminal application node", () => {
+      const app = cons(
+        mkNativeNum(1) as NativeExpr,
+        mkNativeNum(2) as NativeExpr,
+      );
+      assertIsNonTerm(app);
+      assertIsNum(app.lft);
       assert.equal(app.lft.value, 1);
-      assert.equal(app.rgt.kind, 'num');
+      assertIsNum(app.rgt);
       assert.equal(app.rgt.value, 2);
     });
   });
 
-  describe('Native Step Reduction', () => {
-    it('reduces (INC (NUM k)) to NUM (k+1)', () => {
-      const expr = cons(mkNativeInc() as NativeExpr, mkNativeNum(5) as NativeExpr);
-      const result = stepOnceNat(expr);
-      assert.ok(result.altered);
-      assert.equal(result.expr.kind, 'num');
-      assert.equal(result.expr.value, 6);
+  await t.step("single-step reduction (stepOnceNat)", async (t) => {
+    await t.step("(INC (NUM k)) → NUM (k+1)", () => {
+      const expr = cons(
+        mkNativeInc() as NativeExpr,
+        mkNativeNum(5) as NativeExpr,
+      );
+      const { altered, expr: out } = stepOnceNat(expr);
+      assert.ok(altered);
+      assertIsNum(out);
+      assert.equal(out.value, 6);
     });
 
-    it('does not reduce non-matching expressions', () => {
-      const expr = cons(mkNativeNum(1) as NativeExpr, mkNativeNum(2) as NativeExpr);
-      const result = stepOnceNat(expr);
-      assert.ok(!result.altered);
-      assert.equal(result.expr, expr);
+    await t.step("no reduction when pattern doesn’t match", () => {
+      const expr = cons(
+        mkNativeNum(1) as NativeExpr,
+        mkNativeNum(2) as NativeExpr,
+      );
+      const r = stepOnceNat(expr);
+      assert.ok(!r.altered);
+      assert.equal(r.expr, expr);
     });
 
-    it('handles nested applications', () => {
-      const expr = cons(cons(mkNativeInc() as NativeExpr, mkNativeNum(1) as NativeExpr) as NativeExpr, mkNativeNum(2) as NativeExpr);
-      const result = stepOnceNat(expr);
-      assert.ok(result.altered);
-      assert.equal(result.expr.kind, 'non-terminal');
-      assert.equal(result.expr.lft.kind, 'num');
-      assert.equal(result.expr.lft.value, 2);
-      assert.equal(result.expr.rgt.kind, 'num');
-      assert.equal(result.expr.rgt.value, 2);
-    });
-  });
-
-  describe('Native Reduction', () => {
-    it('reduces to normal form', () => {
-      const expr = cons(cons(mkNativeInc() as NativeExpr, mkNativeNum(1) as NativeExpr) as NativeExpr, mkNativeNum(2) as NativeExpr);
-      const result = reduceNat(expr);
-      assert.equal(result.kind, 'non-terminal');
-      assert.equal(result.lft.kind, 'num');
-      assert.equal(result.lft.value, 2);
-      assert.equal(result.rgt.kind, 'num');
-      assert.equal(result.rgt.value, 2);
-    });
-
-    it('handles multiple steps', () => {
-      // (INC (INC (NUM 0))) -> (INC (NUM 1)) -> NUM 2
-      const expr = cons(mkNativeInc() as NativeExpr, cons(mkNativeInc() as NativeExpr, mkNativeNum(0) as NativeExpr) as NativeExpr);
-      const result = reduceNat(expr);
-      assert.equal(result.kind, 'num');
-      assert.equal(result.value, 2);
+    await t.step("nested applications reduce inner-most first", () => {
+      const expr = cons(
+        cons(
+          mkNativeInc() as NativeExpr,
+          mkNativeNum(1) as NativeExpr,
+        ) as NativeExpr,
+        mkNativeNum(2) as NativeExpr,
+      );
+      const r = stepOnceNat(expr);
+      assert.ok(r.altered);
+      assertIsNonTerm(r.expr);
+      assertIsNum(r.expr.lft);
+      assert.equal(r.expr.lft.value, 2);
+      assertIsNum(r.expr.rgt);
+      assert.equal(r.expr.rgt.value, 2);
     });
   });
 
-  describe('Church Numeral Decoding', () => {
-    it('decodes Church zero', () => {
-      const zero = ChurchN(0);
-      assert.equal(unChurchNumber(zero), 0);
+  await t.step("full reduction (reduceNat)", async (t) => {
+    await t.step("reduces to normal form", () => {
+      const expr = cons(
+        cons(
+          mkNativeInc() as NativeExpr,
+          mkNativeNum(1) as NativeExpr,
+        ) as NativeExpr,
+        mkNativeNum(2) as NativeExpr,
+      );
+      const out = reduceNat(expr);
+      assertIsNonTerm(out);
+      assertIsNum(out.lft);
+      assert.equal(out.lft.value, 2);
+      assertIsNum(out.rgt);
+      assert.equal(out.rgt.value, 2);
     });
 
-    it('decodes Church one', () => {
-      const one = ChurchN(1);
-      assert.equal(unChurchNumber(one), 1);
+    await t.step("multiple incremental steps", () => {
+      // (INC (INC 0)) → (INC 1) → 2
+      const expr = cons(
+        mkNativeInc() as NativeExpr,
+        cons(
+          mkNativeInc() as NativeExpr,
+          mkNativeNum(0) as NativeExpr,
+        ) as NativeExpr,
+      );
+      const out = reduceNat(expr);
+      assertIsNum(out);
+      assert.equal(out.value, 2);
     });
+  });
 
-    it('decodes Church two', () => {
-      const two = ChurchN(2);
-      assert.equal(unChurchNumber(two), 2);
-    });
-
-    it('decodes Church five', () => {
-      const five = ChurchN(5);
-      assert.equal(unChurchNumber(five), 5);
-    });
-
-    it('handles larger Church numerals', () => {
-      const ten = ChurchN(10);
-      assert.equal(unChurchNumber(ten), 10);
-    });
-
-    it('returns 0 on non-normal form', () => {
-      const nonNumeral = apply(K, I);
-      assert.equal(unChurchNumber(nonNumeral), 0);
-    });
-
-    it('handles complex Church numeral expressions', () => {
-      const malformed = apply(S, K, I);
-      assert.equal(unChurchNumber(malformed), 1);
-    });
-
-    describe('Combinator Church Numeral Decoding', () => {
-      it('decodes Zero combinator to 0', () => {
-        assert.equal(unChurchNumber(Zero), 0);
+  await t.step("decoding Church numerals", async (t) => {
+    for (const n of [0, 1, 2, 5, 10]) {
+      await t.step(`Church ${n} decodes to ${n}`, () => {
+        assert.equal(unChurchNumber(ChurchN(n)), n);
       });
+    }
 
-      it('decodes One combinator to 1', () => {
-        assert.equal(unChurchNumber(One), 1);
-      });
+    await t.step("non-numeral normalises to 0", () => {
+      assert.equal(unChurchNumber(apply(K, I)), 0);
+    });
 
-      it('decodes True combinator as true (as Church boolean)', () => {
-        assert.equal(UnChurchBoolean(True), true);
-      });
+    await t.step("malformed numeral gives 1", () => {
+      assert.equal(unChurchNumber(apply(S, K, I)), 1);
+    });
 
-      it('decodes False combinator as false (as Church boolean)', () => {
-        assert.equal(UnChurchBoolean(False), false);
-      });
+    await t.step("combinator constants", async (t) => {
+      await t.step("Zero → 0", () => assert.equal(unChurchNumber(Zero), 0));
+      await t.step("One  → 1", () => assert.equal(unChurchNumber(One), 1));
+      await t.step(
+        "True → true",
+        () => assert.equal(UnChurchBoolean(True), true),
+      );
+      await t.step(
+        "False → false",
+        () => assert.equal(UnChurchBoolean(False), false),
+      );
     });
   });
 });

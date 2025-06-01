@@ -1,7 +1,14 @@
-import { ParserState, peek, matchLP, matchRP, consume, parseIdentifier } from './parserState.js';
-import { ParseError } from './parseError.js';
-import { BaseType, arrow, mkTypeVariable } from '../types/types.js';
-import { parseWithEOF } from './eof.js';
+import {
+  consume,
+  matchLP,
+  matchRP,
+  parseIdentifier,
+  ParserState,
+  peek,
+} from "./parserState.ts";
+import { ParseError } from "./parseError.ts";
+import { arrow, BaseType, mkTypeVariable } from "../types/types.ts";
+import { parseWithEOF } from "./eof.ts";
 
 /**
  * Parses a "simple" type.
@@ -9,16 +16,18 @@ import { parseWithEOF } from './eof.js';
  *
  * Returns a triple: [literal, BaseType, updatedState]
  */
-export function parseSimpleType(state: ParserState): [string, BaseType, ParserState] {
+export function parseSimpleType(
+  state: ParserState,
+): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
-  if (ch === '(') {
+  if (ch === "(") {
     // Parenthesized type.
     const stateAfterLP = matchLP(s);
     // Recursively parse a full type inside the parentheses.
     const [innerLit, innerType, stateAfterInner] = parseArrowType(stateAfterLP);
     const [next, sAfterInner] = peek(stateAfterInner);
-    if (next !== ')') {
-      throw new ParseError('expected \')\' after type expression');
+    if (next !== ")") {
+      throw new ParseError("expected ')' after type expression");
     }
     const stateAfterRP = matchRP(sAfterInner);
     return [`(${innerLit})`, innerType, stateAfterRP];
@@ -35,13 +44,21 @@ export function parseSimpleType(state: ParserState): [string, BaseType, ParserSt
  *
  * Returns a triple: [literal, BaseType, updatedState]
  */
-export function parseArrowType(state: ParserState): [string, BaseType, ParserState] {
+export function parseArrowType(
+  state: ParserState,
+): [string, BaseType, ParserState] {
   const [leftLit, leftType, stateAfterLeft] = parseSimpleType(state);
   const [next, sAfterLeft] = peek(stateAfterLeft);
-  if (next === '→') {
+  if (next === "→") {
     const stateAfterArrow = consume(sAfterLeft);
-    const [rightLit, rightType, stateAfterRight] = parseArrowType(stateAfterArrow);
-    return [`${leftLit}→${rightLit}`, arrow(leftType, rightType), stateAfterRight];
+    const [rightLit, rightType, stateAfterRight] = parseArrowType(
+      stateAfterArrow,
+    );
+    return [
+      `${leftLit}→${rightLit}`,
+      arrow(leftType, rightType),
+      stateAfterRight,
+    ];
   } else {
     return [leftLit, leftType, stateAfterLeft];
   }

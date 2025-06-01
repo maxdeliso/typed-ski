@@ -1,10 +1,17 @@
-import { mkVar } from '../terms/lambda.js';
-import { TypedLambda, mkTypedAbs } from '../types/typedLambda.js';
-import { ParserState, peek, matchCh, matchLP, matchRP, parseIdentifier } from './parserState.js';
-import { parseChain } from './chain.js';
-import { parseArrowType } from './type.js';
-import { parseWithEOF } from './eof.js';
-import { ParseError } from './parseError.js';
+import { mkVar } from "../terms/lambda.ts";
+import { mkTypedAbs, TypedLambda } from "../types/typedLambda.ts";
+import {
+  matchCh,
+  matchLP,
+  matchRP,
+  parseIdentifier,
+  ParserState,
+  peek,
+} from "./parserState.ts";
+import { parseChain } from "./chain.ts";
+import { parseArrowType } from "./type.ts";
+import { parseWithEOF } from "./eof.ts";
+import { ParseError } from "./parseError.ts";
 
 /**
  * Parses an atomic typed lambda term.
@@ -16,31 +23,35 @@ import { ParseError } from './parseError.js';
  * Returns a triple: [literal, TypedLambda, updated ParserState]
  */
 export function parseAtomicTypedLambda(
-  state: ParserState
+  state: ParserState,
 ): [string, TypedLambda, ParserState] {
   const [peeked, s] = peek(state);
 
-  if (peeked === 'λ') {
+  if (peeked === "λ") {
     // Parse a typed lambda abstraction: λx : <type> . <body>
-    const stateAfterLambda = matchCh(s, 'λ');
+    const stateAfterLambda = matchCh(s, "λ");
     const [next] = peek(stateAfterLambda);
-    if (next === ':') {
-      throw new ParseError('expected an identifier');
+    if (next === ":") {
+      throw new ParseError("expected an identifier");
     }
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
-    const stateAfterColon = matchCh(stateAfterVar, ':');
+    const stateAfterColon = matchCh(stateAfterVar, ":");
     const [typeLit, ty, stateAfterType] = parseArrowType(stateAfterColon);
-    const stateAfterDot = matchCh(stateAfterType, '.');
-    const [bodyLit, bodyTerm, stateAfterBody] = parseTypedLambdaInternal(stateAfterDot);
+    const stateAfterDot = matchCh(stateAfterType, ".");
+    const [bodyLit, bodyTerm, stateAfterBody] = parseTypedLambdaInternal(
+      stateAfterDot,
+    );
     return [
       `λ${varLit}:${typeLit}.${bodyLit}`,
       mkTypedAbs(varLit, ty, bodyTerm),
-      stateAfterBody
+      stateAfterBody,
     ];
-  } else if (peeked === '(') {
+  } else if (peeked === "(") {
     // Parse a parenthesized term.
     const stateAfterLP = matchLP(s);
-    const [innerLit, innerTerm, stateAfterInner] = parseTypedLambdaInternal(stateAfterLP);
+    const [innerLit, innerTerm, stateAfterInner] = parseTypedLambdaInternal(
+      stateAfterLP,
+    );
     const stateAfterRP = matchRP(stateAfterInner);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
   } else {
@@ -55,7 +66,7 @@ export function parseAtomicTypedLambda(
  * Returns a triple: [literal, TypedLambda, updated ParserState]
  */
 export function parseTypedLambdaInternal(
-  state: ParserState
+  state: ParserState,
 ): [string, TypedLambda, ParserState] {
   return parseChain<TypedLambda>(state, parseAtomicTypedLambda);
 }

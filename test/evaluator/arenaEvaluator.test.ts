@@ -1,94 +1,96 @@
-import { strict as assert } from 'assert';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import rsexport, { RandomSeed } from 'random-seed';
+import { assert, assertEquals } from "https://deno.land/std/assert/mod.ts";
+import { dirname, fromFileUrl, join } from "https://deno.land/std/path/mod.ts";
+import rsexport, { RandomSeed } from "npm:random-seed";
 const { create } = rsexport;
 
-import { ArenaEvaluatorWasm, initArenaEvaluator }
-  from '../../lib/evaluator/arenaEvaluator.js';
-import { parseSKI }
-  from '../../lib/parser/ski.js';
-import { prettyPrint }
-  from '../../lib/ski/expression.js';
-import { randExpression }
-  from '../../lib/ski/generator.js';
-import { symbolicEvaluator }
-  from '../../lib/evaluator/skiEvaluator.js';
+import {
+  ArenaEvaluatorWasm,
+  initArenaEvaluator,
+} from "../../lib/evaluator/arenaEvaluator.ts";
+import { parseSKI } from "../../lib/parser/ski.ts";
+import { prettyPrint } from "../../lib/ski/expression.ts";
+import { randExpression } from "../../lib/ski/generator.ts";
+import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 
-let arenaEval!: ArenaEvaluatorWasm;
+let arenaEval: ArenaEvaluatorWasm;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
-
-before(async () => {
-  const wasmPath = path.resolve(__dirname, '../../build/debug.wasm');
+async function setupEvaluator() {
+  const wasmPath = join(
+    dirname(fromFileUrl(import.meta.url)),
+    "../../build/debug.wasm",
+  );
   arenaEval = await initArenaEvaluator(wasmPath);
-});
+}
 
-describe('stepOnce', () => {
-  const e1 = parseSKI('III');
-  const e2 = parseSKI('II');
-  const e3 = parseSKI('I');
-  const e4 = parseSKI('KIS');
-  const e5 = parseSKI('SKKI');
-  const e6 = parseSKI('SKKII');
-  const e7 = parseSKI('KI(KI)');
+// Setup before all tests
+await setupEvaluator();
 
-  it(`${prettyPrint(e2)} ⇒ ${prettyPrint(e3)}`, () => {
+Deno.test("stepOnce", async (t) => {
+  const e1 = parseSKI("III");
+  const e2 = parseSKI("II");
+  const e3 = parseSKI("I");
+  const e4 = parseSKI("KIS");
+  const e5 = parseSKI("SKKI");
+  const e6 = parseSKI("SKKII");
+  const e7 = parseSKI("KI(KI)");
+
+  await t.step(`${prettyPrint(e2)} ⇒ ${prettyPrint(e3)}`, () => {
     const r = arenaEval.stepOnce(e2);
-    assert.equal(r.altered, true);
-    assert.equal(prettyPrint(r.expr), prettyPrint(e3));
+    assertEquals(r.altered, true);
+    assertEquals(prettyPrint(r.expr), prettyPrint(e3));
   });
 
-  it(`${prettyPrint(e1)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${prettyPrint(e1)} ⇒ ${prettyPrint(e3)}`, () => {
     const r1 = arenaEval.stepOnce(e1);
     const r2 = arenaEval.stepOnce(r1.expr);
 
-    assert.ok(r1.altered && r2.altered);
-    assert.equal(prettyPrint(r2.expr), prettyPrint(e3));
+    assert(r1.altered && r2.altered);
+    assertEquals(prettyPrint(r2.expr), prettyPrint(e3));
   });
 
-  it(`${prettyPrint(e4)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${prettyPrint(e4)} ⇒ ${prettyPrint(e3)}`, () => {
     const r = arenaEval.stepOnce(e4);
-    assert.ok(r.altered);
-    assert.equal(prettyPrint(r.expr), prettyPrint(e3));
+    assert(r.altered);
+    assertEquals(prettyPrint(r.expr), prettyPrint(e3));
   });
 
-  it(`${prettyPrint(e5)} ⇒ ${prettyPrint(e7)}`, () => {
+  await t.step(`${prettyPrint(e5)} ⇒ ${prettyPrint(e7)}`, () => {
     const r = arenaEval.stepOnce(e5);
-    assert.ok(r.altered);
-    assert.equal(prettyPrint(r.expr), prettyPrint(e7));
+    assert(r.altered);
+    assertEquals(prettyPrint(r.expr), prettyPrint(e7));
   });
 
-  it(`${prettyPrint(e6)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${prettyPrint(e6)} ⇒ ${prettyPrint(e3)}`, () => {
     const r1 = arenaEval.stepOnce(e6);
     const r2 = arenaEval.stepOnce(r1.expr);
     const r3 = arenaEval.stepOnce(r2.expr);
 
-    assert.ok(r1.altered && r2.altered && r3.altered);
-    assert.equal(prettyPrint(r3.expr), prettyPrint(e3));
+    assert(r1.altered && r2.altered && r3.altered);
+    assertEquals(prettyPrint(r3.expr), prettyPrint(e3));
   });
 });
 
-describe('symbolic and arena reduction equivalence', () => {
-  const seed = 'df394b';
+Deno.test("symbolic and arena reduction equivalence", async (t) => {
+  const seed = "df394b";
   const normalizeTests = 19;
   const minLength = 5;
   const maxLength = 12;
   const rs: RandomSeed = create(seed);
 
-  it('runs random-expression normalisation checks', () => {
-    for (let t = 0; t < normalizeTests; ++t) {
-      const len   = rs.intBetween(minLength, maxLength);
+  await t.step("runs random-expression normalisation checks", () => {
+    for (let testIdx = 0; testIdx < normalizeTests; ++testIdx) {
+      const len = rs.intBetween(minLength, maxLength);
       const input = randExpression(rs, len);
 
       const arenaNormal = arenaEval.reduce(input);
-      const symNormal   = symbolicEvaluator.reduce(input);
+      const symNormal = symbolicEvaluator.reduce(input);
 
-      assert.equal(
+      assertEquals(
         prettyPrint(arenaNormal),
         prettyPrint(symNormal),
-        `expected: ${prettyPrint(symNormal)}, got: ${prettyPrint(arenaNormal)}`
+        `Mismatch in test #${testIdx + 1}:\nexpected: ${
+          prettyPrint(symNormal)
+        }\ngot: ${prettyPrint(arenaNormal)}`,
       );
     }
   });

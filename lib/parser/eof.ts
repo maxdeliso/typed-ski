@@ -1,5 +1,5 @@
-import { ParserState, createParserState, remaining } from './parserState.js';
-import { ParseError } from './parseError.js';
+import { createParserState, ParserState, remaining } from "./parserState.ts";
+import { ParseError } from "./parseError.ts";
 
 /**
  * Wraps a parser function so that after parsing the input,
@@ -13,14 +13,14 @@ import { ParseError } from './parseError.js';
  */
 export function parseWithEOF<T>(
   input: string,
-  parser: (rdb: ParserState) => [string, T, ParserState]
+  parser: (rdb: ParserState) => [string, T, ParserState],
 ): [string, T, ParserState] {
   const initialState = createParserState(input);
   const [lit, result, updatedState] = parser(initialState);
   const [hasRemaining, finalState] = remaining(updatedState);
   if (hasRemaining) {
     throw new ParseError(
-      `unexpected extra input: "${finalState.buf.slice(finalState.idx)}"`
+      `unexpected extra input: "${finalState.buf.slice(finalState.idx)}"`,
     );
   }
   return [lit, result, finalState];

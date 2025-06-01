@@ -1,10 +1,21 @@
-import { ParseError } from './parseError.js';
-import { matchCh, matchLP, matchRP, parseIdentifier, peek } from './parserState.js';
-import { ParserState } from './parserState.js';
-import { parseSystemFType } from './systemFType.js';
-import { parseWithEOF } from './eof.js';
-import { mkSystemFAbs, mkSystemFTAbs, mkSystemFTypeApp, SystemFTerm } from '../terms/systemF.js';
-import { parseChain } from './chain.js';
+import { ParseError } from "./parseError.ts";
+import {
+  matchCh,
+  matchLP,
+  matchRP,
+  parseIdentifier,
+  peek,
+} from "./parserState.ts";
+import { ParserState } from "./parserState.ts";
+import { parseSystemFType } from "./systemFType.ts";
+import { parseWithEOF } from "./eof.ts";
+import {
+  mkSystemFAbs,
+  mkSystemFTAbs,
+  mkSystemFTypeApp,
+  SystemFTerm,
+} from "../terms/systemF.ts";
+import { parseChain } from "./chain.ts";
 
 /**
  * Parses an atomic System F term.
@@ -18,31 +29,35 @@ import { parseChain } from './chain.js';
  * Returns a triple: [literal, SystemFTerm, updated state]
  */
 export function parseAtomicSystemFTerm(
-  state: ParserState
+  state: ParserState,
 ): [string, SystemFTerm, ParserState] {
   const [ch, currentState] = peek(state);
 
-  if (ch === 'λ') {
-    const stateAfterLambda = matchCh(currentState, 'λ');
+  if (ch === "λ") {
+    const stateAfterLambda = matchCh(currentState, "λ");
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
-    const stateAfterColon = matchCh(stateAfterVar, ':');
-    const [typeLit, typeAnnotation, stateAfterType] = parseSystemFType(stateAfterColon);
-    const stateAfterDot = matchCh(stateAfterType, '.');
+    const stateAfterColon = matchCh(stateAfterVar, ":");
+    const [typeLit, typeAnnotation, stateAfterType] = parseSystemFType(
+      stateAfterColon,
+    );
+    const stateAfterDot = matchCh(stateAfterType, ".");
     const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateAfterDot);
     return [
       `λ${varLit}:${typeLit}.${bodyLit}`,
       mkSystemFAbs(varLit, typeAnnotation, bodyTerm),
       stateAfterBody,
     ];
-  } else if (ch === '(') {
+  } else if (ch === "(") {
     const stateAfterLP = matchLP(state);
-    const [innerLit, innerTerm, stateAfterTerm] = parseSystemFTerm(stateAfterLP);
+    const [innerLit, innerTerm, stateAfterTerm] = parseSystemFTerm(
+      stateAfterLP,
+    );
     const stateAfterRP = matchRP(stateAfterTerm);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
-  } else if (ch === 'Λ') {
-    const stateAfterLambdaT = matchCh(state, 'Λ');
+  } else if (ch === "Λ") {
+    const stateAfterLambdaT = matchCh(state, "Λ");
     const [typeVar, stateAfterVar] = parseIdentifier(stateAfterLambdaT);
-    const stateAfterDot = matchCh(stateAfterVar, '.');
+    const stateAfterDot = matchCh(stateAfterVar, ".");
     const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateAfterDot);
     return [
       `Λ${typeVar}.${bodyLit}`,
@@ -52,19 +67,23 @@ export function parseAtomicSystemFTerm(
   } else if (ch !== null && /[a-zA-Z]/.test(ch)) {
     const [varLit, stateAfterVar] = parseIdentifier(state);
     const [nextCh, stateAfterPeek] = peek(stateAfterVar);
-    if (nextCh === '[') {
-      const stateAfterLBracket = matchCh(stateAfterPeek, '[');
-      const [typeLit, typeArg, stateAfterType] = parseSystemFType(stateAfterLBracket);
-      const stateAfterRBracket = matchCh(stateAfterType, ']');
+    if (nextCh === "[") {
+      const stateAfterLBracket = matchCh(stateAfterPeek, "[");
+      const [typeLit, typeArg, stateAfterType] = parseSystemFType(
+        stateAfterLBracket,
+      );
+      const stateAfterRBracket = matchCh(stateAfterType, "]");
       return [
         `${varLit}[${typeLit}]`,
-        mkSystemFTypeApp({ kind: 'systemF-var', name: varLit }, typeArg),
+        mkSystemFTypeApp({ kind: "systemF-var", name: varLit }, typeArg),
         stateAfterRBracket,
       ];
     }
-    return [varLit, { kind: 'systemF-var', name: varLit }, stateAfterVar];
+    return [varLit, { kind: "systemF-var", name: varLit }, stateAfterVar];
   } else {
-    throw new ParseError(`unexpected end-of-input while parsing atomic term: ${ch ?? 'EOF'}`);
+    throw new ParseError(
+      `unexpected end-of-input while parsing atomic term: ${ch ?? "EOF"}`,
+    );
   }
 }
 
@@ -72,7 +91,9 @@ export function parseAtomicSystemFTerm(
  * Parses a complete System F term, handling both term and type application.
  * Returns a triple: [literal, SystemFTerm, updated state]
  */
-export function parseSystemFTerm(state: ParserState): [string, SystemFTerm, ParserState] {
+export function parseSystemFTerm(
+  state: ParserState,
+): [string, SystemFTerm, ParserState] {
   return parseChain<SystemFTerm>(state, parseAtomicSystemFTerm);
 }
 

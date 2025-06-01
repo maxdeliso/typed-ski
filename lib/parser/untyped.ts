@@ -1,14 +1,14 @@
-import { UntypedLambda, mkUntypedAbs, mkVar } from '../terms/lambda.js';
+import { mkUntypedAbs, mkVar, UntypedLambda } from "../terms/lambda.ts";
 import {
-  ParserState,
-  peek,
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
-} from './parserState.js';
-import { parseChain } from './chain.js';
-import { parseWithEOF } from './eof.js';
+  ParserState,
+  peek,
+} from "./parserState.ts";
+import { parseChain } from "./chain.ts";
+import { parseWithEOF } from "./eof.ts";
 
 /**
  * Parses an untyped lambda term (including applications) by chaining
@@ -17,7 +17,7 @@ import { parseWithEOF } from './eof.js';
  * Returns a triple: [literal, UntypedLambda, updatedState]
  */
 export function parseUntypedLambdaInternal(
-  state: ParserState
+  state: ParserState,
 ): [string, UntypedLambda, ParserState] {
   return parseChain<UntypedLambda>(state, parseAtomicUntypedLambda);
 }
@@ -26,26 +26,28 @@ export function parseUntypedLambdaInternal(
  * Parses an atomic untyped lambda term, tracking the literal substring precisely.
  */
 export function parseAtomicUntypedLambda(
-  state: ParserState
+  state: ParserState,
 ): [string, UntypedLambda, ParserState] {
   const [peeked, s] = peek(state);
 
-  if (peeked === 'λ') {
-    let currentState = matchCh(s, 'λ');
+  if (peeked === "λ") {
+    let currentState = matchCh(s, "λ");
     const [varLit, stateAfterVar] = parseIdentifier(currentState);
-    currentState = matchCh(stateAfterVar, '.');
-    const [, bodyTerm, stateAfterBody] =
-      parseUntypedLambdaInternal(currentState);
+    currentState = matchCh(stateAfterVar, ".");
+    const [, bodyTerm, stateAfterBody] = parseUntypedLambdaInternal(
+      currentState,
+    );
     const literal = s.buf.slice(s.idx, stateAfterBody.idx);
     return [
       literal,
       mkUntypedAbs(varLit, bodyTerm),
       stateAfterBody,
     ];
-  } else if (peeked === '(') {
+  } else if (peeked === "(") {
     let currentState = matchLP(s);
-    const [, innerTerm, stateAfterInner] =
-      parseUntypedLambdaInternal(currentState);
+    const [, innerTerm, stateAfterInner] = parseUntypedLambdaInternal(
+      currentState,
+    );
     currentState = matchRP(stateAfterInner);
     const fullLiteral = s.buf.slice(s.idx, currentState.idx);
     return [fullLiteral, innerTerm, currentState];

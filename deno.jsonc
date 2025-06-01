@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "deno.ns",
+      "dom"
+    ]
+  },
+  "fmt": {
+    "exclude": [
+      "assembly/**/*"
+    ]
+  },
+  "lint": {
+    "exclude": [
+      "assembly/**/*"
+    ]
+  },
+  "test": {
+    "exclude": [
+      "assembly/**/*",
+      "scripts/**/*"
+    ]
+  }
+}

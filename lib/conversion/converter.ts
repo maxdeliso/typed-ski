@@ -1,16 +1,16 @@
-import { ConsCell, cons } from '../cons.js';
-import { C, B } from '../consts/combinators.js';
-import { LambdaVar, UntypedLambda } from '../terms/lambda.js';
-import { SKIExpression } from '../ski/expression.js';
-import { S, K, I, SKITerminal } from '../ski/terminal.js';
-import { ConversionError } from './conversionError.js';
+import { cons, ConsCell } from "../cons.ts";
+import { B, C } from "../consts/combinators.ts";
+import { LambdaVar, UntypedLambda } from "../terms/lambda.ts";
+import { SKIExpression } from "../ski/expression.ts";
+import { I, K, S, SKITerminal } from "../ski/terminal.ts";
+import { ConversionError } from "./conversionError.ts";
 
 /**
  * Internal mixed-domain lambda abstraction.
  * (Uses a distinct tag so as not to conflict with untyped lambda abstractions.)
  */
 interface LambdaAbsMixed {
-  kind: 'lambda-abs-mixed';
+  kind: "lambda-abs-mixed";
   name: string;
   body: LambdaMixed;
 }
@@ -23,13 +23,17 @@ interface LambdaAbsMixed {
  *   - Mixed lambda abstractions (with kind "lambda-abs-mixed"),
  *   - And applications (cons cells) over LambdaMixed.
  */
-type LambdaMixed = SKITerminal | LambdaVar | LambdaAbsMixed | ConsCell<LambdaMixed>;
+type LambdaMixed =
+  | SKITerminal
+  | LambdaVar
+  | LambdaAbsMixed
+  | ConsCell<LambdaMixed>;
 
 /**
  * Helper constructor for a mixed-domain abstraction.
  */
 const mkAbstractMixed = (name: string, body: LambdaMixed): LambdaAbsMixed => ({
-  kind: 'lambda-abs-mixed',
+  kind: "lambda-abs-mixed",
   name,
   body,
 });
@@ -40,12 +44,12 @@ const mkAbstractMixed = (name: string, body: LambdaMixed): LambdaAbsMixed => ({
  */
 const lift = (ut: UntypedLambda): LambdaMixed => {
   switch (ut.kind) {
-    case 'lambda-var':
+    case "lambda-var":
       return ut;
-    case 'lambda-abs':
+    case "lambda-abs":
       // Convert the untyped abstraction into our mixed abstraction.
       return mkAbstractMixed(ut.name, lift(ut.body));
-    case 'non-terminal':
+    case "non-terminal":
       return cons(lift(ut.lft), lift(ut.rgt));
   }
 };
@@ -71,37 +75,39 @@ const lift = (ut: UntypedLambda): LambdaMixed => {
  */
 const convertMixed = (lm: LambdaMixed): LambdaMixed => {
   switch (lm.kind) {
-    case 'lambda-var':
+    case "lambda-var":
       // Rule 1: T[x] ⇒ x
       return lm;
-    case 'non-terminal':
+    case "non-terminal":
       // Rule 2: T[(E₁ E₂)] ⇒ (T[E₁] T[E₂])
       return cons(convertMixed(lm.lft), convertMixed(lm.rgt));
-    case 'lambda-abs-mixed':
+    case "lambda-abs-mixed":
       if (!free(lm.name, lm.body)) {
         // Rule 3: T[λx.E] ⇒ (K T[E])
         return cons(K, convertMixed(lm.body));
       }
       switch (lm.body.kind) {
-        case 'lambda-var':
+        case "lambda-var":
           if (lm.name === lm.body.name) {
             // Rule 4: T[λx.x] ⇒ I
             return I;
           } else {
-            throw new ConversionError('single variable non-match');
+            throw new ConversionError("single variable non-match");
           }
-        case 'lambda-abs-mixed': {
+        case "lambda-abs-mixed": {
           const x = lm.name;
           const y = lm.body.name;
           const E = lm.body.body;
           if (free(x, E)) {
             // Rule 5: T[λx.λy.E] ⇒ T[λx.T[λy.E]]
-            return convertMixed(mkAbstractMixed(x, convertMixed(mkAbstractMixed(y, E))));
+            return convertMixed(
+              mkAbstractMixed(x, convertMixed(mkAbstractMixed(y, E))),
+            );
           } else {
-            throw new ConversionError('abs x abs y { x not referenced }');
+            throw new ConversionError("abs x abs y { x not referenced }");
           }
         }
-        case 'non-terminal': {
+        case "non-terminal": {
           const x = lm.name;
           const E1 = lm.body.lft;
           const E2 = lm.body.rgt;
@@ -109,28 +115,30 @@ const convertMixed = (lm: LambdaMixed): LambdaMixed => {
             // Rule 6: T[λx.(E₁ E₂)] ⇒ (S T[λx.E₁] T[λx.E₂])
             return cons(
               cons(S, convertMixed(mkAbstractMixed(x, E1))),
-              convertMixed(mkAbstractMixed(x, E2))
+              convertMixed(mkAbstractMixed(x, E2)),
             );
           } else if (free(x, E1) && !free(x, E2)) {
             // Rule 7: T[λx.(E₁ E₂)] ⇒ (C T[λx.E₁] T[E₂])
             return cons(
               cons(C, convertMixed(mkAbstractMixed(x, E1))),
-              convertMixed(E2)
+              convertMixed(E2),
             );
           } else if (!free(x, E1) && free(x, E2)) {
             // Rule 8: T[λx.(E₁ E₂)] ⇒ (B T[E₁] T[λx.E₂])
             return cons(
               cons(B, convertMixed(E1)),
-              convertMixed(mkAbstractMixed(x, E2))
+              convertMixed(mkAbstractMixed(x, E2)),
             );
           } else {
-            throw new ConversionError('x not free in E1 or E2');
+            throw new ConversionError("x not free in E1 or E2");
           }
         }
         default:
-          throw new ConversionError('unexpected body kind in lambda abstraction');
+          throw new ConversionError(
+            "unexpected body kind in lambda abstraction",
+          );
       }
-    case 'terminal':
+    case "terminal":
       // Already a SKI terminal—return it as is.
       return lm;
   }
@@ -138,18 +146,18 @@ const convertMixed = (lm: LambdaMixed): LambdaMixed => {
 
 const free = (name: string, lm: LambdaMixed): boolean => {
   switch (lm.kind) {
-    case 'lambda-var':
+    case "lambda-var":
       return lm.name === name;
-    case 'non-terminal':
+    case "non-terminal":
       return free(name, lm.lft) || free(name, lm.rgt);
-    case 'lambda-abs-mixed':
+    case "lambda-abs-mixed":
       // If the abstraction binds the variable 'name', then it is not free.
       if (lm.name === name) {
         return false;
       } else {
         return free(name, lm.body);
       }
-    case 'terminal':
+    case "terminal":
       // SKI terminals do not contribute any free variables.
       return false;
   }
@@ -161,18 +169,20 @@ const free = (name: string, lm: LambdaMixed): boolean => {
  */
 const assertCombinator = (lm: LambdaMixed): SKIExpression => {
   switch (lm.kind) {
-    case 'terminal':
+    case "terminal":
       return lm;
-    case 'non-terminal':
+    case "non-terminal":
       if (
-        lm.lft.kind === 'lambda-var' || lm.lft.kind === 'lambda-abs-mixed' ||
-        lm.rgt.kind === 'lambda-var' || lm.rgt.kind === 'lambda-abs-mixed'
+        lm.lft.kind === "lambda-var" || lm.lft.kind === "lambda-abs-mixed" ||
+        lm.rgt.kind === "lambda-var" || lm.rgt.kind === "lambda-abs-mixed"
       ) {
-        throw new ConversionError('lambda abstraction detected in non-terminal');
+        throw new ConversionError(
+          "lambda abstraction detected in non-terminal",
+        );
       }
       return cons(assertCombinator(lm.lft), assertCombinator(lm.rgt));
     default:
-      throw new ConversionError('lambda abstraction detected at top');
+      throw new ConversionError("lambda abstraction detected at top");
   }
 };
 

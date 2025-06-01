@@ -1,64 +1,64 @@
-import { bracketLambda, eraseSystemF } from '../../index.js';
-import { eraseTypedLambda } from '../../types/typedLambda.js';
-import { TripLangTerm } from '../trip.js';
-import { CompilationError } from './compilation.js';
+import { bracketLambda, eraseSystemF } from "../../index.ts";
+import { eraseTypedLambda } from "../../types/typedLambda.ts";
+import { TripLangTerm } from "../trip.ts";
+import { CompilationError } from "./compilation.ts";
 
 export function termLevel(dt: TripLangTerm): number {
   switch (dt.kind) {
-    case 'poly':
+    case "poly":
       return 4;
-    case 'typed':
+    case "typed":
       return 3;
-    case 'untyped':
+    case "untyped":
       return 2;
-    case 'combinator':
+    case "combinator":
       return 1;
-    case 'type':
+    case "type":
       return -1;
   }
 }
 
 export function lower(dt: TripLangTerm): TripLangTerm {
   switch (dt.kind) {
-    case 'poly': {
+    case "poly": {
       const erased = eraseSystemF(dt.term);
 
       return {
-        kind: 'typed',
+        kind: "typed",
         name: dt.name,
         type: undefined, // note: we'll check it after all the symbols are resolved
-        term: erased
+        term: erased,
       };
     }
-    case 'typed': {
+    case "typed": {
       const erased = eraseTypedLambda(dt.term);
 
       return {
-        kind: 'untyped',
+        kind: "untyped",
         name: dt.name,
-        term: erased
+        term: erased,
       };
     }
 
-    case 'untyped': {
+    case "untyped": {
       const erased = bracketLambda(dt.term);
 
       return {
-        kind: 'combinator',
+        kind: "combinator",
         name: dt.name,
-        term: erased
+        term: erased,
       };
     }
 
-    case 'combinator': {
+    case "combinator": {
       return dt; // fixed point
     }
 
-    case 'type':
+    case "type":
       throw new CompilationError(
-        'Cannot lower a type',
-        'resolve',
-        { type: dt }
+        "Cannot lower a type",
+        "resolve",
+        { type: dt },
       );
   }
 }

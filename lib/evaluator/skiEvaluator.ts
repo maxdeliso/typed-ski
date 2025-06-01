@@ -1,8 +1,12 @@
-import { cons, ConsCell } from '../cons.js';
-import { expressionEquivalent, SKIExpression, toSKIKey } from '../ski/expression.js';
-import { SKITerminalSymbol } from '../ski/terminal.js';
-import { createMap, searchMap, insertMap, SKIMap } from '../data/map/skiMap.js';
-import { Evaluator } from './evaluator.js';
+import { cons, ConsCell } from "../cons.ts";
+import {
+  expressionEquivalent,
+  SKIExpression,
+  toSKIKey,
+} from "../ski/expression.ts";
+import { SKITerminalSymbol } from "../ski/terminal.ts";
+import { createMap, insertMap, searchMap, SKIMap } from "../data/map/skiMap.ts";
+import { Evaluator } from "./evaluator.ts";
 
 /**
  * The internal shape of an evaluation result.
@@ -21,8 +25,8 @@ type SKIStep<E> = (input: E) => SKIResult<E>;
 
 const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) => {
   if (
-    expr.kind === 'non-terminal' &&
-    expr.lft.kind === 'terminal' &&
+    expr.kind === "non-terminal" &&
+    expr.lft.kind === "terminal" &&
     expr.lft.sym === SKITerminalSymbol.I
   ) {
     return { altered: true, expr: expr.rgt };
@@ -32,9 +36,9 @@ const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) => {
 
 const stepK: SKIStep<SKIExpression> = (expr: SKIExpression) => {
   if (
-    expr.kind === 'non-terminal' &&
-    expr.lft.kind === 'non-terminal' &&
-    expr.lft.lft.kind === 'terminal' &&
+    expr.kind === "non-terminal" &&
+    expr.lft.kind === "non-terminal" &&
+    expr.lft.lft.kind === "terminal" &&
     expr.lft.lft.sym === SKITerminalSymbol.K
   ) {
     return { altered: true, expr: expr.lft.rgt };
@@ -44,10 +48,10 @@ const stepK: SKIStep<SKIExpression> = (expr: SKIExpression) => {
 
 const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) => {
   if (
-    expr.kind === 'non-terminal' &&
-    expr.lft.kind === 'non-terminal' &&
-    expr.lft.lft.kind === 'non-terminal' &&
-    expr.lft.lft.lft.kind === 'terminal' &&
+    expr.kind === "non-terminal" &&
+    expr.lft.kind === "non-terminal" &&
+    expr.lft.lft.kind === "non-terminal" &&
+    expr.lft.lft.lft.kind === "terminal" &&
     expr.lft.lft.lft.sym === SKITerminalSymbol.S
   ) {
     const x = expr.lft.lft.rgt;
@@ -67,7 +71,7 @@ const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) => {
  */
 interface Frame {
   node: ConsCell<SKIExpression>;
-  phase: 'left' | 'right';
+  phase: "left" | "right";
   leftResult?: SKIExpression;
 }
 
@@ -97,20 +101,23 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
   const evalCached = searchMap(evaluationCache, origKey);
 
   if (evalCached !== undefined) {
-    return { altered: !expressionEquivalent(orig, evalCached), expr: evalCached };
+    return {
+      altered: !expressionEquivalent(orig, evalCached),
+      expr: evalCached,
+    };
   }
 
   let current: SKIExpression = expr;
   let next: SKIExpression;
   const stack: Frame[] = [];
 
-  for(;;) {
+  for (;;) {
     const key = toSKIKey(current);
     const cached = searchMap(expressionCache, key);
     if (cached !== undefined) {
       next = cached;
     } else {
-      if (current.kind === 'terminal') {
+      if (current.kind === "terminal") {
         next = current;
       } else {
         let stepResult = stepI(current);
@@ -125,7 +132,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
           expressionCache = insertMap(expressionCache, key, next);
         } else {
           // No rule applied here; continue DFS by descending into the left child.
-          stack.push({ node: current, phase: 'left' });
+          stack.push({ node: current, phase: "left" });
           current = current.lft;
           continue;
         }
@@ -145,15 +152,19 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
 
     // Pop a frame and combine the result with its parent.
     const frame = stack.pop()!;
-    if (frame.phase === 'left') {
+    if (frame.phase === "left") {
       if (!expressionEquivalent(frame.node.lft, next)) {
         // The left subtree was reduced. Rebuild the parent's node.
         next = cons(next, frame.node.rgt);
-        expressionCache = insertMap(expressionCache, toSKIKey(frame.node), next);
+        expressionCache = insertMap(
+          expressionCache,
+          toSKIKey(frame.node),
+          next,
+        );
       } else {
         // The left branch is fully normalized.
         // Now prepare to reduce the right branch by pushing a frame with phase 'right'
-        frame.phase = 'right';
+        frame.phase = "right";
         frame.leftResult = next;
         stack.push(frame);
         current = frame.node.rgt;
@@ -197,7 +208,7 @@ const reduce = (exp: SKIExpression, maxIterations?: number): SKIExpression => {
  * @returns whether the reduction step changed the input, and the result
  */
 const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
-  if (expr.kind === 'terminal') return { altered: false, expr };
+  if (expr.kind === "terminal") return { altered: false, expr };
   let result = stepI(expr);
   if (result.altered) return result;
   result = stepK(expr);
@@ -205,9 +216,13 @@ const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
   result = stepS(expr);
   if (result.altered) return result;
   result = stepOnce(expr.lft);
-  if (result.altered) return { altered: true, expr: cons(result.expr, expr.rgt) };
+  if (result.altered) {
+    return { altered: true, expr: cons(result.expr, expr.rgt) };
+  }
   result = stepOnce(expr.rgt);
-  if (result.altered) return { altered: true, expr: cons(expr.lft, result.expr) };
+  if (result.altered) {
+    return { altered: true, expr: cons(expr.lft, result.expr) };
+  }
   return { altered: false, expr };
 };
 

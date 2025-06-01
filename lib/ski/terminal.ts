@@ -1,17 +1,17 @@
 export enum SKITerminalSymbol {
-  S = 'S',
-  K = 'K',
-  I = 'I'
+  S = "S",
+  K = "K",
+  I = "I",
 }
 
 export interface SKITerminal {
-  kind: 'terminal';
+  kind: "terminal";
   sym: SKITerminalSymbol;
 }
 
 export const term = (sym: SKITerminalSymbol): SKITerminal => ({
-  kind: 'terminal',
-  sym
+  kind: "terminal",
+  sym,
 });
 
 export const S = term(SKITerminalSymbol.S);

@@ -1,1 +1,1 @@
-export class TypeError extends Error { }
+export class TypeError extends Error {}

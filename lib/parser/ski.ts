@@ -1,9 +1,9 @@
-import { SKIExpression } from '../ski/expression.js';
-import { ParserState, peek, consume, matchLP, matchRP } from './parserState.js';
-import { ParseError } from './parseError.js';
-import { parseWithEOF } from './eof.js';
-import { cons } from '../cons.js';
-import { SKITerminalSymbol, term } from '../ski/terminal.js';
+import { SKIExpression } from "../ski/expression.ts";
+import { consume, matchLP, matchRP, ParserState, peek } from "./parserState.ts";
+import { ParseError } from "./parseError.ts";
+import { parseWithEOF } from "./eof.ts";
+import { cons } from "../cons.ts";
+import { SKITerminalSymbol, term } from "../ski/terminal.ts";
 
 /**
  * Parses a chain of SKI atomic terms (term { term }).
@@ -18,7 +18,7 @@ function parseSKIChain(rdb: ParserState): [string, SKIExpression, ParserState] {
     const [next, newState] = peek(state);
     if (
       next === null ||
-      (next !== '(' && !['S', 'K', 'I'].includes(next.toUpperCase()))
+      (next !== "(" && !["S", "K", "I"].includes(next.toUpperCase()))
     ) {
       return [lit, expr, newState];
     }
@@ -35,9 +35,11 @@ function parseSKIChain(rdb: ParserState): [string, SKIExpression, ParserState] {
  *
  * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
  */
-export function parseAtomicSKI(rdb: ParserState): [string, SKIExpression, ParserState] {
+export function parseAtomicSKI(
+  rdb: ParserState,
+): [string, SKIExpression, ParserState] {
   const [peeked, state] = peek(rdb);
-  if (peeked === '(') {
+  if (peeked === "(") {
     // Parse a parenthesized expression.
     const stateAfterLP = matchLP(state);
     // Inside parentheses we parse a whole chain.
@@ -46,16 +48,18 @@ export function parseAtomicSKI(rdb: ParserState): [string, SKIExpression, Parser
     return [`(${innerLit})`, innerExpr, stateAfterRP];
   } else if (
     peeked &&
-    (peeked.toUpperCase() === 'S' ||
-      peeked.toUpperCase() === 'K' ||
-      peeked.toUpperCase() === 'I')
+    (peeked.toUpperCase() === "S" ||
+      peeked.toUpperCase() === "K" ||
+      peeked.toUpperCase() === "I")
   ) {
     const token = peeked.toUpperCase();
     const stateAfterConsume = consume(state);
     return [peeked, term(token as SKITerminalSymbol), stateAfterConsume];
   } else {
-    const unexpected = peeked === null ? 'EOF' : `"${peeked}"`;
-    throw new ParseError(`unexpected token ${unexpected} when expecting an SKI term`);
+    const unexpected = peeked === null ? "EOF" : `"${peeked}"`;
+    throw new ParseError(
+      `unexpected token ${unexpected} when expecting an SKI term`,
+    );
   }
 }
 
@@ -65,7 +69,9 @@ export function parseAtomicSKI(rdb: ParserState): [string, SKIExpression, Parser
  *
  * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
  */
-export function parseSKIInternal(rdb: ParserState): [string, SKIExpression, ParserState] {
+export function parseSKIInternal(
+  rdb: ParserState,
+): [string, SKIExpression, ParserState] {
   return parseSKIChain(rdb);
 }
 

@@ -8,4 +8,4 @@ export {
   allocCons,
   arenaKernelStep,
   reduce
-} from './arena-evaluator';
+} from "./arena-evaluator";

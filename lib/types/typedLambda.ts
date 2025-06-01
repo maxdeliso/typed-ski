@@ -1,8 +1,13 @@
-import { cons, ConsCell } from '../cons.js';
-import { AVLTree, createEmptyAVL, insertAVL, searchAVL } from '../data/avl/avlNode.js';
-import { compareStrings } from '../data/map/stringMap.js';
-import { LambdaVar, mkUntypedAbs, UntypedLambda } from '../terms/lambda.js';
-import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.js';
+import { cons, ConsCell } from "../cons.ts";
+import {
+  AVLTree,
+  createEmptyAVL,
+  insertAVL,
+  searchAVL,
+} from "../data/avl/avlNode.ts";
+import { compareStrings } from "../data/map/stringMap.ts";
+import { LambdaVar, mkUntypedAbs, UntypedLambda } from "../terms/lambda.ts";
+import { arrow, BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -20,27 +25,29 @@ import { arrow, typesLitEq, prettyPrintTy, BaseType } from './types.js';
  * The body of the expression is y.
  */
 export interface TypedLambdaAbs {
-  kind: 'typed-lambda-abstraction',
-  varName: string,
-  ty: BaseType,
-  body: TypedLambda
+  kind: "typed-lambda-abstraction";
+  varName: string;
+  ty: BaseType;
+  body: TypedLambda;
 }
 
 /**
  * This recursive type represents the legal terms of the typed lambda calculus.
  */
-export type TypedLambda
-  = LambdaVar
+export type TypedLambda =
+  | LambdaVar
   | TypedLambdaAbs
   | ConsCell<TypedLambda>;
 
 export const mkTypedAbs = (
-  varName: string, ty: BaseType, body: TypedLambda
+  varName: string,
+  ty: BaseType,
+  body: TypedLambda,
 ): TypedLambdaAbs => ({
-  kind: 'typed-lambda-abstraction',
+  kind: "typed-lambda-abstraction",
   varName,
   ty,
-  body
+  body,
 });
 
 /**
@@ -53,14 +60,17 @@ export function emptyContext(): Context {
   return createEmptyAVL<string, BaseType>();
 }
 
-export const addBinding =
-  (ctx: Context, name: string, ty: BaseType): Context => {
-    if (searchAVL(ctx, name, compareStrings) !== undefined) {
-      throw new TypeError('duplicated binding for name: ' + name);
-    }
+export const addBinding = (
+  ctx: Context,
+  name: string,
+  ty: BaseType,
+): Context => {
+  if (searchAVL(ctx, name, compareStrings) !== undefined) {
+    throw new TypeError("duplicated binding for name: " + name);
+  }
 
-    return insertAVL(ctx, name, ty, compareStrings);
-  };
+  return insertAVL(ctx, name, ty, compareStrings);
+};
 
 export const typecheckTypedLambda = (typedTerm: TypedLambda): BaseType => {
   return typecheckGiven(emptyContext(), typedTerm);
@@ -74,29 +84,32 @@ export const typecheckTypedLambda = (typedTerm: TypedLambda): BaseType => {
  * @param typedTerm a lambda term annotated with an input type
  * @returns the type of the entire term
  */
-export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): BaseType => {
+export const typecheckGiven = (
+  ctx: Context,
+  typedTerm: TypedLambda,
+): BaseType => {
   switch (typedTerm.kind) {
-    case 'lambda-var': {
+    case "lambda-var": {
       const termName = typedTerm.name;
       const lookedUp = searchAVL(ctx, termName, compareStrings);
 
       if (lookedUp === undefined) {
-        throw new TypeError('unknown term named: ' + termName);
+        throw new TypeError("unknown term named: " + termName);
       }
 
       return lookedUp;
     }
-    case 'typed-lambda-abstraction': {
+    case "typed-lambda-abstraction": {
       const updatedCtx = addBinding(ctx, typedTerm.varName, typedTerm.ty);
       const bodyTy = typecheckGiven(updatedCtx, typedTerm.body);
       return arrow(typedTerm.ty, bodyTy);
     }
-    case 'non-terminal': {
+    case "non-terminal": {
       const tyLft = typecheckGiven(ctx, typedTerm.lft);
       const tyRgt = typecheckGiven(ctx, typedTerm.rgt);
 
-      if (tyLft.kind !== 'non-terminal') {
-        throw new TypeError('arrow type expected on lhs');
+      if (tyLft.kind !== "non-terminal") {
+        throw new TypeError("arrow type expected on lhs");
       }
 
       const takes = tyLft.lft;
@@ -104,9 +117,9 @@ export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): BaseType =
 
       if (!typesLitEq(tyRgt, takes)) {
         throw new TypeError(
-          'Type mismatch in function application:\n' +
-          `Expected: ${prettyPrintTy(takes)}\n` +
-          `Got: ${prettyPrintTy(tyRgt)}`
+          "Type mismatch in function application:\n" +
+            `Expected: ${prettyPrintTy(takes)}\n` +
+            `Got: ${prettyPrintTy(tyRgt)}`,
         );
       }
 
@@ -117,32 +130,36 @@ export const typecheckGiven = (ctx: Context, typedTerm: TypedLambda): BaseType =
 
 export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
   switch (expr.kind) {
-    case 'lambda-var': {
+    case "lambda-var": {
       return expr.name;
     }
-    case 'typed-lambda-abstraction': {
-      return 'λ' +
+    case "typed-lambda-abstraction": {
+      return "λ" +
         expr.varName +
-        ':' +
+        ":" +
         prettyPrintTy(expr.ty) +
-        '.' +
+        "." +
         prettyPrintTypedLambda(expr.body);
     }
-    case 'non-terminal': {
-      return '(' +
+    case "non-terminal": {
+      return "(" +
         prettyPrintTypedLambda(expr.lft) +
         prettyPrintTypedLambda(expr.rgt) +
-        ')';
+        ")";
     }
   }
 };
 
 export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
-  if (a.kind === 'lambda-var' && b.kind === 'lambda-var') {
+  if (a.kind === "lambda-var" && b.kind === "lambda-var") {
     return a.name === b.name;
-  } else if (a.kind === 'typed-lambda-abstraction' && b.kind === 'typed-lambda-abstraction') {
-    return typesLitEq(a.ty, b.ty) && a.varName === b.varName && typedTermsLitEq(a.body, b.body);
-  } else if (a.kind === 'non-terminal' && b.kind === 'non-terminal') {
+  } else if (
+    a.kind === "typed-lambda-abstraction" &&
+    b.kind === "typed-lambda-abstraction"
+  ) {
+    return typesLitEq(a.ty, b.ty) && a.varName === b.varName &&
+      typedTermsLitEq(a.body, b.body);
+  } else if (a.kind === "non-terminal" && b.kind === "non-terminal") {
     return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt);
   } else {
     return false;
@@ -155,11 +172,11 @@ export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
  */
 export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
   switch (t.kind) {
-    case 'lambda-var':
+    case "lambda-var":
       return t;
-    case 'typed-lambda-abstraction':
+    case "typed-lambda-abstraction":
       return mkUntypedAbs(t.varName, eraseTypedLambda(t.body));
-    case 'non-terminal':
+    case "non-terminal":
       return cons(eraseTypedLambda(t.lft), eraseTypedLambda(t.rgt));
   }
 };

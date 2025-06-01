@@ -1,13 +1,17 @@
-import { AVLTree, createEmptyAVL, insertAVL, searchAVL } from '../../data/avl/avlNode.js';
-import { compareStrings } from '../../data/map/stringMap.js';
-import { BaseType } from '../../types/types.js';
-import { TripLangDefType } from '../trip.js';
-import { CompilationError } from './compilation.js';
+import {
+  AVLTree,
+  createEmptyAVL,
+  insertAVL,
+  searchAVL,
+} from "../../data/avl/avlNode.ts";
+import { compareStrings } from "../../data/map/stringMap.ts";
+import { BaseType } from "../../types/types.ts";
+import { TripLangDefType } from "../trip.ts";
+import { CompilationError } from "./compilation.ts";
 
-export function externalReferences(td: TripLangDefType):
-[
+export function externalReferences(td: TripLangDefType): [
   AVLTree<string, TripLangDefType>,
-  AVLTree<string, BaseType>
+  AVLTree<string, BaseType>,
 ] {
   let externalTermRefs = createEmptyAVL<string, TripLangDefType>();
   let externalTypeRefs = createEmptyAVL<string, BaseType>();
@@ -19,85 +23,128 @@ export function externalReferences(td: TripLangDefType):
 
     if (current === undefined) {
       throw new CompilationError(
-        'Underflow in external references stack',
-        'resolve',
-        { stack: defStack }
+        "Underflow in external references stack",
+        "resolve",
+        { stack: defStack },
       );
     }
 
     switch (current.kind) {
-      case 'systemF-var': {
-        const external = searchAVL(absBindMap, current.name, compareStrings) === undefined;
+      case "systemF-var": {
+        const external =
+          searchAVL(absBindMap, current.name, compareStrings) === undefined;
 
         if (external) {
-          externalTermRefs = insertAVL(externalTermRefs, current.name, current, compareStrings);
+          externalTermRefs = insertAVL(
+            externalTermRefs,
+            current.name,
+            current,
+            compareStrings,
+          );
         }
 
         break;
       }
 
-      case 'lambda-var': {
-        const external = searchAVL(absBindMap, current.name, compareStrings) === undefined;
+      case "lambda-var": {
+        const external =
+          searchAVL(absBindMap, current.name, compareStrings) === undefined;
 
         if (external) {
-          externalTermRefs = insertAVL(externalTermRefs, current.name, current, compareStrings);
+          externalTermRefs = insertAVL(
+            externalTermRefs,
+            current.name,
+            current,
+            compareStrings,
+          );
         }
 
         break;
       }
 
-      case 'type-var': {
-        const external = searchAVL(absBindMap, current.typeName, compareStrings) === undefined;
+      case "type-var": {
+        const external =
+          searchAVL(absBindMap, current.typeName, compareStrings) === undefined;
 
         if (external) {
-          externalTypeRefs = insertAVL(externalTypeRefs, current.typeName, current, compareStrings);
+          externalTypeRefs = insertAVL(
+            externalTypeRefs,
+            current.typeName,
+            current,
+            compareStrings,
+          );
         }
 
         break;
       }
 
-      case 'lambda-abs': {
+      case "lambda-abs": {
         defStack.push(current.body);
-        absBindMap = insertAVL(absBindMap, current.name, current.body, compareStrings);
+        absBindMap = insertAVL(
+          absBindMap,
+          current.name,
+          current.body,
+          compareStrings,
+        );
         break;
       }
 
-      case 'systemF-abs': {
+      case "systemF-abs": {
         defStack.push(current.typeAnnotation);
         defStack.push(current.body);
-        absBindMap = insertAVL(absBindMap, current.name, current.body, compareStrings);
+        absBindMap = insertAVL(
+          absBindMap,
+          current.name,
+          current.body,
+          compareStrings,
+        );
         break;
       }
 
-      case 'systemF-type-abs': {
+      case "systemF-type-abs": {
         defStack.push(current.body);
-        absBindMap = insertAVL(absBindMap, current.typeVar, current.body, compareStrings);
+        absBindMap = insertAVL(
+          absBindMap,
+          current.typeVar,
+          current.body,
+          compareStrings,
+        );
         break;
       }
 
-      case 'typed-lambda-abstraction': {
+      case "typed-lambda-abstraction": {
         defStack.push(current.ty);
         defStack.push(current.body);
-        absBindMap = insertAVL(absBindMap, current.varName, current.body, compareStrings);
+        absBindMap = insertAVL(
+          absBindMap,
+          current.varName,
+          current.body,
+          compareStrings,
+        );
         break;
       }
 
-      case 'forall':
+      case "forall":
         defStack.push(current.body);
-        absBindMap = insertAVL(absBindMap, current.typeVar, current.body, compareStrings);
+        absBindMap = insertAVL(
+          absBindMap,
+          current.typeVar,
+          current.body,
+          compareStrings,
+        );
         break;
 
-      case 'systemF-type-app': {
+      case "systemF-type-app": {
         defStack.push(current.term);
         defStack.push(current.typeArg);
         break;
       }
 
-      case 'terminal':
+      case "terminal":
         // ignore - no bindings possible
         break;
 
-      case 'non-terminal': {
+      case "non-terminal": {
         defStack.push(current.lft);
         defStack.push(current.rgt);
         break;

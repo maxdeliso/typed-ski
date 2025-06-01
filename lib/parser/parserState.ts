@@ -1,4 +1,4 @@
-import { ParseError } from './parseError.js';
+import { ParseError } from "./parseError.ts";
 
 export interface ParserState {
   buf: string;
@@ -32,22 +32,21 @@ export function consume(state: ParserState): ParserState {
 export function matchCh(state: ParserState, ch: string): ParserState {
   const [next, newState] = peek(state);
   if (next !== ch) {
-    throw new ParseError(`expected '${ch}' but found '${next ?? 'EOF'}'`);
+    throw new ParseError(`expected '${ch}' but found '${next ?? "EOF"}'`);
   }
   return consume(newState);
 }
 
 export function matchLP(state: ParserState): ParserState {
-  return matchCh(state, '(');
+  return matchCh(state, "(");
 }
 
 export function matchRP(state: ParserState): ParserState {
-  return matchCh(state, ')');
+  return matchCh(state, ")");
 }
 
-
 export function parseIdentifier(state: ParserState): [string, ParserState] {
-  let id = '';
+  let id = "";
   let currentState = skipWhitespace(state);
   while (currentState.idx < currentState.buf.length) {
     const ch = currentState.buf[currentState.idx];
@@ -56,7 +55,7 @@ export function parseIdentifier(state: ParserState): [string, ParserState] {
     currentState = consume(currentState);
   }
   if (id.length === 0) {
-    throw new ParseError('expected an identifier');
+    throw new ParseError("expected an identifier");
   }
   return [id, currentState];
 }
@@ -66,7 +65,10 @@ export function remaining(state: ParserState): [boolean, ParserState] {
   return [newState.idx < newState.buf.length, newState];
 }
 
-export function parseKeyword(state: ParserState, keywords: string[]): [string, ParserState] {
+export function parseKeyword(
+  state: ParserState,
+  keywords: string[],
+): [string, ParserState] {
   const [word, nextState] = parseIdentifier(state);
   if (!keywords.includes(word)) {
     throw new ParseError(`expected keyword, found ${word}`);

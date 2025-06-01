@@ -1,12 +1,12 @@
-import { ConsCell, cons } from '../cons.js';
+import { cons, ConsCell } from "../cons.ts";
 
 export interface TypeVariable {
-  kind: 'type-var';
+  kind: "type-var";
   typeName: string;
 }
 
 export interface ForallType {
-  kind: 'forall';
+  kind: "forall";
   typeVar: string;
   body: BaseType;
 }
@@ -14,21 +14,22 @@ export interface ForallType {
 export type BaseType = TypeVariable | ConsCell<BaseType> | ForallType;
 
 export const mkTypeVariable = (name: string): TypeVariable => ({
-  kind: 'type-var',
+  kind: "type-var",
   typeName: name,
 });
 
-export const arrow = (a: BaseType, b: BaseType): ConsCell<BaseType> => cons(a, b);
+export const arrow = (a: BaseType, b: BaseType): ConsCell<BaseType> =>
+  cons(a, b);
 
 export const arrows = (...tys: BaseType[]): BaseType =>
   tys.reduceRight((acc, ty) => cons(ty, acc));
 
 export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
-  if (a.kind === 'type-var' && b.kind === 'type-var') {
+  if (a.kind === "type-var" && b.kind === "type-var") {
     return a.typeName === b.typeName;
-  } else if (a.kind === 'forall' && b.kind === 'forall') {
+  } else if (a.kind === "forall" && b.kind === "forall") {
     return a.typeVar === b.typeVar && typesLitEq(a.body, b.body);
-  } else if ('lft' in a && 'rgt' in a && 'lft' in b && 'rgt' in b) {
+  } else if ("lft" in a && "rgt" in a && "lft" in b && "rgt" in b) {
     return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt);
   } else {
     return false;
@@ -36,9 +37,9 @@ export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
 };
 
 export const prettyPrintTy = (ty: BaseType): string => {
-  if (ty.kind === 'type-var') {
+  if (ty.kind === "type-var") {
     return ty.typeName;
-  } else if (ty.kind === 'forall') {
+  } else if (ty.kind === "forall") {
     return `∀${ty.typeVar}.${prettyPrintTy(ty.body)}`;
   } else {
     return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`;

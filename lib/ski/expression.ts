@@ -1,5 +1,5 @@
-import { ConsCell, cons } from '../cons.js';
-import { SKITerminal } from './terminal.js';
+import { cons, ConsCell } from "../cons.ts";
+import { SKITerminal } from "./terminal.ts";
 
 /*
  * EBNF grammar:
@@ -17,7 +17,7 @@ import { SKITerminal } from './terminal.js';
  * terminal | non-terminal | expression
  */
 export type SKIExpression = SKITerminal | ConsCell<SKIExpression>;
-export type SKIChar = 'S' | 'K' | 'I' | '(' | ')';
+export type SKIChar = "S" | "K" | "I" | "(" | ")";
 export type SKIKey = SKIChar[];
 
 /**
@@ -30,11 +30,16 @@ export type SKIKey = SKIChar[];
  */
 export function charToIndex(ch: SKIChar): 0 | 1 | 2 | 3 | 4 {
   switch (ch) {
-    case 'S': return 0;
-    case 'K': return 1;
-    case 'I': return 2;
-    case '(' : return 3;
-    case ')' : return 4;
+    case "S":
+      return 0;
+    case "K":
+      return 1;
+    case "I":
+      return 2;
+    case "(":
+      return 3;
+    case ")":
+      return 4;
   }
 }
 
@@ -53,23 +58,23 @@ export function toSKIKey(expr: SKIExpression): SKIKey {
   while (stack.length > 0) {
     const item = stack.pop();
     if (item === undefined) {
-      throw new Error('stack underflow');
+      throw new Error("stack underflow");
     }
 
-    if (typeof item === 'string') {
+    if (typeof item === "string") {
       // If the item is a literal SKIChar, append it to the key.
       key.push(item);
-    } else if (item.kind === 'terminal') {
+    } else if (item.kind === "terminal") {
       // For terminal nodes, simply push the symbol.
       key.push(item.sym);
     } else {
       // For non-terminal nodes, we want to output:
       // "(" + [key for left subtree] + [key for right subtree] + ")"
       // Push the components in reverse order (LIFO) so that '(' comes first.
-      stack.push(')');         // Will be appended last.
-      stack.push(item.rgt);      // Right subtree.
-      stack.push(item.lft);      // Left subtree.
-      stack.push('(');           // Will be appended first.
+      stack.push(")"); // Will be appended last.
+      stack.push(item.rgt); // Right subtree.
+      stack.push(item.lft); // Left subtree.
+      stack.push("("); // Will be appended first.
     }
   }
 
@@ -80,7 +85,10 @@ export function toSKIKey(expr: SKIExpression): SKIKey {
  * Compare two SKI expressions for structural equivalence.
  * (Uses the canonical key produced by `toSKIKey`.)
  */
-export function expressionEquivalent(a: SKIExpression, b: SKIExpression): boolean {
+export function expressionEquivalent(
+  a: SKIExpression,
+  b: SKIExpression,
+): boolean {
   const keyA = toSKIKey(a);
   const keyB = toSKIKey(b);
   if (keyA.length !== keyB.length) return false;
@@ -97,16 +105,15 @@ export function expressionEquivalent(a: SKIExpression, b: SKIExpression): boolea
  * the key array into a string.
  */
 export function prettyPrint(expr: SKIExpression): string {
-  return toSKIKey(expr).join('');
+  return toSKIKey(expr).join("");
 }
 
-
 /**
-  * @param exp an abstract expression.
-  * @returns how many terminals are present in the expression.
-  */
+ * @param exp an abstract expression.
+ * @returns how many terminals are present in the expression.
+ */
 export function size(exp: SKIExpression): number {
-  if (exp.kind === 'terminal') return 1;
+  if (exp.kind === "terminal") return 1;
   else return size(exp.lft) + size(exp.rgt);
 }
 
@@ -117,7 +124,7 @@ export function size(exp: SKIExpression): number {
  */
 export const apply = (...exps: SKIExpression[]): SKIExpression => {
   if (exps.length <= 0) {
-    throw new Error('there must be at least one expression to apply');
+    throw new Error("there must be at least one expression to apply");
   } else {
     return exps.reduce(cons<SKIExpression>);
   }

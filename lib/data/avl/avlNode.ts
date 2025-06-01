@@ -1,5 +1,4 @@
 /**
- *
  * https://en.wikipedia.org/wiki/AVL_tree
  *
  * An Adelson-Velsky and Landis (AVL) tree
@@ -38,7 +37,7 @@ function createAVLNode<TKey, TValue>(
   value: TValue,
   height: number,
   left: AVLNode<TKey, TValue> | null,
-  right: AVLNode<TKey, TValue> | null
+  right: AVLNode<TKey, TValue> | null,
 ): AVLNode<TKey, TValue> {
   return { key, value, height, left, right };
 }
@@ -48,9 +47,10 @@ function nodeHeight<TKey, TValue>(node: AVLNode<TKey, TValue> | null): number {
   return node ? node.height : 0;
 }
 
-
 /** Recompute a node's height based on its children. */
-function recalcHeight<TKey, TValue>(node: AVLNode<TKey, TValue>): AVLNode<TKey, TValue> {
+function recalcHeight<TKey, TValue>(
+  node: AVLNode<TKey, TValue>,
+): AVLNode<TKey, TValue> {
   const h = 1 + Math.max(nodeHeight(node.left), nodeHeight(node.right));
   if (h === node.height) {
     // no change
@@ -65,7 +65,9 @@ function balanceFactor<TKey, TValue>(node: AVLNode<TKey, TValue>): number {
 }
 
 /** Right rotation. */
-function rotateRight<TKey, TValue>(y: AVLNode<TKey, TValue>): AVLNode<TKey, TValue> {
+function rotateRight<TKey, TValue>(
+  y: AVLNode<TKey, TValue>,
+): AVLNode<TKey, TValue> {
   const x = y.left;
   if (!x) return y; // no rotation possible if no left child
   const T2 = x.right;
@@ -76,12 +78,20 @@ function rotateRight<TKey, TValue>(y: AVLNode<TKey, TValue>): AVLNode<TKey, TVal
 
   // Recalc heights
   const newY2 = recalcHeight(newY);
-  const newX2 = createAVLNode(newX.key, newX.value, newX.height, newX.left, newY2);
+  const newX2 = createAVLNode(
+    newX.key,
+    newX.value,
+    newX.height,
+    newX.left,
+    newY2,
+  );
   return recalcHeight(newX2);
 }
 
 /** Left rotation. */
-function rotateLeft<TKey, TValue>(x: AVLNode<TKey, TValue>): AVLNode<TKey, TValue> {
+function rotateLeft<TKey, TValue>(
+  x: AVLNode<TKey, TValue>,
+): AVLNode<TKey, TValue> {
   const y = x.right;
   if (!y) return x;
   const T2 = y.left;
@@ -91,7 +101,13 @@ function rotateLeft<TKey, TValue>(x: AVLNode<TKey, TValue>): AVLNode<TKey, TValu
   const newY = createAVLNode(y.key, y.value, y.height, newX, y.right);
 
   const newX2 = recalcHeight(newX);
-  const newY2 = createAVLNode(newY.key, newY.value, newY.height, newX2, newY.right);
+  const newY2 = createAVLNode(
+    newY.key,
+    newY.value,
+    newY.height,
+    newX2,
+    newY.right,
+  );
   return recalcHeight(newY2);
 }
 
@@ -110,7 +126,7 @@ export function insertAVL<TKey, TValue>(
   tree: AVLTree<TKey, TValue>,
   key: TKey,
   value: TValue,
-  compareKeys: (a: TKey, b: TKey) => number
+  compareKeys: (a: TKey, b: TKey) => number,
 ): AVLTree<TKey, TValue> {
   // Special case: empty tree -> new root
   if (!tree.root) {
@@ -120,7 +136,7 @@ export function insertAVL<TKey, TValue>(
 
   interface StackItem {
     node: AVLNode<TKey, TValue> | null;
-    direction: 'L' | 'R' | null;
+    direction: "L" | "R" | null;
   }
 
   const stack: StackItem[] = [];
@@ -141,17 +157,17 @@ export function insertAVL<TKey, TValue>(
       break;
     } else if (cmp < 0) {
       // Next move is to the left
-      stack.push({ node: current, direction: 'L' });
+      stack.push({ node: current, direction: "L" });
       if (!current.left) {
-        stack.push({ node: null, direction: 'L' });
+        stack.push({ node: null, direction: "L" });
         break;
       }
       current = current.left;
     } else {
       // Next move is to the right
-      stack.push({ node: current, direction: 'R' });
+      stack.push({ node: current, direction: "R" });
       if (!current.right) {
-        stack.push({ node: null, direction: 'R' });
+        stack.push({ node: null, direction: "R" });
         break;
       }
       current = current.right;
@@ -167,12 +183,18 @@ export function insertAVL<TKey, TValue>(
       // True insertion: create a new leaf node
       newChild = createAVLNode(key, value, 1, null, null);
       stack.pop();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     } else if (top.node) {
       // Overwrite
       const node = top.node;
       // Keep left/right, but update the node's value
-      const replaced = createAVLNode(node.key, value, node.height, node.left, node.right);
+      const replaced = createAVLNode(
+        node.key,
+        value,
+        node.height,
+        node.left,
+        node.right,
+      );
       stack[stack.length - 1] = { node: replaced, direction: top.direction };
     }
   }
@@ -195,10 +217,22 @@ export function insertAVL<TKey, TValue>(
         // we replaced this node entirely
         updated = subtree;
       } else {
-        if (direction === 'L') {
-          updated = createAVLNode(node.key, node.value, node.height, subtree, node.right);
-        } else if (direction === 'R') {
-          updated = createAVLNode(node.key, node.value, node.height, node.left, subtree);
+        if (direction === "L") {
+          updated = createAVLNode(
+            node.key,
+            node.value,
+            node.height,
+            subtree,
+            node.right,
+          );
+        } else if (direction === "R") {
+          updated = createAVLNode(
+            node.key,
+            node.value,
+            node.height,
+            node.left,
+            subtree,
+          );
         }
       }
     }
@@ -216,7 +250,13 @@ export function insertAVL<TKey, TValue>(
         // Left-Right
         if (updated.left) {
           const newLeft = rotateLeft(updated.left);
-          updated = createAVLNode(updated.key, updated.value, updated.height, newLeft, updated.right);
+          updated = createAVLNode(
+            updated.key,
+            updated.value,
+            updated.height,
+            newLeft,
+            updated.right,
+          );
         }
         updated = rotateRight(updated);
       }
@@ -229,7 +269,13 @@ export function insertAVL<TKey, TValue>(
         // Right-Left
         if (updated.right) {
           const newRight = rotateRight(updated.right);
-          updated = createAVLNode(updated.key, updated.value, updated.height, updated.left, newRight);
+          updated = createAVLNode(
+            updated.key,
+            updated.value,
+            updated.height,
+            updated.left,
+            newRight,
+          );
         }
         updated = rotateLeft(updated);
       }
@@ -247,7 +293,7 @@ export function insertAVL<TKey, TValue>(
 export function searchAVL<TKey, TValue>(
   tree: AVLTree<TKey, TValue>,
   key: TKey,
-  compareKeys: (a: TKey, b: TKey) => number
+  compareKeys: (a: TKey, b: TKey) => number,
 ): TValue | undefined {
   let current = tree.root;
   while (current) {
@@ -267,7 +313,7 @@ export function searchAVL<TKey, TValue>(
  * Return an array of all key-value pairs in ascending key order (in-order traversal).
  */
 export function keyValuePairs<TKey, TValue>(
-  tree: AVLTree<TKey, TValue>
+  tree: AVLTree<TKey, TValue>,
 ): [TKey, TValue][] {
   const result: [TKey, TValue][] = [];
   const stack: AVLNode<TKey, TValue>[] = [];
@@ -295,7 +341,7 @@ export function keyValuePairs<TKey, TValue>(
 }
 
 export function emptyAVL<TKey, TValue>(
-  tr: AVLTree<TKey, TValue>
+  tr: AVLTree<TKey, TValue>,
 ): boolean {
   return keyValuePairs(tr).length === 0;
 }
@@ -303,7 +349,7 @@ export function emptyAVL<TKey, TValue>(
 export function mergeAVL<TKey, TValue>(
   a: AVLTree<TKey, TValue>,
   b: AVLTree<TKey, TValue>,
-  compareKeys: (a: TKey, b: TKey) => number
+  compareKeys: (a: TKey, b: TKey) => number,
 ): AVLTree<TKey, TValue> {
   let result = a;
 

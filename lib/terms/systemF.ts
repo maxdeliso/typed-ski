@@ -1,16 +1,16 @@
-import { ConsCell } from '../cons.js';
-import { BaseType } from '../types/types.js';
+import { ConsCell } from "../cons.ts";
+import { BaseType } from "../types/types.ts";
 
 /**
  * A term variable.
  */
 export interface SystemFVar {
-  kind: 'systemF-var';
+  kind: "systemF-var";
   name: string;
 }
 
 export const mkSystemFVar = (name: string): SystemFVar => ({
-  kind: 'systemF-var',
+  kind: "systemF-var",
   name,
 });
 
@@ -18,7 +18,7 @@ export const mkSystemFVar = (name: string): SystemFVar => ({
  * A term abstraction: λx: T. t
  */
 export interface SystemFAbs {
-  kind: 'systemF-abs';
+  kind: "systemF-abs";
   name: string;
   typeAnnotation: BaseType;
   body: SystemFTerm;
@@ -27,9 +27,9 @@ export interface SystemFAbs {
 export const mkSystemFAbs = (
   name: string,
   typeAnnotation: BaseType,
-  body: SystemFTerm
+  body: SystemFTerm,
 ): SystemFAbs => ({
-  kind: 'systemF-abs',
+  kind: "systemF-abs",
   name,
   typeAnnotation,
   body,
@@ -39,16 +39,16 @@ export const mkSystemFAbs = (
  * A type abstraction: ΛX. t
  */
 export interface SystemFTAbs {
-  kind: 'systemF-type-abs';
+  kind: "systemF-type-abs";
   typeVar: string;
   body: SystemFTerm;
 }
 
 export const mkSystemFTAbs = (
   typeVar: string,
-  body: SystemFTerm
+  body: SystemFTerm,
 ): SystemFTAbs => ({
-  kind: 'systemF-type-abs',
+  kind: "systemF-type-abs",
   typeVar,
   body,
 });
@@ -57,22 +57,24 @@ export const mkSystemFTAbs = (
  * A type application node. Represents applying a term to a type argument as in: t [T]
  */
 export interface SystemFTypeApp {
-  kind: 'systemF-type-app';
+  kind: "systemF-type-app";
   term: SystemFTerm;
   typeArg: BaseType;
 }
 
 export const mkSystemFTypeApp = (
   term: SystemFTerm,
-  typeArg: BaseType
+  typeArg: BaseType,
 ): SystemFTypeApp => ({
-  kind: 'systemF-type-app',
+  kind: "systemF-type-app",
   term,
   typeArg,
 });
 
-export const mkSystemFApp = (lft: SystemFTerm, rgt: SystemFTerm): SystemFTerm =>
-  ({ kind: 'non-terminal', lft, rgt });
+export const mkSystemFApp = (
+  lft: SystemFTerm,
+  rgt: SystemFTerm,
+): SystemFTerm => ({ kind: "non-terminal", lft, rgt });
 
 /**
  * A System F term is one of:
@@ -91,23 +93,27 @@ export type SystemFTerm =
 
 export function prettyPrintSystemF(term: SystemFTerm): string {
   switch (term.kind) {
-    case 'non-terminal': {
+    case "non-terminal": {
       const parts = flattenSystemFApp(term);
-      return `(${parts.map(prettyPrintSystemF).join(' ')})`;
+      return `(${parts.map(prettyPrintSystemF).join(" ")})`;
     }
-    case 'systemF-var':
+    case "systemF-var":
       return term.name;
-    case 'systemF-abs':
-      return `λ${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}.${prettyPrintSystemF(term.body)}`;
-    case 'systemF-type-abs':
+    case "systemF-abs":
+      return `λ${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}.${
+        prettyPrintSystemF(term.body)
+      }`;
+    case "systemF-type-abs":
       return `Λ${term.typeVar}.${prettyPrintSystemF(term.body)}`;
-    case 'systemF-type-app':
-      return `${prettyPrintSystemF(term.term)}[${prettyPrintSystemFType(term.typeArg)}]`;
+    case "systemF-type-app":
+      return `${prettyPrintSystemF(term.term)}[${
+        prettyPrintSystemFType(term.typeArg)
+      }]`;
   }
 }
 
 export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
-  if (term.kind === 'non-terminal') {
+  if (term.kind === "non-terminal") {
     const leftParts = flattenSystemFApp(term.lft);
     return [...leftParts, term.rgt];
   } else {
@@ -116,10 +122,12 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
 }
 
 export function prettyPrintSystemFType(ty: BaseType): string {
-  if (ty.kind === 'forall') {
+  if (ty.kind === "forall") {
     return `∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)}`;
-  } else if (ty.kind === 'non-terminal' && 'lft' in ty && 'rgt' in ty) {
-    return `(${prettyPrintSystemFType(ty.lft)}→${prettyPrintSystemFType(ty.rgt)})`;
+  } else if (ty.kind === "non-terminal" && "lft" in ty && "rgt" in ty) {
+    return `(${prettyPrintSystemFType(ty.lft)}→${
+      prettyPrintSystemFType(ty.rgt)
+    })`;
   } else {
     return ty.typeName;
   }

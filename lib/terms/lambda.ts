@@ -1,4 +1,4 @@
-import { ConsCell, cons } from '../cons.js';
+import { cons, ConsCell } from "../cons.ts";
 
 /**
  * This is a single term variable with a name.
@@ -6,35 +6,37 @@ import { ConsCell, cons } from '../cons.js';
  * For instance, in the expression "λx:a.y", this is just "y".
  */
 export interface LambdaVar {
-  kind: 'lambda-var',
-  name: string
+  kind: "lambda-var";
+  name: string;
 }
 
 export const mkVar = (name: string): LambdaVar => ({
-  kind: 'lambda-var',
-  name
+  kind: "lambda-var",
+  name,
 });
 
 // λx.<body>, where x is a name
 interface UntypedLambdaAbs {
-  kind: 'lambda-abs',
-  name: string,
-  body: UntypedLambda
+  kind: "lambda-abs";
+  name: string;
+  body: UntypedLambda;
 }
 
-export const mkUntypedAbs =
-  (name: string, body: UntypedLambda): UntypedLambda => ({
-    kind: 'lambda-abs',
-    name,
-    body
-  });
+export const mkUntypedAbs = (
+  name: string,
+  body: UntypedLambda,
+): UntypedLambda => ({
+  kind: "lambda-abs",
+  name,
+  body,
+});
 
 /**
  * The legal terms of the untyped lambda calculus.
  * e ::= x | λx.e | e e, where x is a variable name, and e is a valid expr
  */
-export type UntypedLambda
-  = LambdaVar
+export type UntypedLambda =
+  | LambdaVar
   | UntypedLambdaAbs
   | ConsCell<UntypedLambda>;
 
@@ -43,11 +45,11 @@ export const typelessApp = (...uts: UntypedLambda[]) =>
 
 export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
   switch (ut.kind) {
-    case 'lambda-var':
+    case "lambda-var":
       return ut.name;
-    case 'lambda-abs':
+    case "lambda-abs":
       return `λ${ut.name}.${prettyPrintUntypedLambda(ut.body)}`;
-    case 'non-terminal':
+    case "non-terminal":
       return `(${prettyPrintUntypedLambda(ut.lft)}` +
         ` ${prettyPrintUntypedLambda(ut.rgt)})`;
   }

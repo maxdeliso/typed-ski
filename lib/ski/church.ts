@@ -1,7 +1,7 @@
-import { Zero, One, Succ, True, False } from '../consts/combinators.js';
-import { apply, SKIExpression } from './expression.js';
-import { symbolicEvaluator } from '../evaluator/skiEvaluator.js';
-import { unChurchNumber as unChurchNumberNative } from './native.js';
+import { False, One, Succ, True, Zero } from "../consts/combinators.ts";
+import { apply, SKIExpression } from "./expression.ts";
+import { symbolicEvaluator } from "../evaluator/skiEvaluator.ts";
+import { unChurchNumber as unChurchNumberNative } from "./native.ts";
 
 /**
  * @see https://en.wikipedia.org/wiki/Church_encoding
@@ -10,10 +10,10 @@ import { unChurchNumber as unChurchNumberNative } from './native.js';
  */
 export const ChurchN = (n: number): SKIExpression => {
   if (!Number.isInteger(n)) {
-    throw new Error('ChurchN only accepts integers');
+    throw new Error("ChurchN only accepts integers");
   }
   if (n < 0) {
-    throw new Error('only non-negative integers are supported');
+    throw new Error("only non-negative integers are supported");
   } else if (n === 0) {
     return Zero;
   } else if (n === 1) {
@@ -44,7 +44,9 @@ export const UnChurchNumber = (exp: SKIExpression): number => {
  */
 export const UnChurchBoolean = (expr: SKIExpression): boolean => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
-  const testExpr = symbolicEvaluator.reduce(apply(expr, ChurchN(1), ChurchN(0)));
+  const testExpr = symbolicEvaluator.reduce(
+    apply(expr, ChurchN(1), ChurchN(0)),
+  );
   return UnChurchNumber(testExpr) === 1;
 };
 

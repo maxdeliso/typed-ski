@@ -2,10 +2,10 @@ import {
   AVLTree,
   createEmptyAVL,
   insertAVL,
-  searchAVL
-} from '../avl/avlNode.js';
+  searchAVL,
+} from "../avl/avlNode.ts";
 
-import { SKIExpression, SKIKey } from '../../ski/expression.js';
+import { SKIExpression, SKIKey } from "../../ski/expression.ts";
 
 function compareSKIKeys(a: SKIKey, b: SKIKey): number {
   const len = Math.min(a.length, b.length);
@@ -25,22 +25,23 @@ export function createMap(): SKIMap {
 export function insertMap(
   tree: SKIMap,
   key: SKIKey,
-  value: SKIExpression
+  value: SKIExpression,
 ): SKIMap {
   return insertAVL(
     tree,
     key,
     value,
-    compareSKIKeys);
+    compareSKIKeys,
+  );
 }
 
 export function searchMap(
   tree: SKIMap,
-  key: SKIKey
+  key: SKIKey,
 ): SKIExpression | undefined {
   return searchAVL(
     tree,
     key,
-    compareSKIKeys
+    compareSKIKeys,
   );
 }

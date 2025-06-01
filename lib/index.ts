@@ -1,66 +1,63 @@
 // Core evaluator exports
-export { symbolicEvaluator } from './evaluator/skiEvaluator.js';
+export { symbolicEvaluator } from "./evaluator/skiEvaluator.ts";
 
 // SKI expression exports
 export {
   prettyPrint as prettyPrintSKI,
-  type SKIExpression
-} from './ski/expression.js';
+  type SKIExpression,
+} from "./ski/expression.ts";
 
 // Parser exports
-export { parseSKI } from './parser/ski.js';
-export { parseLambda } from './parser/untyped.js';
-export { parseSystemF } from './parser/systemFTerm.js';
-export { parseTypedLambda } from './parser/typedLambda.js';
+export { parseSKI } from "./parser/ski.ts";
+export { parseLambda } from "./parser/untyped.ts";
+export { parseSystemF } from "./parser/systemFTerm.ts";
+export { parseTypedLambda } from "./parser/typedLambda.ts";
 
 // Lambda terms exports
 export {
   prettyPrintUntypedLambda,
-  type UntypedLambda
-} from './terms/lambda.js';
+  type UntypedLambda,
+} from "./terms/lambda.ts";
 
 // System F exports
-export {
-  prettyPrintSystemF,
-  type SystemFTerm
-} from './terms/systemF.js';
+export { prettyPrintSystemF, type SystemFTerm } from "./terms/systemF.ts";
 
 // Typed Lambda exports
 export {
   eraseTypedLambda,
   prettyPrintTypedLambda,
+  typecheckTypedLambda as typecheckTyped,
   type TypedLambda,
-  typecheckTypedLambda as typecheckTyped
-} from './types/typedLambda.js';
+} from "./types/typedLambda.ts";
 
 // System F type exports
 export {
   eraseSystemF,
   prettyPrintSystemFType,
-  typecheck as typecheckSystemF
-} from './types/systemF.js';
+  typecheck as typecheckSystemF,
+} from "./types/systemF.ts";
 
 // Conversion exports
-export { bracketLambda } from './conversion/converter.js';
+export { bracketLambda } from "./conversion/converter.ts";
 
 // Type system exports
-export { prettyPrintTy } from './types/types.js';
-export { inferType } from './types/inference.js';
+export { prettyPrintTy } from "./types/types.ts";
+export { inferType } from "./types/inference.ts";
 
 // TripLang compiler exports
-export { parseTripLang } from './parser/tripLang.js';
-export { compile } from './meta/frontend.js';
+export { parseTripLang } from "./parser/tripLang.ts";
+export { compile } from "./meta/frontend.ts";
 export {
+  type PolyDefinition,
   type TripLangProgram,
   type TripLangTerm,
-  type PolyDefinition,
   type TypedDefinition,
-  type TypeDefinition
-} from './meta/trip.js';
-export { externalReferences } from './meta/frontend/externalReferences.js';
-export { indexSymbols, resolveDefTerm } from './meta/frontend/symbolTable.js';
-export { resolveRefs } from './meta/frontend/substitution.js';
+  type TypeDefinition,
+} from "./meta/trip.ts";
+export { externalReferences } from "./meta/frontend/externalReferences.ts";
+export { indexSymbols, resolveDefTerm } from "./meta/frontend/symbolTable.ts";
+export { resolveRefs } from "./meta/frontend/substitution.ts";
 
 // Additional utility exports
-export { UnChurchNumber } from './ski/church.js';
-export { searchAVL } from './data/avl/avlNode.js';
+export { UnChurchNumber } from "./ski/church.ts";
+export { searchAVL } from "./data/avl/avlNode.ts";

@@ -1,14 +1,14 @@
-import { forall } from '../types/systemF.js';
-import { arrow, BaseType, mkTypeVariable } from '../types/types.js';
-import { ParseError } from './parseError.js';
+import { forall } from "../types/systemF.ts";
+import { arrow, BaseType, mkTypeVariable } from "../types/types.ts";
+import { ParseError } from "./parseError.ts";
 import {
-  ParserState,
-  peek,
   matchCh,
   matchLP,
   matchRP,
-  parseIdentifier
-} from './parserState.js';
+  parseIdentifier,
+  ParserState,
+  peek,
+} from "./parserState.ts";
 
 /**
  * Parses a System F type.
@@ -24,24 +24,34 @@ import {
  * Returns a triple: [literal, SystemFType, updatedState]
  */
 export function parseSystemFType(
-  state: ParserState
+  state: ParserState,
 ): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
-  if (ch === '∀') {
+  if (ch === "∀") {
     // Parse universal type: ∀X. T
-    const stateAfterForall = matchCh(s, '∀'); // consume '∀'
+    const stateAfterForall = matchCh(s, "∀"); // consume '∀'
     const [typeVar, stateAfterVar] = parseIdentifier(stateAfterForall);
-    const stateAfterDot = matchCh(stateAfterVar, '.'); // expect a dot
+    const stateAfterDot = matchCh(stateAfterVar, "."); // expect a dot
     const [bodyLit, bodyType, stateAfterBody] = parseSystemFType(stateAfterDot);
-    return [`∀${typeVar}.${bodyLit}`, forall(typeVar, bodyType), stateAfterBody];
+    return [
+      `∀${typeVar}.${bodyLit}`,
+      forall(typeVar, bodyType),
+      stateAfterBody,
+    ];
   } else {
     // Parse an arrow type.
     const [leftLit, leftType, stateAfterLeft] = parseSimpleSystemFType(s);
     const [next, sAfterLeft] = peek(stateAfterLeft);
-    if (next === '→') {
-      const stateAfterArrow = matchCh(sAfterLeft, '→'); // consume the arrow
-      const [rightLit, rightType, stateAfterRight] = parseSystemFType(stateAfterArrow);
-      return [`${leftLit}→${rightLit}`, arrow(leftType, rightType), stateAfterRight];
+    if (next === "→") {
+      const stateAfterArrow = matchCh(sAfterLeft, "→"); // consume the arrow
+      const [rightLit, rightType, stateAfterRight] = parseSystemFType(
+        stateAfterArrow,
+      );
+      return [
+        `${leftLit}→${rightLit}`,
+        arrow(leftType, rightType),
+        stateAfterRight,
+      ];
     } else {
       return [leftLit, leftType, stateAfterLeft];
     }
@@ -56,15 +66,17 @@ export function parseSystemFType(
  * Returns a triple: [literal, SystemFType, updatedState]
  */
 function parseSimpleSystemFType(
-  state: ParserState
+  state: ParserState,
 ): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
-  if (ch === '(') {
+  if (ch === "(") {
     const stateAfterLP = matchLP(s);
-    const [innerLit, innerType, stateAfterInner] = parseSystemFType(stateAfterLP);
+    const [innerLit, innerType, stateAfterInner] = parseSystemFType(
+      stateAfterLP,
+    );
     const [closing, sAfterInner] = peek(stateAfterInner);
-    if (closing !== ')') {
-      throw new ParseError('expected \')\' after type expression');
+    if (closing !== ")") {
+      throw new ParseError("expected ')' after type expression");
     }
     const stateAfterRP = matchRP(sAfterInner);
     return [`(${innerLit})`, innerType, stateAfterRP];

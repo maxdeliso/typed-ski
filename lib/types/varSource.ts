@@ -1,4 +1,4 @@
-import { mkTypeVariable } from './types.js';
+import { mkTypeVariable } from "./types.ts";
 
 /**
  * Returns a generator that yields sequential numbers.
@@ -14,14 +14,14 @@ const monoInts = (): () => number => {
 
 /**
  * Returns a generator that produces fresh type variables.
- * For instance, the first call might return the variable “a”, the next “b”, etc.
+ * For instance, the first call might return the variable "a", the next "b", etc.
  */
-export const varSource = (): (() => ReturnType<typeof mkTypeVariable>) => {
+export const varSource = (): () => ReturnType<typeof mkTypeVariable> => {
   const ordinals = monoInts();
   return () => {
     const offset = ordinals();
     if (offset > 25) {
-      throw new Error('too many type variables');
+      throw new Error("too many type variables");
     }
     const char = String.fromCharCode(97 + offset);
     return mkTypeVariable(char);

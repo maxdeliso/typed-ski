@@ -5,15 +5,6 @@
       "textFile": "build/debug.wat",
       "sourceMap": true,
       "debug": true
-    },
-    "release": {
-      "outFile": "build/release.wasm",
-      "textFile": "build/release.wat",
-      "sourceMap": true,
-      "optimizeLevel": 3,
-      "shrinkLevel": 1,
-      "converge": false,
-      "noAssert": false
     }
   },
   "options": {

@@ -51,20 +51,8 @@ export class ArenaEvaluatorWasm implements Evaluator {
     wasmPath: string,
   ): Promise<ArenaEvaluatorWasm> {
     const bytes = await fs.readFile(wasmPath);
-    const memory = new WebAssembly.Memory({
-      initial: 512, // 32 MiB
-      maximum: 65_536, // 4 GiB
-    });
-
-    const importObject = {
-      env: {
-        memory,
-      },
-    };
-
     const { instance } = await WebAssembly.instantiate(
-      bytes,
-      importObject,
+      bytes
     );
 
     const ex = instance.exports as Record<string, unknown>;

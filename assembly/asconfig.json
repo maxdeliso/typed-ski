@@ -7,8 +7,6 @@
     "exportRuntime": false,
     "use": "abort=assembly/index/abort",
     "bindings": "esm",
-    "runtime": "minimal",
-    "importMemory": true,
     "initialMemory": 512,
     "maximumMemory": 65536
   },

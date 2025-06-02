@@ -1,5 +1,6 @@
+// deno-lint-ignore verbatim-module-syntax
 import { cons, ConsCell } from "../cons.ts";
-import { SKITerminal } from "./terminal.ts";
+import type { SKITerminal } from "./terminal.ts";
 
 /*
  * EBNF grammar:

@@ -1,4 +1,4 @@
-import { TripLangProgram } from "./trip.ts";
+import type { TripLangProgram } from "./trip.ts";
 import { compile } from "./frontend/compilation.ts";
 
 export { compile };

@@ -1,6 +1,6 @@
 import { expect } from "npm:chai";
 import { elaborateSystemF } from "../../../lib/meta/frontend/elaboration.ts";
-import { SymbolTable } from "../../../lib/meta/trip.ts";
+import type { SymbolTable } from "../../../lib/meta/trip.ts";
 import {
   mkSystemFAbs,
   mkSystemFApp,
@@ -10,7 +10,7 @@ import {
 } from "../../../lib/terms/systemF.ts";
 import { createEmptyAVL, insertAVL } from "../../../lib/data/avl/avlNode.ts";
 import { compareStrings } from "../../../lib/data/map/stringMap.ts";
-import { arrow, BaseType } from "../../../lib/types/types.ts";
+import { arrow, type BaseType } from "../../../lib/types/types.ts";
 
 Deno.test("elaborateSystemF", async (t) => {
   function createSymbolTable(

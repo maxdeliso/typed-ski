@@ -1,10 +1,10 @@
 import { promises as fs } from "node:fs";
 
 import { cons } from "../cons.ts";
-import { SKIExpression } from "../ski/expression.ts";
+import type { SKIExpression } from "../ski/expression.ts";
 import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
-import { Evaluator } from "./evaluator.ts";
-import { ArenaKind, ArenaNodeId, ArenaSym } from "../shared/arena.ts";
+import type { Evaluator } from "./evaluator.ts";
+import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 
 interface ArenaWasmExports {
   memory: WebAssembly.Memory;
@@ -22,7 +22,6 @@ interface ArenaWasmExports {
   rightOf(id: number): number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 // deno-lint-ignore ban-types
 function assertFn(obj: unknown, name: string): asserts obj is Function {
   if (typeof obj !== "function") {
@@ -57,21 +56,17 @@ export class ArenaEvaluatorWasm implements Evaluator {
       maximum: 65_536, // 4 GiB
     });
 
-    const abortFn = (
-      _msgPtr: number,
-      _filePtr: number,
-      line: number,
-      col: number,
-    ) => {
-      console.error("abort", { line, col });
-    };
-
     const importObject = {
-      env: { memory, abort: abortFn },
-      "arena-evaluator": { abort: abortFn },
+      env: {
+        memory,
+      },
     };
 
-    const { instance } = await WebAssembly.instantiate(bytes, importObject);
+    const { instance } = await WebAssembly.instantiate(
+      bytes,
+      importObject,
+    );
+
     const ex = instance.exports as Record<string, unknown>;
 
     const required = [

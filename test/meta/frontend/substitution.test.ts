@@ -7,7 +7,7 @@ import {
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFVar,
-  SystemFTerm,
+  type SystemFTerm,
 } from "../../../lib/terms/systemF.ts";
 
 Deno.test("substitute", async (t) => {

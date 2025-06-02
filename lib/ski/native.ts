@@ -1,6 +1,6 @@
-import { SKITerminalSymbol } from "./terminal.ts";
-import { SKIExpression } from "./expression.ts";
-import { cons, ConsCell } from "../cons.ts";
+import type { SKITerminalSymbol } from "./terminal.ts";
+import type { SKIExpression } from "./expression.ts";
+import { cons, type ConsCell } from "../cons.ts";
 
 /**
  * A terminal symbol (S, K, I) in the native representation

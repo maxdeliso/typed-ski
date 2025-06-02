@@ -5,7 +5,7 @@ import {
   insertMap,
   searchMap,
 } from "../../../lib/data/map/skiMap.ts";
-import { SKIChar } from "../../../lib/ski/expression.ts";
+import type { SKIChar } from "../../../lib/ski/expression.ts";
 import { I, K, S } from "../../../lib/ski/terminal.ts";
 
 Deno.test("SKIAVL", async (t) => {

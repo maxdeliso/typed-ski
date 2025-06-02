@@ -17,13 +17,13 @@ import {
   resolveRefs,
   searchAVL,
   symbolicEvaluator,
-  SystemFTerm,
+  type SystemFTerm,
   UnChurchNumber,
 } from "../../lib/index.ts";
 
-import { AVLTree, keyValuePairs } from "../../lib/data/avl/avlNode.ts";
+import { type AVLTree, keyValuePairs } from "../../lib/data/avl/avlNode.ts";
 import { compareStrings } from "../../lib/data/map/stringMap.ts";
-import { BaseType } from "../../lib/types/types.ts";
+import type { BaseType } from "../../lib/types/types.ts";
 import { initArenaEvaluator } from "../../lib/evaluator/arenaEvaluator.ts";
 
 import {
@@ -32,7 +32,7 @@ import {
 } from "../../lib/meta/frontend/compilation.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
-const wasmPath = join(__dirname, "../../build/debug.wasm");
+const wasmPath = join(__dirname, "../../assembly/build/debug.wasm");
 
 const arenaEval = await initArenaEvaluator(wasmPath);
 

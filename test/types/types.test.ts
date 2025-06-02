@@ -1,7 +1,11 @@
 import { expect } from "npm:chai";
 
 import { cons } from "../../lib/cons.ts";
-import { mkUntypedAbs, mkVar, UntypedLambda } from "../../lib/terms/lambda.ts";
+import {
+  mkUntypedAbs,
+  mkVar,
+  type UntypedLambda,
+} from "../../lib/terms/lambda.ts";
 import { parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 
@@ -10,7 +14,7 @@ import { emptyContext, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
 import {
   arrow,
   arrows,
-  BaseType,
+  type BaseType,
   mkTypeVariable,
   prettyPrintTy,
   typesLitEq,

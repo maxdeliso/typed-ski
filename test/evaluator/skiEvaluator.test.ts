@@ -2,8 +2,8 @@ import { assert } from "npm:chai";
 
 import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { prettyPrint, SKIExpression } from "../../lib/ski/expression.ts";
-import rsexport, { RandomSeed } from "npm:random-seed";
+import { prettyPrint, type SKIExpression } from "../../lib/ski/expression.ts";
+import rsexport, { type RandomSeed } from "npm:random-seed";
 const { create } = rsexport;
 import { randExpression } from "../../lib/ski/generator.ts";
 

@@ -6,14 +6,14 @@ import {
   parseIdentifier,
   peek,
 } from "./parserState.ts";
-import { ParserState } from "./parserState.ts";
+import type { ParserState } from "./parserState.ts";
 import { parseSystemFType } from "./systemFType.ts";
 import { parseWithEOF } from "./eof.ts";
 import {
   mkSystemFAbs,
   mkSystemFTAbs,
   mkSystemFTypeApp,
-  SystemFTerm,
+  type SystemFTerm,
 } from "../terms/systemF.ts";
 import { parseChain } from "./chain.ts";
 

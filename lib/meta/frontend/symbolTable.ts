@@ -5,7 +5,7 @@ import {
 } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
 import { prettyPrintTy } from "../../types/types.ts";
-import {
+import type {
   SymbolTable,
   TripLangDefType,
   TripLangProgram,

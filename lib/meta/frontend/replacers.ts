@@ -1,9 +1,9 @@
-import { SystemFTerm } from "../../terms/systemF.ts";
-import { TypedLambda } from "../../types/typedLambda.ts";
-import { UntypedLambda } from "../../terms/lambda.ts";
-import { TripLangTerm } from "../trip.ts";
+import type { SystemFTerm } from "../../terms/systemF.ts";
+import type { TypedLambda } from "../../types/typedLambda.ts";
+import type { UntypedLambda } from "../../terms/lambda.ts";
+import type { TripLangTerm } from "../trip.ts";
 import { substituteSystemFType } from "../../types/systemF.ts";
-import { BaseType } from "../../types/types.ts";
+import type { BaseType } from "../../types/types.ts";
 
 export const replace = <T extends SystemFTerm | TypedLambda | UntypedLambda>(
   n: T,

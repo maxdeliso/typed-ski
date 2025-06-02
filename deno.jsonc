@@ -1,4 +1,19 @@
 {
+  "name": "@maxdeliso/typed-ski",
+  "version": "0.1.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./lib/index.ts",
+    "./wasm-debug-binary": "./assembly/build/debug.wasm"
+  },
+  "publish": {
+    "include": [
+      "README.md",
+      "SECURITY.md",
+      "lib/**",
+      "assembly/build/debug.wasm"
+    ]
+  },
   "compilerOptions": {
     "lib": [
       "deno.ns",
@@ -13,7 +28,10 @@
   "lint": {
     "exclude": [
       "assembly/**/*"
-    ]
+    ],
+    "rules": {
+      "exclude": ["no-slow-types"]
+    }
   },
   "test": {
     "exclude": [

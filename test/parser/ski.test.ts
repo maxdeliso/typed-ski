@@ -4,7 +4,7 @@ import { cons } from "../../lib/cons.ts";
 import { Y } from "../../lib/consts/combinators.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { prettyPrint, SKIExpression } from "../../lib/ski/expression.ts";
+import { prettyPrint, type SKIExpression } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 
 const assertReparse = (expr: string) => {

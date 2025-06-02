@@ -7,7 +7,7 @@ import { apply } from "../../lib/ski/expression.ts";
 import {
   mkNativeInc,
   mkNativeNum,
-  NativeExpr,
+  type NativeExpr,
   reduceNat,
   stepOnceNat,
   unChurchNumber,

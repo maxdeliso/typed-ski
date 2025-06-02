@@ -1,8 +1,8 @@
-import { cons, ConsCell } from "../cons.ts";
+import { cons, type ConsCell } from "../cons.ts";
 import { B, C } from "../consts/combinators.ts";
-import { LambdaVar, UntypedLambda } from "../terms/lambda.ts";
-import { SKIExpression } from "../ski/expression.ts";
-import { I, K, S, SKITerminal } from "../ski/terminal.ts";
+import type { LambdaVar, UntypedLambda } from "../terms/lambda.ts";
+import type { SKIExpression } from "../ski/expression.ts";
+import { I, K, S, type SKITerminal } from "../ski/terminal.ts";
 import { ConversionError } from "./conversionError.ts";
 
 /**

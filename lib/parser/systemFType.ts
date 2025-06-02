@@ -1,12 +1,12 @@
 import { forall } from "../types/systemF.ts";
-import { arrow, BaseType, mkTypeVariable } from "../types/types.ts";
+import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
 import { ParseError } from "./parseError.ts";
 import {
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
-  ParserState,
+  type ParserState,
   peek,
 } from "./parserState.ts";
 

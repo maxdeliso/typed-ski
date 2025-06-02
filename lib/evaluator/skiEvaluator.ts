@@ -1,12 +1,17 @@
-import { cons, ConsCell } from "../cons.ts";
+import { cons, type ConsCell } from "../cons.ts";
 import {
   expressionEquivalent,
-  SKIExpression,
+  type SKIExpression,
   toSKIKey,
 } from "../ski/expression.ts";
 import { SKITerminalSymbol } from "../ski/terminal.ts";
-import { createMap, insertMap, searchMap, SKIMap } from "../data/map/skiMap.ts";
-import { Evaluator } from "./evaluator.ts";
+import {
+  createMap,
+  insertMap,
+  searchMap,
+  type SKIMap,
+} from "../data/map/skiMap.ts";
+import type { Evaluator } from "./evaluator.ts";
 
 /**
  * The internal shape of an evaluation result.

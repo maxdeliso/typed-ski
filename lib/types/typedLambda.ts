@@ -1,13 +1,17 @@
-import { cons, ConsCell } from "../cons.ts";
+import { cons, type ConsCell } from "../cons.ts";
 import {
-  AVLTree,
+  type AVLTree,
   createEmptyAVL,
   insertAVL,
   searchAVL,
 } from "../data/avl/avlNode.ts";
 import { compareStrings } from "../data/map/stringMap.ts";
-import { LambdaVar, mkUntypedAbs, UntypedLambda } from "../terms/lambda.ts";
-import { arrow, BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
+import {
+  type LambdaVar,
+  mkUntypedAbs,
+  type UntypedLambda,
+} from "../terms/lambda.ts";
+import { arrow, type BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.

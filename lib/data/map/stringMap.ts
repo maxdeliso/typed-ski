@@ -1,6 +1,6 @@
 import { createEmptyAVL, insertAVL, searchAVL } from "../avl/avlNode.ts";
 
-import { AVLTree } from "../avl/avlNode.ts";
+import type { AVLTree } from "../avl/avlNode.ts";
 
 export function compareStrings(a: string, b: string): number {
   if (a < b) return -1;

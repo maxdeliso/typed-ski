@@ -3,11 +3,11 @@ import {
   matchLP,
   matchRP,
   parseIdentifier,
-  ParserState,
+  type ParserState,
   peek,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
-import { arrow, BaseType, mkTypeVariable } from "../types/types.ts";
+import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
 import { parseWithEOF } from "./eof.ts";
 
 /**

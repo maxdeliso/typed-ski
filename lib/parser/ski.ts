@@ -1,9 +1,15 @@
-import { SKIExpression } from "../ski/expression.ts";
-import { consume, matchLP, matchRP, ParserState, peek } from "./parserState.ts";
+import type { SKIExpression } from "../ski/expression.ts";
+import {
+  consume,
+  matchLP,
+  matchRP,
+  type ParserState,
+  peek,
+} from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { parseWithEOF } from "./eof.ts";
 import { cons } from "../cons.ts";
-import { SKITerminalSymbol, term } from "../ski/terminal.ts";
+import { type SKITerminalSymbol, term } from "../ski/terminal.ts";
 
 /**
  * Parses a chain of SKI atomic terms (term { term }).

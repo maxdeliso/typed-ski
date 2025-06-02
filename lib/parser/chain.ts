@@ -1,6 +1,11 @@
 import { cons } from "../cons.ts";
 import { ParseError } from "./parseError.ts";
-import { ParserState, peek, remaining, skipWhitespace } from "./parserState.ts";
+import {
+  type ParserState,
+  peek,
+  remaining,
+  skipWhitespace,
+} from "./parserState.ts";
 
 /**
  * Parses a chain of expressions (applications) by repeatedly

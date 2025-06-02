@@ -3,7 +3,7 @@ import { prettyPrintUntypedLambda } from "../../terms/lambda.ts";
 import { prettyPrintSystemF } from "../../terms/systemF.ts";
 import { prettyPrintTypedLambda } from "../../types/typedLambda.ts";
 import { prettyPrintTy } from "../../types/types.ts";
-import { TripLangTerm } from "../trip.ts";
+import type { TripLangTerm } from "../trip.ts";
 
 const def = " := ";
 

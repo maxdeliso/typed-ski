@@ -1,4 +1,4 @@
-import { SKIExpression } from "../ski/expression.ts";
+import type { SKIExpression } from "../ski/expression.ts";
 
 export interface Evaluator {
   /** Apply exactly one β-step (or return unchanged). */

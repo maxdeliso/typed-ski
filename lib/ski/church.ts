@@ -1,5 +1,5 @@
 import { False, One, Succ, True, Zero } from "../consts/combinators.ts";
-import { apply, SKIExpression } from "./expression.ts";
+import { apply, type SKIExpression } from "./expression.ts";
 import { symbolicEvaluator } from "../evaluator/skiEvaluator.ts";
 import { unChurchNumber as unChurchNumberNative } from "./native.ts";
 

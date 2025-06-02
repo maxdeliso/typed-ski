@@ -1,7 +1,7 @@
 import { hrtime } from "node:process";
 import randomSeed from "npm:random-seed";
 
-import { SKIExpression } from "../lib/ski/expression.ts";
+import type { SKIExpression } from "../lib/ski/expression.ts";
 import { symbolicEvaluator } from "../lib/evaluator/skiEvaluator.ts";
 import { randExpression } from "../lib/ski/generator.ts";
 

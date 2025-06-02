@@ -9,6 +9,8 @@ async function buildWasm() {
       "-A",
       "npm:assemblyscript@0.28.1/asc",
       "assembly/index.ts",
+      "--config",
+      "assembly/asconfig.json",
       "--target",
       "debug",
     ],

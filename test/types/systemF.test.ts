@@ -6,7 +6,7 @@ import {
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFVar,
-  SystemFTerm,
+  type SystemFTerm,
 } from "../../lib/terms/systemF.ts";
 
 import { arrow, mkTypeVariable, prettyPrintTy } from "../../lib/types/types.ts";

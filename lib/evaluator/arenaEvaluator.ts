@@ -52,7 +52,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
   ): Promise<ArenaEvaluatorWasm> {
     const bytes = await fs.readFile(wasmPath);
     const { instance } = await WebAssembly.instantiate(
-      bytes
+      bytes,
     );
 
     const ex = instance.exports as Record<string, unknown>;

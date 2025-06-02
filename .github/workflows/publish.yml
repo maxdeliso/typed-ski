@@ -30,4 +30,4 @@ jobs:
         run: deno run --allow-read --allow-run scripts/test.ts
 
       - name: Publish to Deno Registry
-        run: deno publish --allow-read
+        run: deno publish

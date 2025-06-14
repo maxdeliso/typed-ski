@@ -1,9 +1,5 @@
 import { cons, type ConsCell } from "../cons.ts";
-import {
-  expressionEquivalent,
-  type SKIExpression,
-  toSKIKey,
-} from "../ski/expression.ts";
+import { equivalent, type SKIExpression, toSKIKey } from "../ski/expression.ts";
 import { SKITerminalSymbol } from "../ski/terminal.ts";
 import {
   createMap,
@@ -107,7 +103,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
 
   if (evalCached !== undefined) {
     return {
-      altered: !expressionEquivalent(orig, evalCached),
+      altered: !equivalent(orig, evalCached),
       expr: evalCached,
     };
   }
@@ -147,7 +143,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
     // If there are no frames left, we are at the top level.
     if (stack.length === 0) {
       // Determine if the top-level expression changed.
-      const changed = !expressionEquivalent(orig, next);
+      const changed = !equivalent(orig, next);
       // If no change occurred, then newExpr is fully normalized; cache it.
       if (!changed) {
         evaluationCache = insertMap(evaluationCache, origKey, next);
@@ -158,7 +154,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
     // Pop a frame and combine the result with its parent.
     const frame = stack.pop()!;
     if (frame.phase === "left") {
-      if (!expressionEquivalent(frame.node.lft, next)) {
+      if (!equivalent(frame.node.lft, next)) {
         // The left subtree was reduced. Rebuild the parent's node.
         next = cons(next, frame.node.rgt);
         expressionCache = insertMap(

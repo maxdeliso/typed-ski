@@ -1,7 +1,7 @@
 import { assert } from "npm:chai";
 
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { size, type SKIExpression } from "../../lib/ski/expression.ts";
+import { type SKIExpression, terminals } from "../../lib/ski/expression.ts";
 import {
   type BinaryHeap,
   maxHeapIndex,
@@ -26,7 +26,7 @@ Deno.test("packHeap and unpackHeap", async (t) => {
       const packResult = assertRepack(quattro);
       const unpacked = unpackHeap(packResult);
 
-      assert.deepStrictEqual(size(unpacked), 4);
+      assert.deepStrictEqual(terminals(unpacked), 4);
       assert.deepStrictEqual(packResult.length, 3);
     },
   );
@@ -36,7 +36,7 @@ Deno.test("packHeap and unpackHeap", async (t) => {
     const unpackedSingle = unpackHeap(singlePackResult);
 
     assert.deepStrictEqual(singlePackResult.length, 1);
-    assert.deepStrictEqual(size(unpackedSingle), 1);
+    assert.deepStrictEqual(terminals(unpackedSingle), 1);
     assert.deepStrictEqual(eye, unpackedSingle);
   });
 

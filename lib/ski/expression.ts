@@ -1,5 +1,4 @@
-// deno-lint-ignore verbatim-module-syntax
-import { cons, ConsCell } from "../cons.ts";
+import { cons, type ConsCell } from "../cons.ts";
 import type { SKITerminal } from "./terminal.ts";
 
 /*
@@ -22,47 +21,23 @@ export type SKIChar = "S" | "K" | "I" | "(" | ")";
 export type SKIKey = SKIChar[];
 
 /**
- * Maps an SKI character to its corresponding index:
- *   "S" -> 0
- *   "K" -> 1
- *   "I" -> 2
- *   "(" -> 3
- *   ")" -> 4
- */
-export function charToIndex(ch: SKIChar): 0 | 1 | 2 | 3 | 4 {
-  switch (ch) {
-    case "S":
-      return 0;
-    case "K":
-      return 1;
-    case "I":
-      return 2;
-    case "(":
-      return 3;
-    case ")":
-      return 4;
-  }
-}
-
-/**
  * Converts a SKI expression to its canonical key,
  * represented as an array of SKIChar.
  *
  * This function mimics the original pretty-printing algorithm,
  * but builds an SKIKey instead.
  */
-export function toSKIKey(expr: SKIExpression): SKIKey {
+export const toSKIKey = (expr: SKIExpression): SKIKey => {
   const key: SKIKey = [];
   // The stack can hold either expressions or literal SKIChar values.
   const stack: (SKIExpression | SKIChar)[] = [expr];
 
   while (stack.length > 0) {
     const item = stack.pop();
+
     if (item === undefined) {
       throw new Error("stack underflow");
-    }
-
-    if (typeof item === "string") {
+    } else if (typeof item === "string") {
       // If the item is a literal SKIChar, append it to the key.
       key.push(item);
     } else if (item.kind === "terminal") {
@@ -80,24 +55,44 @@ export function toSKIKey(expr: SKIExpression): SKIKey {
   }
 
   return key;
-}
+};
 
 /**
  * Compare two SKI expressions for structural equivalence.
- * (Uses the canonical key produced by `toSKIKey`.)
  */
-export function expressionEquivalent(
-  a: SKIExpression,
-  b: SKIExpression,
-): boolean {
-  const keyA = toSKIKey(a);
-  const keyB = toSKIKey(b);
-  if (keyA.length !== keyB.length) return false;
-  for (let i = 0; i < keyA.length; i++) {
-    if (keyA[i] !== keyB[i]) return false;
+export const equivalent = (
+  lft: SKIExpression,
+  rgt: SKIExpression,
+): boolean => {
+  const firstStack = [lft];
+  const secondStack = [rgt];
+
+  while (firstStack.length > 0 && secondStack.length > 0) {
+    const firstItem = firstStack.pop();
+    const secondItem = secondStack.pop();
+
+    if (firstItem === undefined || secondItem === undefined) {
+      throw new Error("stack underflow");
+    } else if (
+      firstItem.kind === "terminal" && secondItem.kind === "terminal"
+    ) {
+      if (firstItem!.sym !== secondItem!.sym) {
+        return false;
+      }
+    } else if (
+      firstItem.kind === "non-terminal" && secondItem.kind === "non-terminal"
+    ) {
+      firstStack.push(firstItem.rgt);
+      firstStack.push(firstItem.lft);
+      secondStack.push(secondItem.rgt);
+      secondStack.push(secondItem.lft);
+    } else {
+      return false;
+    }
   }
-  return true;
-}
+
+  return firstStack.length === secondStack.length;
+};
 
 /**
  * Returns the string representation of a SKI expression.
@@ -105,18 +100,18 @@ export function expressionEquivalent(
  * This function calls toSKIKey to produce the key and then joins
  * the key array into a string.
  */
-export function prettyPrint(expr: SKIExpression): string {
+export const prettyPrint = (expr: SKIExpression): string => {
   return toSKIKey(expr).join("");
-}
+};
 
 /**
  * @param exp an abstract expression.
  * @returns how many terminals are present in the expression.
  */
-export function size(exp: SKIExpression): number {
+export const terminals = (exp: SKIExpression): number => {
   if (exp.kind === "terminal") return 1;
-  else return size(exp.lft) + size(exp.rgt);
-}
+  else return terminals(exp.lft) + terminals(exp.rgt);
+};
 
 /**
  * Apply a function to its arguments.

@@ -1,33 +1,59 @@
 import { assert } from "npm:chai";
-import rsexport, { type RandomSeed } from "npm:random-seed";
-const { create } = rsexport;
 
 import { cons } from "../../lib/cons.ts";
 import {
+  equivalent,
   prettyPrint,
-  size,
   type SKIExpression,
+  terminals,
+  toSKIKey,
 } from "../../lib/ski/expression.ts";
 import { K, S } from "../../lib/ski/terminal.ts";
-import { randExpression } from "../../lib/ski/generator.ts";
 
-Deno.test("prettyPrint", async (t) => {
-  const expr = cons<SKIExpression>(cons<SKIExpression>(S, K), K);
-  const printedExpr = "((SK)K)";
+const expr = cons<SKIExpression>(cons<SKIExpression>(S, K), K);
+const otherExpr = cons<SKIExpression>(K, S);
 
-  await t.step("pretty prints a valid expression", () => {
-    assert.deepStrictEqual(prettyPrint(expr), printedExpr);
+Deno.test("expression functions", async (t) => {
+  await t.step("toSKIKey with expr", () => {
+    assert.deepStrictEqual(
+      toSKIKey(expr),
+      ["(", "(", "S", "K", ")", "K", ")"],
+    );
   });
-});
 
-Deno.test("generate", async (t) => {
-  const testSeed = "18477814418";
-  const n = 8;
+  await t.step("toSKIKey with other otherExpr", () => {
+    assert.deepStrictEqual(
+      toSKIKey(otherExpr),
+      ["(", "K", "S", ")"],
+    );
+  });
 
-  await t.step("generates a random expression with the specified size", () => {
-    const rs: RandomSeed = create(testSeed);
-    const generated = randExpression(rs, n);
+  await t.step("equivalent", () => {
+    assert.strictEqual(equivalent(expr, expr), true);
+    assert.strictEqual(equivalent(expr, otherExpr), false);
+    assert.strictEqual(equivalent(otherExpr, expr), false);
+    assert.strictEqual(equivalent(otherExpr, otherExpr), true);
+  });
 
-    assert.deepStrictEqual(n, size(generated));
+  await t.step("prettyPrint", () => {
+    assert.deepStrictEqual(prettyPrint(expr), "((SK)K)");
+  });
+
+  await t.step("terminals", () => {
+    assert.strictEqual(terminals(expr), 3);
+  });
+
+  await t.step("apply", () => {
+    const applied = cons<SKIExpression>(expr, otherExpr);
+    assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)(KS))");
+  });
+
+  await t.step("apply with one expression", () => {
+    const applied = cons<SKIExpression>(expr, expr);
+    assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)((SK)K))");
+  });
+  await t.step("apply with two expressions", () => {
+    const applied = cons<SKIExpression>(expr, otherExpr);
+    assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)(KS))");
   });
 });

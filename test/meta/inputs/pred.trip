@@ -14,23 +14,23 @@ poly pair = ΛA . ΛB .
               ΛY . λk : A → B → Y .
                 k a b
 
-poly fst  = ΛA . ΛB .
-              λp : ∀Y . (A → B → Y) → Y .
-                p [A] (λx : A . λy : B . x)
+poly fst = ΛA . ΛB .
+             λp : ∀Y . (A → B → Y) → Y .
+               p [A] (λx : A . λy : B . x)
 
-poly snd  = ΛA . ΛB .
-              λp : ∀Y . (A → B → Y) → Y .
-                p [B] (λx : A . λy : B . y)
+poly snd = ΛA . ΛB .
+             λp : ∀Y . (A → B → Y) → Y .
+               p [B] (λx : A . λy : B . y)
 
 poly pred = λn : Nat .
   fst Nat Nat
     ( n [∀Y . (Nat → Nat → Y) → Y]
-        ( λp : ∀Y . (Nat → Nat → Y) → Y .
-            pair Nat Nat
-              (snd Nat Nat p)
-              (succ (snd Nat Nat p))
-        )
-        (pair Nat Nat zero zero)
+      ( λp : ∀Y . (Nat → Nat → Y) → Y .
+          pair Nat Nat
+            (snd Nat Nat p)
+            (succ (snd Nat Nat p))
+      )
+      (pair Nat Nat zero zero)
     )
 
 poly testPred1 = pred one

@@ -216,24 +216,22 @@ export function insertAVL<TKey, TValue>(
       if (cmp === 0) {
         // we replaced this node entirely
         updated = subtree;
-      } else {
-        if (direction === "L") {
-          updated = createAVLNode(
-            node.key,
-            node.value,
-            node.height,
-            subtree,
-            node.right,
-          );
-        } else if (direction === "R") {
-          updated = createAVLNode(
-            node.key,
-            node.value,
-            node.height,
-            node.left,
-            subtree,
-          );
-        }
+      } else if (direction === "L") {
+        updated = createAVLNode(
+          node.key,
+          node.value,
+          node.height,
+          subtree,
+          node.right,
+        );
+      } else if (direction === "R") {
+        updated = createAVLNode(
+          node.key,
+          node.value,
+          node.height,
+          node.left,
+          subtree,
+        );
       }
     }
 

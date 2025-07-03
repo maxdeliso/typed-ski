@@ -28,6 +28,7 @@ Deno.test("parseTripLang", async (t) => {
     expect(term).to.deep.equal({
       kind: "poly",
       name: "id",
+      type: undefined,
       term: mkSystemFTAbs(
         "a",
         mkSystemFAbs(
@@ -167,6 +168,7 @@ Deno.test("parseTripLang", async (t) => {
         {
           kind: "poly",
           name: "id",
+          type: undefined,
           term: mkSystemFTAbs("A", mkSystemFAbs("x", A, mkSystemFVar("x"))),
         },
         {
@@ -216,4 +218,92 @@ Deno.test("parseTripLang", async (t) => {
       ],
     });
   });
+
+  await t.step("parses poly definition with explicit type annotation", () => {
+    const input = loadInput("polyWithType.trip", __dirname);
+    const [term] = parseTripLangDefinition(createParserState(input));
+    expect(term).to.deep.equal({
+      kind: "poly",
+      name: "id",
+      type: {
+        kind: "forall",
+        typeVar: "a",
+        body: cons(
+          { kind: "type-var", typeName: "a" },
+          { kind: "type-var", typeName: "a" },
+        ),
+      },
+      term: mkSystemFTAbs(
+        "a",
+        mkSystemFAbs(
+          "x",
+          { kind: "type-var", typeName: "a" },
+          mkSystemFVar("x"),
+        ),
+      ),
+    });
+  });
+
+  await t.step(
+    "parses typed definition without explicit type annotation",
+    () => {
+      const input = loadInput("typedNoType.trip", __dirname);
+      const [term] = parseTripLangDefinition(createParserState(input));
+      expect(term).to.deep.equal({
+        kind: "typed",
+        name: "id",
+        type: undefined,
+        term: {
+          kind: "typed-lambda-abstraction",
+          varName: "x",
+          ty: { kind: "type-var", typeName: "Int" },
+          body: { kind: "lambda-var", name: "x" },
+        },
+      });
+    },
+  );
+
+  await t.step("parses module definition", () => {
+    const input = "module MyModule";
+    const [term] = parseTripLangDefinition(createParserState(input));
+    expect(term).to.deep.equal({
+      kind: "module",
+      name: "MyModule",
+    });
+  });
+
+  await t.step("parses import definition", () => {
+    const input = "import Foo bar";
+    const [term] = parseTripLangDefinition(createParserState(input));
+    expect(term).to.deep.equal({
+      kind: "import",
+      name: "Foo",
+      ref: "bar",
+    });
+  });
+
+  await t.step("parses export definition", () => {
+    const input = "export Baz";
+    const [term] = parseTripLangDefinition(createParserState(input));
+    expect(term).to.deep.equal({
+      kind: "export",
+      name: "Baz",
+    });
+  });
+
+  await t.step(
+    "parses combined module/import/export definitions from file",
+    () => {
+      const input = loadInput("moduleCombo.trip", __dirname);
+      const program = parseTripLang(input);
+      expect(program).to.deep.equal({
+        kind: "program",
+        terms: [
+          { kind: "module", name: "MyModule" },
+          { kind: "import", name: "Foo", ref: "bar" },
+          { kind: "export", name: "Baz" },
+        ],
+      });
+    },
+  );
 });

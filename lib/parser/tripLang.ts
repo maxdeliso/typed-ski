@@ -1,12 +1,14 @@
 import {
   createParserState,
   matchCh,
+  parseDefinitionKeyword,
   parseIdentifier,
-  parseKeyword,
+  parseOptionalTypeAnnotation,
   type ParserState,
   remaining,
   skipWhitespace,
 } from "./parserState.ts";
+
 import { ParseError } from "./parseError.ts";
 import { parseSystemFTerm } from "./systemFTerm.ts";
 import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
@@ -14,57 +16,112 @@ import { parseUntypedLambdaInternal } from "./untyped.ts";
 import { parseSKIInternal } from "./ski.ts";
 import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
 import { parseSystemFType } from "./systemFType.ts";
+import type { BaseType } from "../types/types.ts";
+import type { SystemFTerm } from "../terms/systemF.ts";
+import type { TypedLambda } from "../types/typedLambda.ts";
+import type { UntypedLambda } from "../terms/lambda.ts";
+import type { SKIExpression } from "../ski/expression.ts";
+
+export const WHITESPACE_REGEX = /\s/;
+export const IDENTIFIER_CHAR_REGEX = /[a-zA-Z0-9_]/;
+
+export const LEFT_PAREN = "(";
+export const RIGHT_PAREN = ")";
+export const COLON = ":";
+export const EQUALS = "=";
+
+const POLY = "poly" as const;
+const TYPED = "typed" as const;
+const UNTYPED = "untyped" as const;
+const COMBINATOR = "combinator" as const;
+const TYPE = "type" as const;
+const MODULE = "module" as const;
+const IMPORT = "import" as const;
+const EXPORT = "export" as const;
+
+export const DEFINITION_KEYWORDS = [
+  POLY,
+  TYPED,
+  UNTYPED,
+  COMBINATOR,
+  TYPE,
+  MODULE,
+  IMPORT,
+  EXPORT,
+] as const;
+
+export type DefinitionKind = typeof DEFINITION_KEYWORDS[number];
 
 export function parseTripLangDefinition(
   state: ParserState,
 ): [TripLangTerm, ParserState] {
-  const [kind, stateAfterKind] = parseKeyword(state, [
-    "poly",
-    "typed",
-    "untyped",
-    "combinator",
-    "type",
-  ]);
+  let currentState: ParserState;
+  let type: BaseType | undefined;
+  let term:
+    | SystemFTerm
+    | TypedLambda
+    | UntypedLambda
+    | SKIExpression
+    | BaseType;
+  let finalState: ParserState;
 
+  const [kind, stateAfterKind] = parseDefinitionKeyword(
+    state,
+    DEFINITION_KEYWORDS,
+  );
   const [name, stateAfterName] = parseIdentifier(stateAfterKind);
-  let currentState = skipWhitespace(stateAfterName);
-  let type;
 
-  if (kind === "typed") {
-    currentState = matchCh(currentState, ":");
-    currentState = skipWhitespace(currentState);
-    [, type, currentState] = parseArrowType(currentState);
+  if (kind === MODULE || kind === IMPORT || kind === EXPORT) {
+    switch (kind) {
+      case MODULE:
+        return [{ kind: MODULE, name }, skipWhitespace(stateAfterName)];
+      case IMPORT: {
+        const [ref, stateAfterRef] = parseIdentifier(stateAfterName);
+        return [{ kind: IMPORT, name, ref }, skipWhitespace(stateAfterRef)];
+      }
+      case EXPORT:
+        return [{ kind: EXPORT, name }, skipWhitespace(stateAfterName)];
+    }
+  }
+
+  currentState = skipWhitespace(stateAfterName);
+
+  if (kind === TYPED) {
+    [type, currentState] = parseOptionalTypeAnnotation(
+      currentState,
+      parseArrowType,
+    );
+  } else if (kind === POLY) {
+    [type, currentState] = parseOptionalTypeAnnotation(
+      currentState,
+      parseSystemFType,
+    );
   }
 
   currentState = skipWhitespace(currentState);
-  currentState = matchCh(currentState, "=");
+  currentState = matchCh(currentState, EQUALS);
   currentState = skipWhitespace(currentState);
 
-  let term;
-  let finalState;
   switch (kind) {
-    case "poly":
+    case POLY:
       [, term, finalState] = parseSystemFTerm(currentState);
-      return [{ kind: "poly", name, term }, skipWhitespace(finalState)];
+      return [{ kind: POLY, name, type, term }, skipWhitespace(finalState)];
 
-    case "typed":
+    case TYPED:
       [, term, finalState] = parseTypedLambdaInternal(currentState);
-      if (type === undefined) {
-        throw new ParseError("expected type for typed definition");
-      }
-      return [{ kind: "typed", name, type, term }, skipWhitespace(finalState)];
+      return [{ kind: TYPED, name, type, term }, skipWhitespace(finalState)];
 
-    case "untyped":
+    case UNTYPED:
       [, term, finalState] = parseUntypedLambdaInternal(currentState);
-      return [{ kind: "untyped", name, term }, skipWhitespace(finalState)];
+      return [{ kind: UNTYPED, name, term }, skipWhitespace(finalState)];
 
-    case "combinator":
+    case COMBINATOR:
       [, term, finalState] = parseSKIInternal(currentState);
-      return [{ kind: "combinator", name, term }, skipWhitespace(finalState)];
+      return [{ kind: COMBINATOR, name, term }, skipWhitespace(finalState)];
 
-    case "type":
+    case TYPE:
       [, type, finalState] = parseSystemFType(currentState);
-      return [{ kind: "type", name, type }, skipWhitespace(finalState)];
+      return [{ kind: TYPE, name, type }, skipWhitespace(finalState)];
 
     default:
       throw new ParseError(`Unknown definition kind: ${kind}`);

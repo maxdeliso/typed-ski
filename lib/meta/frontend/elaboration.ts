@@ -38,6 +38,12 @@ export function elaborateTerm(
       return term;
     case "type":
       return term;
+    case "module":
+      return term;
+    case "import":
+      return term;
+    case "export":
+      return term;
   }
 }
 

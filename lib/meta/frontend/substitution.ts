@@ -157,6 +157,10 @@ export function substituteTripLangTerm(
         "resolve",
         { current },
       );
+    case "module":
+    case "import":
+    case "export":
+      return current;
   }
 }
 
@@ -202,6 +206,9 @@ export function substituteTripLangType(
       };
     case "untyped":
     case "combinator":
+    case "module":
+    case "import":
+    case "export":
       return {
         ...current,
       };

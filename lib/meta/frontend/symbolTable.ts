@@ -67,5 +67,13 @@ export function resolveDefTerm(tt: TripLangTerm): TripLangDefType {
       return tt.term;
     case "type":
       return tt.type;
+    case "module":
+    case "import":
+    case "export":
+      throw new CompilationError(
+        "Cannot resolve definition term for module/import/export",
+        "resolve",
+        { term: tt },
+      );
   }
 }

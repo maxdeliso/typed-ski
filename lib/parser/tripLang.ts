@@ -65,10 +65,7 @@ export function parseTripLangDefinition(
     | BaseType;
   let finalState: ParserState;
 
-  const [kind, stateAfterKind] = parseDefinitionKeyword(
-    state,
-    DEFINITION_KEYWORDS,
-  );
+  const [kind, stateAfterKind] = parseDefinitionKeyword(state);
   const [name, stateAfterName] = parseIdentifier(stateAfterKind);
 
   if (kind === MODULE || kind === IMPORT || kind === EXPORT) {

@@ -90,10 +90,9 @@ export function parseOptionalTypeAnnotation<T>(
 
 export function parseDefinitionKeyword(
   state: ParserState,
-  keywords: readonly string[],
 ): [DefinitionKind, ParserState] {
   const [word, nextState] = parseIdentifier(state);
-  if (!keywords.includes(word)) {
+  if (!DEFINITION_KEYWORDS.includes(word as DefinitionKind)) {
     throw new ParseError(`expected definition keyword, found ${word}`);
   }
   return [word as DefinitionKind, nextState];

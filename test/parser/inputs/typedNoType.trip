@@ -1,1 +1,3 @@
+module TypedNoType
+
 typed id = λx:Int. x

@@ -1,9 +1,7 @@
 import { expect } from "npm:chai";
 import { dirname } from "node:path";
-import { createParserState } from "../../lib/parser/parserState.ts";
 import {
   parseTripLang,
-  parseTripLangDefinition,
 } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
 import {
@@ -23,8 +21,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 Deno.test("parseTripLang", async (t) => {
   await t.step("parses polymorphic definitions", () => {
     const input = loadInput("polyId.trip", __dirname);
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [moduleDecl, term] = parseTripLang(input).terms;
 
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "PolyId",
+    });
     expect(term).to.deep.equal({
       kind: "poly",
       name: "id",
@@ -42,8 +44,12 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses typed definitions with explicit types", () => {
     const input = loadInput("typedInc.trip", __dirname);
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [moduleDecl, term] = parseTripLang(input).terms;
 
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "TypedInc",
+    });
     expect(term).to.deep.equal({
       kind: "typed",
       name: "inc",
@@ -65,8 +71,12 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses untyped definitions", () => {
     const input = loadInput("untypedDouble.trip", __dirname);
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [moduleDecl, term] = parseTripLang(input).terms;
 
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "UntypedDouble",
+    });
     expect(term).to.deep.equal({
       kind: "untyped",
       name: "double",
@@ -83,8 +93,12 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses complex combinator definitions", () => {
     const input = loadInput("combinatorY.trip", __dirname);
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [moduleDecl, term] = parseTripLang(input).terms;
 
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "CombinatorY",
+    });
     expect(term).to.deep.equal({
       "kind": "combinator",
       "name": "Y",
@@ -124,11 +138,15 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses type definitions correctly", () => {
     const input = loadInput("typeNat.trip", __dirname);
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [moduleDecl, term] = parseTripLang(input).terms;
 
     const typeVar = (name: string) => ({ kind: "type-var", typeName: name });
     const X = typeVar("X");
 
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "TypeNat",
+    });
     expect(term).to.deep.equal({
       kind: "type",
       name: "Nat",
@@ -156,6 +174,7 @@ Deno.test("parseTripLang", async (t) => {
     expect(program).to.deep.equal({
       kind: "program",
       terms: [
+        { kind: "module", name: "Church" },
         {
           kind: "type",
           name: "Nat",
@@ -221,7 +240,11 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses poly definition with explicit type annotation", () => {
     const input = loadInput("polyWithType.trip", __dirname);
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [moduleDecl, term] = parseTripLang(input).terms;
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "PolyWithType",
+    });
     expect(term).to.deep.equal({
       kind: "poly",
       name: "id",
@@ -248,7 +271,11 @@ Deno.test("parseTripLang", async (t) => {
     "parses typed definition without explicit type annotation",
     () => {
       const input = loadInput("typedNoType.trip", __dirname);
-      const [term] = parseTripLangDefinition(createParserState(input));
+      const [moduleDecl, term] = parseTripLang(input).terms;
+      expect(moduleDecl).to.deep.equal({
+        kind: "module",
+        name: "TypedNoType",
+      });
       expect(term).to.deep.equal({
         kind: "typed",
         name: "id",
@@ -265,7 +292,7 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses module definition", () => {
     const input = "module MyModule";
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [term] = parseTripLang(input).terms;
     expect(term).to.deep.equal({
       kind: "module",
       name: "MyModule",
@@ -274,7 +301,7 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses import definition", () => {
     const input = "import Foo bar";
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [term] = parseTripLang(input).terms;
     expect(term).to.deep.equal({
       kind: "import",
       name: "Foo",
@@ -284,7 +311,7 @@ Deno.test("parseTripLang", async (t) => {
 
   await t.step("parses export definition", () => {
     const input = "export Baz";
-    const [term] = parseTripLangDefinition(createParserState(input));
+    const [term] = parseTripLang(input).terms;
     expect(term).to.deep.equal({
       kind: "export",
       name: "Baz",

@@ -1,1 +1,3 @@
+module TypedInc
+
 typed inc : Int→Int = λx:Int. plus x 1

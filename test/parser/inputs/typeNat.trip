@@ -1,1 +1,3 @@
+module TypeNat
+
 type Nat = ∀X.(X→X)→X→X

@@ -1,3 +1,5 @@
+module CondSucc
+
 type Nat  = ∀X . (X → X) → X → X
 type Bool = ∀B . B → B → B
 

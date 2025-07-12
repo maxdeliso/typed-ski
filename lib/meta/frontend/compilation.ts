@@ -1,4 +1,9 @@
-import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
+import type {
+  SymbolTable,
+  TripLangProgram,
+  TripLangTerm,
+  TripLangValueType,
+} from "../trip.ts";
 import {
   extractDefinitionValue,
   indexSymbols as indexSymbolsImpl,
@@ -9,8 +14,9 @@ import { externalReferences } from "./externalReferences.ts";
 import {
   type AVLTree,
   createEmptyAVL,
-  emptyAVL,
   insertAVL,
+  keyValuePairs,
+  searchAVL,
 } from "../../data/avl/avlNode.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
 import { typecheckSystemF } from "../../index.ts";
@@ -104,6 +110,27 @@ export interface TypecheckedProgramWithTypes {
 
 export function parse(input: string): ParsedProgram {
   const program = parseTripLang(input);
+
+  // Validate module constraints
+  const moduleDefinitions = program.terms.filter((term) =>
+    term.kind === "module"
+  );
+
+  if (moduleDefinitions.length === 0) {
+    throw new CompilationError(
+      "No module definition found. Each program must have exactly one module definition.",
+      "parse",
+    );
+  }
+
+  if (moduleDefinitions.length > 1) {
+    const moduleNames = moduleDefinitions.map((m) => m.name).join(", ");
+    throw new CompilationError(
+      `Multiple module definitions found: ${moduleNames}. Each program must have exactly one module definition.`,
+      "parse",
+    );
+  }
+
   return { ...program, __moniker: Symbol() } as ParsedProgram;
 }
 
@@ -137,6 +164,14 @@ export function elaborate(
 export function resolve(
   programWithSymbols: ElaboratedProgramWithSymbols,
 ): ResolvedProgram {
+  // Collect imported symbol names
+  const importedSymbols = new Set<string>();
+  for (const term of programWithSymbols.program.terms) {
+    if (term.kind === "import") {
+      importedSymbols.add(term.name);
+    }
+  }
+
   const resolved = resolveExternalProgramReferences(
     programWithSymbols.program,
     programWithSymbols.symbols,
@@ -148,11 +183,58 @@ export function resolve(
       continue;
     }
     const [ut, uty] = externalReferences(definitionValue);
-    if (!emptyAVL(ut) || !emptyAVL(uty)) {
+
+    // Check for unresolved terms that are not imported
+    const unresolvedTerms = keyValuePairs(ut).map((kvp) => kvp[0]);
+    const unresolvedTypes = keyValuePairs(uty).map((kvp) => kvp[0]);
+
+    const nonImportedUnresolvedTerms = unresolvedTerms.filter((term) =>
+      !importedSymbols.has(term)
+    );
+    const nonImportedUnresolvedTypes = unresolvedTypes.filter((type) =>
+      !importedSymbols.has(type)
+    );
+
+    if (
+      nonImportedUnresolvedTerms.length > 0 ||
+      nonImportedUnresolvedTypes.length > 0
+    ) {
+      // Create filtered AVL trees with only non-imported unresolved references
+      let filteredTerms = createEmptyAVL<string, TripLangValueType>();
+      let filteredTypes = createEmptyAVL<string, BaseType>();
+
+      for (const term of nonImportedUnresolvedTerms) {
+        const termValue = searchAVL(ut, term, compareStrings);
+        if (termValue) {
+          filteredTerms = insertAVL(
+            filteredTerms,
+            term,
+            termValue,
+            compareStrings,
+          );
+        }
+      }
+
+      for (const type of nonImportedUnresolvedTypes) {
+        const typeValue = searchAVL(uty, type, compareStrings);
+        if (typeValue) {
+          filteredTypes = insertAVL(
+            filteredTypes,
+            type,
+            typeValue,
+            compareStrings,
+          );
+        }
+      }
+
       throw new CompilationError(
         "Unresolved external references after resolution",
         "resolve",
-        { term: resolvedTerm, unresolvedTerms: ut, unresolvedTypes: uty },
+        {
+          term: resolvedTerm,
+          unresolvedTerms: filteredTerms,
+          unresolvedTypes: filteredTypes,
+        },
       );
     }
   }
@@ -163,10 +245,37 @@ export function resolve(
 export function typecheck(
   program: ResolvedProgram,
 ): TypecheckedProgramWithTypes {
+  // Collect imported symbol names
+  const importedSymbols = new Set<string>();
+  for (const term of program.terms) {
+    if (term.kind === "import") {
+      importedSymbols.add(term.name);
+    }
+  }
+
   let types = createEmptyAVL<string, BaseType>();
 
   for (const term of program.terms) {
     try {
+      // Check if the term contains unresolved imported symbols
+      const definitionValue = extractDefinitionValue(term);
+      if (definitionValue !== undefined) {
+        const [ut, uty] = externalReferences(definitionValue);
+        const unresolvedTerms = keyValuePairs(ut).map((kvp) => kvp[0]);
+        const unresolvedTypes = keyValuePairs(uty).map((kvp) => kvp[0]);
+
+        // Check if any unresolved references are imported symbols
+        const hasUnresolvedImportedSymbols = unresolvedTerms.some((term) =>
+          importedSymbols.has(term)
+        ) ||
+          unresolvedTypes.some((type) => importedSymbols.has(type));
+
+        if (hasUnresolvedImportedSymbols) {
+          // Skip typechecking for terms with unresolved imported symbols
+          continue;
+        }
+      }
+
       switch (term.kind) {
         case "poly":
           types = insertAVL(

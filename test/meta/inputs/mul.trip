@@ -1,3 +1,5 @@
+module MulModule
+
 type Nat = ∀X . (X → X) → X → X
 
 poly zero = ΛX . λs : X → X . λz : X . z

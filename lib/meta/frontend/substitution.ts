@@ -27,15 +27,26 @@ export function resolveExternalProgramReferences(
   program: TripLangProgram,
   syms: SymbolTable,
 ): TripLangProgram {
+  // Collect all imported symbol names
+  const importedSymbols = new Set<string>();
+  for (const term of program.terms) {
+    if (term.kind === "import") {
+      importedSymbols.add(term.name);
+    }
+  }
+
   return {
     kind: "program",
-    terms: program.terms.map((t) => resolveExternalTermReferences(t, syms)),
+    terms: program.terms.map((t) =>
+      resolveExternalTermReferences(t, syms, importedSymbols)
+    ),
   };
 }
 
 export function resolveExternalTermReferences(
   term: TripLangTerm,
   syms: SymbolTable,
+  importedSymbols: Set<string>,
 ): TripLangTerm {
   const definitionValue = extractDefinitionValue(term);
 
@@ -70,6 +81,11 @@ export function resolveExternalTermReferences(
     if (
       symbolReferencedTerm === undefined && symbolReferencedType === undefined
     ) {
+      // Skip imported symbols - they should remain unresolved
+      if (importedSymbols.has(termRef)) {
+        return acc;
+      }
+
       throw new CompilationError(
         `Unresolved external term reference: ${termRef}`,
         "resolve",
@@ -93,6 +109,7 @@ export function resolveExternalTermReferences(
       const toInsert = resolveExternalTermReferences(
         symbolReferencedTerm,
         syms,
+        importedSymbols,
       );
       return substituteTripLangTerm(acc, toInsert);
     }

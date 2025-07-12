@@ -1,3 +1,5 @@
+module Church
+
 type Nat = ∀X.(X→X)→X→X
 
 poly id = ΛA.λx:A.x

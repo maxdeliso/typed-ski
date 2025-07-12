@@ -1,3 +1,5 @@
+module NestedTypeApps
+
 type Nat = ∀X.((X→X)→(X→X))
 type Bool = ∀B.(B→(B→B))
 poly true = ΛB.λt:B.λf:B.t

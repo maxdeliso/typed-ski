@@ -1,3 +1,5 @@
+module FixFact
+
 type Nat = ∀X . (X → X) → X → X
 
 poly succ =

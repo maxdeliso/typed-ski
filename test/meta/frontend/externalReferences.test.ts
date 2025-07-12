@@ -1,8 +1,8 @@
 import { assert } from "npm:chai";
 import {
   externalReferences,
+  extractDefinitionValue,
   parseTripLang,
-  resolveDefTerm,
 } from "../../../lib/index.ts";
 import { keyValuePairs } from "../../../lib/data/avl/avlNode.ts";
 
@@ -13,7 +13,7 @@ Deno.test("externalReferences", async (t) => {
       const input = "poly id = λx:A.x";
       const program = parseTripLang(input);
       const [termRefs, typeRefs] = externalReferences(
-        resolveDefTerm(program.terms[0]),
+        extractDefinitionValue(program.terms[0])!,
       );
 
       assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
@@ -27,7 +27,7 @@ Deno.test("externalReferences", async (t) => {
     const input = "poly id = ΛX.λx:X.x";
     const program = parseTripLang(input);
     const [termRefs, typeRefs] = externalReferences(
-      resolveDefTerm(program.terms[0]),
+      extractDefinitionValue(program.terms[0])!,
     );
 
     assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
@@ -40,7 +40,7 @@ Deno.test("externalReferences", async (t) => {
       const input = "poly free = λx:A.y";
       const program = parseTripLang(input);
       const [termRefs, typeRefs] = externalReferences(
-        resolveDefTerm(program.terms[0]),
+        extractDefinitionValue(program.terms[0])!,
       );
 
       assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), [
@@ -58,7 +58,7 @@ Deno.test("externalReferences", async (t) => {
       const input = "poly freeType = ΛX.λx:Y.x";
       const program = parseTripLang(input);
       const [termRefs, typeRefs] = externalReferences(
-        resolveDefTerm(program.terms[0]),
+        extractDefinitionValue(program.terms[0])!,
       );
 
       assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
@@ -72,7 +72,7 @@ Deno.test("externalReferences", async (t) => {
     const input = "poly complex = λx:A.λy:B.(x (y z))";
     const program = parseTripLang(input);
     const [termRefs, typeRefs] = externalReferences(
-      resolveDefTerm(program.terms[0]),
+      extractDefinitionValue(program.terms[0])!,
     );
 
     assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), ["z"]);
@@ -88,7 +88,7 @@ Deno.test("externalReferences", async (t) => {
       const input = "poly typeApp = ΛX.λx:X.(x[Y])";
       const program = parseTripLang(input);
       const [termRefs, typeRefs] = externalReferences(
-        resolveDefTerm(program.terms[0]),
+        extractDefinitionValue(program.terms[0])!,
       );
 
       assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
@@ -102,7 +102,7 @@ Deno.test("externalReferences", async (t) => {
     const input = "poly app = (x y)";
     const program = parseTripLang(input);
     const [termRefs, typeRefs] = externalReferences(
-      resolveDefTerm(program.terms[0]),
+      extractDefinitionValue(program.terms[0])!,
     );
 
     assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), [
@@ -118,7 +118,7 @@ Deno.test("externalReferences", async (t) => {
       const input = "poly nested = λx:A.λy:B.(λz:C.(x y z))";
       const program = parseTripLang(input);
       const [termRefs, typeRefs] = externalReferences(
-        resolveDefTerm(program.terms[0]),
+        extractDefinitionValue(program.terms[0])!,
       );
 
       assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);

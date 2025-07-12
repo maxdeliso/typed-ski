@@ -1,10 +1,10 @@
 import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
 import {
+  extractDefinitionValue,
   indexSymbols as indexSymbolsImpl,
-  resolveDefTerm,
 } from "./symbolTable.ts";
 import { elaborateTerms } from "./elaboration.ts";
-import { resolveRefs } from "./substitution.ts";
+import { resolveExternalProgramReferences } from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
 import {
   type AVLTree,
@@ -137,14 +137,17 @@ export function elaborate(
 export function resolve(
   programWithSymbols: ElaboratedProgramWithSymbols,
 ): ResolvedProgram {
-  const resolved = resolveRefs(
+  const resolved = resolveExternalProgramReferences(
     programWithSymbols.program,
     programWithSymbols.symbols,
   );
 
   for (const resolvedTerm of resolved.terms) {
-    const defTerm = resolveDefTerm(resolvedTerm);
-    const [ut, uty] = externalReferences(defTerm);
+    const definitionValue = extractDefinitionValue(resolvedTerm);
+    if (definitionValue === undefined) {
+      continue;
+    }
+    const [ut, uty] = externalReferences(definitionValue);
     if (!emptyAVL(ut) || !emptyAVL(uty)) {
       throw new CompilationError(
         "Unresolved external references after resolution",

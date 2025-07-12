@@ -20,7 +20,7 @@ export type TripLangTerm =
   | ImportDefinition
   | ExportDefinition;
 
-export type TripLangDefType =
+export type TripLangValueType =
   | SystemFTerm
   | TypedLambda
   | UntypedLambda

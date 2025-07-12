@@ -6,17 +6,17 @@ import {
 } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
 import type { BaseType } from "../../types/types.ts";
-import type { TripLangDefType } from "../trip.ts";
+import type { TripLangValueType } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
 
-export function externalReferences(td: TripLangDefType): [
-  AVLTree<string, TripLangDefType>,
+export function externalReferences(td: TripLangValueType): [
+  AVLTree<string, TripLangValueType>,
   AVLTree<string, BaseType>,
 ] {
-  let externalTermRefs = createEmptyAVL<string, TripLangDefType>();
+  let externalTermRefs = createEmptyAVL<string, TripLangValueType>();
   let externalTypeRefs = createEmptyAVL<string, BaseType>();
-  let absBindMap = createEmptyAVL<string, TripLangDefType>();
-  const defStack: TripLangDefType[] = [td];
+  let absBindMap = createEmptyAVL<string, TripLangValueType>();
+  const defStack: TripLangValueType[] = [td];
 
   while (defStack.length) {
     const current = defStack.pop();

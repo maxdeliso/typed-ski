@@ -1,0 +1,5 @@
+{
+  "deno.enable": true,
+  "debug.javascript.autoAttachFilter": "onlyWithFlag",
+  "deno.codeLens.test": true
+}

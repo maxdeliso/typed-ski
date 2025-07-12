@@ -1,8 +1,8 @@
 import { assert } from "npm:chai";
 import {
+  extractDefinitionValue,
   indexSymbols,
   type PolyDefinition,
-  resolveDefTerm,
   type TripLangProgram,
   type TypedDefinition,
   type TypeDefinition,
@@ -94,7 +94,7 @@ Deno.test("Symbol Table", async (t) => {
       term: { kind: "systemF-var", name: "x" },
     };
 
-    const resolved = resolveDefTerm(term);
+    const resolved = extractDefinitionValue(term);
     assert.deepStrictEqual(resolved, { kind: "systemF-var", name: "x" });
   });
 
@@ -106,7 +106,7 @@ Deno.test("Symbol Table", async (t) => {
       term: { kind: "lambda-var", name: "x" },
     };
 
-    const resolved = resolveDefTerm(term);
+    const resolved = extractDefinitionValue(term);
     assert.deepStrictEqual(resolved, { kind: "lambda-var", name: "x" });
   });
 
@@ -117,7 +117,7 @@ Deno.test("Symbol Table", async (t) => {
       type: { kind: "type-var", typeName: "X" },
     };
 
-    const resolved = resolveDefTerm(term);
+    const resolved = extractDefinitionValue(term);
     assert.deepStrictEqual(resolved, { kind: "type-var", typeName: "X" });
   });
 });

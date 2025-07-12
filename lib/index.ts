@@ -55,8 +55,14 @@ export {
   type TypeDefinition,
 } from "./meta/trip.ts";
 export { externalReferences } from "./meta/frontend/externalReferences.ts";
-export { indexSymbols, resolveDefTerm } from "./meta/frontend/symbolTable.ts";
-export { resolveRefs } from "./meta/frontend/substitution.ts";
+export {
+  extractDefinitionValue,
+  indexSymbols,
+} from "./meta/frontend/symbolTable.ts";
+export {
+  resolveExternalProgramReferences,
+  resolveExternalTermReferences,
+} from "./meta/frontend/substitution.ts";
 
 // Additional utility exports
 export { UnChurchNumber } from "./ski/church.ts";

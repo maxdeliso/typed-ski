@@ -7,9 +7,9 @@ import { compareStrings } from "../../data/map/stringMap.ts";
 import { prettyPrintTy } from "../../types/types.ts";
 import type {
   SymbolTable,
-  TripLangDefType,
   TripLangProgram,
   TripLangTerm,
+  TripLangValueType,
   TypeDefinition,
 } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
@@ -58,7 +58,9 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
   };
 }
 
-export function resolveDefTerm(tt: TripLangTerm): TripLangDefType {
+export function extractDefinitionValue(
+  tt: TripLangTerm,
+): TripLangValueType | undefined {
   switch (tt.kind) {
     case "poly":
     case "typed":
@@ -70,10 +72,6 @@ export function resolveDefTerm(tt: TripLangTerm): TripLangDefType {
     case "module":
     case "import":
     case "export":
-      throw new CompilationError(
-        "Cannot resolve definition term for module/import/export",
-        "resolve",
-        { term: tt },
-      );
+      return undefined;
   }
 }

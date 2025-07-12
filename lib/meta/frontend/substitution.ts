@@ -3,13 +3,13 @@ import { compareStrings } from "../../data/map/stringMap.ts";
 import type { BaseType } from "../../types/types.ts";
 import type {
   SymbolTable,
-  TripLangDefType,
   TripLangProgram,
   TripLangTerm,
+  TripLangValueType,
   TypeDefinition,
 } from "../trip.ts";
 import { lower, termLevel } from "./termLevel.ts";
-import { resolveDefTerm } from "./symbolTable.ts";
+import { extractDefinitionValue } from "./symbolTable.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { mkBranch } from "./builders.ts";
 import { needsRebuild, needsReplace } from "./predicates.ts";
@@ -23,22 +23,27 @@ import {
 } from "./rebuilders.ts";
 import { CompilationError } from "./compilation.ts";
 
-export function resolveRefs(
+export function resolveExternalProgramReferences(
   program: TripLangProgram,
   syms: SymbolTable,
 ): TripLangProgram {
   return {
     kind: "program",
-    terms: program.terms.map((t) => resolveTermRefs(t, syms)),
+    terms: program.terms.map((t) => resolveExternalTermReferences(t, syms)),
   };
 }
 
-export function resolveTermRefs(
+export function resolveExternalTermReferences(
   term: TripLangTerm,
   syms: SymbolTable,
 ): TripLangTerm {
-  const programTerm = resolveDefTerm(term);
-  const [tRefs, tyRefs] = externalReferences(programTerm);
+  const definitionValue = extractDefinitionValue(term);
+
+  if (definitionValue === undefined) {
+    return term;
+  }
+
+  const [tRefs, tyRefs] = externalReferences(definitionValue);
   const externalTermRefs = keyValuePairs(tRefs).map((kvp) => kvp[0]);
   const externalTypeRefs = keyValuePairs(tyRefs).map((kvp) => kvp[0]);
 
@@ -85,7 +90,10 @@ export function resolveTermRefs(
     if (symbolReferencedTerm) {
       // note: the symbol referenced term may need resolution too,
       // so we recursively resolve it here
-      const toInsert = resolveTermRefs(symbolReferencedTerm, syms);
+      const toInsert = resolveExternalTermReferences(
+        symbolReferencedTerm,
+        syms,
+      );
       return substituteTripLangTerm(acc, toInsert);
     }
 
@@ -215,7 +223,7 @@ export function substituteTripLangType(
   }
 }
 
-export function substitute<T extends TripLangDefType>(
+export function substitute<T extends TripLangValueType>(
   current: T,
   mkBranchFn: (_: T) => T[],
   replaceNeeded: (_: T) => boolean,

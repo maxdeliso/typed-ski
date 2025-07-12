@@ -19,5 +19,11 @@ export function prettyTerm(dt: TripLangTerm): string {
       return dt.name + def + prettyPrintSKI(dt.term);
     case "type":
       return dt.name + def + prettyPrintTy(dt.type);
+    case "module":
+      return `module ${dt.name}`;
+    case "import":
+      return `import ${dt.name} from ${dt.ref}`;
+    case "export":
+      return `export ${dt.name}`;
   }
 }

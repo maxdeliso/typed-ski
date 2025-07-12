@@ -15,6 +15,10 @@ export function termLevel(dt: TripLangTerm): number {
       return 1;
     case "type":
       return -1;
+    case "module":
+    case "import":
+    case "export":
+      return 0;
   }
 }
 
@@ -60,5 +64,9 @@ export function lower(dt: TripLangTerm): TripLangTerm {
         "resolve",
         { type: dt },
       );
+    case "module":
+    case "import":
+    case "export":
+      return dt; // these don't lower
   }
 }

@@ -1,1 +1,3 @@
+module UntypedDouble
+
 untyped double = λx. x x

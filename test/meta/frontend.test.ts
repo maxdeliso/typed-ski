@@ -14,10 +14,11 @@ import {
   parseTripLang,
   prettyPrintSystemF,
   prettyPrintTy,
-  resolveRefs,
+  resolveExternalProgramReferences,
   searchAVL,
   symbolicEvaluator,
   type SystemFTerm,
+  type TripLangTerm,
   UnChurchNumber,
 } from "../../lib/index.ts";
 
@@ -165,8 +166,11 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       "λn:Nat.ΛX.λs:(X→X).λz:X.(s (n[X] s z))",
     );
 
-    const resolved = resolveRefs(program, indexSymbols(program));
-    const succRes = resolved.terms.find((d) =>
+    const resolved = resolveExternalProgramReferences(
+      program,
+      indexSymbols(program),
+    );
+    const succRes = resolved.terms.find((d: TripLangTerm) =>
       d.kind === "poly" && d.name === "succ"
     )!;
     assertTermMatches(

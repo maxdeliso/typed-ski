@@ -1,4 +1,13 @@
 import { ParseError } from "./parseError.ts";
+import type { DefinitionKind } from "./tripLang.ts";
+import {
+  COLON,
+  DEFINITION_KEYWORDS,
+  IDENTIFIER_CHAR_REGEX,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+  WHITESPACE_REGEX,
+} from "./tripLang.ts";
 
 export interface ParserState {
   buf: string;
@@ -11,7 +20,7 @@ export function createParserState(buf: string): ParserState {
 
 export function skipWhitespace(state: ParserState): ParserState {
   let idx = state.idx;
-  while (idx < state.buf.length && /\s/.test(state.buf[idx])) {
+  while (idx < state.buf.length && WHITESPACE_REGEX.test(state.buf[idx])) {
     idx++;
   }
   return { buf: state.buf, idx };
@@ -38,11 +47,11 @@ export function matchCh(state: ParserState, ch: string): ParserState {
 }
 
 export function matchLP(state: ParserState): ParserState {
-  return matchCh(state, "(");
+  return matchCh(state, LEFT_PAREN);
 }
 
 export function matchRP(state: ParserState): ParserState {
-  return matchCh(state, ")");
+  return matchCh(state, RIGHT_PAREN);
 }
 
 export function parseIdentifier(state: ParserState): [string, ParserState] {
@@ -50,7 +59,7 @@ export function parseIdentifier(state: ParserState): [string, ParserState] {
   let currentState = skipWhitespace(state);
   while (currentState.idx < currentState.buf.length) {
     const ch = currentState.buf[currentState.idx];
-    if (!/[a-zA-Z0-9_]/.test(ch)) break;
+    if (!IDENTIFIER_CHAR_REGEX.test(ch)) break;
     id += ch;
     currentState = consume(currentState);
   }
@@ -65,13 +74,39 @@ export function remaining(state: ParserState): [boolean, ParserState] {
   return [newState.idx < newState.buf.length, newState];
 }
 
-export function parseKeyword(
+export function parseOptionalTypeAnnotation<T>(
   state: ParserState,
-  keywords: string[],
-): [string, ParserState] {
-  const [word, nextState] = parseIdentifier(state);
-  if (!keywords.includes(word)) {
-    throw new ParseError(`expected keyword, found ${word}`);
+  parseType: (state: ParserState) => [string, T, ParserState],
+): [T | undefined, ParserState] {
+  const [nextCh, _] = peek(state);
+  if (nextCh === COLON) {
+    const stateAfterColon = matchCh(state, COLON);
+    const stateAfterWhitespace = skipWhitespace(stateAfterColon);
+    const [, type, stateAfterType] = parseType(stateAfterWhitespace);
+    return [type, stateAfterType];
   }
-  return [word, nextState];
+  return [undefined, state];
+}
+
+export function parseDefinitionKeyword(
+  state: ParserState,
+): [DefinitionKind, ParserState] {
+  const [word, nextState] = parseIdentifier(state);
+  if (!DEFINITION_KEYWORDS.includes(word as DefinitionKind)) {
+    throw new ParseError(`expected definition keyword, found ${word}`);
+  }
+  return [word as DefinitionKind, nextState];
+}
+
+export function isAtDefinitionKeywordLine(state: ParserState): boolean {
+  const maxKeywordLength = Math.max(
+    ...DEFINITION_KEYWORDS.map((k) => k.length),
+  );
+  const sliceLength = maxKeywordLength + 1;
+  const nextChars = state.buf.slice(state.idx, state.idx + sliceLength);
+  const lines = nextChars.split("\n");
+  const firstLine = lines[0].trim();
+  return DEFINITION_KEYWORDS.some((keyword: string) =>
+    firstLine.startsWith(keyword)
+  );
 }

@@ -1,0 +1,7 @@
+module PolyWithType
+
+poly id : ∀a.a→a = Λa. λx:a. x
+
+poly const : ∀a.∀b.a→b→a = Λa.Λb.λx:a.λy:b.x
+
+poly id_no_type = Λa. λx:a. x

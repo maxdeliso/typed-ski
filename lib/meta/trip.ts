@@ -15,9 +15,12 @@ export type TripLangTerm =
   | TypedDefinition
   | UntypedDefinition
   | CombinatorDefinition
-  | TypeDefinition;
+  | TypeDefinition
+  | ModuleDefinition
+  | ImportDefinition
+  | ExportDefinition;
 
-export type TripLangDefType =
+export type TripLangValueType =
   | SystemFTerm
   | TypedLambda
   | UntypedLambda
@@ -27,13 +30,14 @@ export type TripLangDefType =
 export interface PolyDefinition {
   kind: "poly";
   name: string;
+  type?: BaseType;
   term: SystemFTerm;
 }
 
 export interface TypedDefinition {
   kind: "typed";
   name: string;
-  type: BaseType | undefined; // note: can be inferred, but only after resolution
+  type?: BaseType;
   term: TypedLambda;
 }
 
@@ -53,6 +57,22 @@ export interface TypeDefinition {
   kind: "type";
   name: string;
   type: BaseType;
+}
+
+export interface ModuleDefinition {
+  kind: "module";
+  name: string;
+}
+
+export interface ImportDefinition {
+  kind: "import";
+  name: string;
+  ref: string;
+}
+
+export interface ExportDefinition {
+  kind: "export";
+  name: string;
 }
 
 export interface SymbolTable {

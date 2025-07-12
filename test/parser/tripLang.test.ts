@@ -1,8 +1,6 @@
 import { expect } from "npm:chai";
 import { dirname } from "node:path";
-import {
-  parseTripLang,
-} from "../../lib/parser/tripLang.ts";
+import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
 import {
   mkSystemFAbs,

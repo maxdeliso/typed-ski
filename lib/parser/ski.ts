@@ -11,53 +11,39 @@ import { parseWithEOF } from "./eof.ts";
 import { cons } from "../cons.ts";
 import { type SKITerminalSymbol, term } from "../ski/terminal.ts";
 
-/**
- * Parses a chain of SKI atomic terms (term { term }).
- * For example, the input "SII" will be parsed as:
- *    mkApp(mkApp(S, I), I)
- *
- * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
- */
-function parseSKIChain(rdb: ParserState): [string, SKIExpression, ParserState] {
-  let [lit, expr, state] = parseAtomicSKI(rdb);
-  for (;;) {
-    const [next, newState] = peek(state);
-    if (
-      next === null ||
-      (next !== "(" && !["S", "K", "I"].includes(next.toUpperCase()))
-    ) {
-      return [lit, expr, newState];
-    }
-    const [nextLit, nextExpr, updatedState] = parseAtomicSKI(newState);
+const TERMINALS = new Set(["S", "K", "I"]);
+
+function isSymbol(tok: string | null): tok is SKITerminalSymbol {
+  return tok !== null && TERMINALS.has(tok.toUpperCase());
+}
+
+function isAtomStart(tok: string | null): boolean {
+  return tok === "(" || isSymbol(tok);
+}
+
+function parseSeq(rdb: ParserState): [string, SKIExpression, ParserState] {
+  let [lit, expr, state] = parseAtomicOrParens(rdb);
+  let [next, newState] = peek(state);
+
+  while (isAtomStart(next)) {
+    const [nextLit, nextExpr, updatedState] = parseAtomicOrParens(newState);
     lit = `${lit} ${nextLit}`;
     expr = cons(expr, nextExpr);
     state = updatedState;
+    [next, newState] = peek(state);
   }
+
+  return [lit, expr, newState];
 }
 
-/**
- * Parses an atomic SKI term.
- * This is either one of the terminals S, K, I or a parenthesized SKI expression.
- *
- * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
- */
-export function parseAtomicSKI(
+function parseAtomicOrParens(
   rdb: ParserState,
 ): [string, SKIExpression, ParserState] {
   const [peeked, state] = peek(rdb);
+
   if (peeked === "(") {
-    // Parse a parenthesized expression.
-    const stateAfterLP = matchLP(state);
-    // Inside parentheses we parse a whole chain.
-    const [innerLit, innerExpr, stateAfterChain] = parseSKIChain(stateAfterLP);
-    const stateAfterRP = matchRP(stateAfterChain);
-    return [`(${innerLit})`, innerExpr, stateAfterRP];
-  } else if (
-    peeked &&
-    (peeked.toUpperCase() === "S" ||
-      peeked.toUpperCase() === "K" ||
-      peeked.toUpperCase() === "I")
-  ) {
+    return parseParens(state);
+  } else if (isSymbol(peeked)) {
     const token = peeked.toUpperCase();
     const stateAfterConsume = consume(state);
     return [peeked, term(token as SKITerminalSymbol), stateAfterConsume];
@@ -69,22 +55,20 @@ export function parseAtomicSKI(
   }
 }
 
-/**
- * Parses a full SKI expression.
- * (This is just a wrapper around parseSKIChain, which implements the left‐associative application.)
- *
- * Returns a tuple of the literal parsed, the SKI expression, and the updated state.
- */
-export function parseSKIInternal(
-  rdb: ParserState,
+function parseParens(
+  state: ParserState,
 ): [string, SKIExpression, ParserState] {
-  return parseSKIChain(rdb);
+  const stateAfterLP = matchLP(state);
+  const [innerLit, innerExpr, stateAfterChain] = parseSeq(stateAfterLP);
+  const stateAfterRP = matchRP(stateAfterChain);
+  return [`(${innerLit})`, innerExpr, stateAfterRP];
 }
 
-/**
- * Parses an input string into an SKI expression.
- */
+export const parseSKIDelimited = (
+  rdb: ParserState,
+): [string, SKIExpression, ParserState] => parseSeq(rdb);
+
 export function parseSKI(input: string): SKIExpression {
-  const [, expr] = parseWithEOF(input, parseSKIInternal);
+  const [, expr] = parseWithEOF(input, parseSKIDelimited);
   return expr;
 }

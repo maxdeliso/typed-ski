@@ -13,7 +13,7 @@ import { ParseError } from "./parseError.ts";
 import { parseSystemFTerm } from "./systemFTerm.ts";
 import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
 import { parseUntypedLambdaInternal } from "./untyped.ts";
-import { parseSKIInternal } from "./ski.ts";
+import { parseSKIDelimited } from "./ski.ts";
 import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
 import { parseSystemFType } from "./systemFType.ts";
 import type { BaseType } from "../types/types.ts";
@@ -113,7 +113,7 @@ export function parseTripLangDefinition(
       return [{ kind: UNTYPED, name, term }, skipWhitespace(finalState)];
 
     case COMBINATOR:
-      [, term, finalState] = parseSKIInternal(currentState);
+      [, term, finalState] = parseSKIDelimited(currentState);
       return [{ kind: COMBINATOR, name, term }, skipWhitespace(finalState)];
 
     case TYPE:

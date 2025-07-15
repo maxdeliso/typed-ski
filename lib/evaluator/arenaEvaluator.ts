@@ -144,6 +144,47 @@ export class ArenaEvaluatorWasm implements Evaluator {
       this.fromArena(this.$.rightOf(id)),
     );
   }
+
+  dumpArena() {
+    const nodes: Array<
+      | { id: number; kind: "terminal"; sym: string }
+      | { id: number; kind: "non-terminal"; left: number; right: number }
+    > = [];
+
+    for (let id = 0;; id++) {
+      const k = this.$.kindOf(id);
+      // kindOf returns 0 for uninitialised slots; once we hit the first zero we
+      // have traversed the allocated prefix because ids are assigned densely.
+      if (k === 0) break;
+
+      if (k === (ArenaKind.Terminal as number)) {
+        let sym: string;
+        switch (this.$.symOf(id) as ArenaSym) {
+          case ArenaSym.S:
+            sym = "S";
+            break;
+          case ArenaSym.K:
+            sym = "K";
+            break;
+          case ArenaSym.I:
+            sym = "I";
+            break;
+          default:
+            sym = "?";
+        }
+        nodes.push({ id, kind: "terminal", sym });
+      } /* Non-terminal */ else {
+        nodes.push({
+          id,
+          kind: "non-terminal",
+          left: this.$.leftOf(id),
+          right: this.$.rightOf(id),
+        });
+      }
+    }
+
+    return { nodes } as const;
+  }
 }
 
 export async function initArenaEvaluator(wasmPath: string) {

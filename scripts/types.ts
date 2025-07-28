@@ -9,6 +9,7 @@ export interface EvaluationPath {
   source: number;
   sink: number;
   steps: EvaluationStep[];
+  hasCycle: boolean; // true if homeomorphic embedding cutoff occurred
 }
 
 export interface ArenaNode {
@@ -22,7 +23,6 @@ export interface ArenaNode {
 export interface GlobalInfo {
   type: "global";
   nodes: ArenaNode[];
-  labels: Record<string, string>;
   sources: number[];
   sinks: number[];
 }
@@ -36,9 +36,6 @@ export function isValidGlobalInfo(data: unknown): data is GlobalInfo {
     data.type === "global" &&
     "nodes" in data &&
     Array.isArray(data.nodes) &&
-    "labels" in data &&
-    typeof data.labels === "object" &&
-    data.labels !== null &&
     "sources" in data &&
     Array.isArray(data.sources) &&
     "sinks" in data &&
@@ -57,6 +54,8 @@ export function isValidEvaluationPath(data: unknown): data is EvaluationPath {
     typeof data.sink === "number" &&
     "steps" in data &&
     Array.isArray(data.steps) &&
+    "hasCycle" in data &&
+    typeof data.hasCycle === "boolean" &&
     data.steps.every((step) =>
       typeof step === "object" &&
       step !== null &&
@@ -68,12 +67,7 @@ export function isValidEvaluationPath(data: unknown): data is EvaluationPath {
   );
 }
 
-// Helper function to safely get a label for a node
-export function getNodeLabel(globalInfo: GlobalInfo, nodeId: number): string {
-  const label = globalInfo.labels[String(nodeId)];
-  if (label === undefined) {
-    console.error(`Warning: No label found for node ${nodeId}`);
-    return `Node${nodeId}`;
-  }
-  return label;
+// Helper function to get a label for a node
+export function getNodeLabel(_globalInfo: GlobalInfo, nodeId: number): string {
+  return `node_${nodeId}`;
 }

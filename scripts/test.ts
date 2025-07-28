@@ -3,7 +3,8 @@ import { dirname, fromFileUrl } from "https://deno.land/std/path/mod.ts";
 const projectRoot = dirname(dirname(fromFileUrl(import.meta.url)));
 
 async function buildWasm() {
-  const ascCmd = new Deno.Command(Deno.execPath(), {
+  // Build debug version
+  const debugCmd = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "-A",
@@ -19,8 +20,28 @@ async function buildWasm() {
     stderr: "inherit",
   });
 
-  const { success } = await ascCmd.output();
-  if (!success) throw new Error("AssemblyScript build failed");
+  const { success: debugSuccess } = await debugCmd.output();
+  if (!debugSuccess) throw new Error("AssemblyScript debug build failed");
+
+  // Build release version
+  const releaseCmd = new Deno.Command(Deno.execPath(), {
+    args: [
+      "run",
+      "-A",
+      "npm:assemblyscript@0.28.1/asc",
+      "assembly/index.ts",
+      "--config",
+      "assembly/asconfig.json",
+      "--target",
+      "release",
+    ],
+    cwd: projectRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  const { success: releaseSuccess } = await releaseCmd.output();
+  if (!releaseSuccess) throw new Error("AssemblyScript release build failed");
 }
 
 async function runTests() {

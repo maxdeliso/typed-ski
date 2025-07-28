@@ -1,8 +1,7 @@
 import { cons } from "../lib/cons.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
-import { initArenaEvaluator } from "../lib/evaluator/arenaEvaluator.ts";
-import { prettyPrint } from "../lib/ski/expression.ts";
+import { initArenaEvaluator, hasEmbedding } from "../lib/evaluator/arenaEvaluator.ts";
 import type { EvaluationStep, GlobalInfo } from "./types.ts";
 
 const memo = new Map<number, SKIExpression[]>();
@@ -10,7 +9,7 @@ const [nRaw, outputPath] = Deno.args;
 
 if (!nRaw) {
   console.error(
-    "Usage: deno run -A scripts/generateforest.ts <symbolCount> [outputFile]",
+    "Usage: deno run -A scripts/genForest.ts <symbolCount> [outputFile]",
   );
   console.error("");
   console.error(
@@ -62,21 +61,6 @@ function enumerateExpressions(leaves: number): SKIExpression[] {
   return result;
 }
 
-async function generateLabel(expr: SKIExpression): Promise<string> {
-  let label = prettyPrint(expr);
-  if (label.length > 100) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(label);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join(
-      "",
-    );
-    label = `HASH:${hashHex.substring(0, 16)}`;
-  }
-  return label;
-}
-
 export async function* generateEvaluationForest(
   symbolCount: number,
   wasmPath: string,
@@ -90,7 +74,6 @@ export async function* generateEvaluationForest(
   console.error(
     `Processing ${total} expressions with ${symbolCount} symbols each...`,
   );
-  const labels: Record<number, string> = {};
   const sources = new Set<number>();
   const sinks = new Set<number>();
 
@@ -105,61 +88,43 @@ export async function* generateEvaluationForest(
       );
     }
 
-    let cur = expr;
-    let steps = 0;
-    const MAX_STEPS = 10000;
-    const curId = evaluator.toArena(cur);
-    const label = await generateLabel(expr);
-
-    labels[curId] = label;
+    const curId = evaluator.toArena(expr);
     sources.add(curId);
 
-    const encounteredNodes = new Set<number>();
-    encounteredNodes.add(curId);
+    // Track evaluation history for cycle detection
+    const history: number[] = [curId];
     const pathSteps: EvaluationStep[] = [];
+    let hasCycle = false;
+    let currentId = curId;
 
-    while (steps < MAX_STEPS) {
-      steps++;
-      const { altered, expr: next } = evaluator.stepOnce(cur);
-      if (!altered) break;
+    // Manual evaluation with cycle detection
+    for (let step = 0;; step++) {
+      const { altered, expr: nextExpr } = evaluator.stepOnce(evaluator.fromArena(currentId));
 
-      const currentId = evaluator.toArena(cur);
-      const nextId = evaluator.toArena(next);
-
-      if (!labels[currentId]) {
-        labels[currentId] = await generateLabel(cur);
-      }
-      if (!labels[nextId]) {
-        labels[nextId] = await generateLabel(next);
+      if (!altered) {
+        break; // No more reduction possible
       }
 
-      if (encounteredNodes.has(nextId)) {
-        pathSteps.push({ from: currentId, to: nextId });
-        pathSteps.push({ from: nextId, to: nextId });
+      const nextId = evaluator.toArena(nextExpr);
+
+      if (hasEmbedding(evaluator.dumpArena().nodes, history, nextId)) {
+        hasCycle = true;
         break;
       }
 
       pathSteps.push({ from: currentId, to: nextId });
-      encounteredNodes.add(nextId);
-      cur = next;
+      currentId = nextId;
+      history.push(currentId);
     }
 
-    if (steps === MAX_STEPS) {
-      console.error(
-        `Warning: reduction for term #${count} hit step limit (${MAX_STEPS}): ${
-          prettyPrint(expr)
-        }`,
-      );
-    }
-
-    const finalId = evaluator.toArena(cur);
-    labels[finalId] = await generateLabel(cur);
+    const finalId = currentId;
     sinks.add(finalId);
 
     yield JSON.stringify({
       source: curId,
       sink: finalId,
       steps: pathSteps,
+      hasCycle,
     });
   }
 
@@ -167,17 +132,9 @@ export async function* generateEvaluationForest(
 
   console.error(`Arena contains ${nodes.length} nodes`);
 
-  for (const node of nodes) {
-    if (!labels[node.id]) {
-      const expr = evaluator.fromArena(node.id);
-      labels[node.id] = await generateLabel(expr);
-    }
-  }
-
   const globalInfo: GlobalInfo = {
     type: "global",
     nodes,
-    labels,
     sources: Array.from(sources),
     sinks: Array.from(sinks),
   };
@@ -186,7 +143,7 @@ export async function* generateEvaluationForest(
 }
 
 async function streamToFile(symbolCount: number, outputPath: string) {
-  const wasmPath = "assembly/build/debug.wasm";
+  const wasmPath = "assembly/build/release.wasm";
   const file = await Deno.open(outputPath, {
     write: true,
     create: true,
@@ -205,7 +162,7 @@ async function streamToFile(symbolCount: number, outputPath: string) {
 }
 
 async function streamToStdout(symbolCount: number) {
-  const wasmPath = "assembly/build/debug.wasm";
+  const wasmPath = "assembly/build/release.wasm";
 
   for await (const data of generateEvaluationForest(symbolCount, wasmPath)) {
     console.log(data);

@@ -5,6 +5,7 @@ import type { SKIExpression } from "../ski/expression.ts";
 import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
+import type { ArenaNode } from "../../scripts/types.ts";
 
 interface ArenaWasmExports {
   memory: WebAssembly.Memory;
@@ -189,4 +190,53 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
 export async function initArenaEvaluator(wasmPath: string) {
   return await ArenaEvaluatorWasm.instantiate(wasmPath);
+}
+
+// Homeomorphic embedding: a ⊑ b
+// Returns true if a embeds into b
+function embedsRec(
+  nodes: ArenaNode[],
+  a: number,
+  b: number,
+  visited: Set<string>
+): boolean {
+  const key = `${a},${b}`;
+  if (visited.has(key)) return false;
+  visited.add(key);
+
+  const nodeA = nodes.find(n => n.id === a);
+  const nodeB = nodes.find(n => n.id === b);
+
+  if (!nodeA || !nodeB) return false;
+
+  // If a is terminal, b must be the same terminal
+  if (nodeA.kind === "terminal") {
+    return nodeB.kind === "terminal" && nodeA.sym === nodeB.sym;
+  }
+
+  // If a is non-terminal (APP), b must also be non-terminal
+  if (nodeB.kind === "terminal") return false;
+
+  // For APP nodes, check embedding recursively
+  return (
+    embedsRec(nodes, nodeA.left!, nodeB.left!, visited) &&
+    embedsRec(nodes, nodeA.right!, nodeB.right!, visited)
+  );
+}
+
+export function embeds(nodes: ArenaNode[], a: number, b: number): boolean {
+  return embedsRec(nodes, a, b, new Set());
+}
+
+export function hasEmbedding(
+  nodes: ArenaNode[],
+  history: number[],
+  currentId: number
+): boolean {
+  for (const prevId of history) {
+    if (embeds(nodes, prevId, currentId)) {
+      return true;
+    }
+  }
+  return false;
 }

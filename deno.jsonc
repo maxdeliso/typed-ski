@@ -13,6 +13,10 @@
       "SECURITY.md",
       "lib/**",
       "assembly/build/**"
+    ],
+    "exclude": [
+      "!assembly/build/debug.wasm",
+      "!assembly/build/release.wasm"
     ]
   },
   "compilerOptions": {

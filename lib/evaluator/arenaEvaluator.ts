@@ -198,14 +198,14 @@ function embedsRec(
   nodes: ArenaNode[],
   a: number,
   b: number,
-  visited: Set<string>
+  visited: Set<string>,
 ): boolean {
   const key = `${a},${b}`;
   if (visited.has(key)) return false;
   visited.add(key);
 
-  const nodeA = nodes.find(n => n.id === a);
-  const nodeB = nodes.find(n => n.id === b);
+  const nodeA = nodes.find((n) => n.id === a);
+  const nodeB = nodes.find((n) => n.id === b);
 
   if (!nodeA || !nodeB) return false;
 
@@ -231,7 +231,7 @@ export function embeds(nodes: ArenaNode[], a: number, b: number): boolean {
 export function hasEmbedding(
   nodes: ArenaNode[],
   history: number[],
-  currentId: number
+  currentId: number,
 ): boolean {
   for (const prevId of history) {
     if (embeds(nodes, prevId, currentId)) {

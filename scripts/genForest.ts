@@ -1,7 +1,10 @@
 import { cons } from "../lib/cons.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
-import { initArenaEvaluator, hasEmbedding } from "../lib/evaluator/arenaEvaluator.ts";
+import {
+  hasEmbedding,
+  initArenaEvaluator,
+} from "../lib/evaluator/arenaEvaluator.ts";
 import type { EvaluationStep, GlobalInfo } from "./types.ts";
 
 const memo = new Map<number, SKIExpression[]>();
@@ -99,7 +102,9 @@ export async function* generateEvaluationForest(
 
     // Manual evaluation with cycle detection
     for (let step = 0;; step++) {
-      const { altered, expr: nextExpr } = evaluator.stepOnce(evaluator.fromArena(currentId));
+      const { altered, expr: nextExpr } = evaluator.stepOnce(
+        evaluator.fromArena(currentId),
+      );
 
       if (!altered) {
         break; // No more reduction possible

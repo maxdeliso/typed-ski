@@ -1,17 +1,18 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts",
-    "./wasm-debug-binary": "./assembly/build/debug.wasm"
+    "./wasm-debug-binary": "./assembly/build/debug.wasm",
+    "./wasm-release-binary": "./assembly/build/release.wasm"
   },
   "publish": {
     "include": [
       "README.md",
       "SECURITY.md",
       "lib/**",
-      "assembly/build/debug.wasm"
+      "assembly/build/**"
     ]
   },
   "compilerOptions": {

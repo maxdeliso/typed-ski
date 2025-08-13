@@ -9,6 +9,14 @@ import type { BaseType } from "../../types/types.ts";
 import type { TripLangValueType } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
 
+/**
+ * Collects all free (external) term and type references appearing inside a TripLang value.
+ *
+ * A reference is considered external if it is not bound by any enclosing abstraction in the value.
+ *
+ * @param td the TripLang value to analyze (System F term, typed/untyped lambda, SKI expression, or type)
+ * @returns a pair of AVL maps: [freeTermRefs, freeTypeRefs], each mapping the referenced name to its node
+ */
 export function externalReferences(td: TripLangValueType): [
   AVLTree<string, TripLangValueType>,
   AVLTree<string, BaseType>,

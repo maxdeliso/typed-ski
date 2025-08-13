@@ -125,6 +125,15 @@ export function parseTripLangDefinition(
   }
 }
 
+/**
+ * Parses a TripLang program source string into a `TripLangProgram` AST.
+ *
+ * Supports module, import/export, and term/type definitions across System F, typed/untyped lambda, SKI, and base types.
+ *
+ * @param input the program source
+ * @returns the parsed program
+ * @throws ParseError when the input is not a valid TripLang program
+ */
 export function parseTripLang(input: string): TripLangProgram {
   const terms: TripLangTerm[] = [];
   let state = createParserState(input);

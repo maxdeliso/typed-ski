@@ -76,6 +76,12 @@ export const addBinding = (
   return insertAVL(ctx, name, ty, compareStrings);
 };
 
+/**
+ * Infers the type of a simply typed lambda calculus term under an empty context.
+ * @param typedTerm a typed lambda term
+ * @returns the inferred base type
+ * @throws TypeError if the term is ill-typed
+ */
 export const typecheckTypedLambda = (typedTerm: TypedLambda): BaseType => {
   return typecheckGiven(emptyContext(), typedTerm);
 };
@@ -132,6 +138,13 @@ export const typecheckGiven = (
   }
 };
 
+/**
+ * Pretty-prints a simply typed lambda expression.
+ *
+ * Formats variables, abstractions, and applications using λ, colon-annotated types, and parentheses.
+ * @param expr the typed lambda term
+ * @returns a human-readable string representation
+ */
 export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
   switch (expr.kind) {
     case "lambda-var": {

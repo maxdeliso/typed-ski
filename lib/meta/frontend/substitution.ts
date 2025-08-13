@@ -23,6 +23,15 @@ import {
 } from "./rebuilders.ts";
 import { CompilationError } from "./compilation.ts";
 
+/**
+ * Resolves all external references across a program using the provided symbol table.
+ *
+ * Imported symbols are left unresolved by design.
+ *
+ * @param program the program whose definitions should be resolved
+ * @param syms the symbol table built for the program
+ * @returns a new program with references substituted where possible
+ */
 export function resolveExternalProgramReferences(
   program: TripLangProgram,
   syms: SymbolTable,
@@ -43,6 +52,16 @@ export function resolveExternalProgramReferences(
   };
 }
 
+/**
+ * Resolves external references inside a single top-level definition.
+ *
+ * Type references are substituted first, followed by term references. If a reference is
+ * not found and is not imported, an error is thrown.
+ *
+ * @param term the top-level definition to resolve
+ * @param syms the symbol table to resolve against
+ * @param importedSymbols names declared as imports that should remain unresolved
+ */
 export function resolveExternalTermReferences(
   term: TripLangTerm,
   syms: SymbolTable,
@@ -124,6 +143,10 @@ export function resolveExternalTermReferences(
   }, withResolvedTypes);
 }
 
+/**
+ * Substitutes a referenced top-level term into another definition, rebuilding nodes
+ * as necessary to preserve structure and levels.
+ */
 export function substituteTripLangTerm(
   current: TripLangTerm,
   term: TripLangTerm,
@@ -189,6 +212,10 @@ export function substituteTripLangTerm(
   }
 }
 
+/**
+ * Substitutes a referenced type definition into a term definition, rebuilding nodes
+ * and applying typed replacements where required.
+ */
 export function substituteTripLangType(
   current: TripLangTerm,
   type: TypeDefinition,
@@ -240,6 +267,12 @@ export function substituteTripLangType(
   }
 }
 
+/**
+ * Generic non-recursive substitution engine over TripLang values.
+ *
+ * Traverses with an explicit stack, applying either replacement or rebuild functions
+ * depending on the node encountered.
+ */
 export function substitute<T extends TripLangValueType>(
   current: T,
   mkBranchFn: (_: T) => T[],

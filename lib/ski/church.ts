@@ -23,15 +23,10 @@ export const ChurchN = (n: number): SKIExpression => {
   }
 };
 
-/*
- * To verify that combinator expressions produce n applications of f on x,
- * this function is introduced which runs the combinator forward with a lambda
- * that adds one to its argument and returns a number.
+/**
+ * Evaluates a Church numeral SKI expression to a JavaScript number using the optimized native path.
  *
- * This is needed because each function has infinitely many representations
- * in the SKI combinators, but we are concerned with whether a given function
- * represents a given Church numeral, regardless of which one it is. This is
- * the notion of extensional equality.
+ * Useful for testing numeric results of SKI computations via Church encoding.
  */
 export const UnChurchNumber = (exp: SKIExpression): number => {
   return unChurchNumberNative(exp);

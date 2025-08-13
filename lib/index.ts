@@ -1,3 +1,21 @@
+/**
+ * Typed SKI: parsing, pretty-printing, evaluation, typing, and TripLang compiler.
+ *
+ * This module re-exports the public API:
+ * - SKI parsing/printing/types and the symbolic evaluator
+ * - Untyped/typed lambda and System F term utilities
+ * - Type utilities (pretty printing, inference)
+ * - TripLang parsing and full compile pipeline (parse → index → elaborate → resolve → typecheck)
+ *
+ * @example
+ * ```ts
+ * import { parseSKI, symbolicEvaluator } from "jsr:@maxdeliso/typed-ski";
+ * const expr = parseSKI("(S (K S)) K");
+ * const nf = symbolicEvaluator.reduce(expr);
+ * ```
+ *
+ * @module
+ */
 // Core evaluator exports
 export { symbolicEvaluator } from "./evaluator/skiEvaluator.ts";
 

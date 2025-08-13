@@ -227,6 +227,12 @@ const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
   return { altered: false, expr };
 };
 
+/**
+ * A pure symbolic SKI evaluator implementing I, K, S reduction rules with memoization.
+ *
+ * - `stepOnce` performs a single reduction step (or descends), indicating whether the input changed.
+ * - `reduce` repeatedly applies steps until normal form or a maximum iteration bound is reached.
+ */
 export const symbolicEvaluator: Evaluator = {
   stepOnce,
   reduce,

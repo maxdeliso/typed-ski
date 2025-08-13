@@ -43,6 +43,11 @@ export type UntypedLambda =
 export const typelessApp = (...uts: UntypedLambda[]) =>
   uts.reduce(cons<UntypedLambda>);
 
+/**
+ * Pretty-prints an untyped lambda expression using λ and parentheses.
+ * @param ut the untyped lambda term
+ * @returns a human-readable string representation
+ */
 export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
   switch (ut.kind) {
     case "lambda-var":

@@ -1,4 +1,7 @@
-import { dirname, fromFileUrl } from "https://deno.land/std@0.224.0/path/mod.ts";
+import {
+  dirname,
+  fromFileUrl,
+} from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const projectRoot = dirname(dirname(fromFileUrl(import.meta.url)));
 

@@ -1,5 +1,12 @@
-import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { dirname, fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
+import {
+  assert,
+  assertEquals,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  dirname,
+  fromFileUrl,
+  join,
+} from "https://deno.land/std@0.224.0/path/mod.ts";
 import rsexport, { type RandomSeed } from "npm:random-seed";
 const { create } = rsexport;
 

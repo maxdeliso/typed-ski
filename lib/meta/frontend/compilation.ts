@@ -108,6 +108,10 @@ export interface TypecheckedProgramWithTypes {
   readonly __moniker: unique symbol;
 }
 
+/**
+ * Parses TripLang source into a `ParsedProgram`, validating that exactly one module is declared.
+ * @throws CompilationError if zero or multiple module definitions are present
+ */
 export function parse(input: string): ParsedProgram {
   const program = parseTripLang(input);
 
@@ -134,6 +138,9 @@ export function parse(input: string): ParsedProgram {
   return { ...program, __moniker: Symbol() } as ParsedProgram;
 }
 
+/**
+ * Runs symbol indexing for a parsed program using a provided indexing function.
+ */
 export function indexSymbols(
   program: ParsedProgram,
   indexFn: (program: ParsedProgram) => SymbolTable,
@@ -146,6 +153,9 @@ export function indexSymbols(
   } as IndexedProgramWithSymbols;
 }
 
+/**
+ * Elaborates a program (e.g., desugaring, annotation propagation) and re-indexes symbols.
+ */
 export function elaborate(
   programWithSymbols: IndexedProgramWithSymbols,
   elaborateFn: (
@@ -161,6 +171,10 @@ export function elaborate(
   } as ElaboratedProgramWithSymbols;
 }
 
+/**
+ * Resolves external references within a program, ensuring unimported references are bound.
+ * @throws CompilationError when unresolved references remain after resolution
+ */
 export function resolve(
   programWithSymbols: ElaboratedProgramWithSymbols,
 ): ResolvedProgram {
@@ -242,6 +256,11 @@ export function resolve(
   return { ...resolved, __moniker: Symbol() } as ResolvedProgram;
 }
 
+/**
+ * Typechecks System F and simply typed lambda definitions in a resolved program.
+ * Skips terms that reference imported symbols which remain unresolved by design.
+ * @throws CompilationError wrapping type errors with term context
+ */
 export function typecheck(
   program: ResolvedProgram,
 ): TypecheckedProgramWithTypes {
@@ -314,6 +333,11 @@ export function typecheck(
   } as TypecheckedProgramWithTypes;
 }
 
+/**
+ * Full TripLang pipeline: parse → index → elaborate → resolve → typecheck.
+ * @param input source code for a TripLang program
+ * @returns the typechecked program along with inferred types for definitions
+ */
 export function compile(input: string): TypecheckedProgramWithTypes {
   const parsed = parse(input);
   const indexed = indexSymbols(parsed, (p) => indexSymbolsImpl(p));

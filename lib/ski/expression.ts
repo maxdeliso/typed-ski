@@ -16,6 +16,9 @@ import type { SKITerminal } from "./terminal.ts";
  *
  * terminal | non-terminal | expression
  */
+/**
+ * An SKI expression is either a terminal symbol (S, K, I) or an application node.
+ */
 export type SKIExpression = SKITerminal | ConsCell<SKIExpression>;
 export type SKIChar = "S" | "K" | "I" | "(" | ")";
 export type SKIKey = SKIChar[];

@@ -91,6 +91,11 @@ export type SystemFTerm =
   | SystemFTypeApp
   | ConsCell<SystemFTerm>;
 
+/**
+ * Pretty-prints a System F term using λ for term abstraction and Λ for type abstraction.
+ * @param term the System F term
+ * @returns a human-readable string representation
+ */
 export function prettyPrintSystemF(term: SystemFTerm): string {
   switch (term.kind) {
     case "non-terminal": {
@@ -112,6 +117,9 @@ export function prettyPrintSystemF(term: SystemFTerm): string {
   }
 }
 
+/**
+ * Flattens a left-associated application tree into a list of terms.
+ */
 export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
   if (term.kind === "non-terminal") {
     const leftParts = flattenSystemFApp(term.lft);
@@ -121,6 +129,9 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
   }
 }
 
+/**
+ * Pretty-prints a System F type, using ∀ and → syntax.
+ */
 export function prettyPrintSystemFType(ty: BaseType): string {
   if (ty.kind === "forall") {
     return `∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)}`;

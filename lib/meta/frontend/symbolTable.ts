@@ -14,6 +14,13 @@ import type {
 } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
 
+/**
+ * Builds a symbol table for a TripLang program, ensuring all term and type names are unique.
+ *
+ * @throws CompilationError when a duplicate term or type definition is encountered
+ * @param program the TripLang program
+ * @returns a `SymbolTable` containing AVL maps of term and type definitions by name
+ */
 export function indexSymbols(program: TripLangProgram): SymbolTable {
   let termMap = createEmptyAVL<string, TripLangTerm>();
   let tyMap = createEmptyAVL<string, TypeDefinition>();
@@ -58,6 +65,15 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
   };
 }
 
+/**
+ * Extracts the value part of a TripLang definition.
+ *
+ * For term definitions, returns the term; for type definitions, returns the type.
+ * For module/import/export declarations, returns `undefined`.
+ *
+ * @param tt a TripLang term/definition
+ * @returns the contained value (term or type), or `undefined` if not applicable
+ */
 export function extractDefinitionValue(
   tt: TripLangTerm,
 ): TripLangValueType | undefined {

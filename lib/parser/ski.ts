@@ -68,6 +68,15 @@ export const parseSKIDelimited = (
   rdb: ParserState,
 ): [string, SKIExpression, ParserState] => parseSeq(rdb);
 
+/**
+ * Parses an input string containing an SKI expression into its AST representation.
+ *
+ * Accepts terminals S, K, I and fully parenthesized applications.
+ *
+ * @param input the source string
+ * @returns the parsed `SKIExpression`
+ * @throws ParseError when the input is not a valid SKI expression
+ */
 export function parseSKI(input: string): SKIExpression {
   const [, expr] = parseWithEOF(input, parseSKIDelimited);
   return expr;

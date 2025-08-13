@@ -1,4 +1,7 @@
-import { dirname, fromFileUrl } from "https://deno.land/std/path/mod.ts";
+import {
+  dirname,
+  fromFileUrl,
+} from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const projectRoot = dirname(dirname(fromFileUrl(import.meta.url)));
 
@@ -8,7 +11,7 @@ async function buildWasm() {
     args: [
       "run",
       "-A",
-      "npm:assemblyscript@0.28.1/asc",
+      "npm:assemblyscript@latest/asc",
       "assembly/index.ts",
       "--config",
       "assembly/asconfig.json",
@@ -28,7 +31,7 @@ async function buildWasm() {
     args: [
       "run",
       "-A",
-      "npm:assemblyscript@0.28.1/asc",
+      "npm:assemblyscript@latest/asc",
       "assembly/index.ts",
       "--config",
       "assembly/asconfig.json",

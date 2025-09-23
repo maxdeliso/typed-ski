@@ -1,10 +1,6 @@
-import { assert } from "npm:chai";
+import { assert } from "chai";
 
-import {
-  dirname,
-  fromFileUrl,
-  join,
-} from "https://deno.land/std@0.224.0/path/mod.ts";
+import { dirname, fromFileUrl, join } from "std/path";
 import { loadInput } from "../util/fileLoader.ts";
 
 import {

@@ -1,4 +1,4 @@
-import { assert } from "npm:chai";
+import { assert } from "chai";
 import {
   extractDefinitionValue,
   indexSymbols,

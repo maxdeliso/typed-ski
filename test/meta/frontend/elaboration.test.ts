@@ -1,4 +1,4 @@
-import { expect } from "npm:chai";
+import { expect } from "chai";
 import { elaborateSystemF } from "../../../lib/meta/frontend/elaboration.ts";
 import type { SymbolTable } from "../../../lib/meta/trip.ts";
 import {

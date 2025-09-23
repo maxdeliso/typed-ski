@@ -1,4 +1,4 @@
-import { expect } from "npm:chai";
+import { expect } from "chai";
 
 import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
 import { inferType, substituteType } from "../../lib/types/inference.ts";

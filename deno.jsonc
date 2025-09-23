@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts",
@@ -23,6 +23,9 @@
     "lib": [
       "deno.ns",
       "dom"
+    ],
+    "types": [
+      "@types/node"
     ]
   },
   "fmt": {
@@ -43,5 +46,12 @@
       "assembly/**/*",
       "scripts/**/*"
     ]
+  },
+  "imports": {
+    "@types/node": "npm:@types/node@^24.5.2",
+    "std/path": "https://deno.land/std@0.224.0/path/mod.ts",
+    "std/assert": "https://deno.land/std@0.224.0/assert/mod.ts",
+    "chai": "npm:chai@5.2.0",
+    "random-seed": "npm:random-seed@0.3.0"
   }
 }

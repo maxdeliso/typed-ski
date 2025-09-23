@@ -1,4 +1,4 @@
-import { assert } from "npm:chai";
+import { assert } from "chai";
 
 import { ChurchN, UnChurchBoolean } from "../../lib/ski/church.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";

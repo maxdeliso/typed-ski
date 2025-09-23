@@ -1,4 +1,4 @@
-import { assert, expect } from "npm:chai";
+import { assert, expect } from "chai";
 
 import { normalize } from "../../lib/types/normalization.ts";
 import { arrow, type BaseType, mkTypeVariable } from "../../lib/types/types.ts";

@@ -1,14 +1,16 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@types/node@*": "22.15.15",
+    "npm:@types/node@^24.5.2": "24.5.2",
     "npm:assemblyscript@latest": "0.28.2",
     "npm:chai@*": "5.2.0",
-    "npm:random-seed@*": "0.3.0"
+    "npm:chai@5.2.0": "5.2.0",
+    "npm:random-seed@*": "0.3.0",
+    "npm:random-seed@0.3.0": "0.3.0"
   },
   "npm": {
-    "@types/node@22.15.15": {
-      "integrity": "sha512-R5muMcZob3/Jjchn5LcO8jdKwSCbzqmPB6ruBxMcf9kbxtniZHP327s6C37iOfuw8mbKK3cAQa7sEl7afLrQ8A==",
+    "@types/node@24.5.2": {
+      "integrity": "sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ==",
       "dependencies": [
         "undici-types"
       ]
@@ -62,8 +64,8 @@
         "json-stringify-safe"
       ]
     },
-    "undici-types@6.21.0": {
-      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="
+    "undici-types@7.12.0": {
+      "integrity": "sha512-goOacqME2GYyOZZfb5Lgtu+1IDmAlAEu5xnD3+xTzS10hT0vzpf0SPjkXwAw9Jm+4n/mQGDP3LO8CPbYROeBfQ=="
     }
   },
   "redirects": {
@@ -213,5 +215,12 @@
     "https://deno.land/std@0.224.0/path/windows/resolve.ts": "8dae1dadfed9d46ff46cc337c9525c0c7d959fb400a6308f34595c45bdca1972",
     "https://deno.land/std@0.224.0/path/windows/to_file_url.ts": "40e560ee4854fe5a3d4d12976cef2f4e8914125c81b11f1108e127934ced502e",
     "https://deno.land/std@0.224.0/path/windows/to_namespaced_path.ts": "4ffa4fb6fae321448d5fe810b3ca741d84df4d7897e61ee29be961a6aac89a4c"
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:@types/node@^24.5.2",
+      "npm:chai@5.2.0",
+      "npm:random-seed@0.3.0"
+    ]
   }
 }

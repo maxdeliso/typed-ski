@@ -1,4 +1,4 @@
-import { assert } from "npm:chai";
+import { assert } from "chai";
 import { substitute } from "../../../lib/meta/frontend/substitution.ts";
 import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
 import {

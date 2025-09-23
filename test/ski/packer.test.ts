@@ -1,4 +1,4 @@
-import { assert } from "npm:chai";
+import { assert } from "chai";
 
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { type SKIExpression, terminals } from "../../lib/ski/expression.ts";

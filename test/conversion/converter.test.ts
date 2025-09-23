@@ -1,4 +1,4 @@
-import { expect } from "npm:chai";
+import { expect } from "chai";
 
 import { cons } from "../../lib/cons.ts";
 import { predLambda } from "../../lib/consts/lambdas.ts";

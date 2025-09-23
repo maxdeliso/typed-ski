@@ -1,5 +1,5 @@
-import { assert } from "npm:chai";
-import rsexport, { type RandomSeed } from "npm:random-seed";
+import { assert } from "chai";
+import rsexport, { type RandomSeed } from "random-seed";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { terminals } from "../../lib/ski/expression.ts";
 const { create } = rsexport;

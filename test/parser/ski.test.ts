@@ -1,4 +1,4 @@
-import { assert, expect } from "npm:chai";
+import { assert, expect } from "chai";
 
 import { cons } from "../../lib/cons.ts";
 import { Y } from "../../lib/consts/combinators.ts";

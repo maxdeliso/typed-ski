@@ -60,18 +60,38 @@ function mix(a: u32, b: u32): u32 {
   return avalanche32(a ^ (b * GOLD));
 }
 
+/**
+ * Determines the kind (type category) of a given term within the SKI framework.
+ * @param n the node ID
+ * @returns the kind of the node
+ */
 export function kindOf(n: u32): u32 {
   return kind[n];
 }
 
+/**
+ * Retrieves the symbol associated with a terminal node within the SKI expression tree.
+ * @param n the node ID
+ * @returns the symbol of the terminal node
+ */
 export function symOf(n: u32): ArenaSym {
   return symArr[n] as ArenaSym;
 }
 
+/**
+ * Retrieves the left child of a binary node within the SKI expression tree.
+ * @param n the node ID
+ * @returns the left child node ID
+ */
 export function leftOf(n: u32): u32 {
   return leftId[n];
 }
 
+/**
+ * Retrieves the right child of a binary node within the SKI expression tree.
+ * @param n the node ID
+ * @returns the right child node ID
+ */
 export function rightOf(n: u32): u32 {
   return rightId[n];
 }
@@ -80,12 +100,20 @@ function isTerminal(n: u32): bool {
   return kind[n] == ArenaKind.Terminal;
 }
 
+/**
+ * Resets the state of the SKI environment or WebAssembly instance.
+ */
 export function reset(): void {
   top = 0;
   buckets.fill(EMPTY);
   termCache.fill(EMPTY);
 }
 
+/**
+ * Allocates a terminal node within the WebAssembly memory.
+ * @param s the symbol for the terminal
+ * @returns the allocated node ID
+ */
 export function allocTerminal(s: ArenaSym): u32 {
   let cached = termCache[s];
   if (cached != EMPTY) return cached;
@@ -99,6 +127,12 @@ export function allocTerminal(s: ArenaSym): u32 {
   return id;
 }
 
+/**
+ * Allocates a cons cell (a fundamental data structure) within the WebAssembly memory.
+ * @param l the left child node ID
+ * @param r the right child node ID
+ * @returns the allocated cons cell node ID
+ */
 export function allocCons(l: u32, r: u32): u32 {
   let h: u32 = mix(hash32[l], hash32[r]);
   let b: u32 = h & mask;
@@ -125,6 +159,11 @@ export function allocCons(l: u32, r: u32): u32 {
 // A side‑channel flag: 0 = unchanged, 1 = altered during last step
 let alteredLast: u32 = 0;
 
+/**
+ * Performs a single step in the evaluation of the SKI expression within the WebAssembly arena.
+ * @param expr the expression node ID to evaluate
+ * @returns the result of one evaluation step
+ */
 export function arenaKernelStep(expr: u32): u32 {
   alteredLast = 0; // reset flag
   let res = _step(expr);
@@ -170,6 +209,12 @@ function _step(expr: u32): u32 {
   return expr; // unchanged
 }
 
+/**
+ * Reduces an SKI expression to its simplest form through evaluation.
+ * @param expr the expression node ID to reduce
+ * @param max the maximum number of reduction steps (default: unlimited)
+ * @returns the reduced expression node ID
+ */
 export function reduce(expr: u32, max: u32 = 0xffffffff): u32 {
   let cur: u32 = expr;
   for (let i: u32 = 0; i < max; ++i) {

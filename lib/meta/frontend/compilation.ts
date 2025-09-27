@@ -1,4 +1,5 @@
 import type {
+  PolyDefinition,
   SymbolTable,
   TripLangProgram,
   TripLangTerm,
@@ -379,7 +380,7 @@ function assertKind<T extends TripLangTerm["kind"]>(
 export function resolvePoly(
   prog: TypecheckedProgramWithTypes,
   id: string,
-) {
+): PolyDefinition {
   const term = findTerm(prog.program, id);
   assertKind(term, "poly");
   return term;

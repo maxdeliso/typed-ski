@@ -25,3 +25,7 @@ jobs:
 
       - name: Test
         run: deno run --allow-read --allow-run scripts/test.ts
+
+      - name: Dry run publish
+        if: github.ref != 'refs/heads/main'
+        run: deno publish --dry-run

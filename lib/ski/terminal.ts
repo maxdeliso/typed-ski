@@ -14,6 +14,6 @@ export const term = (sym: SKITerminalSymbol): SKITerminal => ({
   sym,
 });
 
-export const S = term(SKITerminalSymbol.S);
-export const K = term(SKITerminalSymbol.K);
-export const I = term(SKITerminalSymbol.I);
+export const S: SKITerminal = term(SKITerminalSymbol.S);
+export const K: SKITerminal = term(SKITerminalSymbol.K);
+export const I: SKITerminal = term(SKITerminalSymbol.I);

@@ -1,3 +1,12 @@
+/**
+ * Type inference using Algorithm W.
+ *
+ * This module implements Algorithm W for type inference in the simply typed
+ * lambda calculus, including unification, constraint solving, and type
+ * normalization.
+ *
+ * @module
+ */
 import { cons } from "../cons.ts";
 import {
   arrow,

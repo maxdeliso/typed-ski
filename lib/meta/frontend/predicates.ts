@@ -1,3 +1,11 @@
+/**
+ * Predicate functions for substitution algorithms.
+ *
+ * This module provides predicate functions used during substitution operations
+ * to determine when terms need rebuilding or replacement.
+ *
+ * @module
+ */
 import type { SystemFTerm } from "../../terms/systemF.ts";
 import type { TypedLambda } from "../../types/typedLambda.ts";
 import type { UntypedLambda } from "../../terms/lambda.ts";

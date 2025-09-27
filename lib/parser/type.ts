@@ -1,3 +1,11 @@
+/**
+ * Simple type parser for arrow types.
+ *
+ * This module provides parsing functionality for simple types including
+ * type variables, parenthesized types, and arrow types with right associativity.
+ *
+ * @module
+ */
 import {
   consume,
   matchLP,

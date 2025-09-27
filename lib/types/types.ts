@@ -1,3 +1,12 @@
+/**
+ * Core type system definitions and utilities.
+ *
+ * This module defines the fundamental types used throughout the type system,
+ * including type variables, arrow types, universal types, and utility functions
+ * for type manipulation and pretty printing.
+ *
+ * @module
+ */
 import { cons, type ConsCell } from "../cons.ts";
 
 export interface TypeVariable {

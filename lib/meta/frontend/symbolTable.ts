@@ -1,3 +1,12 @@
+/**
+ * Symbol table management for TripLang programs.
+ *
+ * This module provides functionality for building and managing symbol tables
+ * for TripLang programs, including indexing terms and types and extracting
+ * definition values.
+ *
+ * @module
+ */
 import {
   createEmptyAVL,
   insertAVL,

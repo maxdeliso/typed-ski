@@ -1,3 +1,12 @@
+/**
+ * Term elaboration and desugaring.
+ *
+ * This module provides functionality for elaborating TripLang terms,
+ * including desugaring operations and type annotation propagation
+ * for System F terms.
+ *
+ * @module
+ */
 import { searchAVL } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
 import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";

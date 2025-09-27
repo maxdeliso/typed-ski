@@ -1,3 +1,11 @@
+/**
+ * Symbolic SKI evaluator with memoization.
+ *
+ * This module provides a pure symbolic evaluator for SKI expressions
+ * implementing I, K, S reduction rules with memoization for performance.
+ *
+ * @module
+ */
 import { cons, type ConsCell } from "../cons.ts";
 import { equivalent, type SKIExpression, toSKIKey } from "../ski/expression.ts";
 import { SKITerminalSymbol } from "../ski/terminal.ts";

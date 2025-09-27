@@ -1,3 +1,11 @@
+/**
+ * Pretty printing utilities for TripLang terms.
+ *
+ * This module provides pretty printing functionality for TripLang terms,
+ * delegating to the appropriate pretty printer based on term type.
+ *
+ * @module
+ */
 import { prettyPrintSKI } from "../../index.ts";
 import { prettyPrintUntypedLambda } from "../../terms/lambda.ts";
 import { prettyPrintSystemF } from "../../terms/systemF.ts";

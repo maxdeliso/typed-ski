@@ -1,3 +1,11 @@
+/**
+ * SKI expression map implementation.
+ *
+ * This module provides a map data structure for SKI expressions using
+ * AVL trees with SKI key comparison for efficient lookups.
+ *
+ * @module
+ */
 import {
   type AVLTree,
   createEmptyAVL,

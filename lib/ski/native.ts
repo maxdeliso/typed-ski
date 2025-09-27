@@ -1,3 +1,11 @@
+/**
+ * Native evaluation of SKI expressions with numeric optimization.
+ *
+ * This module provides a native evaluator for SKI expressions that includes
+ * optimized handling of numeric operations and Church numeral evaluation.
+ *
+ * @module
+ */
 import type { SKITerminalSymbol } from "./terminal.ts";
 import type { SKIExpression } from "./expression.ts";
 import { cons, type ConsCell } from "../cons.ts";

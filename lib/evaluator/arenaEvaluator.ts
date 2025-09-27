@@ -1,3 +1,11 @@
+/**
+ * WebAssembly-based arena evaluator for SKI expressions.
+ *
+ * This module provides a WebAssembly-based evaluator for SKI expressions
+ * using arena-based memory management for efficient evaluation.
+ *
+ * @module
+ */
 import { promises as fs } from "node:fs";
 
 import { cons } from "../cons.ts";

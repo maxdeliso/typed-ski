@@ -1,3 +1,11 @@
+/**
+ * String map implementation using AVL trees.
+ *
+ * This module provides a string-to-string map implementation using
+ * AVL trees with string comparison for efficient lookups.
+ *
+ * @module
+ */
 import { createEmptyAVL, insertAVL, searchAVL } from "../avl/avlNode.ts";
 
 import type { AVLTree } from "../avl/avlNode.ts";

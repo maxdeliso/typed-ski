@@ -1,3 +1,11 @@
+/**
+ * SKI expression parser.
+ *
+ * This module provides parsing functionality for SKI combinator expressions,
+ * supporting terminals S, K, I and fully parenthesized applications.
+ *
+ * @module
+ */
 import type { SKIExpression } from "../ski/expression.ts";
 import {
   consume,

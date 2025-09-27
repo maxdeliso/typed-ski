@@ -1,3 +1,11 @@
+/**
+ * Term replacement functions for substitution algorithms.
+ *
+ * This module provides functions for replacing terms during substitution
+ * operations, including type-aware replacements for different term types.
+ *
+ * @module
+ */
 import type { SystemFTerm } from "../../terms/systemF.ts";
 import type { TypedLambda } from "../../types/typedLambda.ts";
 import type { UntypedLambda } from "../../terms/lambda.ts";

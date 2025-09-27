@@ -1,3 +1,11 @@
+/**
+ * Simply typed lambda calculus representation and type checking.
+ *
+ * This module defines the AST types for simply typed lambda calculus terms
+ * and provides type checking, pretty printing, and type erasure functionality.
+ *
+ * @module
+ */
 import { cons, type ConsCell } from "../cons.ts";
 import {
   type AVLTree,

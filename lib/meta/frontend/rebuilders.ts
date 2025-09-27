@@ -1,3 +1,11 @@
+/**
+ * Term rebuilding functions for substitution algorithms.
+ *
+ * This module provides functions for rebuilding terms after substitution
+ * operations, preserving structure while applying type substitutions.
+ *
+ * @module
+ */
 import { cons } from "../../cons.ts";
 import {
   referencesVar,

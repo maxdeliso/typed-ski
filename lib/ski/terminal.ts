@@ -1,3 +1,11 @@
+/**
+ * SKI terminal symbol definitions.
+ *
+ * This module defines the three fundamental SKI combinator symbols (S, K, I)
+ * and provides constructors for creating terminal nodes.
+ *
+ * @module
+ */
 export enum SKITerminalSymbol {
   S = "S",
   K = "K",

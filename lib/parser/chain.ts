@@ -1,3 +1,12 @@
+/**
+ * Parser chain utilities for expression parsing.
+ *
+ * This module provides utilities for parsing chains of expressions
+ * (applications) by repeatedly consuming atomic terms until termination
+ * conditions are met.
+ *
+ * @module
+ */
 import { cons } from "../cons.ts";
 import { ParseError } from "./parseError.ts";
 import {

@@ -1,3 +1,11 @@
+/**
+ * System F term parser.
+ *
+ * This module provides parsing functionality for System F (polymorphic lambda calculus)
+ * terms, including variables, abstractions, type abstractions, and applications.
+ *
+ * @module
+ */
 import { ParseError } from "./parseError.ts";
 import {
   matchCh,

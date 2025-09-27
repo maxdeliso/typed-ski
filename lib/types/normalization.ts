@@ -1,3 +1,11 @@
+/**
+ * Type normalization and alpha-equivalence.
+ *
+ * This module provides functionality for normalizing types by renaming
+ * type variables to canonical forms, enabling alpha-equivalence checking.
+ *
+ * @module
+ */
 import { cons } from "../cons.ts";
 import type { AVLTree } from "../data/avl/avlNode.ts";
 import {

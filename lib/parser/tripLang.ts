@@ -1,3 +1,12 @@
+/**
+ * TripLang program parser.
+ *
+ * This module provides the main parser for TripLang programs, supporting
+ * module definitions, imports/exports, and term/type definitions across
+ * System F, typed/untyped lambda calculus, SKI combinators, and base types.
+ *
+ * @module
+ */
 import {
   createParserState,
   matchCh,

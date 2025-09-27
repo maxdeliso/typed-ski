@@ -1,11 +1,11 @@
 /**
- * https://en.wikipedia.org/wiki/AVL_tree
+ * AVL tree implementation for persistent data structures.
  *
- * An Adelson-Velsky and Landis (AVL) tree
- * - `key`: The BST key
- * - `value`: The value associated with that key
- * - `height`: For balancing
- * - `left` & `right`: Pointers to subtrees
+ * This module provides a complete implementation of AVL (Adelson-Velsky and Landis)
+ * trees with immutable operations, including insertion, search, and traversal.
+ *
+ * @module
+ * @see https://en.wikipedia.org/wiki/AVL_tree
  */
 export interface AVLNode<TKey, TValue> {
   readonly key: TKey;

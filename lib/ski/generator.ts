@@ -1,3 +1,11 @@
+/**
+ * Random SKI expression generation.
+ *
+ * This module provides functionality for generating random SKI expressions
+ * of specified sizes using a random seed for reproducible results.
+ *
+ * @module
+ */
 import type { RandomSeed } from "random-seed";
 import { cons } from "../cons.ts";
 import type { SKIExpression } from "./expression.ts";

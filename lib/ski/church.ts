@@ -1,3 +1,12 @@
+/**
+ * Church encoding utilities for SKI expressions.
+ *
+ * This module provides functionality for working with Church encodings of
+ * numbers and booleans in SKI combinator expressions, including conversion
+ * to and from JavaScript values.
+ *
+ * @module
+ */
 import { False, One, Succ, True, Zero } from "../consts/combinators.ts";
 import { apply, type SKIExpression } from "./expression.ts";
 import { symbolicEvaluator } from "../evaluator/skiEvaluator.ts";

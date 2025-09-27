@@ -1,3 +1,11 @@
+/**
+ * Untyped lambda calculus parser.
+ *
+ * This module provides parsing functionality for untyped lambda calculus
+ * terms, including variables, abstractions, and applications.
+ *
+ * @module
+ */
 import { mkUntypedAbs, mkVar, type UntypedLambda } from "../terms/lambda.ts";
 import {
   matchCh,

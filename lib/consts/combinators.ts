@@ -1,3 +1,11 @@
+/**
+ * Predefined SKI combinator expressions.
+ *
+ * This module provides predefined SKI combinator expressions including
+ * Church numerals, boolean values, and common combinators like B, C, T, etc.
+ *
+ * @module
+ */
 import { parseSKI } from "../parser/ski.ts";
 import { apply } from "../ski/expression.ts";
 import { I, K, S } from "../ski/terminal.ts";

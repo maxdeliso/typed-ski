@@ -1,3 +1,11 @@
+/**
+ * Type variable name generation.
+ *
+ * This module provides functionality for generating fresh type variable names
+ * during type inference and normalization operations.
+ *
+ * @module
+ */
 import { mkTypeVariable } from "./types.ts";
 
 /**

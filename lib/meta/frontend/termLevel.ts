@@ -1,3 +1,12 @@
+/**
+ * Term level management and lowering operations.
+ *
+ * This module provides functionality for managing term levels in the
+ * type hierarchy and lowering terms from higher levels to lower levels
+ * (e.g., System F → typed lambda → untyped lambda → SKI).
+ *
+ * @module
+ */
 import { bracketLambda, eraseSystemF } from "../../index.ts";
 import { eraseTypedLambda } from "../../types/typedLambda.ts";
 import type { TripLangTerm } from "../trip.ts";

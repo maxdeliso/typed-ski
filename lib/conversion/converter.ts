@@ -1,3 +1,12 @@
+/**
+ * Lambda to SKI combinator conversion.
+ *
+ * This module provides the core algorithm for converting untyped lambda
+ * calculus expressions to SKI combinator expressions using bracket abstraction.
+ * It implements the standard conversion rules including S, K, I, B, and C combinators.
+ *
+ * @module
+ */
 import { cons, type ConsCell } from "../cons.ts";
 import { B, C } from "../consts/combinators.ts";
 import type { LambdaVar, UntypedLambda } from "../terms/lambda.ts";

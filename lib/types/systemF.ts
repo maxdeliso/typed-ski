@@ -1,3 +1,12 @@
+/**
+ * System F type checking and utilities.
+ *
+ * This module provides type checking functionality for System F (polymorphic
+ * lambda calculus) terms, including context management, type substitution,
+ * and conversion to simply typed lambda calculus.
+ *
+ * @module
+ */
 import {
   arrow,
   type BaseType,

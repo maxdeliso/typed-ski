@@ -1,3 +1,11 @@
+/**
+ * SKI expression representation and utilities.
+ *
+ * This module defines the AST types for SKI combinator expressions and provides
+ * utilities for pretty-printing, equivalence checking, and manipulation of SKI terms.
+ *
+ * @module
+ */
 import { cons, type ConsCell } from "../cons.ts";
 import type { SKITerminal } from "./terminal.ts";
 

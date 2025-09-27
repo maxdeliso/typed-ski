@@ -1,3 +1,11 @@
+/**
+ * End-of-file parsing utilities.
+ *
+ * This module provides utilities for ensuring that parsers consume
+ * all input by checking for leftover characters after parsing.
+ *
+ * @module
+ */
 import {
   createParserState,
   type ParserState,

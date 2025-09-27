@@ -1,3 +1,11 @@
+/**
+ * System F type parser.
+ *
+ * This module provides parsing functionality for System F types,
+ * including universal types, arrow types, and type variables.
+ *
+ * @module
+ */
 import { forall } from "../types/systemF.ts";
 import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
 import { ParseError } from "./parseError.ts";

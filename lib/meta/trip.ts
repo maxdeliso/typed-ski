@@ -1,3 +1,11 @@
+/**
+ * Core TripLang AST types and definitions.
+ *
+ * This module defines the fundamental data structures for TripLang programs,
+ * including term definitions, type definitions, and symbol tables.
+ *
+ * @module
+ */
 import type { AVLTree } from "../data/avl/avlNode.ts";
 import type { SKIExpression } from "../ski/expression.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";

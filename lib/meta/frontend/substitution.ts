@@ -1,3 +1,13 @@
+/**
+ * Reference resolution and substitution for TripLang programs.
+ *
+ * This module provides functionality to resolve external references in TripLang
+ * programs by substituting term and type definitions from the symbol table.
+ * It includes generic substitution algorithms and specialized handlers for
+ * different term types.
+ *
+ * @module
+ */
 import { keyValuePairs, searchAVL } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
 import type { BaseType } from "../../types/types.ts";

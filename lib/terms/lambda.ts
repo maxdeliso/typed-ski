@@ -1,3 +1,12 @@
+/**
+ * Untyped lambda calculus term representation and utilities.
+ *
+ * This module defines the AST types for untyped lambda calculus terms,
+ * including variables, abstractions, and applications. It provides
+ * pretty-printing and utility functions for working with untyped lambda terms.
+ *
+ * @module
+ */
 import { cons, type ConsCell } from "../cons.ts";
 
 /**

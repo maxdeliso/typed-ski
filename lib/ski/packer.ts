@@ -1,3 +1,11 @@
+/**
+ * SKI expression packing and heap representation.
+ *
+ * This module provides functionality for converting SKI expressions to and from
+ * compact heap-based representations, including binary packing for efficient storage.
+ *
+ * @module
+ */
 import { cons } from "../cons.ts";
 import type { SKIExpression } from "./expression.ts";
 import { SKITerminalSymbol, term } from "./terminal.ts";

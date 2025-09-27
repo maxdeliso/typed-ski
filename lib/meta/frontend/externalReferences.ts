@@ -1,3 +1,13 @@
+/**
+ * External reference analysis for TripLang values.
+ *
+ * This module provides functionality to collect all free (external) references
+ * in TripLang values, including System F terms, typed/untyped lambda expressions,
+ * SKI expressions, and types. It tracks bound variables to determine which
+ * references are external.
+ *
+ * @module
+ */
 import {
   type AVLTree,
   createEmptyAVL,

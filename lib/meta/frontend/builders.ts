@@ -1,3 +1,11 @@
+/**
+ * Branch builders for substitution algorithms.
+ *
+ * This module provides utility functions for building branches during
+ * substitution operations, extracting child nodes from different term types.
+ *
+ * @module
+ */
 import type { SystemFTerm } from "../../terms/systemF.ts";
 import type { TypedLambda } from "../../types/typedLambda.ts";
 import type { UntypedLambda } from "../../terms/lambda.ts";

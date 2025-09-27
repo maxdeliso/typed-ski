@@ -1,3 +1,12 @@
+/**
+ * System F term representation and utilities.
+ *
+ * This module defines the AST types for System F (polymorphic lambda calculus)
+ * terms, including variables, abstractions, type abstractions, and applications.
+ * It also provides pretty-printing and utility functions for working with System F terms.
+ *
+ * @module
+ */
 import type { ConsCell } from "../cons.ts";
 import type { BaseType } from "../types/types.ts";
 

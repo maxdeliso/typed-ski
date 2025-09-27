@@ -1,3 +1,11 @@
+/**
+ * Persistent set implementation using AVL trees.
+ *
+ * This module provides a generic set data structure implemented using
+ * AVL trees, supporting immutable operations and efficient membership testing.
+ *
+ * @module
+ */
 import {
   type AVLTree,
   createEmptyAVL,

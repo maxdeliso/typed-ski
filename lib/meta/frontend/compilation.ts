@@ -1,3 +1,12 @@
+/**
+ * TripLang compilation pipeline and error handling.
+ *
+ * This module provides the complete compilation pipeline for TripLang programs:
+ * parse → index → elaborate → resolve → typecheck. It also defines compilation
+ * errors and utility functions for working with compiled programs.
+ *
+ * @module
+ */
 import type {
   PolyDefinition,
   SymbolTable,

@@ -1,3 +1,11 @@
+/**
+ * Parser state management and utilities.
+ *
+ * This module provides the core parser state interface and utility functions
+ * for character consumption, token matching, and identifier parsing.
+ *
+ * @module
+ */
 import { ParseError } from "./parseError.ts";
 import type { DefinitionKind } from "./tripLang.ts";
 import {

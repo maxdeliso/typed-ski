@@ -1,3 +1,11 @@
+/**
+ * Evaluator interface for SKI expressions.
+ *
+ * This module defines the interface for SKI expression evaluators,
+ * providing both single-step and full reduction operations.
+ *
+ * @module
+ */
 import type { SKIExpression } from "../ski/expression.ts";
 
 export interface Evaluator {

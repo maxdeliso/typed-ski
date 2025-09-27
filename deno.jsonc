@@ -49,6 +49,7 @@
   },
   "imports": {
     "@types/node": "npm:@types/node@^24.5.2",
+    "@types/chai": "npm:@types/chai@^4.3.0",
     "std/path": "https://deno.land/std@0.224.0/path/mod.ts",
     "std/assert": "https://deno.land/std@0.224.0/assert/mod.ts",
     "chai": "npm:chai@5.2.0",

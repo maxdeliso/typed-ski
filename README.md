@@ -9,6 +9,28 @@ An implementation of a parser, evaluator, printer, and visualizer for
 - [Deno](https://deno.com/)
 - [AssemblyScript](https://www.assemblyscript.org/)
 
+## Development Setup
+
+### VS Code Extensions
+
+This project includes VS Code workspace settings that require the following
+extensions:
+
+- **[Deno](https://marketplace.visualstudio.com/items?itemName=denoland.vscode-deno)** -
+  Official Deno extension for TypeScript support, linting, and IntelliSense
+
+The `.vscode/settings.json` file configures:
+
+- Enables the Deno extension for this workspace
+- Disables the built-in TypeScript language server to avoid conflicts
+- Configures Deno linting and import suggestions
+
+### Installation
+
+1. Install the Deno extension in VS Code
+2. Clone the repository
+3. Open the project in VS Code - the workspace settings will automatically apply
+
 ## Artifacts
 
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)

@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@types/chai@^4.3.0": "4.3.20",
     "npm:@types/node@^24.5.2": "24.5.2",
     "npm:assemblyscript@latest": "0.28.2",
     "npm:chai@*": "5.2.0",
@@ -9,6 +10,9 @@
     "npm:random-seed@0.3.0": "0.3.0"
   },
   "npm": {
+    "@types/chai@4.3.20": {
+      "integrity": "sha512-/pC9HAB5I/xMlc5FP77qjCnI16ChlJfW0tGa0IUcFn38VJrTV6DeZ60NU5KZBtaOZqjdpwTWohz5HU1RrhiYxQ=="
+    },
     "@types/node@24.5.2": {
       "integrity": "sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ==",
       "dependencies": [
@@ -218,6 +222,7 @@
   },
   "workspace": {
     "dependencies": [
+      "npm:@types/chai@^4.3.0",
       "npm:@types/node@^24.5.2",
       "npm:chai@5.2.0",
       "npm:random-seed@0.3.0"

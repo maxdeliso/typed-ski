@@ -1,3 +1,19 @@
+/**
+ * This module provides parsing functionality for typed lambda calculus expressions.
+ * It exports functions to parse typed lambda terms, including abstractions with type annotations,
+ * applications, and variables with their associated types.
+ *
+ * @example
+ * ```ts
+ * import { parseTypedLambda } from "jsr:@maxdeliso/typed-ski";
+ *
+ * const [literal, term] = parseTypedLambda("λx : A . x");
+ * console.log(literal); // "λx:A.x"
+ * ```
+ *
+ * @module
+ */
+
 import { mkVar } from "../terms/lambda.ts";
 import { mkTypedAbs, type TypedLambda } from "../types/typedLambda.ts";
 import {

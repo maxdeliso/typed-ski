@@ -10,7 +10,7 @@
  * @example
  * ```ts
  * import { parseSKI, symbolicEvaluator } from "jsr:@maxdeliso/typed-ski";
- * const expr = parseSKI("(S (K S)) K");
+ * const expr = parseSKI("(K S) I");
  * const nf = symbolicEvaluator.reduce(expr);
  * ```
  *
@@ -50,6 +50,7 @@ export {
 
 // System F type exports
 export {
+  emptySystemFContext,
   eraseSystemF,
   prettyPrintSystemFType,
   typecheck as typecheckSystemF,
@@ -81,7 +82,21 @@ export {
   resolveExternalProgramReferences,
   resolveExternalTermReferences,
 } from "./meta/frontend/substitution.ts";
+export { resolvePoly } from "./meta/frontend/compilation.ts";
 
 // Additional utility exports
-export { UnChurchNumber } from "./ski/church.ts";
+export { ChurchN, UnChurchNumber } from "./ski/church.ts";
 export { searchAVL } from "./data/avl/avlNode.ts";
+
+// Cons cell utilities
+export { cons, type ConsCell } from "./cons.ts";
+
+// SKI terminal and expression utilities
+export {
+  I,
+  K,
+  S,
+  type SKITerminal,
+  type SKITerminalSymbol,
+} from "./ski/terminal.ts";
+export { prettyPrint as prettyPrintSKIExpression } from "./ski/expression.ts";

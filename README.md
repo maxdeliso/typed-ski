@@ -43,6 +43,31 @@ Run the test suite:
 deno run --allow-read --allow-run scripts/test.ts
 ```
 
+## Interactive Development
+
+You can experiment with the library interactively using Deno's REPL:
+
+```bash
+deno repl --allow-read
+```
+
+### Quick Start
+
+```ts
+import {
+  parseSKI,
+  prettyPrintSKIExpression,
+  symbolicEvaluator,
+} from "jsr:@maxdeliso/typed-ski";
+
+const expr = parseSKI("(K S) I");
+const result = symbolicEvaluator.reduce(expr);
+console.log(prettyPrintSKIExpression(result)); // "S"
+```
+
+For a comprehensive library of curated examples, see the
+[JSR module documentation](https://jsr.io/@maxdeliso/typed-ski).
+
 ## Works Referenced
 
 ### Books

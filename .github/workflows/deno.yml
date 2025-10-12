@@ -24,7 +24,7 @@ jobs:
         run: deno lint
 
       - name: Test
-        run: deno run --allow-read --allow-run scripts/test.ts
+        run: deno task ci
 
       - name: Dry run publish
         if: github.ref != 'refs/heads/main'

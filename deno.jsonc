@@ -54,5 +54,12 @@
     "std/assert": "https://deno.land/std@0.224.0/assert/mod.ts",
     "chai": "npm:chai@5.2.0",
     "random-seed": "npm:random-seed@0.3.0"
+  },
+  "tasks": {
+    "build:debug": "deno run -A npm:assemblyscript@latest/asc assembly/index.ts --config assembly/asconfig.json --target debug",
+    "build:release": "deno run -A npm:assemblyscript@latest/asc assembly/index.ts --config assembly/asconfig.json --target release",
+    "build": "deno task build:debug && deno task build:release",
+    "test": "deno test --allow-read test/",
+    "ci": "deno task build && deno task test"
   }
 }

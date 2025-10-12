@@ -35,13 +35,43 @@ The `.vscode/settings.json` file configures:
 
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
 
-## Testing
+## Development Tasks
+
+This project uses Deno's built-in task runner for standardized development
+workflows:
+
+### Building
+
+Build AssemblyScript WebAssembly modules:
+
+```bash
+# Build both debug and release versions
+deno task build
+
+# Build individual versions
+deno task build:debug
+deno task build:release
+```
+
+### Testing
 
 Run the test suite:
 
 ```bash
-deno run --allow-read --allow-run scripts/test.ts
+# Run tests only
+deno task test
+
+# Run full CI pipeline (build + test)
+deno task ci
 ```
+
+### Available Tasks
+
+- `build` - Build both debug and release AssemblyScript modules
+- `build:debug` - Build debug version only
+- `build:release` - Build release version only
+- `test` - Run the test suite
+- `ci` - Run full CI pipeline (build then test)
 
 ## Interactive Development
 

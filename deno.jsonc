@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts"
@@ -46,16 +46,16 @@
     ]
   },
   "imports": {
-    "@types/node": "npm:@types/node@^24.5.2",
-    "@types/chai": "npm:@types/chai@^4.3.0",
+    "@types/node": "npm:@types/node@^24.7.2",
+    "@types/chai": "npm:@types/chai@^5.2.2",
     "std/path": "https://deno.land/std@0.224.0/path/mod.ts",
     "std/assert": "https://deno.land/std@0.224.0/assert/mod.ts",
-    "chai": "npm:chai@5.2.0",
+    "chai": "npm:chai@6.2.0",
     "random-seed": "npm:random-seed@0.3.0"
   },
   "tasks": {
-    "build:debug": "deno run -A npm:assemblyscript@latest/asc assembly/index.ts --config assembly/asconfig.json --target debug",
-    "build:release": "deno run -A npm:assemblyscript@latest/asc assembly/index.ts --config assembly/asconfig.json --target release",
+    "build:debug": "deno run -A npm:assemblyscript@0.28.8/asc assembly/index.ts --config assembly/asconfig.json --target debug",
+    "build:release": "deno run -A npm:assemblyscript@0.28.8/asc assembly/index.ts --config assembly/asconfig.json --target release",
     "build": "deno task build:debug && deno task build:release",
     "test": "deno test --allow-read test/",
     "ci": "deno task build && deno task test"

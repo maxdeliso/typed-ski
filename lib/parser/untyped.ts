@@ -16,6 +16,7 @@ import {
   peek,
 } from "./parserState.ts";
 import { parseChain } from "./chain.ts";
+import { createApplication } from "../terms/lambda.ts";
 import { parseWithEOF } from "./eof.ts";
 
 /**
@@ -27,7 +28,11 @@ import { parseWithEOF } from "./eof.ts";
 export function parseUntypedLambdaInternal(
   state: ParserState,
 ): [string, UntypedLambda, ParserState] {
-  return parseChain<UntypedLambda>(state, parseAtomicUntypedLambda);
+  return parseChain<UntypedLambda>(
+    state,
+    parseAtomicUntypedLambda,
+    createApplication,
+  );
 }
 
 /**

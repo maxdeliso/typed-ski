@@ -1,6 +1,6 @@
 import { expect } from "chai";
-import { cons } from "../../lib/cons.ts";
 import { mkVar } from "../../lib/terms/lambda.ts";
+import { createTypedApplication } from "../../lib/types/typedLambda.ts";
 
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseType } from "../../lib/parser/type.ts";
@@ -94,7 +94,7 @@ Deno.test("Parser Tests", async (t) => {
       await t.step("single term application", () => {
         const src = "x y";
         const [lit, term] = parseTypedLambda(src);
-        const expected = cons(mkVar("x"), mkVar("y"));
+        const expected = createTypedApplication(mkVar("x"), mkVar("y"));
         expect(lit).to.equal(src);
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
@@ -102,9 +102,9 @@ Deno.test("Parser Tests", async (t) => {
       await t.step("juxtaposed terms", () => {
         const src = "x z (y z)";
         const [lit, term] = parseTypedLambda(src);
-        const expected = cons(
-          cons(mkVar("x"), mkVar("z")),
-          cons(mkVar("y"), mkVar("z")),
+        const expected = createTypedApplication(
+          createTypedApplication(mkVar("x"), mkVar("z")),
+          createTypedApplication(mkVar("y"), mkVar("z")),
         );
         expect(lit).to.equal(src);
         expect(typedTermsLitEq(term, expected)).to.equal(true);
@@ -116,7 +116,7 @@ Deno.test("Parser Tests", async (t) => {
         const expected = mkTypedAbs(
           "x",
           mkTypeVariable("a"),
-          cons(mkVar("x"), mkVar("x")),
+          createTypedApplication(mkVar("x"), mkVar("x")),
         );
         expect(lit).to.equal(src);
         expect(typedTermsLitEq(term, expected)).to.equal(true);
@@ -146,9 +146,9 @@ Deno.test("Parser Tests", async (t) => {
             mkTypedAbs(
               "z",
               mkTypeVariable("a"),
-              cons(
-                cons(mkVar("x"), mkVar("z")),
-                cons(mkVar("y"), mkVar("z")),
+              createTypedApplication(
+                createTypedApplication(mkVar("x"), mkVar("z")),
+                createTypedApplication(mkVar("y"), mkVar("z")),
               ),
             ),
           ),

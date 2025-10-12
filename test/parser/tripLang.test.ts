@@ -7,10 +7,10 @@ import {
   mkSystemFTAbs,
   mkSystemFVar,
 } from "../../lib/terms/systemF.ts";
-import { cons } from "../../lib/cons.ts";
-import { mkVar } from "../../lib/terms/lambda.ts";
-import type { TypedLambda } from "../../lib/types/typedLambda.ts";
-import type { SKIExpression } from "../../lib/ski/expression.ts";
+import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
+import { createTypedApplication } from "../../lib/types/typedLambda.ts";
+import { arrow } from "../../lib/types/types.ts";
+import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
 
@@ -51,7 +51,7 @@ Deno.test("parseTripLang", async (t) => {
     expect(term).to.deep.equal({
       kind: "typed",
       name: "inc",
-      type: cons(
+      type: arrow(
         { kind: "type-var", typeName: "Int" },
         { kind: "type-var", typeName: "Int" },
       ),
@@ -59,8 +59,8 @@ Deno.test("parseTripLang", async (t) => {
         kind: "typed-lambda-abstraction",
         varName: "x",
         ty: { kind: "type-var", typeName: "Int" },
-        body: cons<TypedLambda>(
-          cons(mkVar("plus"), mkVar("x")),
+        body: createTypedApplication(
+          createTypedApplication(mkVar("plus"), mkVar("x")),
           mkVar("1"),
         ),
       },
@@ -81,7 +81,7 @@ Deno.test("parseTripLang", async (t) => {
       term: {
         kind: "lambda-abs",
         name: "x",
-        body: cons(
+        body: createApplication(
           mkVar("x"),
           mkVar("x"),
         ),
@@ -100,32 +100,32 @@ Deno.test("parseTripLang", async (t) => {
     expect(term).to.deep.equal({
       "kind": "combinator",
       "name": "Y",
-      "term": cons(
-        cons<SKIExpression>(
+      "term": apply(
+        apply(
           S,
-          cons<SKIExpression>(
+          apply(
             K,
-            cons<SKIExpression>(
-              cons<SKIExpression>(S, I),
+            apply(
+              apply(S, I),
               I,
             ),
           ),
         ),
-        cons<SKIExpression>(
-          cons<SKIExpression>(
+        apply(
+          apply(
             S,
-            cons<SKIExpression>(
-              cons<SKIExpression>(
+            apply(
+              apply(
                 S,
-                cons<SKIExpression>(K, S),
+                apply(K, S),
               ),
               K,
             ),
           ),
-          cons<SKIExpression>(
+          apply(
             K,
-            cons<SKIExpression>(
-              cons<SKIExpression>(S, I),
+            apply(
+              apply(S, I),
               I,
             ),
           ),
@@ -138,7 +138,10 @@ Deno.test("parseTripLang", async (t) => {
     const input = loadInput("typeNat.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
-    const typeVar = (name: string) => ({ kind: "type-var", typeName: name });
+    const typeVar = (name: string) => ({
+      kind: "type-var" as const,
+      typeName: name,
+    });
     const X = typeVar("X");
 
     expect(moduleDecl).to.deep.equal({
@@ -151,9 +154,9 @@ Deno.test("parseTripLang", async (t) => {
       type: {
         kind: "forall",
         typeVar: "X",
-        body: cons(
-          cons(X, X),
-          cons(X, X),
+        body: arrow(
+          arrow(X, X),
+          arrow(X, X),
         ),
       },
     });
@@ -179,7 +182,7 @@ Deno.test("parseTripLang", async (t) => {
           type: {
             kind: "forall",
             typeVar: "X",
-            body: cons(cons(X, X), cons(X, X)),
+            body: arrow(arrow(X, X), arrow(X, X)),
           },
         },
         {
@@ -191,28 +194,28 @@ Deno.test("parseTripLang", async (t) => {
         {
           kind: "combinator",
           name: "complex",
-          term: cons<SKIExpression>(
-            cons<SKIExpression>(
+          term: apply(
+            apply(
               S,
-              cons<SKIExpression>(
+              apply(
                 K,
-                cons<SKIExpression>(
-                  cons<SKIExpression>(S, I),
+                apply(
+                  apply(S, I),
                   I,
                 ),
               ),
             ),
-            cons<SKIExpression>(
-              cons<SKIExpression>(
+            apply(
+              apply(
                 S,
-                cons<SKIExpression>(
-                  cons<SKIExpression>(S, cons<SKIExpression>(K, S)),
+                apply(
+                  apply(S, apply(K, S)),
                   K,
                 ),
               ),
-              cons<SKIExpression>(
+              apply(
                 K,
-                cons<SKIExpression>(cons<SKIExpression>(S, I), I),
+                apply(apply(S, I), I),
               ),
             ),
           ),
@@ -221,9 +224,9 @@ Deno.test("parseTripLang", async (t) => {
           kind: "typed",
           name: "two",
           type: typeVar("Nat"),
-          term: cons<TypedLambda>(
+          term: createTypedApplication(
             mkVar("succ"),
-            cons<TypedLambda>(mkVar("succ"), mkVar("zero")),
+            createTypedApplication(mkVar("succ"), mkVar("zero")),
           ),
         },
         {
@@ -249,7 +252,7 @@ Deno.test("parseTripLang", async (t) => {
       type: {
         kind: "forall",
         typeVar: "a",
-        body: cons(
+        body: arrow(
           { kind: "type-var", typeName: "a" },
           { kind: "type-var", typeName: "a" },
         ),

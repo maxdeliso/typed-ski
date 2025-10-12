@@ -7,7 +7,6 @@
  *
  * @module
  */
-import { cons, type ConsCell } from "../cons.ts";
 
 /**
  * This is a single term variable with a name.
@@ -41,16 +40,40 @@ export const mkUntypedAbs = (
 });
 
 /**
+ * An application in the untyped lambda calculus
+ */
+export interface UntypedApplication {
+  kind: "non-terminal";
+  lft: UntypedLambda;
+  rgt: UntypedLambda;
+}
+
+/**
  * The legal terms of the untyped lambda calculus.
  * e ::= x | λx.e | e e, where x is a variable name, and e is a valid expr
  */
 export type UntypedLambda =
   | LambdaVar
   | UntypedLambdaAbs
-  | ConsCell<UntypedLambda>;
+  | UntypedApplication;
+
+/**
+ * Creates an application of one untyped lambda term to another.
+ * @param left the function term
+ * @param right the argument term
+ * @returns a new application node
+ */
+export const createApplication = (
+  left: UntypedLambda,
+  right: UntypedLambda,
+): UntypedLambda => ({
+  kind: "non-terminal",
+  lft: left,
+  rgt: right,
+});
 
 export const typelessApp = (...uts: UntypedLambda[]) =>
-  uts.reduce(cons<UntypedLambda>);
+  uts.reduce(createApplication);
 
 /**
  * Pretty-prints an untyped lambda expression using λ and parentheses.

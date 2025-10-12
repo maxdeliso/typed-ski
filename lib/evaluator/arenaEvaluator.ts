@@ -8,8 +8,8 @@
  */
 import { promises as fs } from "node:fs";
 
-import { cons } from "../cons.ts";
 import type { SKIExpression } from "../ski/expression.ts";
+import { apply } from "../ski/expression.ts";
 import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
@@ -146,7 +146,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
       }
     }
 
-    return cons(
+    return apply(
       this.fromArena(this.$.leftOf(id)),
       this.fromArena(this.$.rightOf(id)),
     );

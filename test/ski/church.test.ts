@@ -24,19 +24,22 @@ import {
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { predLambda } from "../../lib/consts/lambdas.ts";
-import { apply } from "../../lib/ski/expression.ts";
+import { apply, applyMany } from "../../lib/ski/expression.ts";
 
 // isZero ≡ F True (KF)
-const IsZero = apply(F, True, apply(K, False));
+const IsZero = applyMany(F, True, apply(K, False));
 
 /* λp. <Succ (Car p), Car p>  — pair-shifting successor */
-const pairShiftSucc = apply(
+const pairShiftSucc = applyMany(
   S,
-  apply(apply(B, apply(B, V, Succ)), apply(B, apply(B, I, Car), I)),
-  apply(B, apply(B, I, Car), I),
+  apply(
+    applyMany(B, applyMany(B, V, Succ)),
+    applyMany(B, applyMany(B, I, Car), I),
+  ),
+  applyMany(B, applyMany(B, I, Car), I),
 );
 
-const pairZeroZero = apply(V, ChurchN(0), ChurchN(0));
+const pairZeroZero = applyMany(V, ChurchN(0), ChurchN(0));
 
 Deno.test("Church encodings", async (t) => {
   const N = 5;
@@ -62,14 +65,18 @@ Deno.test("Church encodings", async (t) => {
         // AND ≡ λpq.p q p
         expect(
           UnChurchBoolean(
-            symbolicEvaluator.reduce(apply(ChurchB(p), ChurchB(q), ChurchB(p))),
+            symbolicEvaluator.reduce(
+              applyMany(ChurchB(p), ChurchB(q), ChurchB(p)),
+            ),
           ),
         ).to.equal(conj);
 
         // OR  ≡ λpq.p p q
         expect(
           UnChurchBoolean(
-            symbolicEvaluator.reduce(apply(ChurchB(p), ChurchB(p), ChurchB(q))),
+            symbolicEvaluator.reduce(
+              applyMany(ChurchB(p), ChurchB(p), ChurchB(q)),
+            ),
           ),
         ).to.equal(dis);
       });
@@ -79,20 +86,20 @@ Deno.test("Church encodings", async (t) => {
   await t.step("pairs (make, fst, snd, car, cdr)", () => {
     expect(
       UnChurchNumber(
-        symbolicEvaluator.reduce(apply(V, ChurchN(0), ChurchN(1), Fst)),
+        symbolicEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Fst)),
       ),
     ).to.equal(0);
 
     expect(
       UnChurchNumber(
-        symbolicEvaluator.reduce(apply(V, ChurchN(0), ChurchN(1), Snd)),
+        symbolicEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Snd)),
       ),
     ).to.equal(1);
 
     expect(
       UnChurchNumber(
         symbolicEvaluator.reduce(
-          apply(Car, apply(V, ChurchN(0), ChurchN(1))),
+          apply(Car, applyMany(V, ChurchN(0), ChurchN(1))),
         ),
       ),
     ).to.equal(0);
@@ -100,7 +107,7 @@ Deno.test("Church encodings", async (t) => {
     expect(
       UnChurchNumber(
         symbolicEvaluator.reduce(
-          apply(Cdr, apply(V, ChurchN(0), ChurchN(1))),
+          apply(Cdr, applyMany(V, ChurchN(0), ChurchN(1))),
         ),
       ),
     ).to.equal(1);
@@ -110,13 +117,13 @@ Deno.test("Church encodings", async (t) => {
     // definition-style tests
     expect(
       UnChurchBoolean(
-        symbolicEvaluator.reduce(apply(ChurchN(0), apply(K, False), True)),
+        symbolicEvaluator.reduce(applyMany(ChurchN(0), apply(K, False), True)),
       ),
     ).to.equal(true);
 
     expect(
       UnChurchBoolean(
-        symbolicEvaluator.reduce(apply(ChurchN(1), apply(K, False), True)),
+        symbolicEvaluator.reduce(applyMany(ChurchN(1), apply(K, False), True)),
       ),
     ).to.equal(false);
 
@@ -136,14 +143,14 @@ Deno.test("Church encodings", async (t) => {
         // m + n   via λmn.(m succ) n
         expect(
           UnChurchNumber(
-            symbolicEvaluator.reduce(apply(ChurchN(m), Succ, ChurchN(n))),
+            symbolicEvaluator.reduce(applyMany(ChurchN(m), Succ, ChurchN(n))),
           ),
         ).to.equal(m + n);
 
         // m + n   via Plus combinator
         expect(
           UnChurchNumber(
-            symbolicEvaluator.reduce(apply(Plus, ChurchN(m), ChurchN(n))),
+            symbolicEvaluator.reduce(applyMany(Plus, ChurchN(m), ChurchN(n))),
           ),
         ).to.equal(m + n);
 
@@ -151,7 +158,7 @@ Deno.test("Church encodings", async (t) => {
         expect(
           UnChurchNumber(
             symbolicEvaluator.reduce(
-              apply(ChurchN(m), apply(ChurchN(n), Succ), Zero),
+              applyMany(ChurchN(m), apply(ChurchN(n), Succ), Zero),
             ),
           ),
         ).to.equal(m * n);
@@ -160,7 +167,7 @@ Deno.test("Church encodings", async (t) => {
         expect(
           UnChurchNumber(
             symbolicEvaluator.reduce(
-              apply(B, ChurchN(m), ChurchN(n), Succ, Zero),
+              applyMany(B, ChurchN(m), ChurchN(n), Succ, Zero),
             ),
           ),
         ).to.equal(m * n);
@@ -178,7 +185,7 @@ Deno.test("Church encodings", async (t) => {
       expect(
         UnChurchNumber(
           symbolicEvaluator.reduce(
-            apply(Cdr, apply(ChurchN(m), pairShiftSucc, pairZeroZero)),
+            apply(Cdr, applyMany(ChurchN(m), pairShiftSucc, pairZeroZero)),
           ),
         ),
       ).to.equal(expected);

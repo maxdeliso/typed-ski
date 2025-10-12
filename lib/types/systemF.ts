@@ -14,9 +14,12 @@ import {
   prettyPrintTy,
   typesLitEq,
 } from "./types.ts";
-import { cons } from "../cons.ts";
+import {
+  createApplication,
+  mkUntypedAbs,
+  type UntypedLambda,
+} from "../terms/lambda.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
-import { mkTypedAbs, type TypedLambda } from "./typedLambda.ts";
 import {
   type AVLTree,
   createEmptyAVL,
@@ -49,7 +52,7 @@ export const substituteSystemFType = (
     case "type-var":
       return original.typeName === targetVarName ? replacement : original;
     case "non-terminal":
-      return cons(
+      return arrow(
         substituteSystemFType(original.lft, targetVarName, replacement),
         substituteSystemFType(original.rgt, targetVarName, replacement),
       );
@@ -96,6 +99,21 @@ export interface SystemFContext {
 export const emptySystemFContext = (): SystemFContext => ({
   termCtx: createEmptyAVL<string, BaseType>(),
   typeVars: createSet<string>(compareStrings),
+});
+
+/**
+ * Creates an application of one System F term to another.
+ * @param left the function term
+ * @param right the argument term
+ * @returns a new application node
+ */
+export const createSystemFApplication = (
+  left: SystemFTerm,
+  right: SystemFTerm,
+): SystemFTerm => ({
+  kind: "non-terminal",
+  lft: left,
+  rgt: right,
 });
 
 /**
@@ -243,14 +261,13 @@ export const prettyPrintSystemFType = (ty: BaseType): string => {
  * @param term A System F term.
  * @returns An equivalent term in the simply typed lambda calculus.
  */
-export const eraseSystemF = (term: SystemFTerm): TypedLambda => {
+export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
   switch (term.kind) {
     case "systemF-var":
       return { kind: "lambda-var", name: term.name };
     case "systemF-abs":
-      return mkTypedAbs(
+      return mkUntypedAbs(
         term.name,
-        term.typeAnnotation,
         eraseSystemF(term.body),
       );
     case "systemF-type-abs":
@@ -258,7 +275,7 @@ export const eraseSystemF = (term: SystemFTerm): TypedLambda => {
     case "systemF-type-app":
       return eraseSystemF(term.term);
     default:
-      return cons(
+      return createApplication(
         eraseSystemF(term.lft),
         eraseSystemF(term.rgt),
       );

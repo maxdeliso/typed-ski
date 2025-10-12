@@ -221,9 +221,9 @@ Deno.test("System F type-checker and helpers", async (t) => {
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
       );
       const er = eraseSystemF(term);
-      expect(er.kind).to.equal("typed-lambda-abstraction");
-      if (er.kind === "typed-lambda-abstraction") {
-        expect(er.varName).to.equal("x");
+      expect(er.kind).to.equal("lambda-abs");
+      if (er.kind === "lambda-abs") {
+        expect(er.name).to.equal("x");
         expect(er.body.kind).to.equal("lambda-var");
       }
     });
@@ -249,9 +249,9 @@ Deno.test("System F type-checker and helpers", async (t) => {
         mkTypeVariable("bool"),
       );
       const er = eraseSystemF(applied);
-      expect(er.kind).to.equal("typed-lambda-abstraction");
-      if (er.kind === "typed-lambda-abstraction") {
-        expect(er.varName).to.equal("f");
+      expect(er.kind).to.equal("lambda-abs");
+      if (er.kind === "lambda-abs") {
+        expect(er.name).to.equal("f");
       }
     });
   });

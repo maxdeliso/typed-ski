@@ -37,9 +37,8 @@ export function lower(dt: TripLangTerm): TripLangTerm {
       const erased = eraseSystemF(dt.term);
 
       return {
-        kind: "typed",
+        kind: "untyped",
         name: dt.name,
-        type: undefined, // note: we'll check it after all the symbols are resolved
         term: erased,
       };
     }

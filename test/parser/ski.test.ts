@@ -1,10 +1,13 @@
 import { assert, expect } from "chai";
 
-import { cons } from "../../lib/cons.ts";
 import { Y } from "../../lib/consts/combinators.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { prettyPrint, type SKIExpression } from "../../lib/ski/expression.ts";
+import {
+  apply,
+  prettyPrint,
+  type SKIExpression,
+} from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 
 const assertReparse = (expr: string) => {
@@ -30,7 +33,7 @@ Deno.test("parseSKI", async (t) => {
   };
 
   await t.step(`should parse ${firstLiteral} and variations`, () => {
-    const expectedISK = cons<SKIExpression>(I, cons(S, K));
+    const expectedISK = apply(I, apply(S, K));
     const parsedISK = parseSKI(firstLiteral);
 
     assertPrintedParsedPair(parsedISK, expectedISK);
@@ -41,11 +44,11 @@ Deno.test("parseSKI", async (t) => {
   });
 
   await t.step(`should parse ${secondLiteral} and variations`, () => {
-    const expected = cons<SKIExpression>(
-      cons<SKIExpression>(
-        cons<SKIExpression>(
-          cons<SKIExpression>(
-            cons(S, K),
+    const expected = apply(
+      apply(
+        apply(
+          apply(
+            apply(S, K),
             I,
           ),
           S,

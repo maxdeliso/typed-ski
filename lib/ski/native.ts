@@ -8,7 +8,6 @@
  */
 import type { SKITerminalSymbol } from "./terminal.ts";
 import type { SKIExpression } from "./expression.ts";
-import { cons, type ConsCell } from "../cons.ts";
 
 /**
  * A terminal symbol (S, K, I) in the native representation
@@ -34,18 +33,27 @@ export interface NativeInc {
 }
 
 /**
+ * An application in the native representation
+ */
+export interface NativeApplication {
+  kind: "non-terminal";
+  lft: NativeExpr;
+  rgt: NativeExpr;
+}
+
+/**
  * The legal terms of the native representation.
  * This includes:
  * - Terminal symbols (S, K, I)
  * - Numeric literals
  * - The increment operation
- * - Applications (represented as cons cells)
+ * - Applications
  */
 export type NativeExpr =
   | NativeTerminal
   | NativeNum
   | NativeInc
-  | ConsCell<NativeExpr>;
+  | NativeApplication;
 
 /**
  * Creates a numeric literal with the given value
@@ -66,9 +74,11 @@ export const mkNativeTerminal = (sym: SKITerminalSymbol): NativeTerminal => ({
 });
 
 const skiToNative = (ski: SKIExpression): NativeExpr =>
-  ski.kind === "terminal"
-    ? mkNativeTerminal(ski.sym)
-    : cons(skiToNative(ski.lft), skiToNative(ski.rgt));
+  ski.kind === "terminal" ? mkNativeTerminal(ski.sym) : {
+    kind: "non-terminal",
+    lft: skiToNative(ski.lft),
+    rgt: skiToNative(ski.rgt),
+  };
 
 interface NativeStepResult {
   altered: boolean;
@@ -110,19 +120,31 @@ const stepNative = (e: NativeExpr): NativeStepResult => {
       const x = e.lft.lft.rgt;
       const y = e.lft.rgt;
       const z = e.rgt;
-      const result: ConsCell<NativeExpr> = cons(cons(x, z), cons(y, z));
+      const result: NativeApplication = {
+        kind: "non-terminal",
+        lft: { kind: "non-terminal", lft: x, rgt: z },
+        rgt: { kind: "non-terminal", lft: y, rgt: z },
+      };
       return { altered: true, expr: result };
     }
 
     const leftStep = stepNative(e.lft);
     if (leftStep.altered) {
-      const result: ConsCell<NativeExpr> = cons(leftStep.expr, e.rgt);
+      const result: NativeApplication = {
+        kind: "non-terminal",
+        lft: leftStep.expr,
+        rgt: e.rgt,
+      };
       return { altered: true, expr: result };
     }
 
     const rightStep = stepNative(e.rgt);
     if (rightStep.altered) {
-      const result: ConsCell<NativeExpr> = cons(e.lft, rightStep.expr);
+      const result: NativeApplication = {
+        kind: "non-terminal",
+        lft: e.lft,
+        rgt: rightStep.expr,
+      };
       return { altered: true, expr: result };
     }
   }
@@ -147,10 +169,15 @@ export const reduceNat = (root: NativeExpr): NativeExpr => {
 export const unChurchNumber = (church: SKIExpression): number => {
   /* build  (church  INC  (NUM 0)) in the new ADT */
   const natTerm: NativeExpr = reduceNat(
-    cons(
-      cons(skiToNative(church), mkNativeInc()), // first argument  = INC
-      mkNativeNum(0) as NativeExpr, // second argument = 0, type assertion added
-    ),
+    {
+      kind: "non-terminal",
+      lft: {
+        kind: "non-terminal",
+        lft: skiToNative(church),
+        rgt: mkNativeInc(),
+      },
+      rgt: mkNativeNum(0),
+    },
   );
 
   if (natTerm.kind === "num") return natTerm.value;

@@ -1,17 +1,16 @@
 import { assert } from "chai";
 
-import { cons } from "../../lib/cons.ts";
 import {
+  apply,
   equivalent,
   prettyPrint,
-  type SKIExpression,
   terminals,
   toSKIKey,
 } from "../../lib/ski/expression.ts";
 import { K, S } from "../../lib/ski/terminal.ts";
 
-const expr = cons<SKIExpression>(cons<SKIExpression>(S, K), K);
-const otherExpr = cons<SKIExpression>(K, S);
+const expr = apply(apply(S, K), K);
+const otherExpr = apply(K, S);
 
 Deno.test("expression functions", async (t) => {
   await t.step("toSKIKey with expr", () => {
@@ -44,16 +43,16 @@ Deno.test("expression functions", async (t) => {
   });
 
   await t.step("apply", () => {
-    const applied = cons<SKIExpression>(expr, otherExpr);
+    const applied = apply(expr, otherExpr);
     assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)(KS))");
   });
 
   await t.step("apply with one expression", () => {
-    const applied = cons<SKIExpression>(expr, expr);
+    const applied = apply(expr, expr);
     assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)((SK)K))");
   });
   await t.step("apply with two expressions", () => {
-    const applied = cons<SKIExpression>(expr, otherExpr);
+    const applied = apply(expr, otherExpr);
     assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)(KS))");
   });
 });

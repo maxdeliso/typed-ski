@@ -7,7 +7,6 @@
  *
  * @module
  */
-import { cons } from "../cons.ts";
 import {
   arrow,
   type BaseType,
@@ -16,6 +15,7 @@ import {
   typesLitEq,
   type TypeVariable,
 } from "./types.ts";
+import { createTypedApplication } from "./typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import {
   type Context,
@@ -76,7 +76,7 @@ export const substituteType = (
     case "type-var":
       return original;
     case "non-terminal":
-      return cons(
+      return arrow(
         substituteType(original.lft, lft, rgt),
         substituteType(original.rgt, lft, rgt),
       );
@@ -269,7 +269,7 @@ const attachTypes = (untyped: UntypedLambda, types: Context): TypedLambda => {
       );
     }
     case "non-terminal":
-      return cons(
+      return createTypedApplication(
         attachTypes(untyped.lft, types),
         attachTypes(untyped.rgt, types),
       );

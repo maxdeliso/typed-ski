@@ -6,7 +6,7 @@
  *
  * @module
  */
-import { cons } from "../cons.ts";
+import { arrow } from "./types.ts";
 import type { AVLTree } from "../data/avl/avlNode.ts";
 import {
   createStringMap,
@@ -42,7 +42,7 @@ export const normalizeTy = (
     case "non-terminal": {
       const [lftType, lftMapping] = normalizeTy(ty.lft, mapping, vars);
       const [rgtType, rgtMapping] = normalizeTy(ty.rgt, lftMapping, vars);
-      return [cons(lftType, rgtType), rgtMapping];
+      return [arrow(lftType, rgtType), rgtMapping];
     }
     case "forall": {
       const newVar = vars();

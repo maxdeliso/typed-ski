@@ -7,7 +7,7 @@
  * @module
  */
 import { parseSKI } from "../parser/ski.ts";
-import { apply } from "../ski/expression.ts";
+import { apply, applyMany } from "../ski/expression.ts";
 import { I, K, S } from "../ski/terminal.ts";
 
 /*
@@ -107,7 +107,7 @@ export const Succ = apply(S, B);
  *
  * λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
  */
-export const Plus = apply(B, S, apply(B, B));
+export const Plus = applyMany(B, S, apply(B, B));
 
 /*
  * Cardinal
@@ -125,7 +125,7 @@ export const Plus = apply(B, S, apply(B, B));
  *
  * λxyz.xzy ≡ S(BBS)(KK)
  */
-export const C = apply(S, apply(B, B, S), apply(K, K));
+export const C = applyMany(S, applyMany(B, B, S), apply(K, K));
 
 /*
  * Thrush
@@ -160,7 +160,7 @@ export const T = apply(C, I);
  *
  * Sometimes called a cons cell.
  */
-export const V = apply(B, C, T);
+export const V = applyMany(B, C, T);
 
 /*
  * Mockingbird
@@ -220,13 +220,13 @@ export const Cdr = apply(T, Snd);
 export const W = parseSKI("SS(SK)");
 
 // λabcd.a(bcd)
-export const Blk = apply(B, B, B);
+export const Blk = applyMany(B, B, B);
 
 // λabcde.ab(cde)
-export const E = apply(B, apply(B, B, B));
+export const E = apply(B, applyMany(B, B, B));
 
 // λabc.cba
-export const F = apply(E, T, T, E, T);
+export const F = applyMany(E, T, T, E, T);
 
 // λf.(λx.f(x x))(λx.f(x x))
 export const Y = parseSKI("S(K(SII))(S(S(KS)K)(K(SII)))");

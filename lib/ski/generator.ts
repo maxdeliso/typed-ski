@@ -7,8 +7,8 @@
  * @module
  */
 import type { RandomSeed } from "random-seed";
-import { cons } from "../cons.ts";
 import type { SKIExpression } from "./expression.ts";
+import { apply } from "./expression.ts";
 import { I, K, S, type SKITerminal } from "./terminal.ts";
 
 export const randExpression = (rs: RandomSeed, n: number): SKIExpression => {
@@ -34,14 +34,14 @@ const randomInsert = (
 
   if (expr.kind === "terminal") {
     if (direction) {
-      return cons(expr, term);
+      return apply(expr, term);
     } else {
-      return cons(term, expr);
+      return apply(term, expr);
     }
   } else if (direction) {
-    return cons(randomInsert(randomSeed, expr.lft, term), expr.rgt);
+    return apply(randomInsert(randomSeed, expr.lft, term), expr.rgt);
   } else {
-    return cons(expr.lft, randomInsert(randomSeed, expr.rgt, term));
+    return apply(expr.lft, randomInsert(randomSeed, expr.rgt, term));
   }
 };
 

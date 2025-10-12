@@ -7,6 +7,7 @@
  * @module
  */
 import type { SKIExpression } from "../ski/expression.ts";
+import { apply } from "../ski/expression.ts";
 import {
   consume,
   matchLP,
@@ -16,7 +17,6 @@ import {
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { parseWithEOF } from "./eof.ts";
-import { cons } from "../cons.ts";
 import { type SKITerminalSymbol, term } from "../ski/terminal.ts";
 
 const TERMINALS = new Set(["S", "K", "I"]);
@@ -36,7 +36,7 @@ function parseSeq(rdb: ParserState): [string, SKIExpression, ParserState] {
   while (isAtomStart(next)) {
     const [nextLit, nextExpr, updatedState] = parseAtomicOrParens(newState);
     lit = `${lit} ${nextLit}`;
-    expr = cons(expr, nextExpr);
+    expr = apply(expr, nextExpr);
     state = updatedState;
     [next, newState] = peek(state);
   }

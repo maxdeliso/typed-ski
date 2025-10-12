@@ -6,8 +6,13 @@
  *
  * @module
  */
-import { cons, type ConsCell } from "../cons.ts";
-import { equivalent, type SKIExpression, toSKIKey } from "../ski/expression.ts";
+import {
+  apply,
+  equivalent,
+  type SKIApplication,
+  type SKIExpression,
+  toSKIKey,
+} from "../ski/expression.ts";
 import { SKITerminalSymbol } from "../ski/terminal.ts";
 import {
   createMap,
@@ -66,7 +71,7 @@ const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) => {
     const x = expr.lft.lft.rgt;
     const y = expr.lft.rgt;
     const z = expr.rgt;
-    return { altered: true, expr: cons(cons(x, z), cons(y, z)) };
+    return { altered: true, expr: apply(apply(x, z), apply(y, z)) };
   }
   return { altered: false, expr };
 };
@@ -79,7 +84,7 @@ const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) => {
  *   and we now need to reduce the right child.
  */
 interface Frame {
-  node: ConsCell<SKIExpression>;
+  node: SKIApplication;
   phase: "left" | "right";
   leftResult?: SKIExpression;
 }
@@ -164,7 +169,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
     if (frame.phase === "left") {
       if (!equivalent(frame.node.lft, next)) {
         // The left subtree was reduced. Rebuild the parent's node.
-        next = cons(next, frame.node.rgt);
+        next = apply(next, frame.node.rgt);
         expressionCache = insertMap(
           expressionCache,
           toSKIKey(frame.node),
@@ -181,7 +186,7 @@ const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
       }
     } else { // frame.phase === 'right'
       // Now combine the left result (already normalized) with the just-reduced right branch.
-      next = cons(frame.leftResult!, next);
+      next = apply(frame.leftResult!, next);
       expressionCache = insertMap(expressionCache, toSKIKey(frame.node), next);
     }
     // Propagate the new (combined) expression upward.
@@ -226,11 +231,11 @@ const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
   if (result.altered) return result;
   result = stepOnce(expr.lft);
   if (result.altered) {
-    return { altered: true, expr: cons(result.expr, expr.rgt) };
+    return { altered: true, expr: apply(result.expr, expr.rgt) };
   }
   result = stepOnce(expr.rgt);
   if (result.altered) {
-    return { altered: true, expr: cons(expr.lft, result.expr) };
+    return { altered: true, expr: apply(expr.lft, result.expr) };
   }
   return { altered: false, expr };
 };

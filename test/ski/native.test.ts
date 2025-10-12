@@ -2,7 +2,7 @@ import { assert } from "chai";
 
 import { ChurchN, UnChurchBoolean } from "../../lib/ski/church.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
-import { apply } from "../../lib/ski/expression.ts";
+import { apply, applyMany } from "../../lib/ski/expression.ts";
 
 import {
   mkNativeInc,
@@ -13,7 +13,6 @@ import {
   unChurchNumber,
 } from "../../lib/ski/native.ts";
 
-import { cons } from "../../lib/cons.ts";
 import { False, One, True, Zero } from "../../lib/consts/combinators.ts";
 
 function assertIsNum(
@@ -42,10 +41,11 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
     });
 
     await t.step("non-terminal application node", () => {
-      const app = cons(
-        mkNativeNum(1) as NativeExpr,
-        mkNativeNum(2) as NativeExpr,
-      );
+      const app = {
+        kind: "non-terminal" as const,
+        lft: mkNativeNum(1) as NativeExpr,
+        rgt: mkNativeNum(2) as NativeExpr,
+      };
       assertIsNonTerm(app);
       assertIsNum(app.lft);
       assert.equal(app.lft.value, 1);
@@ -56,10 +56,11 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
 
   await t.step("single-step reduction (stepOnceNat)", async (t) => {
     await t.step("(INC (NUM k)) → NUM (k+1)", () => {
-      const expr = cons(
-        mkNativeInc() as NativeExpr,
-        mkNativeNum(5) as NativeExpr,
-      );
+      const expr = {
+        kind: "non-terminal" as const,
+        lft: mkNativeInc() as NativeExpr,
+        rgt: mkNativeNum(5) as NativeExpr,
+      };
       const { altered, expr: out } = stepOnceNat(expr);
       assert.ok(altered);
       assertIsNum(out);
@@ -67,23 +68,26 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
     });
 
     await t.step("no reduction when pattern doesn’t match", () => {
-      const expr = cons(
-        mkNativeNum(1) as NativeExpr,
-        mkNativeNum(2) as NativeExpr,
-      );
+      const expr = {
+        kind: "non-terminal" as const,
+        lft: mkNativeNum(1) as NativeExpr,
+        rgt: mkNativeNum(2) as NativeExpr,
+      };
       const r = stepOnceNat(expr);
       assert.ok(!r.altered);
       assert.equal(r.expr, expr);
     });
 
     await t.step("nested applications reduce inner-most first", () => {
-      const expr = cons(
-        cons(
-          mkNativeInc() as NativeExpr,
-          mkNativeNum(1) as NativeExpr,
-        ) as NativeExpr,
-        mkNativeNum(2) as NativeExpr,
-      );
+      const expr = {
+        kind: "non-terminal" as const,
+        lft: {
+          kind: "non-terminal" as const,
+          lft: mkNativeInc() as NativeExpr,
+          rgt: mkNativeNum(1) as NativeExpr,
+        } as NativeExpr,
+        rgt: mkNativeNum(2) as NativeExpr,
+      };
       const r = stepOnceNat(expr);
       assert.ok(r.altered);
       assertIsNonTerm(r.expr);
@@ -96,13 +100,15 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
 
   await t.step("full reduction (reduceNat)", async (t) => {
     await t.step("reduces to normal form", () => {
-      const expr = cons(
-        cons(
-          mkNativeInc() as NativeExpr,
-          mkNativeNum(1) as NativeExpr,
-        ) as NativeExpr,
-        mkNativeNum(2) as NativeExpr,
-      );
+      const expr = {
+        kind: "non-terminal" as const,
+        lft: {
+          kind: "non-terminal" as const,
+          lft: mkNativeInc() as NativeExpr,
+          rgt: mkNativeNum(1) as NativeExpr,
+        } as NativeExpr,
+        rgt: mkNativeNum(2) as NativeExpr,
+      };
       const out = reduceNat(expr);
       assertIsNonTerm(out);
       assertIsNum(out.lft);
@@ -113,13 +119,15 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
 
     await t.step("multiple incremental steps", () => {
       // (INC (INC 0)) → (INC 1) → 2
-      const expr = cons(
-        mkNativeInc() as NativeExpr,
-        cons(
-          mkNativeInc() as NativeExpr,
-          mkNativeNum(0) as NativeExpr,
-        ) as NativeExpr,
-      );
+      const expr = {
+        kind: "non-terminal" as const,
+        lft: mkNativeInc() as NativeExpr,
+        rgt: {
+          kind: "non-terminal" as const,
+          lft: mkNativeInc() as NativeExpr,
+          rgt: mkNativeNum(0) as NativeExpr,
+        } as NativeExpr,
+      };
       const out = reduceNat(expr);
       assertIsNum(out);
       assert.equal(out.value, 2);
@@ -138,7 +146,7 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
     });
 
     await t.step("malformed numeral gives 1", () => {
-      assert.equal(unChurchNumber(apply(S, K, I)), 1);
+      assert.equal(unChurchNumber(applyMany(S, K, I)), 1);
     });
 
     await t.step("combinator constants", async (t) => {

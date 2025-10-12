@@ -6,7 +6,6 @@
  *
  * @module
  */
-import { cons, type ConsCell } from "../cons.ts";
 import type { SKITerminal } from "./terminal.ts";
 
 /*
@@ -27,7 +26,13 @@ import type { SKITerminal } from "./terminal.ts";
 /**
  * An SKI expression is either a terminal symbol (S, K, I) or an application node.
  */
-export type SKIExpression = SKITerminal | ConsCell<SKIExpression>;
+export interface SKIApplication {
+  kind: "non-terminal";
+  lft: SKIExpression;
+  rgt: SKIExpression;
+}
+
+export type SKIExpression = SKITerminal | SKIApplication;
 export type SKIChar = "S" | "K" | "I" | "(" | ")";
 export type SKIKey = SKIChar[];
 
@@ -125,14 +130,29 @@ export const terminals = (exp: SKIExpression): number => {
 };
 
 /**
- * Apply a function to its arguments.
+ * Creates an application of one SKI expression to another.
+ * @param left the function expression
+ * @param right the argument expression
+ * @returns a new application node
+ */
+export const apply = (
+  left: SKIExpression,
+  right: SKIExpression,
+): SKIExpression => ({
+  kind: "non-terminal",
+  lft: left,
+  rgt: right,
+});
+
+/**
+ * Apply multiple expressions in sequence (left-associative).
  * @param exps an array of expressions.
  * @returns an unevaluated result.
  */
-export const apply = (...exps: SKIExpression[]): SKIExpression => {
+export const applyMany = (...exps: SKIExpression[]): SKIExpression => {
   if (exps.length <= 0) {
     throw new Error("there must be at least one expression to apply");
   } else {
-    return exps.reduce(cons<SKIExpression>);
+    return exps.reduce(apply);
   }
 };

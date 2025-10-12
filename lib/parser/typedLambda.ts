@@ -27,6 +27,7 @@ import {
 import { parseChain } from "./chain.ts";
 import { parseArrowType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
+import { createTypedApplication } from "../types/typedLambda.ts";
 import { ParseError } from "./parseError.ts";
 
 /**
@@ -84,7 +85,11 @@ export function parseAtomicTypedLambda(
 export function parseTypedLambdaInternal(
   state: ParserState,
 ): [string, TypedLambda, ParserState] {
-  return parseChain<TypedLambda>(state, parseAtomicTypedLambda);
+  return parseChain<TypedLambda>(
+    state,
+    parseAtomicTypedLambda,
+    createTypedApplication,
+  );
 }
 
 /**

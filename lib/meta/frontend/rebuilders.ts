@@ -6,8 +6,8 @@
  *
  * @module
  */
-import { cons } from "../../cons.ts";
 import {
+  createSystemFApplication,
   referencesVar,
   substituteSystemFType as substituteType,
 } from "../../types/systemF.ts";
@@ -15,7 +15,9 @@ import type { BaseType } from "../../types/types.ts";
 import type { TripLangTerm } from "../trip.ts";
 import type { SystemFTerm } from "../../terms/systemF.ts";
 import type { TypedLambda } from "../../types/typedLambda.ts";
+import { createTypedApplication } from "../../types/typedLambda.ts";
 import type { UntypedLambda } from "../../terms/lambda.ts";
+import { createApplication } from "../../terms/lambda.ts";
 import { isNonTerminalNode } from "./predicates.ts";
 import { CompilationError } from "./compilation.ts";
 
@@ -71,7 +73,7 @@ export function polyRebuild(
   term: TripLangTerm,
 ): SystemFTerm {
   if (isNonTerminalNode(n)) {
-    return rebuildNonTerminal(n, rebuilt, cons);
+    return rebuildNonTerminal(n, rebuilt, createSystemFApplication);
   } else if (n.kind === "systemF-abs") {
     return rebuildSystemFAbs(n, rebuilt);
   } else if (n.kind === "systemF-type-abs") {
@@ -96,7 +98,7 @@ export function typedRebuild(
   rebuilt: TypedLambda[],
 ): TypedLambda {
   if (isNonTerminalNode(n)) {
-    return rebuildNonTerminal(n, rebuilt, cons);
+    return rebuildNonTerminal(n, rebuilt, createTypedApplication);
   } else if (n.kind === "typed-lambda-abstraction") {
     return rebuildTypedLambdaAbs(n, rebuilt);
   } else {
@@ -112,7 +114,7 @@ export const untypedRebuild = (
   n: UntypedLambda,
   rebuilt: UntypedLambda[],
 ): UntypedLambda =>
-  isNonTerminalNode(n) ? rebuildNonTerminal(n, rebuilt, cons) : n;
+  isNonTerminalNode(n) ? rebuildNonTerminal(n, rebuilt, createApplication) : n;
 
 export function polyTypeRebuild(
   n: SystemFTerm,
@@ -121,7 +123,7 @@ export function polyTypeRebuild(
   targetBase: BaseType,
 ): SystemFTerm {
   if (isNonTerminalNode(n)) {
-    return rebuildNonTerminal(n, rebuilt, cons);
+    return rebuildNonTerminal(n, rebuilt, createSystemFApplication);
   } else if (n.kind === "systemF-abs") {
     const nextType = referencesVar(n.typeAnnotation, typeRef)
       ? substituteType(n.typeAnnotation, typeRef, targetBase)
@@ -155,7 +157,7 @@ export function typedTypeRebuild(
   rebuilt: TypedLambda[],
 ): TypedLambda {
   if (isNonTerminalNode(n)) {
-    return rebuildNonTerminal(n, rebuilt, cons);
+    return rebuildNonTerminal(n, rebuilt, createTypedApplication);
   } else if (n.kind === "typed-lambda-abstraction") {
     return rebuildTypedLambdaAbs(n, rebuilt);
   } else {

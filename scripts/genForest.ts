@@ -1,4 +1,4 @@
-import { cons } from "../lib/cons.ts";
+import { apply } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import {
@@ -54,7 +54,7 @@ function enumerateExpressions(leaves: number): SKIExpression[] {
       const rightLeaves = leaves - leftLeaves;
       for (const leftExpr of enumerateExpressions(leftLeaves)) {
         for (const rightExpr of enumerateExpressions(rightLeaves)) {
-          result.push(cons(leftExpr, rightExpr));
+          result.push(apply(leftExpr, rightExpr));
         }
       }
     }

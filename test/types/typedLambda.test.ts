@@ -1,9 +1,9 @@
 import { expect } from "chai";
 
-import { cons } from "../../lib/cons.ts";
 import { mkVar } from "../../lib/terms/lambda.ts";
 import {
   addBinding,
+  createTypedApplication,
   emptyContext,
   mkTypedAbs,
   typecheckTypedLambda,
@@ -63,9 +63,9 @@ Deno.test("typed λ-calculus type-checker", async (t) => {
           mkTypedAbs(
             "z",
             mkTypeVariable("a"),
-            cons(
-              cons(mkVar("x"), mkVar("z")),
-              cons(mkVar("y"), mkVar("z")),
+            createTypedApplication(
+              createTypedApplication(mkVar("x"), mkVar("z")),
+              createTypedApplication(mkVar("y"), mkVar("z")),
             ),
           ),
         ),

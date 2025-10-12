@@ -6,8 +6,8 @@
  *
  * @module
  */
-import { cons } from "../cons.ts";
 import type { SKIExpression } from "./expression.ts";
+import { apply } from "./expression.ts";
 import { SKITerminalSymbol, term } from "./terminal.ts";
 
 export type SymbolHeap = (SKITerminalSymbol | undefined)[];
@@ -93,7 +93,7 @@ function unheapifyFrom(heapSyms: SymbolHeap, heapIdx: number): SKIExpression {
   if (heapValue) {
     return term(heapValue);
   } else {
-    return cons(
+    return apply(
       unheapifyFrom(heapSyms, lftIndex(heapIdx)),
       unheapifyFrom(heapSyms, rgtIndex(heapIdx)),
     );

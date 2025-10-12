@@ -6,7 +6,7 @@
  *
  * @module
  */
-import { cons, type ConsCell } from "../cons.ts";
+import { arrow, type BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
 import {
   type AVLTree,
   createEmptyAVL,
@@ -15,11 +15,11 @@ import {
 } from "../data/avl/avlNode.ts";
 import { compareStrings } from "../data/map/stringMap.ts";
 import {
+  createApplication,
   type LambdaVar,
   mkUntypedAbs,
   type UntypedLambda,
 } from "../terms/lambda.ts";
-import { arrow, type BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -49,7 +49,16 @@ export interface TypedLambdaAbs {
 export type TypedLambda =
   | LambdaVar
   | TypedLambdaAbs
-  | ConsCell<TypedLambda>;
+  | TypedLambdaApplication;
+
+/**
+ * An application in the typed lambda calculus
+ */
+export interface TypedLambdaApplication {
+  kind: "non-terminal";
+  lft: TypedLambda;
+  rgt: TypedLambda;
+}
 
 export const mkTypedAbs = (
   varName: string,
@@ -60,6 +69,21 @@ export const mkTypedAbs = (
   varName,
   ty,
   body,
+});
+
+/**
+ * Creates an application of one typed lambda term to another.
+ * @param left the function term
+ * @param right the argument term
+ * @returns a new application node
+ */
+export const createTypedApplication = (
+  left: TypedLambda,
+  right: TypedLambda,
+): TypedLambda => ({
+  kind: "non-terminal",
+  lft: left,
+  rgt: right,
 });
 
 /**
@@ -143,6 +167,8 @@ export const typecheckGiven = (
 
       return gives;
     }
+    default:
+      throw new TypeError("Unknown term kind");
   }
 };
 
@@ -172,6 +198,8 @@ export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
         prettyPrintTypedLambda(expr.rgt) +
         ")";
     }
+    default:
+      throw new Error("Unknown term kind");
   }
 };
 
@@ -202,6 +230,11 @@ export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
     case "typed-lambda-abstraction":
       return mkUntypedAbs(t.varName, eraseTypedLambda(t.body));
     case "non-terminal":
-      return cons(eraseTypedLambda(t.lft), eraseTypedLambda(t.rgt));
+      return createApplication(
+        eraseTypedLambda(t.lft),
+        eraseTypedLambda(t.rgt),
+      );
+    default:
+      throw new Error("Unknown term kind");
   }
 };

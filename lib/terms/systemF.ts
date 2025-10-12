@@ -7,7 +7,6 @@
  *
  * @module
  */
-import type { ConsCell } from "../cons.ts";
 import type { BaseType } from "../types/types.ts";
 
 /**
@@ -93,12 +92,36 @@ export const mkSystemFApp = (
  *  - a type application, or
  *  - a term application (represented as a cons cell over SystemFTerm).
  */
+/**
+ * An application in System F
+ */
+export interface SystemFApplication {
+  kind: "non-terminal";
+  lft: SystemFTerm;
+  rgt: SystemFTerm;
+}
+
 export type SystemFTerm =
   | SystemFVar
   | SystemFAbs
   | SystemFTAbs
   | SystemFTypeApp
-  | ConsCell<SystemFTerm>;
+  | SystemFApplication;
+
+/**
+ * Creates an application of one System F term to another.
+ * @param left the function term
+ * @param right the argument term
+ * @returns a new application node
+ */
+export const createSystemFApplication = (
+  left: SystemFTerm,
+  right: SystemFTerm,
+): SystemFTerm => ({
+  kind: "non-terminal",
+  lft: left,
+  rgt: right,
+});
 
 /**
  * Pretty-prints a System F term using λ for term abstraction and Λ for type abstraction.

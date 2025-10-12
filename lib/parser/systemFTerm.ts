@@ -24,6 +24,7 @@ import {
   type SystemFTerm,
 } from "../terms/systemF.ts";
 import { parseChain } from "./chain.ts";
+import { createSystemFApplication } from "../terms/systemF.ts";
 
 /**
  * Parses an atomic System F term.
@@ -102,7 +103,11 @@ export function parseAtomicSystemFTerm(
 export function parseSystemFTerm(
   state: ParserState,
 ): [string, SystemFTerm, ParserState] {
-  return parseChain<SystemFTerm>(state, parseAtomicSystemFTerm);
+  return parseChain<SystemFTerm>(
+    state,
+    parseAtomicSystemFTerm,
+    createSystemFApplication,
+  );
 }
 
 /**

@@ -7,7 +7,6 @@
  *
  * @module
  */
-import { cons } from "../cons.ts";
 import { ParseError } from "./parseError.ts";
 import {
   isAtDefinitionKeywordLine,
@@ -26,12 +25,14 @@ import {
  * @param state the current parser state.
  * @param parseAtomic a function that parses an atomic term from the state,
  *   returning a triple: [literal, term, updatedState].
+ * @param createApplication a function that creates an application of two terms.
  * @returns a triple: [concatenated literal, chained term, updated parser state].
  * @throws ParseError if no term is parsed.
  */
 export function parseChain<T>(
   state: ParserState,
   parseAtomic: (state: ParserState) => [string, T, ParserState],
+  createApplication: (left: T, right: T) => T,
 ): [string, T, ParserState] {
   const literals: string[] = [];
   let resultTerm: T | undefined = undefined;
@@ -54,7 +55,7 @@ export function parseChain<T>(
     if (resultTerm === undefined) {
       resultTerm = atomTerm;
     } else {
-      resultTerm = cons(resultTerm, atomTerm) as T;
+      resultTerm = createApplication(resultTerm, atomTerm);
     }
 
     currentState = skipWhitespace(newState);

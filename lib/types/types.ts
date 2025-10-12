@@ -7,7 +7,6 @@
  *
  * @module
  */
-import { cons, type ConsCell } from "../cons.ts";
 
 export interface TypeVariable {
   kind: "type-var";
@@ -20,18 +19,27 @@ export interface ForallType {
   body: BaseType;
 }
 
-export type BaseType = TypeVariable | ConsCell<BaseType> | ForallType;
+export interface ArrowType {
+  kind: "non-terminal";
+  lft: BaseType;
+  rgt: BaseType;
+}
+
+export type BaseType = TypeVariable | ArrowType | ForallType;
 
 export const mkTypeVariable = (name: string): TypeVariable => ({
   kind: "type-var",
   typeName: name,
 });
 
-export const arrow = (a: BaseType, b: BaseType): ConsCell<BaseType> =>
-  cons(a, b);
+export const arrow = (a: BaseType, b: BaseType): ArrowType => ({
+  kind: "non-terminal",
+  lft: a,
+  rgt: b,
+});
 
 export const arrows = (...tys: BaseType[]): BaseType =>
-  tys.reduceRight((acc, ty) => cons(ty, acc));
+  tys.reduceRight((acc, ty) => arrow(ty, acc));
 
 export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
   if (a.kind === "type-var" && b.kind === "type-var") {

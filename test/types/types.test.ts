@@ -1,10 +1,9 @@
 import { expect } from "chai";
 
-import { cons } from "../../lib/cons.ts";
 import {
+  createApplication,
   mkUntypedAbs,
   mkVar,
-  type UntypedLambda,
 } from "../../lib/terms/lambda.ts";
 import { parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
@@ -130,9 +129,9 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
               "y",
               mkUntypedAbs(
                 "z",
-                cons(
-                  cons(mkVar("x"), mkVar("z")),
-                  cons(mkVar("y"), mkVar("z")),
+                createApplication(
+                  createApplication(mkVar("x"), mkVar("z")),
+                  createApplication(mkVar("y"), mkVar("z")),
                 ),
               ),
             ),
@@ -147,7 +146,10 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
 
       await t.step("λx.λy.xy", () => {
         const [term, ty] = inferType(
-          mkUntypedAbs("x", mkUntypedAbs("y", cons(mkVar("x"), mkVar("y")))),
+          mkUntypedAbs(
+            "x",
+            mkUntypedAbs("y", createApplication(mkVar("x"), mkVar("y"))),
+          ),
         );
         const [, typed] = parseTypedLambda("λx:a→b.λy:a.x y");
         const [, parsed] = parseType("(a→b)→(a→b)");
@@ -159,7 +161,11 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
 
     await t.step("inference failures", async (t) => {
       await t.step("λx.xx fails (occurs check)", () => {
-        expect(() => inferType(mkUntypedAbs("x", cons(mkVar("x"), mkVar("x")))))
+        expect(() =>
+          inferType(
+            mkUntypedAbs("x", createApplication(mkVar("x"), mkVar("x"))),
+          )
+        )
           .to.throw(/occurs check failed/);
       });
 
@@ -170,8 +176,8 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
               "x",
               mkUntypedAbs(
                 "y",
-                cons<UntypedLambda>(
-                  cons<UntypedLambda>(mkVar("x"), mkVar("y")),
+                createApplication(
+                  createApplication(mkVar("x"), mkVar("y")),
                   mkVar("x"),
                 ),
               ),

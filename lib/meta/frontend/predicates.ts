@@ -28,6 +28,10 @@ export function needsRebuild(
     case "systemF-type-app":
     case "typed-lambda-abstraction":
       return true;
+    case "systemF-var":
+    case "lambda-var":
+    case "lambda-abs":
+      return false;
     default:
       return false;
   }

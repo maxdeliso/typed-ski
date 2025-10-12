@@ -8,7 +8,7 @@
  * @module
  */
 import { False, One, Succ, True, Zero } from "../consts/combinators.ts";
-import { apply, type SKIExpression } from "./expression.ts";
+import { apply, applyMany, type SKIExpression } from "./expression.ts";
 import { symbolicEvaluator } from "../evaluator/skiEvaluator.ts";
 import { unChurchNumber as unChurchNumberNative } from "./native.ts";
 
@@ -49,7 +49,7 @@ export const UnChurchNumber = (exp: SKIExpression): number => {
 export const UnChurchBoolean = (expr: SKIExpression): boolean => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
   const testExpr = symbolicEvaluator.reduce(
-    apply(expr, ChurchN(1), ChurchN(0)),
+    applyMany(expr, ChurchN(1), ChurchN(0)),
   );
   return UnChurchNumber(testExpr) === 1;
 };

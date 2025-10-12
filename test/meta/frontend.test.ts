@@ -7,7 +7,6 @@ import {
   bracketLambda,
   compile,
   eraseSystemF,
-  eraseTypedLambda,
   externalReferences,
   indexSymbols,
   parseSystemF,
@@ -82,7 +81,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     const compiled = compile(src);
     const mainPoly = resolvePoly(compiled, "main");
     const skiMain = bracketLambda(
-      eraseTypedLambda(eraseSystemF(mainPoly.term)),
+      eraseSystemF(mainPoly.term),
     );
     const nf = arenaEval.reduce(skiMain);
     assert.equal(UnChurchNumber(nf), 3);
@@ -96,7 +95,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       const termPoly = compiled.program.terms.find(
         (d) => d.kind === "poly" && d.name === name,
       ) as { kind: "poly"; term: SystemFTerm };
-      const ski = bracketLambda(eraseTypedLambda(eraseSystemF(termPoly.term)));
+      const ski = bracketLambda(eraseSystemF(termPoly.term));
       return UnChurchNumber(arenaEval.reduce(ski));
     };
 
@@ -114,16 +113,12 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     const sixPoly = resolvePoly(compiled, "six");
 
     const skiSix = bracketLambda(
-      eraseTypedLambda(eraseSystemF(
-        sixPoly.term,
-      )),
+      eraseSystemF(sixPoly.term),
     );
 
     const twentyFourPoly = resolvePoly(compiled, "twentyFour");
     const ski24 = bracketLambda(
-      eraseTypedLambda(eraseSystemF(
-        twentyFourPoly.term,
-      )),
+      eraseSystemF(twentyFourPoly.term),
     );
 
     assert.equal(UnChurchNumber(arenaEval.reduce(skiSix)), 6);
@@ -209,7 +204,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     );
     const mainPoly = resolvePoly(compiled, "main");
     const mainRes = symbolicEvaluator.reduce(
-      bracketLambda(eraseTypedLambda(eraseSystemF(mainPoly.term))),
+      bracketLambda(eraseSystemF(mainPoly.term)),
     );
     assert.equal(UnChurchNumber(mainRes), 24);
   });

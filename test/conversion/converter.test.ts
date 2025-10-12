@@ -1,13 +1,16 @@
 import { expect } from "chai";
 
-import { cons } from "../../lib/cons.ts";
 import { predLambda } from "../../lib/consts/lambdas.ts";
 import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
-import { apply } from "../../lib/ski/expression.ts";
+import { apply, applyMany } from "../../lib/ski/expression.ts";
 import { I } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
-import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
+import {
+  createApplication,
+  mkUntypedAbs,
+  mkVar,
+} from "../../lib/terms/lambda.ts";
 
 Deno.test("Lambda conversion", async (t) => {
   const N = 5;
@@ -15,7 +18,7 @@ Deno.test("Lambda conversion", async (t) => {
   const konst = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
   const flip = mkUntypedAbs(
     "x",
-    mkUntypedAbs("y", cons(mkVar("y"), mkVar("x"))),
+    mkUntypedAbs("y", createApplication(mkVar("y"), mkVar("x"))),
   );
 
   await t.step("basic combinators", async (t) => {
@@ -31,7 +34,7 @@ Deno.test("Lambda conversion", async (t) => {
           for (let b = 0; b < N; b++) {
             const result = UnChurchNumber(
               symbolicEvaluator.reduce(
-                apply(bracketLambda(konst), ChurchN(a), ChurchN(b)),
+                applyMany(bracketLambda(konst), ChurchN(a), ChurchN(b)),
               ),
             );
             expect(result).to.equal(a);
@@ -62,7 +65,7 @@ Deno.test("Lambda conversion", async (t) => {
           const expected = a ** b; // exponentiation: a^b
           const result = UnChurchNumber(
             symbolicEvaluator.reduce(
-              apply(bracketLambda(flip), ChurchN(a), ChurchN(b)),
+              applyMany(bracketLambda(flip), ChurchN(a), ChurchN(b)),
             ),
           );
           expect(result).to.equal(expected);

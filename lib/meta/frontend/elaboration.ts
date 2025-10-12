@@ -11,13 +11,13 @@ import { searchAVL } from "../../data/avl/avlNode.ts";
 import { compareStrings } from "../../data/map/stringMap.ts";
 import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
 import {
+  createSystemFApplication,
   mkSystemFAbs,
   mkSystemFTAbs,
   mkSystemFTypeApp,
   type SystemFTerm,
 } from "../../terms/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
-import { cons } from "../../cons.ts";
 
 export function elaborateTerms(
   parsed: TripLangProgram,
@@ -98,7 +98,7 @@ export function elaborateSystemF(
         return mkSystemFTypeApp(elaboratedLft, typeArg);
       }
 
-      return cons(elaboratedLft, elaboratedRgt);
+      return createSystemFApplication(elaboratedLft, elaboratedRgt);
     }
   }
 }

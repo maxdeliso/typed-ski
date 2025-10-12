@@ -122,10 +122,6 @@ export {
 /** Searches for a key in an AVL tree and returns the associated value or undefined if not found. */
 export { searchAVL } from "./data/avl/avlNode.ts";
 
-// Cons cell utilities
-/** Creates a cons cell (non-terminal node) with left and right children. */
-export { cons, type ConsCell } from "./cons.ts";
-
 // SKI terminal and expression utilities
 export {
   /** The I combinator (identity function). */

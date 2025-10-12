@@ -20,6 +20,16 @@
 /** Evaluates SKI expressions symbolically without performing actual computation. */
 export { symbolicEvaluator } from "./evaluator/skiEvaluator.ts";
 
+// WebAssembly arena evaluator exports
+/** Creates a WebAssembly-based arena evaluator using the debug WASM binary. */
+export { createArenaEvaluator } from "./evaluator/arenaEvaluator.ts";
+/** Creates a WebAssembly-based arena evaluator using the release WASM binary. */
+export { createArenaEvaluatorRelease } from "./evaluator/arenaEvaluator.ts";
+/** Fetches and returns the raw ArrayBuffer of the debug WASM module. */
+export { getWasmBytes } from "./evaluator/arenaEvaluator.ts";
+/** Fetches and returns the raw ArrayBuffer of the release WASM module. */
+export { getWasmBytesRelease } from "./evaluator/arenaEvaluator.ts";
+
 // SKI expression exports
 export {
   /** Generates a human-readable string representation of an SKI expression. */

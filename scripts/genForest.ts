@@ -2,8 +2,8 @@ import { apply } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import {
+  createArenaEvaluatorRelease,
   hasEmbedding,
-  initArenaEvaluator,
 } from "../lib/evaluator/arenaEvaluator.ts";
 import type { EvaluationStep, GlobalInfo } from "./types.ts";
 
@@ -66,9 +66,8 @@ function enumerateExpressions(leaves: number): SKIExpression[] {
 
 export async function* generateEvaluationForest(
   symbolCount: number,
-  wasmPath: string,
 ): AsyncGenerator<string, void, unknown> {
-  const evaluator = await initArenaEvaluator(wasmPath);
+  const evaluator = await createArenaEvaluatorRelease();
   const allExprs = enumerateExpressions(symbolCount);
   const total = allExprs.length;
   let count = 0;
@@ -148,7 +147,6 @@ export async function* generateEvaluationForest(
 }
 
 async function streamToFile(symbolCount: number, outputPath: string) {
-  const wasmPath = "assembly/build/release.wasm";
   const file = await Deno.open(outputPath, {
     write: true,
     create: true,
@@ -157,7 +155,7 @@ async function streamToFile(symbolCount: number, outputPath: string) {
   const encoder = new TextEncoder();
 
   try {
-    for await (const data of generateEvaluationForest(symbolCount, wasmPath)) {
+    for await (const data of generateEvaluationForest(symbolCount)) {
       await file.write(encoder.encode(data + "\n"));
     }
     console.error(`Successfully wrote evaluation forest to ${outputPath}`);

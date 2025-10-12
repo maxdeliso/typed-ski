@@ -1,7 +1,9 @@
 import { assert } from "chai";
 
-import { dirname, fromFileUrl, join } from "std/path";
+import { dirname, fromFileUrl } from "std/path";
 import { loadInput } from "../util/fileLoader.ts";
+
+const __dirname = dirname(fromFileUrl(import.meta.url));
 
 import {
   bracketLambda,
@@ -24,17 +26,14 @@ import {
 import { type AVLTree, keyValuePairs } from "../../lib/data/avl/avlNode.ts";
 import { compareStrings } from "../../lib/data/map/stringMap.ts";
 import type { BaseType } from "../../lib/types/types.ts";
-import { initArenaEvaluator } from "../../lib/evaluator/arenaEvaluator.ts";
+import { createArenaEvaluator } from "../../lib/evaluator/arenaEvaluator.ts";
 
 import {
   resolvePoly,
   resolveUntyped,
 } from "../../lib/meta/frontend/compilation.ts";
 
-const __dirname = dirname(fromFileUrl(import.meta.url));
-const wasmPath = join(__dirname, "../../assembly/build/debug.wasm");
-
-const arenaEval = await initArenaEvaluator(wasmPath);
+const arenaEval = await createArenaEvaluator();
 
 function isSystemFTerm(term: unknown): term is SystemFTerm {
   return !!term && typeof term === "object" &&

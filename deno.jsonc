@@ -1,11 +1,9 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "license": "MIT",
   "exports": {
-    ".": "./lib/index.ts",
-    "./wasm-debug-binary": "./assembly/build/debug.wasm",
-    "./wasm-release-binary": "./assembly/build/release.wasm"
+    ".": "./lib/index.ts"
   },
   "publish": {
     "include": [

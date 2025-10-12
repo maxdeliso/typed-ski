@@ -1,5 +1,9 @@
 // Shared type definitions for evaluation forest data
 
+import type { ArenaNode } from "../lib/shared/types.ts";
+
+export type { ArenaNode };
+
 export interface EvaluationStep {
   from: number;
   to: number;
@@ -10,14 +14,6 @@ export interface EvaluationPath {
   sink: number;
   steps: EvaluationStep[];
   hasCycle: boolean; // true if homeomorphic embedding cutoff occurred
-}
-
-export interface ArenaNode {
-  id: number;
-  kind: "terminal" | "non-terminal";
-  sym?: string;
-  left?: number;
-  right?: number;
 }
 
 export interface GlobalInfo {

@@ -6,14 +6,13 @@
  *
  * @module
  */
-import { promises as fs } from "node:fs";
 
 import type { SKIExpression } from "../ski/expression.ts";
 import { apply } from "../ski/expression.ts";
 import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
-import type { ArenaNode } from "../../scripts/types.ts";
+import type { ArenaNode } from "../shared/types.ts";
 
 interface ArenaWasmExports {
   memory: WebAssembly.Memory;
@@ -57,10 +56,9 @@ export class ArenaEvaluatorWasm implements Evaluator {
   }
 
   static async instantiate(
-    wasmPath: string,
+    wasmBytes: BufferSource,
   ): Promise<ArenaEvaluatorWasm> {
-    const bytes = (await fs.readFile(wasmPath)) as unknown as BufferSource;
-    const { instance } = await WebAssembly.instantiate(bytes);
+    const { instance } = await WebAssembly.instantiate(wasmBytes);
 
     const ex = instance.exports as Record<string, unknown>;
 
@@ -97,7 +95,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     return evaluator;
   }
 
-  stepOnce(expr: SKIExpression) {
+  stepOnce(expr: SKIExpression): { altered: boolean; expr: SKIExpression } {
     const next = this.$.arenaKernelStep(this.toArena(expr));
     return {
       altered: next !== this.toArena(expr),
@@ -152,7 +150,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     );
   }
 
-  dumpArena() {
+  dumpArena(): { nodes: ArenaNode[] } {
     const nodes: Array<
       | { id: number; kind: "terminal"; sym: string }
       | { id: number; kind: "non-terminal"; left: number; right: number }
@@ -194,8 +192,114 @@ export class ArenaEvaluatorWasm implements Evaluator {
   }
 }
 
-export async function initArenaEvaluator(wasmPath: string) {
-  return await ArenaEvaluatorWasm.instantiate(wasmPath);
+export async function initArenaEvaluator(wasmBytes: BufferSource) {
+  return await ArenaEvaluatorWasm.instantiate(wasmBytes);
+}
+
+// Memoized WASM loader functions
+let cachedDebugEvaluator: Promise<ArenaEvaluatorWasm> | null = null;
+let cachedReleaseEvaluator: Promise<ArenaEvaluatorWasm> | null = null;
+let cachedDebugBytes: Promise<ArrayBuffer> | null = null;
+let cachedReleaseBytes: Promise<ArrayBuffer> | null = null;
+
+/**
+ * Creates an arena evaluator using the debug WASM binary.
+ * This function is memoized and will reuse the same instance across calls.
+ *
+ * @returns A promise that resolves to a ready-to-use arena evaluator
+ * @example
+ * ```ts
+ * const evaluator = await createArenaEvaluator();
+ * const result = evaluator.reduce(parseSKI("(K S) I"));
+ * ```
+ */
+export async function createArenaEvaluator(): Promise<ArenaEvaluatorWasm> {
+  if (cachedDebugEvaluator === null) {
+    cachedDebugEvaluator = (async () => {
+      const bytes = await getWasmBytes();
+      return await ArenaEvaluatorWasm.instantiate(bytes);
+    })();
+  }
+  return await cachedDebugEvaluator;
+}
+
+/**
+ * Creates an arena evaluator using the release WASM binary.
+ * This function is memoized and will reuse the same instance across calls.
+ *
+ * @returns A promise that resolves to a ready-to-use arena evaluator
+ * @example
+ * ```ts
+ * const evaluator = await createArenaEvaluatorRelease();
+ * const result = evaluator.reduce(parseSKI("(K S) I"));
+ * ```
+ */
+export async function createArenaEvaluatorRelease(): Promise<
+  ArenaEvaluatorWasm
+> {
+  if (cachedReleaseEvaluator === null) {
+    cachedReleaseEvaluator = (async () => {
+      const bytes = await getWasmBytesRelease();
+      return await ArenaEvaluatorWasm.instantiate(bytes);
+    })();
+  }
+  return await cachedReleaseEvaluator;
+}
+
+/**
+ * Fetches and returns the raw ArrayBuffer of the debug WASM module.
+ * This function is memoized and will reuse the same bytes across calls.
+ *
+ * @returns A promise that resolves to the WASM module bytes
+ * @example
+ * ```ts
+ * const bytes = await getWasmBytes();
+ * const evaluator = await ArenaEvaluatorWasm.instantiate(bytes);
+ * ```
+ */
+export async function getWasmBytes(): Promise<ArrayBuffer> {
+  if (cachedDebugBytes === null) {
+    cachedDebugBytes = (async () => {
+      const response = await fetch(
+        new URL("../../assembly/build/debug.wasm", import.meta.url),
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch WASM bytes: ${response.status} ${response.statusText}`,
+        );
+      }
+      return await response.arrayBuffer();
+    })();
+  }
+  return await cachedDebugBytes;
+}
+
+/**
+ * Fetches and returns the raw ArrayBuffer of the release WASM module.
+ * This function is memoized and will reuse the same bytes across calls.
+ *
+ * @returns A promise that resolves to the WASM module bytes
+ * @example
+ * ```ts
+ * const bytes = await getWasmBytesRelease();
+ * const evaluator = await ArenaEvaluatorWasm.instantiate(bytes);
+ * ```
+ */
+export async function getWasmBytesRelease(): Promise<ArrayBuffer> {
+  if (cachedReleaseBytes === null) {
+    cachedReleaseBytes = (async () => {
+      const response = await fetch(
+        new URL("../../assembly/build/release.wasm", import.meta.url),
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch WASM bytes: ${response.status} ${response.statusText}`,
+        );
+      }
+      return await response.arrayBuffer();
+    })();
+  }
+  return await cachedReleaseBytes;
 }
 
 // Homeomorphic embedding: a ⊑ b

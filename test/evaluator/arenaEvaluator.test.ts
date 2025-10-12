@@ -1,11 +1,10 @@
 import { assert, assertEquals } from "std/assert";
-import { dirname, fromFileUrl, join } from "std/path";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 
 import {
   type ArenaEvaluatorWasm,
-  initArenaEvaluator,
+  createArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { prettyPrint } from "../../lib/ski/expression.ts";
@@ -15,11 +14,7 @@ import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 let arenaEval: ArenaEvaluatorWasm;
 
 async function setupEvaluator() {
-  const wasmPath = join(
-    dirname(fromFileUrl(import.meta.url)),
-    "../../assembly/build/debug.wasm",
-  );
-  arenaEval = await initArenaEvaluator(wasmPath);
+  arenaEval = await createArenaEvaluator();
 }
 
 // Setup before all tests

@@ -32,6 +32,10 @@ import {
   untypedRebuild,
 } from "./rebuilders.ts";
 import { CompilationError } from "./compilation.ts";
+import {
+  substituteHygienic,
+  substituteTypeHygienic,
+} from "./hygienicSubstitution.ts";
 
 /**
  * Resolves all external references across a program using the provided symbol table.
@@ -323,4 +327,133 @@ export function substitute<T extends TripLangValueType>(
     );
   }
   return result;
+}
+
+/**
+ * Direct substitution without lowering - preserves term levels with hygienic binding
+ */
+export function substituteTripLangTermDirect(
+  current: TripLangTerm,
+  term: TripLangTerm,
+  symbolName?: string,
+): TripLangTerm {
+  const currentDefinitionValue = extractDefinitionValue(current);
+  if (!currentDefinitionValue) {
+    return current;
+  }
+
+  const termDefinitionValue = extractDefinitionValue(term);
+  if (!termDefinitionValue) {
+    return current;
+  }
+
+  // Use the provided symbol name, or fall back to the term's name
+  const substitutionName = symbolName ?? term.name;
+
+  switch (current.kind) {
+    case "poly": {
+      return {
+        kind: "poly",
+        name: current.name,
+        term: substituteHygienic(
+          current.term,
+          substitutionName,
+          termDefinitionValue,
+        ),
+      };
+    }
+    case "typed": {
+      return {
+        kind: "typed",
+        name: current.name,
+        term: substituteHygienic(
+          current.term,
+          substitutionName,
+          termDefinitionValue,
+        ),
+      };
+    }
+    case "untyped": {
+      return {
+        ...current,
+        term: substituteHygienic(
+          current.term,
+          substitutionName,
+          termDefinitionValue,
+        ),
+      };
+    }
+    case "combinator":
+    case "type":
+      throw new CompilationError(
+        "Unexpected term kind for substitution",
+        "resolve",
+        { current },
+      );
+    case "module":
+    case "import":
+    case "export":
+      return current;
+  }
+}
+
+/**
+ * Direct type substitution without lowering - preserves term levels with hygienic binding
+ */
+export function substituteTripLangTypeDirect(
+  current: TripLangTerm,
+  type: TripLangTerm,
+): TripLangTerm {
+  if (type.kind !== "type") {
+    throw new CompilationError(
+      "Expected type definition for type substitution",
+      "resolve",
+      { type },
+    );
+  }
+
+  const currentDefinitionValue = extractDefinitionValue(current);
+  if (!currentDefinitionValue) {
+    return current;
+  }
+
+  const typeDefinitionValue = extractDefinitionValue(type);
+  if (!typeDefinitionValue) {
+    return current;
+  }
+
+  switch (current.kind) {
+    case "poly": {
+      return {
+        ...current,
+        term: substituteTypeHygienic(
+          current.term,
+          type.name,
+          typeDefinitionValue,
+        ),
+      };
+    }
+    case "typed": {
+      return {
+        ...current,
+        term: substituteTypeHygienic(
+          current.term,
+          type.name,
+          typeDefinitionValue,
+        ),
+      };
+    }
+    case "untyped":
+    case "combinator":
+    case "module":
+    case "import":
+    case "export":
+      return current;
+    default:
+      throw new CompilationError(
+        "Unexpected term kind for type substitution",
+        "resolve",
+        { current },
+      );
+  }
 }

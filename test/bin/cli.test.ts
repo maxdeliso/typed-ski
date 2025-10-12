@@ -251,7 +251,7 @@ poly id = Λa. λx:a. x`;
       const tripcTs = await Deno.readTextFile(
         join(projectRoot, "bin/tripc.ts"),
       );
-      expect(tripcTs).to.include("TripLang Compiler CLI");
+      expect(tripcTs).to.include("TripLang Compiler & Linker");
       expect(tripcTs).to.include("compileToObjectFileString");
     });
   });
@@ -299,7 +299,7 @@ poly id = Λa. λx:a. x`;
         ]);
 
         expect(result.success).to.be.true;
-        expect(result.stdout).to.include("TripLang Compiler (tripc)");
+        expect(result.stdout).to.include("TripLang Compiler & Linker (tripc)");
         expect(result.stdout).to.include("USAGE:");
       });
 
@@ -462,7 +462,7 @@ poly id = Λa. λx:a. x`;
         const result = await runCommand(["./dist/tripc", "--help"]);
 
         expect(result.success).to.be.true;
-        expect(result.stdout).to.include("TripLang Compiler (tripc)");
+        expect(result.stdout).to.include("TripLang Compiler & Linker (tripc)");
         expect(result.stdout).to.include("USAGE:");
       });
 

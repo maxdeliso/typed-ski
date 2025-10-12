@@ -1,0 +1,5 @@
+module Complex
+
+export main
+
+poly main = ΛX. λx: X. λy: X. λz: X. x

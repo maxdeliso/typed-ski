@@ -12,6 +12,7 @@ import type { UntypedLambda } from "../../terms/lambda.ts";
 import type { TripLangTerm } from "../trip.ts";
 import { substituteSystemFType } from "../../types/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
+import { systemFToTypedLambda } from "./lowering.ts";
 
 export const replace = <T extends SystemFTerm | TypedLambda | UntypedLambda>(
   n: T,
@@ -22,6 +23,11 @@ export const replace = <T extends SystemFTerm | TypedLambda | UntypedLambda>(
   }
   if (n.kind === "lambda-var" && term.kind === "typed") {
     return term.term as T;
+  }
+  if (n.kind === "lambda-var" && term.kind === "poly") {
+    // Convert System F to typed lambda for proper substitution
+    const convertedTerm = systemFToTypedLambda(term.term);
+    return convertedTerm as T;
   }
   if (term.kind === "untyped") {
     return term.term as T;

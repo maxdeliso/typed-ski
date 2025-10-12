@@ -334,4 +334,11 @@ Deno.test("parseTripLang", async (t) => {
       });
     },
   );
+
+  await t.step("rejects module names containing dots", () => {
+    const input = "module My.Module";
+    expect(() => parseTripLang(input)).to.throw(
+      "expected an identifier",
+    );
+  });
 });

@@ -1,0 +1,7 @@
+module B
+
+import addA A
+
+export main
+
+typed main = λx:Int. addA x x

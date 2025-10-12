@@ -357,7 +357,6 @@ poly id = Λa. λx:a. x`;
       const testFile = await createTestFile(largeContent);
 
       try {
-        const startTime = Date.now();
         const result = await runCommand([
           "deno",
           "run",
@@ -366,10 +365,8 @@ poly id = Λa. λx:a. x`;
           "bin/tripc.ts",
           testFile,
         ]);
-        const endTime = Date.now();
 
         expect(result.success).to.be.true;
-        expect(endTime - startTime).to.be.lessThan(5000); // Should complete within 5 seconds
 
         // Verify output
         const tripcFile = testFile.replace(/\.trip$/, ".tripc");

@@ -1,0 +1,7 @@
+module A
+
+export addA
+export main
+
+poly addA = ΛX. λx: X. λy: X. x
+poly main = addA

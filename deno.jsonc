@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts",
@@ -51,6 +51,7 @@
     ]
   },
   "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.15",
     "@types/node": "npm:@types/node@^24.7.2",
     "@types/chai": "npm:@types/chai@^5.2.2",
     "std/path": "jsr:@std/path@1",
@@ -76,7 +77,7 @@
     "bundle:tripc:node": "deno task version:gen && deno bundle --platform=browser -o dist/tripc.node.js bin/tripc.ts",
     "compile:tripc": "deno task version:gen && deno compile --allow-read --allow-write --output dist/tripc bin/tripc.ts",
     "compile:tripc:cross": "deno task version:gen && deno compile --allow-read --allow-write --target x86_64-pc-windows-msvc --output dist/tripc.exe bin/tripc.ts && deno compile --allow-read --allow-write --target x86_64-unknown-linux-gnu --output dist/tripc-linux bin/tripc.ts && deno compile --allow-read --allow-write --target x86_64-apple-darwin --output dist/tripc-macos bin/tripc.ts",
-    "dist": "deno task version:gen && mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task compile:tripc",
+    "dist": "deno task version:gen && mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task bundle:tripc:node && deno task compile:tripc",
     "dist:all": "deno task dist && deno task dist:cross",
     "dist:cross": "deno task compile:tripc:cross"
   }

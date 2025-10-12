@@ -7,11 +7,20 @@
  * @module
  */
 export enum SKITerminalSymbol {
+  /** The S combinator (substitution combinator). */
   S = "S",
+  /** The K combinator (constant combinator). */
   K = "K",
+  /** The I combinator (identity combinator). */
   I = "I",
 }
 
+/**
+ * Represents a terminal symbol in an SKI expression.
+ *
+ * Terminal symbols are the atomic building blocks of SKI combinator expressions,
+ * consisting of the three fundamental combinators: S, K, and I.
+ */
 export interface SKITerminal {
   kind: "terminal";
   sym: SKITerminalSymbol;

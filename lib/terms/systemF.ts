@@ -85,15 +85,10 @@ export const mkSystemFApp = (
 ): SystemFTerm => ({ kind: "non-terminal", lft, rgt });
 
 /**
- * A System F term is one of:
- *  - a variable,
- *  - a term abstraction,
- *  - a type abstraction,
- *  - a type application, or
- *  - a term application (represented as a cons cell over SystemFTerm).
- */
-/**
- * An application in System F
+ * An application in System F representing the application of one term to another.
+ *
+ * Applications are binary operations where the left term is applied to the right term.
+ * This is the fundamental operation for function application in System F.
  */
 export interface SystemFApplication {
   kind: "non-terminal";
@@ -101,6 +96,17 @@ export interface SystemFApplication {
   rgt: SystemFTerm;
 }
 
+/**
+ * A System F term represents expressions in the polymorphic lambda calculus (System F).
+ *
+ * System F extends the simply typed lambda calculus with universal quantification over types.
+ * A System F term can be one of:
+ * - a variable (SystemFVar),
+ * - a term abstraction λx:T.t (SystemFAbs),
+ * - a type abstraction ΛX.t (SystemFTAbs),
+ * - a type application t[T] (SystemFTypeApp), or
+ * - a term application t u (SystemFApplication)
+ */
 export type SystemFTerm =
   | SystemFVar
   | SystemFAbs

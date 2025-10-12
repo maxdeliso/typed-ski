@@ -44,7 +44,16 @@ export interface TypedLambdaAbs {
 }
 
 /**
- * This recursive type represents the legal terms of the typed lambda calculus.
+ * This recursive type represents the legal terms of the simply typed lambda calculus.
+ *
+ * Simply typed lambda calculus extends the untyped lambda calculus with explicit
+ * type annotations. Every abstraction must specify the type of its parameter,
+ * and type checking ensures that applications are well-typed.
+ *
+ * A TypedLambda can be:
+ * - a variable (LambdaVar),
+ * - a typed abstraction λx:T.t (TypedLambdaAbs), or
+ * - an application t u (TypedLambdaApplication)
  */
 export type TypedLambda =
   | LambdaVar
@@ -220,8 +229,15 @@ export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
 };
 
 /**
- * @param t The typechecked lambda expression to erase types from.
- * @returns An equivalent untyped lambda expression.
+ * Erases type annotations from a simply typed lambda expression.
+ *
+ * This function converts a typed lambda term into an untyped lambda term by
+ * removing all type annotations while preserving the structure of the expression.
+ * Variables remain variables, abstractions remain abstractions (without type
+ * annotations), and applications remain applications.
+ *
+ * @param t The typechecked lambda expression to erase types from
+ * @returns An equivalent untyped lambda expression
  */
 export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
   switch (t.kind) {

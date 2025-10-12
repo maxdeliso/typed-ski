@@ -386,6 +386,18 @@ function assertKind<T extends TripLangTerm["kind"]>(
   }
 }
 
+/**
+ * Resolves a polymorphic definition by name from a typechecked program.
+ *
+ * Looks up a definition with the given name in the program and ensures it is
+ * a polymorphic (System F) definition. Throws an error if the definition
+ * is not found or is not a polymorphic definition.
+ *
+ * @param prog the typechecked program containing the definition
+ * @param id the name of the definition to resolve
+ * @returns the polymorphic definition
+ * @throws CompilationError if the definition is not found or not polymorphic
+ */
 export function resolvePoly(
   prog: TypecheckedProgramWithTypes,
   id: string,

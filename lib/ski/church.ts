@@ -13,9 +13,16 @@ import { symbolicEvaluator } from "../evaluator/skiEvaluator.ts";
 import { unChurchNumber as unChurchNumberNative } from "./native.ts";
 
 /**
+ * Creates a Church-encoded numeral from a JavaScript number.
+ *
+ * Church numerals represent natural numbers as functions that apply another function
+ * a specified number of times. For example, Church numeral 2 applies a function f
+ * twice: f(f(x)).
+ *
  * @see https://en.wikipedia.org/wiki/Church_encoding
- * @param n a number
- * @returns an extensionally equivalent Church numeral.
+ * @param n a non-negative integer
+ * @returns an extensionally equivalent Church numeral as an SKI expression
+ * @throws Error if n is not an integer or is negative
  */
 export const ChurchN = (n: number): SKIExpression => {
   if (!Number.isInteger(n)) {

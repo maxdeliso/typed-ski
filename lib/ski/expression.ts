@@ -24,7 +24,11 @@ import type { SKITerminal } from "./terminal.ts";
  * terminal | non-terminal | expression
  */
 /**
- * An SKI expression is either a terminal symbol (S, K, I) or an application node.
+ * An SKI application node representing the application of one SKI expression to another.
+ *
+ * Applications are binary operations where the left expression is applied to the
+ * right expression, forming the fundamental building block of functional composition
+ * in the SKI combinator calculus.
  */
 export interface SKIApplication {
   kind: "non-terminal";
@@ -32,6 +36,13 @@ export interface SKIApplication {
   rgt: SKIExpression;
 }
 
+/**
+ * An SKI expression is either a terminal symbol (S, K, I) or an application node.
+ *
+ * This recursive type represents all valid expressions in the SKI combinator calculus,
+ * where every expression is either one of the three fundamental combinators or an
+ * application of two expressions.
+ */
 export type SKIExpression = SKITerminal | SKIApplication;
 export type SKIChar = "S" | "K" | "I" | "(" | ")";
 export type SKIKey = SKIChar[];

@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts",
@@ -15,7 +15,8 @@
       "lib/**",
       "bin/**",
       "dist/**",
-      "assembly/build/**"
+      "assembly/build/**",
+      "lib/shared/version.ts"
     ],
     "exclude": [
       "!assembly/build/debug.wasm",
@@ -59,22 +60,23 @@
     "random-seed": "npm:random-seed@0.3.0"
   },
   "tasks": {
-    "build:debug": "deno run -A npm:assemblyscript@0.28.8/asc assembly/index.ts --config assembly/asconfig.json --target debug",
-    "build:release": "deno run -A npm:assemblyscript@0.28.8/asc assembly/index.ts --config assembly/asconfig.json --target release",
-    "build": "deno task build:debug && deno task build:release",
+    "version:gen": "deno run --allow-read --allow-write scripts/generate-version.ts",
+    "build:debug": "deno task version:gen && deno run -A npm:assemblyscript@0.28.8/asc assembly/index.ts --config assembly/asconfig.json --target debug",
+    "build:release": "deno task version:gen && deno run -A npm:assemblyscript@0.28.8/asc assembly/index.ts --config assembly/asconfig.json --target release",
+    "build": "deno task version:gen && deno task build:debug && deno task build:release",
     "test": "deno test --allow-read --allow-write --allow-run test/",
     "test:cli": "deno test --allow-read --allow-write --allow-run test/bin/",
     "test:forest": "deno test --allow-read --allow-write --allow-run test/bin/forestTools.test.ts",
-    "ci": "deno task build && deno task dist:all && deno test --allow-read --allow-write --allow-run test/",
+    "ci": "deno task version:gen && deno task build && deno task dist:all && deno test --allow-read --allow-write --allow-run test/",
     "tripc": "deno run --allow-read --allow-write bin/tripc.ts",
     "genForest": "deno run --allow-read --allow-write --allow-run bin/genForest.ts",
     "genSvg": "deno run --allow-read --allow-write --allow-run bin/genSvg.ts",
-    "bundle:tripc": "deno bundle -o dist/tripc.js bin/tripc.ts",
-    "bundle:tripc:minified": "deno bundle --minify -o dist/tripc.min.js bin/tripc.ts",
-    "bundle:tripc:node": "deno bundle --platform=browser -o dist/tripc.node.js bin/tripc.ts",
-    "compile:tripc": "deno compile --allow-read --allow-write --output dist/tripc bin/tripc.ts",
-    "compile:tripc:cross": "deno compile --allow-read --allow-write --target x86_64-pc-windows-msvc --output dist/tripc.exe bin/tripc.ts && deno compile --allow-read --allow-write --target x86_64-unknown-linux-gnu --output dist/tripc-linux bin/tripc.ts && deno compile --allow-read --allow-write --target x86_64-apple-darwin --output dist/tripc-macos bin/tripc.ts",
-    "dist": "mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task compile:tripc",
+    "bundle:tripc": "deno task version:gen && deno bundle -o dist/tripc.js bin/tripc.ts",
+    "bundle:tripc:minified": "deno task version:gen && deno bundle --minify -o dist/tripc.min.js bin/tripc.ts",
+    "bundle:tripc:node": "deno task version:gen && deno bundle --platform=browser -o dist/tripc.node.js bin/tripc.ts",
+    "compile:tripc": "deno task version:gen && deno compile --allow-read --allow-write --output dist/tripc bin/tripc.ts",
+    "compile:tripc:cross": "deno task version:gen && deno compile --allow-read --allow-write --target x86_64-pc-windows-msvc --output dist/tripc.exe bin/tripc.ts && deno compile --allow-read --allow-write --target x86_64-unknown-linux-gnu --output dist/tripc-linux bin/tripc.ts && deno compile --allow-read --allow-write --target x86_64-apple-darwin --output dist/tripc-macos bin/tripc.ts",
+    "dist": "deno task version:gen && mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task compile:tripc",
     "dist:all": "deno task dist && deno task dist:cross",
     "dist:cross": "deno task compile:tripc:cross"
   }

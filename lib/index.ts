@@ -122,6 +122,17 @@ export {
 /** Resolves polymorphic definitions in a TripLang program. */
 export { resolvePoly } from "./meta/frontend/compilation.ts";
 
+// Phase 1 Single-File Compiler exports
+export {
+  /** Compiles a single TripLang source string to a TripCObject. */
+  compileToObjectFile,
+  /** Compiles a single TripLang source string to a serialized .tripc object file. */
+  compileToObjectFileString,
+  type ModuleImport,
+  SingleFileCompilerError,
+  type TripCObject,
+} from "./compiler/index.ts";
+
 // Additional utility exports
 export {
   /** Creates a Church-encoded number from a JavaScript number. */

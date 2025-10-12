@@ -4,3 +4,9 @@ build/
 !.vscode/settings.json
 package-lock.json
 package.json
+
+# TripLang compiled object files
+*.tripc
+
+# Distribution files (can be regenerated)
+dist/

@@ -1,0 +1,3 @@
+module Test
+export id
+poly id = Λa. λx:a. x

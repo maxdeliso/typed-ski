@@ -1,3 +1,12 @@
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
+
+/**
+ * SKI Evaluation Forest Generator
+ *
+ * Generates evaluation forests for SKI expressions with a given number of symbols.
+ * Outputs JSONL format with evaluation paths and global arena information.
+ */
+
 import { apply } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
@@ -5,41 +14,82 @@ import {
   createArenaEvaluatorRelease,
   hasEmbedding,
 } from "../lib/evaluator/arenaEvaluator.ts";
-import type { EvaluationStep, GlobalInfo } from "./types.ts";
+import type { EvaluationStep, GlobalInfo } from "../lib/shared/forestTypes.ts";
 
+import { VERSION } from "../lib/shared/version.ts";
+
+// Memoization for expression enumeration
 const memo = new Map<number, SKIExpression[]>();
-const [nRaw, outputPath] = Deno.args;
 
-if (!nRaw) {
-  console.error(
-    "Usage: deno run -A scripts/genForest.ts <symbolCount> [outputFile]",
-  );
-  console.error("");
-  console.error(
-    "symbolCount  Number of terminal symbols (S/K/I) in each generated expression.",
-  );
-  console.error(
-    "outputFile   Optional output file path. If not provided, outputs to stdout.",
-  );
-  Deno.exit(1);
+interface CLIArgs {
+  symbolCount: number;
+  outputFile?: string;
+  verbose: boolean;
 }
 
-console.error(`Arguments: nRaw=${nRaw}, outputPath=${outputPath}`);
-const n = Number.parseInt(nRaw, 10);
-console.error(`Parsed n=${n}`);
+function parseArgs(): CLIArgs {
+  const args = Deno.args;
 
-if (!Number.isFinite(n) || n <= 0) {
-  console.error(
-    `symbolCount must be a positive integer; received \`${nRaw}\`.`,
-  );
-  Deno.exit(1);
+  if (args.includes("--help") || args.includes("-h")) {
+    printHelp();
+    Deno.exit(0);
+  }
+
+  if (args.includes("--version") || args.includes("-v")) {
+    console.log(`genForest v${VERSION}`);
+    Deno.exit(0);
+  }
+
+  const verbose = args.includes("--verbose");
+  const nonFlagArgs = args.filter((arg) => !arg.startsWith("--"));
+
+  if (nonFlagArgs.length === 0) {
+    console.error("Error: symbolCount is required");
+    printHelp();
+    Deno.exit(1);
+  }
+
+  const symbolCount = Number.parseInt(nonFlagArgs[0], 10);
+
+  if (!Number.isFinite(symbolCount) || symbolCount <= 0) {
+    console.error(
+      `Error: symbolCount must be a positive integer; received '${
+        nonFlagArgs[0]
+      }'`,
+    );
+    Deno.exit(1);
+  }
+
+  const outputFile = nonFlagArgs[1];
+
+  return { symbolCount, outputFile, verbose };
 }
 
-console.error("Starting processing...");
-if (outputPath) {
-  await streamToFile(n, outputPath);
-} else {
-  await streamToStdout(n);
+function printHelp(): void {
+  console.log(`SKI Evaluation Forest Generator v${VERSION}
+
+USAGE:
+    genForest <symbolCount> [outputFile] [options]
+
+ARGUMENTS:
+    symbolCount    Number of terminal symbols (S/K/I) in each generated expression
+    outputFile     Optional output file path. If not provided, outputs to stdout
+
+OPTIONS:
+    --verbose, -v  Enable verbose output
+    --help, -h     Show this help message
+    --version      Show version information
+
+EXAMPLES:
+    genForest 3                    # Generate forest for 3 symbols, output to stdout
+    genForest 4 forest.jsonl       # Generate forest for 4 symbols, save to file
+    genForest 5 forest.jsonl -v   # Generate with verbose output
+
+OUTPUT FORMAT:
+    JSONL (JSON Lines) format with one evaluation path per line, followed by global info.
+    Each line contains: source, sink, steps, hasCycle
+    Final line contains: type, nodes, sources, sinks
+`);
 }
 
 function enumerateExpressions(leaves: number): SKIExpression[] {
@@ -146,7 +196,15 @@ export async function* generateEvaluationForest(
   yield JSON.stringify(globalInfo);
 }
 
-async function streamToFile(symbolCount: number, outputPath: string) {
+async function streamToFile(
+  symbolCount: number,
+  outputPath: string,
+  verbose: boolean,
+) {
+  if (verbose) {
+    console.error(`Writing output to ${outputPath}...`);
+  }
+
   const file = await Deno.open(outputPath, {
     write: true,
     create: true,
@@ -164,10 +222,36 @@ async function streamToFile(symbolCount: number, outputPath: string) {
   }
 }
 
-async function streamToStdout(symbolCount: number) {
-  const wasmPath = "assembly/build/release.wasm";
+async function streamToStdout(symbolCount: number, verbose: boolean) {
+  if (verbose) {
+    console.error("Writing output to stdout...");
+  }
 
-  for await (const data of generateEvaluationForest(symbolCount, wasmPath)) {
+  for await (const data of generateEvaluationForest(symbolCount)) {
     console.log(data);
   }
+}
+
+async function main(): Promise<void> {
+  const { symbolCount, outputFile, verbose } = parseArgs();
+
+  if (verbose) {
+    console.error(
+      `Arguments: symbolCount=${symbolCount}, outputFile=${
+        outputFile || "stdout"
+      }`,
+    );
+  }
+
+  console.error("Starting processing...");
+
+  if (outputFile) {
+    await streamToFile(symbolCount, outputFile, verbose);
+  } else {
+    await streamToStdout(symbolCount, verbose);
+  }
+}
+
+if (import.meta.main) {
+  await main();
 }

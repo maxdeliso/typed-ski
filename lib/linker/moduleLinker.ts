@@ -144,10 +144,10 @@ export function loadModule(
 }
 
 /**
- * Creates a program space from multiple loaded modules
+ * Creates the initial program space and populates global indices.
  */
-export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
-  const programSpace: ProgramSpace = {
+function initializeProgramSpace(modules: LoadedModule[]): ProgramSpace {
+  const ps: ProgramSpace = {
     modules: new Map(),
     terms: new Map(),
     types: new Map(),
@@ -155,13 +155,10 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
     typeEnv: new Map(),
   };
 
-  // Load all modules into the program space
   for (const module of modules) {
-    programSpace.modules.set(module.name, module);
-
-    // Initialize per-module environments
-    programSpace.termEnv.set(module.name, new Map());
-    programSpace.typeEnv.set(module.name, new Map());
+    ps.modules.set(module.name, module);
+    ps.termEnv.set(module.name, new Map());
+    ps.typeEnv.set(module.name, new Map());
 
     // Check for duplicate local definitions within the module
     const seenDefs = new Set<string>();
@@ -177,22 +174,19 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
     // Add all definitions to the global qualified indices
     for (const [localName, definition] of module.defs) {
       const qualified = qualifiedName(module.name, localName);
-      const definitionValue = extractDefinitionValue(definition);
-
-      if (definitionValue) {
-        if (definition.kind === "type") {
-          programSpace.types.set(qualified, definition);
-        } else {
-          programSpace.terms.set(qualified, definition);
-        }
-      }
+      setGlobal(ps, qualified, definition);
     }
   }
+  return ps;
+}
 
-  // Validate exports and detect duplicates
+/**
+ * Validates that no symbol is exported by more than one module.
+ */
+function validateExports(ps: ProgramSpace): void {
   const globalExports = new Map<string, Set<string>>(); // name -> set of modules exporting it
 
-  for (const [moduleName, module] of programSpace.modules) {
+  for (const [moduleName, module] of ps.modules) {
     for (const exportName of module.exports) {
       if (!globalExports.has(exportName)) {
         globalExports.set(exportName, new Set());
@@ -210,15 +204,19 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
       );
     }
   }
+}
 
-  // Build per-module environments from imports (validate exports and infer kinds)
-  for (const [moduleName, module] of programSpace.modules) {
-    const termEnv = programSpace.termEnv.get(moduleName)!;
-    const typeEnv = programSpace.typeEnv.get(moduleName)!;
+/**
+ * Builds the local environments for each module from its imports.
+ */
+function buildEnvironments(ps: ProgramSpace): void {
+  for (const [moduleName, module] of ps.modules) {
+    const termEnv = ps.termEnv.get(moduleName)!;
+    const typeEnv = ps.typeEnv.get(moduleName)!;
 
     for (const imp of module.imports) {
       const target = qualifiedName(imp.from, imp.name);
-      const origin = programSpace.modules.get(imp.from);
+      const origin = ps.modules.get(imp.from);
 
       if (!origin) {
         throw new Error(
@@ -233,7 +231,7 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
       }
 
       // Infer import kind from origin module's exports
-      const inferredKind = inferImportKind(programSpace, imp.from, imp.name);
+      const inferredKind = inferImportKind(ps, imp.from, imp.name);
 
       // Update the import spec with inferred kind
       imp.kind = inferredKind;
@@ -257,8 +255,71 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
       }
     }
   }
+}
 
+/**
+ * Creates and populates a complete program space from loaded modules.
+ */
+export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
+  const programSpace = initializeProgramSpace(modules);
+  validateExports(programSpace);
+  buildEnvironments(programSpace);
   return programSpace;
+}
+
+/**
+ * Helper to get module info from a qualified name
+ */
+function getModuleInfo(ps: ProgramSpace, qualified: QualifiedName) {
+  const lastDotIndex = qualified.lastIndexOf(".");
+  const moduleName = qualified.slice(0, lastDotIndex);
+  const localName = qualified.slice(lastDotIndex + 1);
+  const module = ps.modules.get(moduleName);
+  if (!module) {
+    throw new Error(
+      `Module '${moduleName}' not found for qualified name '${qualified}'`,
+    );
+  }
+  return { moduleName, localName, module };
+}
+
+/**
+ * Creates a deep copy of a program space to avoid mutation during resolution
+ */
+function deepCopyProgramSpace(ps: ProgramSpace): ProgramSpace {
+  const resolvedPS: ProgramSpace = {
+    modules: new Map(),
+    terms: new Map(),
+    types: new Map(),
+    termEnv: new Map(),
+    typeEnv: new Map(),
+  };
+
+  // Copy modules
+  for (const [moduleName, module] of ps.modules) {
+    resolvedPS.modules.set(moduleName, {
+      ...module,
+      defs: new Map(module.defs),
+    });
+  }
+
+  // Copy global indices
+  for (const [qualified, term] of ps.terms) {
+    resolvedPS.terms.set(qualified, term);
+  }
+  for (const [qualified, type] of ps.types) {
+    resolvedPS.types.set(qualified, type);
+  }
+
+  // Copy environments
+  for (const [moduleName, env] of ps.termEnv) {
+    resolvedPS.termEnv.set(moduleName, new Map(env));
+  }
+  for (const [moduleName, env] of ps.typeEnv) {
+    resolvedPS.typeEnv.set(moduleName, new Map(env));
+  }
+
+  return resolvedPS;
 }
 
 /**
@@ -400,231 +461,26 @@ function tarjanSCC(
 }
 
 /**
- * Resolves cross-module dependencies using dependency graph fixpoint algorithm
+ * Performs iterative substitution on a single definition until no new external references appear.
  */
-export function resolveCrossModuleDependencies(
-  programSpace: ProgramSpace,
-  verbose = false,
-): ProgramSpace {
-  if (verbose) {
-    console.error("Resolving cross-module dependencies...");
-  }
-
-  // Deep copy the program space
-  const resolvedProgramSpace: ProgramSpace = {
-    modules: new Map(),
-    terms: new Map(),
-    types: new Map(),
-    termEnv: new Map(),
-    typeEnv: new Map(),
-  };
-
-  // Copy modules
-  for (const [moduleName, module] of programSpace.modules) {
-    resolvedProgramSpace.modules.set(moduleName, {
-      ...module,
-      defs: new Map(module.defs),
-    });
-  }
-
-  // Copy global indices
-  for (const [qualified, term] of programSpace.terms) {
-    resolvedProgramSpace.terms.set(qualified, term);
-  }
-  for (const [qualified, type] of programSpace.types) {
-    resolvedProgramSpace.types.set(qualified, type);
-  }
-
-  // Copy environments
-  for (const [moduleName, env] of programSpace.termEnv) {
-    resolvedProgramSpace.termEnv.set(moduleName, new Map(env));
-  }
-  for (const [moduleName, env] of programSpace.typeEnv) {
-    resolvedProgramSpace.typeEnv.set(moduleName, new Map(env));
-  }
-
-  // Build dependency graph
-  const dependencyGraph = buildDependencyGraph(resolvedProgramSpace);
-
-  if (verbose) {
-    console.error(`Built dependency graph with ${dependencyGraph.size} nodes`);
-  }
-
-  // Tarjan's SCC algorithm - reverse to get topological order
-  const sccs = tarjanSCC(dependencyGraph).reverse();
-
-  if (verbose) {
-    console.error(`Found ${sccs.length} strongly connected components`);
-  }
-
-  // Process each SCC
-  for (const scc of sccs) {
-    if (verbose) {
-      console.error(`Processing SCC: ${scc.join(", ")}`);
-    }
-
-    // For single nodes, resolve once
-    if (scc.length === 1) {
-      const qualified = scc[0];
-      const lastDotIndex = qualified.lastIndexOf(".");
-      const moduleName = qualified.slice(0, lastDotIndex);
-      const localName = qualified.slice(lastDotIndex + 1);
-      const module = resolvedProgramSpace.modules.get(moduleName)!;
-      const definition = module.defs.get(localName)!;
-
-      const resolvedDef = resolveDefinitionOnce(
-        definition,
-        moduleName,
-        resolvedProgramSpace,
-        verbose,
-      );
-      module.defs.set(localName, resolvedDef);
-      setGlobal(resolvedProgramSpace, qualified, resolvedDef);
-    } else {
-      // For cycles, iterate until fixpoint
-      const prevHashes = new Map<QualifiedName, string>();
-      let iteration = 0;
-      const maxIterations = 100; // Reasonable limit for cycles
-
-      // Initialize hashes
-      for (const qualified of scc) {
-        const lastDotIndex = qualified.lastIndexOf(".");
-        const moduleName = qualified.slice(0, lastDotIndex);
-        const localName = qualified.slice(lastDotIndex + 1);
-        const definition = resolvedProgramSpace.modules.get(moduleName)!.defs
-          .get(localName)!;
-        prevHashes.set(qualified, computeTermHash(definition));
-      }
-
-      while (iteration < maxIterations) {
-        let changed = false;
-        iteration++;
-
-        if (verbose) {
-          console.error(`  SCC iteration ${iteration}`);
-        }
-
-        for (const qualified of scc) {
-          const lastDotIndex = qualified.lastIndexOf(".");
-          const moduleName = qualified.slice(0, lastDotIndex);
-          const localName = qualified.slice(lastDotIndex + 1);
-          const module = resolvedProgramSpace.modules.get(moduleName)!;
-          const definition = module.defs.get(localName)!;
-
-          const resolvedDef = resolveDefinitionOnce(
-            definition,
-            moduleName,
-            resolvedProgramSpace,
-            verbose,
-          );
-          const newHash = computeTermHash(resolvedDef);
-
-          if (newHash !== prevHashes.get(qualified)) {
-            changed = true;
-            module.defs.set(localName, resolvedDef);
-            setGlobal(resolvedProgramSpace, qualified, resolvedDef);
-            prevHashes.set(qualified, newHash);
-          }
-        }
-
-        if (!changed) break;
-      }
-
-      if (iteration >= maxIterations) {
-        throw new Error(
-          `Circular dependency detected in SCC: ${
-            scc.join(", ")
-          }. Consider using explicit recursion constructs.`,
-        );
-      }
-
-      if (verbose) {
-        console.error(`SCC resolved in ${iteration} iterations`);
-      }
-    }
-  }
-
-  // Sanity check: verify that all exported definitions have no external references
-  for (const [moduleName, module] of resolvedProgramSpace.modules) {
-    for (const exportName of module.exports) {
-      const definition = module.defs.get(exportName);
-      if (definition) {
-        const definitionValue = extractDefinitionValue(definition);
-        if (definitionValue) {
-          const [termRefs, typeRefs] = externalReferences(definitionValue);
-          const externalTermRefs = keyValuePairs(termRefs).map((kvp) => kvp[0]);
-          const externalTypeRefs = keyValuePairs(typeRefs).map((kvp) => kvp[0]);
-
-          if (externalTermRefs.length > 0 || externalTypeRefs.length > 0) {
-            console.warn(
-              `Warning: Exported definition '${
-                qualifiedName(moduleName, exportName)
-              }' still has external references: terms=[${
-                externalTermRefs.join(", ")
-              }], types=[${externalTypeRefs.join(", ")}]`,
-            );
-            if (verbose) {
-              console.error(
-                `  Definition value: ${
-                  JSON.stringify(definitionValue, null, 2)
-                }`,
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (verbose) {
-    console.error("Cross-module resolution completed");
-  }
-
-  return resolvedProgramSpace;
-}
-
-/**
- * Resolves a single definition once using the current program space
- */
-function resolveDefinitionOnce(
-  definition: TripLangTerm,
+function substituteDependencies(
+  def: TripLangTerm,
   moduleName: string,
-  programSpace: ProgramSpace,
-  _verbose = false,
+  ps: ProgramSpace,
 ): TripLangTerm {
-  const definitionValue = extractDefinitionValue(definition);
-  if (!definitionValue) {
-    return definition;
-  }
+  const defValue = extractDefinitionValue(def);
+  if (!defValue) return def;
 
-  const [termRefs, typeRefs] = externalReferences(definitionValue);
+  const [termRefs, typeRefs] = externalReferences(defValue);
   const externalTermRefs = keyValuePairs(termRefs).map((kvp) => kvp[0]);
   const externalTypeRefs = keyValuePairs(typeRefs).map((kvp) => kvp[0]);
 
-  if (_verbose && externalTermRefs.length > 0) {
-    console.error(
-      `  Definition has external references: ${externalTermRefs.join(", ")}`,
-    );
-  }
-
   if (externalTermRefs.length === 0 && externalTypeRefs.length === 0) {
-    return definition;
+    return def;
   }
 
-  const termEnv = programSpace.termEnv.get(moduleName)!;
-
-  if (_verbose && externalTermRefs.length > 0) {
-    console.error(
-      `  Term environment contains: ${Array.from(termEnv.keys()).join(", ")}`,
-    );
-    console.error(
-      `  Program space terms: ${
-        Array.from(programSpace.terms.keys()).join(", ")
-      }`,
-    );
-  }
-
-  let resolvedDefinition = definition;
+  let resolvedDefinition = def;
+  const termEnv = ps.termEnv.get(moduleName)!;
 
   // Resolve term references iteratively until no new external references appear
   let currentExternalTermRefs = externalTermRefs;
@@ -632,164 +488,49 @@ function resolveDefinitionOnce(
   const MAX_ITERATIONS = 10; // Prevent infinite loops
 
   while (currentExternalTermRefs.length > 0 && iteration < MAX_ITERATIONS) {
-    if (_verbose && iteration > 0) {
-      console.error(
-        `  Iteration ${iteration}: resolving ${currentExternalTermRefs.length} external references: ${
-          currentExternalTermRefs.join(", ")
-        }`,
-      );
-    }
-
     const nextExternalTermRefs = new Set<string>();
 
     for (const termRef of currentExternalTermRefs) {
       const targetQualified = termEnv.get(termRef);
       if (targetQualified) {
-        const targetTerm = programSpace.terms.get(targetQualified);
+        const targetTerm = ps.terms.get(targetQualified);
         if (targetTerm) {
-          if (_verbose) {
-            console.error(
-              `Resolving external reference '${termRef}' -> '${targetQualified}'`,
-            );
-            console.error(
-              `  Before substitution: ${
-                JSON.stringify(
-                  extractDefinitionValue(resolvedDefinition),
-                  null,
-                  2,
-                )
-              }`,
-            );
-          }
           resolvedDefinition = substituteTripLangTermDirect(
             resolvedDefinition,
             targetTerm,
             termRef,
           );
-          if (_verbose) {
-            console.error(
-              `  After substitution: ${
-                JSON.stringify(
-                  extractDefinitionValue(resolvedDefinition),
-                  null,
-                  2,
-                )
-              }`,
-            );
-            // Check for new external references after substitution
-            const [newTermRefs, _newTypeRefs] = externalReferences(
-              extractDefinitionValue(resolvedDefinition)!,
-            );
-            const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
-              kvp[0]
-            );
-            if (newExternalTermRefs.length > 0) {
-              console.error(
-                `  New external references after substitution: ${
-                  newExternalTermRefs.join(", ")
-                }`,
-              );
-              newExternalTermRefs.forEach((ref) =>
-                nextExternalTermRefs.add(ref)
-              );
-            }
-          } else {
-            // Always check for new external references, even without verbose logging
-            const [newTermRefs, _newTypeRefs] = externalReferences(
-              extractDefinitionValue(resolvedDefinition)!,
-            );
-            const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
-              kvp[0]
-            );
-            newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
-          }
-        } else {
-          if (_verbose) {
-            console.error(
-              `Warning: target term '${targetQualified}' not found in program space`,
-            );
-          }
+          // Check for new external references after substitution
+          const [newTermRefs, _newTypeRefs] = externalReferences(
+            extractDefinitionValue(resolvedDefinition)!,
+          );
+          const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
+            kvp[0]
+          );
+          newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
         }
       } else {
         // Check if it's a local definition
-        const module = programSpace.modules.get(moduleName)!;
+        const module = ps.modules.get(moduleName)!;
         if (module.defs.has(termRef)) {
           const localTerm = module.defs.get(termRef)!;
-          if (_verbose) {
-            console.error(`Resolving local reference '${termRef}'`);
-            console.error(
-              `  Before substitution: ${
-                JSON.stringify(
-                  extractDefinitionValue(resolvedDefinition),
-                  null,
-                  2,
-                )
-              }`,
-            );
-          }
           resolvedDefinition = substituteTripLangTermDirect(
             resolvedDefinition,
             localTerm,
             termRef,
           );
-          if (_verbose) {
-            console.error(
-              `  After substitution: ${
-                JSON.stringify(
-                  extractDefinitionValue(resolvedDefinition),
-                  null,
-                  2,
-                )
-              }`,
-            );
-            // Check for new external references after substitution
-            const [newTermRefs, _newTypeRefs] = externalReferences(
-              extractDefinitionValue(resolvedDefinition)!,
-            );
-            const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
-              kvp[0]
-            );
-            if (newExternalTermRefs.length > 0) {
-              console.error(
-                `  New external references after substitution: ${
-                  newExternalTermRefs.join(", ")
-                }`,
-              );
-              newExternalTermRefs.forEach((ref) =>
-                nextExternalTermRefs.add(ref)
-              );
-            }
-          } else {
-            // Always check for new external references, even without verbose logging
-            const [newTermRefs, _newTypeRefs] = externalReferences(
-              extractDefinitionValue(resolvedDefinition)!,
-            );
-            const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
-              kvp[0]
-            );
-            newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
-          }
+          // Check for new external references after substitution
+          const [newTermRefs, _newTypeRefs] = externalReferences(
+            extractDefinitionValue(resolvedDefinition)!,
+          );
+          const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
+            kvp[0]
+          );
+          newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
         } else {
-          if (_verbose) {
-            console.error(
-              `Warning: reference '${termRef}' not found in term environment or local definitions`,
-            );
-            console.error(
-              `  Available in termEnv: ${
-                Array.from(termEnv.keys()).join(", ")
-              }`,
-            );
-            console.error(
-              `  Available in module.defs: ${
-                Array.from(module.defs.keys()).join(", ")
-              }`,
-            );
-          }
           // Find candidate modules that export this symbol
           const candidateModules: string[] = [];
-          for (
-            const [candidateModuleName, candidateModule] of programSpace.modules
-          ) {
+          for (const [candidateModuleName, candidateModule] of ps.modules) {
             if (candidateModule.exports.has(termRef)) {
               candidateModules.push(candidateModuleName);
             }
@@ -833,27 +574,14 @@ function resolveDefinitionOnce(
   while (
     currentExternalTypeRefs.length > 0 && typeIteration < MAX_TYPE_ITERATIONS
   ) {
-    if (_verbose && typeIteration > 0) {
-      console.error(
-        `  Type iteration ${typeIteration}: resolving ${currentExternalTypeRefs.length} external type references: ${
-          currentExternalTypeRefs.join(", ")
-        }`,
-      );
-    }
-
     const nextExternalTypeRefs = new Set<string>();
-    const typeEnv = programSpace.typeEnv.get(moduleName)!;
+    const typeEnv = ps.typeEnv.get(moduleName)!;
 
     for (const typeRef of currentExternalTypeRefs) {
       const targetQualified = typeEnv.get(typeRef);
       if (targetQualified) {
-        const targetType = programSpace.types.get(targetQualified);
+        const targetType = ps.types.get(targetQualified);
         if (targetType) {
-          if (_verbose) {
-            console.error(
-              `Resolving external type reference '${typeRef}' -> '${targetQualified}'`,
-            );
-          }
           resolvedDefinition = substituteTripLangTypeDirect(
             resolvedDefinition,
             targetType,
@@ -866,22 +594,13 @@ function resolveDefinitionOnce(
             kvp[0]
           );
           newExternalTypeRefs.forEach((ref) => nextExternalTypeRefs.add(ref));
-        } else {
-          if (_verbose) {
-            console.error(
-              `Warning: target type '${targetQualified}' not found in program space`,
-            );
-          }
         }
       } else {
         // Check if it's a local type definition
-        const module = programSpace.modules.get(moduleName)!;
+        const module = ps.modules.get(moduleName)!;
         if (module.defs.has(typeRef)) {
           const localType = module.defs.get(typeRef)!;
           if (localType.kind === "type") {
-            if (_verbose) {
-              console.error(`Resolving local type reference '${typeRef}'`);
-            }
             resolvedDefinition = substituteTripLangTypeDirect(
               resolvedDefinition,
               localType,
@@ -898,9 +617,7 @@ function resolveDefinitionOnce(
         } else {
           // Find candidate modules that export this type
           const candidateModules: string[] = [];
-          for (
-            const [candidateModuleName, candidateModule] of programSpace.modules
-          ) {
+          for (const [candidateModuleName, candidateModule] of ps.modules) {
             if (candidateModule.exports.has(typeRef)) {
               candidateModules.push(candidateModuleName);
             }
@@ -937,6 +654,134 @@ function resolveDefinitionOnce(
   }
 
   return resolvedDefinition;
+}
+
+/**
+ * Resolves a single Strongly Connected Component (SCC), iterating to a fixpoint if it's a cycle.
+ */
+function resolveSCC(
+  scc: QualifiedName[],
+  ps: ProgramSpace,
+  verbose: boolean,
+): void {
+  if (verbose) console.error(`Processing SCC: ${scc.join(", ")}`);
+
+  // Simple case: no cycle
+  if (scc.length === 1) {
+    const qualified = scc[0];
+    const { moduleName, localName, module } = getModuleInfo(ps, qualified);
+    const resolvedDef = substituteDependencies(
+      module.defs.get(localName)!,
+      moduleName,
+      ps,
+    );
+    module.defs.set(localName, resolvedDef);
+    setGlobal(ps, qualified, resolvedDef);
+    return;
+  }
+
+  // Cycle case: iterate to a fixpoint
+  let iteration = 0;
+  const maxIterations = 100;
+  while (iteration++ < maxIterations) {
+    let hasChanged = false;
+
+    // Store current definitions before iteration to avoid stale references
+    const currentDefinitions = new Map<QualifiedName, TripLangTerm>();
+    for (const qualified of scc) {
+      const { moduleName: _moduleName, localName, module } = getModuleInfo(
+        ps,
+        qualified,
+      );
+      currentDefinitions.set(qualified, module.defs.get(localName)!);
+    }
+
+    for (const qualified of scc) {
+      const { moduleName, localName, module } = getModuleInfo(ps, qualified);
+      const currentDef = currentDefinitions.get(qualified)!;
+      const prevHash = computeTermHash(currentDef);
+
+      const newDef = substituteDependencies(currentDef, moduleName, ps);
+      const newHash = computeTermHash(newDef);
+
+      if (prevHash !== newHash) {
+        hasChanged = true;
+        module.defs.set(localName, newDef);
+        setGlobal(ps, qualified, newDef);
+      }
+    }
+    if (!hasChanged) {
+      if (verbose) console.error(`SCC resolved in ${iteration} iterations.`);
+      return;
+    }
+  }
+
+  throw new Error(
+    `Circular dependency in SCC could not be resolved: ${scc.join(", ")}`,
+  );
+}
+
+/**
+ * Resolves cross-module dependencies using dependency graph fixpoint algorithm
+ */
+export function resolveCrossModuleDependencies(
+  programSpace: ProgramSpace,
+  verbose = false,
+): ProgramSpace {
+  if (verbose) {
+    console.error("Resolving cross-module dependencies...");
+  }
+
+  const resolvedPS = deepCopyProgramSpace(programSpace);
+  const dependencyGraph = buildDependencyGraph(resolvedPS);
+  const sccs = tarjanSCC(dependencyGraph).reverse(); // Topological sort
+
+  if (verbose) {
+    console.error(`Built dependency graph with ${dependencyGraph.size} nodes`);
+    console.error(`Found ${sccs.length} strongly connected components`);
+  }
+
+  for (const scc of sccs) {
+    resolveSCC(scc, resolvedPS, verbose);
+  }
+
+  // Sanity check: verify that all exported definitions have no external references
+  for (const [moduleName, module] of resolvedPS.modules) {
+    for (const exportName of module.exports) {
+      const definition = module.defs.get(exportName);
+      if (definition) {
+        const definitionValue = extractDefinitionValue(definition);
+        if (definitionValue) {
+          const [termRefs, typeRefs] = externalReferences(definitionValue);
+          const externalTermRefs = keyValuePairs(termRefs).map((kvp) => kvp[0]);
+          const externalTypeRefs = keyValuePairs(typeRefs).map((kvp) => kvp[0]);
+
+          if (externalTermRefs.length > 0 || externalTypeRefs.length > 0) {
+            console.warn(
+              `Warning: Exported definition '${
+                qualifiedName(moduleName, exportName)
+              }' still has external references: terms=[${
+                externalTermRefs.join(", ")
+              }], types=[${externalTypeRefs.join(", ")}]`,
+            );
+            if (verbose) {
+              console.error(
+                `  Definition value: ${
+                  JSON.stringify(definitionValue, null, 2)
+                }`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (verbose) {
+    console.error("Cross-module resolution completed");
+  }
+
+  return resolvedPS;
 }
 
 /**

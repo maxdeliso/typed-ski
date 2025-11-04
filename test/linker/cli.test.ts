@@ -369,8 +369,15 @@ poly helper = ΛX. λx: X. x`;
   });
 
   await t.step("executable wrapper works", async () => {
-    const command = new Deno.Command("../../bin/tripc", {
-      args: ["--link", "--help"],
+    const command = new Deno.Command("deno", {
+      args: [
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "../../bin/tripc.ts",
+        "--link",
+        "--help",
+      ],
       cwd: __dirname,
     });
 

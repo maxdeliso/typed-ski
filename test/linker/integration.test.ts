@@ -303,7 +303,7 @@ typed other = λx: Int. x`;
 
       expect(linkCode).to.not.equal(0);
       // The linker now reports unresolved symbols before checking for main
-      expect(errorOutput).to.match(/No 'main' function found|Unresolved/);
+      expect(errorOutput).to.match(/No 'main' function found|Symbol.*is not defined/);
     } finally {
       // Cleanup
       try {
@@ -391,8 +391,15 @@ poly main = ΛX. λx: X. λy: X. λz: X. λw: X. λv: X. λu: X. λt: X. λs: X.
     expect(compileCode).to.equal(0);
 
     // Test the executable wrapper directly
-    const command = new Deno.Command("../../bin/tripc", {
-      args: ["--link", "A.tripc"],
+    const command = new Deno.Command("deno", {
+      args: [
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "../../bin/tripc.ts",
+        "--link",
+        "A.tripc",
+      ],
       cwd: __dirname,
     });
 

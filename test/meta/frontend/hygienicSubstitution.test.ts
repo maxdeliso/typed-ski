@@ -14,7 +14,7 @@ import {
   fresh,
   substituteHygienic,
   substituteTypeHygienic,
-} from "../../../lib/meta/frontend/hygienicSubstitution.ts";
+} from "../../../lib/meta/frontend/substitution.ts";
 import type { TripLangValueType } from "../../../lib/meta/trip.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 

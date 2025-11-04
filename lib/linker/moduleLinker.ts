@@ -549,7 +549,7 @@ function substituteDependencies(
             : "";
 
           throw new Error(
-            `Unresolved term symbol '${termRef}' in module '${moduleName}'${candidatesText}${fixHint}`,
+            `Symbol '${termRef}' is not defined in module '${moduleName}' and is not imported${candidatesText}${fixHint}`,
           );
         }
       }
@@ -636,7 +636,7 @@ function substituteDependencies(
             : "";
 
           throw new Error(
-            `Unresolved type symbol '${typeRef}' in module '${moduleName}'${candidatesText}${fixHint}`,
+            `Symbol '${typeRef}' is not defined in module '${moduleName}' and is not imported${candidatesText}${fixHint}`,
           );
         }
       }

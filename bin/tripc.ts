@@ -218,9 +218,8 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
     const content = await Deno.readTextFile(file);
     const object = deserializeTripCObject(content);
 
-    // Extract module name from filename
-    const moduleName = file.split("/").pop()?.replace(".tripc", "") ||
-      "Unknown";
+    // Use the module name from the file's content
+    const moduleName = object.module;
 
     modules.push({ name: moduleName, object });
   }

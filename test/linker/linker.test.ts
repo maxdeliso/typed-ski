@@ -500,7 +500,7 @@ Deno.test("TripLang Linker", async (t) => {
     } catch (error) {
       // If it fails due to unresolved type 'X', that's expected since we're testing
       // that type binders aren't renamed during term substitution
-      expect((error as Error).message).to.include("Unresolved type symbol 'X'");
+      expect((error as Error).message).to.include("Symbol 'X' is not defined");
     }
   });
 
@@ -553,7 +553,7 @@ Deno.test("TripLang Linker", async (t) => {
     } catch (error) {
       // If it fails due to unresolved type 'X', that's expected since we're testing
       // that type substitution correctly handles type binders
-      expect((error as Error).message).to.include("Unresolved type symbol 'X'");
+      expect((error as Error).message).to.include("Symbol 'X' is not defined");
     }
   });
 
@@ -694,8 +694,8 @@ Deno.test("TripLang Linker", async (t) => {
       expect.fail("Should have thrown an error for unresolved symbols");
     } catch (error) {
       const errorMsg = (error as Error).message;
-      // Should mention "term symbol" or "type symbol" specifically
-      expect(errorMsg).to.match(/Unresolved (term|type) symbol/);
+      // Should mention "not defined" for unresolved symbols
+      expect(errorMsg).to.match(/Symbol '.*' is not defined/);
     }
   });
 
@@ -792,7 +792,7 @@ Deno.test("TripLang Linker", async (t) => {
         // If it fails due to unresolved type 'X', that's expected since we're testing
         // that type edges correctly use programSpace.types.has()
         expect((error as Error).message).to.include(
-          "Unresolved type symbol 'X'",
+          "Symbol 'X' is not defined",
         );
       }
     },

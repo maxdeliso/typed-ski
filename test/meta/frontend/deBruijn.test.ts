@@ -4,7 +4,7 @@ import type { BaseType } from "../../../lib/types/types.ts";
 import type { SystemFTerm } from "../../../lib/terms/systemF.ts";
 import type { TypedLambda } from "../../../lib/types/typedLambda.ts";
 import type { UntypedLambda } from "../../../lib/terms/lambda.ts";
-import { term, SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
+import { SKITerminalSymbol, term } from "../../../lib/ski/terminal.ts";
 
 Deno.test("De Bruijn Conversion", async (t) => {
   await t.step("should convert free term variables", () => {
@@ -27,26 +27,29 @@ Deno.test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.step("should convert nested abstractions with correct indices", () => {
-    // λx. λy. x
-    const term: UntypedLambda = {
-      kind: "lambda-abs",
-      name: "x",
-      body: {
+  await t.step(
+    "should convert nested abstractions with correct indices",
+    () => {
+      // λx. λy. x
+      const term: UntypedLambda = {
         kind: "lambda-abs",
-        name: "y",
-        body: { kind: "lambda-var", name: "x" },
-      },
-    };
-    const result = toDeBruijn(term);
-    assert.deepStrictEqual(result, {
-      kind: "DbAbs",
-      body: {
+        name: "x",
+        body: {
+          kind: "lambda-abs",
+          name: "y",
+          body: { kind: "lambda-var", name: "x" },
+        },
+      };
+      const result = toDeBruijn(term);
+      assert.deepStrictEqual(result, {
         kind: "DbAbs",
-        body: { kind: "DbVar", index: 1 },
-      },
-    });
-  });
+        body: {
+          kind: "DbAbs",
+          body: { kind: "DbVar", index: 1 },
+        },
+      });
+    },
+  );
 
   await t.step("should convert free variables in abstractions", () => {
     // λx. y
@@ -347,30 +350,32 @@ Deno.test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.step("should produce stable hashes for alpha-equivalent terms", () => {
-    // λa. λb. a
-    const term1: UntypedLambda = {
-      kind: "lambda-abs",
-      name: "a",
-      body: {
+  await t.step(
+    "should produce stable hashes for alpha-equivalent terms",
+    () => {
+      // λa. λb. a
+      const term1: UntypedLambda = {
         kind: "lambda-abs",
-        name: "b",
-        body: { kind: "lambda-var", name: "a" },
-      },
-    };
-    // λx. λy. x
-    const term2: UntypedLambda = {
-      kind: "lambda-abs",
-      name: "x",
-      body: {
+        name: "a",
+        body: {
+          kind: "lambda-abs",
+          name: "b",
+          body: { kind: "lambda-var", name: "a" },
+        },
+      };
+      // λx. λy. x
+      const term2: UntypedLambda = {
         kind: "lambda-abs",
-        name: "y",
-        body: { kind: "lambda-var", name: "x" },
-      },
-    };
-    const result1 = JSON.stringify(toDeBruijn(term1));
-    const result2 = JSON.stringify(toDeBruijn(term2));
-    assert.strictEqual(result1, result2);
-  });
+        name: "x",
+        body: {
+          kind: "lambda-abs",
+          name: "y",
+          body: { kind: "lambda-var", name: "x" },
+        },
+      };
+      const result1 = JSON.stringify(toDeBruijn(term1));
+      const result2 = JSON.stringify(toDeBruijn(term2));
+      assert.strictEqual(result1, result2);
+    },
+  );
 });
-

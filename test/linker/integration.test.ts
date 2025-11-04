@@ -303,7 +303,9 @@ typed other = λx: Int. x`;
 
       expect(linkCode).to.not.equal(0);
       // The linker now reports unresolved symbols before checking for main
-      expect(errorOutput).to.match(/No 'main' function found|Symbol.*is not defined/);
+      expect(errorOutput).to.match(
+        /No 'main' function found|Symbol.*is not defined/,
+      );
     } finally {
       // Cleanup
       try {

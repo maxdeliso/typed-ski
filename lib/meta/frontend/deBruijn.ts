@@ -164,14 +164,22 @@ function toDeBruijnInternal(
     case "systemF-abs":
       return {
         kind: "DbSysFAbs",
-        typeAnnotation: toDeBruijnInternal(term.typeAnnotation, termCtx, typeCtx),
+        typeAnnotation: toDeBruijnInternal(
+          term.typeAnnotation,
+          termCtx,
+          typeCtx,
+        ),
         body: toDeBruijnInternal(term.body, [term.name, ...termCtx], typeCtx),
       };
     case "typed-lambda-abstraction":
       return {
         kind: "DbTypedAbs",
         type: toDeBruijnInternal(term.ty, termCtx, typeCtx),
-        body: toDeBruijnInternal(term.body, [term.varName, ...termCtx], typeCtx),
+        body: toDeBruijnInternal(
+          term.body,
+          [term.varName, ...termCtx],
+          typeCtx,
+        ),
       };
     case "systemF-type-abs":
       return {
@@ -224,4 +232,3 @@ function toDeBruijnInternal(
 export function toDeBruijn(term: TripLangValueType): DeBruijnTerm {
   return toDeBruijnInternal(term, [], []);
 }
-

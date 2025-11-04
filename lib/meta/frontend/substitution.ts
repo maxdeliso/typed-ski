@@ -21,16 +21,6 @@ import type {
 import { lower, termLevel } from "./termLevel.ts";
 import { extractDefinitionValue } from "./symbolTable.ts";
 import { externalReferences } from "./externalReferences.ts";
-import { mkBranch } from "./builders.ts";
-import { needsRebuild, needsReplace } from "./predicates.ts";
-import { replace as replaceTerm, typedTypeReplace } from "./replacers.ts";
-import {
-  polyRebuild,
-  polyTypeRebuild,
-  typedRebuild,
-  typedTypeRebuild,
-  untypedRebuild,
-} from "./rebuilders.ts";
 import { CompilationError } from "./compilation.ts";
 
 /**

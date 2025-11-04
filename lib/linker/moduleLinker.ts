@@ -21,6 +21,7 @@ import {
 } from "../meta/frontend/substitution.ts";
 import { keyValuePairs } from "../data/avl/avlNode.ts";
 import { prettyPrint } from "../ski/expression.ts";
+import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 
 /**
  * Qualified name type for module.symbol references
@@ -326,22 +327,28 @@ function deepCopyProgramSpace(ps: ProgramSpace): ProgramSpace {
  * Computes a stable hash for a TripLang term using canonical ordering
  */
 function computeTermHash(term: TripLangTerm): string {
-  // Create a canonical representation with sorted object keys
-  const canonical = JSON.stringify(term, (_key, value) => {
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      // Sort object keys for consistent ordering
-      const sorted: Record<string, unknown> = {};
-      for (const k of Object.keys(value).sort()) {
-        sorted[k] = value[k];
+  const value = extractDefinitionValue(term);
+  if (!value) {
+    // For non-value terms like module/import/export,
+    // the old stringify is fine as they have no binders.
+    return JSON.stringify(term, (_key, value) => {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const sorted: Record<string, unknown> = {};
+        for (const k of Object.keys(value).sort()) {
+          sorted[k] = value[k];
+        }
+        return sorted;
       }
-      return sorted;
-    }
-    return value;
-  });
+      return value;
+    });
+  }
 
-  // TODO: Move to α-normalized structural hashing later to avoid pointless toggling under renames
-  // Simple hash - in production, use a proper hash function like murmur3
-  return canonical;
+  // Convert to De Bruijn representation first
+  const deBruijnAST = toDeBruijn(value);
+
+  // Now stringify the name-independent AST.
+  // The simple stringify is fine; it's already canonical.
+  return JSON.stringify(deBruijnAST);
 }
 
 /**

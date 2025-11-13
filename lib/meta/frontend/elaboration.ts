@@ -7,8 +7,6 @@
  *
  * @module
  */
-import { searchAVL } from "../../data/avl/avlNode.ts";
-import { compareStrings } from "../../data/map/stringMap.ts";
 import type { SymbolTable, TripLangProgram, TripLangTerm } from "../trip.ts";
 import {
   createSystemFApplication,
@@ -61,7 +59,7 @@ function getTypeFromVar(
   syms: SymbolTable,
 ): BaseType | undefined {
   if (term.kind === "systemF-var") {
-    return searchAVL(syms.types, term.name, compareStrings)?.type;
+    return syms.types.get(term.name)?.type;
   }
   return undefined;
 }

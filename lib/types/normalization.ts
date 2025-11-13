@@ -7,12 +7,6 @@
  * @module
  */
 import { arrow } from "./types.ts";
-import type { AVLTree } from "../data/avl/avlNode.ts";
-import {
-  createStringMap,
-  insertStringMap,
-  searchStringMap,
-} from "../data/map/stringMap.ts";
 import { type BaseType, mkTypeVariable } from "./types.ts";
 import { varSource } from "./varSource.ts";
 
@@ -21,19 +15,16 @@ import { varSource } from "./varSource.ts";
  */
 export const normalizeTy = (
   ty: BaseType,
-  mapping: AVLTree<string, string> = createStringMap(),
+  mapping: Map<string, string> = new Map(),
   vars: () => ReturnType<typeof mkTypeVariable>,
-): [BaseType, AVLTree<string, string>] => {
+): [BaseType, Map<string, string>] => {
   switch (ty.kind) {
     case "type-var": {
-      const mapped = searchStringMap(mapping, ty.typeName);
+      const mapped = mapping.get(ty.typeName);
       if (mapped === undefined) {
         const newVar = vars();
-        const newMapping = insertStringMap(
-          mapping,
-          ty.typeName,
-          newVar.typeName,
-        );
+        const newMapping = new Map(mapping);
+        newMapping.set(ty.typeName, newVar.typeName);
         return [mkTypeVariable(newVar.typeName), newMapping];
       } else {
         return [mkTypeVariable(mapped), mapping];
@@ -46,7 +37,8 @@ export const normalizeTy = (
     }
     case "forall": {
       const newVar = vars();
-      const newMapping = insertStringMap(mapping, ty.typeVar, newVar.typeName);
+      const newMapping = new Map(mapping);
+      newMapping.set(ty.typeVar, newVar.typeName);
       const [bodyType, bodyMapping] = normalizeTy(ty.body, newMapping, vars);
       return [{
         kind: "forall",
@@ -58,7 +50,7 @@ export const normalizeTy = (
 };
 
 export const normalize = (ty: BaseType): BaseType => {
-  const mapping = createStringMap();
+  const mapping = new Map<string, string>();
   const vars = varSource();
   return normalizeTy(ty, mapping, vars)[0];
 };

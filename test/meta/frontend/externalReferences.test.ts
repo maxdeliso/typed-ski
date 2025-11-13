@@ -4,7 +4,6 @@ import {
   extractDefinitionValue,
   parseTripLang,
 } from "../../../lib/index.ts";
-import { keyValuePairs } from "../../../lib/data/avl/avlNode.ts";
 
 Deno.test("externalReferences", async (t) => {
   await t.step(
@@ -16,8 +15,8 @@ Deno.test("externalReferences", async (t) => {
         extractDefinitionValue(program.terms[0])!,
       );
 
-      assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
-      assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), [
+      assert.deepStrictEqual(Array.from(termRefs.keys()), []);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
         "A",
       ]);
     },
@@ -30,8 +29,8 @@ Deno.test("externalReferences", async (t) => {
       extractDefinitionValue(program.terms[0])!,
     );
 
-    assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
-    assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), []);
+    assert.deepStrictEqual(Array.from(termRefs.keys()), []);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
   await t.step(
@@ -43,10 +42,10 @@ Deno.test("externalReferences", async (t) => {
         extractDefinitionValue(program.terms[0])!,
       );
 
-      assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), [
+      assert.deepStrictEqual(Array.from(termRefs.keys()), [
         "y",
       ]);
-      assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), [
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
         "A",
       ]);
     },
@@ -61,8 +60,8 @@ Deno.test("externalReferences", async (t) => {
         extractDefinitionValue(program.terms[0])!,
       );
 
-      assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
-      assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), [
+      assert.deepStrictEqual(Array.from(termRefs.keys()), []);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
         "Y",
       ]);
     },
@@ -75,8 +74,8 @@ Deno.test("externalReferences", async (t) => {
       extractDefinitionValue(program.terms[0])!,
     );
 
-    assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), ["z"]);
-    assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), [
+    assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), ["z"]);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), [
       "A",
       "B",
     ]);
@@ -91,8 +90,8 @@ Deno.test("externalReferences", async (t) => {
         extractDefinitionValue(program.terms[0])!,
       );
 
-      assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
-      assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), [
+      assert.deepStrictEqual(Array.from(termRefs.keys()), []);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
         "Y",
       ]);
     },
@@ -105,11 +104,11 @@ Deno.test("externalReferences", async (t) => {
       extractDefinitionValue(program.terms[0])!,
     );
 
-    assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), [
+    assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), [
       "x",
       "y",
     ]);
-    assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), []);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
   await t.step(
@@ -121,8 +120,8 @@ Deno.test("externalReferences", async (t) => {
         extractDefinitionValue(program.terms[0])!,
       );
 
-      assert.deepStrictEqual(keyValuePairs(termRefs).map((kvp) => kvp[0]), []);
-      assert.deepStrictEqual(keyValuePairs(typeRefs).map((kvp) => kvp[0]), [
+      assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), []);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), [
         "A",
         "B",
         "C",

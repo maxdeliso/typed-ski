@@ -8,13 +8,6 @@
  */
 import { arrow, type BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
 import {
-  type AVLTree,
-  createEmptyAVL,
-  insertAVL,
-  searchAVL,
-} from "../data/avl/avlNode.ts";
-import { compareStrings } from "../data/map/stringMap.ts";
-import {
   createApplication,
   type LambdaVar,
   mkUntypedAbs,
@@ -98,11 +91,11 @@ export const createTypedApplication = (
 /**
  * Γ, or capital Gamma, represents the set of mappings from names to types.
  */
-export type Context = AVLTree<string, BaseType>;
+export type Context = Map<string, BaseType>;
 
-/** Create an empty string->string AVL tree. */
+/** Create an empty context. */
 export function emptyContext(): Context {
-  return createEmptyAVL<string, BaseType>();
+  return new Map<string, BaseType>();
 }
 
 export const addBinding = (
@@ -110,11 +103,13 @@ export const addBinding = (
   name: string,
   ty: BaseType,
 ): Context => {
-  if (searchAVL(ctx, name, compareStrings) !== undefined) {
+  if (ctx.has(name)) {
     throw new TypeError("duplicated binding for name: " + name);
   }
 
-  return insertAVL(ctx, name, ty, compareStrings);
+  const newCtx = new Map(ctx);
+  newCtx.set(name, ty);
+  return newCtx;
 };
 
 /**
@@ -142,7 +137,7 @@ export const typecheckGiven = (
   switch (typedTerm.kind) {
     case "lambda-var": {
       const termName = typedTerm.name;
-      const lookedUp = searchAVL(ctx, termName, compareStrings);
+      const lookedUp = ctx.get(termName);
 
       if (lookedUp === undefined) {
         throw new TypeError("unknown term named: " + termName);

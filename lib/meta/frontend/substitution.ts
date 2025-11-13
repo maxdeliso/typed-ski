@@ -8,8 +8,6 @@
  *
  * @module
  */
-import { keyValuePairs, searchAVL } from "../../data/avl/avlNode.ts";
-import { compareStrings } from "../../data/map/stringMap.ts";
 import type { BaseType } from "../../types/types.ts";
 import type {
   SymbolTable,
@@ -571,12 +569,12 @@ export function resolveExternalTermReferences(
   }
 
   const [tRefs, tyRefs] = externalReferences(definitionValue);
-  const externalTermRefs = keyValuePairs(tRefs).map((kvp) => kvp[0]);
-  const externalTypeRefs = keyValuePairs(tyRefs).map((kvp) => kvp[0]);
+  const externalTermRefs = Array.from(tRefs.keys());
+  const externalTypeRefs = Array.from(tyRefs.keys());
 
   // First resolve all type references
   const withResolvedTypes = externalTypeRefs.reduce((acc, typeRef) => {
-    const resolvedTy = searchAVL(syms.types, typeRef, compareStrings);
+    const resolvedTy = syms.types.get(typeRef);
 
     if (resolvedTy === undefined) {
       throw new CompilationError(
@@ -591,8 +589,8 @@ export function resolveExternalTermReferences(
 
   // Then resolve all term references
   return externalTermRefs.reduce((acc, termRef) => {
-    const symbolReferencedTerm = searchAVL(syms.terms, termRef, compareStrings);
-    const symbolReferencedType = searchAVL(syms.types, termRef, compareStrings);
+    const symbolReferencedTerm = syms.terms.get(termRef);
+    const symbolReferencedType = syms.types.get(termRef);
 
     if (
       symbolReferencedTerm === undefined && symbolReferencedType === undefined

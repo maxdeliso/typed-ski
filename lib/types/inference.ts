@@ -25,8 +25,6 @@ import {
 } from "./typedLambda.ts";
 import { varSource } from "./varSource.ts";
 import { normalizeTy } from "./normalization.ts";
-import { insertAVL, keyValuePairs, searchAVL } from "../data/avl/avlNode.ts";
-import { compareStrings, createStringMap } from "../data/map/stringMap.ts";
 
 interface InferenceState {
   varBindings: Context;
@@ -105,11 +103,7 @@ export const algorithmW = (
 ): InferenceResult => {
   switch (term.kind) {
     case "lambda-var": {
-      const contextType = searchAVL(
-        state.varBindings,
-        term.name,
-        compareStrings,
-      );
+      const contextType = state.varBindings.get(term.name);
       if (contextType !== undefined) {
         return {
           type: contextType,
@@ -124,19 +118,13 @@ export const algorithmW = (
     }
     case "lambda-abs": {
       const paramType = nextVar();
+      const newVarBindings = new Map(state.varBindings);
+      newVarBindings.set(term.name, paramType);
+      const newConstraints = new Map(state.constraints);
+      newConstraints.set(term.name, paramType);
       const newState = {
-        varBindings: insertAVL(
-          state.varBindings,
-          term.name,
-          paramType,
-          compareStrings,
-        ),
-        constraints: insertAVL(
-          state.constraints,
-          term.name,
-          paramType,
-          compareStrings,
-        ),
+        varBindings: newVarBindings,
+        constraints: newConstraints,
       };
 
       const result = algorithmW(term.body, nextVar, newState);
@@ -206,16 +194,12 @@ export const unify = (
         `occurs check failed: ${t1.typeName} occurs in ${prettyPrintTy(t2)}`,
       );
     }
-    for (const [key, ty] of keyValuePairs(context)) {
-      context = insertAVL(
-        context,
-        key,
-        substituteType(ty, t1, t2),
-        compareStrings,
-      );
+    const newContext = new Map(context);
+    for (const [key, ty] of context.entries()) {
+      newContext.set(key, substituteType(ty, t1, t2));
     }
-    context = insertAVL(context, t1.typeName, t2, compareStrings);
-    return context;
+    newContext.set(t1.typeName, t2);
+    return newContext;
   }
 
   if (t2.kind === "type-var") {
@@ -225,16 +209,12 @@ export const unify = (
       );
     }
 
-    for (const [key, ty] of keyValuePairs(context)) {
-      context = insertAVL(
-        context,
-        key,
-        substituteType(ty, t2, t1),
-        compareStrings,
-      );
+    const newContext = new Map(context);
+    for (const [key, ty] of context.entries()) {
+      newContext.set(key, substituteType(ty, t2, t1));
     }
-    context = insertAVL(context, t2.typeName, t1, compareStrings);
-    return context;
+    newContext.set(t2.typeName, t1);
+    return newContext;
   }
 
   // At this point, both t1 and t2 are non-terminal (arrow) types.
@@ -258,7 +238,7 @@ const attachTypes = (untyped: UntypedLambda, types: Context): TypedLambda => {
     case "lambda-var":
       return untyped;
     case "lambda-abs": {
-      const ty = searchAVL(types, untyped.name, compareStrings);
+      const ty = types.get(untyped.name);
       if (ty === undefined) {
         throw new TypeError("missing type for term: " + untyped.name);
       }
@@ -293,23 +273,25 @@ export const inferType = (
   let { type, state } = result;
 
   // Apply substitutions from constraints to the type
-  for (const [key, combinedTy] of keyValuePairs(state.constraints)) {
-    const originalTy = searchAVL(state.varBindings, key, compareStrings);
+  for (const [key, combinedTy] of state.constraints.entries()) {
+    const originalTy = state.varBindings.get(key);
     if (originalTy !== undefined && !typesLitEq(combinedTy, originalTy)) {
       type = substituteType(type, originalTy, combinedTy);
     }
   }
 
   // Normalize types
-  let normalizationMappings = createStringMap();
+  let normalizationMappings = new Map<string, string>();
   const vars = varSource();
 
   // Normalize context
-  const normalizedContext = keyValuePairs(state.constraints).reduce(
+  const normalizedContext = Array.from(state.constraints.entries()).reduce(
     (ctx, [termName, ty]) => {
       const [nty, nvars] = normalizeTy(ty, normalizationMappings, vars);
       normalizationMappings = nvars;
-      return insertAVL(ctx, termName, nty, compareStrings);
+      const newCtx = new Map(ctx);
+      newCtx.set(termName, nty);
+      return newCtx;
     },
     emptyContext(),
   );

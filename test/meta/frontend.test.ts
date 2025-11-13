@@ -6,7 +6,6 @@ import { loadInput } from "../util/fileLoader.ts";
 const __dirname = dirname(fromFileUrl(import.meta.url));
 
 import {
-  arenaEvaluator,
   bracketLambda,
   compile,
   eraseSystemF,
@@ -17,14 +16,11 @@ import {
   prettyPrintSystemF,
   prettyPrintTy,
   resolveExternalProgramReferences,
-  searchAVL,
   type SystemFTerm,
   type TripLangTerm,
   UnChurchNumber,
 } from "../../lib/index.ts";
 
-import { type AVLTree, keyValuePairs } from "../../lib/data/avl/avlNode.ts";
-import { compareStrings } from "../../lib/data/map/stringMap.ts";
 import type { BaseType } from "../../lib/types/types.ts";
 import { createArenaEvaluator } from "../../lib/evaluator/arenaEvaluator.ts";
 
@@ -32,6 +28,7 @@ import {
   resolvePoly,
   resolveUntyped,
 } from "../../lib/meta/frontend/compilation.ts";
+import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 
 const arenaEval = await createArenaEvaluator();
 
@@ -65,11 +62,11 @@ function assertTermMatches(actual: unknown, expectedSrc: string, msg?: string) {
 }
 
 function assertTypeDefinition(
-  types: AVLTree<string, BaseType>,
+  types: Map<string, BaseType>,
   id: string,
   expected: string,
 ) {
-  const ty = searchAVL(types, id, compareStrings);
+  const ty = types.get(id);
   assert.isDefined(ty, `${id} should be defined`);
   assert.strictEqual(prettyPrintTy(ty!), expected);
 }
@@ -134,11 +131,11 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     const [termRefs, typeRefs] = externalReferences(factKernel.term);
 
     assert.deepEqual(
-      keyValuePairs(termRefs).map(([k]) => k).sort(),
+      Array.from(termRefs.keys()).sort(),
       ["cond", "isZero", "mul", "one", "pred"].sort(),
     );
     assert.deepEqual(
-      keyValuePairs(typeRefs).map(([k]) => k).sort(),
+      Array.from(typeRefs.keys()).sort(),
       ["Nat"],
     );
 
@@ -178,7 +175,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     const compiled = compile(src);
 
     // expect 9 type definitions, with specific ids
-    const ids = keyValuePairs(compiled.types).map(([id]) => id);
+    const ids = Array.from(compiled.types.keys());
     assert.deepEqual(
       ids.sort(),
       [

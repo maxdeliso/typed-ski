@@ -19,7 +19,6 @@ import {
   substituteTripLangTermDirect,
   substituteTripLangTypeDirect,
 } from "../meta/frontend/substitution.ts";
-import { keyValuePairs } from "../data/avl/avlNode.ts";
 import { prettyPrint } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 
@@ -380,7 +379,7 @@ function buildDependencyGraph(
       const [termRefs, typeRefs] = externalReferences(definitionValue);
 
       // Add term dependencies
-      for (const [refName, _] of keyValuePairs(termRefs)) {
+      for (const refName of termRefs.keys()) {
         // Check for external imports first
         const targetQualified = termEnv.get(refName);
         if (targetQualified) {
@@ -397,7 +396,7 @@ function buildDependencyGraph(
       }
 
       // Add type dependencies
-      for (const [refName, _] of keyValuePairs(typeRefs)) {
+      for (const refName of typeRefs.keys()) {
         // Check for external imports first
         const targetQualified = typeEnv.get(refName);
         if (targetQualified) {
@@ -479,8 +478,8 @@ function substituteDependencies(
   if (!defValue) return def;
 
   const [termRefs, typeRefs] = externalReferences(defValue);
-  const externalTermRefs = keyValuePairs(termRefs).map((kvp) => kvp[0]);
-  const externalTypeRefs = keyValuePairs(typeRefs).map((kvp) => kvp[0]);
+  const externalTermRefs = Array.from(termRefs.keys());
+  const externalTypeRefs = Array.from(typeRefs.keys());
 
   if (externalTermRefs.length === 0 && externalTypeRefs.length === 0) {
     return def;
@@ -511,9 +510,7 @@ function substituteDependencies(
           const [newTermRefs, _newTypeRefs] = externalReferences(
             extractDefinitionValue(resolvedDefinition)!,
           );
-          const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
-            kvp[0]
-          );
+          const newExternalTermRefs = Array.from(newTermRefs.keys());
           newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
         }
       } else {
@@ -530,9 +527,7 @@ function substituteDependencies(
           const [newTermRefs, _newTypeRefs] = externalReferences(
             extractDefinitionValue(resolvedDefinition)!,
           );
-          const newExternalTermRefs = keyValuePairs(newTermRefs).map((kvp) =>
-            kvp[0]
-          );
+          const newExternalTermRefs = Array.from(newTermRefs.keys());
           newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
         } else {
           // Find candidate modules that export this symbol
@@ -597,9 +592,7 @@ function substituteDependencies(
           const [_newTermRefs, newTypeRefs] = externalReferences(
             extractDefinitionValue(resolvedDefinition)!,
           );
-          const newExternalTypeRefs = keyValuePairs(newTypeRefs).map((kvp) =>
-            kvp[0]
-          );
+          const newExternalTypeRefs = Array.from(newTypeRefs.keys());
           newExternalTypeRefs.forEach((ref) => nextExternalTypeRefs.add(ref));
         }
       } else {
@@ -616,9 +609,7 @@ function substituteDependencies(
             const [_newTermRefs, newTypeRefs] = externalReferences(
               extractDefinitionValue(resolvedDefinition)!,
             );
-            const newExternalTypeRefs = keyValuePairs(newTypeRefs).map((kvp) =>
-              kvp[0]
-            );
+            const newExternalTypeRefs = Array.from(newTypeRefs.keys());
             newExternalTypeRefs.forEach((ref) => nextExternalTypeRefs.add(ref));
           }
         } else {
@@ -760,8 +751,8 @@ export function resolveCrossModuleDependencies(
         const definitionValue = extractDefinitionValue(definition);
         if (definitionValue) {
           const [termRefs, typeRefs] = externalReferences(definitionValue);
-          const externalTermRefs = keyValuePairs(termRefs).map((kvp) => kvp[0]);
-          const externalTypeRefs = keyValuePairs(typeRefs).map((kvp) => kvp[0]);
+          const externalTermRefs = Array.from(termRefs.keys());
+          const externalTypeRefs = Array.from(typeRefs.keys());
 
           if (externalTermRefs.length > 0 || externalTypeRefs.length > 0) {
             console.warn(
@@ -846,7 +837,7 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
     // Debug: check for external references before lowering
     if (verbose && current.kind === "untyped") {
       const [termRefs, _typeRefs] = externalReferences(current.term);
-      const externalTermRefs = keyValuePairs(termRefs).map((kvp) => kvp[0]);
+      const externalTermRefs = Array.from(termRefs.keys());
       if (externalTermRefs.length > 0) {
         console.error(
           `  Warning: untyped term still has external references: ${

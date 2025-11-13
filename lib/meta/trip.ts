@@ -6,7 +6,6 @@
  *
  * @module
  */
-import type { AVLTree } from "../data/avl/avlNode.ts";
 import type { SKIExpression } from "../ski/expression.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
@@ -104,6 +103,6 @@ export interface ExportDefinition {
  * Maps names to their definitions for both terms and types.
  */
 export interface SymbolTable {
-  terms: AVLTree<string, TripLangTerm>;
-  types: AVLTree<string, TypeDefinition>;
+  terms: Map<string, TripLangTerm>;
+  types: Map<string, TypeDefinition>;
 }

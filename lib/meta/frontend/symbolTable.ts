@@ -7,12 +7,6 @@
  *
  * @module
  */
-import {
-  createEmptyAVL,
-  insertAVL,
-  searchAVL,
-} from "../../data/avl/avlNode.ts";
-import { compareStrings } from "../../data/map/stringMap.ts";
 import { prettyPrintTy } from "../../types/types.ts";
 import type {
   SymbolTable,
@@ -28,11 +22,11 @@ import { CompilationError } from "./compilation.ts";
  *
  * @throws CompilationError when a duplicate term or type definition is encountered
  * @param program the TripLang program
- * @returns a `SymbolTable` containing AVL maps of term and type definitions by name
+ * @returns a `SymbolTable` containing Maps of term and type definitions by name
  */
 export function indexSymbols(program: TripLangProgram): SymbolTable {
-  let termMap = createEmptyAVL<string, TripLangTerm>();
-  let tyMap = createEmptyAVL<string, TypeDefinition>();
+  const termMap = new Map<string, TripLangTerm>();
+  const tyMap = new Map<string, TypeDefinition>();
 
   for (const term of program.terms) {
     switch (term.kind) {
@@ -41,7 +35,7 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
       case "untyped":
       case "combinator":
         {
-          if (searchAVL(termMap, term.name, compareStrings) !== undefined) {
+          if (termMap.has(term.name)) {
             throw new CompilationError(
               `Duplicate definition: ${term.name}`,
               "index",
@@ -49,13 +43,13 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
             );
           }
 
-          termMap = insertAVL(termMap, term.name, term, compareStrings);
+          termMap.set(term.name, term);
         }
         break;
       case "type":
         {
           const typeDef = term;
-          if (searchAVL(tyMap, term.name, compareStrings) !== undefined) {
+          if (tyMap.has(term.name)) {
             throw new CompilationError(
               `Duplicate type: ${prettyPrintTy(typeDef.type)}`,
               "index",
@@ -63,7 +57,7 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
             );
           }
 
-          tyMap = insertAVL(tyMap, term.name, typeDef, compareStrings);
+          tyMap.set(term.name, typeDef);
         }
         break;
     }

@@ -8,8 +8,6 @@ import {
   mkSystemFTypeApp,
   mkSystemFVar,
 } from "../../../lib/terms/systemF.ts";
-import { createEmptyAVL, insertAVL } from "../../../lib/data/avl/avlNode.ts";
-import { compareStrings } from "../../../lib/data/map/stringMap.ts";
 import { arrow, type BaseType } from "../../../lib/types/types.ts";
 
 Deno.test("elaborateSystemF", async (t) => {
@@ -17,17 +15,12 @@ Deno.test("elaborateSystemF", async (t) => {
     types: { name: string; type: BaseType }[],
   ): SymbolTable {
     const table: SymbolTable = {
-      terms: createEmptyAVL(),
-      types: createEmptyAVL(),
+      terms: new Map(),
+      types: new Map(),
     };
 
     for (const { name, type } of types) {
-      table.types = insertAVL(
-        table.types,
-        name,
-        { kind: "type", name, type },
-        compareStrings,
-      );
+      table.types.set(name, { kind: "type", name, type });
     }
 
     return table;

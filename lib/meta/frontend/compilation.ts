@@ -21,19 +21,11 @@ import {
 import { elaborateTerms } from "./elaboration.ts";
 import { resolveExternalProgramReferences } from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
-import {
-  type AVLTree,
-  createEmptyAVL,
-  insertAVL,
-  keyValuePairs,
-  searchAVL,
-} from "../../data/avl/avlNode.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
 import { typecheckSystemF } from "../../index.ts";
 import type { BaseType } from "../../types/types.ts";
 import { typecheckTypedLambda } from "../../types/typedLambda.ts";
 import { prettyTerm } from "./prettyPrint.ts";
-import { compareStrings } from "../../data/map/stringMap.ts";
 
 export class CompilationError extends Error {
   constructor(
@@ -114,7 +106,7 @@ export interface ElaboratedProgramWithSymbols {
 
 export interface TypecheckedProgramWithTypes {
   program: TypecheckedProgram;
-  types: AVLTree<string, BaseType>;
+  types: Map<string, BaseType>;
   readonly __moniker: unique symbol;
 }
 
@@ -209,8 +201,8 @@ export function resolve(
     const [ut, uty] = externalReferences(definitionValue);
 
     // Check for unresolved terms that are not imported
-    const unresolvedTerms = keyValuePairs(ut).map((kvp) => kvp[0]);
-    const unresolvedTypes = keyValuePairs(uty).map((kvp) => kvp[0]);
+    const unresolvedTerms = Array.from(ut.keys());
+    const unresolvedTypes = Array.from(uty.keys());
 
     const nonImportedUnresolvedTerms = unresolvedTerms.filter((term) =>
       !importedSymbols.has(term)
@@ -223,31 +215,21 @@ export function resolve(
       nonImportedUnresolvedTerms.length > 0 ||
       nonImportedUnresolvedTypes.length > 0
     ) {
-      // Create filtered AVL trees with only non-imported unresolved references
-      let filteredTerms = createEmptyAVL<string, TripLangValueType>();
-      let filteredTypes = createEmptyAVL<string, BaseType>();
+      // Create filtered Maps with only non-imported unresolved references
+      const filteredTerms = new Map<string, TripLangValueType>();
+      const filteredTypes = new Map<string, BaseType>();
 
       for (const term of nonImportedUnresolvedTerms) {
-        const termValue = searchAVL(ut, term, compareStrings);
+        const termValue = ut.get(term);
         if (termValue) {
-          filteredTerms = insertAVL(
-            filteredTerms,
-            term,
-            termValue,
-            compareStrings,
-          );
+          filteredTerms.set(term, termValue);
         }
       }
 
       for (const type of nonImportedUnresolvedTypes) {
-        const typeValue = searchAVL(uty, type, compareStrings);
+        const typeValue = uty.get(type);
         if (typeValue) {
-          filteredTypes = insertAVL(
-            filteredTypes,
-            type,
-            typeValue,
-            compareStrings,
-          );
+          filteredTypes.set(type, typeValue);
         }
       }
 
@@ -282,7 +264,7 @@ export function typecheck(
     }
   }
 
-  let types = createEmptyAVL<string, BaseType>();
+  const types = new Map<string, BaseType>();
 
   for (const term of program.terms) {
     try {
@@ -290,8 +272,8 @@ export function typecheck(
       const definitionValue = extractDefinitionValue(term);
       if (definitionValue !== undefined) {
         const [ut, uty] = externalReferences(definitionValue);
-        const unresolvedTerms = keyValuePairs(ut).map((kvp) => kvp[0]);
-        const unresolvedTypes = keyValuePairs(uty).map((kvp) => kvp[0]);
+        const unresolvedTerms = Array.from(ut.keys());
+        const unresolvedTypes = Array.from(uty.keys());
 
         // Check if any unresolved references are imported symbols
         const hasUnresolvedImportedSymbols = unresolvedTerms.some((term) =>
@@ -307,20 +289,10 @@ export function typecheck(
 
       switch (term.kind) {
         case "poly":
-          types = insertAVL(
-            types,
-            term.name,
-            typecheckSystemF(term.term),
-            compareStrings,
-          );
+          types.set(term.name, typecheckSystemF(term.term));
           break;
         case "typed":
-          types = insertAVL(
-            types,
-            term.name,
-            typecheckTypedLambda(term.term),
-            compareStrings,
-          );
+          types.set(term.name, typecheckTypedLambda(term.term));
           break;
         default:
           break;

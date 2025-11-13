@@ -17,8 +17,6 @@ import {
 } from "../../lib/types/systemF.ts";
 
 import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
-import { insertAVL } from "../../lib/data/avl/avlNode.ts";
-import { compareStrings } from "../../lib/data/map/stringMap.ts";
 
 Deno.test("System F type-checker and helpers", async (t) => {
   await t.step("positive cases", async (t) => {
@@ -71,12 +69,11 @@ Deno.test("System F type-checker and helpers", async (t) => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "a",
-          mkTypeVariable("A"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("a", mkTypeVariable("A"));
+          return newCtx;
+        })(),
       };
 
       const [ty] = typecheckSystemF(ctx, term);
@@ -131,21 +128,19 @@ Deno.test("System F type-checker and helpers", async (t) => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "a",
-          mkTypeVariable("A"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("a", mkTypeVariable("A"));
+          return newCtx;
+        })(),
       };
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "b",
-          mkTypeVariable("B"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("b", mkTypeVariable("B"));
+          return newCtx;
+        })(),
       };
       const term = mkSystemFApp(mkSystemFVar("a"), mkSystemFVar("b"));
       expect(() => typecheckSystemF(ctx, term))
@@ -156,12 +151,11 @@ Deno.test("System F type-checker and helpers", async (t) => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "a",
-          mkTypeVariable("A"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("a", mkTypeVariable("A"));
+          return newCtx;
+        })(),
       };
       const term = mkSystemFTypeApp(mkSystemFVar("a"), mkTypeVariable("B"));
       expect(() => typecheckSystemF(ctx, term))
@@ -173,21 +167,19 @@ Deno.test("System F type-checker and helpers", async (t) => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "f",
-          arrow(mkTypeVariable("A"), mkTypeVariable("A")),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("f", arrow(mkTypeVariable("A"), mkTypeVariable("A")));
+          return newCtx;
+        })(),
       };
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "a",
-          mkTypeVariable("B"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("a", mkTypeVariable("B"));
+          return newCtx;
+        })(),
       };
       const term = mkSystemFApp(f, mkSystemFVar("a"));
       expect(() => typecheckSystemF(ctx, term))
@@ -278,21 +270,19 @@ Deno.test("System F type-checker and helpers", async (t) => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "x",
-          mkTypeVariable("A"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("x", mkTypeVariable("A"));
+          return newCtx;
+        })(),
       };
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "f",
-          arrow(mkTypeVariable("A"), mkTypeVariable("B")),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("f", arrow(mkTypeVariable("A"), mkTypeVariable("B")));
+          return newCtx;
+        })(),
       };
       const term = mkSystemFApp(mkSystemFVar("f"), mkSystemFVar("x"));
       const [ty] = typecheckSystemF(ctx, term);
@@ -313,12 +303,11 @@ Deno.test("System F type-checker and helpers", async (t) => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
-        termCtx: insertAVL(
-          ctx.termCtx,
-          "y",
-          mkTypeVariable("A"),
-          compareStrings,
-        ),
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("y", mkTypeVariable("A"));
+          return newCtx;
+        })(),
       };
 
       const [ty] = typecheckSystemF(ctx, term);

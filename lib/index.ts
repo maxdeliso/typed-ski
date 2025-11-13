@@ -137,8 +137,6 @@ export {
   /** Converts a Church-encoded number back into a standard JavaScript number. */
   UnChurchNumber,
 } from "./ski/church.ts";
-/** Searches for a key in an AVL tree and returns the associated value or undefined if not found. */
-export { searchAVL } from "./data/avl/avlNode.ts";
 
 // SKI terminal and expression utilities
 export {

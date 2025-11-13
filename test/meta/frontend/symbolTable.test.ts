@@ -8,8 +8,6 @@ import {
   type TypeDefinition,
 } from "../../../lib/index.ts";
 import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
-import { searchAVL } from "../../../lib/data/avl/avlNode.ts";
-import { compareStrings } from "../../../lib/data/map/stringMap.ts";
 
 Deno.test("Symbol Table", async (t) => {
   await t.step("should index a program with unique terms and types", () => {
@@ -30,8 +28,8 @@ Deno.test("Symbol Table", async (t) => {
     };
 
     const symbols = indexSymbols(program);
-    const term = searchAVL(symbols.terms, "id", compareStrings);
-    const type = searchAVL(symbols.types, "Nat", compareStrings);
+    const term = symbols.terms.get("id");
+    const type = symbols.types.get("Nat");
 
     assert.isDefined(term);
     assert.isDefined(type);

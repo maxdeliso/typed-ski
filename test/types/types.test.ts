@@ -22,9 +22,6 @@ import {
 import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
 import { normalize } from "../../lib/types/normalization.ts";
 
-import { insertAVL, searchAVL } from "../../lib/data/avl/avlNode.ts";
-import { compareStrings } from "../../lib/data/map/stringMap.ts";
-
 Deno.test("type utilities: construction, normalisation, inference, unification", async (t) => {
   await t.step("basic type operations", async (t) => {
     await t.step("literal equivalence & associativity", () => {
@@ -201,7 +198,8 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
         const a = mkTypeVariable("a");
         const fun = arrow(a, mkTypeVariable("b"));
         let ctx = emptyContext();
-        ctx = insertAVL(ctx, "x", a, compareStrings);
+        ctx = new Map(ctx);
+        ctx.set("x", a);
         expect(() => unify(a, fun, ctx)).to.throw(/occurs check failed/);
       });
     });
@@ -215,12 +213,14 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
       const t2 = arrow(b, c);
 
       let ctx = emptyContext();
-      ctx = insertAVL(ctx, "x", t1, compareStrings);
+      ctx = new Map(ctx);
+      ctx.set("x", t1);
       ctx = unify(t1, t2, ctx);
 
-      expect(searchAVL(ctx, "x", compareStrings)).to.satisfy((ty: BaseType) => {
-        if (ty.kind !== "non-terminal") return false;
-        return typesLitEq(ty.lft, ty.rgt);
+      const ty = ctx.get("x");
+      expect(ty).to.satisfy((t: BaseType | undefined) => {
+        if (!t || t.kind !== "non-terminal") return false;
+        return typesLitEq(t.lft, t.rgt);
       });
     });
   });

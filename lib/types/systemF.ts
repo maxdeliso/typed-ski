@@ -20,14 +20,6 @@ import {
   type UntypedLambda,
 } from "../terms/lambda.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
-import {
-  type AVLTree,
-  createEmptyAVL,
-  insertAVL,
-  searchAVL,
-} from "../data/avl/avlNode.ts";
-import { compareStrings } from "../data/map/stringMap.ts";
-import { createSet, insertSet, type Set } from "../data/set/set.ts";
 import { normalize } from "./normalization.ts";
 
 /*
@@ -85,11 +77,11 @@ export const referencesVar = (
 
 /**
  * The type checking context for System F.
- * - termCtx maps term variables (strings) to their types (SystemFType) using a persistent AVL tree.
- * - typeVars is the set of bound type variables using our persistent AVLSet.
+ * - termCtx maps term variables (strings) to their types (SystemFType) using a Map.
+ * - typeVars is the set of bound type variables using a Set.
  */
 export interface SystemFContext {
-  termCtx: AVLTree<string, BaseType>;
+  termCtx: Map<string, BaseType>;
   typeVars: Set<string>;
 }
 
@@ -97,8 +89,8 @@ export interface SystemFContext {
  * Returns an empty System F context.
  */
 export const emptySystemFContext = (): SystemFContext => ({
-  termCtx: createEmptyAVL<string, BaseType>(),
-  typeVars: createSet<string>(compareStrings),
+  termCtx: new Map<string, BaseType>(),
+  typeVars: new Set<string>(),
 });
 
 /**
@@ -145,7 +137,7 @@ export const typecheckSystemF = (
 ): [BaseType, SystemFContext] => {
   switch (term.kind) {
     case "systemF-var": {
-      const ty = searchAVL(ctx.termCtx, term.name, compareStrings);
+      const ty = ctx.termCtx.get(term.name);
       if (ty === undefined) {
         throw new TypeError(`unknown variable: ${term.name}`);
       }
@@ -153,12 +145,8 @@ export const typecheckSystemF = (
     }
     case "systemF-abs": {
       // Extend the term context locally with x:T.
-      const newTermCtx = insertAVL(
-        ctx.termCtx,
-        term.name,
-        term.typeAnnotation,
-        compareStrings,
-      );
+      const newTermCtx = new Map(ctx.termCtx);
+      newTermCtx.set(term.name, term.typeAnnotation);
       const localCtx: SystemFContext = {
         termCtx: newTermCtx,
         typeVars: ctx.typeVars, // persistent: no need to copy
@@ -201,10 +189,12 @@ export const typecheckSystemF = (
       return [funTy.rgt, ctxAfterRight];
     }
     case "systemF-type-abs": {
-      // Extend the type variable context locally using our AVLSet.
+      // Extend the type variable context locally using a Set.
+      const newTypeVars = new Set(ctx.typeVars);
+      newTypeVars.add(term.typeVar);
       const localCtx: SystemFContext = {
         termCtx: ctx.termCtx,
-        typeVars: insertSet(ctx.typeVars, term.typeVar),
+        typeVars: newTypeVars,
       };
       const [bodyTy] = typecheckSystemF(localCtx, term.body);
       // The local type variable binding is scoped; return the parent context.

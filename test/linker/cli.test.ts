@@ -18,7 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * Helper function to compile a .trip file to .tripc format
  */
 async function compileTripFile(tripFileName: string): Promise<void> {
-  const compileCommand = new Deno.Command("deno", {
+  const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",
@@ -44,7 +44,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
     await compileTripFile("complex.trip");
   });
   await t.step("shows help message", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -67,7 +67,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
   });
 
   await t.step("shows version information", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -87,7 +87,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
   });
 
   await t.step("accepts short help flag", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -107,7 +107,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
   });
 
   await t.step("accepts short version flag", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -127,7 +127,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
   });
 
   await t.step("accepts verbose flag", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -150,7 +150,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
   });
 
   await t.step("accepts short verbose flag", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -173,7 +173,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
   });
 
   await t.step("links single .tripc file", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -205,7 +205,7 @@ poly helper = ΛX. λx: X. x`;
     await Deno.writeTextFile(helperFile, helperSource);
 
     // Compile the helper module
-    const compileCommand = new Deno.Command("deno", {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -223,7 +223,7 @@ poly helper = ΛX. λx: X. x`;
     }
 
     // Now link A.tripc with helper.tripc (only A has main)
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -253,7 +253,7 @@ poly helper = ΛX. λx: X. x`;
   });
 
   await t.step("links complex expression", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -275,7 +275,7 @@ poly helper = ΛX. λx: X. x`;
   });
 
   await t.step("rejects non-.tripc files", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -295,7 +295,7 @@ poly helper = ΛX. λx: X. x`;
   });
 
   await t.step("rejects non-existent files", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -315,7 +315,7 @@ poly helper = ΛX. λx: X. x`;
   });
 
   await t.step("rejects empty argument list", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -339,7 +339,7 @@ poly helper = ΛX. λx: X. x`;
     await Deno.writeTextFile(tempFile, "some content");
 
     try {
-      const command = new Deno.Command("deno", {
+      const command = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -369,7 +369,7 @@ poly helper = ΛX. λx: X. x`;
   });
 
   await t.step("executable wrapper works", async () => {
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",

@@ -33,7 +33,7 @@ async function compileTripFile(tripFileName: string): Promise<string> {
   const tripcPath = `${__dirname}/${tripFileName.replace(".trip", ".tripc")}`;
 
   // Compile the .trip file to .tripc
-  const compileCommand = new Deno.Command("deno", {
+  const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",

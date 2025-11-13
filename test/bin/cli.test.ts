@@ -32,8 +32,12 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
   stderr: string;
   code: number;
 }> {
-  const process = new Deno.Command(command[0], {
-    args: command.slice(1),
+  // Use Deno.execPath() if command is "deno" to ensure we use the same Deno instance
+  const executable = command[0] === "deno" ? Deno.execPath() : command[0];
+  const args = command[0] === "deno" ? command.slice(1) : command.slice(1);
+
+  const process = new Deno.Command(executable, {
+    args,
     cwd,
     stdout: "piped",
     stderr: "piped",

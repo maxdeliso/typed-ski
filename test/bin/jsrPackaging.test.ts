@@ -159,7 +159,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     await t.step("tripc CLI can show version", async () => {
       const tripcScript = join(projectRoot, "bin/tripc.ts");
 
-      const command = new Deno.Command("deno", {
+      const command = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -180,7 +180,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     await t.step("tripc CLI can show help", async () => {
       const tripcScript = join(projectRoot, "bin/tripc.ts");
 
-      const command = new Deno.Command("deno", {
+      const command = new Deno.Command(Deno.execPath(), {
         args: ["run", "--allow-read", "--allow-write", tripcScript, "--help"],
         cwd: projectRoot,
       });
@@ -195,7 +195,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     await t.step("genForest CLI can show version", async () => {
       const genForestScript = join(projectRoot, "bin/genForest.ts");
 
-      const command = new Deno.Command("deno", {
+      const command = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -217,7 +217,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     await t.step("genSvg CLI can show version", async () => {
       const genSvgScript = join(projectRoot, "bin/genSvg.ts");
 
-      const command = new Deno.Command("deno", {
+      const command = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -247,7 +247,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
         // Ignore if doesn't exist
       }
 
-      const command = new Deno.Command("deno", {
+      const command = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",

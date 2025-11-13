@@ -37,7 +37,7 @@ poly main = mul two three`;
   await Deno.writeTextFile(testFilePath, testSource);
 
   // Compile the test module
-  const compileCommand = new Deno.Command("deno", {
+  const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",
@@ -104,7 +104,7 @@ poly main = add one one`;
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
-  const compileCommand = new Deno.Command("deno", {
+  const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",
@@ -172,7 +172,7 @@ poly main = mul two three`;
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
-  const compileCommand = new Deno.Command("deno", {
+  const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",
@@ -241,7 +241,7 @@ poly main = add (mul two three) (mul one four)`;
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
-  const compileCommand = new Deno.Command("deno", {
+  const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",

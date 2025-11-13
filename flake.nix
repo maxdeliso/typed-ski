@@ -183,6 +183,8 @@
               fi
 
               echo "Running Deno tests..."
+              # Ensure deno is in PATH for subprocesses spawned by tests
+              export PATH="${deno}/bin:$PATH"
               ${deno}/bin/deno test --allow-read --allow-write --allow-run test/
             '');
           };

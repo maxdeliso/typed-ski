@@ -38,6 +38,11 @@ jobs:
       - name: Build with Nix
         run: nix build
 
+      - name: Copy WASM files for tests
+        run: |
+          mkdir -p wasm
+          cp result/wasm/*.wasm wasm/
+
       - name: Run Rust tests
         run: nix run .#test-rust
 

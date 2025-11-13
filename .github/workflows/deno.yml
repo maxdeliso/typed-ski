@@ -1,4 +1,4 @@
-name: Deno CI
+name: Nix CI
 
 on: [push]
 
@@ -12,25 +12,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
 
-      - name: CI Pipeline
-        run: deno task ci
+      - name: Verify Nix-provided tools
+        run: |
+          echo "Verifying tools are from Nix:"
+          echo "Deno: $(which deno || echo 'not found')"
+          echo "Cargo: $(which cargo || echo 'not found')"
+          echo "Rustc: $(which rustc || echo 'not found')"
+          echo ""
+          echo "Entering Nix development shell to ensure tools are available..."
+          nix develop --command bash -c "
+            echo 'Tools in Nix environment:'
+            which deno && deno --version
+            which cargo && cargo --version
+            which rustc && rustc --version
+          "
+
+      - name: Update version and generate Cargo.toml
+        run: |
+          nix run .#update-version
+          nix run .#generate-cargo
+
+      - name: Build with Nix
+        run: nix build
+
+      - name: Run Rust tests
+        run: nix run .#test-rust
 
       - name: Check formatting
-        run: deno fmt --check
+        run: nix run .#fmt -- --check
 
       - name: Lint
-        run: deno lint
+        run: nix run .#lint
 
-      - name: Validate dist files
+      - name: Validate WASM files
         run: |
-          ls -la dist/
-          echo "Dist files validation successful"
+          ls -lh result/wasm/
+          echo "WASM files validation successful"
 
-      - name: Dry run publish
+      - name: JSR dry run publish
         if: github.ref != 'refs/heads/main'
-        run: deno publish --dry-run
+        run: nix run .#publish -- --dry-run
+
+      - name: Cargo dry run publish
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Using Cargo from: $(nix --extra-experimental-features 'nix-command flakes' develop --command which cargo)"
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "cd rust && cargo publish --dry-run"

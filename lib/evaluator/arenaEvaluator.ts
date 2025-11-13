@@ -261,7 +261,7 @@ export async function getWasmBytes(): Promise<ArrayBuffer> {
   if (cachedDebugBytes === null) {
     cachedDebugBytes = (async () => {
       const response = await fetch(
-        new URL("../../assembly/build/debug.wasm", import.meta.url),
+        new URL("../../wasm/debug.wasm", import.meta.url),
       );
       if (!response.ok) {
         throw new Error(
@@ -289,7 +289,7 @@ export async function getWasmBytesRelease(): Promise<ArrayBuffer> {
   if (cachedReleaseBytes === null) {
     cachedReleaseBytes = (async () => {
       const response = await fetch(
-        new URL("../../assembly/build/release.wasm", import.meta.url),
+        new URL("../../wasm/release.wasm", import.meta.url),
       );
       if (!response.ok) {
         throw new Error(

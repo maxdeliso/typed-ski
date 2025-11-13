@@ -1,0 +1,218 @@
+{
+  description = "typed-ski: SKI calculus implementation with Rust WASM core";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs { inherit system overlays; };
+
+        # Central version management
+        version = "0.4.2";
+
+        # Rust toolchain with wasm32 target
+        # Using a pinned version for reproducibility
+        rustToolchain = pkgs.rust-bin.stable."1.91.1".default.override {
+          targets = [ "wasm32-unknown-unknown" ];
+        };
+
+        # Deno version (pinned via nixpkgs in flake.lock)
+        # Using Deno 2.x from nixpkgs
+        deno = pkgs.deno;
+
+        # Script to update version in deno.jsonc
+        updateVersion = pkgs.writeShellScriptBin "update-version" ''
+          jq --arg version "${version}" '.version = $version' deno.jsonc > deno.jsonc.tmp && mv deno.jsonc.tmp deno.jsonc
+          echo "Updated deno.jsonc version to ${version}"
+        '';
+
+        # Script to generate Cargo.toml
+        generateCargoToml = pkgs.writeShellScriptBin "generate-cargo-toml" ''
+          mkdir -p rust
+          cat > rust/Cargo.toml << EOF
+          [package]
+          name = "typed-ski"
+          version = "${version}"
+          edition = "2021"
+          authors = ["Max DeLiso <maxdeliso@gmail.com>"]
+          license = "MIT"
+          description = "SKI calculus evaluator in Rust compiled to WASM"
+          repository = "https://github.com/maxdeliso/typed-ski"
+          homepage = "https://github.com/maxdeliso/typed-ski"
+          readme = "README.md"
+          keywords = ["ski", "calculus", "wasm", "combinator"]
+          categories = ["wasm", "no-std"]
+
+          [lib]
+          crate-type = ["cdylib", "rlib"]
+
+          [profile.release]
+          opt-level = "z"
+          lto = true
+          codegen-units = 1
+          strip = true
+
+          [dependencies]
+          EOF
+          echo "Generated rust/Cargo.toml with version ${version}"
+        '';
+
+        # Complete build (WASM + TypeScript + tests)
+        typedSki = pkgs.stdenv.mkDerivation {
+          name = "typed-ski";
+          inherit version;
+
+          src = ./.;
+
+          nativeBuildInputs = [
+            rustToolchain
+            deno
+            pkgs.jq
+            updateVersion
+            generateCargoToml
+          ];
+
+          buildPhase = ''
+            # Update version in deno.jsonc
+            ${updateVersion}/bin/update-version
+            ${generateCargoToml}/bin/generate-cargo-toml
+
+            # Build WASM
+            cd rust
+
+            echo "Building WASM (debug)..."
+            cargo build --target wasm32-unknown-unknown --lib
+
+            echo "Building WASM (release)..."
+            cargo build --release --target wasm32-unknown-unknown --lib
+
+            echo "Copying WASM files to wasm/..."
+            mkdir -p ../wasm
+            cp target/wasm32-unknown-unknown/debug/typed_ski.wasm ../wasm/debug.wasm
+            cp target/wasm32-unknown-unknown/release/typed_ski.wasm ../wasm/release.wasm
+
+            cd ..
+
+            # Verify WASM files exist
+            echo "WASM files:"
+            ls -lh wasm/
+
+          '';
+
+          checkPhase = ''
+            # Tests are run separately via 'nix run .#test'
+            # This allows network access for downloading Deno dependencies
+            echo ""
+            echo "Build complete! WASM files generated successfully."
+            echo "To run tests: nix run .#test"
+            echo ""
+          '';
+
+          installPhase = ''
+            mkdir -p $out
+            cp -r . $out/
+          '';
+
+          doCheck = false;
+        };
+
+        # Development shell
+        devShell = pkgs.mkShell {
+          buildInputs = [
+            rustToolchain
+            deno
+            pkgs.cargo-edit
+            pkgs.jq
+            updateVersion
+            generateCargoToml
+          ];
+
+          shellHook = ''
+            echo "typed-ski development environment"
+            echo "Version: ${version}"
+            echo ""
+            echo "Available commands:"
+            echo "  update-version       - Update version in deno.jsonc"
+            echo "  generate-cargo-toml  - Generate rust/Cargo.toml"
+            echo "  ./build-wasm.sh      - Build WASM from Rust"
+            echo "  nix run .#test       - Run Deno tests"
+            echo "  nix run .#test-rust  - Run Rust tests"
+            echo ""
+          '';
+        };
+
+      in
+      {
+        packages = {
+          default = typedSki;
+        };
+
+        devShells.default = devShell;
+
+        apps = {
+          update-version = {
+            type = "app";
+            program = "${updateVersion}/bin/update-version";
+          };
+          generate-cargo = {
+            type = "app";
+            program = "${generateCargoToml}/bin/generate-cargo-toml";
+          };
+          test = {
+            type = "app";
+            program = toString (pkgs.writeShellScript "run-tests" ''
+              # Check if we're in the project root
+              if [ ! -f deno.jsonc ]; then
+                echo "Error: Please run this command from the typed-ski project root directory."
+                exit 1
+              fi
+
+              # Ensure WASM files exist
+              if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then
+                echo "Error: WASM files not found. Run 'nix build' first to generate WASM files."
+                exit 1
+              fi
+
+              echo "Running Deno tests..."
+              ${deno}/bin/deno test --allow-read --allow-write --allow-run test/
+            '');
+          };
+          fmt = {
+            type = "app";
+            program = toString (pkgs.writeShellScript "deno-fmt" ''
+              ${deno}/bin/deno fmt "$@"
+            '');
+          };
+          lint = {
+            type = "app";
+            program = toString (pkgs.writeShellScript "deno-lint" ''
+              ${deno}/bin/deno lint "$@"
+            '');
+          };
+          publish = {
+            type = "app";
+            program = toString (pkgs.writeShellScript "deno-publish" ''
+              ${deno}/bin/deno publish "$@"
+            '');
+          };
+          test-rust = {
+            type = "app";
+            program = toString (pkgs.writeShellScript "test-rust" ''
+              cd rust
+              ${rustToolchain}/bin/cargo test --lib -- --test-threads=1 "$@"
+            '');
+          };
+        };
+      }
+    );
+}
+

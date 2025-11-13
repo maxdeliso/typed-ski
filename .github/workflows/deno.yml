@@ -47,6 +47,9 @@ jobs:
       - name: Lint
         run: nix run .#lint
 
+      - name: Run Deno tests
+        run: nix run .#test
+
       - name: Validate WASM files
         run: |
           ls -lh result/wasm/

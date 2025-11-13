@@ -50,19 +50,8 @@ jobs:
       - name: Lint
         run: nix run .#lint
 
-      - name: Upload WASM artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-files
-          path: result/wasm/
-          retention-days: 30
-
-      - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-files
-          path: dist/
-          retention-days: 30
+      - name: Run Deno tests
+        run: nix run .#test
 
       - name: Publish to JSR (Deno Registry)
         run: nix run .#publish

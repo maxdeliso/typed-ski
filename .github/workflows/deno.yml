@@ -45,8 +45,20 @@ jobs:
 
       - name: Build dist files for tests
         run: |
+          set -e
           export PATH="$(nix --extra-experimental-features 'nix-command flakes' develop --command bash -c 'echo $PATH'):$PATH"
           nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "deno task dist"
+          echo "Dist files build completed"
+
+      - name: Validate dist files
+        run: |
+          echo "Checking for required dist files..."
+          ls -lh dist/ || echo "dist/ directory does not exist"
+          test -f dist/tripc.js || (echo "ERROR: dist/tripc.js not found" && exit 1)
+          test -f dist/tripc.min.js || (echo "ERROR: dist/tripc.min.js not found" && exit 1)
+          test -f dist/tripc || (echo "ERROR: dist/tripc binary not found" && exit 1)
+          echo "All required dist files exist:"
+          ls -lh dist/tripc.js dist/tripc.min.js dist/tripc
 
       - name: Run Rust tests
         run: nix run .#test-rust

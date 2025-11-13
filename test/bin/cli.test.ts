@@ -80,6 +80,23 @@ async function cleanupTestFile(filePath: string): Promise<void> {
   }
 }
 
+function assertCommandSuccess(
+  result: { success: boolean; stdout: string; stderr: string; code: number },
+  command: string[],
+  context?: string,
+): void {
+  if (!result.success) {
+    const contextMsg = context ? `\nContext: ${context}\n` : "\n";
+    const commandMsg = `Command: ${command.join(" ")}\n`;
+    const codeMsg = `Exit code: ${result.code}\n`;
+    const stdoutMsg = `Stdout:\n${result.stdout || "(empty)"}\n`;
+    const stderrMsg = `Stderr:\n${result.stderr || "(empty)"}\n`;
+    throw new Error(
+      `Command failed:${contextMsg}${commandMsg}${codeMsg}${stdoutMsg}${stderrMsg}`,
+    );
+  }
+}
+
 Deno.test("CLI Tests", async (t) => {
   // Test file content
   const testContent = `module TestModule
@@ -377,17 +394,28 @@ poly id = Λa. λx:a. x`;
     });
 
     await t.step("Bundled JavaScript (dist/tripc.js)", async (t) => {
+      const bundledJsPath = join(projectRoot, "dist/tripc.js");
+
+      await t.step("file exists", () => {
+        expect(existsSync(bundledJsPath)).to.be.true;
+      });
+
       await t.step("--version flag", async () => {
-        const result = await runCommand([
+        const command = [
           "deno",
           "run",
           "--allow-read",
           "--allow-write",
           "dist/tripc.js",
           "--version",
-        ]);
+        ];
+        const result = await runCommand(command);
 
-        expect(result.success).to.be.true;
+        assertCommandSuccess(
+          result,
+          command,
+          "Bundled JavaScript (dist/tripc.js) --version flag",
+        );
         expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
       });
 
@@ -395,16 +423,21 @@ poly id = Λa. λx:a. x`;
         const testFile = await createTestFile(testContent);
 
         try {
-          const result = await runCommand([
+          const command = [
             "deno",
             "run",
             "--allow-read",
             "--allow-write",
             "dist/tripc.js",
             testFile,
-          ]);
+          ];
+          const result = await runCommand(command);
 
-          expect(result.success).to.be.true;
+          assertCommandSuccess(
+            result,
+            command,
+            "Bundled JavaScript (dist/tripc.js) compilation",
+          );
 
           // Check that .tripc file was created
           const tripcFile = testFile.replace(/\.trip$/, ".tripc");
@@ -416,17 +449,28 @@ poly id = Λa. λx:a. x`;
     });
 
     await t.step("Minified JavaScript (dist/tripc.min.js)", async (t) => {
+      const minifiedJsPath = join(projectRoot, "dist/tripc.min.js");
+
+      await t.step("file exists", () => {
+        expect(existsSync(minifiedJsPath)).to.be.true;
+      });
+
       await t.step("--version flag", async () => {
-        const result = await runCommand([
+        const command = [
           "deno",
           "run",
           "--allow-read",
           "--allow-write",
           "dist/tripc.min.js",
           "--version",
-        ]);
+        ];
+        const result = await runCommand(command);
 
-        expect(result.success).to.be.true;
+        assertCommandSuccess(
+          result,
+          command,
+          "Minified JavaScript (dist/tripc.min.js) --version flag",
+        );
         expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
       });
 
@@ -434,16 +478,21 @@ poly id = Λa. λx:a. x`;
         const testFile = await createTestFile(testContent);
 
         try {
-          const result = await runCommand([
+          const command = [
             "deno",
             "run",
             "--allow-read",
             "--allow-write",
             "dist/tripc.min.js",
             testFile,
-          ]);
+          ];
+          const result = await runCommand(command);
 
-          expect(result.success).to.be.true;
+          assertCommandSuccess(
+            result,
+            command,
+            "Minified JavaScript (dist/tripc.min.js) compilation",
+          );
 
           // Check that .tripc file was created
           const tripcFile = testFile.replace(/\.trip$/, ".tripc");
@@ -455,17 +504,46 @@ poly id = Λa. λx:a. x`;
     });
 
     await t.step("Compiled Binary (dist/tripc)", async (t) => {
-      await t.step("--version flag", async () => {
-        const result = await runCommand(["./dist/tripc", "--version"]);
+      const binaryPath = join(projectRoot, "dist/tripc");
 
-        expect(result.success).to.be.true;
+      await t.step("file exists", () => {
+        expect(existsSync(binaryPath)).to.be.true;
+      });
+
+      await t.step("file is executable", async () => {
+        try {
+          const stat = await Deno.stat(binaryPath);
+          expect(stat.isFile).to.be.true;
+        } catch (error) {
+          throw new Error(
+            `Binary file check failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      });
+
+      await t.step("--version flag", async () => {
+        const command = ["./dist/tripc", "--version"];
+        const result = await runCommand(command);
+
+        assertCommandSuccess(
+          result,
+          command,
+          "Compiled Binary (dist/tripc) --version flag",
+        );
         expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
       });
 
       await t.step("--help flag", async () => {
-        const result = await runCommand(["./dist/tripc", "--help"]);
+        const command = ["./dist/tripc", "--help"];
+        const result = await runCommand(command);
 
-        expect(result.success).to.be.true;
+        assertCommandSuccess(
+          result,
+          command,
+          "Compiled Binary (dist/tripc) --help flag",
+        );
         expect(result.stdout).to.include("TripLang Compiler & Linker (tripc)");
         expect(result.stdout).to.include("USAGE:");
       });
@@ -474,9 +552,14 @@ poly id = Λa. λx:a. x`;
         const testFile = await createTestFile(testContent);
 
         try {
-          const result = await runCommand(["./dist/tripc", testFile]);
+          const command = ["./dist/tripc", testFile];
+          const result = await runCommand(command);
 
-          expect(result.success).to.be.true;
+          assertCommandSuccess(
+            result,
+            command,
+            "Compiled Binary (dist/tripc) compilation",
+          );
 
           // Check that .tripc file was created
           const tripcFile = testFile.replace(/\.trip$/, ".tripc");
@@ -490,13 +573,14 @@ poly id = Λa. λx:a. x`;
         const testFile = await createTestFile(testContent);
 
         try {
-          const result = await runCommand([
-            "./dist/tripc",
-            testFile,
-            "--verbose",
-          ]);
+          const command = ["./dist/tripc", testFile, "--verbose"];
+          const result = await runCommand(command);
 
-          expect(result.success).to.be.true;
+          assertCommandSuccess(
+            result,
+            command,
+            "Compiled Binary (dist/tripc) verbose compilation",
+          );
         } finally {
           await cleanupTestFile(testFile);
         }

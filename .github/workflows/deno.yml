@@ -15,21 +15,6 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v25
 
-      - name: Verify Nix-provided tools
-        run: |
-          echo "Verifying tools are from Nix:"
-          echo "Deno: $(which deno || echo 'not found')"
-          echo "Cargo: $(which cargo || echo 'not found')"
-          echo "Rustc: $(which rustc || echo 'not found')"
-          echo ""
-          echo "Entering Nix development shell to ensure tools are available..."
-          nix develop --command bash -c "
-            echo 'Tools in Nix environment:'
-            which deno && deno --version
-            which cargo && cargo --version
-            which rustc && rustc --version
-          "
-
       - name: Update version and generate files
         run: |
           nix run .#update-version
@@ -43,6 +28,9 @@ jobs:
         run: |
           mkdir -p wasm
           cp result/wasm/*.wasm wasm/
+
+      - name: Embed WASM bytes
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command deno run -A scripts/embed-wasm.ts
 
       - name: Build dist files for tests
         run: |

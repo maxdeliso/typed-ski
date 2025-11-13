@@ -1,253 +1,26 @@
 /**
- * Symbolic SKI evaluator with memoization.
+ * Hash-consing arena evaluator singleton.
  *
- * This module provides a pure symbolic evaluator for SKI expressions
- * implementing I, K, S reduction rules with memoization for performance.
+ * This module now exposes the WebAssembly arena evaluator as the primary
+ * evaluation engine for SKI expressions. The legacy symbolic evaluator has been
+ * removed in favour of the faster hash-consing implementation.
  *
  * @module
  */
+
 import {
-  apply,
-  equivalent,
-  type SKIApplication,
-  type SKIExpression,
-  toSKIKey,
-} from "../ski/expression.ts";
-import { SKITerminalSymbol } from "../ski/terminal.ts";
-import {
-  createMap,
-  insertMap,
-  searchMap,
-  type SKIMap,
-} from "../data/map/skiMap.ts";
-import type { Evaluator } from "./evaluator.ts";
+  type ArenaEvaluatorWasm,
+  createArenaEvaluatorReleaseSync,
+} from "./arenaEvaluator.ts";
 
 /**
- * The internal shape of an evaluation result.
- * - `altered` is true if the reduction changed the input.
- * - `expr` is the (possibly reduced) output.
+ * Initialise the release-mode arena evaluator synchronously using the embedded
+ * WASM binary so that bundled environments (e.g. Deno compile / bundle) do not
+ * require filesystem or network access at startup.
  */
-interface SKIResult<E> {
-  altered: boolean;
-  expr: E;
-}
+const wasmEvaluator: ArenaEvaluatorWasm = createArenaEvaluatorReleaseSync();
 
 /**
- * A step function type.
+ * Primary hash-consing arena evaluator used throughout the project.
  */
-type SKIStep<E> = (input: E) => SKIResult<E>;
-
-const stepI: SKIStep<SKIExpression> = (expr: SKIExpression) => {
-  if (
-    expr.kind === "non-terminal" &&
-    expr.lft.kind === "terminal" &&
-    expr.lft.sym === SKITerminalSymbol.I
-  ) {
-    return { altered: true, expr: expr.rgt };
-  }
-  return { altered: false, expr };
-};
-
-const stepK: SKIStep<SKIExpression> = (expr: SKIExpression) => {
-  if (
-    expr.kind === "non-terminal" &&
-    expr.lft.kind === "non-terminal" &&
-    expr.lft.lft.kind === "terminal" &&
-    expr.lft.lft.sym === SKITerminalSymbol.K
-  ) {
-    return { altered: true, expr: expr.lft.rgt };
-  }
-  return { altered: false, expr };
-};
-
-const stepS: SKIStep<SKIExpression> = (expr: SKIExpression) => {
-  if (
-    expr.kind === "non-terminal" &&
-    expr.lft.kind === "non-terminal" &&
-    expr.lft.lft.kind === "non-terminal" &&
-    expr.lft.lft.lft.kind === "terminal" &&
-    expr.lft.lft.lft.sym === SKITerminalSymbol.S
-  ) {
-    const x = expr.lft.lft.rgt;
-    const y = expr.lft.rgt;
-    const z = expr.rgt;
-    return { altered: true, expr: apply(apply(x, z), apply(y, z)) };
-  }
-  return { altered: false, expr };
-};
-
-/**
- * A frame for the iterative DFS.
- *
- * - phase "left" means we are about to reduce the left child.
- * - phase "right" means the left child is done (its result is in `leftResult`)
- *   and we now need to reduce the right child.
- */
-interface Frame {
-  node: SKIApplication;
-  phase: "left" | "right";
-  leftResult?: SKIExpression;
-}
-
-/**
- * expressionCache stores associations between an expression's canonical key and its
- * intermediate reduction.
- */
-let expressionCache: SKIMap = createMap();
-
-/**
- * evaluationCache stores associations between an expression's canonical key and its
- * fully reduced (normalized) form.
- */
-let evaluationCache: SKIMap = createMap();
-
-/**
- * Iteratively performs one DFS-based tree step (one "step‐once"),
- * trying the S, K, and I rules at each node.
- *
- * Uses the evaluation cache only at the very beginning (to avoid work on a fully
- * normalized input) and at the very end (to cache a fully normalized result),
- * while using only the intermediate expressionCache during the DFS.
- */
-const stepOnceMemoized = (expr: SKIExpression): SKIResult<SKIExpression> => {
-  const orig = expr;
-  const origKey = toSKIKey(orig);
-  const evalCached = searchMap(evaluationCache, origKey);
-
-  if (evalCached !== undefined) {
-    return {
-      altered: !equivalent(orig, evalCached),
-      expr: evalCached,
-    };
-  }
-
-  let current: SKIExpression = expr;
-  let next: SKIExpression;
-  const stack: Frame[] = [];
-
-  for (;;) {
-    const key = toSKIKey(current);
-    const cached = searchMap(expressionCache, key);
-    if (cached !== undefined) {
-      next = cached;
-    } else {
-      if (current.kind === "terminal") {
-        next = current;
-      } else {
-        let stepResult = stepI(current);
-        if (!stepResult.altered) {
-          stepResult = stepK(current);
-        }
-        if (!stepResult.altered) {
-          stepResult = stepS(current);
-        }
-        if (stepResult.altered) {
-          next = stepResult.expr;
-          expressionCache = insertMap(expressionCache, key, next);
-        } else {
-          // No rule applied here; continue DFS by descending into the left child.
-          stack.push({ node: current, phase: "left" });
-          current = current.lft;
-          continue;
-        }
-      }
-    }
-
-    // If there are no frames left, we are at the top level.
-    if (stack.length === 0) {
-      // Determine if the top-level expression changed.
-      const changed = !equivalent(orig, next);
-      // If no change occurred, then newExpr is fully normalized; cache it.
-      if (!changed) {
-        evaluationCache = insertMap(evaluationCache, origKey, next);
-      }
-      return { altered: changed, expr: next };
-    }
-
-    // Pop a frame and combine the result with its parent.
-    const frame = stack.pop()!;
-    if (frame.phase === "left") {
-      if (!equivalent(frame.node.lft, next)) {
-        // The left subtree was reduced. Rebuild the parent's node.
-        next = apply(next, frame.node.rgt);
-        expressionCache = insertMap(
-          expressionCache,
-          toSKIKey(frame.node),
-          next,
-        );
-      } else {
-        // The left branch is fully normalized.
-        // Now prepare to reduce the right branch by pushing a frame with phase 'right'
-        frame.phase = "right";
-        frame.leftResult = next;
-        stack.push(frame);
-        current = frame.node.rgt;
-        continue;
-      }
-    } else { // frame.phase === 'right'
-      // Now combine the left result (already normalized) with the just-reduced right branch.
-      next = apply(frame.leftResult!, next);
-      expressionCache = insertMap(expressionCache, toSKIKey(frame.node), next);
-    }
-    // Propagate the new (combined) expression upward.
-    current = next;
-  }
-};
-
-/**
- * Repeatedly applies reduction steps until no further reduction is possible
- * (or until the maximum number of iterations is reached), then returns the result.
- *
- * @param exp the initial SKI expression.
- * @param maxIterations (optional) the maximum number of reduction iterations.
- * @returns the reduced SKI expression.
- */
-const reduce = (exp: SKIExpression, maxIterations?: number): SKIExpression => {
-  let current = exp;
-  const maxIter = maxIterations ?? Infinity;
-  for (let i = 0; i < maxIter; i++) {
-    const result = stepOnceMemoized(current);
-    if (!result.altered) {
-      return result.expr;
-    }
-    current = result.expr;
-  }
-  return current;
-};
-
-/**
- * Performs exactly one symbolic reduction step.
- *
- * @param expr the input SKI expression
- * @returns whether the reduction step changed the input, and the result
- */
-const stepOnce = (expr: SKIExpression): SKIResult<SKIExpression> => {
-  if (expr.kind === "terminal") return { altered: false, expr };
-  let result = stepI(expr);
-  if (result.altered) return result;
-  result = stepK(expr);
-  if (result.altered) return result;
-  result = stepS(expr);
-  if (result.altered) return result;
-  result = stepOnce(expr.lft);
-  if (result.altered) {
-    return { altered: true, expr: apply(result.expr, expr.rgt) };
-  }
-  result = stepOnce(expr.rgt);
-  if (result.altered) {
-    return { altered: true, expr: apply(expr.lft, result.expr) };
-  }
-  return { altered: false, expr };
-};
-
-/**
- * Evaluates SKI expressions symbolically without performing actual computation.
- * A pure symbolic SKI evaluator implementing I, K, S reduction rules with memoization.
- *
- * - `stepOnce` performs a single reduction step (or descends), indicating whether the input changed.
- * - `reduce` repeatedly applies steps until normal form or a maximum iteration bound is reached.
- */
-export const symbolicEvaluator: Evaluator = {
-  stepOnce,
-  reduce,
-};
+export const arenaEvaluator: ArenaEvaluatorWasm = wasmEvaluator;

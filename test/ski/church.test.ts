@@ -14,7 +14,7 @@ import {
   V,
   Zero,
 } from "../../lib/consts/combinators.ts";
-import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import {
   ChurchB,
   ChurchN,
@@ -188,7 +188,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
 
     for (const n of testCases) {
       const church = ChurchN(n);
-      const decoded = UnChurchNumber(symbolicEvaluator.reduce(church));
+      const decoded = UnChurchNumber(arenaEvaluator.reduce(church));
       expect(decoded).to.equal(
         n,
         `ChurchN(${n}) should decode to ${n}, but got ${decoded}`,
@@ -236,33 +236,33 @@ Deno.test("Church numeral optimization functions", async (t) => {
     const church3 = ChurchN(10);
 
     // All should decode to the same value
-    expect(UnChurchNumber(symbolicEvaluator.reduce(church1))).to.equal(10);
-    expect(UnChurchNumber(symbolicEvaluator.reduce(church2))).to.equal(10);
-    expect(UnChurchNumber(symbolicEvaluator.reduce(church3))).to.equal(10);
+    expect(UnChurchNumber(arenaEvaluator.reduce(church1))).to.equal(10);
+    expect(UnChurchNumber(arenaEvaluator.reduce(church2))).to.equal(10);
+    expect(UnChurchNumber(arenaEvaluator.reduce(church3))).to.equal(10);
   });
 
   await t.step("optimization strategy verification", () => {
     // Verify that perfect powers use exponentiation
     // 9 = 3^2 should use application (exponentiation)
     const church9 = ChurchN(9);
-    const decoded9 = UnChurchNumber(symbolicEvaluator.reduce(church9));
+    const decoded9 = UnChurchNumber(arenaEvaluator.reduce(church9));
     expect(decoded9).to.equal(9);
 
     // Verify that composites use composition
     // 18 = 2 * 9 should use composition (B combinator)
     const church18 = ChurchN(18);
-    const decoded18 = UnChurchNumber(symbolicEvaluator.reduce(church18));
+    const decoded18 = UnChurchNumber(arenaEvaluator.reduce(church18));
     expect(decoded18).to.equal(18);
 
     // Verify that primes use successor
     // 19 is prime, so should use Succ(18)
     const church19 = ChurchN(19);
-    const decoded19 = UnChurchNumber(symbolicEvaluator.reduce(church19));
+    const decoded19 = UnChurchNumber(arenaEvaluator.reduce(church19));
     expect(decoded19).to.equal(19);
 
     // Verify that 64 = 2^6 uses exponentiation
     const church64 = ChurchN(64);
-    const decoded64 = UnChurchNumber(symbolicEvaluator.reduce(church64));
+    const decoded64 = UnChurchNumber(arenaEvaluator.reduce(church64));
     expect(decoded64).to.equal(64);
   });
 });
@@ -277,7 +277,7 @@ Deno.test("Church encodings", async (t) => {
 
     await t.step("1 + 1 = 2", () => {
       expect(
-        UnChurchNumber(symbolicEvaluator.reduce(apply(Succ, ChurchN(1)))),
+        UnChurchNumber(arenaEvaluator.reduce(apply(Succ, ChurchN(1)))),
       ).to.equal(2);
     });
   });
@@ -291,7 +291,7 @@ Deno.test("Church encodings", async (t) => {
         // AND ≡ λpq.p q p
         expect(
           UnChurchBoolean(
-            symbolicEvaluator.reduce(
+            arenaEvaluator.reduce(
               applyMany(ChurchB(p), ChurchB(q), ChurchB(p)),
             ),
           ),
@@ -300,7 +300,7 @@ Deno.test("Church encodings", async (t) => {
         // OR  ≡ λpq.p p q
         expect(
           UnChurchBoolean(
-            symbolicEvaluator.reduce(
+            arenaEvaluator.reduce(
               applyMany(ChurchB(p), ChurchB(p), ChurchB(q)),
             ),
           ),
@@ -312,19 +312,19 @@ Deno.test("Church encodings", async (t) => {
   await t.step("pairs (make, fst, snd, car, cdr)", () => {
     expect(
       UnChurchNumber(
-        symbolicEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Fst)),
+        arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Fst)),
       ),
     ).to.equal(0);
 
     expect(
       UnChurchNumber(
-        symbolicEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Snd)),
+        arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Snd)),
       ),
     ).to.equal(1);
 
     expect(
       UnChurchNumber(
-        symbolicEvaluator.reduce(
+        arenaEvaluator.reduce(
           apply(Car, applyMany(V, ChurchN(0), ChurchN(1))),
         ),
       ),
@@ -332,7 +332,7 @@ Deno.test("Church encodings", async (t) => {
 
     expect(
       UnChurchNumber(
-        symbolicEvaluator.reduce(
+        arenaEvaluator.reduce(
           apply(Cdr, applyMany(V, ChurchN(0), ChurchN(1))),
         ),
       ),
@@ -343,23 +343,23 @@ Deno.test("Church encodings", async (t) => {
     // definition-style tests
     expect(
       UnChurchBoolean(
-        symbolicEvaluator.reduce(applyMany(ChurchN(0), apply(K, False), True)),
+        arenaEvaluator.reduce(applyMany(ChurchN(0), apply(K, False), True)),
       ),
     ).to.equal(true);
 
     expect(
       UnChurchBoolean(
-        symbolicEvaluator.reduce(applyMany(ChurchN(1), apply(K, False), True)),
+        arenaEvaluator.reduce(applyMany(ChurchN(1), apply(K, False), True)),
       ),
     ).to.equal(false);
 
     // IsZero combinator
     expect(
-      UnChurchBoolean(symbolicEvaluator.reduce(apply(IsZero, ChurchN(0)))),
+      UnChurchBoolean(arenaEvaluator.reduce(apply(IsZero, ChurchN(0)))),
     ).to.equal(true);
 
     expect(
-      UnChurchBoolean(symbolicEvaluator.reduce(apply(IsZero, ChurchN(1)))),
+      UnChurchBoolean(arenaEvaluator.reduce(apply(IsZero, ChurchN(1)))),
     ).to.equal(false);
   });
 
@@ -369,21 +369,21 @@ Deno.test("Church encodings", async (t) => {
         // m + n   via λmn.(m succ) n
         expect(
           UnChurchNumber(
-            symbolicEvaluator.reduce(applyMany(ChurchN(m), Succ, ChurchN(n))),
+            arenaEvaluator.reduce(applyMany(ChurchN(m), Succ, ChurchN(n))),
           ),
         ).to.equal(m + n);
 
         // m + n   via Plus combinator
         expect(
           UnChurchNumber(
-            symbolicEvaluator.reduce(applyMany(Plus, ChurchN(m), ChurchN(n))),
+            arenaEvaluator.reduce(applyMany(Plus, ChurchN(m), ChurchN(n))),
           ),
         ).to.equal(m + n);
 
         // m * n   via λmn.m (n succ) 0
         expect(
           UnChurchNumber(
-            symbolicEvaluator.reduce(
+            arenaEvaluator.reduce(
               applyMany(ChurchN(m), apply(ChurchN(n), Succ), Zero),
             ),
           ),
@@ -392,7 +392,7 @@ Deno.test("Church encodings", async (t) => {
         // m * n   via B combinator
         expect(
           UnChurchNumber(
-            symbolicEvaluator.reduce(
+            arenaEvaluator.reduce(
               applyMany(B, ChurchN(m), ChurchN(n), Succ, Zero),
             ),
           ),
@@ -410,7 +410,7 @@ Deno.test("Church encodings", async (t) => {
       // Pair-shifting definition
       expect(
         UnChurchNumber(
-          symbolicEvaluator.reduce(
+          arenaEvaluator.reduce(
             apply(Cdr, applyMany(ChurchN(m), pairShiftSucc, pairZeroZero)),
           ),
         ),
@@ -419,7 +419,7 @@ Deno.test("Church encodings", async (t) => {
       // Lambda derived from book definition
       expect(
         UnChurchNumber(
-          symbolicEvaluator.reduce(apply(pred, ChurchN(m))),
+          arenaEvaluator.reduce(apply(pred, ChurchN(m))),
         ),
       ).to.equal(expected);
     }

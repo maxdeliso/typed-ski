@@ -160,6 +160,20 @@ cargo publish --dry-run --no-verify
 - `test` - Run the test suite
 - `ci` - Run full CI pipeline (build then test)
 
+### Embedding WASM for Bundles
+
+The CLI bundle and compiled binaries load the arena evaluator from an embedded
+WASM payload so they can run without filesystem or network access. After
+building the Rust artifacts (e.g. via `nix build` or `deno task build`), update
+the embedded module with:
+
+```bash
+deno run -A scripts/embed-wasm.ts
+```
+
+CI runs this script automatically, but local builds should run it whenever the
+WASM artifacts change to keep `lib/evaluator/arenaWasm.embedded.ts` in sync.
+
 ## Interactive Development
 
 You can experiment with the library interactively using Deno's REPL:
@@ -172,13 +186,13 @@ deno repl --allow-read
 
 ```ts
 import {
+  arenaEvaluator,
   parseSKI,
   prettyPrintSKIExpression,
-  symbolicEvaluator,
 } from "jsr:@maxdeliso/typed-ski";
 
 const expr = parseSKI("(K S) I");
-const result = symbolicEvaluator.reduce(expr);
+const result = arenaEvaluator.reduce(expr);
 console.log(prettyPrintSKIExpression(result)); // "S"
 ```
 

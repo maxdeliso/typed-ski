@@ -18,7 +18,7 @@
  *   eraseTypedLambda,
  *   bracketLambda,
  *   resolvePoly,
- *   symbolicEvaluator,
+ *   arenaEvaluator,
  *   UnChurchNumber
  * } from "jsr:@maxdeliso/typed-ski";
  *
@@ -48,7 +48,7 @@
  * console.log("4. SKI Combinators:", prettyPrintSKI(skiCombinators));
  *
  * // Evaluation and unchurching
- * const normalForm = symbolicEvaluator.reduce(skiCombinators);
+ * const normalForm = arenaEvaluator.reduce(skiCombinators);
  * console.log("5. Normal Form:", prettyPrintSKI(normalForm));
  *
  * const result = UnChurchNumber(normalForm);

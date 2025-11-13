@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { predLambda } from "../../lib/consts/lambdas.ts";
-import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { apply, applyMany } from "../../lib/ski/expression.ts";
 import { I } from "../../lib/ski/terminal.ts";
@@ -33,7 +33,7 @@ Deno.test("Lambda conversion", async (t) => {
         for (let a = 0; a < N; a++) {
           for (let b = 0; b < N; b++) {
             const result = UnChurchNumber(
-              symbolicEvaluator.reduce(
+              arenaEvaluator.reduce(
                 applyMany(bracketLambda(konst), ChurchN(a), ChurchN(b)),
               ),
             );
@@ -64,7 +64,7 @@ Deno.test("Lambda conversion", async (t) => {
         for (let b = 0; b < N; b++) {
           const expected = a ** b; // exponentiation: a^b
           const result = UnChurchNumber(
-            symbolicEvaluator.reduce(
+            arenaEvaluator.reduce(
               applyMany(bracketLambda(flip), ChurchN(a), ChurchN(b)),
             ),
           );
@@ -77,7 +77,7 @@ Deno.test("Lambda conversion", async (t) => {
       for (let n = 0; n < N; n++) {
         const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
         const result = UnChurchNumber(
-          symbolicEvaluator.reduce(
+          arenaEvaluator.reduce(
             apply(bracketLambda(predLambda), ChurchN(n)),
           ),
         );

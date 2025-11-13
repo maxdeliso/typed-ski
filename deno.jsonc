@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts",
@@ -21,7 +21,8 @@
     ],
     "exclude": [
       "!wasm/debug.wasm",
-      "!wasm/release.wasm"
+      "!wasm/release.wasm",
+      "!lib/evaluator/arenaWasm.embedded.ts"
     ]
   },
   "compilerOptions": {

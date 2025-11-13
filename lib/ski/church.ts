@@ -9,7 +9,7 @@
  */
 import { B, False, One, Succ, True, Zero } from "../consts/combinators.ts";
 import { apply, applyMany, type SKIExpression } from "./expression.ts";
-import { symbolicEvaluator } from "../evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../evaluator/skiEvaluator.ts";
 import { unChurchNumber as unChurchNumberNative } from "./native.ts";
 
 // Memoization cache for optimized Church numerals
@@ -247,7 +247,7 @@ export const UnChurchNumber = (exp: SKIExpression): number => {
  */
 export const UnChurchBoolean = (expr: SKIExpression): boolean => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
-  const testExpr = symbolicEvaluator.reduce(
+  const testExpr = arenaEvaluator.reduce(
     applyMany(expr, ChurchN(1), ChurchN(0)),
   );
   return UnChurchNumber(testExpr) === 1;

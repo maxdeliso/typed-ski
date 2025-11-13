@@ -6,6 +6,7 @@ import { loadInput } from "../util/fileLoader.ts";
 const __dirname = dirname(fromFileUrl(import.meta.url));
 
 import {
+  arenaEvaluator,
   bracketLambda,
   compile,
   eraseSystemF,
@@ -17,7 +18,6 @@ import {
   prettyPrintTy,
   resolveExternalProgramReferences,
   searchAVL,
-  symbolicEvaluator,
   type SystemFTerm,
   type TripLangTerm,
   UnChurchNumber,
@@ -202,7 +202,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       "(∀X.((X→X)→(X→X))→∀X.((X→X)→(X→X)))",
     );
     const mainPoly = resolvePoly(compiled, "main");
-    const mainRes = symbolicEvaluator.reduce(
+    const mainRes = arenaEvaluator.reduce(
       bracketLambda(eraseSystemF(mainPoly.term)),
     );
     assert.equal(UnChurchNumber(mainRes), 24);

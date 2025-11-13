@@ -1,6 +1,6 @@
 import { assert } from "chai";
 
-import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { prettyPrint, type SKIExpression } from "../../lib/ski/expression.ts";
 import rsexport, { type RandomSeed } from "random-seed";
@@ -25,7 +25,7 @@ Deno.test("stepOnce", async (t) => {
       =>
       ${prettyPrint(third)}`,
     () => {
-      const result = symbolicEvaluator.stepOnce(second);
+      const result = arenaEvaluator.stepOnce(second);
       assert(result.altered);
       compareExpressions(result.expr, third);
     },
@@ -36,9 +36,9 @@ Deno.test("stepOnce", async (t) => {
       =>
       ${prettyPrint(third)}`,
     () => {
-      const firstStep = symbolicEvaluator.stepOnce(first);
+      const firstStep = arenaEvaluator.stepOnce(first);
       assert(firstStep.altered);
-      const secondStep = symbolicEvaluator.stepOnce(firstStep.expr);
+      const secondStep = arenaEvaluator.stepOnce(firstStep.expr);
       assert(secondStep.altered);
       compareExpressions(secondStep.expr, third);
     },
@@ -49,7 +49,7 @@ Deno.test("stepOnce", async (t) => {
       =>
       ${prettyPrint(third)}`,
     () => {
-      const result = symbolicEvaluator.stepOnce(fourth);
+      const result = arenaEvaluator.stepOnce(fourth);
       assert(result.altered);
       compareExpressions(result.expr, third);
     },
@@ -61,7 +61,7 @@ Deno.test("stepOnce", async (t) => {
       =>
       ${prettyPrint(seventh)}`,
     () => {
-      const first = symbolicEvaluator.stepOnce(fifth);
+      const first = arenaEvaluator.stepOnce(fifth);
       assert(first.altered);
       compareExpressions(first.expr, seventh);
     },
@@ -72,11 +72,11 @@ Deno.test("stepOnce", async (t) => {
       =>
       ${prettyPrint(third)}`,
     () => {
-      const firstStep = symbolicEvaluator.stepOnce(sixth);
+      const firstStep = arenaEvaluator.stepOnce(sixth);
       assert(firstStep.altered);
-      const secondStep = symbolicEvaluator.stepOnce(firstStep.expr);
+      const secondStep = arenaEvaluator.stepOnce(firstStep.expr);
       assert(secondStep.altered);
-      const thirdStep = symbolicEvaluator.stepOnce(secondStep.expr);
+      const thirdStep = arenaEvaluator.stepOnce(secondStep.expr);
       assert(thirdStep.altered);
       compareExpressions(thirdStep.expr, third);
     },
@@ -92,7 +92,7 @@ const MAX_ITER = 100;
 function reduceByLoop(expr: SKIExpression, maxIter = MAX_ITER) {
   let cur = expr;
   for (let i = 0; i < maxIter; i++) {
-    const r = symbolicEvaluator.stepOnce(cur);
+    const r = arenaEvaluator.stepOnce(cur);
     if (!r.altered) return { expr: r.expr, steps: i };
     cur = r.expr;
   }
@@ -112,7 +112,7 @@ Deno.test("stepOnce loop vs. reduce()", async (t) => {
       [...Array(normalizeTests).keys()].forEach(() => {
         const length = rs.intBetween(minLength, maxLength);
         const fresh = randExpression(rs, length);
-        const reducedOnce = symbolicEvaluator.reduce(fresh);
+        const reducedOnce = arenaEvaluator.reduce(fresh);
         const { expr: reducedMany } = reduceByLoop(fresh);
 
         assert.deepStrictEqual(

@@ -2,7 +2,7 @@ import { hrtime } from "node:process";
 import randomSeed from "random-seed";
 
 import type { SKIExpression } from "../lib/ski/expression.ts";
-import { symbolicEvaluator } from "../lib/evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../lib/evaluator/skiEvaluator.ts";
 import { randExpression } from "../lib/ski/generator.ts";
 
 Deno.test("evaluator performance", async (t) => {
@@ -26,7 +26,7 @@ Deno.test("evaluator performance", async (t) => {
       // Now measure the time spent reducing the pre-generated trees.
       const start = hrtime.bigint();
       for (const expr of expressions) {
-        symbolicEvaluator.stepOnce(expr);
+        arenaEvaluator.stepOnce(expr);
       }
       const end = hrtime.bigint();
       const elapsedNs = end - start;

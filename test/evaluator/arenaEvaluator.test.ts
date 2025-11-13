@@ -9,7 +9,7 @@ import {
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { prettyPrint } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
-import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 
 let arenaEval: ArenaEvaluatorWasm;
 
@@ -65,7 +65,7 @@ Deno.test("stepOnce", async (t) => {
   });
 });
 
-Deno.test("symbolic and arena reduction equivalence", async (t) => {
+Deno.test("singleton and fresh arena reduction equivalence", async (t) => {
   const seed = "df394b";
   const normalizeTests = 19;
   const minLength = 5;
@@ -78,7 +78,7 @@ Deno.test("symbolic and arena reduction equivalence", async (t) => {
       const input = randExpression(rs, len);
 
       const arenaNormal = arenaEval.reduce(input);
-      const symNormal = symbolicEvaluator.reduce(input);
+      const symNormal = arenaEvaluator.reduce(input);
 
       assertEquals(
         prettyPrint(arenaNormal),

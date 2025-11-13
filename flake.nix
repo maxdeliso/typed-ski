@@ -17,7 +17,7 @@
         pkgs = import nixpkgs { inherit system overlays; };
 
         # Central version management
-        version = "0.5.0";
+        version = "0.5.1";
 
         # Rust toolchain with wasm32 target
         # Using a pinned version for reproducibility
@@ -116,6 +116,9 @@
             cp target/wasm32-unknown-unknown/release/typed_ski.wasm ../wasm/release.wasm
 
             cd ..
+
+            echo "Embedding WASM bytes into TypeScript bundle..."
+            ${deno}/bin/deno run -A scripts/embed-wasm.ts
 
             # Verify WASM files exist
             echo "WASM files:"

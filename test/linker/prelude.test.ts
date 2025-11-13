@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
-import { symbolicEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
@@ -67,7 +67,7 @@ poly main = mul two three`;
 
     // Parse the SKI expression string and evaluate it
     const skiExpr = parseSKI(skiExpression);
-    const evaluated = symbolicEvaluator.reduce(skiExpr);
+    const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
     assertEquals(decoded, 6, "mul two three should equal 6");
   } finally {
@@ -135,7 +135,7 @@ poly main = add one one`;
     ], true);
 
     const skiExpr = parseSKI(skiExpression);
-    const evaluated = symbolicEvaluator.reduce(skiExpr);
+    const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
     assertEquals(decoded, 2, "add one one should equal 2");
   } finally {
@@ -201,7 +201,7 @@ poly main = mul two three`;
     ], true);
 
     const skiExpr = parseSKI(skiExpression);
-    const evaluated = symbolicEvaluator.reduce(skiExpr);
+    const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
     assertEquals(decoded, 6, "mul two three should equal 6");
   } finally {
@@ -272,7 +272,7 @@ poly main = add (mul two three) (mul one four)`;
     ], true);
 
     const skiExpr = parseSKI(skiExpression);
-    const evaluated = symbolicEvaluator.reduce(skiExpr);
+    const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
     // (2 * 3) + (1 * 4) = 6 + 4 = 10
     assertEquals(decoded, 10, "Complex arithmetic should equal 10");

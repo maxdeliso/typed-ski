@@ -46,6 +46,11 @@ jobs:
           mkdir -p wasm
           cp result/wasm/*.wasm wasm/
 
+      - name: Build dist files for tests
+        run: |
+          export PATH="$(nix --extra-experimental-features 'nix-command flakes' develop --command bash -c 'echo $PATH'):$PATH"
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "deno task dist"
+
       - name: Run Rust tests
         run: nix run .#test-rust
 

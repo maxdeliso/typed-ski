@@ -205,7 +205,7 @@ poly helper = ΛX. λx: X. x`;
     await Deno.writeTextFile(helperFile, helperSource);
 
     // Compile the helper module
-      const compileCommand = new Deno.Command(Deno.execPath(), {
+    const compileCommand = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",

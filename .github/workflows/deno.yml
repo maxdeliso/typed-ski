@@ -30,10 +30,11 @@ jobs:
             which rustc && rustc --version
           "
 
-      - name: Update version and generate Cargo.toml
+      - name: Update version and generate files
         run: |
           nix run .#update-version
           nix run .#generate-cargo
+          nix run .#generate-version-ts
 
       - name: Build with Nix
         run: nix build

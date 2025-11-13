@@ -17,7 +17,7 @@
         pkgs = import nixpkgs { inherit system overlays; };
 
         # Central version management
-        version = "0.5.3";
+        version = "0.5.4";
 
         # Rust toolchain with wasm32 target
         # Using a pinned version for reproducibility

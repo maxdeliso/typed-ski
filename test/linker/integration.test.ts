@@ -28,7 +28,7 @@ poly main = ΛX. λx: X. x`;
 
     try {
       // Step 2: Compile to .tripc
-      const compileCommand = new Deno.Command("deno", {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -44,7 +44,7 @@ poly main = ΛX. λx: X. x`;
       expect(compileCode).to.equal(0);
 
       // Step 3: Link the .tripc file
-      const linkCommand = new Deno.Command("deno", {
+      const linkCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -85,7 +85,7 @@ poly main = ΛX. λx: X. λy: X. λz: X. x`;
 
     try {
       // Step 2: Compile to .tripc
-      const compileCommand = new Deno.Command("deno", {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -101,7 +101,7 @@ poly main = ΛX. λx: X. λy: X. λz: X. x`;
       expect(compileCode).to.equal(0);
 
       // Step 3: Link the .tripc file
-      const linkCommand = new Deno.Command("deno", {
+      const linkCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -153,7 +153,7 @@ poly main = ΛX. λx: X. x`;
 
     try {
       // Step 2: Compile both modules
-      const compileACommand = new Deno.Command("deno", {
+      const compileACommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -165,7 +165,7 @@ poly main = ΛX. λx: X. x`;
         cwd: __dirname,
       });
 
-      const compileBCommand = new Deno.Command("deno", {
+      const compileBCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -184,7 +184,7 @@ poly main = ΛX. λx: X. x`;
       expect(compileBCode).to.equal(0);
 
       // Step 3: Link both modules
-      const linkCommand = new Deno.Command("deno", {
+      const linkCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -229,7 +229,7 @@ poly main = λx:Int. λy:Int. x + y`;
 
     try {
       // Step 2: Try to compile (should fail)
-      const compileCommand = new Deno.Command("deno", {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -270,7 +270,7 @@ typed other = λx: Int. x`;
 
     try {
       // Step 2: Compile to .tripc
-      const compileCommand = new Deno.Command("deno", {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -286,7 +286,7 @@ typed other = λx: Int. x`;
       expect(compileCode).to.equal(0);
 
       // Step 3: Try to link (should fail)
-      const linkCommand = new Deno.Command("deno", {
+      const linkCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -330,7 +330,7 @@ poly main = ΛX. λx: X. λy: X. λz: X. λw: X. λv: X. λu: X. λt: X. λs: X.
 
     try {
       // Step 2: Compile to .tripc
-      const compileCommand = new Deno.Command("deno", {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -346,7 +346,7 @@ poly main = ΛX. λx: X. λy: X. λz: X. λw: X. λv: X. λu: X. λt: X. λs: X.
       expect(compileCode).to.equal(0);
 
       // Step 3: Link the .tripc file
-      const linkCommand = new Deno.Command("deno", {
+      const linkCommand = new Deno.Command(Deno.execPath(), {
         args: [
           "run",
           "--allow-read",
@@ -377,7 +377,7 @@ poly main = ΛX. λx: X. λy: X. λz: X. λw: X. λv: X. λu: X. λt: X. λs: X.
 
   await t.step("executable wrapper integration", async () => {
     // Compile A.trip to A.tripc first
-    const compileCommand = new Deno.Command("deno", {
+    const compileCommand = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",
@@ -393,7 +393,7 @@ poly main = ΛX. λx: X. λy: X. λz: X. λw: X. λv: X. λu: X. λt: X. λs: X.
     expect(compileCode).to.equal(0);
 
     // Test the executable wrapper directly
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
         "--allow-read",

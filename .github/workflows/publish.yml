@@ -1,4 +1,4 @@
-name: Publish to Deno Registry
+name: Publish to JSR and Crates.io
 
 on:
   push:
@@ -15,26 +15,77 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
 
-      - name: CI Pipeline
-        run: deno task ci
+      - name: Verify Nix-provided tools
+        run: |
+          echo "Verifying tools are from Nix:"
+          echo "Deno: $(which deno || echo 'not found')"
+          echo "Cargo: $(which cargo || echo 'not found')"
+          echo "Rustc: $(which rustc || echo 'not found')"
+          echo ""
+          echo "Entering Nix development shell to ensure tools are available..."
+          nix develop --command bash -c "
+            echo 'Tools in Nix environment:'
+            which deno && deno --version
+            which cargo && cargo --version
+            which rustc && rustc --version
+          "
+
+      - name: Update version and generate files
+        run: |
+          nix run .#update-version
+          nix run .#generate-cargo
+          nix run .#generate-version-ts
+
+      - name: Build with Nix
+        run: nix build
+
+      - name: Copy WASM files for tests
+        run: |
+          mkdir -p wasm
+          cp result/wasm/*.wasm wasm/
+
+      - name: Build dist files for tests
+        run: |
+          set -e
+          export PATH="$(nix --extra-experimental-features 'nix-command flakes' develop --command bash -c 'echo $PATH'):$PATH"
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "deno task dist"
+          echo "Dist files build completed"
+
+      - name: Validate dist files
+        run: |
+          echo "Checking for required dist files..."
+          ls -lh dist/ || echo "dist/ directory does not exist"
+          test -f dist/tripc.js || (echo "ERROR: dist/tripc.js not found" && exit 1)
+          test -f dist/tripc.min.js || (echo "ERROR: dist/tripc.min.js not found" && exit 1)
+          test -f dist/tripc || (echo "ERROR: dist/tripc binary not found" && exit 1)
+          echo "All required dist files exist:"
+          ls -lh dist/tripc.js dist/tripc.min.js dist/tripc
+
+      - name: Run Rust tests
+        run: nix run .#test-rust
 
       - name: Check formatting
-        run: deno fmt --check
+        run: nix run .#fmt -- --check
 
       - name: Lint
-        run: deno lint
+        run: nix run .#lint
 
-      - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-files
-          path: dist/
-          retention-days: 30
+      - name: Run Deno tests
+        run: nix run .#test
 
-      - name: Publish to Deno Registry
-        run: deno publish
+      - name: Publish to JSR (Deno Registry)
+        run: nix run .#publish
+
+      - name: Authenticate with crates.io (Trusted Publishing)
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish to crates.io
+        run: |
+          echo "Using Cargo from: $(nix --extra-experimental-features 'nix-command flakes' develop --command which cargo)"
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "cd rust && cargo publish"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

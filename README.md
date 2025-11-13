@@ -7,7 +7,8 @@ An implementation of a parser, evaluator, printer, and visualizer for
 
 - [TypeScript](https://www.typescriptlang.org/)
 - [Deno](https://deno.com/)
-- [AssemblyScript](https://www.assemblyscript.org/)
+- [Rust](https://www.rust-lang.org/) (compiled to WebAssembly)
+- [Nix](https://nixos.org/) (build orchestration)
 
 ## Development Setup
 
@@ -35,14 +36,79 @@ The `.vscode/settings.json` file configures:
 
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
 
-## Development Tasks
+## Build System
 
-This project uses Deno's built-in task runner for standardized development
-workflows:
+This project uses **Nix** for reproducible builds and version management. The
+build system orchestrates Rust → WASM → TypeScript builds with a single source
+of truth for versioning.
+
+**Note:** The `nixpkgs` input tracks `nixos-unstable` branch, with the exact
+commit pinned in `flake.lock` for reproducibility. To update to a newer nixpkgs
+revision, run `nix flake update`.
+
+### Quick Start with Nix
+
+**Build everything:**
+
+```bash
+nix build --extra-experimental-features 'nix-command flakes'
+```
+
+**Enter development shell:**
+
+```bash
+nix develop --extra-experimental-features 'nix-command flakes'
+```
+
+**Run tests:**
+
+```bash
+nix run .#test --extra-experimental-features 'nix-command flakes'      # Deno tests
+nix run .#test-rust --extra-experimental-features 'nix-command flakes'  # Rust unit tests
+```
+
+**Deno commands (using Nix-provided Deno):**
+
+```bash
+nix run .#fmt -- --check          # Check formatting
+nix run .#lint                     # Run linter
+nix run .#publish -- --dry-run     # Dry run publish
+```
+
+**Update version and generate Cargo.toml:**
+
+```bash
+nix run .#update-version --extra-experimental-features 'nix-command flakes'
+nix run .#generate-cargo --extra-experimental-features 'nix-command flakes'
+```
+
+### Setting Up Nix
+
+To avoid typing `--extra-experimental-features` every time, add to
+`~/.config/nix/nix.conf`:
+
+```
+experimental-features = nix-command flakes
+```
+
+### Build Artifacts
+
+After `nix build`, WASM files are available at:
+
+- `result/wasm/debug.wasm` - Debug WASM (1.6MB)
+- `result/wasm/release.wasm` - Release WASM (21KB)
+
+To copy to source tree:
+
+```bash
+cp result/wasm/*.wasm wasm/
+```
+
+## Development Tasks
 
 ### Building
 
-Build AssemblyScript WebAssembly modules:
+**With Deno (legacy):**
 
 ```bash
 # Build both debug and release versions
@@ -53,9 +119,12 @@ deno task build:debug
 deno task build:release
 ```
 
+> **Note:** For Nix builds, see the
+> [Quick Start with Nix](#quick-start-with-nix) section above.
+
 ### Testing
 
-Run the test suite:
+**With Deno:**
 
 ```bash
 # Run tests only
@@ -65,11 +134,29 @@ deno task test
 deno task ci
 ```
 
+> **Note:** For Nix testing, use `nix run .#test` (see
+> [Quick Start with Nix](#quick-start-with-nix) above).
+
+### Publishing (Dry Run)
+
+**JSR (using Nix-provided Deno):**
+
+```bash
+nix run .#publish -- --dry-run --allow-dirty
+```
+
+**Crates.io:**
+
+```bash
+cd rust
+cargo publish --dry-run --no-verify
+```
+
 ### Available Tasks
 
-- `build` - Build both debug and release AssemblyScript modules
-- `build:debug` - Build debug version only
-- `build:release` - Build release version only
+- `build` - Build both debug and release WASM modules (Deno)
+- `build:debug` - Build debug version only (Deno)
+- `build:release` - Build release version only (Deno)
 - `test` - Run the test suite
 - `ci` - Run full CI pipeline (build then test)
 
@@ -118,6 +205,34 @@ For a comprehensive library of curated examples, see the
 - H. G. Baker, "CONS should not CONS its arguments, or, a lazy alloc is a smart
   alloc," _ACM SIGPLAN Notices_, vol. 27, no. 3, pp. 24-34, 1992. DOI:
   10.1145/130854.130858
+
+## Troubleshooting
+
+### Nix Issues
+
+**"command not found: nix"**
+
+```bash
+. /nix/store/*/etc/profile.d/nix.sh
+```
+
+**"Git tree is dirty"** This is just a warning. The build will still work.
+
+**"builder failed"** Check the full log:
+
+```bash
+nix-store -l /nix/store/*-typed-ski.drv
+```
+
+## CI/CD
+
+GitHub Actions automatically:
+
+1. Install Nix
+2. Generate version files
+3. Build Rust → WASM
+4. Run tests
+5. Publish to JSR and crates.io
 
 ## Status
 

@@ -1,4 +1,4 @@
-name: Deno CI
+name: Nix CI
 
 on: [push]
 
@@ -12,25 +12,78 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
 
-      - name: CI Pipeline
-        run: deno task ci
+      - name: Verify Nix-provided tools
+        run: |
+          echo "Verifying tools are from Nix:"
+          echo "Deno: $(which deno || echo 'not found')"
+          echo "Cargo: $(which cargo || echo 'not found')"
+          echo "Rustc: $(which rustc || echo 'not found')"
+          echo ""
+          echo "Entering Nix development shell to ensure tools are available..."
+          nix develop --command bash -c "
+            echo 'Tools in Nix environment:'
+            which deno && deno --version
+            which cargo && cargo --version
+            which rustc && rustc --version
+          "
 
-      - name: Check formatting
-        run: deno fmt --check
+      - name: Update version and generate files
+        run: |
+          nix run .#update-version
+          nix run .#generate-cargo
+          nix run .#generate-version-ts
 
-      - name: Lint
-        run: deno lint
+      - name: Build with Nix
+        run: nix build
+
+      - name: Copy WASM files for tests
+        run: |
+          mkdir -p wasm
+          cp result/wasm/*.wasm wasm/
+
+      - name: Build dist files for tests
+        run: |
+          set -e
+          export PATH="$(nix --extra-experimental-features 'nix-command flakes' develop --command bash -c 'echo $PATH'):$PATH"
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "deno task dist"
+          echo "Dist files build completed"
 
       - name: Validate dist files
         run: |
-          ls -la dist/
-          echo "Dist files validation successful"
+          echo "Checking for required dist files..."
+          ls -lh dist/ || echo "dist/ directory does not exist"
+          test -f dist/tripc.js || (echo "ERROR: dist/tripc.js not found" && exit 1)
+          test -f dist/tripc.min.js || (echo "ERROR: dist/tripc.min.js not found" && exit 1)
+          test -f dist/tripc || (echo "ERROR: dist/tripc binary not found" && exit 1)
+          echo "All required dist files exist:"
+          ls -lh dist/tripc.js dist/tripc.min.js dist/tripc
 
-      - name: Dry run publish
+      - name: Run Rust tests
+        run: nix run .#test-rust
+
+      - name: Check formatting
+        run: nix run .#fmt -- --check
+
+      - name: Lint
+        run: nix run .#lint
+
+      - name: Run Deno tests
+        run: nix run .#test
+
+      - name: Validate WASM files
+        run: |
+          ls -lh result/wasm/
+          echo "WASM files validation successful"
+
+      - name: JSR dry run publish
         if: github.ref != 'refs/heads/main'
-        run: deno publish --dry-run
+        run: nix run .#publish -- --dry-run
+
+      - name: Cargo dry run publish
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Using Cargo from: $(nix --extra-experimental-features 'nix-command flakes' develop --command which cargo)"
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "cd rust && cargo publish --dry-run"

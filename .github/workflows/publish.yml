@@ -18,51 +18,11 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v25
 
-      - name: Update version and generate files
-        run: |
-          nix run .#update-version
-          nix run .#generate-cargo
-          nix run .#generate-version-ts
+      - name: Build artifacts
+        run: make build
 
-      - name: Build with Nix
-        run: nix build
-
-      - name: Copy WASM files for tests
-        run: |
-          mkdir -p wasm
-          cp result/wasm/*.wasm wasm/
-
-      - name: Embed WASM bytes
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command deno run -A scripts/embed-wasm.ts
-
-      - name: Build dist files for tests
-        run: |
-          set -e
-          export PATH="$(nix --extra-experimental-features 'nix-command flakes' develop --command bash -c 'echo $PATH'):$PATH"
-          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "deno task dist"
-          echo "Dist files build completed"
-
-      - name: Validate dist files
-        run: |
-          echo "Checking for required dist files..."
-          ls -lh dist/ || echo "dist/ directory does not exist"
-          test -f dist/tripc.js || (echo "ERROR: dist/tripc.js not found" && exit 1)
-          test -f dist/tripc.min.js || (echo "ERROR: dist/tripc.min.js not found" && exit 1)
-          test -f dist/tripc || (echo "ERROR: dist/tripc binary not found" && exit 1)
-          echo "All required dist files exist:"
-          ls -lh dist/tripc.js dist/tripc.min.js dist/tripc
-
-      - name: Run Rust tests
-        run: nix run .#test-rust
-
-      - name: Check formatting
-        run: nix run .#fmt -- --check
-
-      - name: Lint
-        run: nix run .#lint
-
-      - name: Run Deno tests
-        run: nix run .#test
+      - name: Run test suite
+        run: make test
 
       - name: Publish to JSR (Deno Registry)
         run: nix run .#publish

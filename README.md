@@ -20,7 +20,8 @@ make build  # Compile all artifacts (WASM, TypeScript, dist files)
 make test   # Run the complete test suite (Rust + Deno tests, linting, formatting)
 ```
 
-For detailed information about what each target does, see the [Makefile](Makefile) or run `make help`.
+For detailed information about what each target does, see the
+[Makefile](Makefile) or run `make help`.
 
 ## Development Setup
 
@@ -48,6 +49,7 @@ The `.vscode/settings.json` file configures:
 ## Artifacts
 
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
+- [Crates.io](https://crates.io/crates/typed-ski)
 
 ## Build System
 
@@ -58,31 +60,6 @@ of truth for versioning.
 **Note:** The `nixpkgs` input tracks `nixos-unstable` branch, with the exact
 commit pinned in `flake.lock` for reproducibility. To update to a newer nixpkgs
 revision, run `nix flake update`.
-
-## Interactive Development
-
-You can experiment with the library interactively using Deno's REPL:
-
-```bash
-deno repl --allow-read
-```
-
-### Quick Start
-
-```ts
-import {
-  arenaEvaluator,
-  parseSKI,
-  prettyPrintSKIExpression,
-} from "jsr:@maxdeliso/typed-ski";
-
-const expr = parseSKI("(K S) I");
-const result = arenaEvaluator.reduce(expr);
-console.log(prettyPrintSKIExpression(result)); // "S"
-```
-
-For a comprehensive library of curated examples, see the
-[JSR module documentation](https://jsr.io/@maxdeliso/typed-ski).
 
 ## Works Referenced
 
@@ -107,7 +84,8 @@ For a comprehensive library of curated examples, see the
 
 ## CI/CD
 
-GitHub Actions use the Makefile targets for building and testing. See the workflow files in `.github/workflows/` for details.
+GitHub Actions use the Makefile targets for building and testing. See the
+workflow files in `.github/workflows/` for details.
 
 ## Status
 

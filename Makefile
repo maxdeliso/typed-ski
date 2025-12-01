@@ -12,22 +12,22 @@ help:
 	echo "  format-check - Check code formatting"
 
 setup: ## Prepare this machine by installing necessary tools
-	if ! command -v nix >/dev/null 2>&1; then \
+	@if ! command -v nix >/dev/null 2>&1; then \
 		echo "Error: Nix is not installed or not in PATH."; \
 		echo "Install Nix from: https://nixos.org/download.html"; \
 		exit 1; \
 	fi
 
 build: ## Compile the artifacts
-	if ! command -v nix >/dev/null 2>&1; then \
+	@if ! command -v nix >/dev/null 2>&1; then \
 		echo "Error: Nix is not installed. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	nix $(NIX_FLAGS) run .#update-version
+	nix $(NIX_FLAGS) run .#verify-version
 	nix $(NIX_FLAGS) run .#generate-cargo
 	nix $(NIX_FLAGS) run .#generate-version-ts
 	nix $(NIX_FLAGS) build
-	if [ ! -d result/wasm ] || [ ! -f result/wasm/debug.wasm ] || [ ! -f result/wasm/release.wasm ]; then \
+	@if [ ! -d result/wasm ] || [ ! -f result/wasm/debug.wasm ] || [ ! -f result/wasm/release.wasm ]; then \
 		echo "Error: WASM files not found in result/wasm/. Build may have failed."; \
 		exit 1; \
 	fi
@@ -39,11 +39,11 @@ build: ## Compile the artifacts
 		(echo "Error: Required dist files not found" && exit 1)
 
 test: ## Run the test suite
-	if ! command -v nix >/dev/null 2>&1; then \
+	@if ! command -v nix >/dev/null 2>&1; then \
 		echo "Error: Nix is not installed. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then \
+	@if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then \
 		echo "Error: WASM files not found. Run 'make build' first."; \
 		exit 1; \
 	fi
@@ -53,14 +53,14 @@ test: ## Run the test suite
 	nix $(NIX_FLAGS) run .#test
 
 format:
-	if ! command -v nix >/dev/null 2>&1; then \
+	@if ! command -v nix >/dev/null 2>&1; then \
 		echo "Error: Nix is not installed. Run 'make setup' first."; \
 		exit 1; \
 	fi
 	nix $(NIX_FLAGS) run .#fmt
 
 format-check:
-	if ! command -v nix >/dev/null 2>&1; then \
+	@if ! command -v nix >/dev/null 2>&1; then \
 		echo "Error: Nix is not installed. Run 'make setup' first."; \
 		exit 1; \
 	fi

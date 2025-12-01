@@ -16,8 +16,9 @@
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
 
-        # Central version management
-        version = "0.5.4";
+        # Read version from deno.jsonc (source of truth)
+        denoJson = builtins.fromJSON (builtins.readFile ./deno.jsonc);
+        version = denoJson.version;
 
         # Rust toolchain with wasm32 target
         # Using a pinned version for reproducibility
@@ -29,10 +30,13 @@
         # Using Deno 2.x from nixpkgs
         deno = pkgs.deno;
 
-        # Script to update version in deno.jsonc
-        updateVersion = pkgs.writeShellScriptBin "update-version" ''
-          jq --arg version "${version}" '.version = $version' deno.jsonc > deno.jsonc.tmp && mv deno.jsonc.tmp deno.jsonc
-          echo "Updated deno.jsonc version to ${version}"
+        # Script to verify version exists in deno.jsonc
+        verifyVersion = pkgs.writeShellScriptBin "verify-version" ''
+          if ! ${pkgs.jq}/bin/jq -e '.version' deno.jsonc >/dev/null 2>&1; then
+            echo "Error: version field is required in deno.jsonc"
+            exit 1
+          fi
+          echo "Version in deno.jsonc: $(${pkgs.jq}/bin/jq -r '.version' deno.jsonc)"
         '';
 
         # Script to generate Cargo.toml
@@ -90,14 +94,14 @@
             rustToolchain
             deno
             pkgs.jq
-            updateVersion
+            verifyVersion
             generateCargoToml
             generateVersionTs
           ];
 
           buildPhase = ''
-            # Update version in deno.jsonc
-            ${updateVersion}/bin/update-version
+            # Verify version exists in deno.jsonc
+            ${verifyVersion}/bin/verify-version
             ${generateCargoToml}/bin/generate-cargo-toml
             ${generateVersionTs}/bin/generate-version-ts
 
@@ -150,7 +154,7 @@
             deno
             pkgs.cargo-edit
             pkgs.jq
-            updateVersion
+            verifyVersion
             generateCargoToml
             generateVersionTs
           ];
@@ -160,7 +164,7 @@
             echo "Version: ${version}"
             echo ""
             echo "Available commands:"
-            echo "  update-version       - Update version in deno.jsonc"
+            echo "  verify-version       - Verify version exists in deno.jsonc"
             echo "  generate-cargo-toml  - Generate rust/Cargo.toml"
             echo "  generate-version-ts  - Generate lib/shared/version.generated.ts"
             echo "  make build           - Build all artifacts (WASM, TypeScript, dist)"
@@ -180,9 +184,9 @@
         devShells.default = devShell;
 
         apps = {
-          update-version = {
+          verify-version = {
             type = "app";
-            program = "${updateVersion}/bin/update-version";
+            program = "${verifyVersion}/bin/verify-version";
           };
           generate-cargo = {
             type = "app";

@@ -7,6 +7,7 @@ import { parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 
 import { mkTypedAbs, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
+import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
 import {
   arrow,
   arrows,
@@ -187,6 +188,15 @@ Deno.test("Parser Tests", async (t) => {
         expect(lit).to.equal("λx:a.x");
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
+
+      await t.step("parses nat literal", () => {
+        const src = "42";
+        const [lit, term] = parseTypedLambda(src);
+        expect(lit).to.equal("42");
+        expect(typedTermsLitEq(term, makeTypedChurchNumeral(42n))).to.equal(
+          true,
+        );
+      });
     });
 
     await t.step("error cases", async (t) => {
@@ -225,6 +235,11 @@ Deno.test("Parser Tests", async (t) => {
       await t.step(
         "incomplete type annotation",
         shouldThrow("λx:a→.x"),
+      );
+
+      await t.step(
+        "rejects purely numeric identifiers in lambda bindings",
+        shouldThrow("λ123:a.x", /not a valid identifier.*purely numeric/),
       );
     });
   });

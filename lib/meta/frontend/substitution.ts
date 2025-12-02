@@ -20,6 +20,7 @@ import { lower, termLevel } from "./termLevel.ts";
 import { extractDefinitionValue } from "./symbolTable.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { CompilationError } from "./compilation.ts";
+import { isNatLiteralIdentifier, NAT_TYPE_NAME } from "../../consts/nat.ts";
 
 /**
  * Hygienic substitution functions for TripLang terms and types.
@@ -62,6 +63,10 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
         collect(t.rgt, bound);
         break;
       case "systemF-var":
+        if (isNatLiteralIdentifier(t.name)) {
+          break;
+        }
+      // fall through
       case "lambda-var":
         if (!bound.has(t.name)) {
           free.add(t.name);
@@ -75,6 +80,68 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
 
   collect(t, new Set());
   return free;
+}
+
+function usesSystemFNatLiteral(term: TripLangValueType): boolean {
+  const stack: TripLangValueType[] = [term];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current) continue;
+    switch (current.kind) {
+      case "systemF-var":
+        if (isNatLiteralIdentifier(current.name)) {
+          return true;
+        }
+        break;
+      case "systemF-abs":
+        stack.push(current.typeAnnotation);
+        stack.push(current.body);
+        break;
+      case "systemF-type-abs":
+        stack.push(current.body);
+        break;
+      case "systemF-type-app":
+        stack.push(current.term);
+        stack.push(current.typeArg);
+        break;
+      case "typed-lambda-abstraction":
+        stack.push(current.ty);
+        stack.push(current.body);
+        break;
+      case "lambda-abs":
+        stack.push(current.body);
+        break;
+      case "forall":
+        stack.push(current.body);
+        break;
+      case "non-terminal":
+        stack.push(current.lft);
+        stack.push(current.rgt);
+        break;
+      case "lambda-var":
+      case "type-var":
+      case "terminal":
+        break;
+    }
+  }
+  return false;
+}
+
+function ensureNatAvailabilityIfNeeded(
+  term: TripLangTerm,
+  value: TripLangValueType,
+  syms: SymbolTable,
+): void {
+  if (!usesSystemFNatLiteral(value)) {
+    return;
+  }
+  if (!syms.types.has(NAT_TYPE_NAME)) {
+    throw new CompilationError(
+      `Internal error: '${NAT_TYPE_NAME}' type missing during literal resolution`,
+      "resolve",
+      { term },
+    );
+  }
 }
 
 /**
@@ -567,6 +634,8 @@ export function resolveExternalTermReferences(
   if (definitionValue === undefined) {
     return term;
   }
+
+  ensureNatAvailabilityIfNeeded(term, definitionValue, syms);
 
   const [tRefs, tyRefs] = externalReferences(definitionValue);
   const externalTermRefs = Array.from(tRefs.keys());

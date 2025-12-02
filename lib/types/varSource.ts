@@ -26,12 +26,15 @@ const monoInts = (): () => number => {
  */
 export const varSource = (): () => ReturnType<typeof mkTypeVariable> => {
   const ordinals = monoInts();
+  const baseCharCode = 97; // 'a'
+  const alphabetSize = 26;
+
   return () => {
     const offset = ordinals();
-    if (offset > 25) {
-      throw new Error("too many type variables");
-    }
-    const char = String.fromCharCode(97 + offset);
-    return mkTypeVariable(char);
+    const remainder = offset % alphabetSize;
+    const quotient = Math.floor(offset / alphabetSize);
+    const letter = String.fromCharCode(baseCharCode + remainder);
+    const name = quotient === 0 ? letter : `${letter}${quotient}`;
+    return mkTypeVariable(name);
   };
 };

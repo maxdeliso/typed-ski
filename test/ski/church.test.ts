@@ -51,19 +51,19 @@ Deno.test("Church numeral optimization functions", async (t) => {
   await t.step("findPerfectPower", () => {
     // Test perfect powers
     // Note: Algorithm prefers smallest exponent b, so 16 = 4^2 (b=2) over 16 = 2^4 (b=4)
-    expect(findPerfectPower(4)).to.deep.equal([2, 2]); // 4 = 2^2
-    expect(findPerfectPower(8)).to.deep.equal([2, 3]); // 8 = 2^3
-    expect(findPerfectPower(9)).to.deep.equal([3, 2]); // 9 = 3^2
-    expect(findPerfectPower(16)).to.deep.equal([4, 2]); // 16 = 4^2 (prefers b=2 over b=4)
-    expect(findPerfectPower(25)).to.deep.equal([5, 2]); // 25 = 5^2
-    expect(findPerfectPower(27)).to.deep.equal([3, 3]); // 27 = 3^3
-    expect(findPerfectPower(32)).to.deep.equal([2, 5]); // 32 = 2^5 (only 2^5 exists)
-    expect(findPerfectPower(36)).to.deep.equal([6, 2]); // 36 = 6^2
-    expect(findPerfectPower(64)).to.deep.equal([8, 2]); // 64 = 8^2 (prefers b=2 over b=6)
-    expect(findPerfectPower(81)).to.deep.equal([9, 2]); // 81 = 9^2 (prefers b=2 over b=4)
-    expect(findPerfectPower(100)).to.deep.equal([10, 2]); // 100 = 10^2
-    expect(findPerfectPower(125)).to.deep.equal([5, 3]); // 125 = 5^3
-    expect(findPerfectPower(256)).to.deep.equal([16, 2]); // 256 = 16^2 (prefers b=2 over b=8)
+    expect(findPerfectPower(4)).to.deep.equal([2n, 2n]); // 4 = 2^2
+    expect(findPerfectPower(8)).to.deep.equal([2n, 3n]); // 8 = 2^3
+    expect(findPerfectPower(9)).to.deep.equal([3n, 2n]); // 9 = 3^2
+    expect(findPerfectPower(16)).to.deep.equal([4n, 2n]); // 16 = 4^2 (prefers b=2 over b=4)
+    expect(findPerfectPower(25)).to.deep.equal([5n, 2n]); // 25 = 5^2
+    expect(findPerfectPower(27)).to.deep.equal([3n, 3n]); // 27 = 3^3
+    expect(findPerfectPower(32)).to.deep.equal([2n, 5n]); // 32 = 2^5 (only 2^5 exists)
+    expect(findPerfectPower(36)).to.deep.equal([6n, 2n]); // 36 = 6^2
+    expect(findPerfectPower(64)).to.deep.equal([8n, 2n]); // 64 = 8^2 (prefers b=2 over b=6)
+    expect(findPerfectPower(81)).to.deep.equal([9n, 2n]); // 81 = 9^2 (prefers b=2 over b=4)
+    expect(findPerfectPower(100)).to.deep.equal([10n, 2n]); // 100 = 10^2
+    expect(findPerfectPower(125)).to.deep.equal([5n, 3n]); // 125 = 5^3
+    expect(findPerfectPower(256)).to.deep.equal([16n, 2n]); // 256 = 16^2 (prefers b=2 over b=8)
 
     // Test numbers that are not perfect powers
     expect(findPerfectPower(0)).to.be.null;
@@ -94,28 +94,28 @@ Deno.test("Church numeral optimization functions", async (t) => {
 
   await t.step("findFactors", () => {
     // Test composite numbers
-    expect(findFactors(4)).to.deep.equal([2, 2]); // 4 = 2 * 2
-    expect(findFactors(6)).to.deep.equal([2, 3]); // 6 = 2 * 3
-    expect(findFactors(8)).to.deep.equal([2, 4]); // 8 = 2 * 4
-    expect(findFactors(9)).to.deep.equal([3, 3]); // 9 = 3 * 3
-    expect(findFactors(10)).to.deep.equal([2, 5]); // 10 = 2 * 5
-    expect(findFactors(12)).to.deep.equal([2, 6]); // 12 = 2 * 6
-    expect(findFactors(14)).to.deep.equal([2, 7]); // 14 = 2 * 7
-    expect(findFactors(15)).to.deep.equal([3, 5]); // 15 = 3 * 5
-    expect(findFactors(16)).to.deep.equal([2, 8]); // 16 = 2 * 8
-    expect(findFactors(18)).to.deep.equal([2, 9]); // 18 = 2 * 9
-    expect(findFactors(20)).to.deep.equal([2, 10]); // 20 = 2 * 10
-    expect(findFactors(21)).to.deep.equal([3, 7]); // 21 = 3 * 7
-    expect(findFactors(22)).to.deep.equal([2, 11]); // 22 = 2 * 11
-    expect(findFactors(24)).to.deep.equal([2, 12]); // 24 = 2 * 12
-    expect(findFactors(25)).to.deep.equal([5, 5]); // 25 = 5 * 5
-    expect(findFactors(27)).to.deep.equal([3, 9]); // 27 = 3 * 9
-    expect(findFactors(30)).to.deep.equal([2, 15]); // 30 = 2 * 15
-    expect(findFactors(32)).to.deep.equal([2, 16]); // 32 = 2 * 16
-    expect(findFactors(36)).to.deep.equal([2, 18]); // 36 = 2 * 18
-    expect(findFactors(49)).to.deep.equal([7, 7]); // 49 = 7 * 7
-    expect(findFactors(64)).to.deep.equal([2, 32]); // 64 = 2 * 32
-    expect(findFactors(100)).to.deep.equal([2, 50]); // 100 = 2 * 50
+    expect(findFactors(4)).to.deep.equal([2n, 2n]); // 4 = 2 * 2
+    expect(findFactors(6)).to.deep.equal([2n, 3n]); // 6 = 2 * 3
+    expect(findFactors(8)).to.deep.equal([2n, 4n]); // 8 = 2 * 4
+    expect(findFactors(9)).to.deep.equal([3n, 3n]); // 9 = 3 * 3
+    expect(findFactors(10)).to.deep.equal([2n, 5n]); // 10 = 2 * 5
+    expect(findFactors(12)).to.deep.equal([2n, 6n]); // 12 = 2 * 6
+    expect(findFactors(14)).to.deep.equal([2n, 7n]); // 14 = 2 * 7
+    expect(findFactors(15)).to.deep.equal([3n, 5n]); // 15 = 3 * 5
+    expect(findFactors(16)).to.deep.equal([2n, 8n]); // 16 = 2 * 8
+    expect(findFactors(18)).to.deep.equal([2n, 9n]); // 18 = 2 * 9
+    expect(findFactors(20)).to.deep.equal([2n, 10n]); // 20 = 2 * 10
+    expect(findFactors(21)).to.deep.equal([3n, 7n]); // 21 = 3 * 7
+    expect(findFactors(22)).to.deep.equal([2n, 11n]); // 22 = 2 * 11
+    expect(findFactors(24)).to.deep.equal([2n, 12n]); // 24 = 2 * 12
+    expect(findFactors(25)).to.deep.equal([5n, 5n]); // 25 = 5 * 5
+    expect(findFactors(27)).to.deep.equal([3n, 9n]); // 27 = 3 * 9
+    expect(findFactors(30)).to.deep.equal([2n, 15n]); // 30 = 2 * 15
+    expect(findFactors(32)).to.deep.equal([2n, 16n]); // 32 = 2 * 16
+    expect(findFactors(36)).to.deep.equal([2n, 18n]); // 36 = 2 * 18
+    expect(findFactors(49)).to.deep.equal([7n, 7n]); // 49 = 7 * 7
+    expect(findFactors(64)).to.deep.equal([2n, 32n]); // 64 = 2 * 32
+    expect(findFactors(100)).to.deep.equal([2n, 50n]); // 100 = 2 * 50
 
     // Test prime numbers (should return null)
     expect(findFactors(0)).to.be.null;
@@ -190,8 +190,8 @@ Deno.test("Church numeral optimization functions", async (t) => {
       const church = ChurchN(n);
       const decoded = UnChurchNumber(arenaEvaluator.reduce(church));
       expect(decoded).to.equal(
-        n,
-        `ChurchN(${n}) should decode to ${n}, but got ${decoded}`,
+        BigInt(n),
+        `ChurchN(${n}) should decode to ${BigInt(n)}, but got ${decoded}`,
       );
     }
   });
@@ -228,6 +228,14 @@ Deno.test("Church numeral optimization functions", async (t) => {
     }
   });
 
+  await t.step("supports arbitrarily large bigint inputs", () => {
+    const huge = 2n ** 200n; // comfortably above Number.MAX_SAFE_INTEGER
+    expect(() => {
+      const expr = ChurchN(huge);
+      expect(expr).to.exist;
+    }).to.not.throw();
+  });
+
   await t.step("memoization", () => {
     // Clear any existing cache by testing fresh
     // Multiple calls should return equivalent expressions
@@ -236,9 +244,9 @@ Deno.test("Church numeral optimization functions", async (t) => {
     const church3 = ChurchN(10);
 
     // All should decode to the same value
-    expect(UnChurchNumber(arenaEvaluator.reduce(church1))).to.equal(10);
-    expect(UnChurchNumber(arenaEvaluator.reduce(church2))).to.equal(10);
-    expect(UnChurchNumber(arenaEvaluator.reduce(church3))).to.equal(10);
+    expect(UnChurchNumber(arenaEvaluator.reduce(church1))).to.equal(10n);
+    expect(UnChurchNumber(arenaEvaluator.reduce(church2))).to.equal(10n);
+    expect(UnChurchNumber(arenaEvaluator.reduce(church3))).to.equal(10n);
   });
 
   await t.step("optimization strategy verification", () => {
@@ -246,24 +254,24 @@ Deno.test("Church numeral optimization functions", async (t) => {
     // 9 = 3^2 should use application (exponentiation)
     const church9 = ChurchN(9);
     const decoded9 = UnChurchNumber(arenaEvaluator.reduce(church9));
-    expect(decoded9).to.equal(9);
+    expect(decoded9).to.equal(9n);
 
     // Verify that composites use composition
     // 18 = 2 * 9 should use composition (B combinator)
     const church18 = ChurchN(18);
     const decoded18 = UnChurchNumber(arenaEvaluator.reduce(church18));
-    expect(decoded18).to.equal(18);
+    expect(decoded18).to.equal(18n);
 
     // Verify that primes use successor
     // 19 is prime, so should use Succ(18)
     const church19 = ChurchN(19);
     const decoded19 = UnChurchNumber(arenaEvaluator.reduce(church19));
-    expect(decoded19).to.equal(19);
+    expect(decoded19).to.equal(19n);
 
     // Verify that 64 = 2^6 uses exponentiation
     const church64 = ChurchN(64);
     const decoded64 = UnChurchNumber(arenaEvaluator.reduce(church64));
-    expect(decoded64).to.equal(64);
+    expect(decoded64).to.equal(64n);
   });
 });
 
@@ -272,13 +280,13 @@ Deno.test("Church encodings", async (t) => {
 
   await t.step("succ / basic arithmetic", async (t) => {
     await t.step("0 + 1 = 1", () => {
-      expect(UnChurchNumber(apply(Succ, ChurchN(0)))).to.equal(1);
+      expect(UnChurchNumber(apply(Succ, ChurchN(0)))).to.equal(1n);
     });
 
     await t.step("1 + 1 = 2", () => {
       expect(
         UnChurchNumber(arenaEvaluator.reduce(apply(Succ, ChurchN(1)))),
-      ).to.equal(2);
+      ).to.equal(2n);
     });
   });
 
@@ -314,13 +322,13 @@ Deno.test("Church encodings", async (t) => {
       UnChurchNumber(
         arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Fst)),
       ),
-    ).to.equal(0);
+    ).to.equal(0n);
 
     expect(
       UnChurchNumber(
         arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Snd)),
       ),
-    ).to.equal(1);
+    ).to.equal(1n);
 
     expect(
       UnChurchNumber(
@@ -328,7 +336,7 @@ Deno.test("Church encodings", async (t) => {
           apply(Car, applyMany(V, ChurchN(0), ChurchN(1))),
         ),
       ),
-    ).to.equal(0);
+    ).to.equal(0n);
 
     expect(
       UnChurchNumber(
@@ -336,7 +344,7 @@ Deno.test("Church encodings", async (t) => {
           apply(Cdr, applyMany(V, ChurchN(0), ChurchN(1))),
         ),
       ),
-    ).to.equal(1);
+    ).to.equal(1n);
   });
 
   await t.step("isZero predicate", () => {
@@ -364,8 +372,8 @@ Deno.test("Church encodings", async (t) => {
   });
 
   await t.step("sums and products (0‥N-1)", () => {
-    for (let m = 0; m < N; m++) {
-      for (let n = 0; n < N; n++) {
+    for (let m = 0n; m < N; m++) {
+      for (let n = 0n; n < N; n++) {
         // m + n   via λmn.(m succ) n
         expect(
           UnChurchNumber(
@@ -404,8 +412,8 @@ Deno.test("Church encodings", async (t) => {
   await t.step("predecessor", () => {
     const pred = bracketLambda(predLambda);
 
-    for (let m = 0; m < N; m++) {
-      const expected = Math.max(m - 1, 0); // pred(0) = 0
+    for (let m = 0n; m < N; m++) {
+      const expected = m - 1n > 0n ? m - 1n : 0n; // pred(0) = 0
 
       // Pair-shifting definition
       expect(

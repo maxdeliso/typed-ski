@@ -7,20 +7,26 @@
  * @module
  */
 import { ParseError } from "./parseError.ts";
-import type { DefinitionKind } from "./tripLang.ts";
-import {
-  COLON,
-  DEFINITION_KEYWORDS,
-  IDENTIFIER_CHAR_REGEX,
-  LEFT_PAREN,
-  RIGHT_PAREN,
-  WHITESPACE_REGEX,
-} from "./tripLang.ts";
+import { isNatLiteralIdentifier } from "../consts/natNames.ts";
+import type { DefinitionKind } from "./definition.ts";
+import { DEFINITION_KEYWORDS } from "./definition.ts";
 
 export interface ParserState {
   buf: string;
   idx: number;
 }
+
+const DIGIT_REGEX = /[0-9]/;
+const PURELY_NUMERIC_REGEX = /^[0-9]+$/;
+const WHITESPACE_REGEX = /\s/;
+const IDENTIFIER_CHAR_REGEX = /[a-zA-Z0-9_]/;
+const LEFT_PAREN = "(";
+const RIGHT_PAREN = ")";
+const COLON = ":";
+
+export const isDigit = (ch: string | null): ch is string => {
+  return ch !== null && DIGIT_REGEX.test(ch);
+};
 
 export function createParserState(buf: string): ParserState {
   return { buf, idx: 0 };
@@ -74,6 +80,15 @@ export function parseIdentifier(state: ParserState): [string, ParserState] {
   if (id.length === 0) {
     throw new ParseError("expected an identifier");
   }
+  // Reject purely numeric identifiers (e.g., "123") to avoid ambiguity with numeric literals
+  if (PURELY_NUMERIC_REGEX.test(id)) {
+    throw new ParseError(
+      `'${id}' is not a valid identifier (purely numeric strings are reserved for numeric literals)`,
+    );
+  }
+  if (isNatLiteralIdentifier(id)) {
+    throw new ParseError(`'${id}' is reserved for numeric literals`);
+  }
   return [id, currentState];
 }
 
@@ -104,6 +119,26 @@ export function parseDefinitionKeyword(
     throw new ParseError(`expected definition keyword, found ${word}`);
   }
   return [word as DefinitionKind, nextState];
+}
+
+export function parseNumericLiteral(
+  state: ParserState,
+): [string, bigint, ParserState] {
+  let literal = "";
+  let currentState = skipWhitespace(state);
+
+  while (currentState.idx < currentState.buf.length) {
+    const ch = currentState.buf[currentState.idx];
+    if (!DIGIT_REGEX.test(ch)) break;
+    literal += ch;
+    currentState = consume(currentState);
+  }
+
+  if (literal.length === 0) {
+    throw new ParseError("expected numeric literal");
+  }
+
+  return [literal, BigInt(literal), currentState];
 }
 
 export function isAtDefinitionKeywordLine(state: ParserState): boolean {

@@ -13,6 +13,7 @@ import { arrow } from "../../lib/types/types.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
+import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -61,7 +62,7 @@ Deno.test("parseTripLang", async (t) => {
         ty: { kind: "type-var", typeName: "Int" },
         body: createTypedApplication(
           createTypedApplication(mkVar("plus"), mkVar("x")),
-          mkVar("1"),
+          makeTypedChurchNumeral(1n),
         ),
       },
     });

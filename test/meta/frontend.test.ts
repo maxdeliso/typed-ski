@@ -80,7 +80,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       eraseSystemF(mainPoly.term),
     );
     const nf = arenaEval.reduce(skiMain);
-    assert.equal(UnChurchNumber(nf), 3);
+    assert.equal(UnChurchNumber(nf), 3n);
   });
 
   await t.step("parses & runs pred example", () => {
@@ -95,11 +95,11 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       return UnChurchNumber(arenaEval.reduce(ski));
     };
 
-    assert.equal(num("testPred1"), 0);
-    assert.equal(num("testPred3"), 2);
-    assert.equal(num("testFst"), 2);
-    assert.equal(num("testSnd"), 3);
-    assert.equal(num("main"), 3);
+    assert.equal(num("testPred1"), 0n);
+    assert.equal(num("testPred3"), 2n);
+    assert.equal(num("testFst"), 2n);
+    assert.equal(num("testSnd"), 3n);
+    assert.equal(num("main"), 3n);
   });
 
   await t.step("compiles mul example (six & twenty-four)", () => {
@@ -117,8 +117,8 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       eraseSystemF(twentyFourPoly.term),
     );
 
-    assert.equal(UnChurchNumber(arenaEval.reduce(skiSix)), 6);
-    assert.equal(UnChurchNumber(arenaEval.reduce(ski24)), 24);
+    assert.equal(UnChurchNumber(arenaEval.reduce(skiSix)), 6n);
+    assert.equal(UnChurchNumber(arenaEval.reduce(ski24)), 24n);
   });
 
   await t.step("loads factorial with fixpoint", () => {
@@ -142,7 +142,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     const compiled = compile(src);
     const mainUntyped = resolveUntyped(compiled, "main");
     const mainSki = bracketLambda(mainUntyped.term);
-    assert.equal(UnChurchNumber(arenaEval.reduce(mainSki)), 120);
+    assert.equal(UnChurchNumber(arenaEval.reduce(mainSki)), 120n);
   });
 
   await t.step("elaborates nested type applications", () => {
@@ -202,6 +202,6 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
     const mainRes = arenaEvaluator.reduce(
       bracketLambda(eraseSystemF(mainPoly.term)),
     );
-    assert.equal(UnChurchNumber(mainRes), 24);
+    assert.equal(UnChurchNumber(mainRes), 24n);
   });
 });

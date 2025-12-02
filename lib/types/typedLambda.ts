@@ -45,7 +45,7 @@ export interface TypedLambdaAbs {
  *
  * A TypedLambda can be:
  * - a variable (LambdaVar),
- * - a typed abstraction λx:T.t (TypedLambdaAbs), or
+ * - a typed abstraction λx:T.t (TypedLambdaAbs)
  * - an application t u (TypedLambdaApplication)
  */
 export type TypedLambda =

@@ -322,6 +322,13 @@ function deepCopyProgramSpace(ps: ProgramSpace): ProgramSpace {
   return resolvedPS;
 }
 
+const BIGINT_JSON_REPLACER = (_key: string, value: unknown) => {
+  if (typeof value === "bigint") {
+    return `${value.toString()}n`;
+  }
+  return value;
+};
+
 /**
  * Computes a stable hash for a TripLang term using canonical ordering
  */
@@ -331,6 +338,9 @@ function computeTermHash(term: TripLangTerm): string {
     // For non-value terms like module/import/export,
     // the old stringify is fine as they have no binders.
     return JSON.stringify(term, (_key, value) => {
+      if (typeof value === "bigint") {
+        return `${value.toString()}n`;
+      }
       if (value && typeof value === "object" && !Array.isArray(value)) {
         const sorted: Record<string, unknown> = {};
         for (const k of Object.keys(value).sort()) {
@@ -347,7 +357,7 @@ function computeTermHash(term: TripLangTerm): string {
 
   // Now stringify the name-independent AST.
   // The simple stringify is fine; it's already canonical.
-  return JSON.stringify(deBruijnAST);
+  return JSON.stringify(deBruijnAST, BIGINT_JSON_REPLACER);
 }
 
 /**
@@ -765,7 +775,11 @@ export function resolveCrossModuleDependencies(
             if (verbose) {
               console.error(
                 `  Definition value: ${
-                  JSON.stringify(definitionValue, null, 2)
+                  JSON.stringify(
+                    definitionValue,
+                    BIGINT_JSON_REPLACER,
+                    2,
+                  )
                 }`,
               );
             }

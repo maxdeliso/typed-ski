@@ -1,4 +1,4 @@
-import { assertEquals } from "std/assert";
+import { assertEquals, assertThrows } from "std/assert";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -69,7 +69,7 @@ poly main = mul two three`;
     const skiExpr = parseSKI(skiExpression);
     const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
-    assertEquals(decoded, 6, "mul two three should equal 6");
+    assertEquals(decoded, 6n, "mul two three should equal 6");
   } finally {
     // Cleanup
     try {
@@ -137,7 +137,7 @@ poly main = add one one`;
     const skiExpr = parseSKI(skiExpression);
     const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
-    assertEquals(decoded, 2, "add one one should equal 2");
+    assertEquals(decoded, 2n, "add one one should equal 2");
   } finally {
     try {
       await Deno.remove(`${__dirname}/test-simple.trip`);
@@ -203,13 +203,161 @@ poly main = mul two three`;
     const skiExpr = parseSKI(skiExpression);
     const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
-    assertEquals(decoded, 6, "mul two three should equal 6");
+    assertEquals(decoded, 6n, "mul two three should equal 6");
   } finally {
     try {
       await Deno.remove(`${__dirname}/test-mult.trip`);
       await Deno.remove(`${__dirname}/test-mult.tripc`);
     } catch {
       // Ignore cleanup errors
+    }
+  }
+});
+
+Deno.test("links numeric literals across modules without leaking Nat", async () => {
+  const preludeObject = await getPreludeObject();
+
+  const providerSource = `module LiteralProvider
+
+import Nat Prelude
+
+export lit
+
+poly lit = 3
+`;
+
+  const consumerSource = `module LiteralConsumer
+
+import lit LiteralProvider
+
+export main
+
+poly main = lit
+`;
+
+  const providerFileName = "literal-provider.trip";
+  const consumerFileName = "literal-consumer.trip";
+
+  await Deno.writeTextFile(`${__dirname}/${providerFileName}`, providerSource);
+  await Deno.writeTextFile(`${__dirname}/${consumerFileName}`, consumerSource);
+
+  const compile = async (fileName: string) => {
+    const command = new Deno.Command(Deno.execPath(), {
+      args: [
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "../../bin/tripc.ts",
+        fileName,
+        fileName.replace(".trip", ".tripc"),
+      ],
+      cwd: __dirname,
+    });
+    const { code } = await command.output();
+    assertEquals(code, 0, `${fileName} should compile successfully`);
+  };
+
+  try {
+    await compile(providerFileName);
+    await compile(consumerFileName);
+
+    const providerBytes = await Deno.readTextFile(
+      `${__dirname}/literal-provider.tripc`,
+    );
+    const consumerBytes = await Deno.readTextFile(
+      `${__dirname}/literal-consumer.tripc`,
+    );
+    const providerObject = deserializeTripCObject(providerBytes);
+    const consumerObject = deserializeTripCObject(consumerBytes);
+
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObject },
+      { name: "LiteralProvider", object: providerObject },
+      { name: "LiteralConsumer", object: consumerObject },
+    ], true);
+
+    const skiExpr = parseSKI(skiExpression);
+    const evaluated = arenaEvaluator.reduce(skiExpr);
+    const decoded = UnChurchNumber(evaluated);
+    assertEquals(decoded, 3n, "linked literal should evaluate to 3");
+  } finally {
+    for (
+      const file of [
+        "literal-provider.trip",
+        "literal-provider.tripc",
+        "literal-consumer.trip",
+        "literal-consumer.tripc",
+      ]
+    ) {
+      try {
+        await Deno.remove(`${__dirname}/${file}`);
+      } catch {
+        // ignore
+      }
+    }
+  }
+});
+
+Deno.test("fails to link when module exports Nat conflicting with Prelude", async () => {
+  const preludeObject = await getPreludeObject();
+
+  const conflictingSource = `module ConflictingNat
+
+export Nat
+
+type Nat = ∀X . (X → X) → X → X
+
+poly main = 3
+`;
+
+  const conflictingFileName = "conflicting-nat.trip";
+
+  await Deno.writeTextFile(
+    `${__dirname}/${conflictingFileName}`,
+    conflictingSource,
+  );
+
+  const compile = async (fileName: string) => {
+    const command = new Deno.Command(Deno.execPath(), {
+      args: [
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "../../bin/tripc.ts",
+        fileName,
+        fileName.replace(".trip", ".tripc"),
+      ],
+      cwd: __dirname,
+    });
+    const { code } = await command.output();
+    assertEquals(code, 0, `${fileName} should compile successfully`);
+  };
+
+  try {
+    await compile(conflictingFileName);
+
+    const conflictingBytes = await Deno.readTextFile(
+      `${__dirname}/conflicting-nat.tripc`,
+    );
+    const conflictingObject = deserializeTripCObject(conflictingBytes);
+
+    assertThrows(
+      () => {
+        linkModules([
+          { name: "Prelude", object: preludeObject },
+          { name: "ConflictingNat", object: conflictingObject },
+        ], true);
+      },
+      Error,
+      "Ambiguous export 'Nat' found in multiple modules",
+    );
+  } finally {
+    for (const file of ["conflicting-nat.trip", "conflicting-nat.tripc"]) {
+      try {
+        await Deno.remove(`${__dirname}/${file}`);
+      } catch {
+        // ignore
+      }
     }
   }
 });
@@ -275,7 +423,7 @@ poly main = add (mul two three) (mul one four)`;
     const evaluated = arenaEvaluator.reduce(skiExpr);
     const decoded = UnChurchNumber(evaluated);
     // (2 * 3) + (1 * 4) = 6 + 4 = 10
-    assertEquals(decoded, 10, "Complex arithmetic should equal 10");
+    assertEquals(decoded, 10n, "Complex arithmetic should equal 10");
   } finally {
     try {
       await Deno.remove(`${__dirname}/test-complex.trip`);

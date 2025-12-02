@@ -13,10 +13,66 @@ import { arenaEvaluator } from "../evaluator/skiEvaluator.ts";
 import { unChurchNumber as unChurchNumberNative } from "./native.ts";
 
 // Memoization cache for optimized Church numerals
-const churchCache = new Map<number, SKIExpression>();
+const churchCache = new Map<bigint, SKIExpression>();
 
 // Pre-compute Church numeral 2 for efficiency
 let ChurchTwo: SKIExpression | null = null;
+
+const toBigInt = (value: number | bigint): bigint => {
+  if (typeof value === "bigint") return value;
+  if (!Number.isInteger(value)) {
+    throw new Error("Only integer values can be converted to Church numerals");
+  }
+  return BigInt(value);
+};
+
+const powBigInt = (base: bigint, exponent: bigint): bigint => {
+  let result = 1n;
+  let b = base;
+  let e = exponent;
+  while (e > 0n) {
+    if ((e & 1n) === 1n) {
+      result *= b;
+    }
+    if (e === 1n) break;
+    b *= b;
+    e >>= 1n;
+  }
+  return result;
+};
+
+const sqrtBigInt = (n: bigint): bigint => {
+  if (n < 0n) {
+    throw new Error("Cannot compute square root of negative bigint");
+  }
+  if (n < 2n) return n;
+  let x0 = 1n << BigInt((n.toString(2).length >> 1) + 1);
+  let x1 = (x0 + n / x0) >> 1n;
+  while (x1 < x0) {
+    x0 = x1;
+    x1 = (x0 + n / x0) >> 1n;
+  }
+  return x0;
+};
+
+const integerRootCeil = (n: bigint, k: bigint): bigint => {
+  if (k === 1n) return n;
+  let low = 2n;
+  let high = n;
+  while (low <= high) {
+    const mid = (low + high) >> 1n;
+    const power = powBigInt(mid, k);
+    if (power === n) {
+      return mid;
+    }
+    if (power < n) {
+      low = mid + 1n;
+    } else {
+      high = mid - 1n;
+    }
+  }
+  return low;
+};
 
 /**
  * Checks if n is a perfect power: n = a^b for integers a, b > 1
@@ -25,21 +81,23 @@ let ChurchTwo: SKIExpression | null = null;
  *
  * @internal Exported for testing purposes
  */
-export function findPerfectPower(n: number): [number, number] | null {
-  if (n < 4) return null; // 0, 1, 2, 3 are not perfect powers (with b > 1)
+export function findPerfectPower(
+  value: number | bigint,
+): [bigint, bigint] | null {
+  const n = toBigInt(value);
+  if (n < 4n) return null; // 0,1,2,3 are not perfect powers (with b > 1)
 
-  // Try exponents from 2 up to log2(n)
-  const maxExponent = Math.floor(Math.log2(n));
-  for (let b = 2; b <= maxExponent; b++) {
-    // Try bases from 2 up to n^(1/b)
-    // Use ceil to account for floating point precision issues
-    const maxBase = Math.ceil(Math.pow(n, 1 / b));
-    for (let a = 2; a <= maxBase; a++) {
-      const power = Math.pow(a, b);
-      if (power === n) {
-        return [a, b];
-      }
-      if (power > n) break;
+  const bitLength = BigInt(n.toString(2).length);
+  for (let exponent = 2n; exponent <= bitLength; exponent++) {
+    const base = integerRootCeil(n, exponent);
+    if (base <= 1n) continue;
+    const power = powBigInt(base, exponent);
+    if (power === n) {
+      return [base, exponent];
+    }
+    if (base === 2n && exponent === 2n && power > n) {
+      // further exponents will only increase the result
+      break;
     }
   }
   return null;
@@ -52,13 +110,12 @@ export function findPerfectPower(n: number): [number, number] | null {
  *
  * @internal Exported for testing purposes
  */
-export function findFactors(n: number): [number, number] | null {
-  if (n < 4) return null; // 0, 1, 2, 3 are not composite (or trivial)
-
-  // Try to find the smallest factor (peel off smallest prime)
-  const sqrtN = Math.sqrt(n);
-  for (let a = 2; a <= sqrtN; a++) {
-    if (n % a === 0) {
+export function findFactors(value: number | bigint): [bigint, bigint] | null {
+  const n = toBigInt(value);
+  if (n < 4n) return null;
+  const sqrtN = sqrtBigInt(n);
+  for (let a = 2n; a <= sqrtN; a++) {
+    if (n % a === 0n) {
       return [a, n / a];
     }
   }
@@ -70,9 +127,9 @@ export function findFactors(n: number): [number, number] | null {
  * Once all dependencies are resolved, we can build the final expression.
  */
 type DeferredComputation =
-  | { type: "perfectPower"; base: number; exponent: number }
-  | { type: "composite"; factor1: number; factor2: number }
-  | { type: "prime"; predecessor: number };
+  | { type: "perfectPower"; base: bigint; exponent: bigint }
+  | { type: "composite"; factor1: bigint; factor2: bigint }
+  | { type: "prime"; predecessor: bigint };
 
 /**
  * Optimized Church numeral generation using factorization hierarchy:
@@ -84,39 +141,30 @@ type DeferredComputation =
  * This implementation is iterative and stack-safe, using a work queue
  * to process dependencies without recursion.
  */
-function optimizeChurchN(n: number): SKIExpression {
-  // Check cache
+function optimizeChurchN(n: bigint): SKIExpression {
   const cached = churchCache.get(n);
   if (cached !== undefined) {
     return cached;
   }
 
-  // Work queue: numbers that need to be optimized
-  const workQueue: number[] = [n];
-  // Maps numbers to their deferred computations
-  const deferred: Map<number, DeferredComputation> = new Map();
-  // Set of numbers we've already analyzed (to avoid reprocessing)
-  const analyzed = new Set<number>();
+  const workQueue: bigint[] = [n];
+  const deferred: Map<bigint, DeferredComputation> = new Map();
+  const analyzed = new Set<bigint>();
 
-  // Process work queue iteratively to collect all dependencies
   while (workQueue.length > 0) {
     const current = workQueue.pop()!;
-
-    // Skip if already cached or already analyzed
     if (churchCache.has(current) || analyzed.has(current)) {
       continue;
     }
-
     analyzed.add(current);
 
-    // Base cases - resolve immediately
-    if (current === 0) {
+    if (current === 0n) {
       churchCache.set(current, Zero);
       continue;
-    } else if (current === 1) {
+    } else if (current === 1n) {
       churchCache.set(current, One);
       continue;
-    } else if (current === 2) {
+    } else if (current === 2n) {
       if (ChurchTwo === null) {
         ChurchTwo = apply(Succ, One);
       }
@@ -124,36 +172,38 @@ function optimizeChurchN(n: number): SKIExpression {
       continue;
     }
 
-    // Determine the computation strategy and record dependencies
     const perfectPower = findPerfectPower(current);
     if (perfectPower !== null) {
-      const [a, b] = perfectPower;
-      // Need to compute both a and b first
-      deferred.set(current, { type: "perfectPower", base: a, exponent: b });
-      if (!churchCache.has(a) && !analyzed.has(a)) workQueue.push(a);
-      if (!churchCache.has(b) && !analyzed.has(b)) workQueue.push(b);
+      const [base, exponent] = perfectPower;
+      deferred.set(current, { type: "perfectPower", base, exponent });
+      if (!churchCache.has(base) && !analyzed.has(base)) workQueue.push(base);
+      if (!churchCache.has(exponent) && !analyzed.has(exponent)) {
+        workQueue.push(exponent);
+      }
     } else {
       const factors = findFactors(current);
       if (factors !== null) {
-        const [a, b] = factors;
-        // Need to compute both factors first
-        deferred.set(current, { type: "composite", factor1: a, factor2: b });
-        if (!churchCache.has(a) && !analyzed.has(a)) workQueue.push(a);
-        if (!churchCache.has(b) && !analyzed.has(b)) workQueue.push(b);
+        const [factor1, factor2] = factors;
+        deferred.set(current, { type: "composite", factor1, factor2 });
+        if (!churchCache.has(factor1) && !analyzed.has(factor1)) {
+          workQueue.push(factor1);
+        }
+        if (!churchCache.has(factor2) && !analyzed.has(factor2)) {
+          workQueue.push(factor2);
+        }
       } else {
-        // Prime - need predecessor
-        deferred.set(current, { type: "prime", predecessor: current - 1 });
-        if (!churchCache.has(current - 1) && !analyzed.has(current - 1)) {
-          workQueue.push(current - 1);
+        const predecessor = current - 1n;
+        deferred.set(current, { type: "prime", predecessor });
+        if (!churchCache.has(predecessor) && !analyzed.has(predecessor)) {
+          workQueue.push(predecessor);
         }
       }
     }
   }
 
-  // Now resolve all deferred computations
-  // Process dependencies in topological order (smallest to largest)
-  // to ensure dependencies are resolved before they're used
-  const sortedNumbers = Array.from(deferred.keys()).sort((a, b) => a - b);
+  const sortedNumbers = Array.from(deferred.keys()).sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0
+  );
 
   for (const num of sortedNumbers) {
     if (churchCache.has(num)) continue; // Already resolved
@@ -163,30 +213,23 @@ function optimizeChurchN(n: number): SKIExpression {
       throw new Error(`Missing deferred computation for ${num}`);
     }
 
-    // Get dependencies, recursively computing if needed
     let result: SKIExpression;
 
     switch (comp.type) {
       case "perfectPower": {
-        // Recursively ensure dependencies are computed
         const baseExpr = optimizeChurchN(comp.base);
         const expExpr = optimizeChurchN(comp.exponent);
-        // n = a^b: Church encoding is b applied to a
         result = apply(expExpr, baseExpr);
         break;
       }
       case "composite": {
-        // Recursively ensure dependencies are computed
         const factor1Expr = optimizeChurchN(comp.factor1);
         const factor2Expr = optimizeChurchN(comp.factor2);
-        // n = a * b: Church encoding uses composition B
         result = applyMany(B, factor1Expr, factor2Expr);
         break;
       }
       case "prime": {
-        // Recursively ensure predecessor is computed
         const predExpr = optimizeChurchN(comp.predecessor);
-        // Prime - use successor
         result = apply(Succ, predExpr);
         break;
       }
@@ -204,7 +247,7 @@ function optimizeChurchN(n: number): SKIExpression {
 }
 
 /**
- * Creates a Church-encoded numeral from a JavaScript number.
+ * Creates a Church-encoded numeral from an integer.
  *
  * Church numerals represent natural numbers as functions that apply another function
  * a specified number of times. For example, Church numeral 2 applies a function f
@@ -217,32 +260,31 @@ function optimizeChurchN(n: number): SKIExpression {
  * - Successor (addition) - lowest priority
  *
  * @see https://en.wikipedia.org/wiki/Church_encoding
- * @param n a non-negative integer
+ * @param value a non-negative integer
  * @returns an extensionally equivalent Church numeral as an SKI expression
- * @throws Error if n is not an integer or is negative
+ * @throws Error if the input is negative or non-integral
  */
-export const ChurchN = (n: number): SKIExpression => {
-  if (!Number.isInteger(n)) {
-    throw new Error("ChurchN only accepts integers");
-  }
-  if (n < 0) {
+export const ChurchN = (value: number | bigint): SKIExpression => {
+  const n = toBigInt(value);
+  if (n < 0n) {
     throw new Error("only non-negative integers are supported");
   }
   return optimizeChurchN(n);
 };
 
 /**
- * Evaluates a Church numeral SKI expression to a JavaScript number using the optimized native path.
+ * Evaluates a Church numeral SKI expression to a JavaScript bigint using the optimized native path.
  *
  * Useful for testing numeric results of SKI computations via Church encoding.
+ * Returns bigint to support unbounded natural numbers.
  */
-export const UnChurchNumber = (exp: SKIExpression): number => {
+export const UnChurchNumber = (exp: SKIExpression): bigint => {
   return unChurchNumberNative(exp);
 };
 
 /**
- * UnChurchBoolean applies the Church boolean expression (which is expected to be in normal form)
- * to two Church numerals (here ChurchN(1) and ChurchN(0)) and then uses UnChurch to obtain a number.
+ * UnChurchBoolean applies the Church boolean expression to two Church numerals
+ * (here ChurchN(1) and ChurchN(0)) and then reduces and uses UnChurch to obtain a bigint.
  * If the result is 1, then the Church boolean was true; if 0, then it was false.
  */
 export const UnChurchBoolean = (expr: SKIExpression): boolean => {
@@ -250,7 +292,7 @@ export const UnChurchBoolean = (expr: SKIExpression): boolean => {
   const testExpr = arenaEvaluator.reduce(
     applyMany(expr, ChurchN(1), ChurchN(0)),
   );
-  return UnChurchNumber(testExpr) === 1;
+  return UnChurchNumber(testExpr) === 1n;
 };
 
 export const ChurchB = (b: boolean): SKIExpression => b ? True : False;

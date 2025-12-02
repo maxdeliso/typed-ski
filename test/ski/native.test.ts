@@ -17,7 +17,7 @@ import { False, One, True, Zero } from "../../lib/consts/combinators.ts";
 
 function assertIsNum(
   e: NativeExpr,
-): asserts e is { kind: "num"; value: number } {
+): asserts e is { kind: "num"; value: bigint } {
   assert.equal(e.kind, "num", "expected kind 'num'");
 }
 
@@ -32,7 +32,7 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
     await t.step("mkNativeNum", () => {
       const n = mkNativeNum(42);
       assert.equal(n.kind, "num");
-      assert.equal(n.value, 42);
+      assert.equal(n.value, 42n);
     });
 
     await t.step("mkNativeInc", () => {
@@ -48,9 +48,9 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
       };
       assertIsNonTerm(app);
       assertIsNum(app.lft);
-      assert.equal(app.lft.value, 1);
+      assert.equal(app.lft.value, 1n);
       assertIsNum(app.rgt);
-      assert.equal(app.rgt.value, 2);
+      assert.equal(app.rgt.value, 2n);
     });
   });
 
@@ -64,7 +64,7 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
       const { altered, expr: out } = stepOnceNat(expr);
       assert.ok(altered);
       assertIsNum(out);
-      assert.equal(out.value, 6);
+      assert.equal(out.value, 6n);
     });
 
     await t.step("no reduction when pattern doesn’t match", () => {
@@ -92,9 +92,9 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
       assert.ok(r.altered);
       assertIsNonTerm(r.expr);
       assertIsNum(r.expr.lft);
-      assert.equal(r.expr.lft.value, 2);
+      assert.equal(r.expr.lft.value, 2n);
       assertIsNum(r.expr.rgt);
-      assert.equal(r.expr.rgt.value, 2);
+      assert.equal(r.expr.rgt.value, 2n);
     });
   });
 
@@ -112,9 +112,9 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
       const out = reduceNat(expr);
       assertIsNonTerm(out);
       assertIsNum(out.lft);
-      assert.equal(out.lft.value, 2);
+      assert.equal(out.lft.value, 2n);
       assertIsNum(out.rgt);
-      assert.equal(out.rgt.value, 2);
+      assert.equal(out.rgt.value, 2n);
     });
 
     await t.step("multiple incremental steps", () => {
@@ -130,28 +130,28 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
       };
       const out = reduceNat(expr);
       assertIsNum(out);
-      assert.equal(out.value, 2);
+      assert.equal(out.value, 2n);
     });
   });
 
   await t.step("decoding Church numerals", async (t) => {
     for (const n of [0, 1, 2, 5, 10]) {
       await t.step(`Church ${n} decodes to ${n}`, () => {
-        assert.equal(unChurchNumber(ChurchN(n)), n);
+        assert.equal(unChurchNumber(ChurchN(n)), BigInt(n));
       });
     }
 
     await t.step("non-numeral normalises to 0", () => {
-      assert.equal(unChurchNumber(apply(K, I)), 0);
+      assert.equal(unChurchNumber(apply(K, I)), 0n);
     });
 
     await t.step("malformed numeral gives 1", () => {
-      assert.equal(unChurchNumber(applyMany(S, K, I)), 1);
+      assert.equal(unChurchNumber(applyMany(S, K, I)), 1n);
     });
 
     await t.step("combinator constants", async (t) => {
-      await t.step("Zero → 0", () => assert.equal(unChurchNumber(Zero), 0));
-      await t.step("One  → 1", () => assert.equal(unChurchNumber(One), 1));
+      await t.step("Zero → 0", () => assert.equal(unChurchNumber(Zero), 0n));
+      await t.step("One  → 1", () => assert.equal(unChurchNumber(One), 1n));
       await t.step(
         "True → true",
         () => assert.equal(UnChurchBoolean(True), true),

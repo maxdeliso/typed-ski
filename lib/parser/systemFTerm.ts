@@ -8,10 +8,12 @@
  */
 import { ParseError } from "./parseError.ts";
 import {
+  isDigit,
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
+  parseNumericLiteral,
   peek,
 } from "./parserState.ts";
 import type { ParserState } from "./parserState.ts";
@@ -21,8 +23,10 @@ import {
   mkSystemFAbs,
   mkSystemFTAbs,
   mkSystemFTypeApp,
+  mkSystemFVar,
   type SystemFTerm,
 } from "../terms/systemF.ts";
+import { makeNatLiteralIdentifier } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createSystemFApplication } from "../terms/systemF.ts";
 
@@ -72,6 +76,13 @@ export function parseAtomicSystemFTerm(
       `Λ${typeVar}.${bodyLit}`,
       mkSystemFTAbs(typeVar, bodyTerm),
       stateAfterBody,
+    ];
+  } else if (isDigit(ch)) {
+    const [literal, value, stateAfterLiteral] = parseNumericLiteral(state);
+    return [
+      literal,
+      mkSystemFVar(makeNatLiteralIdentifier(value)),
+      stateAfterLiteral,
     ];
   } else if (ch !== null && /[a-zA-Z]/.test(ch)) {
     const [varLit, stateAfterVar] = parseIdentifier(state);

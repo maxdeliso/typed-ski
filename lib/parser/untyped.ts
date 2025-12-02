@@ -8,13 +8,16 @@
  */
 import { mkUntypedAbs, mkVar, type UntypedLambda } from "../terms/lambda.ts";
 import {
+  isDigit,
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
+  parseNumericLiteral,
   type ParserState,
   peek,
 } from "./parserState.ts";
+import { makeUntypedChurchNumeral } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createApplication } from "../terms/lambda.ts";
 import { parseWithEOF } from "./eof.ts";
@@ -64,6 +67,9 @@ export function parseAtomicUntypedLambda(
     currentState = matchRP(stateAfterInner);
     const fullLiteral = s.buf.slice(s.idx, currentState.idx);
     return [fullLiteral, innerTerm, currentState];
+  } else if (isDigit(peeked)) {
+    const [literal, value, nextState] = parseNumericLiteral(s);
+    return [literal, makeUntypedChurchNumeral(value), nextState];
   } else {
     const [varLit, stateAfterVar] = parseIdentifier(s);
     const fullLiteral = s.buf.slice(s.idx, stateAfterVar.idx);

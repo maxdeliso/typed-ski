@@ -11,6 +11,7 @@
 import type { BaseType } from "../../types/types.ts";
 import type { TripLangValueType } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
+import { parseNatLiteralIdentifier } from "../../consts/nat.ts";
 
 /**
  * Collects all free (external) term and type references appearing inside a TripLang value.
@@ -42,6 +43,10 @@ export function externalReferences(td: TripLangValueType): [
 
     switch (current.kind) {
       case "systemF-var": {
+        const literalValue = parseNatLiteralIdentifier(current.name);
+        if (literalValue !== null) {
+          break;
+        }
         const external = !absBindMap.has(current.name);
 
         if (external) {

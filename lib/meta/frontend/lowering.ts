@@ -10,6 +10,8 @@
 import type { SystemFTerm } from "../../terms/systemF.ts";
 import type { TypedLambda } from "../../types/typedLambda.ts";
 import { createTypedApplication } from "../../types/typedLambda.ts";
+import { parseNatLiteralIdentifier } from "../../consts/nat.ts";
+import { makeTypedChurchNumeral } from "../../types/natLiteral.ts";
 
 /**
  * Converts System F to typed lambda calculus, preserving type annotations
@@ -23,8 +25,13 @@ import { createTypedApplication } from "../../types/typedLambda.ts";
  */
 export function systemFToTypedLambda(term: SystemFTerm): TypedLambda {
   switch (term.kind) {
-    case "systemF-var":
+    case "systemF-var": {
+      const literalValue = parseNatLiteralIdentifier(term.name);
+      if (literalValue !== null) {
+        return makeTypedChurchNumeral(literalValue);
+      }
       return { kind: "lambda-var", name: term.name };
+    }
     case "systemF-abs":
       return {
         kind: "typed-lambda-abstraction",

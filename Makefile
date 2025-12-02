@@ -4,12 +4,12 @@
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
 
 help:
-	echo "Available targets:"
-	echo "  setup        - Prepare this machine by installing necessary tools"
-	echo "  build        - Compile the artifacts"
-	echo "  test         - Run the test suite"
-	echo "  format       - Format code"
-	echo "  format-check - Check code formatting"
+	@echo "Available targets:"
+	@echo "  setup        - Prepare this machine by installing necessary tools"
+	@echo "  build        - Compile the artifacts"
+	@echo "  test         - Run the test suite"
+	@echo "  format       - Format code"
+	@echo "  format-check - Check code formatting"
 
 setup: ## Prepare this machine by installing necessary tools
 	@if ! command -v nix >/dev/null 2>&1; then \
@@ -35,8 +35,10 @@ build: ## Compile the artifacts
 	ln -s result/wasm wasm
 	nix $(NIX_FLAGS) develop --command deno run -A scripts/embed-wasm.ts
 	nix $(NIX_FLAGS) develop --command bash -c "deno task dist"
-	test -f dist/tripc.js && test -f dist/tripc.min.js && test -f dist/tripc || \
-		(echo "Error: Required dist files not found" && exit 1)
+	@if [ ! -f dist/tripc.js ] || [ ! -f dist/tripc.min.js ] || [ ! -f dist/tripc ]; then \
+		echo "Error: Required dist files not found"; \
+		exit 1; \
+	fi
 
 test: ## Run the test suite
 	@if ! command -v nix >/dev/null 2>&1; then \
@@ -65,4 +67,3 @@ format-check:
 		exit 1; \
 	fi
 	nix $(NIX_FLAGS) run .#fmt -- --check
-

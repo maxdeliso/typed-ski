@@ -17,6 +17,16 @@ import {
   remaining,
   skipWhitespace,
 } from "./parserState.ts";
+import {
+  COMBINATOR,
+  EXPORT,
+  IMPORT,
+  MODULE,
+  POLY,
+  TYPE,
+  TYPED,
+  UNTYPED,
+} from "./definition.ts";
 
 import { ParseError } from "./parseError.ts";
 import { parseSystemFTerm } from "./systemFTerm.ts";
@@ -38,28 +48,6 @@ export const LEFT_PAREN = "(";
 export const RIGHT_PAREN = ")";
 export const COLON = ":";
 export const EQUALS = "=";
-
-const POLY = "poly" as const;
-const TYPED = "typed" as const;
-const UNTYPED = "untyped" as const;
-const COMBINATOR = "combinator" as const;
-const TYPE = "type" as const;
-const MODULE = "module" as const;
-const IMPORT = "import" as const;
-const EXPORT = "export" as const;
-
-export const DEFINITION_KEYWORDS = [
-  POLY,
-  TYPED,
-  UNTYPED,
-  COMBINATOR,
-  TYPE,
-  MODULE,
-  IMPORT,
-  EXPORT,
-] as const;
-
-export type DefinitionKind = typeof DEFINITION_KEYWORDS[number];
 
 export function parseTripLangDefinition(
   state: ParserState,
@@ -109,13 +97,25 @@ export function parseTripLangDefinition(
   currentState = skipWhitespace(currentState);
 
   switch (kind) {
-    case POLY:
-      [, term, finalState] = parseSystemFTerm(currentState);
-      return [{ kind: POLY, name, type, term }, skipWhitespace(finalState)];
+    case POLY: {
+      const [, systemFTerm, finalState] = parseSystemFTerm(currentState);
+      return [{
+        kind: POLY,
+        name,
+        type,
+        term: systemFTerm,
+      }, skipWhitespace(finalState)];
+    }
 
-    case TYPED:
-      [, term, finalState] = parseTypedLambdaInternal(currentState);
-      return [{ kind: TYPED, name, type, term }, skipWhitespace(finalState)];
+    case TYPED: {
+      const [, typedTerm, finalState] = parseTypedLambdaInternal(currentState);
+      return [{
+        kind: TYPED,
+        name,
+        type,
+        term: typedTerm,
+      }, skipWhitespace(finalState)];
+    }
 
     case UNTYPED:
       [, term, finalState] = parseUntypedLambdaInternal(currentState);

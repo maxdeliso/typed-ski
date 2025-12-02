@@ -13,6 +13,14 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(ast.name, "x");
   });
 
+  await t.step("parses a natural number literal", () => {
+    const [lit, ast] = parseSystemF("123");
+    assert.equal(lit, "123");
+    assert.equal(ast.kind, "systemF-var");
+    assert.match(ast.name, /__trip_nat_literal__/);
+    assert.equal(prettyPrintSystemF(ast), "123");
+  });
+
   await t.step("parses a term abstraction", () => {
     // Example: λx:X.x
     const input = "λx:X.x";
@@ -110,6 +118,18 @@ Deno.test("System F Parser", async (t) => {
     // The right branch of the outer cons cell should be the variable "z".
     assert.equal(ast.rgt.kind, "systemF-var");
     assert.equal(ast.rgt.name, "z");
+  });
+
+  await t.step("rejects purely numeric identifiers in lambda bindings", () => {
+    // Purely numeric strings should be parsed as numeric literals, not identifiers
+    // This test verifies that lambda abstractions with numeric bindings are rejected
+    assert.throws(
+      () => {
+        parseSystemF("λ123:X.123");
+      },
+      Error,
+      "not a valid identifier",
+    );
   });
 
   await t.step("throws an error on incomplete or malformed input", () => {

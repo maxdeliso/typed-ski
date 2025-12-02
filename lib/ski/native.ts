@@ -22,7 +22,7 @@ export interface NativeTerminal {
  */
 export interface NativeNum {
   kind: "num";
-  value: number;
+  value: bigint;
 }
 
 /**
@@ -58,7 +58,10 @@ export type NativeExpr =
 /**
  * Creates a numeric literal with the given value
  */
-export const mkNativeNum = (k = 0): NativeNum => ({ kind: "num", value: k });
+export const mkNativeNum = (k: number | bigint = 0n): NativeNum => ({
+  kind: "num",
+  value: typeof k === "bigint" ? k : BigInt(k),
+});
 
 /**
  * The increment operation
@@ -86,71 +89,84 @@ interface NativeStepResult {
 }
 
 const stepNative = (e: NativeExpr): NativeStepResult => {
-  // Handle (INC (NUM k)) -> NUM (k+1)
-  if (
-    e.kind === "non-terminal" && e.lft.kind === "inc" && e.rgt.kind === "num"
-  ) {
-    const result: NativeNum = mkNativeNum(e.rgt.value + 1);
-    return { altered: true, expr: result };
+  switch (e.kind) {
+    case "terminal":
+    case "num":
+    case "inc":
+      // No reduction possible for atomic expressions
+      return { altered: false, expr: e };
+
+    case "non-terminal": {
+      // Handle (INC (NUM k)) -> NUM (k+1)
+      if (e.lft.kind === "inc" && e.rgt.kind === "num") {
+        return { altered: true, expr: mkNativeNum(e.rgt.value + 1n) };
+      }
+
+      // Handle SKI reduction rules
+      // I x -> x
+      if (e.lft.kind === "terminal" && e.lft.sym === "I") {
+        return { altered: true, expr: e.rgt };
+      }
+
+      // K x y -> x
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "terminal" &&
+        e.lft.lft.sym === "K"
+      ) {
+        return { altered: true, expr: e.lft.rgt };
+      }
+
+      // S x y z -> (x z) (y z)
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.kind === "terminal" &&
+        e.lft.lft.lft.sym === "S"
+      ) {
+        const x = e.lft.lft.rgt;
+        const y = e.lft.rgt;
+        const z = e.rgt;
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: { kind: "non-terminal", lft: x, rgt: z },
+            rgt: { kind: "non-terminal", lft: y, rgt: z },
+          },
+        };
+      }
+
+      // Recurse on left subtree
+      const leftStep = stepNative(e.lft);
+      if (leftStep.altered) {
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: leftStep.expr,
+            rgt: e.rgt,
+          },
+        };
+      }
+
+      // Recurse on right subtree
+      const rightStep = stepNative(e.rgt);
+      if (rightStep.altered) {
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: e.lft,
+            rgt: rightStep.expr,
+          },
+        };
+      }
+
+      // No reduction possible
+      return { altered: false, expr: e };
+    }
   }
-
-  // Handle SKI reduction rules for terminal expressions
-  if (e.kind === "non-terminal") {
-    // I x -> x
-    if (e.lft.kind === "terminal" && e.lft.sym === "I" as SKITerminalSymbol) {
-      return { altered: true, expr: e.rgt };
-    }
-
-    // K x y -> x
-    if (
-      e.lft.kind === "non-terminal" &&
-      e.lft.lft.kind === "terminal" &&
-      e.lft.lft.sym === "K" as SKITerminalSymbol
-    ) {
-      return { altered: true, expr: e.lft.rgt };
-    }
-
-    // S x y z -> (x z) (y z)
-    if (
-      e.lft.kind === "non-terminal" &&
-      e.lft.lft.kind === "non-terminal" &&
-      e.lft.lft.lft.kind === "terminal" &&
-      e.lft.lft.lft.sym === "S" as SKITerminalSymbol
-    ) {
-      const x = e.lft.lft.rgt;
-      const y = e.lft.rgt;
-      const z = e.rgt;
-      const result: NativeApplication = {
-        kind: "non-terminal",
-        lft: { kind: "non-terminal", lft: x, rgt: z },
-        rgt: { kind: "non-terminal", lft: y, rgt: z },
-      };
-      return { altered: true, expr: result };
-    }
-
-    const leftStep = stepNative(e.lft);
-    if (leftStep.altered) {
-      const result: NativeApplication = {
-        kind: "non-terminal",
-        lft: leftStep.expr,
-        rgt: e.rgt,
-      };
-      return { altered: true, expr: result };
-    }
-
-    const rightStep = stepNative(e.rgt);
-    if (rightStep.altered) {
-      const result: NativeApplication = {
-        kind: "non-terminal",
-        lft: e.lft,
-        rgt: rightStep.expr,
-      };
-      return { altered: true, expr: result };
-    }
-  }
-
-  // No reduction possible
-  return { altered: false, expr: e };
 };
 
 export const stepOnceNat = (e: NativeExpr): NativeStepResult => {
@@ -166,7 +182,7 @@ export const reduceNat = (root: NativeExpr): NativeExpr => {
   }
 };
 
-export const unChurchNumber = (church: SKIExpression): number => {
+export const unChurchNumber = (church: SKIExpression): bigint => {
   /* build  (church  INC  (NUM 0)) in the new ADT */
   const natTerm: NativeExpr = reduceNat(
     {
@@ -176,10 +192,10 @@ export const unChurchNumber = (church: SKIExpression): number => {
         lft: skiToNative(church),
         rgt: mkNativeInc(),
       },
-      rgt: mkNativeNum(0),
+      rgt: mkNativeNum(0n),
     },
   );
 
   if (natTerm.kind === "num") return natTerm.value;
-  return 0;
+  return 0n;
 };

@@ -18,18 +18,32 @@ export interface LambdaVar {
   name: string;
 }
 
+/**
+ * Creates a lambda calculus variable term.
+ * @param name the variable name
+ * @returns a new lambda variable node
+ */
 export const mkVar = (name: string): LambdaVar => ({
   kind: "lambda-var",
   name,
 });
 
-// λx.<body>, where x is a name
+/**
+ * An untyped lambda abstraction (λx.body).
+ * Represents a function that binds a variable name and has a body expression.
+ */
 interface UntypedLambdaAbs {
   kind: "lambda-abs";
   name: string;
   body: UntypedLambda;
 }
 
+/**
+ * Creates an untyped lambda abstraction (λx.body).
+ * @param name the bound variable name
+ * @param body the body of the abstraction
+ * @returns a new lambda abstraction node
+ */
 export const mkUntypedAbs = (
   name: string,
   body: UntypedLambda,
@@ -49,8 +63,8 @@ export interface UntypedApplication {
 }
 
 /**
- * The legal terms of the untyped lambda calculus.
- * e ::= x | λx.e | e e, where x is a variable name, and e is a valid expr
+ * The union type representing all possible untyped lambda calculus terms.
+ * Includes variables, abstractions, and applications.
  */
 export type UntypedLambda =
   | LambdaVar
@@ -72,6 +86,12 @@ export const createApplication = (
   rgt: right,
 });
 
+/**
+ * Creates a left-associative application chain from multiple untyped lambda terms.
+ * For example, typelessApp(a, b, c) creates ((a b) c).
+ * @param uts the untyped lambda terms to apply in sequence
+ * @returns the resulting application chain
+ */
 export const typelessApp = (...uts: UntypedLambda[]) =>
   uts.reduce(createApplication);
 

@@ -15,6 +15,11 @@ import {
   typesLitEq,
 } from "./types.ts";
 import {
+  makeNatType,
+  makeUntypedChurchNumeral,
+  parseNatLiteralIdentifier,
+} from "../consts/nat.ts";
+import {
   createApplication,
   mkUntypedAbs,
   type UntypedLambda,
@@ -137,6 +142,10 @@ export const typecheckSystemF = (
 ): [BaseType, SystemFContext] => {
   switch (term.kind) {
     case "systemF-var": {
+      const literalValue = parseNatLiteralIdentifier(term.name);
+      if (literalValue !== null) {
+        return [makeNatType(), ctx];
+      }
       const ty = ctx.termCtx.get(term.name);
       if (ty === undefined) {
         throw new TypeError(`unknown variable: ${term.name}`);
@@ -253,8 +262,13 @@ export const prettyPrintSystemFType = (ty: BaseType): string => {
  */
 export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
   switch (term.kind) {
-    case "systemF-var":
+    case "systemF-var": {
+      const literalValue = parseNatLiteralIdentifier(term.name);
+      if (literalValue !== null) {
+        return makeUntypedChurchNumeral(literalValue);
+      }
       return { kind: "lambda-var", name: term.name };
+    }
     case "systemF-abs":
       return mkUntypedAbs(
         term.name,

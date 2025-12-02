@@ -8,22 +8,30 @@
  * @module
  */
 import type { BaseType } from "../types/types.ts";
+import { parseNatLiteralIdentifier } from "../consts/nat.ts";
 
 /**
- * A term variable.
+ * A term variable in System F.
+ * Represents a reference to a bound or free variable by name.
  */
 export interface SystemFVar {
   kind: "systemF-var";
   name: string;
 }
 
+/**
+ * Creates a System F term variable.
+ * @param name the variable name
+ * @returns a new System F variable node
+ */
 export const mkSystemFVar = (name: string): SystemFVar => ({
   kind: "systemF-var",
   name,
 });
 
 /**
- * A term abstraction: λx: T. t
+ * A term abstraction in System F: λx: T. t
+ * Represents a function that binds a variable with a type annotation.
  */
 export interface SystemFAbs {
   kind: "systemF-abs";
@@ -32,6 +40,13 @@ export interface SystemFAbs {
   body: SystemFTerm;
 }
 
+/**
+ * Creates a System F term abstraction (λx: T. t).
+ * @param name the bound variable name
+ * @param typeAnnotation the type annotation for the bound variable
+ * @param body the body of the abstraction
+ * @returns a new System F term abstraction node
+ */
 export const mkSystemFAbs = (
   name: string,
   typeAnnotation: BaseType,
@@ -44,7 +59,8 @@ export const mkSystemFAbs = (
 });
 
 /**
- * A type abstraction: ΛX. t
+ * A type abstraction in System F: ΛX. t
+ * Represents a polymorphic function that abstracts over a type variable.
  */
 export interface SystemFTAbs {
   kind: "systemF-type-abs";
@@ -52,6 +68,12 @@ export interface SystemFTAbs {
   body: SystemFTerm;
 }
 
+/**
+ * Creates a System F type abstraction (ΛX. t).
+ * @param typeVar the bound type variable name
+ * @param body the body of the type abstraction
+ * @returns a new System F type abstraction node
+ */
 export const mkSystemFTAbs = (
   typeVar: string,
   body: SystemFTerm,
@@ -62,7 +84,8 @@ export const mkSystemFTAbs = (
 });
 
 /**
- * A type application node. Represents applying a term to a type argument as in: t [T]
+ * A type application node in System F: t [T]
+ * Represents applying a polymorphic term to a type argument.
  */
 export interface SystemFTypeApp {
   kind: "systemF-type-app";
@@ -70,6 +93,12 @@ export interface SystemFTypeApp {
   typeArg: BaseType;
 }
 
+/**
+ * Creates a System F type application (t [T]).
+ * @param term the polymorphic term to apply
+ * @param typeArg the type argument
+ * @returns a new System F type application node
+ */
 export const mkSystemFTypeApp = (
   term: SystemFTerm,
   typeArg: BaseType,
@@ -79,6 +108,12 @@ export const mkSystemFTypeApp = (
   typeArg,
 });
 
+/**
+ * Creates a System F term application (t u).
+ * @param lft the function term
+ * @param rgt the argument term
+ * @returns a new System F application node
+ */
 export const mkSystemFApp = (
   lft: SystemFTerm,
   rgt: SystemFTerm,
@@ -141,7 +176,7 @@ export function prettyPrintSystemF(term: SystemFTerm): string {
       return `(${parts.map(prettyPrintSystemF).join(" ")})`;
     }
     case "systemF-var":
-      return term.name;
+      return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
     case "systemF-abs":
       return `λ${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}.${
         prettyPrintSystemF(term.body)
@@ -157,6 +192,9 @@ export function prettyPrintSystemF(term: SystemFTerm): string {
 
 /**
  * Flattens a left-associated application tree into a list of terms.
+ * For example, ((a b) c) becomes [a, b, c].
+ * @param term the System F term to flatten
+ * @returns an array of terms in left-to-right order
  */
 export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
   if (term.kind === "non-terminal") {
@@ -169,6 +207,8 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
 
 /**
  * Pretty-prints a System F type, using ∀ and → syntax.
+ * @param ty the BaseType to pretty-print
+ * @returns a human-readable string representation of the type
  */
 export function prettyPrintSystemFType(ty: BaseType): string {
   if (ty.kind === "forall") {

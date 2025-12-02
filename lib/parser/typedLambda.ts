@@ -15,20 +15,26 @@
  */
 
 import { mkVar } from "../terms/lambda.ts";
-import { mkTypedAbs, type TypedLambda } from "../types/typedLambda.ts";
 import {
+  createTypedApplication,
+  mkTypedAbs,
+  type TypedLambda,
+} from "../types/typedLambda.ts";
+import {
+  isDigit,
   matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
+  parseNumericLiteral,
   type ParserState,
   peek,
 } from "./parserState.ts";
 import { parseChain } from "./chain.ts";
 import { parseArrowType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
-import { createTypedApplication } from "../types/typedLambda.ts";
 import { ParseError } from "./parseError.ts";
+import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
 
 /**
  * Parses an atomic typed lambda term.
@@ -71,6 +77,9 @@ export function parseAtomicTypedLambda(
     );
     const stateAfterRP = matchRP(stateAfterInner);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
+  } else if (isDigit(peeked)) {
+    const [literal, value, nextState] = parseNumericLiteral(s);
+    return [literal, makeTypedChurchNumeral(value), nextState];
   } else {
     const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkVar(varLit), stateAfterVar];

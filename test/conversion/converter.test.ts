@@ -1,6 +1,7 @@
 import { expect } from "chai";
 
 import { predLambda } from "../../lib/consts/lambdas.ts";
+import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { apply, applyMany } from "../../lib/ski/expression.ts";
@@ -11,6 +12,7 @@ import {
   mkUntypedAbs,
   mkVar,
 } from "../../lib/terms/lambda.ts";
+import type { UntypedLambda } from "../../lib/terms/lambda.ts";
 
 Deno.test("Lambda conversion", async (t) => {
   const N = 5;
@@ -37,7 +39,7 @@ Deno.test("Lambda conversion", async (t) => {
                 applyMany(bracketLambda(konst), ChurchN(a), ChurchN(b)),
               ),
             );
-            expect(result).to.equal(a);
+            expect(result).to.equal(BigInt(a));
           }
         }
       },
@@ -68,7 +70,7 @@ Deno.test("Lambda conversion", async (t) => {
               applyMany(bracketLambda(flip), ChurchN(a), ChurchN(b)),
             ),
           );
-          expect(result).to.equal(expected);
+          expect(result).to.equal(BigInt(expected));
         }
       }
     });
@@ -81,8 +83,15 @@ Deno.test("Lambda conversion", async (t) => {
             apply(bracketLambda(predLambda), ChurchN(n)),
           ),
         );
-        expect(result).to.equal(expected);
+        expect(result).to.equal(BigInt(expected));
       }
     });
+  });
+
+  await t.step("nat literal lowers via church encoder", () => {
+    const literal: UntypedLambda = makeUntypedChurchNumeral(8n);
+    const ski = bracketLambda(literal);
+    const result = UnChurchNumber(arenaEvaluator.reduce(ski));
+    expect(result).to.equal(8n);
   });
 });

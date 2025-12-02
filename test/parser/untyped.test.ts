@@ -6,6 +6,7 @@ import {
   prettyPrintUntypedLambda,
   typelessApp,
 } from "../../lib/terms/lambda.ts";
+import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
 import { predLambda } from "../../lib/consts/lambdas.ts";
@@ -34,6 +35,27 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
         typelessApp(mkVar("a"), typelessApp(mkVar("b"), mkVar("c"))),
       );
     });
+
+    await t.step("parses nat literal", () => {
+      const src = "7";
+      const [lit, term] = parseLambda(src);
+      expect(lit).to.equal(src);
+      expect(term).to.deep.equal(makeUntypedChurchNumeral(7n));
+    });
+  });
+
+  await t.step("parseLambda → error cases", async (t) => {
+    await t.step(
+      "rejects purely numeric identifiers in lambda bindings",
+      () => {
+        // Purely numeric strings should be parsed as numeric literals, not identifiers
+        // This test verifies that lambda abstractions with numeric bindings are rejected
+        expect(() => parseLambda("λ123.x")).to.throw(
+          Error,
+          /not a valid identifier.*purely numeric/,
+        );
+      },
+    );
   });
 
   await t.step("parseLambda → complex expressions", async (t) => {

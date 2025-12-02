@@ -47,8 +47,16 @@ export interface TripCObject {
  * @param obj The object file to serialize
  * @returns JSON string representation of the object file
  */
+const BIGINT_TAG = "__trip_bigint__";
+
 export function serializeTripCObject(obj: TripCObject): string {
-  return JSON.stringify(obj, null, 2);
+  const replacer = (_key: string, value: unknown) => {
+    if (typeof value === "bigint") {
+      return { [BIGINT_TAG]: value.toString() };
+    }
+    return value;
+  };
+  return JSON.stringify(obj, replacer, 2);
 }
 
 /**
@@ -60,7 +68,21 @@ export function serializeTripCObject(obj: TripCObject): string {
  */
 export function deserializeTripCObject(json: string): TripCObject {
   try {
-    const parsed = JSON.parse(json);
+    const reviver = (_key: string, value: unknown) => {
+      if (
+        value &&
+        typeof value === "object" &&
+        BIGINT_TAG in (value as Record<string, unknown>)
+      ) {
+        const serialized = (value as Record<string, unknown>)[BIGINT_TAG];
+        if (typeof serialized !== "string") {
+          throw new Error("Invalid bigint encoding in object file");
+        }
+        return BigInt(serialized);
+      }
+      return value;
+    };
+    const parsed = JSON.parse(json, reviver);
 
     // Basic validation
     if (typeof parsed.module !== "string") {

@@ -1,4 +1,4 @@
-.PHONY: setup build test format format-check help
+.PHONY: setup build test format format-check validate-wasm help
 .DEFAULT_GOAL := help
 
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
@@ -39,6 +39,13 @@ build: ## Compile the artifacts
 		echo "Error: Required dist files not found"; \
 		exit 1; \
 	fi
+
+validate-wasm: ## Inspect the generated WASM (prints full wat)
+	@if [ ! -f result/wasm/release.wasm ]; then \
+		echo "Error: result/wasm/release.wasm not found. Run 'make build' first."; \
+		exit 1; \
+	fi
+	nix $(NIX_FLAGS) develop --command bash -c "wasm2wat --enable-threads result/wasm/release.wasm"
 
 test: ## Run the test suite
 	@if ! command -v nix >/dev/null 2>&1; then \

@@ -289,9 +289,10 @@ export const UnChurchNumber = (exp: SKIExpression): bigint => {
  */
 export const UnChurchBoolean = (expr: SKIExpression): boolean => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
+  // `arenaEvaluator` is the single-threaded evaluator and returns synchronously.
   const testExpr = arenaEvaluator.reduce(
     applyMany(expr, ChurchN(1), ChurchN(0)),
-  );
+  ) as SKIExpression;
   return UnChurchNumber(testExpr) === 1n;
 };
 

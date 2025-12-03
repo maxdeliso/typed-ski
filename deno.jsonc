@@ -73,5 +73,5 @@
     "compile:tripc": "deno compile --allow-read --allow-write --output dist/tripc bin/tripc.ts",
     "dist": "mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task bundle:tripc:node && deno task compile:tripc"
   },
-  "version": "0.6.1"
+  "version": "0.7.0"
 }

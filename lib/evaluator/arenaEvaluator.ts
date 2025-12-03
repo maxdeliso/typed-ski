@@ -15,9 +15,7 @@ import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 
-interface ArenaWasmExports {
-  memory: WebAssembly.Memory;
-
+export interface ArenaWasmExports {
   /* arena API */
   reset(): void;
   allocTerminal(sym: number): number;
@@ -29,6 +27,19 @@ interface ArenaWasmExports {
   symOf(id: number): number;
   leftOf(id: number): number;
   rightOf(id: number): number;
+
+  /* SAB bootstrap (wasm32) */
+  initArena?(initialCapacity: number): number;
+  connectArena?(arenaPointer: number): number;
+
+  /* Debug/Diagnostic functions */
+  debugLockState?(): number;
+  getArenaMode?(): number;
+  debugCalculateArenaSize?(capacity: number): number;
+  debugGetMemorySize?(): number;
+  debugGetArenaBaseAddr?(): number;
+  debugGetLockAcquisitionCount?(): number;
+  debugGetLockReleaseCount?(): number;
 }
 
 // deno-lint-ignore ban-types
@@ -38,44 +49,67 @@ function assertFn(obj: unknown, name: string): asserts obj is Function {
   }
 }
 
-function assertMemory(
-  obj: unknown,
-  name: string,
-): asserts obj is WebAssembly.Memory {
-  if (!(obj instanceof WebAssembly.Memory)) {
-    throw new TypeError(
-      `WASM export \`${name}\` is missing or not a WebAssembly.Memory`,
-    );
-  }
-}
-
 export class ArenaEvaluatorWasm implements Evaluator {
-  private readonly $: ArenaWasmExports;
+  public readonly $: ArenaWasmExports;
+  public readonly memory: WebAssembly.Memory;
 
-  private constructor(exports: ArenaWasmExports) {
+  protected constructor(exports: ArenaWasmExports, memory: WebAssembly.Memory) {
     this.$ = exports;
+    this.memory = memory;
   }
 
-  static async instantiate(
-    wasmBytes: BufferSource,
-  ): Promise<ArenaEvaluatorWasm> {
-    const { instance } = await WebAssembly.instantiate(wasmBytes);
-    return ArenaEvaluatorWasm.fromInstance(instance);
-  }
+  /**
+   * Instantiate a WASM arena evaluator with a fresh shared memory layout.
+   * Always allocates its own WebAssembly.Memory configured for 4GB max.
+   */
+  static instantiateFromBytes(wasmBytes: BufferSource): ArenaEvaluatorWasm {
+    const wasmMemory = new WebAssembly.Memory({
+      initial: 256, // Start with 16MB (256 pages)
+      maximum: 65536, // Max 4GB (65536 pages)
+      shared: true, // Enable SharedArrayBuffer support
+    });
 
-  static instantiateSync(wasmBytes: BufferSource): ArenaEvaluatorWasm {
+    const imports = {
+      env: {
+        memory: wasmMemory,
+      },
+    } as WebAssembly.Imports;
+
     const module = new WebAssembly.Module(bufferSourceToArrayBuffer(wasmBytes));
-    const instance = new WebAssembly.Instance(module, {});
-    return ArenaEvaluatorWasm.fromInstance(instance);
+    const instance = new WebAssembly.Instance(module, imports);
+    const normalized = ArenaEvaluatorWasm.normalizeExports(instance.exports);
+    return ArenaEvaluatorWasm.fromInstance(normalized, wasmMemory);
+  }
+
+  private static normalizeExports(raw: WebAssembly.Exports): ArenaWasmExports {
+    const e = raw as Record<string, unknown>;
+    return {
+      ...(raw as Record<string, unknown>),
+      debugLockState: e.debugLockState as (() => number) | undefined,
+      getArenaMode: e.getArenaMode as (() => number) | undefined,
+      debugCalculateArenaSize: e.debugCalculateArenaSize as
+        | ((c: number) => number)
+        | undefined,
+      debugGetMemorySize: e.debugGetMemorySize as (() => number) | undefined,
+      debugGetArenaBaseAddr: e.debugGetArenaBaseAddr as
+        | (() => number)
+        | undefined,
+      debugGetLockAcquisitionCount: e.debugGetLockAcquisitionCount as
+        | (() => number)
+        | undefined,
+      debugGetLockReleaseCount: e.debugGetLockReleaseCount as
+        | (() => number)
+        | undefined,
+    } as ArenaWasmExports;
   }
 
   private static fromInstance(
-    instance: WebAssembly.Instance,
+    instance: ArenaWasmExports,
+    memory: WebAssembly.Memory,
   ): ArenaEvaluatorWasm {
-    const ex = instance.exports as Record<string, unknown>;
+    const ex = instance as unknown as Record<string, unknown>;
 
     const required = [
-      "memory",
       "reset",
       "allocTerminal",
       "allocCons",
@@ -91,7 +125,6 @@ export class ArenaEvaluatorWasm implements Evaluator {
       if (!(k in ex)) throw new Error(`WASM export \`${k}\` is missing`);
     });
 
-    assertMemory(ex.memory, "memory");
     assertFn(ex.reset, "reset");
     assertFn(ex.allocTerminal, "allocTerminal");
     assertFn(ex.allocCons, "allocCons");
@@ -102,7 +135,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     assertFn(ex.leftOf, "leftOf");
     assertFn(ex.rightOf, "rightOf");
 
-    const evaluator = new ArenaEvaluatorWasm(ex as unknown as ArenaWasmExports);
+    const evaluator = new ArenaEvaluatorWasm(
+      instance as unknown as ArenaWasmExports,
+      memory,
+    );
     evaluator.reset();
     return evaluator;
   }
@@ -204,17 +240,13 @@ export class ArenaEvaluatorWasm implements Evaluator {
   }
 }
 
-export async function initArenaEvaluator(wasmBytes: BufferSource) {
-  return await ArenaEvaluatorWasm.instantiate(wasmBytes);
-}
-
 /**
  * Synchronously creates an arena evaluator using the embedded release WASM
  * bytes. This is primarily used by the CLI bundle and other environments where
  * asynchronous initialisation is undesirable.
  */
 export function createArenaEvaluatorReleaseSync(): ArenaEvaluatorWasm {
-  const evaluator = ArenaEvaluatorWasm.instantiateSync(
+  const evaluator = ArenaEvaluatorWasm.instantiateFromBytes(
     getEmbeddedReleaseWasm().slice(),
   );
   return evaluator;

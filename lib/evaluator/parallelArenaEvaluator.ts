@@ -26,6 +26,7 @@ type WorkerResultMessage = {
   type: "result";
   id: number;
   expr: SKIExpression;
+  arenaNodeId: number; // Arena node ID for the result expression
 };
 
 type WorkerErrorMessage = {
@@ -48,8 +49,27 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     number,
     { resolve: (val: SKIExpression) => void; reject: (err: Error) => void }
   >();
+  private readonly workerRequestMap = new Map<number, number>(); // requestId -> workerIndex
   private nextRequestId = 0;
   private nextWorkerIndex = 0;
+
+  // Callbacks for tracking worker activity
+  public onRequestQueued?: (
+    requestId: number,
+    workerIndex: number,
+    expr: SKIExpression,
+  ) => void;
+  public onRequestCompleted?: (
+    requestId: number,
+    workerIndex: number,
+    expr: SKIExpression,
+    arenaNodeId: number,
+  ) => void;
+  public onRequestError?: (
+    requestId: number,
+    workerIndex: number,
+    error: string,
+  ) => void;
 
   private constructor(
     exports: ArenaWasmExports,
@@ -210,12 +230,12 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         "ParallelArenaEvaluatorWasm requires at least one worker",
       );
     }
-    const ESTIMATED_BYTES_PER_NODE = 24;
-    const MAX_CAP = 1 << 26; // keep in sync with rust (fits <4GB)
+    const _ESTIMATED_BYTES_PER_NODE = 24; // For documentation/sync with Rust
+    const _MAX_CAP = 1 << 27; // keep in sync with rust (134,217,728 nodes, ~3.2GB, fits under 4GB limit)
     const INITIAL_CAP = 1 << 16; // Use a modest bootstrap cap to fit constrained shared memory in tests.
-    const REQUIRED_BYTES = MAX_CAP * ESTIMATED_BYTES_PER_NODE + 65536;
-    const PAGE_SIZE = 65536;
-    const MAX_PAGES = Math.min(65536, Math.ceil(REQUIRED_BYTES / PAGE_SIZE));
+    // Calculate max pages for 4GB limit (65536 pages = 4GB)
+    const _PAGE_SIZE = 65536; // For documentation
+    const MAX_PAGES = 65536; // 4GB maximum
     const INITIAL_ARENA_PAGES = 128; // ~8MB, should be enough for initial arena + headroom
     const sharedMemory = new WebAssembly.Memory({
       initial: INITIAL_ARENA_PAGES,
@@ -252,6 +272,11 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     const arenaPointer = (() => {
       const init = validated.exports.initArena!;
       const result = init(INITIAL_CAP);
+      // initArena return codes:
+      // - 0: Invalid capacity (not power of 2, or out of valid range)
+      // - 1: Out of memory (OOM)
+      // - 2: Bounds check failure (allocation logic error)
+      // - Any other value: Success (returns the arena header address)
       if (result === 0) {
         throw new Error("initArena failed: invalid capacity or parameters");
       }
@@ -297,13 +322,41 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     }
 
     const requestId = this.nextRequestId++;
-    const worker = this.workers[this.nextWorkerIndex];
-    this.nextWorkerIndex = (this.nextWorkerIndex + 1) % this.workers.length;
+    const workerIndex = this.nextWorkerIndex;
+    const worker = this.workers[workerIndex];
+    const workerCount = this.workers.length;
+    this.nextWorkerIndex = (workerIndex + 1) % workerCount;
+
+    // Track which worker handles this request
+    this.workerRequestMap.set(requestId, workerIndex);
+
+    // Notify callback if registered
+    if (this.onRequestQueued) {
+      this.onRequestQueued(requestId, workerIndex, expr);
+    }
 
     return await new Promise<SKIExpression>((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject });
       worker.postMessage({ type: "work", id: requestId, expr, max });
     });
+  }
+
+  /**
+   * Get the number of pending requests for each worker.
+   */
+  getPendingCounts(): number[] {
+    const counts = new Array(this.workers.length).fill(0);
+    for (const workerIndex of this.workerRequestMap.values()) {
+      counts[workerIndex]++;
+    }
+    return counts;
+  }
+
+  /**
+   * Get total number of pending requests.
+   */
+  getTotalPending(): number {
+    return this.pendingRequests.size;
   }
 
   /**
@@ -322,13 +375,30 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         "message",
         (e: MessageEvent<WorkerToMainMessage>) => {
           if (e.data.type === "result") {
-            const pending = this.pendingRequests.get(e.data.id);
+            const requestId = e.data.id;
+            const workerIndex = this.workerRequestMap.get(requestId);
+            const pending = this.pendingRequests.get(requestId);
             if (pending) {
-              this.pendingRequests.delete(e.data.id);
+              this.pendingRequests.delete(requestId);
+              if (workerIndex !== undefined) {
+                this.workerRequestMap.delete(requestId);
+                // Notify callback if registered
+                if (this.onRequestCompleted) {
+                  this.onRequestCompleted(
+                    requestId,
+                    workerIndex,
+                    e.data.expr as SKIExpression,
+                    e.data.arenaNodeId,
+                  );
+                }
+              }
               pending.resolve(e.data.expr as SKIExpression);
             }
           } else if (e.data.type === "error") {
             const id = e.data.workId ?? e.data.id;
+            const workerIndex = id !== undefined
+              ? this.workerRequestMap.get(id)
+              : undefined;
             const err = new Error(
               e.data.error ?? "Worker error with no message",
             );
@@ -344,6 +414,17 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
             }
 
             this.pendingRequests.delete(id);
+            if (workerIndex !== undefined) {
+              this.workerRequestMap.delete(id);
+              // Notify callback if registered
+              if (this.onRequestError) {
+                this.onRequestError(
+                  id,
+                  workerIndex,
+                  e.data.error ?? "Unknown error",
+                );
+              }
+            }
             pending.reject(err);
           }
         },

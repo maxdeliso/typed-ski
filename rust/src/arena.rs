@@ -26,11 +26,7 @@ const EMPTY: u32 = 0xffff_ffff;
 const ARENA_MAGIC: u32 = 0x534B_4941;
 
 const INITIAL_CAP: u32 = 1 << 20; // ~1,048,576 nodes
-const MAX_CAP: u32 = 1 << 26; // 67,108,864 nodes (~1.6GB at ~24B/node)
-
-const BUCKET_SHIFT: u32 = 16;
-const N_BUCKETS: usize = 1 << BUCKET_SHIFT; // 65,536
-const MASK: u32 = (1 << BUCKET_SHIFT) - 1; // 0xffff
+const MAX_CAP: u32 = 1 << 27; // 134,217,728 nodes (~3.2GB at ~24B/node, fits under 4GB limit)
 
 /// Global arena base address (instance-local).
 /// - In SAB Mode: Points to shared memory provided by Host.
@@ -116,8 +112,10 @@ fn get_arena() -> *mut SabHeader {
 #[repr(C, align(64))]
 struct SabHeader {
     global_lock: u32,   // 0 = unlocked, 1 = locked
-    capacity: u32,      // fixed capacity in nodes
-    top: u32,           // next free node index
+    capacity: u32,      // fixed capacity in nodes (max: MAX_CAP = 1<<27 = 134,217,728)
+    top: u32,           // next free node index (max: capacity - 1)
+    bucket_mask: u32,   // Dynamic mask (capacity - 1) for hash bucket selection
+    // Byte offsets from start of header (max: ~2.95 GB at MAX_CAP, fits in u32)
     offset_kind: u32,
     offset_sym: u32,
     offset_left_id: u32,
@@ -135,27 +133,34 @@ impl SabHeader {
     fn new(capacity: u32) -> Self {
         let header_size = core::mem::size_of::<SabHeader>() as u32;
 
+        // Buckets array is now sized to capacity (load factor ~1.0)
+        let buckets_count = capacity;
+
         let offset_kind = header_size;
         let offset_sym = offset_kind + capacity;
-        let offset_left_id = {
-            let unaligned = offset_sym + capacity;
-            let padding = (4 - (unaligned % 4)) % 4;
-            unaligned + padding
-        };
+
+        // Align offsets to 4 bytes
+        let align4 = |ptr: u32| (ptr + 3) & !3;
+
+        let offset_left_id = align4(offset_sym + capacity);
         let offset_right_id = offset_left_id + 4 * capacity;
         let offset_hash32 = offset_right_id + 4 * capacity;
         let offset_next_idx = offset_hash32 + 4 * capacity;
+
+        // Buckets array is now variable size (capacity * 4 bytes)
         let offset_buckets = {
             let unaligned = offset_next_idx + 4 * capacity;
             let padding = (64 - (unaligned % 64)) % 64;
             unaligned + padding
         };
-        let offset_term_cache = offset_buckets + 4 * (N_BUCKETS as u32);
+
+        let offset_term_cache = offset_buckets + 4 * buckets_count;
 
         SabHeader {
             global_lock: 0,
             capacity,
             top: 0,
+            bucket_mask: capacity - 1, // Assumes capacity is power of 2
             offset_kind,
             offset_sym,
             offset_left_id,
@@ -325,6 +330,9 @@ unsafe fn allocate_raw_arena(capacity: u32) -> *mut SabHeader {
     let capacity_ptr = &mut (*header_ptr).capacity as *mut u32;
     atomic_store_u32(capacity_ptr, capacity);
 
+    let bucket_mask_ptr = &mut (*header_ptr).bucket_mask as *mut u32;
+    atomic_store_u32(bucket_mask_ptr, capacity - 1);
+
     let magic_ptr = &mut (*header_ptr).magic as *mut u32;
     atomic_store_u32(magic_ptr, ARENA_MAGIC);
 
@@ -337,7 +345,8 @@ unsafe fn allocate_raw_arena(capacity: u32) -> *mut SabHeader {
 
     // 4. Initialize specialized structures
     let buckets_ptr = buckets_array_ptr(header_ptr);
-    for i in 0..N_BUCKETS {
+    let buckets_count = capacity as usize; // Dynamic bucket count
+    for i in 0..buckets_count {
         *buckets_ptr.add(i) = EMPTY;
     }
 
@@ -347,6 +356,164 @@ unsafe fn allocate_raw_arena(capacity: u32) -> *mut SabHeader {
     }
 
     header_ptr
+}
+
+/// Grow the arena to a new capacity. Must be called with the lock held.
+/// Returns true if growth succeeded, false if it failed (e.g., already at MAX_CAP or OOM).
+/// This function rebuilds the hash table (buckets/next_idx) instead of moving them,
+/// which maintains O(1) performance at any scale.
+#[cfg(target_arch = "wasm32")]
+unsafe fn grow_arena(header_ptr: *mut SabHeader) -> bool {
+    let header = &*header_ptr;
+    let old_capacity = header.capacity;
+    let top = header.load_top(); // We need 'top' to know how many nodes to rehash
+
+    // Check if we can grow
+    if old_capacity >= MAX_CAP {
+        return false; // Already at max capacity
+    }
+
+    // Double the capacity (or cap at MAX_CAP)
+    let new_capacity = (old_capacity * 2).min(MAX_CAP);
+    if new_capacity == old_capacity {
+        return false; // Can't grow further
+    }
+
+    // 1. Grow Memory
+    let new_total_size = calculate_total_arena_size(new_capacity);
+    let header_addr = header_ptr as usize;
+    let current_mem_pages = wasm32::memory_size(0);
+    let current_mem_bytes = current_mem_pages * WASM_PAGE_SIZE;
+    let needed_mem_bytes = header_addr + new_total_size;
+
+    if needed_mem_bytes > current_mem_bytes {
+        let bytes_needed = needed_mem_bytes - current_mem_bytes;
+        let pages_needed = (bytes_needed + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
+        if wasm32::memory_grow(0, pages_needed) == usize::MAX {
+            return false; // OOM
+        }
+    }
+    let new_mem_bytes = wasm32::memory_size(0) * WASM_PAGE_SIZE;
+
+    // 2. Prepare Layouts
+    let new_header_layout = SabHeader::new(new_capacity);
+    let old_header_layout = SabHeader::new(old_capacity);
+
+    // 3. Move Data Arrays (Kind, Sym, Left, Right, Hash)
+    // NOTE: We do NOT move Buckets or NextIdx. We will rebuild them.
+    let move_array = |old_offset: u32, new_offset: u32, element_size: usize, count: usize| {
+        if old_offset == new_offset {
+            return; // Optimization: No move needed
+        }
+        let size_bytes = count * element_size;
+        let src = (header_ptr as *mut u8).add(old_offset as usize);
+        let dst = (header_ptr as *mut u8).add(new_offset as usize);
+        // Safety check
+        if header_addr + new_offset as usize + size_bytes > new_mem_bytes {
+            wasm32::unreachable();
+        }
+        core::ptr::copy(src, dst, size_bytes);
+    };
+
+    // Move in reverse order of NEW offsets to be safe, though copy() handles overlap
+    move_array(
+        old_header_layout.offset_term_cache,
+        new_header_layout.offset_term_cache,
+        4,
+        4,
+    );
+    // Skip buckets - we'll rebuild them
+    // Skip next_idx - we'll rebuild them
+    move_array(
+        old_header_layout.offset_hash32,
+        new_header_layout.offset_hash32,
+        4,
+        old_capacity as usize,
+    );
+    move_array(
+        old_header_layout.offset_right_id,
+        new_header_layout.offset_right_id,
+        4,
+        old_capacity as usize,
+    );
+    move_array(
+        old_header_layout.offset_left_id,
+        new_header_layout.offset_left_id,
+        4,
+        old_capacity as usize,
+    );
+    move_array(
+        old_header_layout.offset_sym,
+        new_header_layout.offset_sym,
+        1,
+        old_capacity as usize,
+    );
+    move_array(
+        old_header_layout.offset_kind,
+        new_header_layout.offset_kind,
+        1,
+        old_capacity as usize,
+    );
+
+    // 4. Update Header pointers (so our helper functions point to the NEW arrays)
+    (*header_ptr).capacity = new_capacity;
+    (*header_ptr).bucket_mask = new_capacity - 1; // Update mask
+    (*header_ptr).offset_kind = new_header_layout.offset_kind;
+    (*header_ptr).offset_sym = new_header_layout.offset_sym;
+    (*header_ptr).offset_left_id = new_header_layout.offset_left_id;
+    (*header_ptr).offset_right_id = new_header_layout.offset_right_id;
+    (*header_ptr).offset_hash32 = new_header_layout.offset_hash32;
+    (*header_ptr).offset_next_idx = new_header_layout.offset_next_idx;
+    (*header_ptr).offset_buckets = new_header_layout.offset_buckets;
+    (*header_ptr).offset_term_cache = new_header_layout.offset_term_cache;
+
+    // 5. Initialize New Buckets to EMPTY
+    let buckets_ptr = buckets_array_ptr(header_ptr);
+    let buckets_len = new_capacity as usize; // Now sized to capacity
+    // Efficiently set all buckets to EMPTY (0xFFFFFFFF)
+    for i in 0..buckets_len {
+        *buckets_ptr.add(i) = EMPTY;
+    }
+
+    // 6. REHASH: Rebuild Hash Chains
+    // This adapts to the new bucket count
+    let hash_ptr = hash32_array_ptr(header_ptr);
+    let next_ptr = next_idx_array_ptr(header_ptr);
+    let new_mask = new_capacity - 1;
+
+    for i in 0..top {
+        let h = *hash_ptr.add(i as usize);
+        let b = (h & new_mask) as usize;
+
+        let old_head = *buckets_ptr.add(b);
+        *next_ptr.add(i as usize) = old_head;
+        *buckets_ptr.add(b) = i;
+    }
+
+    // 7. Zero-init only the EXTENSIONS of data arrays
+    // (We don't need to zero next_idx extension because we only read it if we reached it via valid bucket)
+    let added_nodes = (new_capacity - old_capacity) as usize;
+
+    let zero_extension = |offset: u32, element_size: usize| {
+        let byte_offset = offset as usize + (old_capacity as usize * element_size);
+        let bytes_to_zero = added_nodes * element_size;
+        let dst = (header_ptr as *mut u8).add(byte_offset);
+        // Safety check
+        if header_addr + byte_offset + bytes_to_zero > new_mem_bytes {
+            wasm32::unreachable();
+        }
+        core::ptr::write_bytes(dst, 0, bytes_to_zero);
+    };
+
+    zero_extension(new_header_layout.offset_kind, 1);
+    zero_extension(new_header_layout.offset_sym, 1);
+    zero_extension(new_header_layout.offset_left_id, 4);
+    zero_extension(new_header_layout.offset_right_id, 4);
+    zero_extension(new_header_layout.offset_hash32, 4);
+    // next_idx extension doesn't strictly need zeroing but is good practice
+    zero_extension(new_header_layout.offset_next_idx, 4);
+
+    true
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -687,7 +854,9 @@ pub extern "C" fn reset() {
         header.store_top(0);
 
         let buckets_ptr = buckets_array_ptr(header_ptr);
-        for i in 0..N_BUCKETS {
+        let capacity = header.capacity;
+        let buckets_count = capacity as usize; // Dynamic bucket count
+        for i in 0..buckets_count {
             unsafe { *buckets_ptr.add(i) = EMPTY; }
         }
 
@@ -712,11 +881,23 @@ pub extern "C" fn allocTerminal(s: u32) -> u32 {
         let header = unsafe { &mut *header_ptr };
         header.lock();
 
-        let capacity = header.capacity;
-        let top = header.load_top();
+        let mut capacity = header.capacity;
+        let mut top = header.load_top();
         if top >= capacity {
-            header.unlock();
-            wasm32::unreachable(); // Fatal: capacity exceeded
+            // Try to grow the arena
+            if !unsafe { grow_arena(header_ptr) } {
+                header.unlock();
+                wasm32::unreachable(); // Fatal: capacity exceeded and can't grow
+            }
+            // After growing, reload capacity and top from updated header
+            // We can't use header directly here since grow_arena may have modified it
+            // So we reload through the pointer
+            capacity = unsafe { (*header_ptr).capacity };
+            top = unsafe { (*header_ptr).load_top() };
+            if top >= capacity {
+                header.unlock();
+                wasm32::unreachable(); // Still full after growth (shouldn't happen)
+            }
         }
 
         if s < 4 {
@@ -760,15 +941,54 @@ pub extern "C" fn allocCons(l: u32, r: u32) -> u32 {
         let header = unsafe { &mut *header_ptr };
         header.lock();
 
+        // Check capacity first, before getting any array pointers
+        // This ensures we grow before calculating pointers, so pointers are always valid
+        let mut capacity = header.capacity;
+        let mut top = header.load_top();
+        if top >= capacity {
+            // Try to grow the arena
+            if !unsafe { grow_arena(header_ptr) } {
+                header.unlock();
+                wasm32::unreachable(); // Fatal: capacity exceeded and can't grow
+            }
+            // After growing, reload capacity and top from updated header
+            // We can't use header directly here since grow_arena may have modified it
+            // So we reload through the pointer
+            capacity = unsafe { (*header_ptr).capacity };
+            top = unsafe { (*header_ptr).load_top() };
+            if top >= capacity {
+                unsafe { (*header_ptr).unlock(); }
+                wasm32::unreachable(); // Still full after growth (shouldn't happen)
+            }
+            // Reload header reference after growth to ensure we have fresh data
+            let header = unsafe { &mut *header_ptr };
+        }
+
+        // Now get array pointers - they will use the updated offsets after growth
+        // Validate that l and r are within bounds (they should be < top)
+        let current_top = unsafe { (*header_ptr).load_top() };
+        if l >= current_top || r >= current_top {
+            header.unlock();
+            wasm32::unreachable(); // Invalid node IDs
+        }
+
+        // Get dynamic mask from header
+        let mask = unsafe { (*header_ptr).bucket_mask };
+
         let hash_ptr = hash32_array_ptr(header_ptr);
         let hash_l = unsafe { *hash_ptr.add(l as usize) };
         let hash_r = unsafe { *hash_ptr.add(r as usize) };
         let h = mix(hash_l, hash_r);
-        let b = (h & MASK) as usize;
+        let b = (h & mask) as usize;
 
         let buckets_ptr = buckets_array_ptr(header_ptr);
         let mut current = unsafe { *buckets_ptr.add(b) };
         while current != EMPTY {
+            // Validate current is within bounds
+            if current >= current_top {
+                header.unlock();
+                wasm32::unreachable(); // Invalid node ID in bucket chain
+            }
             let current_hash = unsafe { *hash_ptr.add(current as usize) };
             let left_ptr = left_id_array_ptr(header_ptr);
             let right_ptr = right_id_array_ptr(header_ptr);
@@ -780,13 +1000,6 @@ pub extern "C" fn allocCons(l: u32, r: u32) -> u32 {
             }
             let next_ptr = next_idx_array_ptr(header_ptr);
             current = unsafe { *next_ptr.add(current as usize) };
-        }
-
-        let capacity = header.capacity;
-        let top = header.load_top();
-        if top >= capacity {
-            header.unlock();
-            wasm32::unreachable(); // Fatal: capacity exceeded
         }
 
         let id = top;

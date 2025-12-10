@@ -6,12 +6,9 @@
 
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import type { ArenaWasmExports } from "./arenaEvaluator.ts";
+import { fromArenaWithExports, toArenaWithExports } from "./arenaEvaluator.ts";
 import type { SKIExpression } from "../ski/expression.ts";
-import { apply } from "../ski/expression.ts";
-import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
-import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
-
-const EMPTY = 0xffffffff;
+import type { ArenaNodeId } from "../shared/arena.ts";
 
 interface InitMessage {
   type: "init";
@@ -36,6 +33,7 @@ interface ResultMessage {
   type: "result";
   id: number;
   expr: SKIExpression;
+  arenaNodeId: number; // Arena node ID for the result expression
 }
 
 let wasmExports: ArenaWasmExports | null = null;
@@ -83,59 +81,12 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
 }
 
-function toArena(exp: SKIExpression, exports: ArenaWasmExports): ArenaNodeId {
-  let id: number;
-
-  switch (exp.kind) {
-    case "terminal":
-      switch (exp.sym) {
-        case SKITerminalSymbol.S:
-          id = exports.allocTerminal(ArenaSym.S);
-          break;
-        case SKITerminalSymbol.K:
-          id = exports.allocTerminal(ArenaSym.K);
-          break;
-        case SKITerminalSymbol.I:
-          id = exports.allocTerminal(ArenaSym.I);
-          break;
-        default:
-          throw new Error("unrecognised terminal symbol");
-      }
-      break;
-
-    case "non-terminal":
-      id = exports.allocCons(
-        toArena(exp.lft, exports),
-        toArena(exp.rgt, exports),
-      );
-      break;
-  }
-
-  if (id === EMPTY) {
-    throw new Error("Arena Out of Memory during marshaling");
-  }
-
-  return id;
+function toArena(root: SKIExpression, exports: ArenaWasmExports): ArenaNodeId {
+  return toArenaWithExports(root, exports);
 }
 
 function fromArena(id: ArenaNodeId, exports: ArenaWasmExports): SKIExpression {
-  if (exports.kindOf(id) === (ArenaKind.Terminal as number)) {
-    switch (exports.symOf(id) as ArenaSym) {
-      case ArenaSym.S:
-        return S;
-      case ArenaSym.K:
-        return K;
-      case ArenaSym.I:
-        return I;
-      default:
-        throw new Error("corrupt symbol tag in arena");
-    }
-  }
-
-  return apply(
-    fromArena(exports.leftOf(id), exports),
-    fromArena(exports.rightOf(id), exports),
-  );
+  return fromArenaWithExports(id, exports);
 }
 
 function handleWork(msg: WorkMessage) {
@@ -150,6 +101,7 @@ function handleWork(msg: WorkMessage) {
       type: "result",
       id: msg.id,
       expr: result,
+      arenaNodeId: resultId, // Include the arena node ID
     };
     self.postMessage(resultMsg);
   } catch (err) {

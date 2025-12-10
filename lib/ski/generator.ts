@@ -6,12 +6,21 @@
  *
  * @module
  */
-import type { RandomSeed } from "random-seed";
 import type { SKIExpression } from "./expression.ts";
 import { apply } from "./expression.ts";
 import { I, K, S, type SKITerminal } from "./terminal.ts";
 
-export const randExpression = (rs: RandomSeed, n: number): SKIExpression => {
+/**
+ * Simple interface for random number generation.
+ * This allows the generator to work with any random number source
+ * without bundling specific dependencies.
+ */
+export interface RandomSource {
+  /** Returns a random integer between min (inclusive) and max (inclusive) */
+  intBetween(min: number, max: number): number;
+}
+
+export const randExpression = (rs: RandomSource, n: number): SKIExpression => {
   if (n <= 0) {
     throw new Error("A valid expression must contain at least one symbol.");
   }
@@ -26,7 +35,7 @@ export const randExpression = (rs: RandomSeed, n: number): SKIExpression => {
 };
 
 const randomInsert = (
-  randomSeed: RandomSeed,
+  randomSeed: RandomSource,
   expr: SKIExpression,
   term: SKITerminal,
 ): SKIExpression => {
@@ -46,10 +55,10 @@ const randomInsert = (
 };
 
 /**
- * @param rs the random seed to use.
+ * @param rs the random source to use.
  * @returns a randomly selected terminal symbol.
  */
-export function randTerminal(rs: RandomSeed): SKITerminal {
+export function randTerminal(rs: RandomSource): SKITerminal {
   const die = rs.intBetween(1, 3);
 
   if (die === 1) {

@@ -149,5 +149,11 @@ export {
   type SKITerminal,
   type SKITerminalSymbol,
 } from "./ski/terminal.ts";
-/** Generates a human-readable string representation of an SKI expression. */
+
 export { prettyPrint as prettyPrintSKIExpression } from "./ski/expression.ts";
+
+export {
+  randExpression,
+  type RandomSource,
+  randTerminal,
+} from "./ski/generator.ts";

@@ -3,7 +3,10 @@ import {
   prettyPrintSKI as prettyPrint,
   randExpression,
 } from "@maxdeliso/typed-ski";
-import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
+import {
+  ParallelArenaEvaluatorWasm,
+  ResubmissionLimitExceededError,
+} from "../lib/evaluator/parallelArenaEvaluator.ts";
 
 // Simple random source using JavaScript's built-in Math.random()
 // Implements the RandomSource interface (just needs intBetween method)
@@ -24,12 +27,11 @@ const workerCountInput = document.getElementById("workerCountInput");
 const maxStepsInput = document.getElementById("maxStepsInput");
 const continuousToggle = document.getElementById("continuousToggle");
 const batchSizeInput = document.getElementById("batchSizeInput");
-const batchSizeLabel = document.getElementById("batchSizeLabel");
 const wasmStatus = document.getElementById("wasmStatus");
 const totalPending = document.getElementById("totalPending");
 const totalCompleted = document.getElementById("totalCompleted");
 const totalErrors = document.getElementById("totalErrors");
-const workersGrid = document.getElementById("workersGrid");
+const logOutput = document.getElementById("logOutput");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const avgTime = document.getElementById("avgTime");
 const totalTime = document.getElementById("totalTime");
@@ -39,19 +41,49 @@ const controlsContainer = document.getElementById("controlsContainer");
 
 // State
 let evaluator = null;
-let workerPanels = [];
-let workerPendingCounts = [];
-let workerOutputs = [];
+let evaluatorDead = false; // Track if evaluator has crashed (WASM trap)
 let continuousMode = false;
 let continuousRunning = false;
 let pendingSingleRun = false; // Track if we're waiting for a single run to complete
 let memoryLogInterval = null;
+const SLOW_LOGGING = false; // Disable detailed logging in continuous mode for performance
 let stats = {
   completed: 0,
   errors: 0,
   totalTime: 0,
   startTime: null,
 };
+
+function getPendingCountsSafe() {
+  if (!evaluator) return [];
+  // Prefer evaluator-provided tracking (ParallelArenaEvaluatorWasm).
+  if (typeof evaluator.getPendingCounts === "function") {
+    try {
+      const counts = evaluator.getPendingCounts();
+      return Array.isArray(counts) ? counts : [];
+    } catch {
+      return [];
+    }
+  }
+  // Fallback: no per-worker info.
+  return [];
+}
+
+function sumPending() {
+  // Use the authoritative total pending count if available
+  if (evaluator && typeof evaluator.getTotalPending === "function") {
+    try {
+      return evaluator.getTotalPending();
+    } catch {
+      // Fall through to per-worker sum
+    }
+  }
+  // Fallback: sum per-worker counts (may be inaccurate)
+  const counts = getPendingCountsSafe();
+  let total = 0;
+  for (const c of counts) total += c ?? 0;
+  return total;
+}
 
 function showLoading() {
   loadingOverlay.classList.remove("hidden");
@@ -76,6 +108,10 @@ function updateStats() {
     const elapsed = (Date.now() - stats.startTime) / 1000;
     if (elapsed > 0) {
       throughput.textContent = (stats.completed / elapsed).toFixed(2);
+
+      // Calculate and display effective parallelism
+      const parallelism = (stats.totalTime / 1000) / elapsed;
+      throughput.title = `Effective Parallelism: ${parallelism.toFixed(2)}x`;
     }
   }
 }
@@ -85,11 +121,11 @@ function logMemoryInfo(evaluator) {
 
   const memoryBytes = evaluator.memory.buffer.byteLength;
   const memoryPages = memoryBytes / 65536;
-  const wasmPages = evaluator.$.debugGetMemorySize?.() || 0;
 
-  console.log(
-    `[DEBUG] Current memory: ${memoryBytes} bytes (${memoryPages} pages), WASM reports ${wasmPages} pages`,
-  );
+  const memoryInfo =
+    `Current memory: ${memoryBytes} bytes (${memoryPages} pages)`;
+  console.log(`[DEBUG] ${memoryInfo}`);
+  addLog(`[MEMORY] ${memoryInfo}`, true);
 }
 
 function startMemoryLogging(evaluator) {
@@ -114,133 +150,126 @@ function stopMemoryLogging() {
   }
 }
 
-function createWorkerPanels(count) {
-  workersGrid.innerHTML = "";
-  workerPanels = [];
-  workerPendingCounts = [];
-  workerOutputs = [];
-
-  for (let i = 0; i < count; i++) {
-    const panel = document.createElement("div");
-    panel.className = "worker-panel";
-    panel.innerHTML = `
-      <div class="worker-header">
-        <div class="worker-title">Worker ${i}</div>
-        <div class="pending-indicator" id="pending-indicator-${i}">
-          <div class="pending-bar">
-            <div class="pending-bar-fill zero" id="pending-bar-${i}" style="width: 0%"></div>
-          </div>
-          <div class="pending-count" id="pending-count-${i}">0</div>
-        </div>
-      </div>
-      <div class="worker-output" id="output-${i}"></div>
-    `;
-    workersGrid.appendChild(panel);
-    workerPanels.push(panel);
-    workerPendingCounts.push(0);
-    workerOutputs.push(document.getElementById(`output-${i}`));
-  }
-  updatePendingCounts();
-}
-
 function updatePendingCounts() {
   if (!evaluator) return;
-
-  const counts = evaluator.getPendingCounts();
-  let total = 0;
-  const maxPending = Math.max(1, ...counts, 10); // Use max of counts or 10, minimum 1
-
-  for (let i = 0; i < counts.length; i++) {
-    const count = counts[i];
-    workerPendingCounts[i] = count;
-    total += count;
-
-    const bar = document.getElementById(`pending-bar-${i}`);
-    const countText = document.getElementById(`pending-count-${i}`);
-
-    if (bar && countText) {
-      const percentage = Math.min(100, (count / maxPending) * 100);
-      bar.style.width = percentage + "%";
-      bar.classList.toggle("zero", count === 0);
-      countText.textContent = count;
-    }
-  }
+  const total = sumPending();
   totalPending.textContent = total;
 }
 
-function addWorkerOutput(workerIndex, message) {
-  const output = workerOutputs[workerIndex];
-  if (output) {
-    const timestamp = new Date().toLocaleTimeString();
-    const newLine = `[${timestamp}] ${message}\n`;
+function addLog(message, force = false) {
+  // FAST PATH: Skip DOM updates in continuous mode for performance (unless forced)
+  if (continuousMode && !SLOW_LOGGING && !force) return;
 
-    // Add the new line
-    output.textContent += newLine;
+  if (!logOutput) return;
+  const timestamp = new Date().toLocaleTimeString();
+  const newLine = `[${timestamp}] ${message}\n`;
 
-    // Enforce 16KB limit (16384 bytes)
-    const MAX_SIZE = 16 * 1024;
-    const encoder = new TextEncoder();
-    let currentSize = encoder.encode(output.textContent).length;
+  logOutput.textContent += newLine;
 
-    if (currentSize > MAX_SIZE) {
-      // Remove lines from the beginning until we're under the limit
-      const lines = output.textContent.split("\n");
-      while (currentSize > MAX_SIZE && lines.length > 1) {
-        lines.shift(); // Remove first line
-        output.textContent = lines.join("\n");
-        currentSize = encoder.encode(output.textContent).length;
-      }
+  // Enforce 64KB limit in UI log to avoid unbounded DOM growth.
+  const MAX_SIZE = 64 * 1024;
+  const encoder = new TextEncoder();
+  let currentSize = encoder.encode(logOutput.textContent).length;
+  if (currentSize > MAX_SIZE) {
+    const lines = logOutput.textContent.split("\n");
+    while (currentSize > MAX_SIZE && lines.length > 1) {
+      lines.shift();
+      logOutput.textContent = lines.join("\n");
+      currentSize = encoder.encode(logOutput.textContent).length;
     }
-
-    output.scrollTop = output.scrollHeight;
   }
+
+  logOutput.scrollTop = logOutput.scrollHeight;
 }
 
-function setupEvaluatorCallbacks(evaluator) {
-  // Set up callbacks to track worker activity
-  evaluator.onRequestQueued = (_requestId, workerIndex, _expr) => {
-    updatePendingCounts();
-    addWorkerOutput(workerIndex, `Queued`);
-  };
+function disableAllButtons() {
+  if (runBtn) runBtn.disabled = true;
+  if (resetBtn) resetBtn.disabled = true;
+  if (hammerTimeBtn) hammerTimeBtn.disabled = true;
+  if (generateRandomBtn) generateRandomBtn.disabled = true;
+  if (continuousToggle) continuousToggle.disabled = true;
+}
 
-  evaluator.onRequestCompleted = (
-    _requestId,
-    workerIndex,
-    _expr,
-    arenaNodeId,
-  ) => {
+async function submitAndTrack(
+  expr,
+  maxSteps,
+  { highlightOnDone = false } = {},
+) {
+  if (!evaluator) throw new Error("Evaluator not initialized");
+  if (evaluatorDead) {
+    throw new Error(
+      "Evaluator has crashed (WASM trap). Please reload the page.",
+    );
+  }
+
+  const start = performance.now();
+  try {
     updatePendingCounts();
-    addWorkerOutput(workerIndex, `Result: node ${arenaNodeId}`);
+    const startNodeId = evaluator.toArena(expr);
+    addLog(`Queued node ${startNodeId}`);
+
+    // Set max steps before submitting
+    evaluator.setMaxSteps(maxSteps);
+
+    const resultNodeId = await evaluator.reduceArenaNodeIdAsync(
+      startNodeId,
+      expr,
+    );
+    const elapsed = performance.now() - start;
+
+    addLog(`Result node ${resultNodeId}`);
     stats.completed++;
+    stats.totalTime += elapsed;
     updateStats();
-
-    // Scroll to worker output if this was a single run (not continuous mode)
-    if (pendingSingleRun && !continuousMode) {
-      const workerPanel = workerPanels[workerIndex];
-      if (workerPanel) {
-        // Add highlight class
-        workerPanel.classList.add("highlighted");
-
-        // Small delay to ensure the output is rendered
-        setTimeout(() => {
-          workerPanel.scrollIntoView({ behavior: "smooth", block: "center" });
-
-          // Remove highlight after animation completes
-          setTimeout(() => {
-            workerPanel.classList.remove("highlighted");
-          }, 2000);
-        }, 100);
-      }
-      pendingSingleRun = false; // Reset after scrolling
-    }
-  };
-
-  evaluator.onRequestError = (_requestId, workerIndex, error) => {
     updatePendingCounts();
-    addWorkerOutput(workerIndex, `Error: ${error}`);
+
+    void highlightOnDone; // highlight removed in single-log UI
+
+    return resultNodeId;
+  } catch (error) {
+    // Track elapsed time even for failed requests
+    const elapsed = performance.now() - start;
+    stats.totalTime += elapsed;
+
+    // Check if this is a resubmission limit error
+    const isResubmitLimit = error instanceof ResubmissionLimitExceededError;
+
+    // Check if this is a WASM RuntimeError (unreachable trap, OOM, etc.)
+    const isWasmTrap = error instanceof Error &&
+      (error.name === "RuntimeError" ||
+        error.message?.includes("unreachable") ||
+        error.message?.includes("RuntimeError"));
+
+    if (isWasmTrap && !evaluatorDead) {
+      evaluatorDead = true;
+      addLog(
+        `[FATAL] WASM trapped (likely OOM / memory exhausted). Evaluator is no longer usable. Arena contents preserved for analysis.`,
+        true,
+      );
+      disableAllButtons();
+      // Stop continuous mode if running
+      if (continuousMode) {
+        stopContinuous();
+        continuousMode = false;
+        if (continuousToggle) {
+          continuousToggle.classList.remove("active");
+        }
+      }
+    } else if (isResubmitLimit) {
+      // Resubmission limit is a normal error condition, not a fatal crash
+      const errorMsg = error?.message ?? String(error);
+      addLog(`[ERROR] Evaluation failed: ${errorMsg}`, true);
+    } else {
+      // Log error details (may duplicate onRequestError callback, but ensures visibility)
+      const errorMsg = error?.message ?? String(error);
+      addLog(`[ERROR] Evaluation failed: ${errorMsg}`, true);
+    }
+
     stats.errors++;
     updateStats();
-  };
+    updatePendingCounts();
+    throw error;
+  }
 }
 
 async function loadWasm() {
@@ -263,6 +292,9 @@ async function loadWasm() {
     evaluator = null;
   }
 
+  // Reset dead flag when loading a new evaluator
+  evaluatorDead = false;
+
   // Reset stats after cleaning up old evaluator
   stats = { completed: 0, errors: 0, totalTime: 0, startTime: null };
   updateStats();
@@ -272,6 +304,7 @@ async function loadWasm() {
     wasmStatus.textContent = "Loading...";
 
     const workerCount = parseInt(workerCountInput.value, 10) || 4;
+    console.log(`[DEBUG] Creating evaluator with workerCount: ${workerCount}`);
     if (workerCount < 1 || workerCount > 16) {
       throw new Error("Worker count must be between 1 and 16");
     }
@@ -285,7 +318,36 @@ async function loadWasm() {
 
     try {
       evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
-      setupEvaluatorCallbacks(evaluator);
+      evaluator.onRequestQueued = (
+        _reqId,
+        _workerIndex,
+        _expr,
+      ) => {
+        updatePendingCounts();
+      };
+      evaluator.onRequestYield = (
+        reqId,
+        _workerIndex,
+        _expr,
+        suspensionNodeId,
+        resubmitCount,
+      ) => {
+        addLog(
+          `[RESUBMIT] Requeued req ${reqId} suspension ${suspensionNodeId} (resubmit #${resubmitCount})`,
+        );
+        updatePendingCounts();
+      };
+      evaluator.onRequestError = (
+        reqId,
+        _workerIndex,
+        _expr,
+        errorMessage,
+      ) => {
+        // Log errors immediately when they occur (before promise rejection)
+        // Force logging even in continuous mode for critical errors
+        addLog(`[ERROR] Request ${reqId}: ${errorMessage}`, true);
+        updatePendingCounts();
+      };
       startMemoryLogging(evaluator);
     } finally {
       Object.defineProperty(navigator, "hardwareConcurrency", {
@@ -295,7 +357,7 @@ async function loadWasm() {
       });
     }
 
-    createWorkerPanels(workerCount);
+    updatePendingCounts();
     wasmStatus.textContent = "Ready";
     stats.startTime = Date.now();
 
@@ -309,7 +371,6 @@ async function loadWasm() {
     if (wasContinuousMode) {
       continuousMode = true;
       continuousToggle.classList.add("active");
-      batchSizeLabel.style.display = "flex";
       startContinuous();
     }
   } catch (error) {
@@ -331,68 +392,81 @@ function generateRandom() {
 }
 
 async function run() {
-  if (!evaluator) return;
+  if (!evaluator || evaluatorDead) return;
 
   try {
+    if (pendingSingleRun || continuousRunning) return;
     const exprStr = exprInput.value.trim();
     const expr = parseSKI(exprStr);
+    runBtn.disabled = true;
+    pendingSingleRun = true;
     evaluator.reset();
 
-    // Mark that we're doing a single run (not continuous)
-    pendingSingleRun = true;
-
     const maxSteps = parseInt(maxStepsInput.value, 10) || 1000;
-    const start = performance.now();
-    const _result = await evaluator.reduceAsync(expr, maxSteps);
-    const elapsed = performance.now() - start;
-
-    stats.totalTime += elapsed;
-    updateStats();
+    await submitAndTrack(expr, maxSteps, { highlightOnDone: true });
     pendingSingleRun = false;
+    if (!evaluatorDead) {
+      runBtn.disabled = false;
+    }
   } catch (error) {
     console.error(error);
     pendingSingleRun = false;
+    if (!evaluatorDead) {
+      runBtn.disabled = false;
+    }
   }
 }
 
 async function startContinuous() {
-  if (continuousRunning) return;
+  if (continuousRunning || evaluatorDead) return;
   continuousRunning = true;
 
-  const batchSize = parseInt(batchSizeInput.value, 10) || 8;
+  // Sliding-window parallelism: keep at most N in-flight tasks.
+  const parallelism = parseInt(batchSizeInput.value, 10) || 8;
+  const inFlight = new Set();
 
-  // Continuous loop that dispatches batches
+  const spawnOne = () => {
+    // Generate a unique random expression for each request
+    const size = parseInt(randomSizeInput.value, 10) || 10;
+    const rs = new SimpleRandomSource();
+    const expr = randExpression(rs, size);
+    const maxSteps = parseInt(maxStepsInput.value, 10) || 1000;
+
+    const p = submitAndTrack(expr, maxSteps).then(() => {
+      // noop
+    }).catch((error) => {
+      console.error(error);
+      // Log ResubmissionLimitExceededError to the UI log (forced even in continuous mode)
+      if (error instanceof ResubmissionLimitExceededError) {
+        addLog(`[ERROR] ${error.message}`, true);
+      }
+    }).finally(() => {
+      inFlight.delete(p);
+      updatePendingCounts();
+    });
+
+    inFlight.add(p);
+  };
+
   while (continuousMode && evaluator) {
-    // Dispatch a batch of n requests - each with a unique random expression
-    const promises = [];
-    for (let i = 0; i < batchSize; i++) {
-      if (!continuousMode) break; // Check if we should stop
-
-      // Generate a unique random expression for each request in the batch
-      const size = parseInt(randomSizeInput.value, 10) || 10;
-      const rs = new SimpleRandomSource();
-      const expr = randExpression(rs, size);
-
-      // Don't reset evaluator for each request - let them queue up
-      const maxSteps = parseInt(maxStepsInput.value, 10) || 1000;
-      const start = performance.now();
-      const promise = evaluator.reduceAsync(expr, maxSteps).then((result) => {
-        const elapsed = performance.now() - start;
-        stats.totalTime += elapsed;
-        updateStats();
-        return result;
-      }).catch((error) => {
-        console.error(error);
-      });
-
-      promises.push(promise);
+    // Fill the window
+    while (continuousMode && evaluator && inFlight.size < parallelism) {
+      spawnOne();
     }
 
-    // Wait for all requests in the batch to complete
-    await Promise.all(promises);
+    if (!continuousMode || !evaluator) break;
 
-    // Small delay before next batch to allow UI updates
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // If we somehow have nothing in flight, yield a bit and retry.
+    if (inFlight.size === 0) {
+      await new Promise((r) => setTimeout(r, 10));
+      continue;
+    }
+
+    // Wait for the next completion (sliding window).
+    await Promise.race(inFlight);
+
+    // Yield to keep UI responsive even if completions are very fast.
+    await new Promise((r) => setTimeout(r, 0));
   }
 
   continuousRunning = false;
@@ -404,37 +478,47 @@ function stopContinuous() {
 }
 
 function resetEvaluator() {
+  if (evaluatorDead) {
+    addLog(
+      "[ERROR] Cannot reset: evaluator has crashed. Please reload the page.",
+      true,
+    );
+    return;
+  }
   if (evaluator) {
     evaluator.reset();
     stats = { completed: 0, errors: 0, totalTime: 0, startTime: Date.now() };
     updateStats();
-    for (let i = 0; i < workerOutputs.length; i++) {
-      workerOutputs[i].textContent = "";
-    }
-    workerPendingCounts.fill(0);
+    if (logOutput) logOutput.textContent = "";
     updatePendingCounts();
   }
 }
 
 function hammerTime() {
+  if (evaluatorDead) {
+    addLog(
+      "[ERROR] Cannot start hammer time: evaluator has crashed. Please reload the page.",
+      true,
+    );
+    return;
+  }
   // If continuous mode is already running, turn it off
   if (continuousMode) {
     continuousMode = false;
     continuousToggle.classList.remove("active");
-    batchSizeLabel.style.display = "none";
     stopContinuous();
     return;
   }
 
-  // Max out all limits
-  workerCountInput.value = "16";
-  batchSizeInput.value = "100";
-  randomSizeInput.value = "100";
+  // Optimized settings for high-performance parallel evaluation
+  workerCountInput.value = "8";
+  batchSizeInput.value = "24";
+  randomSizeInput.value = "15";
+  maxStepsInput.value = "20";
 
   // Enable continuous mode
   continuousMode = true;
   continuousToggle.classList.add("active");
-  batchSizeLabel.style.display = "flex";
 
   // Reload evaluator with max workers
   loadWasm().then(() => {
@@ -454,9 +538,9 @@ if (hammerTimeBtn) {
 }
 
 continuousToggle.addEventListener("click", () => {
+  if (evaluatorDead) return;
   continuousMode = !continuousMode;
   continuousToggle.classList.toggle("active", continuousMode);
-  batchSizeLabel.style.display = continuousMode ? "flex" : "none";
   if (continuousMode) {
     startContinuous();
   } else {
@@ -472,6 +556,12 @@ workerCountInput.addEventListener("change", () => {
 gearButton.addEventListener("click", () => {
   controlsContainer.scrollIntoView({ behavior: "smooth", block: "start" });
 });
+
+// Set optimized defaults for high-performance parallel evaluation
+workerCountInput.value = "8";
+batchSizeInput.value = "24";
+randomSizeInput.value = "15";
+maxStepsInput.value = "20";
 
 // Load on startup
 loadWasm();

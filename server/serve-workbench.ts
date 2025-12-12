@@ -107,7 +107,7 @@ async function handler(req: Request): Promise<Response> {
 
     // For other files, serve as-is
     const file = await Deno.open(fullPathString, { read: true });
-    const content = await file.readable;
+    const content = file.readable;
 
     // Determine content type
     let contentType = "text/plain";
@@ -130,7 +130,8 @@ async function handler(req: Request): Promise<Response> {
     if (error instanceof Deno.errors.NotFound) {
       return new Response("Not Found", { status: 404 });
     }
-    return new Response(`Error: ${error.message}`, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return new Response(`Error: ${msg}`, { status: 500 });
   }
 }
 

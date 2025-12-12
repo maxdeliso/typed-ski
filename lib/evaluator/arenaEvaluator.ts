@@ -180,6 +180,21 @@ export function fromArenaWithExports(
       }
       cache.set(id, expr);
       stack.pop();
+    } else if (
+      kind === (ArenaKind.Continuation as number) ||
+      kind === (ArenaKind.Suspension as number)
+    ) {
+      // CONTINUATION/SUSPENSION: These are internal WASM-only nodes used for iterative reduction.
+      // They should never appear in the final result, but if they do (e.g., due to a bug or
+      // incomplete reduction), we cannot convert them to SKI expressions.
+      // Skip them and pop from stack to avoid infinite loops.
+      throw new Error(
+        `Cannot convert ${
+          kind === (ArenaKind.Continuation as number)
+            ? "Continuation"
+            : "Suspension"
+        } node ${id} to SKI expression. This node type is internal to the WASM reducer and should not appear in results.`,
+      );
     } else {
       // NON-TERMINAL: Check children
       const leftId = views
@@ -219,7 +234,10 @@ export interface ArenaWasmExports {
   allocCons(l: number, r: number): number;
   arenaKernelStep(expr: number): number;
   reduce(expr: number, max: number): number;
-
+  hostSubmit?(nodeId: number, reqId: number): number;
+  hostPull?(): bigint;
+  setMaxSteps?(max: number): void;
+  workerLoop?(): void;
   kindOf(id: number): number;
   symOf(id: number): number;
   leftOf(id: number): number;
@@ -233,10 +251,7 @@ export interface ArenaWasmExports {
   debugLockState?(): number;
   getArenaMode?(): number;
   debugCalculateArenaSize?(capacity: number): number;
-  debugGetMemorySize?(): number;
   debugGetArenaBaseAddr?(): number;
-  debugGetLockAcquisitionCount?(): number;
-  debugGetLockReleaseCount?(): number;
 }
 
 // deno-lint-ignore ban-types
@@ -269,8 +284,6 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const imports = {
       env: {
         memory: wasmMemory,
-        // Main thread usage: no blocking allowed
-        js_allow_block: () => 0,
       },
     } as WebAssembly.Imports;
 
@@ -290,14 +303,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
       debugCalculateArenaSize: e.debugCalculateArenaSize as
         | ((c: number) => number)
         | undefined,
-      debugGetMemorySize: e.debugGetMemorySize as (() => number) | undefined,
       debugGetArenaBaseAddr: e.debugGetArenaBaseAddr as
-        | (() => number)
-        | undefined,
-      debugGetLockAcquisitionCount: e.debugGetLockAcquisitionCount as
-        | (() => number)
-        | undefined,
-      debugGetLockReleaseCount: e.debugGetLockReleaseCount as
         | (() => number)
         | undefined,
     } as ArenaWasmExports;
@@ -366,6 +372,29 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
   reset(): void {
     this.$.reset();
+    // IMPORTANT:
+    // `toArenaWithExports` caches terminal node IDs (S/K/I) per exports instance.
+    // A WASM-level `reset()` reclaims the arena (top=0) and clears the WASM terminal cache,
+    // so previously cached terminal IDs may be reused for non-terminal nodes.
+    // If we don't invalidate the JS cache here, subsequent submissions can build corrupted graphs,
+    // leading to hangs or traps in the reducer.
+    terminalCache.delete(
+      this.$ as unknown as Pick<ArenaWasmExports, "allocTerminal">,
+    );
+  }
+
+  setMaxSteps(max: number): void {
+    this.$.setMaxSteps?.(max >>> 0);
+  }
+
+  hostSubmit(nodeId: number, reqId: number): number {
+    if (!this.$.hostSubmit) throw new Error("hostSubmit export missing");
+    return this.$.hostSubmit(nodeId >>> 0, reqId >>> 0);
+  }
+
+  hostPull(): bigint {
+    if (!this.$.hostPull) throw new Error("hostPull export missing");
+    return this.$.hostPull();
   }
 
   toArena(exp: SKIExpression): ArenaNodeId {
@@ -383,16 +412,15 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
     if (!baseAddr) return 0;
 
-    // Header layout: stripe_locks[64] (0-63), resize_lock (64), resize_seq (65),
-    // capacity (66), top (67), ...
-    const headerView = new Uint32Array(this.memory.buffer, baseAddr, 80);
-    const STRIPE_COUNT = 64;
-    return headerView[STRIPE_COUNT + 3]; // offset 67
+    // New header layout (rust/src/arena.rs SabHeader):
+    // 13 = capacity, 17 = top
+    const headerView = new Uint32Array(this.memory.buffer, baseAddr, 32);
+    return headerView[17];
   }
 
   /**
    * Helper: Decodes a single node ID into an ArenaNode object.
-   * Returns null if the slot is uninitialized (indicating end of data).
+   * Returns null if the slot is uninitialized (a "hole").
    */
   private getArenaNode(
     id: number,
@@ -402,9 +430,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     let k: number;
     if (views && id < views.capacity) {
       k = views.kind[id];
+      if (k === 0) return null; // Hole/uninitialized
     } else {
       k = this.$.kindOf(id);
-      if (k === 0) return null; // End of allocated prefix
+      if (k === 0) return null; // Hole/uninitialized
     }
 
     // 2. Build Terminal
@@ -454,7 +483,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
     for (let id = 0; id < top; id++) {
       const node = this.getArenaNode(id, views);
-      if (!node) break; // Stop at uninitialized slot
+      if (!node) continue; // Skip holes
       nodes.push(node);
     }
 
@@ -474,7 +503,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
     for (let id = 0; id < top; id++) {
       const node = this.getArenaNode(id, views);
-      if (!node) break; // Stop at uninitialized slot
+      if (!node) continue; // Skip holes
 
       chunk.push(node);
 

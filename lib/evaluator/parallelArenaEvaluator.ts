@@ -12,6 +12,41 @@ import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
+import { ArenaKind } from "../shared/arena.ts";
+
+const EMPTY = -1n;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// Maximum number of resubmissions per work unit (when yielding suspensions)
+// This prevents a single divergent term from monopolizing resources
+const MAX_RESUBMITS_PER_WORK_UNIT = 10;
+
+/**
+ * Error thrown when a work unit exceeds the maximum number of resubmissions.
+ * This typically indicates that the expression does not normalize (diverges).
+ */
+export class ResubmissionLimitExceededError extends Error {
+  constructor(
+    public readonly reqId: number,
+    public readonly resubmitCount: number,
+    public readonly maxResubmits: number,
+  ) {
+    super(
+      `Request ${reqId} exceeded maximum resubmissions (${maxResubmits}). This expression likely does not normalize.`,
+    );
+    this.name = "ResubmissionLimitExceededError";
+  }
+}
+
+export type ArenaRingStatsSnapshot = {
+  submitOk: number;
+  submitFull: number;
+  submitNotConnected: number;
+  pullEmpty: number;
+  pullNonEmpty: number;
+  completionsStashed: number;
+  pending: number;
+  completed: number;
+};
 
 type WorkerConnectCompleteMessage = {
   type: "connectArenaComplete";
@@ -44,31 +79,201 @@ type WorkerToMainMessage =
 export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   implements Evaluator {
   public readonly workers: Worker[] = [];
-  private readonly pendingRequests = new Map<
-    number,
-    { resolve: (val: number) => void; reject: (err: Error) => void }
-  >();
-  private readonly workerRequestMap = new Map<number, number>(); // requestId -> workerIndex
-  private nextRequestId = 0;
-  private nextWorkerIndex = 0;
 
-  // Callbacks for tracking worker activity
+  /**
+   * Optional instrumentation hooks (used by `server/workbench.js`).
+   *
+   * Notes:
+   * - `workerIndex` is a logical assignment (round-robin at submit time).
+   *   CQ completions don't encode the physical worker thread id.
+   */
   public onRequestQueued?: (
-    requestId: number,
+    reqId: number,
     workerIndex: number,
-    expr: SKIExpression,
+    expr?: SKIExpression,
   ) => void;
   public onRequestCompleted?: (
-    requestId: number,
+    reqId: number,
     workerIndex: number,
-    expr: SKIExpression,
+    expr: SKIExpression | undefined,
     arenaNodeId: number,
   ) => void;
   public onRequestError?: (
-    requestId: number,
+    reqId: number,
     workerIndex: number,
+    expr: SKIExpression | undefined,
     error: string,
   ) => void;
+  public onRequestYield?: (
+    reqId: number,
+    workerIndex: number,
+    expr: SKIExpression | undefined,
+    suspensionNodeId: number,
+    resubmitCount: number,
+  ) => void;
+
+  private nextRequestId = 1;
+  private readonly pending = new Map<
+    number,
+    { resolve: (val: number) => void; reject: (err: Error) => void }
+  >();
+  private readonly completed = new Map<number, number>();
+  private pollerStarted = false;
+  private aborted = false;
+  private abortError: Error | null = null;
+  private nextWorkerIndex = 0;
+  private readonly reqToWorkerIndex = new Map<number, number>();
+  private readonly reqToExpr = new Map<number, SKIExpression>();
+  private readonly reqToResubmitCount = new Map<number, number>();
+  private workerPendingCounts: number[] = [];
+  private readonly ringStats = {
+    submitOk: 0,
+    submitFull: 0,
+    submitNotConnected: 0,
+    pullEmpty: 0,
+    pullNonEmpty: 0,
+    completionsStashed: 0,
+  };
+
+  private abortAll(err: Error) {
+    if (this.aborted) return;
+    this.aborted = true;
+    this.abortError = err;
+    for (const { reject } of this.pending.values()) reject(err);
+    this.pending.clear();
+    this.completed.clear();
+    this.reqToWorkerIndex.clear();
+    this.reqToExpr.clear();
+    this.reqToResubmitCount.clear();
+    this.workerPendingCounts.fill(0);
+    this.workers.forEach((w) => w.terminate());
+  }
+
+  /**
+   * Workbench UI helper.
+   * Returns per-worker pending counts (best-effort logical assignment).
+   */
+  getPendingCounts(): number[] {
+    const n = Math.max(1, this.workers.length);
+    if (this.workerPendingCounts.length !== n) {
+      this.workerPendingCounts = new Array(n).fill(0);
+    }
+    return this.workerPendingCounts.slice();
+  }
+
+  /**
+   * Returns the total number of pending requests.
+   * This is the authoritative count based on the pending Map.
+   */
+  getTotalPending(): number {
+    return this.pending.size;
+  }
+
+  getRingStatsSnapshot(): ArenaRingStatsSnapshot {
+    return {
+      submitOk: this.ringStats.submitOk,
+      submitFull: this.ringStats.submitFull,
+      submitNotConnected: this.ringStats.submitNotConnected,
+      pullEmpty: this.ringStats.pullEmpty,
+      pullNonEmpty: this.ringStats.pullNonEmpty,
+      completionsStashed: this.ringStats.completionsStashed,
+      pending: this.pending.size,
+      completed: this.completed.size,
+    };
+  }
+
+  /**
+   * Submit an already-allocated arena node id to the worker pool and await the resulting arena node id.
+   *
+   * Notes:
+   * - The number of reduction steps is controlled globally by `setMaxSteps(...)`.
+   * - This is the primitive used by higher-level helpers (e.g. reduceAsync) and tooling (e.g. genForest).
+   */
+  async reduceArenaNodeIdAsync(
+    arenaNodeId: number,
+    expr?: SKIExpression,
+  ): Promise<number> {
+    if (this.aborted) {
+      throw this.abortError ?? new Error("Evaluator terminated");
+    }
+    const ex = this.$ as unknown as {
+      hostSubmit?: (nodeId: number, reqId: number) => number;
+      hostPull?: () => bigint;
+    };
+    if (!ex.hostPull || !ex.hostSubmit) {
+      throw new Error("hostSubmit/hostPull exports are required");
+    }
+
+    const reqId = this.nextRequestId++ >>> 0;
+
+    // Track logical worker slot for UI (round-robin assignment).
+    const nWorkers = Math.max(1, this.workers.length);
+    if (this.workerPendingCounts.length !== nWorkers) {
+      this.workerPendingCounts = new Array(nWorkers).fill(0);
+    }
+    const workerIndex = this.nextWorkerIndex++ % nWorkers;
+    this.reqToWorkerIndex.set(reqId, workerIndex);
+    if (expr) this.reqToExpr.set(reqId, expr);
+    this.workerPendingCounts[workerIndex] =
+      (this.workerPendingCounts[workerIndex] ?? 0) + 1;
+
+    this.ensurePoller(ex.hostPull);
+
+    // Register the resolver BEFORE submitting so we can't lose a fast completion.
+    const existing = this.completed.get(reqId);
+    if (existing !== undefined) {
+      this.completed.delete(reqId);
+      return existing;
+    }
+    const resultPromise = new Promise<number>((resolve, reject) => {
+      this.pending.set(reqId, { resolve, reject });
+    });
+
+    this.onRequestQueued?.(reqId, workerIndex, expr);
+
+    // Non-blocking submit: retry until queued, with a fixed cap on retries.
+    // 0 = ok, 1 = full, 2 = not connected
+    let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId);
+    let fullStreak = 0;
+    while (rc === 1) {
+      this.ringStats.submitFull++;
+      if (this.aborted) {
+        throw (this.abortError ?? new Error("Evaluator terminated"));
+      }
+      // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
+      // Back off to a macrotask so we don't peg a CPU core.
+      fullStreak++;
+      if (fullStreak < 512) {
+        await new Promise<void>((r) => queueMicrotask(r));
+      } else {
+        if (this.aborted) {
+          throw (this.abortError ?? new Error("Evaluator terminated"));
+        }
+        await sleep(0); // Try 0 first, it might yield but return faster than 1
+        if (this.aborted) {
+          throw (this.abortError ?? new Error("Evaluator terminated"));
+        }
+      }
+      rc = ex.hostSubmit(arenaNodeId >>> 0, reqId);
+    }
+    if (rc !== 0) {
+      if (rc === 2) this.ringStats.submitNotConnected++;
+      const err = new Error(`hostSubmit failed with code ${rc}`);
+      this.onRequestError?.(reqId, workerIndex, expr, err.message);
+      this.pending.get(reqId)?.reject(err);
+      this.pending.delete(reqId);
+      this.reqToWorkerIndex.delete(reqId);
+      this.reqToExpr.delete(reqId);
+      this.workerPendingCounts[workerIndex] = Math.max(
+        0,
+        (this.workerPendingCounts[workerIndex] ?? 0) - 1,
+      );
+      throw new Error(`hostSubmit failed with code ${rc}`);
+    }
+    this.ringStats.submitOk++;
+
+    return await resultPromise;
+  }
 
   private constructor(
     exports: ArenaWasmExports,
@@ -77,6 +282,30 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   ) {
     super(exports, memory);
     this.workers = workers;
+    // If any worker traps due to OOM, abort all outstanding requests so callers don't hang forever.
+    for (const w of this.workers) {
+      w.addEventListener("error", (e) => {
+        const err = e.error instanceof Error
+          ? e.error
+          : new Error(e.message || "Worker error");
+        // Only abort all if this is an OOM/memory error
+        const isOOM = err.message?.includes("out of memory") ||
+          err.message?.includes("memory") ||
+          err.message?.includes("unreachable") ||
+          err.name === "RuntimeError";
+        if (isOOM) {
+          this.abortAll(err);
+        } else {
+          // For non-OOM errors, just log and continue
+          console.error("Worker error (non-fatal):", err);
+        }
+      });
+      // Some environments surface failed structured-clone / message errors separately.
+      // These are not fatal - just log and continue.
+      w.addEventListener("messageerror", () => {
+        console.error("Worker messageerror (non-fatal)");
+      });
+    }
   }
 
   private static async spawnWorkers(
@@ -85,6 +314,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     sharedMemory: WebAssembly.Memory,
     sharedBuffer: SharedArrayBuffer,
   ): Promise<Worker[]> {
+    console.error(`[DEBUG] Spawning ${workerCount} workers`);
     const workers: Worker[] = [];
     const initPromises: Promise<void>[] = [];
 
@@ -97,6 +327,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       });
 
       initPromises.push(
+        // We only need the readiness barrier; discard the payload to keep initPromises typed as Promise<void>[].
         this.waitForWorkerMessage(worker, "ready").then(() => undefined),
       );
       worker.postMessage({
@@ -121,15 +352,11 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     debugLockState: () => number;
     getArenaMode: () => number;
     debugGetArenaBaseAddr: () => number;
-    debugGetLockAcquisitionCount?: () => number;
-    debugGetLockReleaseCount?: () => number;
   } {
     const {
       debugLockState,
       getArenaMode,
       debugGetArenaBaseAddr,
-      debugGetLockAcquisitionCount,
-      debugGetLockReleaseCount,
     } = exports;
 
     if (!exports.initArena || typeof exports.initArena !== "function") {
@@ -163,8 +390,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       debugLockState,
       getArenaMode,
       debugGetArenaBaseAddr,
-      debugGetLockAcquisitionCount,
-      debugGetLockReleaseCount,
     };
   }
 
@@ -172,17 +397,29 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     workers: Worker[],
     arenaPointer: number,
   ): Promise<void> {
-    const connectPromises = workers.map(async (worker) => {
-      worker.postMessage({
-        type: "connectArena",
-        arenaPointer,
-      });
-      const message = await this.waitForWorkerMessage(
-        worker,
-        "connectArenaComplete",
-      );
-      if (message.error) {
-        throw new Error(message.error);
+    const connectPromises = workers.map(async (worker, workerIndex) => {
+      try {
+        worker.postMessage({
+          type: "connectArena",
+          arenaPointer,
+        });
+        const message = await this.waitForWorkerMessage(
+          worker,
+          "connectArenaComplete",
+        );
+        if (message.error) {
+          // High-signal diagnostic for the workbench/server: connection failures often look like "worker died".
+          console.error(
+            `[ParallelArenaEvaluatorWasm] worker ${workerIndex} connectArena failed: ${message.error}`,
+          );
+          throw new Error(message.error);
+        }
+      } catch (err) {
+        console.error(
+          `[ParallelArenaEvaluatorWasm] worker ${workerIndex} died during connectArena`,
+          err,
+        );
+        throw err;
       }
     });
     await Promise.all(connectPromises);
@@ -224,6 +461,9 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   static async create(
     workerCount = navigator.hardwareConcurrency || 4,
   ): Promise<ParallelArenaEvaluatorWasm> {
+    console.error(
+      `[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: ${workerCount}, navigator.hardwareConcurrency: ${navigator.hardwareConcurrency}`,
+    );
     if (workerCount < 1) {
       throw new Error(
         "ParallelArenaEvaluatorWasm requires at least one worker",
@@ -238,11 +478,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       shared: true,
     });
 
-    console.log(
-      `[DEBUG] Initial memory: ${sharedMemory.buffer.byteLength} bytes (${
-        sharedMemory.buffer.byteLength / 65536
-      } pages), expected ${INITIAL_ARENA_PAGES} pages`,
-    );
+    // NOTE: keep stdout clean for CLI tools (e.g. genForest) that stream JSONL.
+    // If you want this, run with `--verbose` at the CLI layer instead.
 
     if (typeof SharedArrayBuffer === "undefined") {
       throw new Error(
@@ -262,8 +499,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     const sharedInstance = await WebAssembly.instantiate(wasmModule, {
       env: {
         memory: sharedMemory,
-        // THE FIX: Main thread tells Wasm "No blocking allowed"
-        js_allow_block: () => 0,
       },
     } as WebAssembly.Imports);
     const exports = sharedInstance.exports as unknown as ArenaWasmExports;
@@ -305,63 +540,31 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       sharedMemory,
       workers,
     );
-
-    evaluator.attachWorkerMessageHandlers();
     return evaluator;
   }
 
   /**
-   * Offload reduction to a worker to keep the main thread responsive.
-   * Optimized: converts to arena once, sends u32 ID, receives u32 ID, converts back only when needed.
+   * Offload reduction to WASM workers via the shared SQ/CQ rings (io_uring-style).
+   *
+   * Contract:
+   * - **Submit (SQ)**: host enqueues `{ nodeId, reqId }` using `hostSubmit`.
+   * - **Complete (CQ)**: workers dequeue, reduce for `maxSteps` (global), then enqueue `{ resultNodeId, reqId }`.
+   *   Workers may also enqueue a **Suspension** node when they run out of traversal gas mid-step; the host must resubmit it.
+   * - **Polling**: host drains CQ via `hostPull()`, which returns a packed bigint:
+   *   `-1n` if empty, otherwise `(reqId << 32) | resultNodeId`.
+   *   Results may arrive out-of-order; `reqId` is used to match completions to callers.
    */
   async reduceAsync(
     expr: SKIExpression,
     max = 0xffffffff,
   ): Promise<SKIExpression> {
-    if (this.workers.length === 0) {
-      throw new Error(
-        "ParallelArenaEvaluatorWasm was constructed without workers",
-      );
-    }
-
-    // Convert to arena ONCE on the main thread
+    this.$.setMaxSteps?.(max >>> 0);
     const arenaNodeId = this.toArena(expr);
-    const requestId = this.nextRequestId++;
-    const workerIndex = this.nextWorkerIndex;
-    const worker = this.workers[workerIndex];
-    const workerCount = this.workers.length;
-    this.nextWorkerIndex = (workerIndex + 1) % workerCount;
-    this.workerRequestMap.set(requestId, workerIndex);
-    if (this.onRequestQueued) {
-      this.onRequestQueued(requestId, workerIndex, expr);
-    }
-    const resultArenaNodeId = await new Promise<number>((resolve, reject) => {
-      this.pendingRequests.set(requestId, {
-        resolve: (resultId: number) => resolve(resultId),
-        reject,
-      });
-      worker.postMessage({ type: "work", id: requestId, arenaNodeId, max });
-    });
-    const result = this.fromArena(resultArenaNodeId);
-    return result;
-  }
-
-  /**
-   * Get the number of pending requests for each worker.
-   */
-  getPendingCounts(): number[] {
-    const counts = new Array(this.workers.length).fill(0);
-    for (const workerIndex of this.workerRequestMap.values()) {
-      counts[workerIndex]++;
-    }
-    return counts;
-  }
-
-  /**
-   * Get total number of pending requests.
-   */
-  getTotalPending(): number {
-    return this.pendingRequests.size;
+    const resultArenaNodeId = await this.reduceArenaNodeIdAsync(
+      arenaNodeId,
+      expr,
+    );
+    return this.fromArena(resultArenaNodeId);
   }
 
   /**
@@ -374,73 +577,165 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     );
   }
 
-  private attachWorkerMessageHandlers() {
-    this.workers.forEach((worker) => {
-      worker.addEventListener(
-        "message",
-        (e: MessageEvent<WorkerToMainMessage>) => {
-          if (e.data.type === "result") {
-            const requestId = e.data.id;
-            const workerIndex = this.workerRequestMap.get(requestId);
-            const pending = this.pendingRequests.get(requestId);
-            if (pending) {
-              this.pendingRequests.delete(requestId);
-              if (workerIndex !== undefined) {
-                this.workerRequestMap.delete(requestId);
-                // Notify callback if registered
-                if (this.onRequestCompleted) {
-                  // Convert arena ID to expression for callback (if needed)
-                  const resultExpr = this.fromArena(e.data.arenaNodeId);
-                  this.onRequestCompleted(
-                    requestId,
-                    workerIndex,
-                    resultExpr,
-                    e.data.arenaNodeId,
-                  );
-                }
-              }
-              // Resolve with arena node ID (will be converted to expression in reduceAsync)
-              pending.resolve(e.data.arenaNodeId);
-            }
-          } else if (e.data.type === "error") {
-            const id = e.data.workId ?? e.data.id;
-            const workerIndex = id !== undefined
-              ? this.workerRequestMap.get(id)
-              : undefined;
-            const err = new Error(
-              e.data.error ?? "Worker error with no message",
-            );
-            if (id === undefined) {
-              console.error(err);
-              return;
-            }
+  private ensurePoller(hostPull: () => bigint) {
+    if (this.pollerStarted) return;
+    this.pollerStarted = true;
+    const pull = hostPull;
+    (async () => {
+      let emptyStreak = 0;
+      const ex = this.$ as unknown as {
+        kindOf: (id: number) => number;
+        hostSubmit: (nodeId: number, reqId: number) => number;
+      };
+      for (;;) {
+        if (this.aborted) return;
 
-            const pending = this.pendingRequests.get(id);
-            if (!pending) {
-              console.error(err);
-              return;
-            }
-
-            this.pendingRequests.delete(id);
-            if (workerIndex !== undefined) {
-              this.workerRequestMap.delete(id);
-              // Notify callback if registered
-              if (this.onRequestError) {
-                this.onRequestError(
-                  id,
-                  workerIndex,
-                  e.data.error ?? "Unknown error",
-                );
-              }
-            }
-            pending.reject(err);
+        // OPTIMIZATION: If no work is pending, hibernate.
+        // This prevents burning CPU when the user is staring at the screen doing nothing.
+        // Use very short sleeps (1ms) in a loop to check aborted frequently while still saving CPU.
+        if (this.pending.size === 0) {
+          // Check aborted before sleeping to avoid creating a timer that leaks
+          if (this.aborted) return;
+          // Sleep in 1ms chunks up to ~50ms total, checking aborted frequently
+          for (let i = 0; i < 50; i++) {
+            if (this.aborted) return;
+            await sleep(1);
+            if (this.aborted) return;
           }
-        },
-      );
-    });
+          continue;
+        }
+
+        const packed = pull();
+        if (packed === EMPTY) {
+          this.ringStats.pullEmpty++;
+          // If the CQ is empty, avoid burning CPU by spinning in the microtask queue.
+          // Use a short macrotask backoff once we've observed emptiness for a while.
+          emptyStreak++;
+          if (emptyStreak < 512) {
+            await new Promise<void>((r) => queueMicrotask(r));
+          } else {
+            if (this.aborted) return;
+            await sleep(0); // Try 0 first, it might yield but return faster than 1
+            if (this.aborted) return;
+          }
+          continue;
+        }
+        this.ringStats.pullNonEmpty++;
+        emptyStreak = 0;
+        const reqId = Number((packed >> 32n) & 0xffffffffn) >>> 0;
+        const nodeId = Number(packed & 0xffffffffn) >>> 0;
+
+        // If the worker yielded, the nodeId is a Suspension node. Resubmit to continue.
+        // (Do not resolve the promise yet; the job is still in-flight.)
+        if (ex.kindOf(nodeId) === (ArenaKind.Suspension as number)) {
+          // If the caller already gave up / was aborted, drop the yielded work.
+          if (!this.pending.has(reqId)) continue;
+
+          // Track resubmissions per work unit to prevent infinite loops from divergent terms.
+          // Check BEFORE attempting to resubmit - if limit exceeded, stop this work unit.
+          const resubmitCount = (this.reqToResubmitCount.get(reqId) ?? 0) + 1;
+          if (resubmitCount > MAX_RESUBMITS_PER_WORK_UNIT) {
+            const err = new ResubmissionLimitExceededError(
+              reqId,
+              resubmitCount,
+              MAX_RESUBMITS_PER_WORK_UNIT,
+            );
+            const workerIndex = this.reqToWorkerIndex.get(reqId) ?? 0;
+            const expr = this.reqToExpr.get(reqId);
+            this.onRequestError?.(reqId, workerIndex, expr, err.message);
+            this.pending.get(reqId)?.reject(err);
+            this.pending.delete(reqId);
+            this.reqToWorkerIndex.delete(reqId);
+            this.reqToExpr.delete(reqId);
+            this.reqToResubmitCount.delete(reqId);
+            if (workerIndex < this.workerPendingCounts.length) {
+              this.workerPendingCounts[workerIndex] = Math.max(
+                0,
+                (this.workerPendingCounts[workerIndex] ?? 0) - 1,
+              );
+            }
+            continue;
+          }
+          // Increment resubmit count for this work unit
+          this.reqToResubmitCount.set(reqId, resubmitCount);
+
+          const workerIndex = this.reqToWorkerIndex.get(reqId) ?? 0;
+          const expr = this.reqToExpr.get(reqId);
+          this.onRequestYield?.(
+            reqId,
+            workerIndex,
+            expr,
+            nodeId,
+            resubmitCount,
+          );
+
+          // Retry submitting until queue accepts (unbounded retries when queue is full).
+          // The per-work-unit resubmission limit above prevents individual work units
+          // from monopolizing resources.
+          let rc = ex.hostSubmit(nodeId >>> 0, reqId);
+          let fullStreak = 0;
+          while (rc === 1) {
+            this.ringStats.submitFull++;
+            if (this.aborted) return;
+            fullStreak++;
+            if (fullStreak < 64) {
+              await new Promise<void>((r) => queueMicrotask(r));
+            } else {
+              if (this.aborted) return;
+              await sleep(1);
+              if (this.aborted) return;
+            }
+            rc = ex.hostSubmit(nodeId >>> 0, reqId);
+          }
+          if (rc !== 0) {
+            const err = new Error(
+              `Resubmit failed for reqId ${reqId} with code ${rc}`,
+            );
+            const workerIndex = this.reqToWorkerIndex.get(reqId) ?? 0;
+            const expr = this.reqToExpr.get(reqId);
+            this.onRequestError?.(reqId, workerIndex, expr, err.message);
+            this.pending.get(reqId)?.reject(err);
+            this.pending.delete(reqId);
+            this.reqToWorkerIndex.delete(reqId);
+            this.reqToExpr.delete(reqId);
+            this.reqToResubmitCount.delete(reqId);
+            if (workerIndex < this.workerPendingCounts.length) {
+              this.workerPendingCounts[workerIndex] = Math.max(
+                0,
+                (this.workerPendingCounts[workerIndex] ?? 0) - 1,
+              );
+            }
+          }
+          continue;
+        }
+
+        const cb = this.pending.get(reqId);
+        if (cb) {
+          this.pending.delete(reqId);
+          const workerIndex = this.reqToWorkerIndex.get(reqId) ?? 0;
+          const expr = this.reqToExpr.get(reqId);
+          if (workerIndex < this.workerPendingCounts.length) {
+            this.workerPendingCounts[workerIndex] = Math.max(
+              0,
+              (this.workerPendingCounts[workerIndex] ?? 0) - 1,
+            );
+          }
+          this.reqToWorkerIndex.delete(reqId);
+          this.reqToExpr.delete(reqId);
+          this.reqToResubmitCount.delete(reqId);
+          this.onRequestCompleted?.(reqId, workerIndex, expr, nodeId);
+          cb.resolve(nodeId);
+        } else {
+          // Completion can race with registration, or belong to a caller that already
+          // gave up. Stash it so a future awaiter can still observe it.
+          this.completed.set(reqId, nodeId);
+          this.ringStats.completionsStashed++;
+        }
+      }
+    })();
   }
 
   terminate() {
-    this.workers.forEach((w) => w.terminate());
+    this.abortAll(new Error("Evaluator terminated"));
   }
 }

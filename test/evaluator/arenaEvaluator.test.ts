@@ -6,6 +6,7 @@ import {
   type ArenaEvaluatorWasm,
   createArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
+import { getOrBuildArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { prettyPrint } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
@@ -221,5 +222,29 @@ Deno.test("dumpArena", async (t) => {
         assert(node.right >= 0, "Right child ID should be non-negative");
       }
     }
+  });
+
+  await t.step("skips holes instead of stopping early", () => {
+    const evaluator = arenaEval;
+    evaluator.reset();
+    // Ensure we have multiple allocated nodes.
+    evaluator.toArena(parseSKI("III"));
+
+    const baseAddr = evaluator.$.debugGetArenaBaseAddr?.() ?? 0;
+    assert(baseAddr !== 0, "Arena should be initialized");
+
+    const views = getOrBuildArenaViews(evaluator.memory, evaluator.$);
+    assert(views !== null, "Arena views should be available");
+
+    // Create an artificial hole at id=0.
+    views.kind[0] = 0;
+
+    const { nodes } = evaluator.dumpArena();
+    // We should still see later nodes; specifically id=1 should still exist.
+    assert(nodes.some((n) => n.id === 1), "Dump should continue past holes");
+    // And the holed-out node should not be present as a decoded node.
+    assert(!nodes.some((n) => n.id === 0), "Holed-out node should be skipped");
+
+    evaluator.reset();
   });
 });

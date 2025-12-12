@@ -19,19 +19,6 @@ interface ConnectArenaMessage {
   arenaPointer: number;
 }
 
-interface WorkMessage {
-  type: "work";
-  id: number;
-  arenaNodeId: number; // Arena node ID - graph already in shared memory
-  max?: number;
-}
-
-interface ResultMessage {
-  type: "result";
-  id: number;
-  arenaNodeId: number; // Arena node ID for the result expression
-}
-
 let wasmExports: ArenaWasmExports | null = null;
 
 async function init(msg: InitMessage) {
@@ -40,8 +27,6 @@ async function init(msg: InitMessage) {
   const instance = await WebAssembly.instantiate(module, {
     env: {
       memory: msg.memory,
-      // THE FIX: Worker tells Wasm "Blocking is fine"
-      js_allow_block: () => 1,
     },
   });
   wasmExports = instance.exports as unknown as ArenaWasmExports;
@@ -69,6 +54,8 @@ function handleConnectArena(msg: ConnectArenaMessage) {
     // 6 = Error: Misaligned address
     if (rc === 1) {
       self.postMessage({ type: "connectArenaComplete" });
+      // Enter the blocking worker loop; never returns.
+      wasmExports.workerLoop?.();
     } else {
       self.postMessage({
         type: "connectArenaComplete",
@@ -85,27 +72,6 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
 }
 
-function handleWork(msg: WorkMessage) {
-  if (!wasmExports) return;
-
-  try {
-    const max = msg.max ?? 0xffffffff;
-    const resultId = wasmExports.reduce(msg.arenaNodeId, max);
-    const resultMsg: ResultMessage = {
-      type: "result",
-      id: msg.id,
-      arenaNodeId: resultId,
-    };
-    self.postMessage(resultMsg);
-  } catch (err) {
-    self.postMessage({
-      type: "error",
-      error: err instanceof Error ? err.message : String(err),
-      workId: msg.id,
-    });
-  }
-}
-
 self.onmessage = (e) => {
   if (e.data.type === "init") {
     init(e.data).catch((err) => {
@@ -113,7 +79,5 @@ self.onmessage = (e) => {
     });
   } else if (e.data.type === "connectArena") {
     handleConnectArena(e.data as ConnectArenaMessage);
-  } else if (e.data.type === "work") {
-    handleWork(e.data as WorkMessage);
   }
 };

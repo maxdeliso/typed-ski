@@ -69,14 +69,14 @@
             <span style="font-weight: 600; color: #555">Continuous Mode:</span>
             <div class="toggle-switch" id="continuousToggle"></div>
           </div>
-          <label id="batchSizeLabel" style="display: none; align-items: center">
-            Batch Size (n at a time):
+          <label id="batchSizeLabel" style="align-items: center">
+            Parallelism (max in-flight):
             <input
               type="number"
               id="batchSizeInput"
               value="8"
               min="1"
-              max="100"
+              max="256"
               style="width: 90px; margin-left: 5px; padding: 10px 15px"
             >
           </label>
@@ -102,7 +102,12 @@
         </div>
       </div>
 
-      <div class="workers-grid" id="workersGrid"></div>
+      <div class="log-panel">
+        <div class="log-header">
+          <div class="log-title">Log</div>
+        </div>
+        <div class="log-output" id="logOutput"></div>
+      </div>
 
       <div class="stats">
         <div class="stat-item">
@@ -111,7 +116,7 @@
         </div>
         <div class="stat-item">
           <div class="stat-value" id="totalTime">0</div>
-          <div class="stat-label">Total Time (ms)</div>
+          <div class="stat-label">Cumulative Latency (ms)</div>
         </div>
         <div class="stat-item">
           <div class="stat-value" id="throughput">0</div>

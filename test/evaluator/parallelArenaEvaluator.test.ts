@@ -2,8 +2,22 @@ import { assert, assertEquals } from "std/assert";
 import randomSeed from "random-seed";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { prettyPrint, type SKIExpression } from "../../lib/ski/expression.ts";
+import {
+  apply,
+  prettyPrint,
+  type SKIExpression,
+} from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
+import { I, K, S } from "../../lib/ski/terminal.ts";
+
+function makeUniqueExpr(i: number, bits = 16): SKIExpression {
+  // Deterministic, bounded-size expression that is unique for i < 2^bits.
+  let e: SKIExpression = I;
+  for (let b = 0; b < bits; b++) {
+    e = apply(e, (i >>> b) & 1 ? S : K);
+  }
+  return e;
+}
 
 Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
   await t.step("creates evaluator with shared memory", async () => {
@@ -183,30 +197,19 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
     "evaluates (SII)(SII) in parallel - generates lock contention",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-      const { $: exports } = evaluator;
       const expr = parseSKI("(SII)(SII)");
-
-      const baselineAcquisitions = exports.debugGetLockAcquisitionCount?.() ??
-        0;
-      const baselineReleases = exports.debugGetLockReleaseCount?.() ?? 0;
 
       const sendWork = (max: number): Promise<SKIExpression> => {
         return evaluator.reduceAsync(expr, max);
       };
 
       // (SII)(SII) has an infinite reduction sequence - it reduces to itself
-      // Run two evaluations in parallel for 1000 steps to generate lock contention
+      // Run two evaluations in parallel for 1000
       const promise1 = sendWork(1000);
       const promise2 = sendWork(1000);
 
       // Wait for both workers to complete their work
       const [result1, result2] = await Promise.all([promise1, promise2]);
-
-      // Get final lock counts
-      const totalAcquisitions = exports.debugGetLockAcquisitionCount?.() ??
-        0 - baselineAcquisitions;
-      const totalReleases = exports.debugGetLockReleaseCount?.() ??
-        0 - baselineReleases;
 
       // Both workers evaluated the same expression for the same number of steps,
       // so they should produce identical results
@@ -217,18 +220,43 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
       );
 
       // Validate that locks were acquired and released (proves concurrent access)
-      assert(
-        totalAcquisitions > 0,
-        `Expected lock acquisitions > 0, got ${totalAcquisitions}`,
-      );
-      assert(
-        totalReleases > 0,
-        `Expected lock releases > 0, got ${totalReleases}`,
-      );
+      // Note: implementation is lock-free; we only validate deterministic results.
 
       evaluator.terminate();
     },
   );
+});
+
+Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
+  await t.step("correlation correctness under load (maxSteps=0)", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(4);
+    const N = 400;
+    const exprs = Array.from({ length: N }, (_, i) => makeUniqueExpr(i));
+
+    // maxSteps=0 => result should equal input; mismatch implies bad correlation.
+    const results = await Promise.all(
+      exprs.map((e) => evaluator.reduceAsync(e, 0)),
+    );
+    for (let i = 0; i < N; i++) {
+      assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
+    }
+    evaluator.terminate();
+  });
+
+  await t.step("ring wrap-around / slot sequence correctness", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(8);
+    // RING_ENTRIES is 1024 in wasm; exceed it several times.
+    const N = 4096;
+    const exprs = Array.from({ length: N }, (_, i) => makeUniqueExpr(i, 20));
+
+    const results = await Promise.all(
+      exprs.map((e) => evaluator.reduceAsync(e, 0)),
+    );
+    for (let i = 0; i < N; i++) {
+      assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
+    }
+    evaluator.terminate();
+  });
 });
 
 Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
@@ -267,12 +295,9 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
       const expr = parseSKI("III");
-      // Reduce in arena
-      const reducedId = evaluator.$.reduce(evaluator.toArena(expr), 100);
-      // Convert back from arena
-      const reconstructed = evaluator.fromArena(reducedId);
-      // Should be reduced to "I"
-      assertEquals(prettyPrint(reconstructed), "I");
+      // Reduce using the ring-based async path
+      const reduced = await evaluator.reduceAsync(expr, 100);
+      assertEquals(prettyPrint(reduced), "I");
       evaluator.terminate();
     },
   );
@@ -349,8 +374,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
         baseAddr !== undefined && baseAddr !== 0,
         "Arena should be initialized",
       );
-      const headerView = new Uint32Array(memory.buffer, baseAddr, 16);
-      const initialCapacity = headerView[1];
+      const headerView = new Uint32Array(memory.buffer, baseAddr, 32);
+      const initialCapacity = headerView[13];
 
       // Allocate many unique expressions to trigger arena growth
       // Each unique expression creates new nodes, so we need enough to exceed initial capacity
@@ -377,7 +402,6 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
         // This ensures each expression is unique while keeping them reasonably sized
         const symbolCount = (i % 20) + 1;
         const expr = randExpression(rs, symbolCount);
-
         const id = evaluator.toArena(expr);
 
         // Store every 100th expression for validation

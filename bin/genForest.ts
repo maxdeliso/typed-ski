@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --unstable-worker-options
+#!/usr/bin/env -S deno run --allow-read --allow-run --unstable-worker-options
 
 /**
  * SKI Evaluation Forest Generator
@@ -12,6 +12,7 @@ import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import {
   ParallelArenaEvaluatorWasm,
+  ResubmissionLimitExceededError,
 } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import type { EvaluationStep } from "../lib/shared/forestTypes.ts";
 
@@ -22,7 +23,6 @@ const memo = new Map<number, SKIExpression[]>();
 
 interface CLIArgs {
   symbolCount: number;
-  outputFile?: string;
   verbose: boolean;
   maxSteps?: number;
 }
@@ -89,20 +89,27 @@ function parseArgs(): CLIArgs {
     Deno.exit(1);
   }
 
-  const outputFile = nonFlagArgs[1];
+  if (nonFlagArgs.length > 1) {
+    console.error(
+      `Error: genForest writes to stdout; unexpected extra argument '${
+        nonFlagArgs[1]
+      }'`,
+    );
+    printHelp();
+    Deno.exit(1);
+  }
 
-  return { symbolCount, outputFile, verbose, maxSteps };
+  return { symbolCount, verbose, maxSteps };
 }
 
 function printHelp(): void {
   console.log(`SKI Evaluation Forest Generator v${VERSION}
 
 USAGE:
-    genForest <symbolCount> [outputFile] [options]
+    genForest <symbolCount> [options]
 
 ARGUMENTS:
     symbolCount    Number of terminal symbols (S/K/I) in each generated expression
-    outputFile     Optional output file path. If not provided, outputs to stdout
 
 OPTIONS:
     --verbose, -v      Enable verbose output
@@ -112,8 +119,8 @@ OPTIONS:
 
 EXAMPLES:
     genForest 3                    # Generate forest for 3 symbols, output to stdout
-    genForest 4 forest.jsonl       # Generate forest for 4 symbols, save to file
-    genForest 5 forest.jsonl -v   # Generate with verbose output
+    genForest 4 > forest.jsonl     # Generate forest for 4 symbols, save to file
+    genForest 5 -v > forest.jsonl  # Generate with verbose output
 
 OUTPUT FORMAT:
     JSONL (JSON Lines) format with one evaluation path per line, followed by global info.
@@ -144,105 +151,109 @@ function enumerateExpressions(leaves: number): SKIExpression[] {
   return result;
 }
 
-function evaluateExpression(
-  evaluator: ParallelArenaEvaluatorWasm,
-  expr: SKIExpression,
-  exprIndex: number,
-  total: number,
-  maxSteps: number,
-): {
+type EvalResult = {
   source: number;
   sink: number;
   steps: EvaluationStep[];
   hasCycle: boolean;
   hitStepLimit: boolean;
   arenaError: boolean;
+  hitSubmitLimit: boolean;
+};
+
+function initEvalState(
+  sourceArenaId: number,
+): {
+  source: number;
+  currentId: number;
+  seenIds: Set<number>;
+  historyQueue: number[];
+  steps: EvaluationStep[];
+  hasCycle: boolean;
+  hitStepLimit: boolean;
+  arenaError: boolean;
+  hitSubmitLimit: boolean;
+  done: boolean;
 } {
-  const exprStart = Date.now();
-  const curId = evaluator.toArena(expr);
+  return {
+    source: sourceArenaId,
+    currentId: sourceArenaId,
+    seenIds: new Set<number>([sourceArenaId]),
+    historyQueue: [sourceArenaId],
+    steps: [],
+    hasCycle: false,
+    hitStepLimit: false,
+    arenaError: false,
+    hitSubmitLimit: false,
+    done: false,
+  };
+}
 
-  // Track evaluation history for cycle detection (exact node ID matches only)
-  // Use a sliding window to prevent unbounded memory growth
+async function evaluateBatchParallel(
+  evaluator: ParallelArenaEvaluatorWasm,
+  sourceArenaId: number,
+  maxSteps: number,
+  onStep?: (stepsTaken: number) => void,
+): Promise<EvalResult> {
   const MAX_HISTORY_SIZE = 10000;
-  const seenIds = new Set<number>([curId]);
-  const historyQueue: number[] = [curId];
-  const pathSteps: EvaluationStep[] = [];
-  // Limit path storage to prevent unbounded memory growth
   const MAX_PATH_STEPS = 10000;
-  let hasCycle = false;
-  let currentId = curId;
 
-  // Manual evaluation with cycle detection
-  let hitStepLimit = false;
-  let arenaError = false;
-  for (let step = 0; step < maxSteps; step++) {
-    // Report progress for long-running evaluations
-    if (step > 0 && step % 10000 === 0) {
-      const exprElapsed = ((Date.now() - exprStart) / 1000).toFixed(1);
-      console.error(
-        `Expression ${exprIndex}/${total}: ${step} steps in ${exprElapsed}s...`,
-      );
-    }
+  const st = initEvalState(sourceArenaId);
+  let stepsTaken = 0;
 
-    try {
-      // Use direct arena step to avoid toArena/fromArena conversion overhead
-      const nextId = evaluator.stepOnceArena(currentId);
+  try {
+    for (let step = 0; step < maxSteps; step++) {
+      if (st.done) break;
+      const nextId = await evaluator.reduceArenaNodeIdAsync(st.currentId);
+      stepsTaken++;
+      onStep?.(stepsTaken);
 
-      // Check if no reduction occurred (same node ID returned)
-      if (nextId === currentId) {
-        break; // No more reduction possible
+      if (nextId === st.currentId) {
+        st.done = true; // normal form
+        break;
       }
-
-      // Check for exact cycle (same node ID seen before)
-      if (seenIds.has(nextId)) {
-        hasCycle = true;
+      if (st.seenIds.has(nextId)) {
+        st.hasCycle = true;
+        st.done = true;
         break;
       }
 
-      // Only store path steps up to a limit to prevent unbounded memory growth
-      if (pathSteps.length < MAX_PATH_STEPS) {
-        pathSteps.push({ from: currentId, to: nextId });
+      if (st.steps.length < MAX_PATH_STEPS) {
+        st.steps.push({ from: st.currentId, to: nextId });
       }
-      currentId = nextId;
 
-      // Maintain sliding window of seen IDs
-      seenIds.add(nextId);
-      historyQueue.push(nextId);
-      if (historyQueue.length > MAX_HISTORY_SIZE) {
-        const removed = historyQueue.shift()!;
-        // Remove from seenIds - we only track recent history for exact matches
-        // This is safe because we still check cycles against the full recent history
-        seenIds.delete(removed);
+      st.currentId = nextId;
+      st.seenIds.add(nextId);
+      st.historyQueue.push(nextId);
+      if (st.historyQueue.length > MAX_HISTORY_SIZE) {
+        const removed = st.historyQueue.shift()!;
+        st.seenIds.delete(removed);
       }
-    } catch (error) {
-      // Catch WASM errors (e.g., arena capacity exceeded, OOM, invalid node IDs)
-      arenaError = true;
-      const exprElapsed = ((Date.now() - exprStart) / 1000).toFixed(1);
-      console.error(
-        `Warning: Expression ${exprIndex}/${total} failed after ${step} steps in ${exprElapsed}s: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      break;
+    }
+
+    if (!st.done) {
+      st.hitStepLimit = true;
+      st.done = true;
+    }
+  } catch (error) {
+    // Check if this is a resubmission limit error
+    if (error instanceof ResubmissionLimitExceededError) {
+      st.hitSubmitLimit = true;
+      st.done = true;
+    } else {
+      st.arenaError = true;
+      st.done = true;
     }
   }
 
-  if (pathSteps.length >= maxSteps) {
-    hitStepLimit = true;
-    const exprElapsed = ((Date.now() - exprStart) / 1000).toFixed(1);
-    console.error(
-      `Warning: Expression ${exprIndex}/${total} hit step limit of ${maxSteps} after ${exprElapsed}s`,
-    );
-  }
-
-  const finalId = currentId;
   return {
-    source: curId,
-    sink: finalId,
-    steps: pathSteps,
-    hasCycle,
-    hitStepLimit,
-    arenaError,
+    source: st.source,
+    sink: st.currentId,
+    steps: st.steps,
+    hasCycle: st.hasCycle,
+    hitStepLimit: st.hitStepLimit,
+    arenaError: st.arenaError,
+    hitSubmitLimit: st.hitSubmitLimit,
   };
 }
 
@@ -260,70 +271,140 @@ export async function* generateEvaluationForest(
     console.error(
       `Processing ${total} expressions with ${symbolCount} symbols each using 8 workers...`,
     );
+
+    // Pre-convert all expressions to arena node IDs sequentially to ensure
+    // deterministic node ID assignment. This is critical for deterministic output.
+    console.error(
+      "Pre-converting expressions to arena nodes (deterministic order)...",
+    );
+    const allArenaIds: number[] = [];
+    for (let i = 0; i < total; i++) {
+      allArenaIds.push(evaluator.toArena(allExprs[i]));
+      if ((i + 1) % 1000 === 0) {
+        console.error(`  Converted ${i + 1}/${total} expressions...`);
+      }
+    }
+    console.error(`All ${total} expressions converted to arena nodes.`);
+
     const sources = new Set<number>();
     const sinks = new Set<number>();
 
-    // Process expressions in batches of 8 (one per worker)
-    const BATCH_SIZE = 8;
-    const STATUS_UPDATE_INTERVAL = 2000; // Update status every 2 seconds
+    // Configure workers to execute exactly one reduction step per submission.
+    // The per-expression step limit is enforced in JS.
+    evaluator.setMaxSteps(1);
 
-    for (let i = 0; i < allExprs.length; i += BATCH_SIZE) {
-      const batch = allExprs.slice(i, i + BATCH_SIZE);
-      const batchStartTime = Date.now();
+    // Sliding concurrency window: when one expression completes, immediately start another.
+    const CONCURRENCY = 8;
+    let nextIndex = 0;
+    let processed = 0;
 
-      // Start batch processing
-      const batchPromises = batch.map((expr, batchIdx) =>
-        Promise.resolve(evaluateExpression(
-          evaluator,
-          expr,
-          i + batchIdx + 1,
-          total,
-          maxSteps,
-        ))
+    type SlotState =
+      | { exprIndex: number; stepsTaken: number; startedAtMs: number }
+      | null;
+    const slots: SlotState[] = new Array(CONCURRENCY).fill(null);
+
+    const getRingStats = () =>
+      (evaluator as unknown as { getRingStatsSnapshot?: () => unknown })
+        .getRingStatsSnapshot?.();
+    const getDebugLockState = () => (evaluator.$.debugLockState
+      ? evaluator.$.debugLockState()
+      : undefined);
+
+    const statusInterval = setInterval(() => {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const inFlight = slots.filter(Boolean).length;
+      const slotSummary = slots
+        .map(
+          (s, i) => (s ? `${i}:${s.exprIndex + 1}@${s.stepsTaken}` : `${i}:-`),
+        )
+        .join(" ");
+      console.error(
+        `[Status] Processed: ${processed}/${total} (${
+          ((processed / total) * 100).toFixed(2)
+        }%) | In flight: ${inFlight}/${CONCURRENCY} | ` +
+          `Total time: ${elapsed}s | Slots: ${slotSummary} | ` +
+          `Ring: ${JSON.stringify(getRingStats() ?? {})} | ` +
+          `resize_seq: ${getDebugLockState() ?? "n/a"}`,
       );
+    }, 2000);
 
-      // Show status while processing
-      const showStatus = () => {
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        const batchElapsed = ((Date.now() - batchStartTime) / 1000).toFixed(1);
-        const processed = i;
-        const inFlight = batch.length;
-        console.error(
-          `[Status] Processed: ${processed}/${total} (${
-            ((processed / total) * 100).toFixed(2)
-          }%) | ` +
-            `In flight: ${inFlight} | Total time: ${elapsed}s | Batch time: ${batchElapsed}s`,
-        );
+    try {
+      type Done = {
+        slot: number;
+        exprIndex: number;
+        result: EvalResult;
+      };
+      type InFlightEntry = {
+        slot: number;
+        exprIndex: number;
+        promise: Promise<Done>;
       };
 
-      // Show initial status
-      showStatus();
+      let inFlights: InFlightEntry[] = [];
 
-      // Set up periodic status updates
-      const statusInterval = setInterval(showStatus, STATUS_UPDATE_INTERVAL);
+      const startSlot = (slot: number) => {
+        if (nextIndex >= total) {
+          return;
+        }
+        const exprIndex = nextIndex++;
+        slots[slot] = { exprIndex, stepsTaken: 0, startedAtMs: Date.now() };
 
-      const results = await Promise.all(batchPromises);
-      clearInterval(statusInterval);
-
-      // Show final status for this batch
-      showStatus();
-
-      for (const result of results) {
-        sources.add(result.source);
-        sinks.add(result.sink);
-        yield JSON.stringify(result);
-      }
-
-      // Progress reporting
-      const processed = Math.min(i + BATCH_SIZE, total);
-      if (processed % 1000 === 0 || processed === total) {
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        console.error(
-          `Processed ${processed} / ${total} (${
-            ((processed / total) * 100).toFixed(2)
-          }%) in ${elapsed}s`,
+        const base = evaluateBatchParallel(
+          evaluator,
+          allArenaIds[exprIndex],
+          maxSteps,
+          (stepsTaken) => {
+            const s = slots[slot];
+            if (s) {
+              s.stepsTaken = stepsTaken;
+            }
+          },
         );
+
+        const promise = base.then((result) => ({ slot, exprIndex, result }));
+        inFlights.push({ slot, exprIndex, promise });
+      };
+
+      for (let slot = 0; slot < CONCURRENCY; slot++) {
+        startSlot(slot);
       }
+
+      // Buffer for results to ensure deterministic output order
+      const resultBuffer = new Map<number, EvalResult>();
+      let nextExpectedIndex = 0;
+
+      while (inFlights.length > 0 || resultBuffer.size > 0) {
+        // Wait for next completion if we have in-flight work
+        if (inFlights.length > 0) {
+          const done = await Promise.race(
+            inFlights.map((e) =>
+              e.promise
+            ),
+          );
+          inFlights = inFlights.filter((e) => e.slot !== done.slot);
+
+          slots[done.slot] = null;
+          processed++;
+          sources.add(done.result.source);
+          sinks.add(done.result.sink);
+
+          // Buffer the result to maintain deterministic output order
+          resultBuffer.set(done.exprIndex, done.result);
+
+          // backfill this slot if more work remains
+          startSlot(done.slot);
+        }
+
+        // Yield results in deterministic order (by exprIndex)
+        while (resultBuffer.has(nextExpectedIndex)) {
+          const result = resultBuffer.get(nextExpectedIndex)!;
+          resultBuffer.delete(nextExpectedIndex);
+          yield JSON.stringify(result);
+          nextExpectedIndex++;
+        }
+      }
+    } finally {
+      clearInterval(statusInterval);
     }
 
     console.error("Dumping arena (streaming)...");
@@ -384,49 +465,6 @@ export async function* generateEvaluationForest(
   }
 }
 
-async function streamToFile(
-  symbolCount: number,
-  outputPath: string,
-  verbose: boolean,
-  maxSteps: number = 100000,
-) {
-  if (verbose) {
-    console.error(`Writing output to ${outputPath}...`);
-  }
-
-  const file = await Deno.open(outputPath, {
-    write: true,
-    create: true,
-    truncate: true,
-  });
-  const encoder = new TextEncoder();
-
-  try {
-    let inGlobalInfo = false;
-    for await (const data of generateEvaluationForest(symbolCount, maxSteps)) {
-      // Check if this is the start of global info
-      if (data.startsWith('{"type":"global"')) {
-        inGlobalInfo = true;
-        await file.write(encoder.encode(data));
-      } else if (inGlobalInfo) {
-        // Continuation chunk of global info - no newline
-        await file.write(encoder.encode(data));
-        // Check if this is the end of global info (ends with })
-        if (data.endsWith("}")) {
-          await file.write(encoder.encode("\n"));
-          inGlobalInfo = false;
-        }
-      } else {
-        // Regular evaluation path - add newline
-        await file.write(encoder.encode(data + "\n"));
-      }
-    }
-    console.error(`Successfully wrote evaluation forest to ${outputPath}`);
-  } finally {
-    file.close();
-  }
-}
-
 async function streamToStdout(
   symbolCount: number,
   verbose: boolean,
@@ -458,23 +496,16 @@ async function streamToStdout(
 }
 
 async function main(): Promise<void> {
-  const { symbolCount, outputFile, verbose, maxSteps = 100000 } = parseArgs();
+  const { symbolCount, verbose, maxSteps = 100000 } = parseArgs();
 
   if (verbose) {
     console.error(
-      `Arguments: symbolCount=${symbolCount}, outputFile=${
-        outputFile || "stdout"
-      }, maxSteps=${maxSteps}`,
+      `Arguments: symbolCount=${symbolCount}, maxSteps=${maxSteps}`,
     );
   }
 
   console.error("Starting processing...");
-
-  if (outputFile) {
-    await streamToFile(symbolCount, outputFile, verbose, maxSteps);
-  } else {
-    await streamToStdout(symbolCount, verbose, maxSteps);
-  }
+  await streamToStdout(symbolCount, verbose, maxSteps);
 }
 
 if (import.meta.main) {

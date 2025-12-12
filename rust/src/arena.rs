@@ -28,6 +28,12 @@ const ARENA_MAGIC: u32 = 0x534B_4941;
 const INITIAL_CAP: u32 = 1 << 20; // ~1,048,576 nodes
 const MAX_CAP: u32 = 1 << 27; // 134,217,728 nodes (~3.2GB at ~24B/node, fits under 4GB limit)
 
+// Lock striping constants
+#[cfg(target_arch = "wasm32")]
+const STRIPE_COUNT: usize = 64; // Must be power of 2
+#[cfg(target_arch = "wasm32")]
+const STRIPE_MASK: u32 = (STRIPE_COUNT as u32) - 1;
+
 /// Global arena base address (instance-local).
 /// - In SAB Mode: Points to shared memory provided by Host.
 /// - In Heap Mode: Points to local memory we allocated lazily.
@@ -52,10 +58,25 @@ static mut LOCK_ACQUISITION_COUNT: u32 = 0;
 #[allow(static_mut_refs)]
 static mut LOCK_RELEASE_COUNT: u32 = 0;
 
+/// Thread ID counter for RNG seed variance
+/// Uses AtomicU32 to avoid UB from static mut data races
+#[cfg(target_arch = "wasm32")]
+static THREAD_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
+
 #[cfg(target_arch = "wasm32")]
 use core::arch::wasm32;
 #[cfg(target_arch = "wasm32")]
 use core::sync::atomic::{AtomicU32, Ordering};
+
+/// Import from JavaScript to check if this thread can block.
+/// This is instance-local (not shared memory), so each WASM instance
+/// (main thread vs workers) can provide different values.
+/// - Returns 0: Main thread (cannot block, must spin)
+/// - Returns 1: Worker thread (can block using memory_atomic_wait32)
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn js_allow_block() -> i32;
+}
 
 
 /// Fast 32-bit integer scrambler with good distribution properties
@@ -111,9 +132,17 @@ fn get_arena() -> *mut SabHeader {
 #[cfg(target_arch = "wasm32")]
 #[repr(C, align(64))]
 struct SabHeader {
-    global_lock: u32,   // 0 = unlocked, 1 = locked (no contention), 2 = locked (contention)
+    // Lock striping: array of 64 locks (64 * 4 bytes = 256 bytes)
+    // Each lock uses tri-state: 0 = unlocked, 1 = locked (no contention), 2 = locked (contention)
+    stripe_locks: [u32; STRIPE_COUNT],
+    // Global lock specifically for RESIZING (The "Stop the World" lock)
+    resize_lock: u32,   // 0 = unlocked, 1 = locked (no contention), 2 = locked (contention)
+    // Sequence lock for lock-free reads during resize
+    // Incremented BEFORE resize starts (odd) and AFTER ends (even).
+    // Readers check this is even and unchanged.
+    resize_seq: u32,    // Atomic access via atomic_load_u32/atomic_store_u32
     capacity: u32,      // fixed capacity in nodes (max: MAX_CAP = 1<<27 = 134,217,728)
-    top: u32,           // next free node index (max: capacity - 1)
+    top: u32,           // next free node index (max: capacity - 1) - now accessed via atomic_fetch_add
     bucket_mask: u32,   // Dynamic mask (capacity - 1) for hash bucket selection
     // Byte offsets from start of header (max: ~2.95 GB at MAX_CAP, fits in u32)
     offset_kind: u32,
@@ -157,7 +186,9 @@ impl SabHeader {
         let offset_term_cache = offset_buckets + 4 * buckets_count;
 
         SabHeader {
-            global_lock: 0,
+            stripe_locks: [0; STRIPE_COUNT],
+            resize_lock: 0,
+            resize_seq: 0,  // Start at even (stable state)
             capacity,
             top: 0,
             bucket_mask: capacity - 1, // Assumes capacity is power of 2
@@ -174,126 +205,34 @@ impl SabHeader {
         }
     }
 
+    // Lock a specific stripe
     #[inline(always)]
-    fn lock(&mut self) {
-        let ptr = &mut self.global_lock as *mut u32;
-
-        // 1. FAST PATH: Try to grab the lock assuming no contention.
-        // We strictly expect 0. If it's 1 or 2, we go to slow path.
-        if unsafe { atomic_cxchg_u32(ptr, 0, 1) } == 0 {
-            unsafe { LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1); }
-            return;
-        }
-
-        // 2. SLOW PATH: Contention detected.
-        self.lock_slow(ptr);
-
-        unsafe { LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1); }
+    fn lock_stripe(&mut self, idx: usize) {
+        let ptr = &mut self.stripe_locks[idx] as *mut u32;
+        wait_lock(ptr);
     }
 
-    // Cold function to keep the hot path (lock) small for inlining
-    #[cold]
-    fn lock_slow(&mut self, ptr: *mut u32) {
-        let mut spin_count = 0;
-        let mut rng_seed = ptr as u32; // Poor man's seed based on address
-
-        loop {
-            // A. SPIN PHASE
-            // We spin for a short duration to catch locks held for tiny amounts of time.
-            // This avoids the overhead of the 'wait' syscall.
-            if spin_count < 100 {
-                spin_count += 1;
-
-                // Reload value to check state
-                let state = unsafe { atomic_load_u32(ptr) };
-
-                // Optimization: Don't try to CAS if we see it's locked.
-                // Just spin-loop. This reduces cache coherency traffic (MESI:
-                // Modified, Exclusive, Shared, Invalid cache coherency protocol).
-                if state != 0 {
-                    core::hint::spin_loop();
-                    continue;
-                }
-
-                // Try to grab it again (0 -> 1)
-                if unsafe { atomic_cxchg_u32(ptr, 0, 1) } == 0 {
-                    return;
-                }
-
-                // Random Backoff (Ethernet style) to prevent thundering herd
-                // Simple Xorshift or just using the loop counter + address
-                rng_seed ^= rng_seed << 13;
-                rng_seed ^= rng_seed >> 17;
-                rng_seed ^= rng_seed << 5;
-
-                // Variable spin loop based on "randomness"
-                let backoff = (rng_seed % 10) + 1;
-                for _ in 0..backoff {
-                    core::hint::spin_loop();
-                }
-                continue;
-            }
-
-            // B. PARK PHASE (The "Descheduling")
-            // If we are still here, the lock is held for a "long" time.
-            // We must mark the state as 2 (Contested) so the unlocker knows to wake us.
-
-            let state = unsafe { atomic_load_u32(ptr) };
-            if state == 0 {
-                // Just in case it unlocked while we were preparing to sleep
-                if unsafe { atomic_cxchg_u32(ptr, 0, 1) } == 0 { return; }
-                continue;
-            }
-
-            // If state is 1, upgrade to 2 (signal "I am going to sleep")
-            if state == 1 {
-                if unsafe { atomic_cxchg_u32(ptr, 1, 2) } != 1 {
-                    continue; // State changed, retry loop
-                }
-            }
-
-            // C. SLEEP
-            // Execute 'memory.atomic.wait32'.
-            // This suspends the thread execution until:
-            // 1. Another thread calls memory.atomic.notify on this address.
-            // 2. The value at the address is no longer equal to 2 (race check).
-            // 3. Optional timeout (we pass -1 for infinite).
-            unsafe {
-                // Must cast to *mut i32 for the intrinsic
-                let ptr_i32 = ptr as *mut i32;
-                // Params: (ptr, expected_value, timeout_ns)
-                wasm32::memory_atomic_wait32(ptr_i32, 2, -1);
-            }
-
-            // After waking up, we loop back to start.
-            // We do NOT assume we have the lock. We must try to CAS 0->2 or 0->1 again.
-            // Reset spin count to try spinning briefly again upon wake-up.
-            spin_count = 0;
-        }
-    }
-
+    // Unlock a specific stripe
     #[inline(always)]
-    fn unlock(&mut self) {
-        let ptr = &mut self.global_lock as *mut u32;
-
-        // 1. FAST RELEASE
-        // Atomically swap 0. We need the previous value to know if we need to wake anyone.
-        // We use xchg (swap) instead of store to strictly serialize.
-        // If previous was 1, no one was waiting. We are done.
-        let prev = unsafe { atomic_xchg_u32(ptr, 0) };
-
-        // 2. WAKE UP (If needed)
-        // If previous value was 2, it means threads are sleeping in the kernel.
-        if prev == 2 {
-            unsafe {
-                let ptr_i32 = ptr as *mut i32;
-                // Wake up 1 waiter. (Passing u32::MAX would wake all -> thundering herd).
-                wasm32::memory_atomic_notify(ptr_i32, 1);
-            }
-        }
-
-        unsafe { LOCK_RELEASE_COUNT = LOCK_RELEASE_COUNT.wrapping_add(1); }
+    fn unlock_stripe(&mut self, idx: usize) {
+        let ptr = &mut self.stripe_locks[idx] as *mut u32;
+        notify_unlock(ptr);
     }
+
+    // Lock the resize mutex
+    #[inline(always)]
+    fn lock_resize_mutex(&mut self) {
+        let ptr = &mut self.resize_lock as *mut u32;
+        wait_lock(ptr);
+    }
+
+    // Unlock the resize mutex
+    #[inline(always)]
+    fn unlock_resize_mutex(&mut self) {
+        let ptr = &mut self.resize_lock as *mut u32;
+        notify_unlock(ptr);
+    }
+
 
     #[inline(always)]
     fn load_top(&self) -> u32 {
@@ -368,6 +307,151 @@ fn atomic_cxchg_u32(ptr: *mut u32, current: u32, new: u32) -> u32 {
 unsafe fn atomic_xchg_u32(ptr: *mut u32, new: u32) -> u32 {
     // compiles to i32.atomic.rmw.xchg
     (&*(ptr as *const AtomicU32)).swap(new, Ordering::SeqCst)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[inline(always)]
+unsafe fn atomic_fetch_add_u32(ptr: *mut u32, val: u32) -> u32 {
+    // compiles to i32.atomic.rmw.add
+    (&*(ptr as *const AtomicU32)).fetch_add(val, Ordering::SeqCst)
+}
+
+// Generic lock function that works with any lock pointer
+#[cfg(target_arch = "wasm32")]
+#[inline(always)]
+fn wait_lock(ptr: *mut u32) {
+    // 1. FAST PATH: Try to grab the lock assuming no contention.
+    // We strictly expect 0. If it's 1 or 2, we go to slow path.
+    if atomic_cxchg_u32(ptr, 0, 1) == 0 {
+        unsafe { LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1); }
+        return;
+    }
+
+    // 2. SLOW PATH: Contention detected.
+    // Check if we're on main thread before entering slow path
+    let allow = unsafe { js_allow_block() };
+    if allow == 0 {
+        // Main thread: use spin-only version
+        wait_lock_spin_only(ptr);
+    } else {
+        // Worker thread: can use blocking wait
+        wait_lock_slow(ptr);
+    }
+
+    unsafe { LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1); }
+}
+
+// Spin-only version for main thread (never blocks)
+#[cfg(target_arch = "wasm32")]
+#[cold]
+fn wait_lock_spin_only(ptr: *mut u32) {
+    loop {
+        let state = atomic_load_u32(ptr);
+        if state == 0 {
+            if atomic_cxchg_u32(ptr, 0, 1) == 0 {
+                return;
+            }
+        }
+        core::hint::spin_loop();
+    }
+}
+
+// Cold function to keep the hot path (wait_lock) small for inlining
+#[cfg(target_arch = "wasm32")]
+#[cold]
+fn wait_lock_slow(ptr: *mut u32) {
+    let mut spin_count = 0;
+    // Mix lock address with thread ID for variance
+    // Use AtomicU32 to safely increment across threads
+    let thread_id = THREAD_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut rng_seed = (ptr as u32).wrapping_mul(0x9e3779b9).wrapping_add(thread_id);
+
+    loop {
+        // A. SPIN PHASE
+        if spin_count < 100 {
+            spin_count += 1;
+            let state = atomic_load_u32(ptr);
+            if state != 0 {
+                core::hint::spin_loop();
+                continue;
+            }
+
+            // DEADLOCK FIX:
+            // In the slow path, we MUST assume contention.
+            // If we acquire the lock (0 -> ?), we set it to 2 (Contended).
+            // This ensures that when we unlock, we send a notify if anyone else is waiting.
+            // Setting it to 1 would "erase" the knowledge of other sleepers.
+            if atomic_cxchg_u32(ptr, 0, 2) == 0 {
+                return;
+            }
+
+            // Random Backoff
+            rng_seed ^= rng_seed << 13;
+            rng_seed ^= rng_seed >> 17;
+            rng_seed ^= rng_seed << 5;
+            let backoff = (rng_seed % 10) + 1;
+            for _ in 0..backoff {
+                core::hint::spin_loop();
+            }
+            continue;
+        }
+
+        // B. PARK PHASE
+        let state = atomic_load_u32(ptr);
+        if state == 0 {
+            // Try to acquire with '2' to preserve wakeup chain
+            if atomic_cxchg_u32(ptr, 0, 2) == 0 { return; }
+            continue;
+        }
+        if state == 1 {
+            if atomic_cxchg_u32(ptr, 1, 2) != 1 {
+                continue;
+            }
+        }
+
+        // C. SLEEP
+        // Execute 'memory.atomic.wait32'.
+        // This suspends the thread execution until:
+        // 1. Another thread calls memory.atomic.notify on this address.
+        // 2. The value at the address is no longer equal to 2 (race check).
+        // 3. Optional timeout (we pass -1 for infinite).
+        // NOTE: This function is only called from wait_lock() after verifying
+        // js_allow_block() returned 1 (Worker thread), so blocking is safe here.
+        unsafe {
+                // Must cast to *mut i32 for the intrinsic
+                let ptr_i32 = ptr as *mut i32;
+                // Params: (ptr, expected_value, timeout_ns)
+                core::arch::wasm32::memory_atomic_wait32(ptr_i32, 2, -1);
+        }
+
+        // After waking up, we loop back to start.
+        // We do NOT assume we have the lock. We must try to CAS 0->2 or 0->1 again.
+        // Reset spin count to try spinning briefly again upon wake-up.
+        spin_count = 0;
+    }
+}
+
+// Generic unlock function that works with any lock pointer
+#[cfg(target_arch = "wasm32")]
+#[inline(always)]
+fn notify_unlock(ptr: *mut u32) {
+    // 1. FAST RELEASE
+    // Atomically swap 0. We need the previous value to know if we need to wake anyone.
+    // We use xchg (swap) instead of store to strictly serialize.
+    // If previous was 1, no one was waiting. We are done.
+    let prev = unsafe { atomic_xchg_u32(ptr, 0) };
+
+    // 2. WAKE UP (If needed)
+    // If previous value was 2, it means threads are sleeping in the kernel.
+    if prev == 2 {
+        unsafe {
+            let ptr_i32 = ptr as *mut i32;
+            // Wake up 1 waiter. (Passing u32::MAX would wake all -> thundering herd).
+            core::arch::wasm32::memory_atomic_notify(ptr_i32, 1);
+        }
+    }
+
+    unsafe { LOCK_RELEASE_COUNT = LOCK_RELEASE_COUNT.wrapping_add(1); }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -478,7 +562,64 @@ unsafe fn allocate_raw_arena(capacity: u32) -> *mut SabHeader {
     header_ptr
 }
 
-/// Grow the arena to a new capacity. Must be called with the lock held.
+/// Perform a global resize with "Stop The World" synchronization.
+/// This acquires all stripe locks and the resize lock to safely grow the arena.
+#[cfg(target_arch = "wasm32")]
+unsafe fn perform_global_resize(header_ptr: *mut SabHeader) {
+    let header = &mut *header_ptr;
+
+    // 1. Acquire the specific RESIZE lock
+    // This blocks other resizers immediately.
+    header.lock_resize_mutex();
+
+    // 2. ACQUIRE ALL STRIPES (Stop The World)
+    // We must acquire them in order (0..63) to prevent deadlocks.
+    for i in 0..STRIPE_COUNT {
+        header.lock_stripe(i);
+    }
+
+    // 3. Double Check Capacity (Someone else might have resized just before us)
+    let top = atomic_load_u32(&mut header.top as *mut u32);
+    if top < header.capacity {
+        // False alarm, someone else grew it.
+        // Just release everything (no need to touch seq lock since we didn't start resize).
+        for i in 0..STRIPE_COUNT {
+            header.unlock_stripe(i);
+        }
+        header.unlock_resize_mutex();
+        return;
+    }
+
+    // 4. Increment SeqLock to ODD (signal resize in progress)
+    let seq_ptr = &mut header.resize_seq as *mut u32;
+    let old_seq = atomic_load_u32(seq_ptr);
+    // Use Release ordering on store to ensure visibility
+    unsafe {
+        let seq_atomic = seq_ptr as *mut AtomicU32;
+        (&*seq_atomic).store(old_seq.wrapping_add(1), Ordering::Release); // Make it odd
+    }
+
+    // 5. Do the Resize
+    // Since we hold ALL locks, we are effectively single-threaded here.
+    grow_arena(header_ptr);
+
+    // 6. Increment SeqLock to EVEN (signal resize complete)
+    let new_seq = atomic_load_u32(seq_ptr);
+    // Use Release ordering on store to ensure visibility
+    unsafe {
+        let seq_atomic = seq_ptr as *mut AtomicU32;
+        (&*seq_atomic).store(new_seq.wrapping_add(1), Ordering::Release); // Make it even
+    }
+
+    // 7. Release ALL locks (in reverse order for symmetry, though not strictly required)
+    for i in 0..STRIPE_COUNT {
+        header.unlock_stripe(i);
+    }
+
+    header.unlock_resize_mutex();
+}
+
+/// Grow the arena to a new capacity. Must be called with ALL locks held (via perform_global_resize).
 /// Returns true if growth succeeded, false if it failed (e.g., already at MAX_CAP or OOM).
 /// This function rebuilds the hash table (buckets/next_idx) instead of moving them,
 /// which maintains O(1) performance at any scale.
@@ -599,9 +740,17 @@ unsafe fn grow_arena(header_ptr: *mut SabHeader) -> bool {
     // This adapts to the new bucket count
     let hash_ptr = hash32_array_ptr(header_ptr);
     let next_ptr = next_idx_array_ptr(header_ptr);
+    let kind_ptr = kind_array_ptr(header_ptr);
     let new_mask = new_capacity - 1;
 
     for i in 0..top {
+        // SKIP HOLES: Nodes that were allocated (incremented top) but never initialized
+        // These occur when atomic_fetch_add increments top beyond capacity before resize
+        let kind = *kind_ptr.add(i as usize);
+        if kind == 0 {
+            continue; // Skip uninitialized/hole nodes
+        }
+
         let h = *hash_ptr.add(i as usize);
         let b = (h & new_mask) as usize;
 
@@ -737,8 +886,8 @@ pub extern "C" fn debugLockState() -> u32 {
         }
         let header_ptr = ARENA_BASE_ADDR as *mut SabHeader;
         let header = &*header_ptr;
-        let lock_ptr = &header.global_lock as *const u32 as *mut u32;
-        atomic_load_u32(lock_ptr) // Returns 0 if unlocked, 1 if locked
+        let lock_ptr = &header.resize_lock as *const u32 as *mut u32;
+        atomic_load_u32(lock_ptr) // Returns 0 if unlocked, 1 if locked (no contention), 2 if locked (contention)
     }
 }
 
@@ -753,6 +902,7 @@ pub extern "C" fn debugLockState() -> u32 {
 pub extern "C" fn getArenaMode() -> u32 {
     unsafe { ARENA_MODE }
 }
+
 
 #[cfg(target_arch = "wasm32")]
 #[no_mangle]
@@ -831,16 +981,40 @@ pub extern "C" fn kindOf(n: u32) -> u32 {
         let header_ptr = get_arena();
         unsafe {
             if ARENA_MODE == 1 {
-                // SAB mode: acquire lock for consistency
-                let header = &mut *header_ptr;
-                header.lock();
-                let result = if n >= header.capacity {
-                    0
-                } else {
-                    *kind_array_ptr(header_ptr).add(n as usize) as u32
-                };
-                header.unlock();
-                result
+                // SAB mode: lock-free read using SeqLock
+                let header = &*header_ptr;
+                loop {
+                    // 1. Read Seq (Acquire)
+                    let seq_ptr = &header.resize_seq as *const u32 as *mut u32;
+                    let seq = atomic_load_u32(seq_ptr);
+
+                    // 2. If odd, a resize is happening. Wait/Spin.
+                    if seq & 1 == 1 {
+                        core::hint::spin_loop();
+                        continue;
+                    }
+
+                    // 3. Check Bounds (Optimistic)
+                    // Note: We use relaxed loads for capacity because the fence in 'seq' protects us
+                    let cap_ptr = &header.capacity as *const u32 as *mut u32;
+                    let cap = atomic_load_u32(cap_ptr);
+                    if n >= cap {
+                        return 0;
+                    }
+
+                    // 4. Read Data
+                    let val = *kind_array_ptr(header_ptr).add(n as usize) as u32;
+
+                    // 5. Verify Seq (Acquire/Fence)
+                    // If seq changed, our read (step 4) might have been invalid/garbage. Retry.
+                    core::sync::atomic::fence(Ordering::Acquire);
+                    let current_seq = atomic_load_u32(seq_ptr);
+
+                    if current_seq == seq {
+                        return val;
+                    }
+                    // Seq changed, retry
+                }
             } else {
                 // Heap mode: no lock needed (single-threaded)
                 let header = &*header_ptr;
@@ -866,16 +1040,27 @@ pub extern "C" fn symOf(n: u32) -> u32 {
         let header_ptr = get_arena();
         unsafe {
             if ARENA_MODE == 1 {
-                // SAB mode: acquire lock for consistency
-                let header = &mut *header_ptr;
-                header.lock();
-                let result = if n >= header.capacity {
-                    0
-                } else {
-                    *sym_array_ptr(header_ptr).add(n as usize) as u32
-                };
-                header.unlock();
-                result
+                // SAB mode: lock-free read using SeqLock
+                let header = &*header_ptr;
+                loop {
+                    let seq_ptr = &header.resize_seq as *const u32 as *mut u32;
+                    let seq = atomic_load_u32(seq_ptr);
+                    if seq & 1 == 1 {
+                        core::hint::spin_loop();
+                        continue;
+                    }
+                    let cap_ptr = &header.capacity as *const u32 as *mut u32;
+                    let cap = atomic_load_u32(cap_ptr);
+                    if n >= cap {
+                        return 0;
+                    }
+                    let val = *sym_array_ptr(header_ptr).add(n as usize) as u32;
+                    core::sync::atomic::fence(Ordering::Acquire);
+                    let current_seq = atomic_load_u32(seq_ptr);
+                    if current_seq == seq {
+                        return val;
+                    }
+                }
             } else {
                 // Heap mode: no lock needed (single-threaded)
                 let header = &*header_ptr;
@@ -901,16 +1086,27 @@ pub extern "C" fn leftOf(n: u32) -> u32 {
         let header_ptr = get_arena();
         unsafe {
             if ARENA_MODE == 1 {
-                // SAB mode: acquire lock for consistency
-                let header = &mut *header_ptr;
-                header.lock();
-                let result = if n >= header.capacity {
-                    0
-                } else {
-                    *left_id_array_ptr(header_ptr).add(n as usize)
-                };
-                header.unlock();
-                result
+                // SAB mode: lock-free read using SeqLock
+                let header = &*header_ptr;
+                loop {
+                    let seq_ptr = &header.resize_seq as *const u32 as *mut u32;
+                    let seq = atomic_load_u32(seq_ptr);
+                    if seq & 1 == 1 {
+                        core::hint::spin_loop();
+                        continue;
+                    }
+                    let cap_ptr = &header.capacity as *const u32 as *mut u32;
+                    let cap = atomic_load_u32(cap_ptr);
+                    if n >= cap {
+                        return 0;
+                    }
+                    let val = *left_id_array_ptr(header_ptr).add(n as usize);
+                    core::sync::atomic::fence(Ordering::Acquire);
+                    let current_seq = atomic_load_u32(seq_ptr);
+                    if current_seq == seq {
+                        return val;
+                    }
+                }
             } else {
                 // Heap mode: no lock needed (single-threaded)
                 let header = &*header_ptr;
@@ -936,16 +1132,27 @@ pub extern "C" fn rightOf(n: u32) -> u32 {
         let header_ptr = get_arena();
         unsafe {
             if ARENA_MODE == 1 {
-                // SAB mode: acquire lock for consistency
-                let header = &mut *header_ptr;
-                header.lock();
-                let result = if n >= header.capacity {
-                    0
-                } else {
-                    *right_id_array_ptr(header_ptr).add(n as usize)
-                };
-                header.unlock();
-                result
+                // SAB mode: lock-free read using SeqLock
+                let header = &*header_ptr;
+                loop {
+                    let seq_ptr = &header.resize_seq as *const u32 as *mut u32;
+                    let seq = atomic_load_u32(seq_ptr);
+                    if seq & 1 == 1 {
+                        core::hint::spin_loop();
+                        continue;
+                    }
+                    let cap_ptr = &header.capacity as *const u32 as *mut u32;
+                    let cap = atomic_load_u32(cap_ptr);
+                    if n >= cap {
+                        return 0;
+                    }
+                    let val = *right_id_array_ptr(header_ptr).add(n as usize);
+                    core::sync::atomic::fence(Ordering::Acquire);
+                    let current_seq = atomic_load_u32(seq_ptr);
+                    if current_seq == seq {
+                        return val;
+                    }
+                }
             } else {
                 // Heap mode: no lock needed (single-threaded)
                 let header = &*header_ptr;
@@ -970,7 +1177,12 @@ pub extern "C" fn reset() {
     {
         let header_ptr = get_arena();
         let header = unsafe { &mut *header_ptr };
-        header.lock();
+        // Acquire all stripe locks for reset (similar to resize)
+        header.lock_resize_mutex();
+        for i in 0..STRIPE_COUNT {
+            header.lock_stripe(i);
+        }
+
         header.store_top(0);
 
         let buckets_ptr = buckets_array_ptr(header_ptr);
@@ -985,7 +1197,10 @@ pub extern "C" fn reset() {
             unsafe { *cache_ptr.add(i) = EMPTY; }
         }
 
-        header.unlock();
+        for i in 0..STRIPE_COUNT {
+            header.unlock_stripe(i);
+        }
+        header.unlock_resize_mutex();
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -999,23 +1214,22 @@ pub extern "C" fn allocTerminal(s: u32) -> u32 {
     {
         let header_ptr = get_arena();
         let header = unsafe { &mut *header_ptr };
-        header.lock();
+        // Use resize lock for allocTerminal (simpler, less frequent)
+        header.lock_resize_mutex();
 
         let mut capacity = header.capacity;
         let mut top = header.load_top();
         if top >= capacity {
             // Try to grow the arena
-            if !unsafe { grow_arena(header_ptr) } {
-                header.unlock();
-                wasm32::unreachable(); // Fatal: capacity exceeded and can't grow
-            }
-            // After growing, reload capacity and top from updated header
-            // We can't use header directly here since grow_arena may have modified it
-            // So we reload through the pointer
-            capacity = unsafe { (*header_ptr).capacity };
-            top = unsafe { (*header_ptr).load_top() };
+            header.unlock_resize_mutex();
+            unsafe { perform_global_resize(header_ptr); }
+            // Retry after resize
+            let header = unsafe { &mut *header_ptr };
+            header.lock_resize_mutex();
+            capacity = header.capacity;
+            top = header.load_top();
             if top >= capacity {
-                header.unlock();
+                header.unlock_resize_mutex();
                 wasm32::unreachable(); // Still full after growth (shouldn't happen)
             }
         }
@@ -1024,7 +1238,7 @@ pub extern "C" fn allocTerminal(s: u32) -> u32 {
             let cache_ptr = term_cache_array_ptr(header_ptr);
             let cached = unsafe { *cache_ptr.add(s as usize) };
             if cached != EMPTY {
-                header.unlock();
+                header.unlock_resize_mutex();
                 return cached;
             }
         }
@@ -1043,7 +1257,7 @@ pub extern "C" fn allocTerminal(s: u32) -> u32 {
             unsafe { *cache_ptr.add(s as usize) = id; }
         }
 
-        header.unlock();
+        header.unlock_resize_mutex();
         id
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -1058,135 +1272,148 @@ pub extern "C" fn allocCons(l: u32, r: u32) -> u32 {
     #[cfg(target_arch = "wasm32")]
     {
         let header_ptr = get_arena();
-        let header = unsafe { &*header_ptr }; // Immutable reference for optimistic read
+        // We use raw pointer offsets to avoid borrowing issues
 
-        // --- STEP 1: PRECOMPUTE (Hash) ---
-        // We can read mask without lock because it only changes during resize (which takes a lock).
-        // Technically racy during resize, but we catch that in the fallback.
-        let mask = unsafe { (*header_ptr).bucket_mask };
-
-        // Pointers for READ-ONLY access (safe due to SoA layout)
+        // --- PRE-CALCULATION ---
+        // Calculate hash and stripe index immediately
         let hash_ptr = hash32_array_ptr(header_ptr);
         let hash_l = unsafe { *hash_ptr.add(l as usize) };
         let hash_r = unsafe { *hash_ptr.add(r as usize) };
         let h = mix(hash_l, hash_r);
-        let b = (h & mask) as usize;
 
-        // --- STEP 2: OPTIMISTIC READ (No Lock) ---
-        // "Verify the original unstable data"
+        // Map hash to a lock index (0..63)
+        let stripe_idx = (h & STRIPE_MASK) as usize;
+
+        // --- PHASE 1: OPTIMISTIC READ (Lock-Free) ---
+        // (Same as before: try to find it without locking anything)
+        // But we must check the SeqLock to avoid races with resize
         unsafe {
-            let mut current = header.load_bucket_atomic(b);
-            let left_ptr = left_id_array_ptr(header_ptr);
-            let right_ptr = right_id_array_ptr(header_ptr);
+            let header = &*header_ptr;
+            let seq_ptr = &header.resize_seq as *const u32 as *mut u32;
 
-            // Limit the walk to prevent infinite loops if the chain is being resized crazily
-            // (though normally resize builds a new arena, so pointers remain valid in old space)
-            let mut attempts = 0;
+            // Read seq before starting
+            let seq_before = atomic_load_u32(seq_ptr);
+            if seq_before & 1 == 1 {
+                // Resize in progress, skip optimistic read and go straight to lock
+            } else {
+                let mask = header.bucket_mask;
+                let b = (h & mask) as usize;
 
-            while current != EMPTY && attempts < 100 {
-                // If we read a node ID, the data *must* be valid due to Acquire load above
-                let c_left = *left_ptr.add(current as usize);
-                let c_right = *right_ptr.add(current as usize);
-                // We double check hash to avoid expensive memory lookups on false positives
-                let c_hash = *hash_ptr.add(current as usize);
+                // Use Acquire load for consistency
+                let bucket_ptr = buckets_array_ptr(header_ptr).add(b) as *mut AtomicU32;
+                let mut current = (&*bucket_ptr).load(Ordering::Acquire);
 
-                if c_hash == h && c_left == l && c_right == r {
-                    // HIT! We found it without ever locking.
-                    return current;
+                let next_base = next_idx_array_ptr(header_ptr);
+                let left_base = left_id_array_ptr(header_ptr);
+                let right_base = right_id_array_ptr(header_ptr);
+
+                let mut loop_count = 0;
+                while current != EMPTY {
+                    // Safety brake: prevent infinite loops if resize corrupts the chain
+                    if loop_count > 500 {
+                        break; // Abort optimistic read if chain is suspicious
+                    }
+                    loop_count += 1;
+
+                    // Check integrity before expensive checks
+                    let c_hash = *hash_ptr.add(current as usize);
+                    if c_hash == h {
+                         let c_l = *left_base.add(current as usize);
+                         let c_r = *right_base.add(current as usize);
+                         if c_l == l && c_r == r {
+                             // Verify seq hasn't changed (resize didn't happen)
+                             core::sync::atomic::fence(Ordering::Acquire);
+                             let seq_after = atomic_load_u32(seq_ptr);
+                             if seq_after == seq_before {
+                                 return current;
+                             }
+                             // Seq changed, abort optimistic read
+                             break;
+                         }
+                    }
+
+                    // Traverse
+                    let next_atom = next_base.add(current as usize) as *mut AtomicU32;
+                    current = (&*next_atom).load(Ordering::Acquire);
                 }
-
-                // Load next pointer atomically
-                current = header.load_next_atomic(current as usize);
-                attempts += 1;
             }
         }
 
-        // --- STEP 3: ACQUIRE LOCK (The "Commit" Phase) ---
+        // --- PHASE 2: STRIPE LOCK ---
+        // We failed to find it. Now we must lock ONLY our stripe.
         let header = unsafe { &mut *header_ptr };
-        header.lock();
 
-        // --- STEP 4: VERIFY (Double-Checked Locking) ---
-        // We must check again. While we were walking above, or waiting for the lock,
-        // someone else might have inserted it.
+        // 2a. Acquire Stripe Lock
+        header.lock_stripe(stripe_idx);
 
-        // Re-read capacity/pointers in case of resize
-        let mut capacity = header.capacity;
-        let mut top = header.load_top();
+        // 2b. DOUBLE CHECK (The "Verify" step)
+        // We must check again because another thread might have inserted into THIS stripe
+        // while we were waiting.
+        let mask = header.bucket_mask;
+        let b = (h & mask) as usize;
+        let buckets_ptr = buckets_array_ptr(header_ptr);
+        let next_ptr = next_idx_array_ptr(header_ptr);
 
-        // Growth Check (Standard logic)
-        if top >= capacity {
-            if !unsafe { grow_arena(header_ptr) } {
-                header.unlock();
-                wasm32::unreachable();
-            }
-            capacity = unsafe { (*header_ptr).capacity };
-            top = unsafe { (*header_ptr).load_top() };
-            if top >= capacity {
-                header.unlock();
-                wasm32::unreachable();
-            }
+        let mut current = unsafe { *buckets_ptr.add(b) };
+        while current != EMPTY {
+             let c_hash = unsafe { *hash_ptr.add(current as usize) };
+             if c_hash == h {
+                 let c_l = unsafe { *left_id_array_ptr(header_ptr).add(current as usize) };
+                 let c_r = unsafe { *right_id_array_ptr(header_ptr).add(current as usize) };
+                 if c_l == l && c_r == r {
+                     // Found it! Unlock and return.
+                     header.unlock_stripe(stripe_idx);
+                     return current;
+                 }
+             }
+             current = unsafe { *next_ptr.add(current as usize) };
         }
 
-        // Validate that l and r are within bounds (they should be < top)
-        if l >= top || r >= top {
-            header.unlock();
+        // --- PHASE 3: ATOMIC ALLOCATION ---
+        // We are writing. We need a new ID.
+        // Since 'top' is global, we must use atomic_fetch_add.
+        let top_ptr = &mut header.top as *mut u32;
+        let id = unsafe { atomic_fetch_add_u32(top_ptr, 1) };
+
+        // --- PHASE 4: GROWTH CHECK ---
+        if id >= header.capacity {
+             // OOM! We exceeded capacity.
+             // We must release our stripe lock, acquire the GLOBAL resize lock, and grow.
+             header.unlock_stripe(stripe_idx);
+
+             // This function handles the Stop-The-World synchronization
+             unsafe { perform_global_resize(header_ptr); }
+
+             // Recursive retry after resize (safest way to handle pointers moving)
+             return allocCons(l, r);
+        }
+
+        // Validate that l and r are within bounds (they should be < id, since id is the new top)
+        if l >= id || r >= id {
+            header.unlock_stripe(stripe_idx);
             wasm32::unreachable(); // Invalid node IDs
         }
 
-        // Re-calculate bucket (mask might have changed due to resize!)
-        let current_mask = header.bucket_mask;
-        let b_locked = (h & current_mask) as usize;
-
-        // Standard Locked Search
-        let buckets_ptr = buckets_array_ptr(header_ptr);
-        let next_ptr = next_idx_array_ptr(header_ptr);
-        let left_ptr = left_id_array_ptr(header_ptr);
-        let right_ptr = right_id_array_ptr(header_ptr);
-        let hash_vals_ptr = hash32_array_ptr(header_ptr);
-
-        let mut current = unsafe { *buckets_ptr.add(b_locked) };
-        while current != EMPTY {
-            // Validate current is within bounds
-            if current >= top {
-                header.unlock();
-                wasm32::unreachable(); // Invalid node ID in bucket chain
-            }
-            let c_hash = unsafe { *hash_vals_ptr.add(current as usize) };
-            if c_hash == h {
-                let c_l = unsafe { *left_ptr.add(current as usize) };
-                let c_r = unsafe { *right_ptr.add(current as usize) };
-                if c_l == l && c_r == r {
-                    header.unlock();
-                    return current; // Found it on the second try!
-                }
-            }
-            current = unsafe { *next_ptr.add(current as usize) };
-        }
-
-        // --- STEP 5: WRITE (Commit New Data) ---
-        let id = top;
-        header.store_top(top + 1);
-
+        // --- PHASE 5: WRITE ---
+        // We own the stripe lock, and we have a unique ID. Safe to write.
         unsafe {
             *kind_array_ptr(header_ptr).add(id as usize) = ArenaKind::NonTerm as u8;
-            *left_ptr.add(id as usize) = l;
-            *right_ptr.add(id as usize) = r;
-            *hash_vals_ptr.add(id as usize) = h;
+            *left_id_array_ptr(header_ptr).add(id as usize) = l;
+            *right_id_array_ptr(header_ptr).add(id as usize) = r;
+            *hash_ptr.add(id as usize) = h;
 
             // Link into bucket
-            // IMPORTANT: This write makes the node visible to the optimistic readers.
-            // We use Release ordering so readers see the data written above
-            let old_head = *buckets_ptr.add(b_locked);
+            let bucket_slot = buckets_ptr.add(b);
+            let old_head = *bucket_slot;
 
-            // Store Next: No ordering needed yet, nobody can see 'id' yet
             *next_ptr.add(id as usize) = old_head;
 
-            // Store Bucket Head: RELEASE ordering required so readers see the data written above
-            let bucket_atomic = buckets_ptr.add(b_locked) as *mut AtomicU32;
-            (&*bucket_atomic).store(id, Ordering::Release);
+            // Release store to bucket head
+            let bucket_atom = bucket_slot as *mut AtomicU32;
+            (&*bucket_atom).store(id, Ordering::Release);
         }
 
-        header.unlock();
+        header.unlock_stripe(stripe_idx);
         id
     }
     #[cfg(not(target_arch = "wasm32"))]

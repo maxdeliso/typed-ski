@@ -4,6 +4,7 @@
 //! compiled to WebAssembly for use in JavaScript/TypeScript environments.
 
 #![no_std]
+#![cfg_attr(target_arch = "wasm32", feature(stdarch_wasm_atomic_wait))]
 
 // Minimal Panic Handler
 #[cfg(not(test))]

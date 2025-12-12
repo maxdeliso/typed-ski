@@ -20,8 +20,8 @@
         denoJson = builtins.fromJSON (builtins.readFile ./deno.jsonc);
         version = denoJson.version;
 
-        # Use standard stable toolchain.
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        # Use nightly toolchain to enable unstable WASM atomic wait features.
+        rustToolchain = pkgs.rust-bin.nightly.latest.default.override {
           targets = [ "wasm32-unknown-unknown" ];
         };
 
@@ -195,6 +195,9 @@
             type = "app";
             program = toString (pkgs.writeShellScript "test-rust" ''
               cd rust
+              export PATH="${rustToolchain}/bin:$PATH"
+              export CARGO="${rustToolchain}/bin/cargo"
+              export RUSTC="${rustToolchain}/bin/rustc"
               ${rustToolchain}/bin/cargo test --lib -- --test-threads=1 "$@"
             '');
            };

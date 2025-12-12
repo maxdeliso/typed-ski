@@ -269,12 +269,15 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const imports = {
       env: {
         memory: wasmMemory,
+        // Main thread usage: no blocking allowed
+        js_allow_block: () => 0,
       },
     } as WebAssembly.Imports;
 
     const module = new WebAssembly.Module(bufferSourceToArrayBuffer(wasmBytes));
     const instance = new WebAssembly.Instance(module, imports);
     const normalized = ArenaEvaluatorWasm.normalizeExports(instance.exports);
+
     return ArenaEvaluatorWasm.fromInstance(normalized, wasmMemory);
   }
 
@@ -380,9 +383,11 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
     if (!baseAddr) return 0;
 
-    // top is at offset 2 of the header (32-bit integer array view)
-    const headerView = new Uint32Array(this.memory.buffer, baseAddr, 16);
-    return headerView[2];
+    // Header layout: stripe_locks[64] (0-63), resize_lock (64), resize_seq (65),
+    // capacity (66), top (67), ...
+    const headerView = new Uint32Array(this.memory.buffer, baseAddr, 80);
+    const STRIPE_COUNT = 64;
+    return headerView[STRIPE_COUNT + 3]; // offset 67
   }
 
   /**

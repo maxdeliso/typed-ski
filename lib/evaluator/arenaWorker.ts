@@ -38,7 +38,11 @@ async function init(msg: InitMessage) {
   const wasmBytes = getEmbeddedReleaseWasm().slice();
   const module = await WebAssembly.compile(wasmBytes);
   const instance = await WebAssembly.instantiate(module, {
-    env: { memory: msg.memory },
+    env: {
+      memory: msg.memory,
+      // THE FIX: Worker tells Wasm "Blocking is fine"
+      js_allow_block: () => 1,
+    },
   });
   wasmExports = instance.exports as unknown as ArenaWasmExports;
 

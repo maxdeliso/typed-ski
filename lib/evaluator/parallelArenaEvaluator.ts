@@ -260,10 +260,17 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     const bytes = getEmbeddedReleaseWasm().slice();
     const wasmModule = await WebAssembly.compile(bytes);
     const sharedInstance = await WebAssembly.instantiate(wasmModule, {
-      env: { memory: sharedMemory },
+      env: {
+        memory: sharedMemory,
+        // THE FIX: Main thread tells Wasm "No blocking allowed"
+        js_allow_block: () => 0,
+      },
     } as WebAssembly.Imports);
     const exports = sharedInstance.exports as unknown as ArenaWasmExports;
+
+    // Validate exports
     const validated = this.validateSabExports(exports);
+
     const arenaPointer = (() => {
       const init = validated.exports.initArena!;
       const result = init(INITIAL_CAP);

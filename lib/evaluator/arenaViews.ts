@@ -55,22 +55,18 @@ function buildArenaViews(
   }
 
   const buffer = memory.buffer;
-  const headerView = new Uint32Array(buffer, baseAddr, 16); // Read header (64 bytes = 16 u32s)
+  // Read enough of the header to get all offsets we need
+  // Header layout: stripe_locks[64] (0-63), resize_lock (64), resize_seq (65),
+  // capacity (66), top (67), bucket_mask (68), offset_kind (69), offset_sym (70),
+  // offset_left_id (71), offset_right_id (72), ...
+  const headerView = new Uint32Array(buffer, baseAddr, 80); // Read enough for all offsets
 
-  // Header layout (from Rust SabHeader):
-  // offset 0: global_lock
-  // offset 1: capacity
-  // offset 2: top
-  // offset 3: bucket_mask
-  // offset 4: offset_kind
-  // offset 5: offset_sym
-  // offset 6: offset_left_id
-  // offset 7: offset_right_id
-  const capacity = headerView[1];
-  const offsetKind = headerView[4];
-  const offsetSym = headerView[5];
-  const offsetLeftId = headerView[6];
-  const offsetRightId = headerView[7];
+  const STRIPE_COUNT = 64;
+  const capacity = headerView[STRIPE_COUNT + 2]; // offset 66
+  const offsetKind = headerView[STRIPE_COUNT + 5]; // offset 69
+  const offsetSym = headerView[STRIPE_COUNT + 6]; // offset 70
+  const offsetLeftId = headerView[STRIPE_COUNT + 7]; // offset 71
+  const offsetRightId = headerView[STRIPE_COUNT + 8]; // offset 72
 
   // Create typed array views of the arena data arrays
   const kind = new Uint8Array(buffer, baseAddr + offsetKind, capacity);
@@ -101,8 +97,9 @@ export function validateAndRebuildViews(
 
   // Check current capacity from header
   const buffer = memory.buffer;
-  const headerView = new Uint32Array(buffer, baseAddr, 16);
-  const currentCapacity = headerView[1];
+  const headerView = new Uint32Array(buffer, baseAddr, 80);
+  const STRIPE_COUNT = 64;
+  const currentCapacity = headerView[STRIPE_COUNT + 2]; // offset 66
 
   // If capacity changed, views are stale - rebuild them
   if (currentCapacity !== views.capacity) {

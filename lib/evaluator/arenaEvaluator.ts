@@ -373,76 +373,87 @@ export class ArenaEvaluatorWasm implements Evaluator {
     return fromArenaWithExports(id, this.$, this.memory);
   }
 
-  dumpArena(): { nodes: ArenaNode[] } {
-    const nodes: Array<
-      | { id: number; kind: "terminal"; sym: string }
-      | { id: number; kind: "non-terminal"; left: number; right: number }
-    > = [];
-
-    const views = getOrBuildArenaViews(this.memory, this.$);
-
-    // Get the top index from the arena header to know how many nodes are allocated
+  /**
+   * Helper: Reads the arena header to find the number of allocated nodes.
+   */
+  private getArenaTop(): number {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
-    let top = 0;
-    if (baseAddr) {
-      const headerView = new Uint32Array(this.memory.buffer, baseAddr, 16);
-      top = headerView[2]; // top is at offset 2
+    if (!baseAddr) return 0;
+
+    // top is at offset 2 of the header (32-bit integer array view)
+    const headerView = new Uint32Array(this.memory.buffer, baseAddr, 16);
+    return headerView[2];
+  }
+
+  /**
+   * Helper: Decodes a single node ID into an ArenaNode object.
+   * Returns null if the slot is uninitialized (indicating end of data).
+   */
+  private getArenaNode(
+    id: number,
+    views: ReturnType<typeof getOrBuildArenaViews>,
+  ): ArenaNode | null {
+    // 1. Determine Kind (Optimization: Use View if possible)
+    let k: number;
+    if (views && id < views.capacity) {
+      k = views.kind[id];
+    } else {
+      k = this.$.kindOf(id);
+      if (k === 0) return null; // End of allocated prefix
     }
+
+    // 2. Build Terminal
+    if (k === (ArenaKind.Terminal as number)) {
+      let symValue: number;
+      if (views && id < views.capacity) {
+        symValue = views.sym[id];
+      } else {
+        symValue = this.$.symOf(id);
+      }
+
+      let sym: string;
+      switch (symValue as ArenaSym) {
+        case ArenaSym.S:
+          sym = "S";
+          break;
+        case ArenaSym.K:
+          sym = "K";
+          break;
+        case ArenaSym.I:
+          sym = "I";
+          break;
+        default:
+          sym = "?";
+      }
+      return { id, kind: "terminal", sym };
+    }
+
+    // 3. Build Non-Terminal
+    let left: number;
+    let right: number;
+    if (views && id < views.capacity) {
+      left = views.leftId[id];
+      right = views.rightId[id];
+    } else {
+      left = this.$.leftOf(id);
+      right = this.$.rightOf(id);
+    }
+
+    return { id, kind: "non-terminal", left, right };
+  }
+
+  dumpArena(): { nodes: ArenaNode[] } {
+    const nodes: ArenaNode[] = [];
+    const views = getOrBuildArenaViews(this.memory, this.$);
+    const top = this.getArenaTop();
 
     for (let id = 0; id < top; id++) {
-      // Use views if available and id is in bounds, otherwise fall back to WASM calls
-      let k: number;
-      if (views && id < views.capacity) {
-        k = views.kind[id];
-      } else {
-        k = this.$.kindOf(id);
-        // kindOf returns 0 for uninitialised slots; once we hit the first zero we
-        // have traversed the allocated prefix because ids are assigned densely.
-        if (k === 0) break;
-      }
-
-      if (k === (ArenaKind.Terminal as number)) {
-        let sym: string;
-        let symValue: number;
-        if (views && id < views.capacity) {
-          symValue = views.sym[id];
-        } else {
-          symValue = this.$.symOf(id) as ArenaSym;
-        }
-        switch (symValue) {
-          case ArenaSym.S:
-            sym = "S";
-            break;
-          case ArenaSym.K:
-            sym = "K";
-            break;
-          case ArenaSym.I:
-            sym = "I";
-            break;
-          default:
-            sym = "?";
-        }
-        nodes.push({ id, kind: "terminal", sym });
-      } /* Non-terminal */ else {
-        let left: number;
-        let right: number;
-        if (views && id < views.capacity) {
-          left = views.leftId[id];
-          right = views.rightId[id];
-        } else {
-          left = this.$.leftOf(id);
-          right = this.$.rightOf(id);
-        }
-        nodes.push({
-          id,
-          kind: "non-terminal",
-          left,
-          right,
-        });
-      }
+      const node = this.getArenaNode(id, views);
+      if (!node) break; // Stop at uninitialized slot
+      nodes.push(node);
     }
 
-    return { nodes } as const;
+    return { nodes };
   }
 
   /**
@@ -453,80 +464,21 @@ export class ArenaEvaluatorWasm implements Evaluator {
     chunkSize: number = 10000,
   ): Generator<ArenaNode[], void, unknown> {
     const views = getOrBuildArenaViews(this.memory, this.$);
-
-    // Get the top index from the arena header to know how many nodes are allocated
-    const baseAddr = this.$.debugGetArenaBaseAddr?.();
-    let top = 0;
-    if (baseAddr) {
-      const headerView = new Uint32Array(this.memory.buffer, baseAddr, 16);
-      top = headerView[2]; // top is at offset 2
-    }
-
+    const top = this.getArenaTop();
     const chunk: ArenaNode[] = [];
 
     for (let id = 0; id < top; id++) {
-      // Use views if available and id is in bounds, otherwise fall back to WASM calls
-      let k: number;
-      if (views && id < views.capacity) {
-        k = views.kind[id];
-      } else {
-        k = this.$.kindOf(id);
-        // kindOf returns 0 for uninitialised slots; once we hit the first zero we
-        // have traversed the allocated prefix because ids are assigned densely.
-        if (k === 0) break;
-      }
-
-      let node: ArenaNode;
-      if (k === (ArenaKind.Terminal as number)) {
-        let sym: string;
-        let symValue: number;
-        if (views && id < views.capacity) {
-          symValue = views.sym[id];
-        } else {
-          symValue = this.$.symOf(id) as ArenaSym;
-        }
-        switch (symValue) {
-          case ArenaSym.S:
-            sym = "S";
-            break;
-          case ArenaSym.K:
-            sym = "K";
-            break;
-          case ArenaSym.I:
-            sym = "I";
-            break;
-          default:
-            sym = "?";
-        }
-        node = { id, kind: "terminal", sym };
-      } else {
-        let left: number;
-        let right: number;
-        if (views && id < views.capacity) {
-          left = views.leftId[id];
-          right = views.rightId[id];
-        } else {
-          left = this.$.leftOf(id);
-          right = this.$.rightOf(id);
-        }
-        node = {
-          id,
-          kind: "non-terminal",
-          left,
-          right,
-        };
-      }
+      const node = this.getArenaNode(id, views);
+      if (!node) break; // Stop at uninitialized slot
 
       chunk.push(node);
 
-      // Yield chunk when it reaches the desired size
       if (chunk.length >= chunkSize) {
         yield chunk;
-        chunk.length = 0; // Clear array efficiently
+        chunk.length = 0;
       }
     }
 
-    // Yield remaining nodes
     if (chunk.length > 0) {
       yield chunk;
     }

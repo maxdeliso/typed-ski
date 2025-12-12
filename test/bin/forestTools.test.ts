@@ -142,6 +142,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
           "--allow-read",
           "--allow-write",
           "--allow-run",
+          "--unstable-worker-options",
           "bin/genForest.ts",
           "2",
           testFile,

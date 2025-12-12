@@ -14,11 +14,7 @@ import type { Evaluator } from "./evaluator.ts";
 import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
-import {
-  type ArenaViews,
-  getOrBuildArenaViews,
-  validateAndRebuildViews,
-} from "./arenaViews.ts";
+import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
 
 /**
  * Terminal cache: Maps exports instance -> {S, K, I} IDs
@@ -352,6 +348,15 @@ export class ArenaEvaluatorWasm implements Evaluator {
     } as const;
   }
 
+  /**
+   * Perform a single evaluation step directly on an arena node ID.
+   * Returns the next arena node ID, or the same ID if no reduction is possible.
+   * This avoids the overhead of converting to/from SKIExpression.
+   */
+  stepOnceArena(arenaNodeId: ArenaNodeId): ArenaNodeId {
+    return this.$.arenaKernelStep(arenaNodeId);
+  }
+
   reduce(expr: SKIExpression, max = 0xffffffff): SKIExpression {
     return this.fromArena(this.$.reduce(this.toArena(expr), max));
   }
@@ -441,18 +446,90 @@ export class ArenaEvaluatorWasm implements Evaluator {
   }
 
   /**
-   * Check if any node in history embeds into currentId using views for performance.
-   * Uses direct memory access via views for optimal performance.
+   * Stream arena nodes in chunks to avoid memory issues with large arenas.
+   * Yields nodes in batches for efficient processing.
    */
-  hasEmbedding(history: number[], currentId: number): boolean {
+  *dumpArenaStreaming(
+    chunkSize: number = 10000,
+  ): Generator<ArenaNode[], void, unknown> {
     const views = getOrBuildArenaViews(this.memory, this.$);
-    // Views should always be available since we have memory and exports
-    if (!views) {
-      throw new Error(
-        "Failed to build arena views - arena may not be initialized",
-      );
+
+    // Get the top index from the arena header to know how many nodes are allocated
+    const baseAddr = this.$.debugGetArenaBaseAddr?.();
+    let top = 0;
+    if (baseAddr) {
+      const headerView = new Uint32Array(this.memory.buffer, baseAddr, 16);
+      top = headerView[2]; // top is at offset 2
     }
-    return hasEmbeddingDirect(views, this.$, history, currentId);
+
+    const chunk: ArenaNode[] = [];
+
+    for (let id = 0; id < top; id++) {
+      // Use views if available and id is in bounds, otherwise fall back to WASM calls
+      let k: number;
+      if (views && id < views.capacity) {
+        k = views.kind[id];
+      } else {
+        k = this.$.kindOf(id);
+        // kindOf returns 0 for uninitialised slots; once we hit the first zero we
+        // have traversed the allocated prefix because ids are assigned densely.
+        if (k === 0) break;
+      }
+
+      let node: ArenaNode;
+      if (k === (ArenaKind.Terminal as number)) {
+        let sym: string;
+        let symValue: number;
+        if (views && id < views.capacity) {
+          symValue = views.sym[id];
+        } else {
+          symValue = this.$.symOf(id) as ArenaSym;
+        }
+        switch (symValue) {
+          case ArenaSym.S:
+            sym = "S";
+            break;
+          case ArenaSym.K:
+            sym = "K";
+            break;
+          case ArenaSym.I:
+            sym = "I";
+            break;
+          default:
+            sym = "?";
+        }
+        node = { id, kind: "terminal", sym };
+      } else {
+        let left: number;
+        let right: number;
+        if (views && id < views.capacity) {
+          left = views.leftId[id];
+          right = views.rightId[id];
+        } else {
+          left = this.$.leftOf(id);
+          right = this.$.rightOf(id);
+        }
+        node = {
+          id,
+          kind: "non-terminal",
+          left,
+          right,
+        };
+      }
+
+      chunk.push(node);
+
+      // Yield chunk when it reaches the desired size
+      if (chunk.length >= chunkSize) {
+        yield chunk;
+        chunk.length = 0; // Clear array efficiently
+      }
+    }
+
+    // Yield remaining nodes
+    if (chunk.length > 0) {
+      yield chunk;
+    }
   }
 }
 
@@ -473,191 +550,6 @@ export function createArenaEvaluator(): ArenaEvaluatorWasm {
 }
 
 export const createArenaEvaluatorRelease = createArenaEvaluatorReleaseSync;
-
-/**
- * Homeomorphic embedding: a ⊑ b
- * Returns true if a embeds into b
- * Uses direct memory access via views for optimal performance.
- */
-function embedsWithViews(
-  views: ArenaViews,
-  exports: Pick<ArenaWasmExports, "kindOf" | "symOf" | "leftOf" | "rightOf">,
-  a: number,
-  b: number,
-): boolean {
-  // Use iterative approach with a stack to avoid recursion
-  // Stack contains pairs [aId, bId] to check
-  const stack: [number, number][] = [[a, b]];
-  const visited = new Set<string>();
-
-  while (stack.length > 0) {
-    const [aId, bId] = stack.pop()!;
-    const key = `${aId},${bId}`;
-    if (visited.has(key)) {
-      continue; // Already processed this pair
-    }
-    visited.add(key);
-
-    // Get node kinds using views if available, otherwise fall back to WASM calls
-    let kindA: number;
-    let kindB: number;
-    if (aId < views.capacity && bId < views.capacity) {
-      kindA = views.kind[aId];
-      kindB = views.kind[bId];
-    } else {
-      kindA = exports.kindOf(aId);
-      kindB = exports.kindOf(bId);
-    }
-
-    // If either node is uninitialized (kind === 0), embedding fails
-    if (kindA === 0 || kindB === 0) {
-      return false;
-    }
-
-    // If a is terminal, b must be the same terminal
-    if (kindA === (ArenaKind.Terminal as number)) {
-      if (kindB !== (ArenaKind.Terminal as number)) {
-        return false;
-      }
-      // Check if symbols match
-      let symA: number;
-      let symB: number;
-      if (aId < views.capacity && bId < views.capacity) {
-        symA = views.sym[aId];
-        symB = views.sym[bId];
-      } else {
-        symA = exports.symOf(aId);
-        symB = exports.symOf(bId);
-      }
-      if (symA !== symB) {
-        return false;
-      }
-      continue; // Terminal match, continue to next pair
-    }
-
-    // If a is non-terminal (APP), b must also be non-terminal
-    if (kindB === (ArenaKind.Terminal as number)) {
-      return false;
-    }
-
-    // For APP nodes, check embedding recursively by pushing children to stack
-    let leftA: number;
-    let rightA: number;
-    let leftB: number;
-    let rightB: number;
-    if (aId < views.capacity && bId < views.capacity) {
-      leftA = views.leftId[aId];
-      rightA = views.rightId[aId];
-      leftB = views.leftId[bId];
-      rightB = views.rightId[bId];
-    } else {
-      leftA = exports.leftOf(aId);
-      rightA = exports.rightOf(aId);
-      leftB = exports.leftOf(bId);
-      rightB = exports.rightOf(bId);
-    }
-
-    // Push both child pairs to stack (right first, so left is processed first)
-    stack.push([rightA, rightB]);
-    stack.push([leftA, leftB]);
-  }
-
-  return true; // All pairs matched successfully
-}
-
-/**
- * Homeomorphic embedding: a ⊑ b
- * Returns true if a embeds into b
- * Uses a Map for O(1) node lookup from the nodes array.
- */
-export function embeds(nodes: ArenaNode[], a: number, b: number): boolean {
-  // Create a Map for O(1) lookup instead of O(n) find operations
-  const nodeMap = new Map<number, ArenaNode>();
-  for (const node of nodes) {
-    nodeMap.set(node.id, node);
-  }
-
-  // Use iterative approach with a stack to avoid recursion
-  const stack: [number, number][] = [[a, b]];
-  const visited = new Set<string>();
-
-  while (stack.length > 0) {
-    const [aId, bId] = stack.pop()!;
-    const key = `${aId},${bId}`;
-    if (visited.has(key)) {
-      continue; // Already processed this pair
-    }
-    visited.add(key);
-
-    const nodeA = nodeMap.get(aId);
-    const nodeB = nodeMap.get(bId);
-
-    if (!nodeA || !nodeB) {
-      return false;
-    }
-
-    // If a is terminal, b must be the same terminal
-    if (nodeA.kind === "terminal") {
-      if (nodeB.kind !== "terminal" || nodeA.sym !== nodeB.sym) {
-        return false;
-      }
-      continue; // Terminal match, continue to next pair
-    }
-
-    // If a is non-terminal (APP), b must also be non-terminal
-    if (nodeB.kind === "terminal") {
-      return false;
-    }
-
-    // For APP nodes, check embedding recursively by pushing children to stack
-    if (nodeA.left === undefined || nodeA.right === undefined) {
-      return false;
-    }
-    if (nodeB.left === undefined || nodeB.right === undefined) {
-      return false;
-    }
-
-    // Push both child pairs to stack (right first, so left is processed first)
-    stack.push([nodeA.right, nodeB.right]);
-    stack.push([nodeA.left, nodeB.left]);
-  }
-
-  return true; // All pairs matched successfully
-}
-
-/**
- * Check if any node in history embeds into currentId.
- * Optimized version using views for direct memory access.
- */
-export function hasEmbeddingDirect(
-  views: ArenaViews,
-  exports: Pick<ArenaWasmExports, "kindOf" | "symOf" | "leftOf" | "rightOf">,
-  history: number[],
-  currentId: number,
-): boolean {
-  for (const prevId of history) {
-    if (embedsWithViews(views, exports, prevId, currentId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Check if any node in history embeds into currentId.
- */
-export function hasEmbedding(
-  nodes: ArenaNode[],
-  history: number[],
-  currentId: number,
-): boolean {
-  for (const prevId of history) {
-    if (embeds(nodes, prevId, currentId)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 function bufferSourceToUint8Array(bytes: BufferSource): Uint8Array {
   if (bytes instanceof Uint8Array) return bytes;

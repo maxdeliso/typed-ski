@@ -306,6 +306,23 @@ impl SabHeader {
         let ptr = &mut self.top as *mut u32;
         atomic_store_u32(ptr, val);
     }
+
+    // Read a bucket head atomically with Acquire ordering
+    // This ensures that if we see a node ID in a bucket, the data for that node is fully visible
+    #[inline(always)]
+    unsafe fn load_bucket_atomic(&self, bucket_idx: usize) -> u32 {
+        let header_ptr = self as *const SabHeader;
+        let ptr = buckets_array_ptr(header_ptr).add(bucket_idx) as *mut AtomicU32;
+        (&*ptr).load(Ordering::Acquire)
+    }
+
+    // Read a next_idx pointer atomically with Acquire ordering
+    #[inline(always)]
+    unsafe fn load_next_atomic(&self, node_idx: usize) -> u32 {
+        let header_ptr = self as *const SabHeader;
+        let ptr = next_idx_array_ptr(header_ptr).add(node_idx) as *mut AtomicU32;
+        (&*ptr).load(Ordering::Acquire)
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1041,83 +1058,132 @@ pub extern "C" fn allocCons(l: u32, r: u32) -> u32 {
     #[cfg(target_arch = "wasm32")]
     {
         let header_ptr = get_arena();
-        let header = unsafe { &mut *header_ptr };
-        header.lock();
+        let header = unsafe { &*header_ptr }; // Immutable reference for optimistic read
 
-        // Check capacity first, before getting any array pointers
-        // This ensures we grow before calculating pointers, so pointers are always valid
-        let mut capacity = header.capacity;
-        let mut top = header.load_top();
-        if top >= capacity {
-            // Try to grow the arena
-            if !unsafe { grow_arena(header_ptr) } {
-                header.unlock();
-                wasm32::unreachable(); // Fatal: capacity exceeded and can't grow
-            }
-            // After growing, reload capacity and top from updated header
-            // We can't use header directly here since grow_arena may have modified it
-            // So we reload through the pointer
-            capacity = unsafe { (*header_ptr).capacity };
-            top = unsafe { (*header_ptr).load_top() };
-            if top >= capacity {
-                unsafe { (*header_ptr).unlock(); }
-                wasm32::unreachable(); // Still full after growth (shouldn't happen)
-            }
-            // Reload header reference after growth to ensure we have fresh data
-            let header = unsafe { &mut *header_ptr };
-        }
-
-        // Now get array pointers - they will use the updated offsets after growth
-        // Validate that l and r are within bounds (they should be < top)
-        let current_top = unsafe { (*header_ptr).load_top() };
-        if l >= current_top || r >= current_top {
-            header.unlock();
-            wasm32::unreachable(); // Invalid node IDs
-        }
-
-        // Get dynamic mask from header
+        // --- STEP 1: PRECOMPUTE (Hash) ---
+        // We can read mask without lock because it only changes during resize (which takes a lock).
+        // Technically racy during resize, but we catch that in the fallback.
         let mask = unsafe { (*header_ptr).bucket_mask };
 
+        // Pointers for READ-ONLY access (safe due to SoA layout)
         let hash_ptr = hash32_array_ptr(header_ptr);
         let hash_l = unsafe { *hash_ptr.add(l as usize) };
         let hash_r = unsafe { *hash_ptr.add(r as usize) };
         let h = mix(hash_l, hash_r);
         let b = (h & mask) as usize;
 
+        // --- STEP 2: OPTIMISTIC READ (No Lock) ---
+        // "Verify the original unstable data"
+        unsafe {
+            let mut current = header.load_bucket_atomic(b);
+            let left_ptr = left_id_array_ptr(header_ptr);
+            let right_ptr = right_id_array_ptr(header_ptr);
+
+            // Limit the walk to prevent infinite loops if the chain is being resized crazily
+            // (though normally resize builds a new arena, so pointers remain valid in old space)
+            let mut attempts = 0;
+
+            while current != EMPTY && attempts < 100 {
+                // If we read a node ID, the data *must* be valid due to Acquire load above
+                let c_left = *left_ptr.add(current as usize);
+                let c_right = *right_ptr.add(current as usize);
+                // We double check hash to avoid expensive memory lookups on false positives
+                let c_hash = *hash_ptr.add(current as usize);
+
+                if c_hash == h && c_left == l && c_right == r {
+                    // HIT! We found it without ever locking.
+                    return current;
+                }
+
+                // Load next pointer atomically
+                current = header.load_next_atomic(current as usize);
+                attempts += 1;
+            }
+        }
+
+        // --- STEP 3: ACQUIRE LOCK (The "Commit" Phase) ---
+        let header = unsafe { &mut *header_ptr };
+        header.lock();
+
+        // --- STEP 4: VERIFY (Double-Checked Locking) ---
+        // We must check again. While we were walking above, or waiting for the lock,
+        // someone else might have inserted it.
+
+        // Re-read capacity/pointers in case of resize
+        let mut capacity = header.capacity;
+        let mut top = header.load_top();
+
+        // Growth Check (Standard logic)
+        if top >= capacity {
+            if !unsafe { grow_arena(header_ptr) } {
+                header.unlock();
+                wasm32::unreachable();
+            }
+            capacity = unsafe { (*header_ptr).capacity };
+            top = unsafe { (*header_ptr).load_top() };
+            if top >= capacity {
+                header.unlock();
+                wasm32::unreachable();
+            }
+        }
+
+        // Validate that l and r are within bounds (they should be < top)
+        if l >= top || r >= top {
+            header.unlock();
+            wasm32::unreachable(); // Invalid node IDs
+        }
+
+        // Re-calculate bucket (mask might have changed due to resize!)
+        let current_mask = header.bucket_mask;
+        let b_locked = (h & current_mask) as usize;
+
+        // Standard Locked Search
         let buckets_ptr = buckets_array_ptr(header_ptr);
-        let mut current = unsafe { *buckets_ptr.add(b) };
+        let next_ptr = next_idx_array_ptr(header_ptr);
+        let left_ptr = left_id_array_ptr(header_ptr);
+        let right_ptr = right_id_array_ptr(header_ptr);
+        let hash_vals_ptr = hash32_array_ptr(header_ptr);
+
+        let mut current = unsafe { *buckets_ptr.add(b_locked) };
         while current != EMPTY {
             // Validate current is within bounds
-            if current >= current_top {
+            if current >= top {
                 header.unlock();
                 wasm32::unreachable(); // Invalid node ID in bucket chain
             }
-            let current_hash = unsafe { *hash_ptr.add(current as usize) };
-            let left_ptr = left_id_array_ptr(header_ptr);
-            let right_ptr = right_id_array_ptr(header_ptr);
-            let current_left = unsafe { *left_ptr.add(current as usize) };
-            let current_right = unsafe { *right_ptr.add(current as usize) };
-            if current_hash == h && current_left == l && current_right == r {
-                header.unlock();
-                return current;
+            let c_hash = unsafe { *hash_vals_ptr.add(current as usize) };
+            if c_hash == h {
+                let c_l = unsafe { *left_ptr.add(current as usize) };
+                let c_r = unsafe { *right_ptr.add(current as usize) };
+                if c_l == l && c_r == r {
+                    header.unlock();
+                    return current; // Found it on the second try!
+                }
             }
-            let next_ptr = next_idx_array_ptr(header_ptr);
             current = unsafe { *next_ptr.add(current as usize) };
         }
 
+        // --- STEP 5: WRITE (Commit New Data) ---
         let id = top;
         header.store_top(top + 1);
 
         unsafe {
             *kind_array_ptr(header_ptr).add(id as usize) = ArenaKind::NonTerm as u8;
-            *left_id_array_ptr(header_ptr).add(id as usize) = l;
-            *right_id_array_ptr(header_ptr).add(id as usize) = r;
-            *hash_ptr.add(id as usize) = h;
+            *left_ptr.add(id as usize) = l;
+            *right_ptr.add(id as usize) = r;
+            *hash_vals_ptr.add(id as usize) = h;
 
-            let bucket_ptr = buckets_ptr.add(b);
-            let old_head = *bucket_ptr;
-            *next_idx_array_ptr(header_ptr).add(id as usize) = old_head;
-            *bucket_ptr = id;
+            // Link into bucket
+            // IMPORTANT: This write makes the node visible to the optimistic readers.
+            // We use Release ordering so readers see the data written above
+            let old_head = *buckets_ptr.add(b_locked);
+
+            // Store Next: No ordering needed yet, nobody can see 'id' yet
+            *next_ptr.add(id as usize) = old_head;
+
+            // Store Bucket Head: RELEASE ordering required so readers see the data written above
+            let bucket_atomic = buckets_ptr.add(b_locked) as *mut AtomicU32;
+            (&*bucket_atomic).store(id, Ordering::Release);
         }
 
         header.unlock();

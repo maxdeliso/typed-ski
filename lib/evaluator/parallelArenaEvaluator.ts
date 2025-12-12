@@ -25,7 +25,6 @@ type WorkerReadyMessage = {
 type WorkerResultMessage = {
   type: "result";
   id: number;
-  expr: SKIExpression;
   arenaNodeId: number; // Arena node ID for the result expression
 };
 
@@ -47,7 +46,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   public readonly workers: Worker[] = [];
   private readonly pendingRequests = new Map<
     number,
-    { resolve: (val: SKIExpression) => void; reject: (err: Error) => void }
+    { resolve: (val: number) => void; reject: (err: Error) => void }
   >();
   private readonly workerRequestMap = new Map<number, number>(); // requestId -> workerIndex
   private nextRequestId = 0;
@@ -230,11 +229,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         "ParallelArenaEvaluatorWasm requires at least one worker",
       );
     }
-    const _ESTIMATED_BYTES_PER_NODE = 24; // For documentation/sync with Rust
-    const _MAX_CAP = 1 << 27; // keep in sync with rust (134,217,728 nodes, ~3.2GB, fits under 4GB limit)
     const INITIAL_CAP = 1 << 16; // Use a modest bootstrap cap to fit constrained shared memory in tests.
-    // Calculate max pages for 4GB limit (65536 pages = 4GB)
-    const _PAGE_SIZE = 65536; // For documentation
     const MAX_PAGES = 65536; // 4GB maximum
     const INITIAL_ARENA_PAGES = 128; // ~8MB, should be enough for initial arena + headroom
     const sharedMemory = new WebAssembly.Memory({
@@ -310,6 +305,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
   /**
    * Offload reduction to a worker to keep the main thread responsive.
+   * Optimized: converts to arena once, sends u32 ID, receives u32 ID, converts back only when needed.
    */
   async reduceAsync(
     expr: SKIExpression,
@@ -321,24 +317,26 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       );
     }
 
+    // Convert to arena ONCE on the main thread
+    const arenaNodeId = this.toArena(expr);
     const requestId = this.nextRequestId++;
     const workerIndex = this.nextWorkerIndex;
     const worker = this.workers[workerIndex];
     const workerCount = this.workers.length;
     this.nextWorkerIndex = (workerIndex + 1) % workerCount;
-
-    // Track which worker handles this request
     this.workerRequestMap.set(requestId, workerIndex);
-
-    // Notify callback if registered
     if (this.onRequestQueued) {
       this.onRequestQueued(requestId, workerIndex, expr);
     }
-
-    return await new Promise<SKIExpression>((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve, reject });
-      worker.postMessage({ type: "work", id: requestId, expr, max });
+    const resultArenaNodeId = await new Promise<number>((resolve, reject) => {
+      this.pendingRequests.set(requestId, {
+        resolve: (resultId: number) => resolve(resultId),
+        reject,
+      });
+      worker.postMessage({ type: "work", id: requestId, arenaNodeId, max });
     });
+    const result = this.fromArena(resultArenaNodeId);
+    return result;
   }
 
   /**
@@ -384,15 +382,18 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
                 this.workerRequestMap.delete(requestId);
                 // Notify callback if registered
                 if (this.onRequestCompleted) {
+                  // Convert arena ID to expression for callback (if needed)
+                  const resultExpr = this.fromArena(e.data.arenaNodeId);
                   this.onRequestCompleted(
                     requestId,
                     workerIndex,
-                    e.data.expr as SKIExpression,
+                    resultExpr,
                     e.data.arenaNodeId,
                   );
                 }
               }
-              pending.resolve(e.data.expr as SKIExpression);
+              // Resolve with arena node ID (will be converted to expression in reduceAsync)
+              pending.resolve(e.data.arenaNodeId);
             }
           } else if (e.data.type === "error") {
             const id = e.data.workId ?? e.data.id;

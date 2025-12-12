@@ -12,7 +12,6 @@ import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import {
   createArenaEvaluatorRelease,
-  hasEmbedding,
 } from "../lib/evaluator/arenaEvaluator.ts";
 import type { EvaluationStep, GlobalInfo } from "../lib/shared/forestTypes.ts";
 
@@ -161,7 +160,7 @@ export async function* generateEvaluationForest(
 
       const nextId = evaluator.toArena(nextExpr);
 
-      if (hasEmbedding(evaluator.dumpArena().nodes, history, nextId)) {
+      if (evaluator.hasEmbedding(history, nextId)) {
         hasCycle = true;
         break;
       }

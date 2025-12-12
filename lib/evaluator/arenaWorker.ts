@@ -6,9 +6,6 @@
 
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import type { ArenaWasmExports } from "./arenaEvaluator.ts";
-import { fromArenaWithExports, toArenaWithExports } from "./arenaEvaluator.ts";
-import type { SKIExpression } from "../ski/expression.ts";
-import type { ArenaNodeId } from "../shared/arena.ts";
 
 interface InitMessage {
   type: "init";
@@ -25,23 +22,19 @@ interface ConnectArenaMessage {
 interface WorkMessage {
   type: "work";
   id: number;
-  expr: SKIExpression;
+  arenaNodeId: number; // Arena node ID - graph already in shared memory
   max?: number;
 }
 
 interface ResultMessage {
   type: "result";
   id: number;
-  expr: SKIExpression;
   arenaNodeId: number; // Arena node ID for the result expression
 }
 
 let wasmExports: ArenaWasmExports | null = null;
-let _workerId: number | null = null;
 
 async function init(msg: InitMessage) {
-  _workerId = msg.workerId;
-
   const wasmBytes = getEmbeddedReleaseWasm().slice();
   const module = await WebAssembly.compile(wasmBytes);
   const instance = await WebAssembly.instantiate(module, {
@@ -62,6 +55,14 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
   try {
     const rc = wasmExports.connectArena(msg.arenaPointer);
+    // Return codes from connectArena (see rust/src/arena.rs):
+    // 1 = Success
+    // 0 = Error: null pointer
+    // 2 = Error: header out of bounds
+    // 3 = Error: invalid capacity
+    // 4 = Error: Arena data out of bounds
+    // 5 = Error: Invalid Magic / Corrupted Header
+    // 6 = Error: Misaligned address
     if (rc === 1) {
       self.postMessage({ type: "connectArenaComplete" });
     } else {
@@ -71,7 +72,6 @@ function handleConnectArena(msg: ConnectArenaMessage) {
       });
     }
   } catch (err) {
-    // Catch WASM traps (like unreachable) that might occur during connectArena
     self.postMessage({
       type: "connectArenaComplete",
       error: `connectArena threw an error: ${
@@ -81,27 +81,16 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
 }
 
-function toArena(root: SKIExpression, exports: ArenaWasmExports): ArenaNodeId {
-  return toArenaWithExports(root, exports);
-}
-
-function fromArena(id: ArenaNodeId, exports: ArenaWasmExports): SKIExpression {
-  return fromArenaWithExports(id, exports);
-}
-
 function handleWork(msg: WorkMessage) {
   if (!wasmExports) return;
 
   try {
-    const arenaId = toArena(msg.expr, wasmExports);
     const max = msg.max ?? 0xffffffff;
-    const resultId = wasmExports.reduce(arenaId, max);
-    const result = fromArena(resultId, wasmExports);
+    const resultId = wasmExports.reduce(msg.arenaNodeId, max);
     const resultMsg: ResultMessage = {
       type: "result",
       id: msg.id,
-      expr: result,
-      arenaNodeId: resultId, // Include the arena node ID
+      arenaNodeId: resultId,
     };
     self.postMessage(resultMsg);
   } catch (err) {

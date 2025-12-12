@@ -23,8 +23,8 @@ The arena allocator supports two modes:
 - **Single-threaded (Heap Mode)**: Uses local WASM memory with lazy allocation
 - **Multi-threaded (SAB Mode)**: Uses
   [WebAssembly shared memory][wasm-shared-memory] (SharedArrayBuffer) to enable
-  concurrent access from multiple Web Workers, with atomic operations and
-  lock striping for thread safety
+  concurrent access from multiple Web Workers, with atomic operations and lock
+  striping for thread safety
 
 Hash consing is implemented using a hash table with chaining, ensuring that
 expressions with the same structure (same left and right children) are
@@ -40,8 +40,8 @@ to enable high-performance concurrent access:
 
 The arena uses **lock striping** with 64 independent locks to minimize
 contention. Each hash bucket is mapped to one of 64 locks using a bitwise mask
-of the hash value, allowing concurrent operations on different buckets to proceed
-in parallel without blocking each other.
+of the hash value, allowing concurrent operations on different buckets to
+proceed in parallel without blocking each other.
 
 #### Tri-State Mutex
 
@@ -63,11 +63,12 @@ The locking implementation uses a multi-phase approach:
    (CAS) operation. If successful, set state to 1 and return immediately.
 
 2. **Spin Phase**: If the fast path fails, spin for up to 100 iterations with
-   random exponential backoff to handle short-duration locks without the overhead
-   of system calls.
+   random exponential backoff to handle short-duration locks without the
+   overhead of system calls.
 
 3. **Park Phase**: For longer-held locks, threads mark the lock as contended
-   (state 2) and use `memory.atomic.wait32` to sleep until woken by the unlocker.
+   (state 2) and use `memory.atomic.wait32` to sleep until woken by the
+   unlocker.
 
 #### Thread Configuration
 
@@ -80,7 +81,8 @@ a thread can block:
   efficiency under contention
 
 This configuration is instance-local (stored in each WASM instance's JavaScript
-closure), avoiding shared memory state collisions between main thread and workers.
+closure), avoiding shared memory state collisions between main thread and
+workers.
 
 #### Resize Synchronization
 
@@ -175,9 +177,9 @@ The arena requires the following JavaScript imports (provided via `env` module):
 
 - `memory: WebAssembly.Memory` - The shared memory instance (must be created
   with `shared: true` for SAB mode)
-- `js_allow_block() -> i32` - Returns `0` for main thread (spin-only) or `1`
-  for worker threads (can block). This is instance-local and not stored in
-  shared memory to avoid state collisions.
+- `js_allow_block() -> i32` - Returns `0` for main thread (spin-only) or `1` for
+  worker threads (can block). This is instance-local and not stored in shared
+  memory to avoid state collisions.
 
 ## Publishing
 

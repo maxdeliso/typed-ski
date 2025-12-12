@@ -27,6 +27,7 @@ jobs:
       - name: Validate WASM files
         run: |
           ls -lh result/wasm/
+          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "wasm2wat --enable-threads result/wasm/release.wasm"
           echo "WASM files validation successful"
 
       - name: JSR dry run publish

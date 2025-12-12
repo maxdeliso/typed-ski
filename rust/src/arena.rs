@@ -111,7 +111,7 @@ fn get_arena() -> *mut SabHeader {
 #[cfg(target_arch = "wasm32")]
 #[repr(C, align(64))]
 struct SabHeader {
-    global_lock: u32,   // 0 = unlocked, 1 = locked
+    global_lock: u32,   // 0 = unlocked, 1 = locked (no contention), 2 = locked (contention)
     capacity: u32,      // fixed capacity in nodes (max: MAX_CAP = 1<<27 = 134,217,728)
     top: u32,           // next free node index (max: capacity - 1)
     bucket_mask: u32,   // Dynamic mask (capacity - 1) for hash bucket selection
@@ -177,26 +177,122 @@ impl SabHeader {
     #[inline(always)]
     fn lock(&mut self) {
         let ptr = &mut self.global_lock as *mut u32;
-        // Simple spinlock with backoff
+
+        // 1. FAST PATH: Try to grab the lock assuming no contention.
+        // We strictly expect 0. If it's 1 or 2, we go to slow path.
+        if unsafe { atomic_cxchg_u32(ptr, 0, 1) } == 0 {
+            unsafe { LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1); }
+            return;
+        }
+
+        // 2. SLOW PATH: Contention detected.
+        self.lock_slow(ptr);
+
+        unsafe { LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1); }
+    }
+
+    // Cold function to keep the hot path (lock) small for inlining
+    #[cold]
+    fn lock_slow(&mut self, ptr: *mut u32) {
+        let mut spin_count = 0;
+        let mut rng_seed = ptr as u32; // Poor man's seed based on address
+
         loop {
-            // 0 -> 1
-            if atomic_cxchg_u32(ptr, 0, 1) == 0 {
-                unsafe {
-                    LOCK_ACQUISITION_COUNT = LOCK_ACQUISITION_COUNT.wrapping_add(1);
+            // A. SPIN PHASE
+            // We spin for a short duration to catch locks held for tiny amounts of time.
+            // This avoids the overhead of the 'wait' syscall.
+            if spin_count < 100 {
+                spin_count += 1;
+
+                // Reload value to check state
+                let state = unsafe { atomic_load_u32(ptr) };
+
+                // Optimization: Don't try to CAS if we see it's locked.
+                // Just spin-loop. This reduces cache coherency traffic (MESI:
+                // Modified, Exclusive, Shared, Invalid cache coherency protocol).
+                if state != 0 {
+                    core::hint::spin_loop();
+                    continue;
                 }
-                return;
+
+                // Try to grab it again (0 -> 1)
+                if unsafe { atomic_cxchg_u32(ptr, 0, 1) } == 0 {
+                    return;
+                }
+
+                // Random Backoff (Ethernet style) to prevent thundering herd
+                // Simple Xorshift or just using the loop counter + address
+                rng_seed ^= rng_seed << 13;
+                rng_seed ^= rng_seed >> 17;
+                rng_seed ^= rng_seed << 5;
+
+                // Variable spin loop based on "randomness"
+                let backoff = (rng_seed % 10) + 1;
+                for _ in 0..backoff {
+                    core::hint::spin_loop();
+                }
+                continue;
             }
-            core::hint::spin_loop();
+
+            // B. PARK PHASE (The "Descheduling")
+            // If we are still here, the lock is held for a "long" time.
+            // We must mark the state as 2 (Contested) so the unlocker knows to wake us.
+
+            let state = unsafe { atomic_load_u32(ptr) };
+            if state == 0 {
+                // Just in case it unlocked while we were preparing to sleep
+                if unsafe { atomic_cxchg_u32(ptr, 0, 1) } == 0 { return; }
+                continue;
+            }
+
+            // If state is 1, upgrade to 2 (signal "I am going to sleep")
+            if state == 1 {
+                if unsafe { atomic_cxchg_u32(ptr, 1, 2) } != 1 {
+                    continue; // State changed, retry loop
+                }
+            }
+
+            // C. SLEEP
+            // Execute 'memory.atomic.wait32'.
+            // This suspends the thread execution until:
+            // 1. Another thread calls memory.atomic.notify on this address.
+            // 2. The value at the address is no longer equal to 2 (race check).
+            // 3. Optional timeout (we pass -1 for infinite).
+            unsafe {
+                // Must cast to *mut i32 for the intrinsic
+                let ptr_i32 = ptr as *mut i32;
+                // Params: (ptr, expected_value, timeout_ns)
+                wasm32::memory_atomic_wait32(ptr_i32, 2, -1);
+            }
+
+            // After waking up, we loop back to start.
+            // We do NOT assume we have the lock. We must try to CAS 0->2 or 0->1 again.
+            // Reset spin count to try spinning briefly again upon wake-up.
+            spin_count = 0;
         }
     }
 
     #[inline(always)]
     fn unlock(&mut self) {
         let ptr = &mut self.global_lock as *mut u32;
-        atomic_store_u32(ptr, 0);
-        unsafe {
-            LOCK_RELEASE_COUNT = LOCK_RELEASE_COUNT.wrapping_add(1);
+
+        // 1. FAST RELEASE
+        // Atomically swap 0. We need the previous value to know if we need to wake anyone.
+        // We use xchg (swap) instead of store to strictly serialize.
+        // If previous was 1, no one was waiting. We are done.
+        let prev = unsafe { atomic_xchg_u32(ptr, 0) };
+
+        // 2. WAKE UP (If needed)
+        // If previous value was 2, it means threads are sleeping in the kernel.
+        if prev == 2 {
+            unsafe {
+                let ptr_i32 = ptr as *mut i32;
+                // Wake up 1 waiter. (Passing u32::MAX would wake all -> thundering herd).
+                wasm32::memory_atomic_notify(ptr_i32, 1);
+            }
         }
+
+        unsafe { LOCK_RELEASE_COUNT = LOCK_RELEASE_COUNT.wrapping_add(1); }
     }
 
     #[inline(always)]
@@ -248,6 +344,13 @@ fn atomic_cxchg_u32(ptr: *mut u32, current: u32, new: u32) -> u32 {
             Err(v) => v,
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[inline(always)]
+unsafe fn atomic_xchg_u32(ptr: *mut u32, new: u32) -> u32 {
+    // compiles to i32.atomic.rmw.xchg
+    (&*(ptr as *const AtomicU32)).swap(new, Ordering::SeqCst)
 }
 
 #[cfg(target_arch = "wasm32")]

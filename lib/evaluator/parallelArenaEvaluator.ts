@@ -15,7 +15,20 @@ import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import { ArenaKind } from "../shared/arena.ts";
 
 const EMPTY = -1n;
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// Cancellable sleep function that returns both the promise and a cleanup function
+const sleep = (ms: number): { promise: Promise<void>; cancel: () => void } => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const promise = new Promise<void>((r) => {
+    timeoutId = setTimeout(r, ms);
+  });
+  const cancel = () => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+  return { promise, cancel };
+};
 // Maximum number of resubmissions per work unit (when yielding suspensions)
 // This prevents a single divergent term from monopolizing resources
 const MAX_RESUBMITS_PER_WORK_UNIT = 10;
@@ -134,11 +147,17 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     pullNonEmpty: 0,
     completionsStashed: 0,
   };
+  private readonly activeTimeouts = new Set<() => void>();
 
   private abortAll(err: Error) {
     if (this.aborted) return;
     this.aborted = true;
     this.abortError = err;
+    // Clear all active timeouts to prevent leaks
+    for (const cancel of this.activeTimeouts) {
+      cancel();
+    }
+    this.activeTimeouts.clear();
     for (const { reject } of this.pending.values()) reject(err);
     this.pending.clear();
     this.completed.clear();
@@ -249,7 +268,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         if (this.aborted) {
           throw (this.abortError ?? new Error("Evaluator terminated"));
         }
-        await sleep(0); // Try 0 first, it might yield but return faster than 1
+        const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
+        this.activeTimeouts.add(cancel);
+        try {
+          await promise;
+        } finally {
+          this.activeTimeouts.delete(cancel);
+        }
         if (this.aborted) {
           throw (this.abortError ?? new Error("Evaluator terminated"));
         }
@@ -599,7 +624,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
           // Sleep in 1ms chunks up to ~50ms total, checking aborted frequently
           for (let i = 0; i < 50; i++) {
             if (this.aborted) return;
-            await sleep(1);
+            const { promise, cancel } = sleep(1);
+            this.activeTimeouts.add(cancel);
+            try {
+              await promise;
+            } finally {
+              this.activeTimeouts.delete(cancel);
+            }
             if (this.aborted) return;
           }
           continue;
@@ -615,7 +646,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
             await new Promise<void>((r) => queueMicrotask(r));
           } else {
             if (this.aborted) return;
-            await sleep(0); // Try 0 first, it might yield but return faster than 1
+            const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
+            this.activeTimeouts.add(cancel);
+            try {
+              await promise;
+            } finally {
+              this.activeTimeouts.delete(cancel);
+            }
             if (this.aborted) return;
           }
           continue;
@@ -682,7 +719,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
               await new Promise<void>((r) => queueMicrotask(r));
             } else {
               if (this.aborted) return;
-              await sleep(1);
+              const { promise, cancel } = sleep(1);
+              this.activeTimeouts.add(cancel);
+              try {
+                await promise;
+              } finally {
+                this.activeTimeouts.delete(cancel);
+              }
               if (this.aborted) return;
             }
             rc = ex.hostSubmit(nodeId >>> 0, reqId);

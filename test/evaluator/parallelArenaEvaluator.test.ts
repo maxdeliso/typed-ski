@@ -74,9 +74,9 @@ Deno.test("ParallelArenaEvaluator - worker initialization", async (t) => {
   });
 });
 
-Deno.test("ParallelArenaEvaluator - basic evaluation still works", async (t) => {
+Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) => {
   await t.step(
-    "can still evaluate expressions (fallback to parent)",
+    "async evaluation works and arena is in SAB mode",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
       const { $: exports } = evaluator;
@@ -194,104 +194,123 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
   });
 
   await t.step(
-    "evaluates (SII)(SII) in parallel - generates lock contention",
+    "parallel evaluations of same expression produce deterministic results",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-      const expr = parseSKI("(SII)(SII)");
+      try {
+        const expr = parseSKI("(SII)(SII)");
 
-      const sendWork = (max: number): Promise<SKIExpression> => {
-        return evaluator.reduceAsync(expr, max);
-      };
+        const sendWork = (max: number): Promise<SKIExpression> => {
+          return evaluator.reduceAsync(expr, max);
+        };
 
-      // (SII)(SII) has an infinite reduction sequence - it reduces to itself
-      // Run two evaluations in parallel for 1000
-      const promise1 = sendWork(1000);
-      const promise2 = sendWork(1000);
+        // (SII)(SII) has an infinite reduction sequence - it reduces to itself
+        // Run two evaluations in parallel for 1000
+        const promise1 = sendWork(1000);
+        const promise2 = sendWork(1000);
 
-      // Wait for both workers to complete their work
-      const [result1, result2] = await Promise.all([promise1, promise2]);
+        // Wait for both workers to complete their work
+        const [result1, result2] = await Promise.all([promise1, promise2]);
 
-      // Both workers evaluated the same expression for the same number of steps,
-      // so they should produce identical results
-      assertEquals(
-        prettyPrint(result1),
-        prettyPrint(result2),
-        "Both workers should produce the same result when evaluating the same expression",
-      );
+        // Both workers evaluated the same expression for the same number of steps,
+        // so they should produce identical results
+        assertEquals(
+          prettyPrint(result1),
+          prettyPrint(result2),
+          "Both workers should produce the same result when evaluating the same expression",
+        );
 
-      // Validate that locks were acquired and released (proves concurrent access)
-      // Note: implementation is lock-free; we only validate deterministic results.
-
-      evaluator.terminate();
+        // Validate that locks were acquired and released (proves concurrent access)
+        // Note: implementation is lock-free; we only validate deterministic results.
+      } finally {
+        evaluator.terminate();
+      }
     },
   );
 });
 
 Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
-  await t.step("correlation correctness under load (maxSteps=0)", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(4);
-    const N = 400;
-    const exprs = Array.from({ length: N }, (_, i) => makeUniqueExpr(i));
+  await t.step(
+    "request correlation: results match inputs with maxSteps=0",
+    async () => {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(4);
+      try {
+        const N = 400;
+        const exprs = Array.from({ length: N }, (_, i) => makeUniqueExpr(i));
 
-    // maxSteps=0 => result should equal input; mismatch implies bad correlation.
-    const results = await Promise.all(
-      exprs.map((e) => evaluator.reduceAsync(e, 0)),
-    );
-    for (let i = 0; i < N; i++) {
-      assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
-    }
-    evaluator.terminate();
-  });
+        // maxSteps=0 => result should equal input; mismatch implies bad correlation.
+        const results = await Promise.all(
+          exprs.map((e) => evaluator.reduceAsync(e, 0)),
+        );
+        for (let i = 0; i < N; i++) {
+          assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
+        }
+      } finally {
+        evaluator.terminate();
+      }
+    },
+  );
 
-  await t.step("ring wrap-around / slot sequence correctness", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(8);
-    // RING_ENTRIES is 1024 in wasm; exceed it several times.
-    const N = 4096;
-    const exprs = Array.from({ length: N }, (_, i) => makeUniqueExpr(i, 20));
+  await t.step(
+    "ring buffer wrap-around when exceeding RING_ENTRIES capacity",
+    async () => {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(8);
+      try {
+        // RING_ENTRIES is 1024 in wasm; exceed it several times.
+        const N = 4096;
+        const exprs = Array.from(
+          { length: N },
+          (_, i) => makeUniqueExpr(i, 20),
+        );
 
-    const results = await Promise.all(
-      exprs.map((e) => evaluator.reduceAsync(e, 0)),
-    );
-    for (let i = 0; i < N; i++) {
-      assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
-    }
-    evaluator.terminate();
-  });
+        const results = await Promise.all(
+          exprs.map((e) => evaluator.reduceAsync(e, 0)),
+        );
+        for (let i = 0; i < N; i++) {
+          assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
+        }
+      } finally {
+        evaluator.terminate();
+      }
+    },
+  );
 });
 
 Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
   await t.step("fromArena correctly reconstructs expressions", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-    const testCases = [
-      "I",
-      "II",
-      "III",
-      "KIS",
-      "SKKI",
-      "SKKII",
-      "KI(KI)",
-      "(SII)(SII)",
-    ];
+    try {
+      const testCases = [
+        "I",
+        "II",
+        "III",
+        "KIS",
+        "SKKI",
+        "SKKII",
+        "KI(KI)",
+        "(SII)(SII)",
+      ];
 
-    for (const exprStr of testCases) {
-      const expr = parseSKI(exprStr);
-      // Convert to arena
-      const arenaId = evaluator.toArena(expr);
-      // Convert back from arena using memory views
-      const reconstructed = evaluator.fromArena(arenaId);
-      // Verify they match
-      assertEquals(
-        prettyPrint(reconstructed),
-        prettyPrint(expr),
-        `fromArena failed for expression: ${exprStr}`,
-      );
+      for (const exprStr of testCases) {
+        const expr = parseSKI(exprStr);
+        // Convert to arena
+        const arenaId = evaluator.toArena(expr);
+        // Convert back from arena using memory views
+        const reconstructed = evaluator.fromArena(arenaId);
+        // Verify they match
+        assertEquals(
+          prettyPrint(reconstructed),
+          prettyPrint(expr),
+          `fromArena failed for expression: ${exprStr}`,
+        );
+      }
+    } finally {
+      evaluator.terminate();
     }
-
-    evaluator.terminate();
   });
 
   await t.step(
-    "fromArena correctly reconstructs expressions after reduction",
+    "fromArena reconstructs expressions correctly after async reduction",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
       const expr = parseSKI("III");
@@ -303,7 +322,7 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
   );
 
   await t.step(
-    "fromArena works correctly with parallel reduceAsync",
+    "fromArena works with reduceAsync and manual toArena/fromArena round-trip",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
       const expr = parseSKI("III");

@@ -68,7 +68,8 @@ Inter-thread communication uses **lock-free ring buffers** (io_uring-style):
 Arena growth uses a **seqlock-style approach**:
 
 - **Stop-the-world pauses**: All threads spin during resize operations
-- **Sequence lock**: Odd values indicate resize in progress, even values indicate stable
+- **Sequence lock**: Odd values indicate resize in progress, even values
+  indicate stable
 - **Reverse-order copying**: Prevents overlap issues during memory migration
 - **Bucket rebuild**: Hash table reconstructed after resize
 - **Poisoning on failure**: Unrecoverable errors set poison sequences

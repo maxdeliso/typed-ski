@@ -28,8 +28,8 @@ The arena allocator supports two modes:
 - **Single-threaded (Heap Mode)**: Uses local WASM memory with lazy allocation
 - **Multi-threaded (SAB Mode)**: Uses
   [WebAssembly shared memory][wasm-shared-memory] (SharedArrayBuffer) to enable
-  concurrent access from multiple Web Workers, with atomic operations and lock
-  striping for thread safety
+  concurrent access from multiple Web Workers, with atomic operations and
+  lock-free synchronization for thread safety
 
 Hash consing is implemented using a hash table with chaining, ensuring that
 expressions with the same structure (same left and right children) are
@@ -38,69 +38,40 @@ capacity.
 
 ### Thread Safety and Locking
 
-In SAB (SharedArrayBuffer) mode, the arena uses a sophisticated locking scheme
-to enable high-performance concurrent access:
+In SAB (SharedArrayBuffer) mode, the arena uses lock-free and atomic-based
+concurrency control to enable high-performance concurrent access:
 
-#### Lock Striping
+#### Optimistic Concurrency Control
 
-The arena uses **lock striping** with 64 independent locks to minimize
-contention. Each hash bucket is mapped to one of 64 locks using a bitwise mask
-of the hash value, allowing concurrent operations on different buckets to
-proceed in parallel without blocking each other.
+Hash-consing allocation uses **optimistic concurrency control**:
 
-#### Tri-State Mutex
+1. **Optimistic read**: Traverse bucket chain without locking
+2. **Pre-allocate ID**: Use `top.fetch_add()` to reserve slot atomically
+3. **CAS insertion**: Attempt to insert into hash table bucket
+4. **Graceful failure**: If CAS fails, slot becomes a "hole" (`kind = 0`)
 
-Each lock uses a **tri-state mutex** implementation:
+**Correctness guarantee**: Canonical node IDs are always returned. Readers treat
+non-`NonTerm` kinds as terminal values, so holes don't affect evaluation.
 
-- **State 0**: Unlocked (available)
-- **State 1**: Locked, no contention (fast path - no waiters)
-- **State 2**: Locked, with contention (slow path - threads are sleeping)
+#### Lock-Free Ring Buffers
 
-This design enables an optimized unlock path: if the lock was in state 1, no
-wakeup notification is needed. If it was in state 2, the unlocker must wake up
-sleeping threads using `memory.atomic.notify`.
+Inter-thread communication uses **lock-free ring buffers** (io_uring-style):
 
-#### Locking Strategy
-
-The locking implementation uses a multi-phase approach:
-
-1. **Fast Path**: Try to acquire the lock with a single atomic compare-and-swap
-   (CAS) operation. If successful, set state to 1 and return immediately.
-
-2. **Spin Phase**: If the fast path fails, spin for up to 100 iterations with
-   random exponential backoff to handle short-duration locks without the
-   overhead of system calls.
-
-3. **Park Phase**: For longer-held locks, threads mark the lock as contended
-   (state 2) and use `memory.atomic.wait32` to sleep until woken by the
-   unlocker.
-
-#### Thread Configuration
-
-The arena uses a JavaScript host import (`js_allow_block`) to determine whether
-a thread can block:
-
-- **Main Thread**: Returns `0` - must use spin-only locking (cannot call
-  `memory.atomic.wait32` as it would block the main event loop)
-- **Worker Threads**: Return `1` - can use blocking waits for better CPU
-  efficiency under contention
-
-This configuration is instance-local (stored in each WASM instance's JavaScript
-closure), avoiding shared memory state collisions between main thread and
-workers.
+- **Submission Queue (SQ)**: Main thread → Worker communication
+- **Completion Queue (CQ)**: Worker → Main thread results
+- **Atomic operations**: Wait-free producer/consumer patterns
+- **Sequence numbers**: ABA prevention in concurrent access
+- **Blocking waits**: Efficient WASM atomic wait/notify
 
 #### Resize Synchronization
 
-Arena growth uses a "Stop the World" approach:
+Arena growth uses a **seqlock-style approach**:
 
-- **Resize Lock**: A global lock that must be acquired before resizing
-- **Sequence Lock**: A lock-free mechanism for readers to detect concurrent
-  resizes. The sequence number is incremented to an odd value before resize
-  starts and to an even value after completion. Readers check that the sequence
-  is even and unchanged during their read operation.
-
-During resize, all 64 stripe locks are acquired in order to prevent deadlocks,
-ensuring exclusive access for the rehashing operation.
+- **Stop-the-world pauses**: All threads spin during resize operations
+- **Sequence lock**: Odd values indicate resize in progress, even values indicate stable
+- **Reverse-order copying**: Prevents overlap issues during memory migration
+- **Bucket rebuild**: Hash table reconstructed after resize
+- **Poisoning on failure**: Unrecoverable errors set poison sequences
 
 [wasm-shared-memory]: https://webassembly.github.io/spec/core/syntax/modules.html#memories
 [soa]: https://en.wikipedia.org/wiki/AoS_and_SoA

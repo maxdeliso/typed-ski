@@ -131,8 +131,10 @@ export function fromArenaWithExports(
   >,
   memory?: WebAssembly.Memory,
 ): SKIExpression {
-  // Get or build arena views with caching
-  let views = getOrBuildArenaViews(memory, exports);
+  // Get or build arena views with caching (initial views, set once before loop)
+  const initialViews = getOrBuildArenaViews(memory, exports);
+  // Current views (may be updated inside loop if arena grows)
+  let views = initialViews;
   const cache = new Map<number, SKIExpression>();
   const stack: number[] = [rootId];
 

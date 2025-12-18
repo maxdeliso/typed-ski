@@ -234,9 +234,8 @@ export interface ArenaWasmExports {
   allocCons(l: number, r: number): number;
   arenaKernelStep(expr: number): number;
   reduce(expr: number, max: number): number;
-  hostSubmit?(nodeId: number, reqId: number): number;
+  hostSubmit?(nodeId: number, reqId: number, maxSteps: number): number;
   hostPull?(): bigint;
-  setMaxSteps?(max: number): void;
   workerLoop?(): void;
   kindOf(id: number): number;
   symOf(id: number): number;
@@ -383,13 +382,9 @@ export class ArenaEvaluatorWasm implements Evaluator {
     );
   }
 
-  setMaxSteps(max: number): void {
-    this.$.setMaxSteps?.(max >>> 0);
-  }
-
-  hostSubmit(nodeId: number, reqId: number): number {
+  hostSubmit(nodeId: number, reqId: number, maxSteps: number): number {
     if (!this.$.hostSubmit) throw new Error("hostSubmit export missing");
-    return this.$.hostSubmit(nodeId >>> 0, reqId >>> 0);
+    return this.$.hostSubmit(nodeId >>> 0, reqId >>> 0, maxSteps >>> 0);
   }
 
   hostPull(): bigint {
@@ -412,10 +407,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
     if (!baseAddr) return 0;
 
-    // New header layout (rust/src/arena.rs SabHeader):
-    // 13 = capacity, 17 = top
+    // Header layout (rust/src/arena.rs SabHeader):
+    // 13 = capacity, 16 = top (after removing max_steps field)
     const headerView = new Uint32Array(this.memory.buffer, baseAddr, 32);
-    return headerView[17];
+    return headerView[16];
   }
 
   /**

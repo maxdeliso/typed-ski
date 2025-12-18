@@ -271,12 +271,13 @@ cargo build --target wasm32-unknown-unknown --release
 - `allocCons(left: u32, right: u32) -> u32`
 - `arenaKernelStep(expr: u32) -> u32`
 - `reduce(expr: u32, max: u32) -> u32`
-- `setMaxSteps(max: u32)`: sets the global reduction limit used by workers.
 
 ### SQ/CQ interface
 
-- `hostSubmit(node_id: u32, req_id: u32) -> u32`
+- `hostSubmit(node_id: u32, req_id: u32, max_steps: u32) -> u32`
   - returns `0` ok, `1` SQ full, `2` not connected
+  - `max_steps` is the reduction limit for this specific request (eliminates
+    race conditions)
 - `hostPull() -> i64`
   - returns `-1` if CQ empty, otherwise a packed value:
     - high 32 bits: `req_id`

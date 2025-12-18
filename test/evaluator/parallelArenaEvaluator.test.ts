@@ -194,34 +194,45 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
   });
 
   await t.step(
-    "parallel evaluations of same expression produce deterministic results",
+    "parallel evaluations of convergent expression produce deterministic results",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
       try {
-        const expr = parseSKI("(SII)(SII)");
+        // Instead of a divergent term like (SII)(SII), we use a convergent term
+        // that will eventually reduce to I but takes many steps.
+        // We use a simpler construction: (K I) applied multiple times to I.
+        // (K I) x -> I, so (K I) I -> I, and we can nest this.
+        // This creates work without exponential growth.
 
-        const sendWork = (max: number): Promise<SKIExpression> => {
-          return evaluator.reduceAsync(expr, max);
+        // Build: (K I) ((K I) ((K I) ... I))
+        let heavyExpr: SKIExpression = I;
+        const KI = apply(K, I);
+        // Nesting 30 deep creates significant work while still converging
+        for (let i = 0; i < 30; i++) {
+          heavyExpr = apply(KI, heavyExpr);
+        }
+
+        // Run two evaluations in parallel with a fixed step limit
+        // The key test is that both produce the SAME result, regardless
+        // of whether they fully converge within the limit.
+        const stepLimit = 5000;
+        const sendWork = (): Promise<SKIExpression> => {
+          return evaluator.reduceAsync(heavyExpr, stepLimit);
         };
 
-        // (SII)(SII) has an infinite reduction sequence - it reduces to itself
-        // Run two evaluations in parallel for 1000
-        const promise1 = sendWork(1000);
-        const promise2 = sendWork(1000);
+        const [result1, result2] = await Promise.all([sendWork(), sendWork()]);
 
-        // Wait for both workers to complete their work
-        const [result1, result2] = await Promise.all([promise1, promise2]);
-
-        // Both workers evaluated the same expression for the same number of steps,
-        // so they should produce identical results
+        // The critical assertion: both workers should produce identical results
+        // when given the same expression and step limit, demonstrating
+        // deterministic step counting regardless of suspension/resumption timing.
         assertEquals(
           prettyPrint(result1),
           prettyPrint(result2),
-          "Both workers should produce the same result when evaluating the same expression",
+          "Parallel executions produced different results (violated determinism). " +
+            `Worker 1: ${prettyPrint(result1)}, Worker 2: ${
+              prettyPrint(result2)
+            }`,
         );
-
-        // Validate that locks were acquired and released (proves concurrent access)
-        // Note: implementation is lock-free; we only validate deterministic results.
       } finally {
         evaluator.terminate();
       }

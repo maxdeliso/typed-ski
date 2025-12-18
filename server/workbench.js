@@ -208,12 +208,11 @@ async function submitAndTrack(
     const startNodeId = evaluator.toArena(expr);
     addLog(`Queued node ${startNodeId}`);
 
-    // Set max steps before submitting
-    evaluator.setMaxSteps(maxSteps);
-
+    // Pass maxSteps directly to the request
     const resultNodeId = await evaluator.reduceArenaNodeIdAsync(
       startNodeId,
       expr,
+      maxSteps,
     );
     const elapsed = performance.now() - start;
 

@@ -204,7 +204,12 @@ async function evaluateBatchParallel(
   try {
     for (let step = 0; step < maxSteps; step++) {
       if (st.done) break;
-      const nextId = await evaluator.reduceArenaNodeIdAsync(st.currentId);
+      // Each call does exactly one reduction step
+      const nextId = await evaluator.reduceArenaNodeIdAsync(
+        st.currentId,
+        undefined,
+        1,
+      );
       stepsTaken++;
       onStep?.(stepsTaken);
 
@@ -291,8 +296,6 @@ export async function* generateEvaluationForest(
 
     // Configure workers to execute exactly one reduction step per submission.
     // The per-expression step limit is enforced in JS.
-    evaluator.setMaxSteps(1);
-
     // Sliding concurrency window: when one expression completes, immediately start another.
     const CONCURRENCY = 8;
     let nextIndex = 0;

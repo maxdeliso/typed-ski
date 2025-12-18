@@ -221,9 +221,6 @@ pub extern "C" fn hostPull() -> u32 { u32::MAX }
 pub extern "C" fn workerLoop() {}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn setMaxSteps(_m: u32) {}
-#[cfg(not(target_arch = "wasm32"))]
-#[no_mangle]
 pub extern "C" fn debugGetArenaBaseAddr() -> u32 { 0 }
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
@@ -303,8 +300,9 @@ mod wasm {
         /// Must be unique across all outstanding requests.
         pub req_id: u32,
 
-        /// Padding to align Slot<Sqe> to 16 bytes (power of 2) for efficient indexing.
-        pub _pad: u32,
+        /// Max reduction steps for this specific request.
+        /// Replaces previous _pad field. Each request carries its own immutable limit.
+        pub max_steps: u32,
     }
 
     /// Completion Queue Entry: Worker → Main thread results.
@@ -654,7 +652,6 @@ mod wasm {
         offset_term_cache: u32,
         capacity: u32,
         bucket_mask: u32,
-        max_steps: AtomicU32,
         resize_seq: AtomicU32,
         top: AtomicU32,
     }
@@ -852,7 +849,6 @@ mod wasm {
         h.offset_term_cache = h.offset_buckets + 4 * capacity;
         h.capacity = capacity;
         h.bucket_mask = capacity - 1;
-        h.max_steps.store(0xffff_ffff, Ordering::Relaxed);
         h.resize_seq.store(0, Ordering::Relaxed);
         h.top.store(0, Ordering::Relaxed);
 
@@ -1485,6 +1481,42 @@ mod wasm {
         }
     }
 
+    /// Unwind the continuation stack to reconstruct the full expression tree.
+    ///
+    /// When the step limit is exhausted, the worker may be deep in the expression tree
+    /// with a non-empty stack. This function walks up the stack, rebuilding parent nodes
+    /// as necessary, to return the root of the expression rather than a sub-expression.
+    #[inline(always)]
+    unsafe fn unwind_to_root(mut curr: u32, mut stack: u32) -> u32 {
+        while stack != EMPTY {
+            let recycled = stack;
+            stack = leftOf(recycled);
+            let parent_node = rightOf(recycled);
+            let stage = symOf(recycled) as u8;
+
+            if stage == STAGE_LEFT {
+                let orig_left = leftOf(parent_node);
+                if curr != orig_left {
+                    // Left child changed, must allocate new parent
+                    curr = allocCons(curr, rightOf(parent_node));
+                } else {
+                    // Left child didn't change, reuse existing parent
+                    curr = parent_node;
+                }
+            } else {
+                // STAGE_RIGHT
+                let orig_right = rightOf(parent_node);
+                if curr != orig_right {
+                    // Right child changed, must allocate new parent
+                    curr = allocCons(leftOf(parent_node), curr);
+                } else {
+                    curr = parent_node;
+                }
+            }
+        }
+        curr
+    }
+
     enum StepResult {
         Done(u32),
         Yield(u32), // Suspension node id
@@ -1510,6 +1542,12 @@ mod wasm {
     /// - **Yield on exhaustion**: Returns Suspension node for later resumption
     /// - **Cooperative multitasking**: Prevents worker starvation in parallel evaluation
     ///
+    /// ## Step Counting
+    ///
+    /// - **Accurate counting**: Decrements `remaining_steps` immediately when each reduction occurs
+    /// - **Multiple reductions per call**: Can perform multiple reductions in a single call
+    /// - **Deterministic**: Every reduction is counted exactly once, regardless of batching
+    ///
     /// ## Node Recycling Optimization
     ///
     /// - **Free node reuse**: Dead continuation frames are recycled immediately
@@ -1522,18 +1560,19 @@ mod wasm {
     /// - `stack`: Stack of continuation frames (linked list of nodes)
     /// - `mode`: Current evaluation mode (descend/return)
     /// - `gas`: Remaining traversal gas (mutable, decremented during execution)
-    /// - `remaining_steps`: Total reduction steps remaining
+    /// - `remaining_steps`: Mutable reference to reduction steps remaining (decremented on each reduction)
     /// - `free_node`: Recyclable node ID from previous operations
     ///
     /// ## Returns
     ///
     /// - `StepResult::Done(node)`: Reduction completed, `node` is the result
     /// - `StepResult::Yield(susp_id)`: Yielded mid-step, `susp_id` is Suspension node
-    unsafe fn step_iterative(mut curr: u32, mut stack: u32, mut mode: u8, gas: &mut u32, remaining_steps: u32, mut free_node: u32) -> StepResult {
+    unsafe fn step_iterative(mut curr: u32, mut stack: u32, mut mode: u8, gas: &mut u32, remaining_steps: &mut u32, mut free_node: u32) -> StepResult {
         loop {
+            // Gas exhaustion yield
             if *gas == 0 {
                 // If we have a free_node we didn't use, it's just a hole now.
-                return StepResult::Yield(alloc_suspension(curr, stack, mode, remaining_steps));
+                return StepResult::Yield(alloc_suspension(curr, stack, mode, *remaining_steps));
             }
             *gas -= 1;
 
@@ -1592,10 +1631,23 @@ mod wasm {
             let left = leftOf(curr);
             let right = rightOf(curr);
 
+            // [REDUCTION LOGIC START] -----------------------------------------
+
             // I x -> x
             if kindOf(left) == ArenaKind::Terminal as u32 && symOf(left) == ArenaSym::I as u32 {
+                if *remaining_steps == 0 {
+                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                }
+                *remaining_steps = remaining_steps.saturating_sub(1);
+
                 curr = right;
                 mode = MODE_RETURN;
+
+                // Yield IMMEDIATELY if limit hit zero.
+                // Don't waste gas traversing to the next redex.
+                if *remaining_steps == 0 {
+                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                }
                 continue;
             }
 
@@ -1603,14 +1655,30 @@ mod wasm {
                 let ll = leftOf(left);
                 // K x y -> x
                 if kindOf(ll) == ArenaKind::Terminal as u32 && symOf(ll) == ArenaSym::K as u32 {
+                    if *remaining_steps == 0 {
+                        return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                    }
+                    *remaining_steps = remaining_steps.saturating_sub(1);
+
                     curr = rightOf(left);
                     mode = MODE_RETURN;
+
+                    // Yield IMMEDIATELY
+                    if *remaining_steps == 0 {
+                        return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                    }
                     continue;
                 }
                 // S x y z -> x z (y z)
                 if kindOf(ll) == ArenaKind::NonTerm as u32 {
                     let lll = leftOf(ll);
                     if kindOf(lll) == ArenaKind::Terminal as u32 && symOf(lll) == ArenaSym::S as u32 {
+                        if *remaining_steps == 0 {
+                            return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                        }
+                        // Use saturating_sub for consistency
+                        *remaining_steps = remaining_steps.saturating_sub(1);
+
                         let x = rightOf(ll);
                         let y = rightOf(left);
                         let z = right;
@@ -1618,10 +1686,17 @@ mod wasm {
                         let yz = allocCons(y, z);
                         curr = allocCons(xz, yz);
                         mode = MODE_RETURN;
+
+                        // Yield IMMEDIATELY
+                        if *remaining_steps == 0 {
+                            return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                        }
                         continue;
                     }
                 }
             }
+
+            // [REDUCTION LOGIC END] -------------------------------------------
 
             // No redex: PUSH frame to descend left
             if free_node != EMPTY {
@@ -1639,7 +1714,8 @@ mod wasm {
     fn step_internal(expr: u32) -> u32 {
         unsafe {
             let mut gas = u32::MAX;
-            match step_iterative(expr, EMPTY, MODE_DESCEND, &mut gas, u32::MAX, EMPTY) {
+            let mut steps = u32::MAX; // Dummy - not used for single-step calls
+            match step_iterative(expr, EMPTY, MODE_DESCEND, &mut gas, &mut steps, EMPTY) {
                 StepResult::Done(x) => x,
                 StepResult::Yield(_) => expr, // unreachable with u32::MAX gas; keep total safety
             }
@@ -1667,15 +1743,6 @@ mod wasm {
         cur
     }
 
-    #[no_mangle]
-    pub extern "C" fn setMaxSteps(max: u32) {
-        unsafe {
-            if ARENA_BASE_ADDR != 0 {
-                header().max_steps.store(max, Ordering::Release);
-            }
-        }
-    }
-
     // -------------------------------------------------------------------------
     // Host/worker ring APIs
     // -------------------------------------------------------------------------
@@ -1696,14 +1763,14 @@ mod wasm {
     }
 
     #[no_mangle]
-    /// Submit work with explicit correlation id.
+    /// Submit work with explicit correlation id and max reduction steps.
     /// Returns: 0=ok, 1=full, 2=not connected.
-    pub extern "C" fn hostSubmit(node_id: u32, req_id: u32) -> u32 {
+    pub extern "C" fn hostSubmit(node_id: u32, req_id: u32, max_steps: u32) -> u32 {
         unsafe {
             if ARENA_BASE_ADDR == 0 {
                 return 2;
             }
-            if sq_ring().try_enqueue(Sqe { node_id, req_id, _pad: 0 }) {
+            if sq_ring().try_enqueue(Sqe { node_id, req_id, max_steps }) {
                 0
             } else {
                 1
@@ -1733,6 +1800,15 @@ mod wasm {
     /// - **Suspension resumption**: Can restart from any yield point
     /// - **Fair scheduling**: Prevents any single expression from monopolizing CPU
     ///
+    /// ## Step Counting Semantics
+    ///
+    /// - **Step decrement**: Only occurs when `StepResult::Done` is returned (step completed)
+    /// - **Yield behavior**: When `step_iterative` yields, it saves the UN-DECREMENTED `remaining_steps`
+    ///   because the step did not finish. This is correct: the suspension captures the state before
+    ///   the step completes, so resumption continues with the same budget.
+    /// - **Deterministic counting**: Each reduction step is counted exactly once, regardless of
+    ///   how many times the work is suspended and resumed.
+    ///
     /// ## Memory Management
     ///
     /// - **Node recycling**: Reuses dead continuation frames immediately
@@ -1752,7 +1828,7 @@ mod wasm {
             let cq = cq_ring();
             // Per-dequeue traversal gas (preemption) to prevent starvation.
             // This is NOT the same as max reduction steps.
-            let batch_gas: u32 = 20000; // 4x the original 5000
+            let batch_gas: u32 = 20000;
             loop {
                 let job = sq.dequeue_blocking();
                 let mut curr = job.node_id;
@@ -1769,17 +1845,28 @@ mod wasm {
                     curr = leftOf(susp);
                     stack = rightOf(susp);
                     mode = symOf(susp) as u8;
+                    // Strict resume: Trust the suspension's counter 100%
+                    // The suspension node's hash field contains the remaining_steps that were
+                    // saved when the step yielded (before decrement, because the step didn't finish).
                     remaining_steps = hash_of_internal(susp);
                     free_node = susp; // <--- RECYCLE START
                 } else {
-                    // Total reduction step budget (same semantics as `reduce(expr, max)` / previous worker loop).
-                    let limit = header().max_steps.load(Ordering::Acquire);
+                    // Set strict limit from the job packet
+                    let limit = job.max_steps;
                     remaining_steps = if limit == 0xffff_ffff { u32::MAX } else { limit };
                 }
 
                 loop {
+                    // Check budget BEFORE trying a step
                     if remaining_steps == 0 {
-                        // Step budget exhausted; return partial result.
+                        // If we have a stack, we are deep in the tree.
+                        // We must unwind to the root to return a valid full expression.
+                        if stack != EMPTY {
+                            curr = unwind_to_root(curr, stack);
+                            stack = EMPTY;
+                        }
+
+                        // Step budget exhausted; return (partial) result.
                         cq.enqueue_blocking(Cqe {
                             node_id: curr,
                             req_id: job.req_id,
@@ -1789,8 +1876,12 @@ mod wasm {
                     }
 
                     let mut gas = batch_gas;
-                    match step_iterative(curr, stack, mode, &mut gas, remaining_steps, free_node) {
+
+                    match step_iterative(curr, stack, mode, &mut gas, &mut remaining_steps, free_node) {
                         StepResult::Yield(susp_id) => {
+                            // Yielded (gas or limit). 'susp_id' has the correct remaining count
+                            // because step_iterative updated 'remaining_steps' in place for each
+                            // reduction that occurred before yielding.
                             cq.enqueue_blocking(Cqe {
                                 node_id: susp_id,
                                 req_id: job.req_id,
@@ -1799,8 +1890,6 @@ mod wasm {
                             break;
                         }
                         StepResult::Done(next_node) => {
-                            // One "step" consumed (even if it is a fixpoint check), matching `reduce(...)`.
-                            remaining_steps = remaining_steps.wrapping_sub(1);
                             if next_node == curr {
                                 // Fixpoint reached.
                                 cq.enqueue_blocking(Cqe {
@@ -1810,12 +1899,14 @@ mod wasm {
                                 });
                                 break;
                             }
+
+                            // Setup for next iteration
                             curr = next_node;
                             stack = EMPTY;
                             mode = MODE_DESCEND;
-                            free_node = EMPTY; // Previous free node chain broken/used
-                            // Continue reducing within this dequeue while we still have gas.
-                            // If we run out of traversal gas mid-step, we will Yield and be resubmitted.
+                            free_node = EMPTY;
+
+                            // Loop continues; 'remaining_steps' was updated by reference in step_iterative
                         }
                     }
                 }

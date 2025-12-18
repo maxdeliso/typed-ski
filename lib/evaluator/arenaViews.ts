@@ -55,10 +55,11 @@ function buildArenaViews(
   }
 
   const buffer = memory.buffer;
-  // New header layout (rust/src/arena.rs SabHeader):
+  // Header layout (rust/src/arena.rs SabHeader):
   // 0 magic, 1 ring_entries, 2 ring_mask, 3 offset_sq, 4 offset_cq,
   // 5 offset_kind, 6 offset_sym, 7 offset_left_id, 8 offset_right_id,
-  // 13 capacity, 17 top, ...
+  // 9 offset_hash32, 10 offset_next_idx, 11 offset_buckets, 12 offset_term_cache,
+  // 13 capacity, 14 bucket_mask, 15 resize_seq, 16 top
   const headerView = new Uint32Array(buffer, baseAddr, 32);
   const capacity = headerView[13];
   const offsetKind = headerView[5];

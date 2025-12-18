@@ -205,18 +205,19 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
    * Submit an already-allocated arena node id to the worker pool and await the resulting arena node id.
    *
    * Notes:
-   * - The number of reduction steps is controlled globally by `setMaxSteps(...)`.
+   * - The number of reduction steps is specified per-request via `maxSteps`.
    * - This is the primitive used by higher-level helpers (e.g. reduceAsync) and tooling (e.g. genForest).
    */
   async reduceArenaNodeIdAsync(
     arenaNodeId: number,
     expr?: SKIExpression,
+    maxSteps: number = 0xffffffff,
   ): Promise<number> {
     if (this.aborted) {
       throw this.abortError ?? new Error("Evaluator terminated");
     }
     const ex = this.$ as unknown as {
-      hostSubmit?: (nodeId: number, reqId: number) => number;
+      hostSubmit?: (nodeId: number, reqId: number, maxSteps: number) => number;
       hostPull?: () => bigint;
     };
     if (!ex.hostPull || !ex.hostSubmit) {
@@ -252,7 +253,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
     // Non-blocking submit: retry until queued, with a fixed cap on retries.
     // 0 = ok, 1 = full, 2 = not connected
-    let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId);
+    // maxSteps is strictly passed as Uint32
+    let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
     let fullStreak = 0;
     while (rc === 1) {
       this.ringStats.submitFull++;
@@ -279,7 +281,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
           throw (this.abortError ?? new Error("Evaluator terminated"));
         }
       }
-      rc = ex.hostSubmit(arenaNodeId >>> 0, reqId);
+      // retry also includes maxSteps
+      rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
     }
     if (rc !== 0) {
       if (rc === 2) this.ringStats.submitNotConnected++;
@@ -572,8 +575,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
    * Offload reduction to WASM workers via the shared SQ/CQ rings (io_uring-style).
    *
    * Contract:
-   * - **Submit (SQ)**: host enqueues `{ nodeId, reqId }` using `hostSubmit`.
-   * - **Complete (CQ)**: workers dequeue, reduce for `maxSteps` (global), then enqueue `{ resultNodeId, reqId }`.
+   * - **Submit (SQ)**: host enqueues `{ nodeId, reqId, maxSteps }` using `hostSubmit`.
+   * - **Complete (CQ)**: workers dequeue, reduce for the request-specific `maxSteps`, then enqueue `{ resultNodeId, reqId }`.
    *   Workers may also enqueue a **Suspension** node when they run out of traversal gas mid-step; the host must resubmit it.
    * - **Polling**: host drains CQ via `hostPull()`, which returns a packed bigint:
    *   `-1n` if empty, otherwise `(reqId << 32) | resultNodeId`.
@@ -583,11 +586,11 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     expr: SKIExpression,
     max = 0xffffffff,
   ): Promise<SKIExpression> {
-    this.$.setMaxSteps?.(max >>> 0);
     const arenaNodeId = this.toArena(expr);
     const resultArenaNodeId = await this.reduceArenaNodeIdAsync(
       arenaNodeId,
       expr,
+      max,
     );
     return this.fromArena(resultArenaNodeId);
   }
@@ -610,7 +613,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       let emptyStreak = 0;
       const ex = this.$ as unknown as {
         kindOf: (id: number) => number;
-        hostSubmit: (nodeId: number, reqId: number) => number;
+        hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
       };
       for (;;) {
         if (this.aborted) return;
@@ -709,7 +712,10 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
           // Retry submitting until queue accepts (unbounded retries when queue is full).
           // The per-work-unit resubmission limit above prevents individual work units
           // from monopolizing resources.
-          let rc = ex.hostSubmit(nodeId >>> 0, reqId);
+          // when resubmitting a suspension, max_steps is ignored by the worker
+          // (it uses the suspension's internal hash field for remaining budget), so we pass 0.
+          // The worker will read the count from the Suspension node's hash field.
+          let rc = ex.hostSubmit(nodeId >>> 0, reqId, 0);
           let fullStreak = 0;
           while (rc === 1) {
             this.ringStats.submitFull++;
@@ -728,7 +734,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
               }
               if (this.aborted) return;
             }
-            rc = ex.hostSubmit(nodeId >>> 0, reqId);
+            // retry passes 0 max steps for suspensions
+            rc = ex.hostSubmit(nodeId >>> 0, reqId, 0);
           }
           if (rc !== 0) {
             const err = new Error(

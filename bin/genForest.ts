@@ -260,7 +260,7 @@ async function evaluateBatchParallel(
 export async function* generateEvaluationForest(
   symbolCount: number,
   maxSteps: number = 100000,
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<EvalResult | string, void, unknown> {
   const evaluator = await ParallelArenaEvaluatorWasm.create(8);
 
   try {
@@ -399,7 +399,7 @@ export async function* generateEvaluationForest(
         while (resultBuffer.has(nextExpectedIndex)) {
           const result = resultBuffer.get(nextExpectedIndex)!;
           resultBuffer.delete(nextExpectedIndex);
-          yield JSON.stringify(result);
+          yield result;
           nextExpectedIndex++;
         }
       }
@@ -474,24 +474,52 @@ async function streamToStdout(
     console.error("Writing output to stdout...");
   }
 
+  const BATCH_SIZE = 100; // Batch size for stringification
+  const resultBatch: EvalResult[] = [];
   let inGlobalInfo = false;
+
   for await (const data of generateEvaluationForest(symbolCount, maxSteps)) {
-    // Check if this is the start of global info
-    if (data.startsWith('{"type":"global"')) {
-      inGlobalInfo = true;
-      Deno.stdout.writeSync(new TextEncoder().encode(data));
-    } else if (inGlobalInfo) {
-      // Continuation chunk of global info - no newline
-      Deno.stdout.writeSync(new TextEncoder().encode(data));
-      // Check if this is the end of global info (ends with })
-      if (data.endsWith("}")) {
-        Deno.stdout.writeSync(new TextEncoder().encode("\n"));
-        inGlobalInfo = false;
+    // Check if this is global info (string) or evaluation result (object)
+    if (typeof data === "string") {
+      // Global info chunk - handle as before
+      if (data.startsWith('{"type":"global"')) {
+        // Flush any pending results before global info
+        if (resultBatch.length > 0) {
+          const batchStr = resultBatch.map(r => JSON.stringify(r)).join('\n');
+          console.log(batchStr);
+          resultBatch.length = 0;
+        }
+        inGlobalInfo = true;
+        Deno.stdout.writeSync(new TextEncoder().encode(data));
+      } else if (inGlobalInfo) {
+        // Continuation chunk of global info - no newline
+        Deno.stdout.writeSync(new TextEncoder().encode(data));
+        // Check if this is the end of global info (ends with })
+        if (data.endsWith("}")) {
+          Deno.stdout.writeSync(new TextEncoder().encode("\n"));
+          inGlobalInfo = false;
+        }
       }
     } else {
-      // Regular evaluation path - use console.log which adds newline
-      console.log(data);
+      // Evaluation result object - batch stringify
+      resultBatch.push(data);
+      if (resultBatch.length >= BATCH_SIZE) {
+        // Stringify entire batch at once (faster than individual stringify)
+        const batchJson = JSON.stringify(resultBatch);
+        // Convert array format to JSONL (one object per line)
+        // Remove leading '[' and trailing ']', then split by '},{' and add newlines
+        const jsonl = batchJson.slice(1, -1).replace(/},{/g, '}\n{');
+        console.log(jsonl);
+        resultBatch.length = 0;
+      }
     }
+  }
+
+  // Flush any remaining results
+  if (resultBatch.length > 0) {
+    const batchJson = JSON.stringify(resultBatch);
+    const jsonl = batchJson.slice(1, -1).replace(/},{/g, '}\n{');
+    console.log(jsonl);
   }
 }
 

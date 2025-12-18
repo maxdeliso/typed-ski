@@ -11,7 +11,7 @@ import type { SKIExpression } from "../ski/expression.ts";
 import { apply } from "../ski/expression.ts";
 import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
-import { ArenaKind, type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
+import { type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
@@ -175,7 +175,7 @@ export function fromArenaWithExports(
     // Use direct memory access if views are available, otherwise fall back to WASM calls
     const kind = getKind(id);
 
-    if (kind === (ArenaKind.Terminal as number)) {
+    if (kind === 1) { // ArenaKind.Terminal
       // TERMINAL: Construct immediately and cache
       const sym = getSym(id);
       let expr: SKIExpression;
@@ -194,19 +194,14 @@ export function fromArenaWithExports(
       }
       cache.set(id, expr);
       stack.pop();
-    } else if (
-      kind === (ArenaKind.Continuation as number) ||
-      kind === (ArenaKind.Suspension as number)
-    ) {
+    } else if (kind === 3 || kind === 4) { // ArenaKind.Continuation || ArenaKind.Suspension
       // CONTINUATION/SUSPENSION: These are internal WASM-only nodes used for iterative reduction.
       // They should never appear in the final result, but if they do (e.g., due to a bug or
       // incomplete reduction), we cannot convert them to SKI expressions.
       // Skip them and pop from stack to avoid infinite loops.
       throw new Error(
         `Cannot convert ${
-          kind === (ArenaKind.Continuation as number)
-            ? "Continuation"
-            : "Suspension"
+          kind === 3 ? "Continuation" : "Suspension"
         } node ${id} to SKI expression. This node type is internal to the WASM reducer and should not appear in results.`,
       );
     } else {
@@ -442,7 +437,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     }
 
     // 2. Build Terminal
-    if (k === (ArenaKind.Terminal as number)) {
+    if (k === 1) { // ArenaKind.Terminal
       let symValue: number;
       if (views && id < views.capacity) {
         symValue = views.sym[id];

@@ -1,10 +1,6 @@
 /**
  * Hash-consing arena evaluator singleton.
  *
- * This module now exposes the WebAssembly arena evaluator as the primary
- * evaluation engine for SKI expressions. The legacy symbolic evaluator has been
- * removed in favour of the faster hash-consing implementation.
- *
  * @module
  */
 
@@ -23,4 +19,4 @@ const wasmEvaluator: ArenaEvaluatorWasm = createArenaEvaluatorReleaseSync();
 /**
  * Primary hash-consing arena evaluator used throughout the project.
  */
-export const arenaEvaluator: ArenaEvaluatorWasm = wasmEvaluator;
+export const arenaEvaluator = wasmEvaluator;

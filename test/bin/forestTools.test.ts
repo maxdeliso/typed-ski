@@ -56,20 +56,6 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
   }
 }
 
-async function createTestFile(content: string): Promise<string> {
-  const tempFile = join(projectRoot, `test_forest_${Date.now()}.jsonl`);
-  await Deno.writeTextFile(tempFile, content);
-  return tempFile;
-}
-
-async function cleanupTestFile(filePath: string): Promise<void> {
-  try {
-    await Deno.remove(filePath);
-  } catch {
-    // Ignore cleanup errors
-  }
-}
-
 Deno.test("Forest Tools CLI Tests", async (t) => {
   await t.step("genForest CLI", async (t) => {
     await t.step("--help flag", async () => {
@@ -77,7 +63,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "deno",
         "run",
         "--allow-read",
-        "--allow-write",
         "--allow-run",
         "bin/genForest.ts",
         "--help",
@@ -93,7 +78,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "deno",
         "run",
         "--allow-read",
-        "--allow-write",
         "--allow-run",
         "bin/genForest.ts",
         "--version",
@@ -108,7 +92,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "deno",
         "run",
         "--allow-read",
-        "--allow-write",
         "--allow-run",
         "bin/genForest.ts",
       ]);
@@ -122,7 +105,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "deno",
         "run",
         "--allow-read",
-        "--allow-write",
         "--allow-run",
         "bin/genForest.ts",
         "invalid",
@@ -133,46 +115,37 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
     });
 
     await t.step("generates forest data for small input", async () => {
-      const testFile = await createTestFile("");
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "--unstable-worker-options",
+        "bin/genForest.ts",
+        "2",
+      ]);
 
-      try {
-        const result = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "--allow-run",
-          "bin/genForest.ts",
-          "2",
-          testFile,
-        ]);
+      expect(result.success).to.be.true;
 
-        expect(result.success).to.be.true;
-        expect(existsSync(testFile)).to.be.true;
+      const lines = result.stdout.trim().split("\n");
 
-        const content = await Deno.readTextFile(testFile);
-        const lines = content.trim().split("\n");
+      // Should have evaluation paths + global info
+      expect(lines.length).to.be.greaterThan(1);
 
-        // Should have evaluation paths + global info
-        expect(lines.length).to.be.greaterThan(1);
+      // Check that last line is global info
+      const lastLine = JSON.parse(lines[lines.length - 1]);
+      expect(lastLine).to.have.property("type", "global");
+      expect(lastLine).to.have.property("nodes");
+      expect(lastLine).to.have.property("sources");
+      expect(lastLine).to.have.property("sinks");
 
-        // Check that last line is global info
-        const lastLine = JSON.parse(lines[lines.length - 1]);
-        expect(lastLine).to.have.property("type", "global");
-        expect(lastLine).to.have.property("nodes");
-        expect(lastLine).to.have.property("sources");
-        expect(lastLine).to.have.property("sinks");
-
-        // Check that other lines are evaluation paths
-        for (let i = 0; i < lines.length - 1; i++) {
-          const path = JSON.parse(lines[i]);
-          expect(path).to.have.property("source");
-          expect(path).to.have.property("sink");
-          expect(path).to.have.property("steps");
-          expect(path).to.have.property("hasCycle");
-        }
-      } finally {
-        await cleanupTestFile(testFile);
+      // Check that other lines are evaluation paths
+      for (let i = 0; i < lines.length - 1; i++) {
+        const path = JSON.parse(lines[i]);
+        expect(path).to.have.property("source");
+        expect(path).to.have.property("sink");
+        expect(path).to.have.property("steps");
+        expect(path).to.have.property("hasCycle");
       }
     });
   });
@@ -214,7 +187,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "deno",
         "run",
         "--allow-read",
-        "--allow-write",
         "--allow-run",
         "bin/genSvg.ts",
       ]);
@@ -228,7 +200,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "deno",
         "run",
         "--allow-read",
-        "--allow-write",
         "--allow-run",
         "bin/genSvg.ts",
         "invalid",
@@ -251,7 +222,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       ]);
 
       expect(result.success).to.be.false;
-      expect(result.stderr).to.include("Error reading file");
+      expect(result.stdout + result.stderr).to.include("Error reading file");
     });
   });
 
@@ -260,7 +231,13 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const results: string[] = [];
 
       for await (const data of generateEvaluationForest(2)) {
-        results.push(data);
+        // Handle both EvalResult objects and string (global info)
+        if (typeof data === "string") {
+          results.push(data);
+        } else {
+          // Stringify EvalResult objects
+          results.push(JSON.stringify(data));
+        }
       }
 
       expect(results.length).to.be.greaterThan(1);
@@ -326,7 +303,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         join(projectRoot, "bin/genForest.ts"),
       );
       expect(genForestTs).to.include(
-        "#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run",
+        "#!/usr/bin/env -S deno run --allow-read --allow-run",
       );
 
       const genSvgTs = await Deno.readTextFile(

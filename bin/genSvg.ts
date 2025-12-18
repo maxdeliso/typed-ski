@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --unstable-worker-options
 
 /**
  * SKI Evaluation Forest SVG Generator
@@ -122,11 +122,12 @@ async function generateForestData(
       "--allow-read",
       "--allow-write",
       "--allow-run",
+      "--unstable-worker-options",
       "bin/genForest.ts",
       String(symbolCount),
     ],
     stdout: "piped",
-    stderr: verbose ? "inherit" : "null",
+    stderr: verbose ? "inherit" : "piped", // Pipe stderr so we can read it on error
   });
 
   const forestProc = genForest.spawn();
@@ -134,7 +135,9 @@ async function generateForestData(
 
   if (!forestOut.success) {
     console.error("Failed to generate forest data.");
-    console.error(new TextDecoder().decode(forestOut.stderr));
+    if (forestOut.stderr) {
+      console.error(new TextDecoder().decode(forestOut.stderr));
+    }
     Deno.exit(1);
   }
 
@@ -167,7 +170,18 @@ function parseJsonlData(jsonlContent: string, verbose: boolean): {
 
   for (const line of lines) {
     if (!line.trim()) continue;
-    const data = JSON.parse(line);
+    // Skip lines that don't look like JSON (debug output, status messages, etc.)
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+
+    let data;
+    try {
+      data = JSON.parse(line);
+    } catch (error) {
+      console.error("Error parsing JSON line:", line, "with error:", error);
+      continue;
+    }
+
     if (data.type === "global") {
       if (isValidGlobalInfo(data)) {
         globalInfo = data;

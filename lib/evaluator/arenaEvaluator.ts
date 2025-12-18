@@ -388,13 +388,15 @@ export class ArenaEvaluatorWasm implements Evaluator {
   }
 
   hostSubmit(nodeId: number, reqId: number, maxSteps: number): number {
-    if (!this.$.hostSubmit) throw new Error("hostSubmit export missing");
-    return this.$.hostSubmit(nodeId >>> 0, reqId >>> 0, maxSteps >>> 0);
+    const $ = this.$;
+    if (!$?.hostSubmit) throw new Error("hostSubmit export missing");
+    return $.hostSubmit(nodeId >>> 0, reqId >>> 0, maxSteps >>> 0);
   }
 
   hostPull(): bigint {
-    if (!this.$.hostPull) throw new Error("hostPull export missing");
-    return this.$.hostPull();
+    const $ = this.$;
+    if (!$?.hostPull) throw new Error("hostPull export missing");
+    return $.hostPull();
   }
 
   toArena(exp: SKIExpression): ArenaNodeId {

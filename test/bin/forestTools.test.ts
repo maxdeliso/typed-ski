@@ -231,7 +231,13 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const results: string[] = [];
 
       for await (const data of generateEvaluationForest(2)) {
-        results.push(data);
+        // Handle both EvalResult objects and string (global info)
+        if (typeof data === "string") {
+          results.push(data);
+        } else {
+          // Stringify EvalResult objects
+          results.push(JSON.stringify(data));
+        }
       }
 
       expect(results.length).to.be.greaterThan(1);

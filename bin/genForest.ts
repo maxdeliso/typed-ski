@@ -485,7 +485,7 @@ async function streamToStdout(
       if (data.startsWith('{"type":"global"')) {
         // Flush any pending results before global info
         if (resultBatch.length > 0) {
-          const batchStr = resultBatch.map(r => JSON.stringify(r)).join('\n');
+          const batchStr = resultBatch.map((r) => JSON.stringify(r)).join("\n");
           console.log(batchStr);
           resultBatch.length = 0;
         }
@@ -508,7 +508,7 @@ async function streamToStdout(
         const batchJson = JSON.stringify(resultBatch);
         // Convert array format to JSONL (one object per line)
         // Remove leading '[' and trailing ']', then split by '},{' and add newlines
-        const jsonl = batchJson.slice(1, -1).replace(/},{/g, '}\n{');
+        const jsonl = batchJson.slice(1, -1).replace(/},{/g, "}\n{");
         console.log(jsonl);
         resultBatch.length = 0;
       }
@@ -518,7 +518,7 @@ async function streamToStdout(
   // Flush any remaining results
   if (resultBatch.length > 0) {
     const batchJson = JSON.stringify(resultBatch);
-    const jsonl = batchJson.slice(1, -1).replace(/},{/g, '}\n{');
+    const jsonl = batchJson.slice(1, -1).replace(/},{/g, "}\n{");
     console.log(jsonl);
   }
 }

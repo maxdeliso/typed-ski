@@ -438,12 +438,9 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
     // 2. Build Terminal
     if (k === 1) { // ArenaKind.Terminal
-      let symValue: number;
-      if (views && id < views.capacity) {
-        symValue = views.sym[id];
-      } else {
-        symValue = this.$.symOf(id);
-      }
+      const symValue = views && id < views.capacity
+        ? views.sym[id]
+        : this.$.symOf(id);
 
       let sym: string;
       switch (symValue as ArenaSym) {

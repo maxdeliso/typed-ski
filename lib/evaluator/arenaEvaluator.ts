@@ -145,14 +145,6 @@ export function fromArenaWithExports(
   const getSym = (id: number): number => {
     return views && id < views.capacity ? views.sym[id] : exports.symOf(id);
   };
-  const getLeftId = (id: number): number => {
-    return views && id < views.capacity ? views.leftId[id] : exports.leftOf(id);
-  };
-  const getRightId = (id: number): number => {
-    return views && id < views.capacity
-      ? views.rightId[id]
-      : exports.rightOf(id);
-  };
 
   while (stack.length > 0) {
     // Peek at the current node (don't pop yet, we might need to push children)
@@ -206,8 +198,16 @@ export function fromArenaWithExports(
       );
     } else {
       // NON-TERMINAL: Check children
-      const leftId = getLeftId(id);
-      const rightId = getRightId(id);
+      // Cache views properties to avoid repeated dereferencing
+      const capacity = views?.capacity;
+      const leftIdArray = views?.leftId;
+      const rightIdArray = views?.rightId;
+      const leftId = capacity !== undefined && id < capacity
+        ? leftIdArray![id]
+        : exports.leftOf(id);
+      const rightId = capacity !== undefined && id < capacity
+        ? rightIdArray![id]
+        : exports.rightOf(id);
 
       const leftDone = cache.has(leftId);
       const rightDone = cache.has(rightId);

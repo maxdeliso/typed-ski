@@ -477,9 +477,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const nodes: ArenaNode[] = [];
     const views = getOrBuildArenaViews(this.memory, this.$);
     const top = this.getArenaTop();
+    let node: ArenaNode | null;
 
     for (let id = 0; id < top; id++) {
-      const node = this.getArenaNode(id, views);
+      node = this.getArenaNode(id, views);
       if (!node) continue; // Skip holes
       nodes.push(node);
     }
@@ -497,9 +498,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const views = getOrBuildArenaViews(this.memory, this.$);
     const top = this.getArenaTop();
     const chunk: ArenaNode[] = [];
+    let node: ArenaNode | null;
 
     for (let id = 0; id < top; id++) {
-      const node = this.getArenaNode(id, views);
+      node = this.getArenaNode(id, views);
       if (!node) continue; // Skip holes
 
       chunk.push(node);

@@ -138,6 +138,22 @@ export function fromArenaWithExports(
   const cache = new Map<number, SKIExpression>();
   const stack: number[] = [rootId];
 
+  // Helper functions to get node data from views or WASM calls
+  const getKind = (id: number): number => {
+    return views && id < views.capacity ? views.kind[id] : exports.kindOf(id);
+  };
+  const getSym = (id: number): number => {
+    return views && id < views.capacity ? views.sym[id] : exports.symOf(id);
+  };
+  const getLeftId = (id: number): number => {
+    return views && id < views.capacity ? views.leftId[id] : exports.leftOf(id);
+  };
+  const getRightId = (id: number): number => {
+    return views && id < views.capacity
+      ? views.rightId[id]
+      : exports.rightOf(id);
+  };
+
   while (stack.length > 0) {
     // Peek at the current node (don't pop yet, we might need to push children)
     const id = stack[stack.length - 1];
@@ -157,15 +173,11 @@ export function fromArenaWithExports(
     }
 
     // Use direct memory access if views are available, otherwise fall back to WASM calls
-    const kind = views
-      ? (id < views.capacity ? views.kind[id] : exports.kindOf(id))
-      : exports.kindOf(id);
+    const kind = getKind(id);
 
     if (kind === (ArenaKind.Terminal as number)) {
       // TERMINAL: Construct immediately and cache
-      const sym = views
-        ? (id < views.capacity ? views.sym[id] : exports.symOf(id))
-        : exports.symOf(id);
+      const sym = getSym(id);
       let expr: SKIExpression;
       switch (sym) {
         case ArenaSym.S:
@@ -199,12 +211,8 @@ export function fromArenaWithExports(
       );
     } else {
       // NON-TERMINAL: Check children
-      const leftId = views
-        ? (id < views.capacity ? views.leftId[id] : exports.leftOf(id))
-        : exports.leftOf(id);
-      const rightId = views
-        ? (id < views.capacity ? views.rightId[id] : exports.rightOf(id))
-        : exports.rightOf(id);
+      const leftId = getLeftId(id);
+      const rightId = getRightId(id);
 
       const leftDone = cache.has(leftId);
       const rightDone = cache.has(rightId);

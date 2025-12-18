@@ -431,11 +431,9 @@ export class ArenaEvaluatorWasm implements Evaluator {
     // 1. Determine Kind (Optimization: Use View if possible)
     let k: number;
     if (views && id < views.capacity) {
-      k = views.kind[id];
-      if (k === 0) return null; // Hole/uninitialized
+      if ((k = views.kind[id]) === 0) return null; // Hole/uninitialized
     } else {
-      k = this.$.kindOf(id);
-      if (k === 0) return null; // Hole/uninitialized
+      if ((k = this.$.kindOf(id)) === 0) return null; // Hole/uninitialized
     }
 
     // 2. Build Terminal

@@ -46,13 +46,15 @@ async function transpileTypeScript(filePath: string): Promise<string> {
   }
 }
 
-// Base headers for SharedArrayBuffer support
+// Base headers for SharedArrayBuffer support (reused across requests)
+const baseHeaders = new Headers({
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+});
+
 function createHeaders(contentType: string, contentLength?: string): Headers {
-  const headers = new Headers({
-    "Content-Type": contentType,
-    "Cross-Origin-Opener-Policy": "same-origin",
-    "Cross-Origin-Embedder-Policy": "require-corp",
-  });
+  const headers = new Headers(baseHeaders);
+  headers.set("Content-Type", contentType);
   if (contentLength !== undefined) {
     headers.set("Content-Length", contentLength);
   }

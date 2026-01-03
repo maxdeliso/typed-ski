@@ -46,6 +46,19 @@ async function transpileTypeScript(filePath: string): Promise<string> {
   }
 }
 
+// Base headers for SharedArrayBuffer support
+function createHeaders(contentType: string, contentLength?: string): Headers {
+  const headers = new Headers({
+    "Content-Type": contentType,
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+  });
+  if (contentLength !== undefined) {
+    headers.set("Content-Length", contentLength);
+  }
+  return headers;
+}
+
 async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   let filePath = url.pathname;
@@ -76,11 +89,7 @@ async function handler(req: Request): Promise<Response> {
       try {
         const jsContent = await transpileTypeScript(fullPathString);
 
-        const headers = new Headers({
-          "Content-Type": "application/javascript",
-          "Cross-Origin-Opener-Policy": "same-origin",
-          "Cross-Origin-Embedder-Policy": "require-corp",
-        });
+        const headers = createHeaders("application/javascript");
         return new Response(jsContent, { headers });
       } catch (transpileError) {
         console.error(
@@ -118,12 +127,7 @@ async function handler(req: Request): Promise<Response> {
     else if (localPath.endsWith(".json")) contentType = "application/json";
 
     // Required headers for SharedArrayBuffer
-    const headers = new Headers({
-      "Content-Type": contentType,
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-      "Content-Length": stat.size.toString(),
-    });
+    const headers = createHeaders(contentType, stat.size.toString());
 
     return new Response(content, { headers });
   } catch (error) {

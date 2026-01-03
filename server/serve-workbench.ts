@@ -61,6 +61,20 @@ function createHeaders(contentType: string, contentLength?: string): Headers {
   return headers;
 }
 
+// Fixed lookup table for content types
+const contentTypeTable: Record<string, string> = {
+  ".html": "text/html",
+  ".wasm": "application/wasm",
+  ".js": "application/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+};
+
+function getContentType(filePath: string): string {
+  const ext = filePath.substring(filePath.lastIndexOf("."));
+  return contentTypeTable[ext] || "text/plain";
+}
+
 async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   let filePath = url.pathname;
@@ -121,12 +135,7 @@ async function handler(req: Request): Promise<Response> {
     const content = file.readable;
 
     // Determine content type
-    let contentType = "text/plain";
-    if (localPath.endsWith(".html")) contentType = "text/html";
-    else if (localPath.endsWith(".wasm")) contentType = "application/wasm";
-    else if (localPath.endsWith(".js")) contentType = "application/javascript";
-    else if (localPath.endsWith(".css")) contentType = "text/css";
-    else if (localPath.endsWith(".json")) contentType = "application/json";
+    const contentType = getContentType(localPath);
 
     // Required headers for SharedArrayBuffer
     const headers = createHeaders(contentType, stat.size.toString());

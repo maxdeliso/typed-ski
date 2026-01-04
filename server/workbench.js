@@ -302,10 +302,11 @@ async function loadWasm() {
     showLoading();
     wasmStatus.textContent = "Loading...";
 
-    const workerCount = parseInt(workerCountInput.value, 10) || 4;
+    const defaultWorkers = navigator.hardwareConcurrency || 4;
+    const workerCount = parseInt(workerCountInput.value, 10) || defaultWorkers;
     console.log(`[DEBUG] Creating evaluator with workerCount: ${workerCount}`);
-    if (workerCount < 1 || workerCount > 16) {
-      throw new Error("Worker count must be between 1 and 16");
+    if (workerCount < 1 || workerCount > 256) {
+      throw new Error("Worker count must be between 1 and 256");
     }
 
     const originalConcurrency = navigator.hardwareConcurrency;
@@ -421,7 +422,7 @@ async function startContinuous() {
   continuousRunning = true;
 
   // Sliding-window parallelism: keep at most N in-flight tasks.
-  const parallelism = parseInt(batchSizeInput.value, 10) || 8;
+  const parallelism = parseInt(batchSizeInput.value, 10) || 1024;
   const inFlight = new Set();
 
   const spawnOne = () => {
@@ -557,10 +558,9 @@ gearButton.addEventListener("click", () => {
 });
 
 // Set optimized defaults for high-performance parallel evaluation
-workerCountInput.value = "8";
-batchSizeInput.value = "24";
-randomSizeInput.value = "15";
-maxStepsInput.value = "20";
+workerCountInput.value = String(navigator.hardwareConcurrency || 4);
+batchSizeInput.value = "1024";
+maxStepsInput.value = "1000";
 
 // Load on startup
 loadWasm();

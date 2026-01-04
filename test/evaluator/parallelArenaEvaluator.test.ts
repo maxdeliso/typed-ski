@@ -267,8 +267,12 @@ Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(8);
       try {
-        // RING_ENTRIES is 1024 in wasm; exceed it several times.
-        const N = 4096;
+        // Exceed the WASM ring capacity to force wrap-around in the SQ/CQ indices.
+        const ringEntries = evaluator.$.debugGetRingEntries?.() ??
+          (() => {
+            throw new Error("WASM export `debugGetRingEntries` is missing");
+          })();
+        const N = ringEntries + 8192;
         const exprs = Array.from(
           { length: N },
           (_, i) => makeUniqueExpr(i, 20),

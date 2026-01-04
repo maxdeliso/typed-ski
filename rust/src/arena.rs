@@ -250,7 +250,12 @@ mod wasm {
     const INITIAL_CAP: u32 = 1 << 20;
     const MAX_CAP: u32 = 1 << 27;
     const WASM_PAGE_SIZE: usize = 65536;
-    const RING_ENTRIES: u32 = 1024; // power of two
+    // Size of SQ/CQ rings (power of two).
+    //
+    // Larger rings reduce backpressure + atomic wait/notify churn when many workers
+    // produce results faster than the host can drain them (a common cause of "stuttering"
+    // worker timelines and main-thread saturation in profiles).
+    const RING_ENTRIES: u32 = 1 << 16; // 65536
 
     #[inline(always)]
     const fn align64(x: u32) -> u32 {
@@ -1810,6 +1815,14 @@ mod wasm {
                 -1
             }
         }
+    }
+
+    /// Debug/diagnostic helper: expose ring capacity to the host.
+    ///
+    /// Useful for tests and for sizing stress workloads without duplicating a JS-side constant.
+    #[no_mangle]
+    pub extern "C" fn debugGetRingEntries() -> u32 {
+        RING_ENTRIES
     }
 
     #[no_mangle]

@@ -611,6 +611,46 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     const pull = hostPull;
     (async () => {
       let emptyStreak = 0;
+      // Prevent main-thread saturation under load by time-slicing CQ drains.
+      // Microtask yielding is not sufficient to guarantee rendering; prefer rAF when available.
+      const SLICE_BUDGET_MS = 8;
+      const MAX_EVENTS_PER_SLICE = 4096;
+      const nowMs = () =>
+        (typeof performance !== "undefined" &&
+            typeof performance.now === "function")
+          ? performance.now()
+          : Date.now();
+      const yieldToRenderer = async () => {
+        // Browser: yield to the next frame so painting can happen.
+        if (typeof requestAnimationFrame === "function") {
+          await new Promise<void>((r) => requestAnimationFrame(() => r()));
+          return;
+        }
+        // Non-browser (tests/deno): yield back to the macrotask queue.
+        if (this.aborted) return;
+        const { promise, cancel } = sleep(0);
+        this.activeTimeouts.add(cancel);
+        try {
+          await promise;
+        } finally {
+          this.activeTimeouts.delete(cancel);
+        }
+      };
+      let sliceStart = nowMs();
+      let sliceEvents = 0;
+      const maybeYield = async () => {
+        // Avoid doing an unbounded amount of synchronous work without yielding.
+        if (
+          sliceEvents < MAX_EVENTS_PER_SLICE &&
+          nowMs() - sliceStart < SLICE_BUDGET_MS
+        ) {
+          return;
+        }
+        sliceEvents = 0;
+        sliceStart = nowMs();
+        await yieldToRenderer();
+        sliceStart = nowMs();
+      };
       const ex = this.$ as unknown as {
         kindOf: (id: number) => number;
         hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
@@ -636,6 +676,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
             }
             if (this.aborted) return;
           }
+          sliceEvents = 0;
+          sliceStart = nowMs();
           continue;
         }
 
@@ -658,6 +700,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
             }
             if (this.aborted) return;
           }
+          sliceEvents = 0;
+          sliceStart = nowMs();
           continue;
         }
         this.ringStats.pullNonEmpty++;
@@ -756,6 +800,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
               );
             }
           }
+          sliceEvents++;
+          await maybeYield();
           continue;
         }
 
@@ -781,6 +827,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
           this.completed.set(reqId, nodeId);
           this.ringStats.completionsStashed++;
         }
+        sliceEvents++;
+        await maybeYield();
       }
     })();
   }

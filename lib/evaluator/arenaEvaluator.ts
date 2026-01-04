@@ -256,6 +256,7 @@ export interface ArenaWasmExports {
   getArenaMode?(): number;
   debugCalculateArenaSize?(capacity: number): number;
   debugGetArenaBaseAddr?(): number;
+  debugGetRingEntries?(): number;
 }
 
 // deno-lint-ignore ban-types
@@ -310,6 +311,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
       debugGetArenaBaseAddr: e.debugGetArenaBaseAddr as
         | (() => number)
         | undefined,
+      debugGetRingEntries: e.debugGetRingEntries as (() => number) | undefined,
     } as ArenaWasmExports;
   }
 

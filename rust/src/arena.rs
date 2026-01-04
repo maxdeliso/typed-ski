@@ -260,6 +260,38 @@ mod wasm {
     // -------------------------------------------------------------------------
     // Atomics + wait/notify
     // -------------------------------------------------------------------------
+    // WASM atomics / CAS safety notes (applies to all compare_exchange* uses below)
+    // -------------------------------------------------------------------------
+    //
+    // This module relies heavily on CAS (compare_exchange / compare_exchange_weak),
+    // which compiles to a single atomic read-modify-write instruction in WebAssembly
+    // (e.g. `i32.atomic.rmw.cmpxchg`). That property prevents the classic "check-then-
+    // store" race where two threads both observe a value and both write the same
+    // update thinking they won; CAS has a single winner and forces losers to retry.
+    //
+    // ABA notes:
+    // - Many CAS patterns are vulnerable to ABA when the *same* value can reappear
+    //   (e.g. counters wrapping or pointer reuse). In this codebase, ABA is either
+    //   explicitly prevented (ring slot sequence numbers advance by whole cycles)
+    //   or is practically irrelevant in context (e.g. seqlock-style counters would
+    //   require billions of expensive operations to wrap during one read section).
+    //
+    // WASM platform particularities:
+    // - When wasm threads are enabled, the linear memory is backed by a
+    //   `SharedArrayBuffer`, and atomic ops synchronize across Web Workers.
+    //   Rust `Ordering::{Acquire,Release,AcqRel,SeqCst}` map onto WASM atomics/fences
+    //   to provide the needed visibility guarantees.
+    // - `memory.grow` increases linear memory size but does not "move" addresses
+    //   from the module's perspective; what changes is our chosen layout within
+    //   that address space (offsets/capacity), guarded by atomics/seqlock.
+    //
+    // External references:
+    // - Seqlock concept: https://en.wikipedia.org/wiki/Seqlock
+    // - SharedArrayBuffer (required for wasm threads): https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer
+    // - WebAssembly features (threads/atomics): https://webassembly.org/features/
+    // - Rust atomic memory orderings: https://doc.rust-lang.org/std/sync/atomic/enum.Ordering.html
+    // - WebAssembly `memory.grow`: https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Memory/Grow
+    //
     mod sys {
         use super::*;
         #[inline(always)]
@@ -497,6 +529,7 @@ mod wasm {
 
                     if diff == 0 {
                         // Slot is free. Try to claim it by advancing tail.
+                        // See "WASM atomics / CAS safety notes" above (cmpxchg winner/loser).
                         if self
                             .tail
                             .compare_exchange_weak(
@@ -555,6 +588,7 @@ mod wasm {
 
                     if diff == 0 {
                         // Slot has data. Try to claim it by advancing head.
+                        // See "WASM atomics / CAS safety notes" above (cmpxchg winner/loser).
                         if self
                             .head
                             .compare_exchange_weak(
@@ -784,6 +818,14 @@ mod wasm {
     // -------------------------------------------------------------------------
     // Resize guard (seqlock-style)
     // -------------------------------------------------------------------------
+    // See "WASM atomics / CAS safety notes" above for CAS/ABA discussion.
+    // This specific guard is seqlock-style: even=stable, odd=resize in progress.
+    // For READING existing data. Returns (seq, h) to enable read-verify-retry pattern:
+    // 1. Call enter_stable() to get sequence number
+    // 2. Read the data you need
+    // 3. Call check_stable(seq) to verify sequence didn't change
+    // 4. If changed, retry (resize occurred during read)
+    // Used in: kindOf(), symOf(), leftOf(), rightOf(), hash lookups
     #[inline(always)]
     fn enter_stable() -> (u32, &'static SabHeader) {
         unsafe {
@@ -802,6 +844,10 @@ mod wasm {
         }
     }
 
+    // For WRITING new data. See comment above enter_stable() for distinction.
+    // Simply waits until resize completes (sequence is even).
+    // No verification needed since we're not reading existing data.
+    // Used in: allocTerminal(), allocCons() allocation path, alloc_generic()
     #[inline(always)]
     fn wait_resize_stable() {
         unsafe {
@@ -1181,6 +1227,7 @@ mod wasm {
                 loop {
                     let head = (*buckets.add(b)).load(Ordering::Acquire);
                     (*next.add(id as usize)).store(head, Ordering::Relaxed);
+                    // See "WASM atomics / CAS safety notes" above (cmpxchg winner/loser).
                     if (*buckets.add(b))
                         .compare_exchange(head, id, Ordering::Release, Ordering::Relaxed)
                         .is_ok()
@@ -1248,6 +1295,8 @@ mod wasm {
                     expected = h.resize_seq.load(Ordering::Acquire);
                     continue;
                 }
+                // Acquire exclusive "writer" by flipping even->odd with CAS.
+                // See "WASM atomics / CAS safety notes" above (cmpxchg winner/loser).
                 if h.resize_seq.compare_exchange(expected, expected | 1, Ordering::AcqRel, Ordering::Acquire).is_ok() {
                     break;
                 }
@@ -1419,6 +1468,7 @@ mod wasm {
                 loop {
                     let head = (*buckets.add(b)).load(Ordering::Acquire);
                     (*next.add(i as usize)).store(head, Ordering::Relaxed);
+                    // See "WASM atomics / CAS safety notes" above (cmpxchg winner/loser).
                     if (*buckets.add(b))
                         .compare_exchange(head, i, Ordering::Release, Ordering::Relaxed)
                         .is_ok()

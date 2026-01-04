@@ -97,7 +97,8 @@ let uiPendingDirty = false;
 let lastUiFlushMs = 0;
 
 function nowMs() {
-  return (typeof performance !== "undefined" && typeof performance.now === "function")
+  return (typeof performance !== "undefined" &&
+      typeof performance.now === "function")
     ? performance.now()
     : Date.now();
 }

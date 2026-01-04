@@ -1,7 +1,4 @@
-import {
-  prettyPrintSKI as prettyPrint,
-  randExpression,
-} from "@maxdeliso/typed-ski";
+import { randExpression } from "@maxdeliso/typed-ski";
 import {
   ParallelArenaEvaluatorWasm,
   ResubmissionLimitExceededError,

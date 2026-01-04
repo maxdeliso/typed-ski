@@ -15,6 +15,10 @@ export enum ArenaKind {
   Terminal = 1,
   /** Non-terminal node (internal) */
   NonTerm = 2,
+  /** Internal stack frame for iterative reduction (WASM only) */
+  Continuation = 3,
+  /** Paused reducer state (WASM only): host should resubmit */
+  Suspension = 4,
 }
 
 /**

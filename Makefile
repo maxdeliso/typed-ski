@@ -1,7 +1,8 @@
-.PHONY: setup build test format format-check help
+.PHONY: setup build test format format-check validate-wasm start help
 .DEFAULT_GOAL := help
 
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
+PORT ?= 8080
 
 help:
 	@echo "Available targets:"
@@ -10,6 +11,7 @@ help:
 	@echo "  test         - Run the test suite"
 	@echo "  format       - Format code"
 	@echo "  format-check - Check code formatting"
+	@echo "  start        - Start the profiling demo server (PORT=8080)"
 
 setup: ## Prepare this machine by installing necessary tools
 	@if ! command -v nix >/dev/null 2>&1; then \
@@ -40,6 +42,13 @@ build: ## Compile the artifacts
 		exit 1; \
 	fi
 
+validate-wasm: ## Inspect the generated WASM (prints full wat)
+	@if [ ! -f result/wasm/release.wasm ]; then \
+		echo "Error: result/wasm/release.wasm not found. Run 'make build' first."; \
+		exit 1; \
+	fi
+	nix $(NIX_FLAGS) develop --command bash -c "wasm2wat --enable-threads result/wasm/release.wasm"
+
 test: ## Run the test suite
 	@if ! command -v nix >/dev/null 2>&1; then \
 		echo "Error: Nix is not installed. Run 'make setup' first."; \
@@ -67,3 +76,14 @@ format-check:
 		exit 1; \
 	fi
 	nix $(NIX_FLAGS) run .#fmt -- --check
+
+start: ## Start the profiling demo server
+	@if ! command -v nix >/dev/null 2>&1; then \
+		echo "Error: Nix is not installed. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f lib/shared/version.generated.ts ]; then \
+		echo "Error: Generated source files not found. Run 'make build' first."; \
+		exit 1; \
+	fi
+	nix $(NIX_FLAGS) develop --command deno run --allow-net --allow-read --allow-env --allow-run server/serve-workbench.ts $(PORT)

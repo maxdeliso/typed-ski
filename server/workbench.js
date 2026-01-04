@@ -1,5 +1,4 @@
 import {
-  parseSKI,
   prettyPrintSKI as prettyPrint,
   randExpression,
 } from "@maxdeliso/typed-ski";
@@ -17,15 +16,11 @@ class SimpleRandomSource {
 }
 
 // UI Elements
-const exprInput = document.getElementById("exprInput");
 const randomSizeInput = document.getElementById("randomSizeInput");
-const generateRandomBtn = document.getElementById("generateRandomBtn");
 const runBtn = document.getElementById("runBtn");
 const resetBtn = document.getElementById("resetBtn");
-const hammerTimeBtn = document.getElementById("hammerTimeBtn");
 const workerCountInput = document.getElementById("workerCountInput");
 const maxStepsInput = document.getElementById("maxStepsInput");
-const continuousToggle = document.getElementById("continuousToggle");
 const batchSizeInput = document.getElementById("batchSizeInput");
 const wasmStatus = document.getElementById("wasmStatus");
 const totalPending = document.getElementById("totalPending");
@@ -44,7 +39,6 @@ let evaluator = null;
 let evaluatorDead = false; // Track if evaluator has crashed (WASM trap)
 let continuousMode = false;
 let continuousRunning = false;
-let pendingSingleRun = false; // Track if we're waiting for a single run to complete
 let memoryLogInterval = null;
 const SLOW_LOGGING = false; // Disable detailed logging in continuous mode for performance
 let stats = {
@@ -91,6 +85,64 @@ function showLoading() {
 
 function hideLoading() {
   loadingOverlay.classList.add("hidden");
+}
+
+// ---------------------------------------------------------------------------
+// UI responsiveness: throttle DOM updates and coalesce stats/pending refreshes.
+// ---------------------------------------------------------------------------
+const UI_FLUSH_INTERVAL_MS = 100;
+let uiFlushScheduled = false;
+let uiStatsDirty = false;
+let uiPendingDirty = false;
+let lastUiFlushMs = 0;
+
+function nowMs() {
+  return (typeof performance !== "undefined" && typeof performance.now === "function")
+    ? performance.now()
+    : Date.now();
+}
+
+function markUiDirty(
+  { stats: statsDirty = false, pending: pendingDirty = false } = {},
+) {
+  if (statsDirty) uiStatsDirty = true;
+  if (pendingDirty) uiPendingDirty = true;
+  scheduleUiFlush();
+}
+
+function scheduleUiFlush() {
+  if (uiFlushScheduled) return;
+  uiFlushScheduled = true;
+
+  const delay = Math.max(0, UI_FLUSH_INTERVAL_MS - (nowMs() - lastUiFlushMs));
+  const flush = () => {
+    uiFlushScheduled = false;
+    // If we ran too early (e.g. rAF), reschedule for the remaining delay.
+    const remaining = UI_FLUSH_INTERVAL_MS - (nowMs() - lastUiFlushMs);
+    if (remaining > 0) {
+      scheduleUiFlush();
+      return;
+    }
+    lastUiFlushMs = nowMs();
+    if (uiStatsDirty) {
+      uiStatsDirty = false;
+      updateStats();
+    }
+    if (uiPendingDirty) {
+      uiPendingDirty = false;
+      updatePendingCounts();
+    }
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    if (delay === 0) {
+      requestAnimationFrame(flush);
+    } else {
+      setTimeout(() => requestAnimationFrame(flush), delay);
+    }
+  } else {
+    setTimeout(flush, delay);
+  }
 }
 
 function updateStats() {
@@ -185,9 +237,6 @@ function addLog(message, force = false) {
 function disableAllButtons() {
   if (runBtn) runBtn.disabled = true;
   if (resetBtn) resetBtn.disabled = true;
-  if (hammerTimeBtn) hammerTimeBtn.disabled = true;
-  if (generateRandomBtn) generateRandomBtn.disabled = true;
-  if (continuousToggle) continuousToggle.disabled = true;
 }
 
 async function submitAndTrack(
@@ -204,7 +253,7 @@ async function submitAndTrack(
 
   const start = performance.now();
   try {
-    updatePendingCounts();
+    markUiDirty({ pending: true });
     const startNodeId = evaluator.toArena(expr);
     addLog(`Queued node ${startNodeId}`);
 
@@ -219,8 +268,7 @@ async function submitAndTrack(
     addLog(`Result node ${resultNodeId}`);
     stats.completed++;
     stats.totalTime += elapsed;
-    updateStats();
-    updatePendingCounts();
+    markUiDirty({ stats: true, pending: true });
 
     void highlightOnDone; // highlight removed in single-log UI
 
@@ -250,9 +298,7 @@ async function submitAndTrack(
       if (continuousMode) {
         stopContinuous();
         continuousMode = false;
-        if (continuousToggle) {
-          continuousToggle.classList.remove("active");
-        }
+        updateRunButton();
       }
     } else if (isResubmitLimit) {
       // Resubmission limit is a normal error condition, not a fatal crash
@@ -265,8 +311,7 @@ async function submitAndTrack(
     }
 
     stats.errors++;
-    updateStats();
-    updatePendingCounts();
+    markUiDirty({ stats: true, pending: true });
     throw error;
   }
 }
@@ -323,7 +368,7 @@ async function loadWasm() {
         _workerIndex,
         _expr,
       ) => {
-        updatePendingCounts();
+        markUiDirty({ pending: true });
       };
       evaluator.onRequestYield = (
         reqId,
@@ -335,7 +380,7 @@ async function loadWasm() {
         addLog(
           `[RESUBMIT] Requeued req ${reqId} suspension ${suspensionNodeId} (resubmit #${resubmitCount})`,
         );
-        updatePendingCounts();
+        markUiDirty({ pending: true });
       };
       evaluator.onRequestError = (
         reqId,
@@ -346,7 +391,7 @@ async function loadWasm() {
         // Log errors immediately when they occur (before promise rejection)
         // Force logging even in continuous mode for critical errors
         addLog(`[ERROR] Request ${reqId}: ${errorMessage}`, true);
-        updatePendingCounts();
+        markUiDirty({ pending: true });
       };
       startMemoryLogging(evaluator);
     } finally {
@@ -357,21 +402,17 @@ async function loadWasm() {
       });
     }
 
-    updatePendingCounts();
+    markUiDirty({ pending: true });
     wasmStatus.textContent = "Ready";
     stats.startTime = Date.now();
 
     if (runBtn) runBtn.disabled = false;
     if (resetBtn) resetBtn.disabled = false;
-    if (generateRandomBtn) generateRandomBtn.disabled = false;
-    if (hammerTimeBtn) hammerTimeBtn.disabled = false;
     hideLoading();
 
-    // Restore continuous mode if it was on before
+    // Restore run toggle if it was on before
     if (wasContinuousMode) {
-      continuousMode = true;
-      continuousToggle.classList.add("active");
-      startContinuous();
+      startRun();
     }
   } catch (error) {
     wasmStatus.textContent = "Error";
@@ -380,50 +421,61 @@ async function loadWasm() {
   }
 }
 
-function generateRandom() {
-  const size = parseInt(randomSizeInput.value, 10) || 10;
-  if (size < 1 || size > 100) {
-    alert("Size must be between 1 and 100");
-    return;
+function updateRunButton() {
+  if (!runBtn) return;
+  if (continuousMode) {
+    runBtn.textContent = "■ Stop";
+    runBtn.classList.remove("btn-primary");
+    runBtn.classList.add("btn-danger");
+  } else {
+    runBtn.textContent = "▶ Run";
+    runBtn.classList.remove("btn-danger");
+    runBtn.classList.add("btn-primary");
   }
-  const rs = new SimpleRandomSource();
-  const expr = randExpression(rs, size);
-  exprInput.value = prettyPrint(expr);
+  // Reset should not be usable while continuous mode is running (it would race with
+  // active submissions / in-flight work).
+  if (resetBtn) {
+    resetBtn.disabled = continuousMode || continuousRunning;
+  }
 }
 
-async function run() {
+function startRun() {
   if (!evaluator || evaluatorDead) return;
+  if (continuousMode) return;
+  continuousMode = true;
+  updateRunButton();
+  startContinuous();
+}
 
-  try {
-    if (pendingSingleRun || continuousRunning) return;
-    const exprStr = exprInput.value.trim();
-    const expr = parseSKI(exprStr);
-    runBtn.disabled = true;
-    pendingSingleRun = true;
-    evaluator.reset();
+function stopRun() {
+  if (!continuousMode) return;
+  continuousMode = false;
+  updateRunButton();
+  stopContinuous();
+}
 
-    const maxSteps = parseInt(maxStepsInput.value, 10) || 1000;
-    await submitAndTrack(expr, maxSteps, { highlightOnDone: true });
-    pendingSingleRun = false;
-    if (!evaluatorDead) {
-      runBtn.disabled = false;
-    }
-  } catch (error) {
-    console.error(error);
-    pendingSingleRun = false;
-    if (!evaluatorDead) {
-      runBtn.disabled = false;
-    }
-  }
+function toggleRun() {
+  if (!evaluator || evaluatorDead) return;
+  if (continuousMode) stopRun();
+  else startRun();
 }
 
 async function startContinuous() {
   if (continuousRunning || evaluatorDead) return;
   continuousRunning = true;
+  updateRunButton();
 
   // Sliding-window parallelism: keep at most N in-flight tasks.
   const parallelism = parseInt(batchSizeInput.value, 10) || 1024;
   const inFlight = new Set();
+
+  // Yield while ramping up so the toggle/UI stays responsive even at large parallelism.
+  const YIELD_BUDGET_MS = 8;
+  const MAX_SPAWNS_PER_SLICE = 64;
+  const yieldToRenderer = () =>
+    (typeof requestAnimationFrame === "function")
+      ? new Promise((r) => requestAnimationFrame(() => r()))
+      : new Promise((r) => setTimeout(r, 0));
 
   const spawnOne = () => {
     // Generate a unique random expression for each request
@@ -442,7 +494,7 @@ async function startContinuous() {
       }
     }).finally(() => {
       inFlight.delete(p);
-      updatePendingCounts();
+      markUiDirty({ pending: true });
     });
 
     inFlight.add(p);
@@ -450,8 +502,20 @@ async function startContinuous() {
 
   while (continuousMode && evaluator) {
     // Fill the window
+    let sliceStart = nowMs();
+    let spawnedThisSlice = 0;
     while (continuousMode && evaluator && inFlight.size < parallelism) {
       spawnOne();
+      spawnedThisSlice++;
+      if (
+        spawnedThisSlice >= MAX_SPAWNS_PER_SLICE ||
+        nowMs() - sliceStart >= YIELD_BUDGET_MS
+      ) {
+        spawnedThisSlice = 0;
+        sliceStart = nowMs();
+        await yieldToRenderer();
+        sliceStart = nowMs();
+      }
     }
 
     if (!continuousMode || !evaluator) break;
@@ -470,11 +534,12 @@ async function startContinuous() {
   }
 
   continuousRunning = false;
+  updateRunButton();
 }
 
 function stopContinuous() {
-  continuousMode = false;
   continuousRunning = false;
+  updateRunButton();
 }
 
 function resetEvaluator() {
@@ -494,59 +559,9 @@ function resetEvaluator() {
   }
 }
 
-function hammerTime() {
-  if (evaluatorDead) {
-    addLog(
-      "[ERROR] Cannot start hammer time: evaluator has crashed. Please reload the page.",
-      true,
-    );
-    return;
-  }
-  // If continuous mode is already running, turn it off
-  if (continuousMode) {
-    continuousMode = false;
-    continuousToggle.classList.remove("active");
-    stopContinuous();
-    return;
-  }
-
-  // Optimized settings for high-performance parallel evaluation
-  workerCountInput.value = "8";
-  batchSizeInput.value = "24";
-  randomSizeInput.value = "15";
-  maxStepsInput.value = "20";
-
-  // Enable continuous mode
-  continuousMode = true;
-  continuousToggle.classList.add("active");
-
-  // Reload evaluator with max workers
-  loadWasm().then(() => {
-    // Start continuous mode
-    if (!continuousRunning) {
-      startContinuous();
-    }
-  });
-}
-
 // Event listeners
-generateRandomBtn.addEventListener("click", generateRandom);
-runBtn.addEventListener("click", run);
+runBtn.addEventListener("click", toggleRun);
 resetBtn.addEventListener("click", resetEvaluator);
-if (hammerTimeBtn) {
-  hammerTimeBtn.addEventListener("click", hammerTime);
-}
-
-continuousToggle.addEventListener("click", () => {
-  if (evaluatorDead) return;
-  continuousMode = !continuousMode;
-  continuousToggle.classList.toggle("active", continuousMode);
-  if (continuousMode) {
-    startContinuous();
-  } else {
-    stopContinuous();
-  }
-});
 
 workerCountInput.addEventListener("change", () => {
   loadWasm();
@@ -561,6 +576,7 @@ gearButton.addEventListener("click", () => {
 workerCountInput.value = String(navigator.hardwareConcurrency || 4);
 batchSizeInput.value = "1024";
 maxStepsInput.value = "1000";
+updateRunButton();
 
 // Load on startup
 loadWasm();

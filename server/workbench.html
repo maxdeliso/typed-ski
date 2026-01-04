@@ -15,16 +15,10 @@
 
       <div class="controls">
         <div class="control-row">
-          <label>
-            SKI Expression:
-            <input
-              type="text"
-              id="exprInput"
-              value="SKKI"
-              placeholder="e.g., SKKI, III, KIS"
-              style="width: 300px"
-            >
-          </label>
+          <button id="runBtn" class="btn-primary">▶ Run</button>
+          <button id="resetBtn" class="btn-secondary">Reset</button>
+        </div>
+        <div class="control-row">
           <label>
             Random Size:
             <input
@@ -35,16 +29,6 @@
               max="100"
             >
           </label>
-          <button id="generateRandomBtn" class="btn-info">
-            🎲 Generate Random
-          </button>
-        </div>
-        <div class="control-row">
-          <button id="runBtn" class="btn-primary">▶ Run</button>
-          <button id="resetBtn" class="btn-secondary">Reset</button>
-          <button id="hammerTimeBtn" class="btn-danger">🔨 Hammer Time</button>
-        </div>
-        <div class="control-row">
           <label>
             Worker Count:
             <input
@@ -65,10 +49,6 @@
               max="1000000"
             >
           </label>
-          <div class="toggle-container">
-            <span style="font-weight: 600; color: #555">Continuous Mode:</span>
-            <div class="toggle-switch" id="continuousToggle"></div>
-          </div>
           <label id="batchSizeLabel" style="align-items: center">
             Parallelism (max in-flight):
             <input

@@ -7,7 +7,7 @@
  * Outputs JSONL format with evaluation paths and global arena information.
  */
 
-import { apply } from "../lib/ski/expression.ts";
+import { apply, prettyPrint } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import {
@@ -281,6 +281,8 @@ export async function* generateEvaluationForest(
 
     const sources = new Set<number>();
     const sinks = new Set<number>();
+    // Track all unique node IDs that appear in evaluation paths
+    const allNodeIds = new Set<number>();
 
     // Configure workers to execute exactly one reduction step per submission.
     // The per-expression step limit is enforced in JS.
@@ -352,6 +354,14 @@ export async function* generateEvaluationForest(
           sources.add(done.result.source);
           sinks.add(done.result.sink);
 
+          // Track node IDs from this result
+          allNodeIds.add(done.result.source);
+          allNodeIds.add(done.result.sink);
+          for (const step of done.result.steps) {
+            allNodeIds.add(step.from);
+            allNodeIds.add(step.to);
+          }
+
           // Buffer the result to maintain deterministic output order
           resultBuffer.set(done.exprIndex, done.result);
 
@@ -379,6 +389,19 @@ export async function* generateEvaluationForest(
       // Collect nodes
       for (const node of chunk) {
         nodes.push(node);
+      }
+    }
+
+    // Generate and stream node labels for all unique node IDs
+    // Convert each node ID to its string representation
+    for (const nodeId of allNodeIds) {
+      try {
+        const expr = evaluator.fromArena(nodeId);
+        const label = prettyPrint(expr);
+        yield JSON.stringify({ type: "nodeLabel", id: nodeId, label });
+      } catch (error) {
+        // Skip nodes that can't be converted (e.g., internal WASM nodes)
+        // They'll fall back to node_${nodeId} in genSvg
       }
     }
 

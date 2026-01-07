@@ -7,11 +7,16 @@
  * Creates DOT files and converts them to SVG using Graphviz's sfdp layout.
  */
 
-import type { EvaluationPath, GlobalInfo } from "../lib/shared/forestTypes.ts";
+import type {
+  EvaluationPath,
+  GlobalInfo,
+  NodeLabel,
+} from "../lib/shared/forestTypes.ts";
 import {
   getNodeLabel,
   isValidEvaluationPath,
   isValidGlobalInfo,
+  isValidNodeLabel,
 } from "../lib/shared/forestTypes.ts";
 
 import { VERSION } from "../lib/shared/version.ts";
@@ -153,10 +158,12 @@ async function readInputData(
 function parseJsonlData(jsonlContent: string, _verbose: boolean): {
   paths: EvaluationPath[];
   globalInfo: GlobalInfo;
+  nodeLabels: Map<number, string>;
 } {
   const lines = jsonlContent.trim().split("\n");
   const paths: EvaluationPath[] = [];
   let globalInfo: GlobalInfo | null = null;
+  const nodeLabels = new Map<number, string>();
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -176,6 +183,13 @@ function parseJsonlData(jsonlContent: string, _verbose: boolean): {
         console.error("Invalid global info structure:", data);
         Deno.exit(1);
       }
+    } else if (data.type === "nodeLabel") {
+      if (isValidNodeLabel(data)) {
+        nodeLabels.set(data.id, data.label);
+      } else {
+        console.error("Invalid node label structure:", data);
+        Deno.exit(1);
+      }
     } else {
       if (isValidEvaluationPath(data)) {
         paths.push(data);
@@ -191,7 +205,18 @@ function parseJsonlData(jsonlContent: string, _verbose: boolean): {
     Deno.exit(1);
   }
 
-  return { paths, globalInfo };
+  return { paths, globalInfo, nodeLabels };
+}
+
+/**
+ * Escapes special characters in DOT file labels
+ */
+function escapeDotLabel(label: string): string {
+  return label
+    .replace(/\\/g, "\\\\") // Escape backslashes first
+    .replace(/"/g, '\\"') // Escape quotes
+    .replace(/\n/g, " ") // Replace newlines with spaces
+    .replace(/\r/g, " "); // Replace carriage returns with spaces
 }
 
 function groupPathsBySink(
@@ -218,13 +243,14 @@ function groupPathsBySink(
 async function generateDotFiles(
   sinkGroups: Map<number, { paths: EvaluationPath[]; hasCycle: boolean }>,
   globalInfo: GlobalInfo,
+  nodeLabels: Map<number, string>,
   outputDir: string,
   _verbose: boolean,
 ): Promise<string[]> {
   const dotFiles: string[] = [];
 
   for (const [sinkId, group] of sinkGroups) {
-    const sinkLabel = getNodeLabel(globalInfo, sinkId);
+    const sinkLabel = getNodeLabel(nodeLabels, sinkId);
     const dotPath = `${outputDir}/sink_${sinkId}.dot`;
 
     const nodes = new Set<number>();
@@ -240,13 +266,15 @@ async function generateDotFiles(
       }
     }
 
-    let dotContent = `digraph "Sink_${sinkId}_${sinkLabel}" {\n`;
+    const escapedSinkLabel = escapeDotLabel(sinkLabel);
+    let dotContent = `digraph "Sink_${sinkId}_${escapedSinkLabel}" {\n`;
     dotContent +=
       `  node [shape=box, style=filled, fontname="Arial", fontsize=10];\n`;
     dotContent += `  edge [fontname="Arial", fontsize=8];\n\n`;
 
     for (const nodeId of nodes) {
-      const label = getNodeLabel(globalInfo, nodeId);
+      const label = getNodeLabel(nodeLabels, nodeId);
+      const escapedLabel = escapeDotLabel(label);
       const isSource = group.paths.some((p) => p.source === nodeId);
       const isSink = nodeId === sinkId;
 
@@ -259,7 +287,7 @@ async function generateDotFiles(
         color = group.hasCycle ? "orange" : "lightcoral";
       }
 
-      dotContent += `  ${nodeId} [label="${label}", fillcolor="${color}"];\n`;
+      dotContent += `  ${nodeId} [label="${escapedLabel}", fillcolor="${color}"];\n`;
     }
 
     dotContent += `\n`;
@@ -328,7 +356,10 @@ async function main(): Promise<void> {
     : await generateForestData(symbolCount, verbose);
 
   // Parse JSONL data
-  const { paths, globalInfo } = parseJsonlData(jsonlContent, verbose);
+  const { paths, globalInfo, nodeLabels } = parseJsonlData(
+    jsonlContent,
+    verbose,
+  );
 
   // Group paths by sink
   const sinkGroups = groupPathsBySink(paths, verbose);
@@ -337,6 +368,7 @@ async function main(): Promise<void> {
   const dotFiles = await generateDotFiles(
     sinkGroups,
     globalInfo,
+    nodeLabels,
     outputDir,
     verbose,
   );

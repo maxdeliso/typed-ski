@@ -318,7 +318,7 @@ async function generateSvgFiles(
   concurrency: number,
   _verbose: boolean,
 ): Promise<void> {
-  let idx = 0;
+  let nextIndex = 0;
 
   async function runSfdp(dotPath: string): Promise<void> {
     const svgPath = dotPath.replace(/\.dot$/, ".svg");
@@ -340,10 +340,44 @@ async function generateSvgFiles(
     }
   }
 
-  while (idx < dotFiles.length) {
-    const batch = dotFiles.slice(idx, idx + concurrency);
-    await Promise.all(batch.map(runSfdp));
-    idx += concurrency;
+  // Sliding window: start up to concurrency jobs, and as soon as one completes,
+  // immediately start the next one from the queue
+  type InFlightEntry = {
+    index: number;
+    promise: Promise<void>;
+  };
+
+  const inFlights: InFlightEntry[] = [];
+
+  // Start initial batch
+  while (nextIndex < dotFiles.length && inFlights.length < concurrency) {
+    const index = nextIndex++;
+    const promise = runSfdp(dotFiles[index]);
+    inFlights.push({ index, promise });
+  }
+
+  // Process remaining jobs with sliding window
+  while (inFlights.length > 0) {
+    // Wait for any job to complete
+    const doneEntry = await Promise.race(
+      inFlights.map(async (entry) => {
+        await entry.promise;
+        return entry;
+      }),
+    );
+
+    // Remove completed job
+    const doneIndex = inFlights.findIndex((entry) => entry === doneEntry);
+    if (doneIndex !== -1) {
+      inFlights.splice(doneIndex, 1);
+    }
+
+    // Start next job if available
+    if (nextIndex < dotFiles.length) {
+      const index = nextIndex++;
+      const promise = runSfdp(dotFiles[index]);
+      inFlights.push({ index, promise });
+    }
   }
 }
 

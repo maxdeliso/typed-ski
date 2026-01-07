@@ -7,11 +7,7 @@
  * Creates DOT files and converts them to SVG using Graphviz's sfdp layout.
  */
 
-import type {
-  EvaluationPath,
-  GlobalInfo,
-  NodeLabel,
-} from "../lib/shared/forestTypes.ts";
+import type { EvaluationPath, GlobalInfo } from "../lib/shared/forestTypes.ts";
 import {
   getNodeLabel,
   isValidEvaluationPath,
@@ -246,7 +242,7 @@ function groupPathsBySink(
 
 async function generateDotFiles(
   sinkGroups: Map<number, { paths: EvaluationPath[]; hasCycle: boolean }>,
-  globalInfo: GlobalInfo,
+  _globalInfo: GlobalInfo,
   nodeLabels: Map<number, string>,
   outputDir: string,
   _verbose: boolean,
@@ -291,7 +287,8 @@ async function generateDotFiles(
         color = group.hasCycle ? "orange" : "lightcoral";
       }
 
-      dotContent += `  ${nodeId} [label="${escapedLabel}", fillcolor="${color}"];\n`;
+      dotContent +=
+        `  ${nodeId} [label="${escapedLabel}", fillcolor="${color}"];\n`;
     }
 
     dotContent += `\n`;

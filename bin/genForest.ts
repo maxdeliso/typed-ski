@@ -389,7 +389,7 @@ export async function* generateEvaluationForest(
         const expr = evaluator.fromArena(nodeId);
         const label = prettyPrint(expr);
         yield JSON.stringify({ type: "nodeLabel", id: nodeId, label });
-      } catch (error) {
+      } catch (_error) {
         // Skip nodes that can't be converted (e.g., internal WASM nodes)
         // They'll fall back to node_${nodeId} in genSvg
       }

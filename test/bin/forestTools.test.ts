@@ -139,13 +139,17 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       expect(lastLine).to.have.property("sources");
       expect(lastLine).to.have.property("sinks");
 
-      // Check that other lines are evaluation paths
+      // Check that other lines are evaluation paths (skip nodeLabel objects)
       for (let i = 0; i < lines.length - 1; i++) {
-        const path = JSON.parse(lines[i]);
-        expect(path).to.have.property("source");
-        expect(path).to.have.property("sink");
-        expect(path).to.have.property("steps");
-        expect(path).to.have.property("hasCycle");
+        const obj = JSON.parse(lines[i]);
+        // Skip nodeLabel objects
+        if (obj.type === "nodeLabel") {
+          continue;
+        }
+        expect(obj).to.have.property("source");
+        expect(obj).to.have.property("sink");
+        expect(obj).to.have.property("steps");
+        expect(obj).to.have.property("hasCycle");
       }
     });
   });
@@ -249,13 +253,17 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       expect(globalInfo).to.have.property("sources");
       expect(globalInfo).to.have.property("sinks");
 
-      // Check that other results are evaluation paths
+      // Check that other results are evaluation paths (skip nodeLabel objects)
       for (let i = 0; i < results.length - 1; i++) {
-        const path = JSON.parse(results[i]);
-        expect(path).to.have.property("source");
-        expect(path).to.have.property("sink");
-        expect(path).to.have.property("steps");
-        expect(path).to.have.property("hasCycle");
+        const obj = JSON.parse(results[i]);
+        // Skip nodeLabel objects
+        if (obj.type === "nodeLabel") {
+          continue;
+        }
+        expect(obj).to.have.property("source");
+        expect(obj).to.have.property("sink");
+        expect(obj).to.have.property("steps");
+        expect(obj).to.have.property("hasCycle");
       }
     });
   });

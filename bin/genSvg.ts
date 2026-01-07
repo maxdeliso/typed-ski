@@ -48,9 +48,13 @@ function parseArgs(): CLIArgs {
   const concurrencyIndex = args.findIndex((arg) =>
     arg.startsWith("--concurrency=")
   );
+  const defaultConcurrency = typeof navigator !== "undefined" &&
+      typeof navigator.hardwareConcurrency === "number"
+    ? navigator.hardwareConcurrency
+    : 64;
   const concurrency = concurrencyIndex !== -1
     ? Number.parseInt(args[concurrencyIndex].split("=")[1], 10)
-    : 64;
+    : defaultConcurrency;
 
   const nonFlagArgs = args.filter((arg) => !arg.startsWith("--"));
 
@@ -89,7 +93,7 @@ ARGUMENTS:
 
 OPTIONS:
     --verbose, -v           Enable verbose output
-    --concurrency=N         Number of concurrent sfdp processes (default: 64)
+    --concurrency=N         Number of concurrent sfdp processes (default: CPU count)
     --help, -h              Show this help message
     --version               Show version information
 

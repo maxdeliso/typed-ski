@@ -108,14 +108,8 @@ REQUIREMENTS:
 
 async function generateForestData(
   symbolCount: number,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<string> {
-  if (verbose) {
-    console.error(
-      `Step 1: Generating forest JSONL for ${symbolCount} symbols...`,
-    );
-  }
-
   const genForest = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -127,7 +121,7 @@ async function generateForestData(
       String(symbolCount),
     ],
     stdout: "piped",
-    stderr: verbose ? "inherit" : "piped", // Pipe stderr so we can read it on error
+    stderr: "piped",
   });
 
   const forestProc = genForest.spawn();
@@ -146,12 +140,8 @@ async function generateForestData(
 
 async function readInputData(
   inputFile: string,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<string> {
-  if (verbose) {
-    console.error(`Step 1: Reading forest data from ${inputFile}...`);
-  }
-
   try {
     return await Deno.readTextFile(inputFile);
   } catch (error) {
@@ -160,7 +150,7 @@ async function readInputData(
   }
 }
 
-function parseJsonlData(jsonlContent: string, verbose: boolean): {
+function parseJsonlData(jsonlContent: string, _verbose: boolean): {
   paths: EvaluationPath[];
   globalInfo: GlobalInfo;
 } {
@@ -170,9 +160,6 @@ function parseJsonlData(jsonlContent: string, verbose: boolean): {
 
   for (const line of lines) {
     if (!line.trim()) continue;
-    // Skip lines that don't look like JSON (debug output, status messages, etc.)
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
 
     let data;
     try {
@@ -204,22 +191,13 @@ function parseJsonlData(jsonlContent: string, verbose: boolean): {
     Deno.exit(1);
   }
 
-  if (verbose) {
-    console.error(`Step 1 complete. Found ${paths.length} evaluation paths`);
-    console.error(`Global info contains ${globalInfo.nodes.length} nodes`);
-  }
-
   return { paths, globalInfo };
 }
 
 function groupPathsBySink(
   paths: EvaluationPath[],
-  verbose: boolean,
+  _verbose: boolean,
 ): Map<number, { paths: EvaluationPath[]; hasCycle: boolean }> {
-  if (verbose) {
-    console.error(`Step 2: Grouping paths by sink...`);
-  }
-
   const sinkGroups = new Map<
     number,
     { paths: EvaluationPath[]; hasCycle: boolean }
@@ -234,10 +212,6 @@ function groupPathsBySink(
     group.hasCycle = group.hasCycle || path.hasCycle;
   }
 
-  if (verbose) {
-    console.error(`Found ${sinkGroups.size} unique sinks`);
-  }
-
   return sinkGroups;
 }
 
@@ -245,12 +219,8 @@ async function generateDotFiles(
   sinkGroups: Map<number, { paths: EvaluationPath[]; hasCycle: boolean }>,
   globalInfo: GlobalInfo,
   outputDir: string,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<string[]> {
-  if (verbose) {
-    console.error(`Step 3: Generating DOT files for each sink...`);
-  }
-
   const dotFiles: string[] = [];
 
   for (const [sinkId, group] of sinkGroups) {
@@ -308,22 +278,14 @@ async function generateDotFiles(
     dotFiles.push(dotPath);
   }
 
-  if (verbose) {
-    console.error(`Step 3 complete. Generated ${dotFiles.length} DOT files`);
-  }
-
   return dotFiles;
 }
 
 async function generateSvgFiles(
   dotFiles: string[],
   concurrency: number,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<void> {
-  if (verbose) {
-    console.error(`Step 4: Running sfdp to generate SVG...`);
-  }
-
   let idx = 0;
 
   async function runSfdp(dotPath: string): Promise<void> {
@@ -343,8 +305,6 @@ async function generateSvgFiles(
     const { success } = await sfdp.output();
     if (!success) {
       console.error(`sfdp failed for ${dotPath}`);
-    } else if (verbose) {
-      console.error(`Generated: ${dotPath} -> ${svgPath}`);
     }
   }
 
@@ -352,30 +312,12 @@ async function generateSvgFiles(
     const batch = dotFiles.slice(idx, idx + concurrency);
     await Promise.all(batch.map(runSfdp));
     idx += concurrency;
-
-    if (verbose) {
-      console.error(
-        `Processed ${
-          Math.min(idx, dotFiles.length)
-        } / ${dotFiles.length} SVG files (${
-          ((Math.min(idx, dotFiles.length) / dotFiles.length) * 100).toFixed(2)
-        }%)`,
-      );
-    }
   }
 }
 
 async function main(): Promise<void> {
   const { symbolCount, inputFile, outputDir, verbose, concurrency } =
     parseArgs();
-
-  if (verbose) {
-    console.error(
-      `Arguments: symbolCount=${symbolCount}, inputFile=${
-        inputFile || "generated"
-      }, outputDir=${outputDir}, concurrency=${concurrency}`,
-    );
-  }
 
   // Create output directory
   await Deno.mkdir(outputDir, { recursive: true });
@@ -386,7 +328,7 @@ async function main(): Promise<void> {
     : await generateForestData(symbolCount, verbose);
 
   // Parse JSONL data
-  const { paths, globalInfo } = await parseJsonlData(jsonlContent, verbose);
+  const { paths, globalInfo } = parseJsonlData(jsonlContent, verbose);
 
   // Group paths by sink
   const sinkGroups = groupPathsBySink(paths, verbose);

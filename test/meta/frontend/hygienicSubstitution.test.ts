@@ -5,7 +5,7 @@
  * capture by tracking bound variables and performing alpha-renaming when necessary.
  */
 
-import { assertEquals } from "@std/assert";
+import { assertEquals } from "std/assert";
 import {
   alphaRenameTermBinder,
   alphaRenameTypeBinder,

@@ -156,9 +156,6 @@ type EvalResult = {
   sink: number;
   steps: EvaluationStep[];
   hasCycle: boolean;
-  hitStepLimit: boolean;
-  arenaError: boolean;
-  hitSubmitLimit: boolean;
 };
 
 function initEvalState(
@@ -170,9 +167,6 @@ function initEvalState(
   historyQueue: number[];
   steps: EvaluationStep[];
   hasCycle: boolean;
-  hitStepLimit: boolean;
-  arenaError: boolean;
-  hitSubmitLimit: boolean;
   done: boolean;
 } {
   return {
@@ -182,9 +176,6 @@ function initEvalState(
     historyQueue: [sourceArenaId],
     steps: [],
     hasCycle: false,
-    hitStepLimit: false,
-    arenaError: false,
-    hitSubmitLimit: false,
     done: false,
   };
 }
@@ -237,16 +228,13 @@ async function evaluateBatchParallel(
     }
 
     if (!st.done) {
-      st.hitStepLimit = true;
       st.done = true;
     }
   } catch (error) {
     // Check if this is a resubmission limit error
     if (error instanceof ResubmissionLimitExceededError) {
-      st.hitSubmitLimit = true;
       st.done = true;
     } else {
-      st.arenaError = true;
       st.done = true;
     }
   }
@@ -256,9 +244,6 @@ async function evaluateBatchParallel(
     sink: st.currentId,
     steps: st.steps,
     hasCycle: st.hasCycle,
-    hitStepLimit: st.hitStepLimit,
-    arenaError: st.arenaError,
-    hitSubmitLimit: st.hitSubmitLimit,
   };
 }
 
@@ -266,7 +251,12 @@ export async function* generateEvaluationForest(
   symbolCount: number,
   maxSteps: number = 100000,
 ): AsyncGenerator<EvalResult | string, void, unknown> {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(8);
+  // Use navigator.hardwareConcurrency when available, fallback to 8
+  const workerCount = typeof navigator !== "undefined" &&
+      typeof navigator.hardwareConcurrency === "number"
+    ? navigator.hardwareConcurrency
+    : 8;
+  const evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
 
   try {
     const allExprs = enumerateExpressions(symbolCount);
@@ -287,7 +277,7 @@ export async function* generateEvaluationForest(
     // Configure workers to execute exactly one reduction step per submission.
     // The per-expression step limit is enforced in JS.
     // Sliding concurrency window: when one expression completes, immediately start another.
-    const CONCURRENCY = 8;
+    const CONCURRENCY = workerCount;
     let nextIndex = 0;
     let processed = 0;
 

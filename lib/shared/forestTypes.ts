@@ -36,6 +36,18 @@ export interface EvaluationPath {
 }
 
 /**
+ * Represents a node label mapping
+ */
+export interface NodeLabel {
+  /** Type identifier */
+  type: "nodeLabel";
+  /** Node ID */
+  id: number;
+  /** String representation of the node */
+  label: string;
+}
+
+/**
  * Global information about the evaluation forest
  */
 export interface GlobalInfo {
@@ -100,12 +112,34 @@ export function isValidEvaluationPath(data: unknown): data is EvaluationPath {
 }
 
 /**
+ * Type guard to validate node label structure
+ *
+ * @param data - The data to validate
+ * @returns True if data is a valid NodeLabel object
+ */
+export function isValidNodeLabel(data: unknown): data is NodeLabel {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "type" in data &&
+    data.type === "nodeLabel" &&
+    "id" in data &&
+    typeof data.id === "number" &&
+    "label" in data &&
+    typeof data.label === "string"
+  );
+}
+
+/**
  * Helper function to get a label for a node
  *
- * @param _globalInfo - Global info (unused but kept for API consistency)
+ * @param nodeLabels - Map of node ID to string label
  * @param nodeId - The node ID to generate a label for
  * @returns A string label for the node
  */
-export function getNodeLabel(_globalInfo: GlobalInfo, nodeId: number): string {
-  return `node_${nodeId}`;
+export function getNodeLabel(
+  nodeLabels: Map<number, string>,
+  nodeId: number,
+): string {
+  return nodeLabels.get(nodeId) ?? `node_${nodeId}`;
 }

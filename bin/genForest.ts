@@ -7,7 +7,7 @@
  * Outputs JSONL format with evaluation paths and global arena information.
  */
 
-import { apply } from "../lib/ski/expression.ts";
+import { apply, prettyPrint } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import {
@@ -156,9 +156,6 @@ type EvalResult = {
   sink: number;
   steps: EvaluationStep[];
   hasCycle: boolean;
-  hitStepLimit: boolean;
-  arenaError: boolean;
-  hitSubmitLimit: boolean;
 };
 
 function initEvalState(
@@ -170,9 +167,6 @@ function initEvalState(
   historyQueue: number[];
   steps: EvaluationStep[];
   hasCycle: boolean;
-  hitStepLimit: boolean;
-  arenaError: boolean;
-  hitSubmitLimit: boolean;
   done: boolean;
 } {
   return {
@@ -182,9 +176,6 @@ function initEvalState(
     historyQueue: [sourceArenaId],
     steps: [],
     hasCycle: false,
-    hitStepLimit: false,
-    arenaError: false,
-    hitSubmitLimit: false,
     done: false,
   };
 }
@@ -237,16 +228,13 @@ async function evaluateBatchParallel(
     }
 
     if (!st.done) {
-      st.hitStepLimit = true;
       st.done = true;
     }
   } catch (error) {
     // Check if this is a resubmission limit error
     if (error instanceof ResubmissionLimitExceededError) {
-      st.hitSubmitLimit = true;
       st.done = true;
     } else {
-      st.arenaError = true;
       st.done = true;
     }
   }
@@ -256,9 +244,6 @@ async function evaluateBatchParallel(
     sink: st.currentId,
     steps: st.steps,
     hasCycle: st.hasCycle,
-    hitStepLimit: st.hitStepLimit,
-    arenaError: st.arenaError,
-    hitSubmitLimit: st.hitSubmitLimit,
   };
 }
 
@@ -266,38 +251,33 @@ export async function* generateEvaluationForest(
   symbolCount: number,
   maxSteps: number = 100000,
 ): AsyncGenerator<EvalResult | string, void, unknown> {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(8);
+  // Use navigator.hardwareConcurrency when available, fallback to 8
+  const workerCount = typeof navigator !== "undefined" &&
+      typeof navigator.hardwareConcurrency === "number"
+    ? navigator.hardwareConcurrency
+    : 8;
+  const evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
 
   try {
     const allExprs = enumerateExpressions(symbolCount);
     const total = allExprs.length;
-    const start = Date.now();
-
-    console.error(
-      `Processing ${total} expressions with ${symbolCount} symbols each using 8 workers...`,
-    );
 
     // Pre-convert all expressions to arena node IDs sequentially to ensure
     // deterministic node ID assignment. This is critical for deterministic output.
-    console.error(
-      "Pre-converting expressions to arena nodes (deterministic order)...",
-    );
     const allArenaIds: number[] = [];
     for (let i = 0; i < total; i++) {
       allArenaIds.push(evaluator.toArena(allExprs[i]));
-      if ((i + 1) % 1000 === 0) {
-        console.error(`  Converted ${i + 1}/${total} expressions...`);
-      }
     }
-    console.error(`All ${total} expressions converted to arena nodes.`);
 
     const sources = new Set<number>();
     const sinks = new Set<number>();
+    // Track all unique node IDs that appear in evaluation paths
+    const allNodeIds = new Set<number>();
 
     // Configure workers to execute exactly one reduction step per submission.
     // The per-expression step limit is enforced in JS.
     // Sliding concurrency window: when one expression completes, immediately start another.
-    const CONCURRENCY = 8;
+    const CONCURRENCY = workerCount;
     let nextIndex = 0;
     let processed = 0;
 
@@ -305,31 +285,6 @@ export async function* generateEvaluationForest(
       | { exprIndex: number; stepsTaken: number; startedAtMs: number }
       | null;
     const slots: SlotState[] = new Array(CONCURRENCY).fill(null);
-
-    const getRingStats = () =>
-      (evaluator as unknown as { getRingStatsSnapshot?: () => unknown })
-        .getRingStatsSnapshot?.();
-    const getDebugLockState = () => (evaluator.$.debugLockState
-      ? evaluator.$.debugLockState()
-      : undefined);
-
-    const statusInterval = setInterval(() => {
-      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      const inFlight = slots.filter(Boolean).length;
-      const slotSummary = slots
-        .map(
-          (s, i) => (s ? `${i}:${s.exprIndex + 1}@${s.stepsTaken}` : `${i}:-`),
-        )
-        .join(" ");
-      console.error(
-        `[Status] Processed: ${processed}/${total} (${
-          ((processed / total) * 100).toFixed(2)
-        }%) | In flight: ${inFlight}/${CONCURRENCY} | ` +
-          `Total time: ${elapsed}s | Slots: ${slotSummary} | ` +
-          `Ring: ${JSON.stringify(getRingStats() ?? {})} | ` +
-          `resize_seq: ${getDebugLockState() ?? "n/a"}`,
-      );
-    }, 2000);
 
     try {
       type Done = {
@@ -380,9 +335,7 @@ export async function* generateEvaluationForest(
         // Wait for next completion if we have in-flight work
         if (inFlights.length > 0) {
           const done = await Promise.race(
-            inFlights.map((e) =>
-              e.promise
-            ),
+            inFlights.map((e) => e.promise),
           );
           inFlights = inFlights.filter((e) => e.slot !== done.slot);
 
@@ -390,6 +343,14 @@ export async function* generateEvaluationForest(
           processed++;
           sources.add(done.result.source);
           sinks.add(done.result.sink);
+
+          // Track node IDs from this result
+          allNodeIds.add(done.result.source);
+          allNodeIds.add(done.result.sink);
+          for (const step of done.result.steps) {
+            allNodeIds.add(step.from);
+            allNodeIds.add(step.to);
+          }
 
           // Buffer the result to maintain deterministic output order
           resultBuffer.set(done.exprIndex, done.result);
@@ -407,61 +368,43 @@ export async function* generateEvaluationForest(
         }
       }
     } finally {
-      clearInterval(statusInterval);
+      // Inner try block cleanup (if needed in future)
     }
 
-    console.error("Dumping arena (streaming)...");
-
-    // Stream the JSON output to avoid memory issues with large arenas
-    // We need to yield chunks of JSON to avoid exceeding string length limits
-    let nodeCount = 0;
-    const CHUNK_SIZE = 100000; // Yield JSON in chunks of 100k nodes
-
-    // Start JSON object
-    let jsonBuffer = '{"type":"global","nodes":[';
-
-    let firstNode = true;
-    let nodesInBuffer = 0;
+    // Build the complete global info JSON object to avoid invalid JSON fragments
+    // We collect all nodes first, then construct the complete JSON object
+    const nodes: unknown[] = [];
 
     for (const chunk of evaluator.dumpArenaStreaming(10000)) {
-      nodeCount += chunk.length;
-
-      // Progress reporting for large dumps
-      if (nodeCount % 1000000 === 0) {
-        console.error(`  Dumped ${nodeCount} nodes...`);
-      }
-
-      // Serialize chunk and add to JSON buffer
+      // Collect nodes
       for (const node of chunk) {
-        if (!firstNode) {
-          jsonBuffer += ",";
-        }
-        jsonBuffer += JSON.stringify(node);
-        firstNode = false;
-        nodesInBuffer++;
-
-        // Yield buffer when it gets large enough to avoid memory issues
-        if (nodesInBuffer >= CHUNK_SIZE) {
-          yield jsonBuffer;
-          jsonBuffer = ""; // Reset buffer
-          nodesInBuffer = 0;
-        }
+        nodes.push(node);
       }
     }
 
-    console.error(`Arena contains ${nodeCount} nodes`);
-
-    // Close nodes array and add sources/sinks
-    jsonBuffer += '],"sources":';
-    jsonBuffer += JSON.stringify(Array.from(sources));
-    jsonBuffer += ',"sinks":';
-    jsonBuffer += JSON.stringify(Array.from(sinks));
-    jsonBuffer += "}";
-
-    // Yield remaining JSON
-    if (jsonBuffer) {
-      yield jsonBuffer;
+    // Generate and stream node labels for all unique node IDs
+    // Convert each node ID to its string representation
+    for (const nodeId of allNodeIds) {
+      try {
+        const expr = evaluator.fromArena(nodeId);
+        const label = prettyPrint(expr);
+        yield JSON.stringify({ type: "nodeLabel", id: nodeId, label });
+      } catch (_error) {
+        // Skip nodes that can't be converted (e.g., internal WASM nodes)
+        // They'll fall back to node_${nodeId} in genSvg
+      }
     }
+
+    // Build complete JSON object
+    const globalInfo = {
+      type: "global",
+      nodes: nodes,
+      sources: Array.from(sources),
+      sinks: Array.from(sinks),
+    };
+
+    // Yield the complete JSON object as a single string
+    yield JSON.stringify(globalInfo);
   } finally {
     // Clean up workers
     evaluator.terminate();
@@ -470,48 +413,31 @@ export async function* generateEvaluationForest(
 
 async function streamToStdout(
   symbolCount: number,
-  verbose: boolean,
+  _verbose: boolean,
   maxSteps: number = 100000,
 ) {
-  if (verbose) {
-    console.error("Writing output to stdout...");
-  }
-
   const BATCH_SIZE = 100; // Batch size for stringification
   const resultBatch: EvalResult[] = [];
-  let inGlobalInfo = false;
 
   for await (const data of generateEvaluationForest(symbolCount, maxSteps)) {
     // Check if this is global info (string) or evaluation result (object)
     if (typeof data === "string") {
-      // Global info chunk - handle as before
-      if (data.startsWith('{"type":"global"')) {
-        // Flush any pending results before global info
-        if (resultBatch.length > 0) {
-          const batchStr = resultBatch.map((r) => JSON.stringify(r)).join("\n");
-          console.log(batchStr);
-          resultBatch.length = 0;
-        }
-        inGlobalInfo = true;
-        Deno.stdout.writeSync(new TextEncoder().encode(data));
-      } else if (inGlobalInfo) {
-        // Continuation chunk of global info - no newline
-        Deno.stdout.writeSync(new TextEncoder().encode(data));
-        // Check if this is the end of global info (ends with })
-        if (data.endsWith("}")) {
-          Deno.stdout.writeSync(new TextEncoder().encode("\n"));
-          inGlobalInfo = false;
-        }
+      // Global info - now always a complete JSON object
+      // Flush any pending results before global info
+      if (resultBatch.length > 0) {
+        const batchStr = resultBatch.map((r) => JSON.stringify(r)).join("\n");
+        console.log(batchStr);
+        resultBatch.length = 0;
       }
+      // Write the complete global info JSON object followed by a newline
+      console.log(data);
     } else {
       // Evaluation result object - batch stringify
       resultBatch.push(data);
       if (resultBatch.length >= BATCH_SIZE) {
-        // Stringify entire batch at once (faster than individual stringify)
-        const batchJson = JSON.stringify(resultBatch);
-        // Convert array format to JSONL (one object per line)
-        // Remove leading '[' and trailing ']', then split by '},{' and add newlines
-        const jsonl = batchJson.slice(1, -1).replace(/},{/g, "}\n{");
+        // Stringify each object individually to avoid regex issues with nested arrays
+        // This is safer than using regex replacement which can match inside nested structures
+        const jsonl = resultBatch.map((r) => JSON.stringify(r)).join("\n");
         console.log(jsonl);
         resultBatch.length = 0;
       }
@@ -520,22 +446,14 @@ async function streamToStdout(
 
   // Flush any remaining results
   if (resultBatch.length > 0) {
-    const batchJson = JSON.stringify(resultBatch);
-    const jsonl = batchJson.slice(1, -1).replace(/},{/g, "}\n{");
+    // Stringify each object individually to avoid regex issues with nested arrays
+    const jsonl = resultBatch.map((r) => JSON.stringify(r)).join("\n");
     console.log(jsonl);
   }
 }
 
 async function main(): Promise<void> {
   const { symbolCount, verbose, maxSteps = 100000 } = parseArgs();
-
-  if (verbose) {
-    console.error(
-      `Arguments: symbolCount=${symbolCount}, maxSteps=${maxSteps}`,
-    );
-  }
-
-  console.error("Starting processing...");
   await streamToStdout(symbolCount, verbose, maxSteps);
 }
 

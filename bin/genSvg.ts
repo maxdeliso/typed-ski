@@ -12,6 +12,7 @@ import {
   getNodeLabel,
   isValidEvaluationPath,
   isValidGlobalInfo,
+  isValidNodeLabel,
 } from "../lib/shared/forestTypes.ts";
 
 import { VERSION } from "../lib/shared/version.ts";
@@ -43,9 +44,13 @@ function parseArgs(): CLIArgs {
   const concurrencyIndex = args.findIndex((arg) =>
     arg.startsWith("--concurrency=")
   );
+  const defaultConcurrency = typeof navigator !== "undefined" &&
+      typeof navigator.hardwareConcurrency === "number"
+    ? navigator.hardwareConcurrency
+    : 64;
   const concurrency = concurrencyIndex !== -1
     ? Number.parseInt(args[concurrencyIndex].split("=")[1], 10)
-    : 64;
+    : defaultConcurrency;
 
   const nonFlagArgs = args.filter((arg) => !arg.startsWith("--"));
 
@@ -84,7 +89,7 @@ ARGUMENTS:
 
 OPTIONS:
     --verbose, -v           Enable verbose output
-    --concurrency=N         Number of concurrent sfdp processes (default: 64)
+    --concurrency=N         Number of concurrent sfdp processes (default: CPU count)
     --help, -h              Show this help message
     --version               Show version information
 
@@ -108,14 +113,8 @@ REQUIREMENTS:
 
 async function generateForestData(
   symbolCount: number,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<string> {
-  if (verbose) {
-    console.error(
-      `Step 1: Generating forest JSONL for ${symbolCount} symbols...`,
-    );
-  }
-
   const genForest = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -127,7 +126,7 @@ async function generateForestData(
       String(symbolCount),
     ],
     stdout: "piped",
-    stderr: verbose ? "inherit" : "piped", // Pipe stderr so we can read it on error
+    stderr: "piped",
   });
 
   const forestProc = genForest.spawn();
@@ -146,12 +145,8 @@ async function generateForestData(
 
 async function readInputData(
   inputFile: string,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<string> {
-  if (verbose) {
-    console.error(`Step 1: Reading forest data from ${inputFile}...`);
-  }
-
   try {
     return await Deno.readTextFile(inputFile);
   } catch (error) {
@@ -160,19 +155,18 @@ async function readInputData(
   }
 }
 
-function parseJsonlData(jsonlContent: string, verbose: boolean): {
+function parseJsonlData(jsonlContent: string, _verbose: boolean): {
   paths: EvaluationPath[];
   globalInfo: GlobalInfo;
+  nodeLabels: Map<number, string>;
 } {
   const lines = jsonlContent.trim().split("\n");
   const paths: EvaluationPath[] = [];
   let globalInfo: GlobalInfo | null = null;
+  const nodeLabels = new Map<number, string>();
 
   for (const line of lines) {
     if (!line.trim()) continue;
-    // Skip lines that don't look like JSON (debug output, status messages, etc.)
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
 
     let data;
     try {
@@ -187,6 +181,13 @@ function parseJsonlData(jsonlContent: string, verbose: boolean): {
         globalInfo = data;
       } else {
         console.error("Invalid global info structure:", data);
+        Deno.exit(1);
+      }
+    } else if (data.type === "nodeLabel") {
+      if (isValidNodeLabel(data)) {
+        nodeLabels.set(data.id, data.label);
+      } else {
+        console.error("Invalid node label structure:", data);
         Deno.exit(1);
       }
     } else {
@@ -204,22 +205,24 @@ function parseJsonlData(jsonlContent: string, verbose: boolean): {
     Deno.exit(1);
   }
 
-  if (verbose) {
-    console.error(`Step 1 complete. Found ${paths.length} evaluation paths`);
-    console.error(`Global info contains ${globalInfo.nodes.length} nodes`);
-  }
+  return { paths, globalInfo, nodeLabels };
+}
 
-  return { paths, globalInfo };
+/**
+ * Escapes special characters in DOT file labels
+ */
+function escapeDotLabel(label: string): string {
+  return label
+    .replace(/\\/g, "\\\\") // Escape backslashes first
+    .replace(/"/g, '\\"') // Escape quotes
+    .replace(/\n/g, " ") // Replace newlines with spaces
+    .replace(/\r/g, " "); // Replace carriage returns with spaces
 }
 
 function groupPathsBySink(
   paths: EvaluationPath[],
-  verbose: boolean,
+  _verbose: boolean,
 ): Map<number, { paths: EvaluationPath[]; hasCycle: boolean }> {
-  if (verbose) {
-    console.error(`Step 2: Grouping paths by sink...`);
-  }
-
   const sinkGroups = new Map<
     number,
     { paths: EvaluationPath[]; hasCycle: boolean }
@@ -234,27 +237,20 @@ function groupPathsBySink(
     group.hasCycle = group.hasCycle || path.hasCycle;
   }
 
-  if (verbose) {
-    console.error(`Found ${sinkGroups.size} unique sinks`);
-  }
-
   return sinkGroups;
 }
 
 async function generateDotFiles(
   sinkGroups: Map<number, { paths: EvaluationPath[]; hasCycle: boolean }>,
-  globalInfo: GlobalInfo,
+  _globalInfo: GlobalInfo,
+  nodeLabels: Map<number, string>,
   outputDir: string,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<string[]> {
-  if (verbose) {
-    console.error(`Step 3: Generating DOT files for each sink...`);
-  }
-
   const dotFiles: string[] = [];
 
   for (const [sinkId, group] of sinkGroups) {
-    const sinkLabel = getNodeLabel(globalInfo, sinkId);
+    const sinkLabel = getNodeLabel(nodeLabels, sinkId);
     const dotPath = `${outputDir}/sink_${sinkId}.dot`;
 
     const nodes = new Set<number>();
@@ -270,13 +266,15 @@ async function generateDotFiles(
       }
     }
 
-    let dotContent = `digraph "Sink_${sinkId}_${sinkLabel}" {\n`;
+    const escapedSinkLabel = escapeDotLabel(sinkLabel);
+    let dotContent = `digraph "Sink_${sinkId}_${escapedSinkLabel}" {\n`;
     dotContent +=
       `  node [shape=box, style=filled, fontname="Arial", fontsize=10];\n`;
     dotContent += `  edge [fontname="Arial", fontsize=8];\n\n`;
 
     for (const nodeId of nodes) {
-      const label = getNodeLabel(globalInfo, nodeId);
+      const label = getNodeLabel(nodeLabels, nodeId);
+      const escapedLabel = escapeDotLabel(label);
       const isSource = group.paths.some((p) => p.source === nodeId);
       const isSink = nodeId === sinkId;
 
@@ -289,7 +287,8 @@ async function generateDotFiles(
         color = group.hasCycle ? "orange" : "lightcoral";
       }
 
-      dotContent += `  ${nodeId} [label="${label}", fillcolor="${color}"];\n`;
+      dotContent +=
+        `  ${nodeId} [label="${escapedLabel}", fillcolor="${color}"];\n`;
     }
 
     dotContent += `\n`;
@@ -308,23 +307,15 @@ async function generateDotFiles(
     dotFiles.push(dotPath);
   }
 
-  if (verbose) {
-    console.error(`Step 3 complete. Generated ${dotFiles.length} DOT files`);
-  }
-
   return dotFiles;
 }
 
 async function generateSvgFiles(
   dotFiles: string[],
   concurrency: number,
-  verbose: boolean,
+  _verbose: boolean,
 ): Promise<void> {
-  if (verbose) {
-    console.error(`Step 4: Running sfdp to generate SVG...`);
-  }
-
-  let idx = 0;
+  let nextIndex = 0;
 
   async function runSfdp(dotPath: string): Promise<void> {
     const svgPath = dotPath.replace(/\.dot$/, ".svg");
@@ -343,24 +334,46 @@ async function generateSvgFiles(
     const { success } = await sfdp.output();
     if (!success) {
       console.error(`sfdp failed for ${dotPath}`);
-    } else if (verbose) {
-      console.error(`Generated: ${dotPath} -> ${svgPath}`);
     }
   }
 
-  while (idx < dotFiles.length) {
-    const batch = dotFiles.slice(idx, idx + concurrency);
-    await Promise.all(batch.map(runSfdp));
-    idx += concurrency;
+  // Sliding window: start up to concurrency jobs, and as soon as one completes,
+  // immediately start the next one from the queue
+  type InFlightEntry = {
+    index: number;
+    promise: Promise<void>;
+  };
 
-    if (verbose) {
-      console.error(
-        `Processed ${
-          Math.min(idx, dotFiles.length)
-        } / ${dotFiles.length} SVG files (${
-          ((Math.min(idx, dotFiles.length) / dotFiles.length) * 100).toFixed(2)
-        }%)`,
-      );
+  const inFlights: InFlightEntry[] = [];
+
+  // Start initial batch
+  while (nextIndex < dotFiles.length && inFlights.length < concurrency) {
+    const index = nextIndex++;
+    const promise = runSfdp(dotFiles[index]);
+    inFlights.push({ index, promise });
+  }
+
+  // Process remaining jobs with sliding window
+  while (inFlights.length > 0) {
+    // Wait for any job to complete
+    const doneEntry = await Promise.race(
+      inFlights.map(async (entry) => {
+        await entry.promise;
+        return entry;
+      }),
+    );
+
+    // Remove completed job
+    const doneIndex = inFlights.findIndex((entry) => entry === doneEntry);
+    if (doneIndex !== -1) {
+      inFlights.splice(doneIndex, 1);
+    }
+
+    // Start next job if available
+    if (nextIndex < dotFiles.length) {
+      const index = nextIndex++;
+      const promise = runSfdp(dotFiles[index]);
+      inFlights.push({ index, promise });
     }
   }
 }
@@ -368,14 +381,6 @@ async function generateSvgFiles(
 async function main(): Promise<void> {
   const { symbolCount, inputFile, outputDir, verbose, concurrency } =
     parseArgs();
-
-  if (verbose) {
-    console.error(
-      `Arguments: symbolCount=${symbolCount}, inputFile=${
-        inputFile || "generated"
-      }, outputDir=${outputDir}, concurrency=${concurrency}`,
-    );
-  }
 
   // Create output directory
   await Deno.mkdir(outputDir, { recursive: true });
@@ -386,7 +391,10 @@ async function main(): Promise<void> {
     : await generateForestData(symbolCount, verbose);
 
   // Parse JSONL data
-  const { paths, globalInfo } = await parseJsonlData(jsonlContent, verbose);
+  const { paths, globalInfo, nodeLabels } = parseJsonlData(
+    jsonlContent,
+    verbose,
+  );
 
   // Group paths by sink
   const sinkGroups = groupPathsBySink(paths, verbose);
@@ -395,6 +403,7 @@ async function main(): Promise<void> {
   const dotFiles = await generateDotFiles(
     sinkGroups,
     globalInfo,
+    nodeLabels,
     outputDir,
     verbose,
   );

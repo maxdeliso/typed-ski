@@ -168,8 +168,14 @@ void main() {
   // Z-fighting fix: when drawing points, bias them slightly towards the camera
   // so they consistently win against coincident line fragments in the depth buffer.
   // The scale by w keeps the bias roughly consistent across depth.
+  // Clamp to prevent clipping: ensure z >= -w (near plane) to avoid popping.
   if (u_use_points > 0.5) {
-    gl_Position.z -= 0.00025 * gl_Position.w;
+    float bias = 0.0001 * gl_Position.w;
+    gl_Position.z -= bias;
+    // Safety clamp: ensure z >= -w (near plane) to prevent vertex clipping
+    if (gl_Position.z < -gl_Position.w) {
+      gl_Position.z = -gl_Position.w + 0.00001;
+    }
   }
 
   // Perspective sizing
@@ -236,6 +242,7 @@ void main() {
 }
 
 function mat4Perspective(
+  out: Float32Array,
   fovYRad: number,
   aspect: number,
   near: number,
@@ -243,59 +250,80 @@ function mat4Perspective(
 ): Float32Array {
   const f = 1.0 / Math.tan(fovYRad / 2);
   const nf = 1 / (near - far);
-  return new Float32Array([
-    f / aspect,
-    0,
-    0,
-    0,
-    0,
-    f,
-    0,
-    0,
-    0,
-    0,
-    (far + near) * nf,
-    -1,
-    0,
-    0,
-    (2 * far * near) * nf,
-    0,
-  ]);
+  out.fill(0);
+  out[0] = f / aspect;
+  out[5] = f;
+  out[10] = (far + near) * nf;
+  out[11] = -1;
+  out[14] = (2 * far * near) * nf;
+  return out;
 }
 
-function mat4Mul(a: Float32Array, b: Float32Array): Float32Array {
-  const o = new Float32Array(16);
+function mat4Mul(
+  out: Float32Array,
+  a: Float32Array,
+  b: Float32Array,
+): Float32Array {
   // Column-major (WebGL convention): index = col*4 + row.
-  for (let c = 0; c < 4; c++) {
-    for (let r = 0; r < 4; r++) {
-      o[c * 4 + r] = a[0 * 4 + r] * b[c * 4 + 0] +
-        a[1 * 4 + r] * b[c * 4 + 1] +
-        a[2 * 4 + r] * b[c * 4 + 2] +
-        a[3 * 4 + r] * b[c * 4 + 3];
-    }
-  }
-  return o;
+  // Read all values from 'a' first to handle aliasing if out === a
+  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
+  const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
+  const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
+  const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+
+  let b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+  out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+  b0 = b[4];
+  b1 = b[5];
+  b2 = b[6];
+  b3 = b[7];
+  out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+  b0 = b[8];
+  b1 = b[9];
+  b2 = b[10];
+  b3 = b[11];
+  out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+  b0 = b[12];
+  b1 = b[13];
+  b2 = b[14];
+  b3 = b[15];
+  out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+  return out;
 }
 
-function mat4Translate(z: number): Float32Array {
-  return new Float32Array([
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-    0,
-    0,
-    z,
-    1,
-  ]);
+function mat4Translate(out: Float32Array, z: number): Float32Array {
+  out.fill(0);
+  out[0] = 1;
+  out[5] = 1;
+  out[10] = 1;
+  out[15] = 1;
+  out[14] = z;
+  return out;
+}
+
+// Cache sphere geometry at module scope to avoid recalculation
+let cachedSphere: { posCol: Float32Array } | null = null;
+
+function getSphereGeometry(segments: number): { posCol: Float32Array } {
+  if (!cachedSphere) {
+    cachedSphere = buildSphereWireframe(segments);
+  }
+  return cachedSphere;
 }
 
 function buildSphereWireframe(segments: number): { posCol: Float32Array } {
@@ -591,6 +619,10 @@ export function initWebglForestViewer(deps: ViewerDeps) {
   // Opaque render (no glow); blending off avoids driver-dependent artifacts.
   gl.disable(gl.BLEND);
 
+  // Enable vertex attribute arrays once (they stay enabled for all draw calls)
+  gl.enableVertexAttribArray(prog.aPos);
+  gl.enableVertexAttribArray(prog.aCol);
+
   // Buffers
   const pointBuf = gl.createBuffer();
   const lineBuf = gl.createBuffer();
@@ -599,9 +631,14 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     throw new Error("WebGL buffer allocation failed");
   }
 
-  const sphere = buildSphereWireframe(18);
+  const sphere = getSphereGeometry(18);
   gl.bindBuffer(gl.ARRAY_BUFFER, sphereBuf);
   gl.bufferData(gl.ARRAY_BUFFER, sphere.posCol, gl.STATIC_DRAW);
+
+  // Allocate matrix buffers once and reuse them in tick loop
+  const mProj = new Float32Array(16);
+  const mView = new Float32Array(16);
+  const mMvp = new Float32Array(16);
 
   let points: Float32Array<ArrayBufferLike> = new Float32Array(0);
   let lines: Float32Array<ArrayBufferLike> = new Float32Array(0);
@@ -676,8 +713,7 @@ export function initWebglForestViewer(deps: ViewerDeps) {
 
   const drawInterleaved = (buf: WebGLBuffer) => {
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.enableVertexAttribArray(prog.aPos);
-    gl.enableVertexAttribArray(prog.aCol);
+    // Vertex attrib arrays are enabled once during initialization
     gl.vertexAttribPointer(prog.aPos, 3, gl.FLOAT, false, 24, 0);
     gl.vertexAttribPointer(prog.aCol, 3, gl.FLOAT, false, 24, 12);
   };
@@ -687,14 +723,15 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     resize();
 
     const aspect = Math.max(1e-6, deps.canvas.width / deps.canvas.height);
-    const proj = mat4Perspective((60 * Math.PI) / 180, aspect, 0.01, 50);
-    const view = mat4Translate(-camDist);
-    const mvp = mat4Mul(proj, view);
+    // Reuse existing matrix buffers to avoid GC pressure
+    mat4Perspective(mProj, (60 * Math.PI) / 180, aspect, 0.01, 50);
+    mat4Translate(mView, -camDist);
+    mat4Mul(mMvp, mProj, mView);
     gl.useProgram(prog.program);
     // IMPORTANT: uniforms apply to the *currently bound* program.
     // Setting uniforms before `useProgram()` can silently fail (INVALID_OPERATION),
     // leaving stale matrices and causing apparent "blinks".
-    gl.uniformMatrix4fv(prog.uMvp, false, mvp);
+    gl.uniformMatrix4fv(prog.uMvp, false, mMvp);
 
     gl.clearColor(0.02, 0.02, 0.03, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

@@ -7,9 +7,7 @@
  * @module
  */
 
-import type { ArenaNode } from "./types.ts";
-
-export type { ArenaNode };
+// NOTE: Global arena dumps have been removed from the forest format.
 
 /**
  * Represents a single step in an evaluation path
@@ -25,14 +23,18 @@ export interface EvaluationStep {
  * Represents a complete evaluation path from source to sink
  */
 export interface EvaluationPath {
+  /** Pretty-printed source expression (for debugging/inspection) */
+  expr: string;
   /** Starting node ID */
   source: number;
   /** Ending node ID */
   sink: number;
   /** Sequence of evaluation steps */
   steps: EvaluationStep[];
-  /** True if homeomorphic embedding cutoff occurred */
-  hasCycle: boolean;
+  /** True if this expression reached a normal form within the configured max step limit */
+  reachedNormalForm: boolean;
+  /** Total number of reduction steps attempted (may exceed steps[].length due to truncation) */
+  stepsTaken: number;
 }
 
 /**
@@ -50,38 +52,6 @@ export interface NodeLabel {
 /**
  * Global information about the evaluation forest
  */
-export interface GlobalInfo {
-  /** Type identifier */
-  type: "global";
-  /** All nodes in the arena */
-  nodes: ArenaNode[];
-  /** Source node IDs */
-  sources: number[];
-  /** Sink node IDs */
-  sinks: number[];
-}
-
-/**
- * Type guard to validate global info structure
- *
- * @param data - The data to validate
- * @returns True if data is a valid GlobalInfo object
- */
-export function isValidGlobalInfo(data: unknown): data is GlobalInfo {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "type" in data &&
-    data.type === "global" &&
-    "nodes" in data &&
-    Array.isArray(data.nodes) &&
-    "sources" in data &&
-    Array.isArray(data.sources) &&
-    "sinks" in data &&
-    Array.isArray(data.sinks)
-  );
-}
-
 /**
  * Type guard to validate evaluation path structure
  *
@@ -92,14 +62,18 @@ export function isValidEvaluationPath(data: unknown): data is EvaluationPath {
   return (
     typeof data === "object" &&
     data !== null &&
+    "expr" in data &&
+    typeof data.expr === "string" &&
     "source" in data &&
     typeof data.source === "number" &&
     "sink" in data &&
     typeof data.sink === "number" &&
     "steps" in data &&
     Array.isArray(data.steps) &&
-    "hasCycle" in data &&
-    typeof data.hasCycle === "boolean" &&
+    "reachedNormalForm" in data &&
+    typeof data.reachedNormalForm === "boolean" &&
+    "stepsTaken" in data &&
+    typeof data.stepsTaken === "number" &&
     data.steps.every((step) =>
       typeof step === "object" &&
       step !== null &&

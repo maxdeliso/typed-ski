@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --unstable-worker-options
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
 
 /**
  * SKI Evaluation Forest SVG Generator
@@ -7,11 +7,10 @@
  * Creates DOT files and converts them to SVG using Graphviz's sfdp layout.
  */
 
-import type { EvaluationPath, GlobalInfo } from "../lib/shared/forestTypes.ts";
+import type { EvaluationPath } from "../lib/shared/forestTypes.ts";
 import {
   getNodeLabel,
   isValidEvaluationPath,
-  isValidGlobalInfo,
   isValidNodeLabel,
 } from "../lib/shared/forestTypes.ts";
 
@@ -23,6 +22,8 @@ interface CLIArgs {
   outputDir: string;
   verbose: boolean;
   concurrency: number;
+  maxSteps: number;
+  genForestNoLabels: boolean;
 }
 
 function parseArgs(): CLIArgs {
@@ -40,6 +41,30 @@ function parseArgs(): CLIArgs {
 
   const verbose = args.includes("--verbose");
 
+  // Parse --max-steps (forwarded to genForest when generating data)
+  // Default is intentionally lower than genForest's default: genSvg is typically used
+  // interactively, and huge step budgets make the tail latency (hard/divergent terms)
+  // dominate wall-clock time.
+  let maxSteps = 2000;
+  let maxStepsIndex = -1;
+  for (let i = args.length - 1; i >= 0; i--) {
+    if (args[i] === "--max-steps") {
+      maxStepsIndex = i;
+      break;
+    }
+  }
+  if (maxStepsIndex >= 0 && maxStepsIndex < args.length - 1) {
+    const maxStepsValue = args[maxStepsIndex + 1];
+    const parsed = Number.parseInt(maxStepsValue, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      console.error(
+        `Error: --max-steps must be a positive integer; received '${maxStepsValue}'`,
+      );
+      Deno.exit(1);
+    }
+    maxSteps = parsed;
+  }
+
   // Parse concurrency option
   const concurrencyIndex = args.findIndex((arg) =>
     arg.startsWith("--concurrency=")
@@ -52,7 +77,11 @@ function parseArgs(): CLIArgs {
     ? Number.parseInt(args[concurrencyIndex].split("=")[1], 10)
     : defaultConcurrency;
 
-  const nonFlagArgs = args.filter((arg) => !arg.startsWith("--"));
+  const nonFlagArgs = args.filter((arg, index) => {
+    if (arg.startsWith("--")) return false;
+    if (index > 0 && args[index - 1] === "--max-steps") return false;
+    return true;
+  });
 
   if (nonFlagArgs.length === 0) {
     console.error("Error: symbolCount is required");
@@ -74,7 +103,19 @@ function parseArgs(): CLIArgs {
   const inputFile = nonFlagArgs[1];
   const outputDir = `forest${symbolCount}_svg`;
 
-  return { symbolCount, inputFile, outputDir, verbose, concurrency };
+  // Heuristic defaults for large forests: avoid massive post-processing costs.
+  // - node labels can be extremely expensive at n>=6 (many unique nodes to pretty-print)
+  const genForestNoLabels = args.includes("--no-labels") || symbolCount >= 6;
+
+  return {
+    symbolCount,
+    inputFile,
+    outputDir,
+    verbose,
+    concurrency,
+    maxSteps,
+    genForestNoLabels,
+  };
 }
 
 function printHelp(): void {
@@ -90,6 +131,8 @@ ARGUMENTS:
 OPTIONS:
     --verbose, -v           Enable verbose output
     --concurrency=N         Number of concurrent sfdp processes (default: CPU count)
+    --max-steps <N>         Max reduction steps per expression when generating forest data (default: 2000)
+    --no-labels             When generating forest data, skip nodeLabel emission (faster; labels fallback to node_<id>)
     --help, -h              Show this help message
     --version               Show version information
 
@@ -107,26 +150,37 @@ OUTPUT:
 
 REQUIREMENTS:
     - Graphviz with sfdp command must be installed
-    - Input JSONL format: one evaluation path per line + global info
+    - Input JSONL format: one evaluation path per line (+ optional nodeLabel)
 `);
 }
 
 async function generateForestData(
   symbolCount: number,
-  _verbose: boolean,
+  maxSteps: number,
+  genForestNoLabels: boolean,
+  verbose: boolean,
 ): Promise<string> {
+  if (verbose) {
+    console.error(
+      `[genSvg] generating forest data via genForest (n=${symbolCount}, maxSteps=${maxSteps}, noLabels=${genForestNoLabels})`,
+    );
+  }
   const genForest = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
       "--allow-read",
       "--allow-write",
       "--allow-run",
-      "--unstable-worker-options",
       "bin/genForest.ts",
       String(symbolCount),
+      "--max-steps",
+      String(maxSteps),
+      ...(genForestNoLabels ? ["--no-labels"] : []),
+      "--progress",
     ],
     stdout: "piped",
-    stderr: "piped",
+    // genForest progress is printed to stderr; inherit so genSvg doesn't look "hung".
+    stderr: "inherit",
   });
 
   const forestProc = genForest.spawn();
@@ -134,9 +188,6 @@ async function generateForestData(
 
   if (!forestOut.success) {
     console.error("Failed to generate forest data.");
-    if (forestOut.stderr) {
-      console.error(new TextDecoder().decode(forestOut.stderr));
-    }
     Deno.exit(1);
   }
 
@@ -157,12 +208,10 @@ async function readInputData(
 
 function parseJsonlData(jsonlContent: string, _verbose: boolean): {
   paths: EvaluationPath[];
-  globalInfo: GlobalInfo;
   nodeLabels: Map<number, string>;
 } {
   const lines = jsonlContent.trim().split("\n");
   const paths: EvaluationPath[] = [];
-  let globalInfo: GlobalInfo | null = null;
   const nodeLabels = new Map<number, string>();
 
   for (const line of lines) {
@@ -176,14 +225,7 @@ function parseJsonlData(jsonlContent: string, _verbose: boolean): {
       continue;
     }
 
-    if (data.type === "global") {
-      if (isValidGlobalInfo(data)) {
-        globalInfo = data;
-      } else {
-        console.error("Invalid global info structure:", data);
-        Deno.exit(1);
-      }
-    } else if (data.type === "nodeLabel") {
+    if (data.type === "nodeLabel") {
       if (isValidNodeLabel(data)) {
         nodeLabels.set(data.id, data.label);
       } else {
@@ -200,12 +242,7 @@ function parseJsonlData(jsonlContent: string, _verbose: boolean): {
     }
   }
 
-  if (!globalInfo) {
-    console.error("No global info found in JSONL output");
-    Deno.exit(1);
-  }
-
-  return { paths, globalInfo, nodeLabels };
+  return { paths, nodeLabels };
 }
 
 /**
@@ -222,30 +259,25 @@ function escapeDotLabel(label: string): string {
 function groupPathsBySink(
   paths: EvaluationPath[],
   _verbose: boolean,
-): Map<number, { paths: EvaluationPath[]; hasCycle: boolean }> {
-  const sinkGroups = new Map<
-    number,
-    { paths: EvaluationPath[]; hasCycle: boolean }
-  >();
+): Map<number, { paths: EvaluationPath[] }> {
+  const sinkGroups = new Map<number, { paths: EvaluationPath[] }>();
 
   for (const path of paths) {
     if (!sinkGroups.has(path.sink)) {
-      sinkGroups.set(path.sink, { paths: [], hasCycle: false });
+      sinkGroups.set(path.sink, { paths: [] });
     }
     const group = sinkGroups.get(path.sink)!;
     group.paths.push(path);
-    group.hasCycle = group.hasCycle || path.hasCycle;
   }
 
   return sinkGroups;
 }
 
 async function generateDotFiles(
-  sinkGroups: Map<number, { paths: EvaluationPath[]; hasCycle: boolean }>,
-  _globalInfo: GlobalInfo,
+  sinkGroups: Map<number, { paths: EvaluationPath[] }>,
   nodeLabels: Map<number, string>,
   outputDir: string,
-  _verbose: boolean,
+  verbose: boolean,
 ): Promise<string[]> {
   const dotFiles: string[] = [];
 
@@ -253,17 +285,18 @@ async function generateDotFiles(
     const sinkLabel = getNodeLabel(nodeLabels, sinkId);
     const dotPath = `${outputDir}/sink_${sinkId}.dot`;
 
-    const nodes = new Set<number>();
-    const edges = new Set<string>();
+    const totalSteps = group.paths.reduce((acc, p) => acc + p.steps.length, 0);
+    const sourceIds = new Set<number>();
+    const nonNormalSources = new Set<number>();
+    for (const p of group.paths) {
+      sourceIds.add(p.source);
+      if (!p.reachedNormalForm) nonNormalSources.add(p.source);
+    }
 
-    for (const path of group.paths) {
-      nodes.add(path.source);
-      nodes.add(path.sink);
-      for (const step of path.steps) {
-        nodes.add(step.from);
-        nodes.add(step.to);
-        edges.add(`${step.from} -> ${step.to}`);
-      }
+    if (verbose) {
+      console.error(
+        `[genSvg] sink=${sinkId} paths=${group.paths.length} steps=${totalSteps} sources=${sourceIds.size}`,
+      );
     }
 
     const escapedSinkLabel = escapeDotLabel(sinkLabel);
@@ -272,19 +305,33 @@ async function generateDotFiles(
       `  node [shape=box, style=filled, fontname="Arial", fontsize=10];\n`;
     dotContent += `  edge [fontname="Arial", fontsize=8];\n\n`;
 
+    const nodes = new Set<number>();
+    const edges: string[] = [];
+
+    for (const path of group.paths) {
+      nodes.add(path.source);
+      nodes.add(path.sink);
+      for (const step of path.steps) {
+        nodes.add(step.from);
+        nodes.add(step.to);
+        // Reverse edges (sink-rooted view) for generally more legible layout.
+        edges.push(`${step.to} -> ${step.from}`);
+      }
+    }
+
     for (const nodeId of nodes) {
       const label = getNodeLabel(nodeLabels, nodeId);
       const escapedLabel = escapeDotLabel(label);
-      const isSource = group.paths.some((p) => p.source === nodeId);
+      const isSource = sourceIds.has(nodeId);
       const isSink = nodeId === sinkId;
 
       let color = "lightgray";
       if (isSource && isSink) {
-        color = group.hasCycle ? "orange" : "lightblue";
+        color = "lightblue";
       } else if (isSource) {
-        color = "lightgreen";
+        color = nonNormalSources.has(nodeId) ? "orange" : "lightgreen";
       } else if (isSink) {
-        color = group.hasCycle ? "orange" : "lightcoral";
+        color = "lightcoral";
       }
 
       dotContent +=
@@ -293,13 +340,9 @@ async function generateDotFiles(
 
     dotContent += `\n`;
 
+    // Write edges without deduplication (dedup can be very expensive at this scale).
     for (const edge of edges) {
       dotContent += `  ${edge};\n`;
-    }
-
-    if (group.hasCycle) {
-      dotContent +=
-        `  /* homeomorphic embedding cutoff: sink colored orange */\n`;
     }
 
     dotContent += `}\n`;
@@ -313,9 +356,38 @@ async function generateDotFiles(
 async function generateSvgFiles(
   dotFiles: string[],
   concurrency: number,
-  _verbose: boolean,
+  verbose: boolean,
 ): Promise<void> {
   let nextIndex = 0;
+
+  const startedAt = Date.now();
+  const encoder = new TextEncoder();
+  let completed = 0;
+  let failed = 0;
+  let lastReportAtMs = 0;
+
+  const fmtSec = (ms: number) => (ms / 1000).toFixed(1);
+  const maybeReport = (force: boolean) => {
+    const now = Date.now();
+    if (!force && now - lastReportAtMs < 750) return;
+    lastReportAtMs = now;
+    const elapsedMs = now - startedAt;
+    const rate = completed > 0 ? (completed / (elapsedMs / 1000)) : 0;
+    const remaining = dotFiles.length - completed;
+    const etaSec = rate > 0 ? (remaining / rate) : Infinity;
+    const msg =
+      `[genSvg] sfdp ${completed}/${dotFiles.length} running=${inFlights.length} failed=${failed} elapsed=${
+        fmtSec(elapsedMs)
+      }s` +
+      (Number.isFinite(etaSec) ? ` eta=${etaSec.toFixed(0)}s` : "") +
+      (rate > 0 ? ` rate=${rate.toFixed(1)}/s` : "");
+    // Update in-place to avoid flooding logs; end with newline at completion.
+    Deno.stderr.writeSync(encoder.encode(`${msg}\r`));
+    if (verbose) {
+      // In verbose mode, also emit a newline occasionally so logs are readable.
+      if (force) Deno.stderr.writeSync(encoder.encode("\n"));
+    }
+  };
 
   async function runSfdp(dotPath: string): Promise<void> {
     const svgPath = dotPath.replace(/\.dot$/, ".svg");
@@ -333,6 +405,7 @@ async function generateSvgFiles(
     });
     const { success } = await sfdp.output();
     if (!success) {
+      failed++;
       console.error(`sfdp failed for ${dotPath}`);
     }
   }
@@ -368,6 +441,8 @@ async function generateSvgFiles(
     if (doneIndex !== -1) {
       inFlights.splice(doneIndex, 1);
     }
+    completed++;
+    maybeReport(false);
 
     // Start next job if available
     if (nextIndex < dotFiles.length) {
@@ -376,11 +451,23 @@ async function generateSvgFiles(
       inFlights.push({ index, promise });
     }
   }
+
+  // Final progress line
+  maybeReport(true);
+  // Ensure the progress line doesn't leave the cursor mid-line.
+  Deno.stderr.writeSync(encoder.encode("\n"));
 }
 
 async function main(): Promise<void> {
-  const { symbolCount, inputFile, outputDir, verbose, concurrency } =
-    parseArgs();
+  const {
+    symbolCount,
+    inputFile,
+    outputDir,
+    verbose,
+    concurrency,
+    maxSteps,
+    genForestNoLabels,
+  } = parseArgs();
 
   // Create output directory
   await Deno.mkdir(outputDir, { recursive: true });
@@ -388,10 +475,15 @@ async function main(): Promise<void> {
   // Get input data
   const jsonlContent = inputFile
     ? await readInputData(inputFile, verbose)
-    : await generateForestData(symbolCount, verbose);
+    : await generateForestData(
+      symbolCount,
+      maxSteps,
+      genForestNoLabels,
+      verbose,
+    );
 
   // Parse JSONL data
-  const { paths, globalInfo, nodeLabels } = parseJsonlData(
+  const { paths, nodeLabels } = parseJsonlData(
     jsonlContent,
     verbose,
   );
@@ -402,7 +494,6 @@ async function main(): Promise<void> {
   // Generate DOT files
   const dotFiles = await generateDotFiles(
     sinkGroups,
-    globalInfo,
     nodeLabels,
     outputDir,
     verbose,

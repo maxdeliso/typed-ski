@@ -15,14 +15,8 @@ const projectRoot = join(__dirname, "../..");
 
 // Import library functions for testing
 import { generateEvaluationForest } from "../../bin/genForest.ts";
-import type {
-  EvaluationPath,
-  GlobalInfo,
-} from "../../lib/shared/forestTypes.ts";
-import {
-  isValidEvaluationPath,
-  isValidGlobalInfo,
-} from "../../lib/shared/forestTypes.ts";
+import type { EvaluationPath } from "../../lib/shared/forestTypes.ts";
+import { isValidEvaluationPath } from "../../lib/shared/forestTypes.ts";
 
 // Test utilities
 async function runCommand(command: string[], cwd = projectRoot): Promise<{
@@ -120,7 +114,6 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         "run",
         "--allow-read",
         "--allow-run",
-        "--unstable-worker-options",
         "bin/genForest.ts",
         "2",
       ]);
@@ -132,15 +125,8 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       // Should have evaluation paths + global info
       expect(lines.length).to.be.greaterThan(1);
 
-      // Check that last line is global info
-      const lastLine = JSON.parse(lines[lines.length - 1]);
-      expect(lastLine).to.have.property("type", "global");
-      expect(lastLine).to.have.property("nodes");
-      expect(lastLine).to.have.property("sources");
-      expect(lastLine).to.have.property("sinks");
-
-      // Check that other lines are evaluation paths (skip nodeLabel objects)
-      for (let i = 0; i < lines.length - 1; i++) {
+      // Check that lines are evaluation paths (skip nodeLabel objects)
+      for (let i = 0; i < lines.length; i++) {
         const obj = JSON.parse(lines[i]);
         // Skip nodeLabel objects
         if (obj.type === "nodeLabel") {
@@ -149,7 +135,9 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         expect(obj).to.have.property("source");
         expect(obj).to.have.property("sink");
         expect(obj).to.have.property("steps");
-        expect(obj).to.have.property("hasCycle");
+        expect(obj).to.have.property("expr");
+        expect(obj).to.have.property("reachedNormalForm");
+        expect(obj).to.have.property("stepsTaken");
       }
     });
   });
@@ -246,15 +234,8 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
 
       expect(results.length).to.be.greaterThan(1);
 
-      // Check that last result is global info
-      const globalInfo = JSON.parse(results[results.length - 1]);
-      expect(globalInfo).to.have.property("type", "global");
-      expect(globalInfo).to.have.property("nodes");
-      expect(globalInfo).to.have.property("sources");
-      expect(globalInfo).to.have.property("sinks");
-
-      // Check that other results are evaluation paths (skip nodeLabel objects)
-      for (let i = 0; i < results.length - 1; i++) {
+      // Check that results are evaluation paths (skip nodeLabel objects)
+      for (let i = 0; i < results.length; i++) {
         const obj = JSON.parse(results[i]);
         // Skip nodeLabel objects
         if (obj.type === "nodeLabel") {
@@ -263,32 +244,22 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         expect(obj).to.have.property("source");
         expect(obj).to.have.property("sink");
         expect(obj).to.have.property("steps");
-        expect(obj).to.have.property("hasCycle");
+        expect(obj).to.have.property("expr");
+        expect(obj).to.have.property("reachedNormalForm");
+        expect(obj).to.have.property("stepsTaken");
       }
     });
   });
 
   await t.step("Type validation tests", async (t) => {
-    await t.step("isValidGlobalInfo works", () => {
-      const validGlobalInfo: GlobalInfo = {
-        type: "global",
-        nodes: [],
-        sources: [1, 2, 3],
-        sinks: [4, 5, 6],
-      };
-
-      expect(isValidGlobalInfo(validGlobalInfo)).to.be.true;
-      expect(isValidGlobalInfo({})).to.be.false;
-      expect(isValidGlobalInfo(null)).to.be.false;
-      expect(isValidGlobalInfo("invalid")).to.be.false;
-    });
-
     await t.step("isValidEvaluationPath works", () => {
       const validPath: EvaluationPath = {
+        expr: "II",
         source: 1,
         sink: 2,
         steps: [{ from: 1, to: 2 }],
-        hasCycle: false,
+        reachedNormalForm: true,
+        stepsTaken: 1,
       };
 
       expect(isValidEvaluationPath(validPath)).to.be.true;

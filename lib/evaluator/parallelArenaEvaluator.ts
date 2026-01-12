@@ -340,7 +340,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     workerCount: number,
     workerUrl: string,
     sharedMemory: WebAssembly.Memory,
-    sharedBuffer: SharedArrayBuffer,
   ): Promise<Worker[]> {
     console.error(`[DEBUG] Spawning ${workerCount} workers`);
     const workers: Worker[] = [];
@@ -350,8 +349,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(workerUrl, {
         type: "module",
-        // @ts-ignore Deno specific
-        deno: { permissions: "inherit" },
       });
 
       initPromises.push(
@@ -361,7 +358,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       worker.postMessage({
         type: "init",
         memory: sharedMemory,
-        sab: sharedBuffer,
         workerId: i,
       });
 
@@ -558,7 +554,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       workerCount,
       workerUrl,
       sharedMemory,
-      sharedBuffer,
     );
 
     await this.connectWorkersToArena(workers, arenaPointer);

@@ -10,7 +10,6 @@ import type { ArenaWasmExports } from "./arenaEvaluator.ts";
 interface InitMessage {
   type: "init";
   memory: WebAssembly.Memory;
-  sab: SharedArrayBuffer;
   workerId: number;
 }
 

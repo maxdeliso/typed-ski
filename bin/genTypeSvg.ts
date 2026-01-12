@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --unstable-worker-options
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
 
 /**
  * System F Term and Type SVG Generator

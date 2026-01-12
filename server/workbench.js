@@ -3,6 +3,7 @@ import {
   ParallelArenaEvaluatorWasm,
   ResubmissionLimitExceededError,
 } from "../lib/evaluator/parallelArenaEvaluator.ts";
+import { initWebglForestViewer } from "./webglForest.ts";
 
 // Simple random source using JavaScript's built-in Math.random()
 // Implements the RandomSource interface (just needs intBetween method)
@@ -31,6 +32,24 @@ const throughput = document.getElementById("throughput");
 const gearButton = document.getElementById("gearButton");
 const controlsContainer = document.getElementById("controlsContainer");
 
+// Tabs (Performance vs WebGL)
+const tabPerfBtn = document.getElementById("tabPerfBtn");
+const tabWebglBtn = document.getElementById("tabWebglBtn");
+const panelPerf = document.getElementById("panelPerf");
+const panelWebgl = document.getElementById("panelWebgl");
+
+// WebGL UI
+const forestCanvas = document.getElementById("forestCanvas");
+const webglStatus = document.getElementById("webglStatus");
+const webglRebuildBtn = document.getElementById("webglRebuildBtn");
+const webglClearRootsBtn = document.getElementById("webglClearRootsBtn");
+const webglHelpToggleBtn = document.getElementById("webglHelpToggleBtn");
+const webglHelp = document.getElementById("webglHelp");
+const webglMaxNodesInput = document.getElementById("webglMaxNodesInput");
+const webglGeodesicStepsInput = document.getElementById(
+  "webglGeodesicStepsInput",
+);
+
 // State
 let evaluator = null;
 let evaluatorDead = false; // Track if evaluator has crashed (WASM trap)
@@ -44,6 +63,69 @@ let stats = {
   totalTime: 0,
   startTime: null,
 };
+
+// Forest roots: track submitted and result node ids so the WebGL tab can visualize the arena.
+const forestRoots = new Set();
+const forestRootQueue = [];
+const MAX_FOREST_ROOTS = 256;
+let webglActive = false;
+let webglDirty = false;
+let webglRebuildTimer = null;
+
+const webglViewer = forestCanvas
+  ? initWebglForestViewer({
+    canvas: forestCanvas,
+    getEvaluator: () => evaluator,
+    getRoots: () => Array.from(forestRoots),
+    statusEl: webglStatus,
+  })
+  : null;
+
+// When the WebGL panel becomes visible, ensure the canvas has non-zero size before rendering.
+if (webglViewer && panelWebgl && typeof ResizeObserver !== "undefined") {
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      if (!webglActive) continue;
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+        // Kick the viewer once layout is resolved.
+        try {
+          webglViewer.setActive(true);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  });
+  observer.observe(panelWebgl);
+}
+
+function scheduleWebglRebuild() {
+  webglDirty = true;
+  if (!webglActive || !webglViewer) return;
+  if (webglRebuildTimer) return;
+  webglRebuildTimer = setTimeout(() => {
+    webglRebuildTimer = null;
+    if (!webglViewer || !webglActive) return;
+    webglDirty = false;
+    try {
+      webglViewer.requestRebuild();
+    } catch (e) {
+      console.error(e);
+    }
+  }, 500);
+}
+
+function addForestRoot(id) {
+  if (id === undefined || id === null) return;
+  const nid = id >>> 0;
+  if (forestRoots.has(nid)) return;
+  forestRoots.add(nid);
+  forestRootQueue.push(nid);
+  if (forestRootQueue.length > MAX_FOREST_ROOTS) {
+    const old = forestRootQueue.shift();
+    if (old !== undefined) forestRoots.delete(old);
+  }
+}
 
 function getPendingCountsSafe() {
   if (!evaluator) return [];
@@ -254,6 +336,8 @@ async function submitAndTrack(
     markUiDirty({ pending: true });
     const startNodeId = evaluator.toArena(expr);
     addLog(`Queued node ${startNodeId}`);
+    addForestRoot(startNodeId);
+    scheduleWebglRebuild();
 
     // Pass maxSteps directly to the request
     const resultNodeId = await evaluator.reduceArenaNodeIdAsync(
@@ -264,6 +348,8 @@ async function submitAndTrack(
     const elapsed = performance.now() - start;
 
     addLog(`Result node ${resultNodeId}`);
+    addForestRoot(resultNodeId);
+    scheduleWebglRebuild();
     stats.completed++;
     stats.totalTime += elapsed;
     markUiDirty({ stats: true, pending: true });
@@ -336,6 +422,9 @@ async function loadWasm() {
 
   // Reset dead flag when loading a new evaluator
   evaluatorDead = false;
+  forestRoots.clear();
+  forestRootQueue.length = 0;
+  scheduleWebglRebuild();
 
   // Reset stats after cleaning up old evaluator
   stats = { completed: 0, errors: 0, totalTime: 0, startTime: null };
@@ -554,6 +643,36 @@ function resetEvaluator() {
     updateStats();
     if (logOutput) logOutput.textContent = "";
     updatePendingCounts();
+    forestRoots.clear();
+    forestRootQueue.length = 0;
+    scheduleWebglRebuild();
+  }
+}
+
+function setActiveTab(tab) {
+  const isWebgl = tab === "webgl";
+  webglActive = isWebgl;
+  if (tabPerfBtn) {
+    tabPerfBtn.classList.toggle("active", !isWebgl);
+    tabPerfBtn.setAttribute("aria-selected", String(!isWebgl));
+  }
+  if (tabWebglBtn) {
+    tabWebglBtn.classList.toggle("active", isWebgl);
+    tabWebglBtn.setAttribute("aria-selected", String(isWebgl));
+  }
+  if (panelPerf) panelPerf.classList.toggle("hidden", isWebgl);
+  if (panelWebgl) panelWebgl.classList.toggle("hidden", !isWebgl);
+
+  if (webglViewer) {
+    webglViewer.setActive(isWebgl);
+    if (isWebgl && webglDirty) {
+      webglDirty = false;
+      try {
+        webglViewer.requestRebuild();
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }
 }
 
@@ -570,11 +689,63 @@ gearButton.addEventListener("click", () => {
   controlsContainer.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+if (tabPerfBtn) {
+  tabPerfBtn.addEventListener("click", () => setActiveTab("perf"));
+}
+if (tabWebglBtn) {
+  tabWebglBtn.addEventListener("click", () => setActiveTab("webgl"));
+}
+
+if (webglRebuildBtn) {
+  webglRebuildBtn.addEventListener("click", () => {
+    if (!webglViewer) return;
+    webglDirty = false;
+    webglViewer.requestRebuild();
+  });
+}
+if (webglClearRootsBtn) {
+  webglClearRootsBtn.addEventListener("click", () => {
+    forestRoots.clear();
+    forestRootQueue.length = 0;
+    scheduleWebglRebuild();
+    if (webglViewer && webglActive) webglViewer.requestRebuild();
+  });
+}
+if (webglHelpToggleBtn && webglHelp) {
+  webglHelpToggleBtn.addEventListener("click", () => {
+    const isHidden = webglHelp.classList.contains("hidden");
+    webglHelp.classList.toggle("hidden", !isHidden);
+    // If we're currently on the WebGL tab, a size change can require a viewport update.
+    if (webglViewer && webglActive) {
+      webglViewer.setActive(true);
+    }
+  });
+}
+if (webglMaxNodesInput) {
+  webglMaxNodesInput.addEventListener("change", () => {
+    if (!webglViewer) return;
+    const maxNodes = parseInt(webglMaxNodesInput.value, 10) || 20000;
+    webglViewer.setConfig({ maxNodes });
+    scheduleWebglRebuild();
+  });
+}
+if (webglGeodesicStepsInput) {
+  webglGeodesicStepsInput.addEventListener("change", () => {
+    if (!webglViewer) return;
+    const geodesicSteps = parseInt(webglGeodesicStepsInput.value, 10) || 16;
+    webglViewer.setConfig({ geodesicSteps });
+    scheduleWebglRebuild();
+  });
+}
+
 // Set optimized defaults for high-performance parallel evaluation
 workerCountInput.value = String(navigator.hardwareConcurrency || 4);
 batchSizeInput.value = "1024";
 maxStepsInput.value = "1000";
 updateRunButton();
+
+// Default to performance tab
+setActiveTab("perf");
 
 // Load on startup
 loadWasm();

@@ -13,94 +13,183 @@
     <div class="container" id="controlsContainer">
       <h1>⚒️ Hephaestus - SKI Arena Evaluator</h1>
 
-      <div class="controls">
-        <div class="control-row">
-          <button id="runBtn" class="btn-primary">▶ Run</button>
-          <button id="resetBtn" class="btn-secondary">Reset</button>
-        </div>
-        <div class="control-row">
-          <label>
-            Random Size:
-            <input
-              type="number"
-              id="randomSizeInput"
-              value="10"
-              min="1"
-              max="100"
-            >
-          </label>
-          <label>
-            Worker Count:
-            <input
-              type="number"
-              id="workerCountInput"
-              value="4"
-              min="1"
-              max="256"
-            >
-          </label>
-          <label>
-            Max Steps:
-            <input
-              type="number"
-              id="maxStepsInput"
-              value="1000"
-              min="1"
-              max="1000000"
-            >
-          </label>
-          <label id="batchSizeLabel" style="align-items: center">
-            Parallelism (max in-flight):
-            <input
-              type="number"
-              id="batchSizeInput"
-              value="1024"
-              min="1"
-              max="65536"
-              style="width: 90px; margin-left: 5px; padding: 10px 15px"
-            >
-          </label>
-        </div>
+      <div class="tabs" role="tablist" aria-label="Hephaestus Tabs">
+        <button
+          class="tab-btn active"
+          id="tabPerfBtn"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panelPerf"
+        >
+          Performance
+        </button>
+        <button
+          class="tab-btn"
+          id="tabWebglBtn"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panelWebgl"
+        >
+          WebGL Forest (Hyperbolic)
+        </button>
       </div>
 
-      <div class="status-bar">
-        <div class="status-item">
-          <span class="status-label">WASM Status:</span>
-          <span class="status-value" id="wasmStatus">Loading...</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">Total Pending:</span>
-          <span class="status-value" id="totalPending">0</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">Completed:</span>
-          <span class="status-value" id="totalCompleted">0</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">Errors:</span>
-          <span class="status-value" id="totalErrors">0</span>
-        </div>
-      </div>
+      <div class="tab-panels">
+        <div class="tab-panel" id="panelPerf" role="tabpanel">
+          <div class="controls">
+            <div class="control-row">
+              <button id="runBtn" class="btn-primary">▶ Run</button>
+              <button id="resetBtn" class="btn-secondary">Reset</button>
+            </div>
+            <div class="control-row">
+              <label>
+                Random Size:
+                <input
+                  type="number"
+                  id="randomSizeInput"
+                  value="10"
+                  min="1"
+                  max="100"
+                >
+              </label>
+              <label>
+                Worker Count:
+                <input
+                  type="number"
+                  id="workerCountInput"
+                  value="4"
+                  min="1"
+                  max="256"
+                >
+              </label>
+              <label>
+                Max Steps:
+                <input
+                  type="number"
+                  id="maxStepsInput"
+                  value="1000"
+                  min="1"
+                  max="1000000"
+                >
+              </label>
+              <label id="batchSizeLabel" style="align-items: center">
+                Parallelism (max in-flight):
+                <input
+                  type="number"
+                  id="batchSizeInput"
+                  value="1024"
+                  min="1"
+                  max="65536"
+                  style="width: 90px; margin-left: 5px; padding: 10px 15px"
+                >
+              </label>
+            </div>
+          </div>
 
-      <div class="log-panel">
-        <div class="log-header">
-          <div class="log-title">Log</div>
-        </div>
-        <div class="log-output" id="logOutput"></div>
-      </div>
+          <div class="status-bar">
+            <div class="status-item">
+              <span class="status-label">WASM Status:</span>
+              <span class="status-value" id="wasmStatus">Loading...</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Total Pending:</span>
+              <span class="status-value" id="totalPending">0</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Completed:</span>
+              <span class="status-value" id="totalCompleted">0</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Errors:</span>
+              <span class="status-value" id="totalErrors">0</span>
+            </div>
+          </div>
 
-      <div class="stats">
-        <div class="stat-item">
-          <div class="stat-value" id="avgTime">0</div>
-          <div class="stat-label">Avg Time (ms)</div>
+          <div class="log-panel">
+            <div class="log-header">
+              <div class="log-title">Log</div>
+            </div>
+            <div class="log-output" id="logOutput"></div>
+          </div>
+
+          <div class="stats">
+            <div class="stat-item">
+              <div class="stat-value" id="avgTime">0</div>
+              <div class="stat-label">Avg Time (ms)</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="totalTime">0</div>
+              <div class="stat-label">Cumulative Latency (ms)</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="throughput">0</div>
+              <div class="stat-label">Throughput (expr/s)</div>
+            </div>
+          </div>
         </div>
-        <div class="stat-item">
-          <div class="stat-value" id="totalTime">0</div>
-          <div class="stat-label">Cumulative Latency (ms)</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="throughput">0</div>
-          <div class="stat-label">Throughput (expr/s)</div>
+
+        <div class="tab-panel hidden" id="panelWebgl" role="tabpanel">
+          <div class="webgl-toolbar">
+            <button id="webglRebuildBtn" class="btn-info">
+              Rebuild layout
+            </button>
+            <button id="webglClearRootsBtn" class="btn-secondary">
+              Clear roots
+            </button>
+            <button id="webglHelpToggleBtn" class="btn-secondary">
+              Controls & coordinates
+            </button>
+            <label>
+              Max nodes:
+              <input
+                type="number"
+                id="webglMaxNodesInput"
+                value="20000"
+                min="100"
+                max="500000"
+                style="width: 110px"
+              >
+            </label>
+            <label>
+              Geodesic steps:
+              <input
+                type="number"
+                id="webglGeodesicStepsInput"
+                value="16"
+                min="2"
+                max="128"
+                style="width: 90px"
+              >
+            </label>
+          </div>
+
+          <div class="webgl-help hidden" id="webglHelp">
+            <div>
+              <strong>Controls:</strong>
+              WASD = move, Q/E = down/up, ←/→ = yaw, ↑/↓ = pitch, Z/X = zoom,
+              Shift = faster.
+            </div>
+            <div>
+              <strong>Coordinate scheme:</strong>
+              All node/edge positions live in the Poincaré Ball model:
+              <code>x²+y²+z² &lt; 1</code>. The boundary wire sphere is radius
+              1. Axes are standard: +X right, +Y up, and “forward” is -Z.
+            </div>
+            <div>
+              <strong>Motion model:</strong>
+              WASD/QE does <em>hyperbolic fly</em>: the camera stays at the
+              origin while the world is Möbius-translated by the inverse of your
+              input. Arrow keys rotate the world (inverse of your turn) so your
+              controls stay camera-relative. Z/X only changes the Euclidean view
+              distance (projection framing), not the hyperbolic coordinates.
+            </div>
+          </div>
+
+          <div class="webgl-canvas-wrap">
+            <canvas id="forestCanvas"></canvas>
+          </div>
+
+          <div class="webgl-status" id="webglStatus"></div>
         </div>
       </div>
     </div>

@@ -28,8 +28,8 @@ type GLProgramBundle = {
   gl: WebGLRenderingContext;
   program: WebGLProgram;
   aPos: number;
-  aCol: number;
   uMvp: WebGLUniformLocation;
+  uColor: WebGLUniformLocation;
 };
 
 // --- Math Helpers utilized with higher precision inputs ---
@@ -37,15 +37,19 @@ type GLProgramBundle = {
 function v3Add(a: Vec3, b: Vec3): Vec3 {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 }
+
 function v3Scale(a: Vec3, s: number): Vec3 {
   return [a[0] * s, a[1] * s, a[2] * s];
 }
+
 function v3Dot(a: Vec3, b: Vec3): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
+
 function v3Len(a: Vec3): number {
   return Math.hypot(a[0], a[1], a[2]);
 }
+
 function v3Norm(a: Vec3): Vec3 {
   const l = v3Len(a);
   return l > 0 ? v3Scale(a, 1 / l) : [0, 0, 0];
@@ -54,6 +58,7 @@ function v3Norm(a: Vec3): Vec3 {
 function quatConj(q: Quat): Quat {
   return [-q[0], -q[1], -q[2], q[3]];
 }
+
 function quatMul(a: Quat, b: Quat): Quat {
   const ax = a[0], ay = a[1], az = a[2], aw = a[3];
   const bx = b[0], by = b[1], bz = b[2], bw = b[3];
@@ -64,6 +69,7 @@ function quatMul(a: Quat, b: Quat): Quat {
     aw * bw - ax * bx - ay * by - az * bz,
   ];
 }
+
 function quatFromAxisAngle(axis: Vec3, angleRad: number): Quat {
   const a = v3Norm(axis);
   const s = Math.sin(angleRad / 2);
@@ -129,12 +135,9 @@ function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
   const vs = `
     precision highp float;
     attribute vec3 a_pos;
-    attribute vec3 a_col;
     uniform mat4 u_mvp;
-    varying vec3 v_col;
 
     void main() {
-      v_col = a_col;
       vec4 pos = u_mvp * vec4(a_pos, 1.0);
 
       if (pos.w < 0.2) {
@@ -148,9 +151,9 @@ function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
 
   const fs = `
     precision mediump float;
-    varying vec3 v_col;
+    uniform vec3 u_color;
     void main() {
-      gl_FragColor = vec4(v_col, 1.0);
+      gl_FragColor = vec4(u_color, 1.0);
     }
   `;
 
@@ -180,8 +183,8 @@ function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
     gl,
     program: prog,
     aPos: gl.getAttribLocation(prog, "a_pos"),
-    aCol: gl.getAttribLocation(prog, "a_col"),
     uMvp: gl.getUniformLocation(prog, "u_mvp")!,
+    uColor: gl.getUniformLocation(prog, "u_color")!,
   };
 }
 
@@ -234,35 +237,12 @@ function mat4Mul(out: Float32Array, a: Float32Array, b: Float32Array) {
   return out;
 }
 
-// --- Layout Engine (Canonical Gallery + Colored Edges) ---
+// --- Layout Engine (Canonical Gallery) ---
 
-type LayoutEdge = { from: Vec3; to: Vec3; color: Vec3 };
+type LayoutEdge = { from: Vec3; to: Vec3 };
 
 function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
   return new Uint32Array(memory.buffer, baseAddr, 32)[16] >>> 0;
-}
-
-function getNodeColor(
-  id: number,
-  kind: Uint8Array,
-  sym: Uint8Array,
-  cap: number,
-): Vec3 {
-  if (id >= cap) return [0.5, 0.5, 0.5];
-  const k = kind[id];
-
-  // ArenaKind.Terminal = 1
-  if (k === 1) {
-    const s = sym[id];
-    // ArenaSym.S = 1, K = 2, I = 3
-    if (s === 1) return [1.0, 0.2, 0.4]; // S: Red/Magenta
-    if (s === 2) return [0.0, 0.8, 1.0]; // K: Cyan
-    if (s === 3) return [1.0, 0.8, 0.0]; // I: Yellow
-    return [0.8, 0.8, 0.8]; // Other Terminals
-  }
-
-  // Non-Terminals (Applications) are standard grey
-  return [0.65, 0.65, 0.7];
 }
 
 function buildLayoutFromRoots(
@@ -343,10 +323,6 @@ function buildLayoutFromRoots(
     const leftId = getLeft(id) >>> 0;
     const rightId = getRight(id) >>> 0;
 
-    // Determine colors for children ahead of time
-    const colL = getNodeColor(leftId, views.kind, views.sym, views.capacity);
-    const colR = getNodeColor(rightId, views.kind, views.sym, views.capacity);
-
     // Left
     const qLeft = quatMul(
       currentFrame.rot,
@@ -357,9 +333,9 @@ function buildLayoutFromRoots(
 
     const existL = positioned.get(leftId);
     if (existL) {
-      edges.push({ from: currentFrame.pos, to: existL.pos, color: colL });
+      edges.push({ from: currentFrame.pos, to: existL.pos });
     } else {
-      edges.push({ from: currentFrame.pos, to: posL, color: colL });
+      edges.push({ from: currentFrame.pos, to: posL });
       stack.push({ id: leftId, frame: { pos: posL, rot: qLeft } });
     }
 
@@ -373,9 +349,9 @@ function buildLayoutFromRoots(
 
     const existR = positioned.get(rightId);
     if (existR) {
-      edges.push({ from: currentFrame.pos, to: existR.pos, color: colR });
+      edges.push({ from: currentFrame.pos, to: existR.pos });
     } else {
-      edges.push({ from: currentFrame.pos, to: posR, color: colR });
+      edges.push({ from: currentFrame.pos, to: posR });
       stack.push({ id: rightId, frame: { pos: posR, rot: qRight } });
     }
   }
@@ -386,13 +362,11 @@ function buildLayoutFromRoots(
   };
 }
 
-// --- Double Precision Storage for Stability ---
+// --- World Buffer Storage ---
 
-// We store the "Master" world state in Float64.
-// Every frame/move, we update this master state, then copy to Float32 for GPU.
 type WorldBuffer = {
-  // Interleaved [x,y,z, r,g,b]
-  lines: Float64Array;
+  // [x,y,z] per vertex
+  lines: Float32Array;
 };
 
 function buildWorldBuffers(
@@ -404,26 +378,25 @@ function buildWorldBuffers(
 
   for (const e of edges) {
     let prev = getGeodesicPoint(e.from, e.to, 0);
-    const c = e.color;
 
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
       const cur = getGeodesicPoint(e.from, e.to, t);
 
-      // Push segment with color
-      lineVerts.push(prev[0], prev[1], prev[2], c[0], c[1], c[2]);
-      lineVerts.push(cur[0], cur[1], cur[2], c[0], c[1], c[2]);
+      // Push segment vertices
+      lineVerts.push(prev[0], prev[1], prev[2]);
+      lineVerts.push(cur[0], cur[1], cur[2]);
 
       prev = cur;
     }
   }
-  return { lines: new Float64Array(lineVerts) };
+  return { lines: new Float32Array(lineVerts) };
 }
 
-function applyWorldMobiusTranslation64(buf: Float64Array, v: Vec3) {
+function applyWorldMobiusTranslation(buf: Float32Array, v: Vec3) {
   const negV: Vec3 = [-v[0], -v[1], -v[2]];
-  // Stride is 6 (x,y,z, r,g,b)
-  for (let i = 0; i < buf.length; i += 6) {
+  // Stride is 3 (x,y,z)
+  for (let i = 0; i < buf.length; i += 3) {
     const p: Vec3 = [buf[i], buf[i + 1], buf[i + 2]];
     if (v3Dot(p, p) >= 1.0) continue;
     const p2 = mobiusAdd(p, negV);
@@ -433,8 +406,8 @@ function applyWorldMobiusTranslation64(buf: Float64Array, v: Vec3) {
   }
 }
 
-function applyWorldRotation64(buf: Float64Array, qInv: Quat) {
-  for (let i = 0; i < buf.length; i += 6) {
+function applyWorldRotation(buf: Float32Array, qInv: Quat) {
+  for (let i = 0; i < buf.length; i += 3) {
     const p: Vec3 = [buf[i], buf[i + 1], buf[i + 2]];
     const p2 = v3RotateByQuat(p, qInv);
     buf[i] = p2[0];
@@ -477,22 +450,20 @@ export function initWebglForestViewer(deps: ViewerDeps) {
   gl.depthFunc(gl.LEQUAL);
   gl.disable(gl.BLEND);
   gl.enableVertexAttribArray(progBundle.aPos);
-  gl.enableVertexAttribArray(progBundle.aCol);
 
   const lineBuf = gl.createBuffer();
   // We use simple line sphere for boundary
   const sphereGeom = (() => {
     const lines: number[] = [];
     const seg = 24;
-    const c = [0.3, 0.4, 0.5];
     for (let i = 0; i < seg; i++) {
       const t1 = (i / seg) * Math.PI * 2, t2 = ((i + 1) / seg) * Math.PI * 2;
-      lines.push(Math.cos(t1), Math.sin(t1), 0, c[0], c[1], c[2]);
-      lines.push(Math.cos(t2), Math.sin(t2), 0, c[0], c[1], c[2]);
-      lines.push(Math.cos(t1), 0, Math.sin(t1), c[0], c[1], c[2]);
-      lines.push(Math.cos(t2), 0, Math.sin(t2), c[0], c[1], c[2]);
-      lines.push(0, Math.cos(t1), Math.sin(t1), c[0], c[1], c[2]);
-      lines.push(0, Math.cos(t2), Math.sin(t2), c[0], c[1], c[2]);
+      lines.push(Math.cos(t1), Math.sin(t1), 0);
+      lines.push(Math.cos(t2), Math.sin(t2), 0);
+      lines.push(Math.cos(t1), 0, Math.sin(t1));
+      lines.push(Math.cos(t2), 0, Math.sin(t2));
+      lines.push(0, Math.cos(t1), Math.sin(t1));
+      lines.push(0, Math.cos(t2), Math.sin(t2));
     }
     return new Float32Array(lines);
   })();
@@ -500,10 +471,8 @@ export function initWebglForestViewer(deps: ViewerDeps) {
   gl.bindBuffer(gl.ARRAY_BUFFER, sphereBuf);
   gl.bufferData(gl.ARRAY_BUFFER, sphereGeom, gl.STATIC_DRAW);
 
-  // CPU-side double precision state
-  let world64: WorldBuffer = { lines: new Float64Array(0) };
-  // Temporary F32 buffers for upload
-  const renderF32 = { lines: new Float32Array(0) };
+  // CPU-side world state (Float32, matches GPU format)
+  let world: WorldBuffer = { lines: new Float32Array(0) };
 
   let active = false;
   let raf = 0;
@@ -526,15 +495,9 @@ export function initWebglForestViewer(deps: ViewerDeps) {
   };
 
   const syncBuffers = () => {
-    // Downcast F64 -> F32 for GPU
-    if (renderF32.lines.length !== world64.lines.length) {
-      renderF32.lines = new Float32Array(world64.lines);
-    } else {
-      renderF32.lines.set(world64.lines);
-    }
-
+    // Upload directly to GPU (no conversion needed)
     gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, renderF32.lines, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, world.lines, gl.DYNAMIC_DRAW);
   };
 
   const rebuild = () => {
@@ -543,8 +506,8 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     const roots = deps.getRoots();
     const { edges, stats } = buildLayoutFromRoots(ev.memory, ev.$, roots, cfg);
 
-    // Create fresh F64 world
-    world64 = buildWorldBuffers(edges, cfg.geodesicSteps);
+    // Create fresh world buffer
+    world = buildWorldBuffers(edges, cfg.geodesicSteps);
     syncBuffers();
 
     if (deps.statusEl) {
@@ -555,8 +518,7 @@ export function initWebglForestViewer(deps: ViewerDeps) {
 
   const drawInterleaved = (buf: WebGLBuffer) => {
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.vertexAttribPointer(progBundle.aPos, 3, gl.FLOAT, false, 24, 0);
-    gl.vertexAttribPointer(progBundle.aCol, 3, gl.FLOAT, false, 24, 12);
+    gl.vertexAttribPointer(progBundle.aPos, 3, gl.FLOAT, false, 12, 0);
   };
 
   const tick = () => {
@@ -575,13 +537,15 @@ export function initWebglForestViewer(deps: ViewerDeps) {
 
     // 1. Boundary
     gl.disable(gl.DEPTH_TEST);
+    gl.uniform3f(progBundle.uColor, 0.3, 0.4, 0.5);
     drawInterleaved(sphereBuf);
-    gl.drawArrays(gl.LINES, 0, sphereGeom.length / 6);
+    gl.drawArrays(gl.LINES, 0, sphereGeom.length / 3);
 
     // 2. Lines
     gl.enable(gl.DEPTH_TEST);
+    gl.uniform3f(progBundle.uColor, 0.7, 0.7, 0.7);
     drawInterleaved(lineBuf);
-    gl.drawArrays(gl.LINES, 0, renderF32.lines.length / 6);
+    gl.drawArrays(gl.LINES, 0, world.lines.length / 3);
 
     raf = requestAnimationFrame(tick);
   };
@@ -591,8 +555,8 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     const stepLocal = v3Scale(v3Norm(dir), distE);
     const stepWorld = v3RotateByQuat(stepLocal, camRot);
 
-    // Mutate F64 world
-    applyWorldMobiusTranslation64(world64.lines, stepWorld);
+    // Mutate world buffer
+    applyWorldMobiusTranslation(world.lines, stepWorld);
     syncBuffers();
   };
 
@@ -600,7 +564,7 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     const qDelta = quatFromEulerDeg(dx, dy, 0);
     camRot = quatMul(camRot, qDelta);
     const qInv = quatConj(qDelta);
-    applyWorldRotation64(world64.lines, qInv);
+    applyWorldRotation(world.lines, qInv);
     syncBuffers();
   };
 

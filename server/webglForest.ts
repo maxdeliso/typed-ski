@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import { getOrBuildArenaViews } from "../lib/evaluator/arenaViews.ts";
-import { ArenaKind, ArenaSym } from "../lib/shared/arena.ts";
+import { ArenaKind } from "../lib/shared/arena.ts";
 
 type Vec3 = [number, number, number];
 type Quat = [number, number, number, number]; // x,y,z,w
@@ -11,6 +11,7 @@ type ForestLayoutConfig = {
   branchAngleDeg: number;
   geodesicSteps: number;
   maxNodes: number;
+  rootSpacing: number;
 };
 
 type ViewerDeps = {
@@ -29,8 +30,9 @@ type GLProgramBundle = {
   aPos: number;
   aCol: number;
   uMvp: WebGLUniformLocation;
-  uUsePoints: WebGLUniformLocation;
 };
+
+// --- Math Helpers utilized with higher precision inputs ---
 
 function v3Add(a: Vec3, b: Vec3): Vec3 {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -49,9 +51,6 @@ function v3Norm(a: Vec3): Vec3 {
   return l > 0 ? v3Scale(a, 1 / l) : [0, 0, 0];
 }
 
-function quatIdentity(): Quat {
-  return [0, 0, 0, 1];
-}
 function quatConj(q: Quat): Quat {
   return [-q[0], -q[1], -q[2], q[3]];
 }
@@ -70,6 +69,7 @@ function quatFromAxisAngle(axis: Vec3, angleRad: number): Quat {
   const s = Math.sin(angleRad / 2);
   return [a[0] * s, a[1] * s, a[2] * s, Math.cos(angleRad / 2)];
 }
+
 function quatFromEulerDeg(xDeg: number, yDeg: number, zDeg: number): Quat {
   const xr = (xDeg * Math.PI) / 180;
   const yr = (yDeg * Math.PI) / 180;
@@ -77,9 +77,9 @@ function quatFromEulerDeg(xDeg: number, yDeg: number, zDeg: number): Quat {
   const qx = quatFromAxisAngle([1, 0, 0], xr);
   const qy = quatFromAxisAngle([0, 1, 0], yr);
   const qz = quatFromAxisAngle([0, 0, 1], zr);
-  // XYZ order
   return quatMul(quatMul(qx, qy), qz);
 }
+
 function v3RotateByQuat(v: Vec3, q: Quat): Vec3 {
   const p: Quat = [v[0], v[1], v[2], 0];
   const qc = quatConj(q);
@@ -87,19 +87,15 @@ function v3RotateByQuat(v: Vec3, q: Quat): Vec3 {
   return [r[0], r[1], r[2]];
 }
 
-// ----------------------------
-// Hyperbolic kernel (Poincaré ball)
-// ----------------------------
+// --- Hyperbolic Kernel ---
 
 function mobiusAdd(u: Vec3, v: Vec3): Vec3 {
   const u2 = v3Dot(u, u);
   const v2 = v3Dot(v, v);
   const uv = v3Dot(u, v);
-
   const denom = 1 + 2 * uv + u2 * v2;
-  // Avoid NaNs at extreme values; clamp denom away from 0.
-  const d = Math.abs(denom) < 1e-12 ? (denom < 0 ? -1e-12 : 1e-12) : denom;
-
+  // Guard against division by zero or extreme instability
+  const d = Math.abs(denom) < 1e-14 ? 1e-14 : denom;
   const term1 = v3Scale(u, 1 + 2 * uv + v2);
   const term2 = v3Scale(v, 1 - u2);
   return v3Scale(v3Add(term1, term2), 1 / d);
@@ -110,8 +106,7 @@ function hyperToEuclidDist(hDist: number): number {
 }
 
 function atanhSafe(x: number): number {
-  // Clamp to avoid Infinity when x approaches 1.
-  const c = Math.max(-0.999999, Math.min(0.999999, x));
+  const c = Math.max(-0.99999999, Math.min(0.99999999, x));
   return 0.5 * Math.log((1 + c) / (1 - c));
 }
 
@@ -120,7 +115,6 @@ function getGeodesicPoint(A: Vec3, B: Vec3, t: number): Vec3 {
   const Bp = mobiusAdd(B, negA);
   const r = v3Len(Bp);
   if (r < 1e-9) return A;
-
   const distH = 2 * atanhSafe(r);
   const distT = distH * t;
   const rT = Math.tanh(distT / 2);
@@ -128,117 +122,67 @@ function getGeodesicPoint(A: Vec3, B: Vec3, t: number): Vec3 {
   return mobiusAdd(Pp, A);
 }
 
-// ----------------------------
-// WebGL helpers
-// ----------------------------
-
-function createShader(
-  gl: WebGLRenderingContext,
-  type: number,
-  source: string,
-): WebGLShader {
-  const sh = gl.createShader(type);
-  if (!sh) throw new Error("createShader failed");
-  gl.shaderSource(sh, source);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(sh) || "unknown shader compile error";
-    gl.deleteShader(sh);
-    throw new Error(info);
-  }
-  return sh;
-}
+// --- WebGL Shader Setup ---
 
 function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
-  const vs = createShader(
-    gl,
-    gl.VERTEX_SHADER,
-    `
-precision highp float;
-attribute vec3 a_pos;
-attribute vec3 a_col;
-uniform mat4 u_mvp;
-uniform mediump float u_use_points;
-varying vec3 v_col;
-varying float v_depth;
-void main() {
-  v_col = a_col;
-  gl_Position = u_mvp * vec4(a_pos, 1.0);
+  // VERTEX SHADER
+  const vs = `
+    precision highp float;
+    attribute vec3 a_pos;
+    attribute vec3 a_col;
+    uniform mat4 u_mvp;
+    varying vec3 v_col;
 
-  // Z-fighting fix: when drawing points, bias them slightly towards the camera
-  // so they consistently win against coincident line fragments in the depth buffer.
-  // The scale by w keeps the bias roughly consistent across depth.
-  // Clamp to prevent clipping: ensure z >= -w (near plane) to avoid popping.
-  if (u_use_points > 0.5) {
-    float bias = 0.0001 * gl_Position.w;
-    gl_Position.z -= bias;
-    // Safety clamp: ensure z >= -w (near plane) to prevent vertex clipping
-    if (gl_Position.z < -gl_Position.w) {
-      gl_Position.z = -gl_Position.w + 0.00001;
+    void main() {
+      v_col = a_col;
+      vec4 pos = u_mvp * vec4(a_pos, 1.0);
+
+      if (pos.w < 0.2) {
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0); // Outside NDC
+        return;
+      }
+
+      gl_Position = pos;
     }
+  `;
+
+  const fs = `
+    precision mediump float;
+    varying vec3 v_col;
+    void main() {
+      gl_FragColor = vec4(v_col, 1.0);
+    }
+  `;
+
+  const vShader = gl.createShader(gl.VERTEX_SHADER)!;
+  gl.shaderSource(vShader, vs);
+  gl.compileShader(vShader);
+  if (!gl.getShaderParameter(vShader, gl.COMPILE_STATUS)) {
+    throw new Error(gl.getShaderInfoLog(vShader) || "");
   }
 
-  // Perspective sizing
-  gl_PointSize = 300.0 / gl_Position.w;
-  gl_PointSize = clamp(gl_PointSize, 2.0, 64.0);
-
-  // For fogging (approx)
-  v_depth = gl_Position.w / 5.0;
-}
-`.trim(),
-  );
-
-  const fs = createShader(
-    gl,
-    gl.FRAGMENT_SHADER,
-    `
-precision mediump float;
-varying vec3 v_col;
-varying float v_depth;
-uniform mediump float u_use_points; // 1.0 for points, 0.0 for lines
-void main() {
-  // Depth fog (fade to darkness)
-  float fog = 1.0 - smoothstep(0.0, 1.5, v_depth);
-  vec3 color = v_col * fog;
-
-  if (u_use_points > 0.5) {
-    // Solid discs (no glow)
-    vec2 coord = gl_PointCoord - vec2(0.5);
-    float r = length(coord);
-    if (r > 0.5) discard;
-    // Subtle dark rim for contrast against lines
-    float rim = smoothstep(0.45, 0.5, r);
-    vec3 finalColor = mix(color, vec3(0.0), rim);
-    gl_FragColor = vec4(finalColor, 1.0);
-  } else {
-    // Lines: solid (fog only affects brightness)
-    gl_FragColor = vec4(color, 1.0);
+  const fShader = gl.createShader(gl.FRAGMENT_SHADER)!;
+  gl.shaderSource(fShader, fs);
+  gl.compileShader(fShader);
+  if (!gl.getShaderParameter(fShader, gl.COMPILE_STATUS)) {
+    throw new Error(gl.getShaderInfoLog(fShader) || "");
   }
-}
-`.trim(),
-  );
 
-  const prog = gl.createProgram();
-  if (!prog) throw new Error("createProgram failed");
-  gl.attachShader(prog, vs);
-  gl.attachShader(prog, fs);
+  const prog = gl.createProgram()!;
+  gl.attachShader(prog, vShader);
+  gl.attachShader(prog, fShader);
   gl.linkProgram(prog);
-  gl.deleteShader(vs);
-  gl.deleteShader(fs);
-
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(prog) || "unknown program link error";
-    gl.deleteProgram(prog);
-    throw new Error(info);
+    throw new Error(gl.getProgramInfoLog(prog) || "");
   }
 
-  const aPos = gl.getAttribLocation(prog, "a_pos");
-  const aCol = gl.getAttribLocation(prog, "a_col");
-  const uMvp = gl.getUniformLocation(prog, "u_mvp");
-  if (!uMvp) throw new Error("missing uniform u_mvp");
-  const uUsePoints = gl.getUniformLocation(prog, "u_use_points");
-  if (!uUsePoints) throw new Error("missing uniform u_use_points");
-  return { gl, program: prog, aPos, aCol, uMvp, uUsePoints };
+  return {
+    gl,
+    program: prog,
+    aPos: gl.getAttribLocation(prog, "a_pos"),
+    aCol: gl.getAttribLocation(prog, "a_col"),
+    uMvp: gl.getUniformLocation(prog, "u_mvp")!,
+  };
 }
 
 function mat4Perspective(
@@ -247,7 +191,7 @@ function mat4Perspective(
   aspect: number,
   near: number,
   far: number,
-): Float32Array {
+) {
   const f = 1.0 / Math.tan(fovYRad / 2);
   const nf = 1 / (near - far);
   out.fill(0);
@@ -259,54 +203,7 @@ function mat4Perspective(
   return out;
 }
 
-function mat4Mul(
-  out: Float32Array,
-  a: Float32Array,
-  b: Float32Array,
-): Float32Array {
-  // Column-major (WebGL convention): index = col*4 + row.
-  // Read all values from 'a' first to handle aliasing if out === a
-  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
-  const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
-  const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
-  const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
-
-  let b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
-  out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-
-  b0 = b[4];
-  b1 = b[5];
-  b2 = b[6];
-  b3 = b[7];
-  out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-
-  b0 = b[8];
-  b1 = b[9];
-  b2 = b[10];
-  b3 = b[11];
-  out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-
-  b0 = b[12];
-  b1 = b[13];
-  b2 = b[14];
-  b3 = b[15];
-  out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-  return out;
-}
-
-function mat4Translate(out: Float32Array, z: number): Float32Array {
+function mat4Translate(out: Float32Array, z: number) {
   out.fill(0);
   out[0] = 1;
   out[5] = 1;
@@ -316,97 +213,56 @@ function mat4Translate(out: Float32Array, z: number): Float32Array {
   return out;
 }
 
-// Cache sphere geometry at module scope to avoid recalculation
-let cachedSphere: { posCol: Float32Array } | null = null;
+function mat4Mul(out: Float32Array, a: Float32Array, b: Float32Array) {
+  // Simple unrolled mat mul
+  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
+  const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
+  const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
+  const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+  let b0, b1, b2, b3;
 
-function getSphereGeometry(segments: number): { posCol: Float32Array } {
-  if (!cachedSphere) {
-    cachedSphere = buildSphereWireframe(segments);
+  for (let i = 0; i < 4; i++) {
+    b0 = b[i * 4 + 0];
+    b1 = b[i * 4 + 1];
+    b2 = b[i * 4 + 2];
+    b3 = b[i * 4 + 3];
+    out[i * 4 + 0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+    out[i * 4 + 1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+    out[i * 4 + 2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+    out[i * 4 + 3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
   }
-  return cachedSphere;
+  return out;
 }
 
-function buildSphereWireframe(segments: number): { posCol: Float32Array } {
-  // Simple lat/long wireframe
-  const lines: number[] = [];
-  const col = [0.35, 0.45, 0.6];
-  const addLine = (a: Vec3, b: Vec3) => {
-    lines.push(a[0], a[1], a[2], col[0], col[1], col[2]);
-    lines.push(b[0], b[1], b[2], col[0], col[1], col[2]);
-  };
+// --- Layout Engine (Canonical Gallery + Colored Edges) ---
 
-  const rings = segments;
-  const meridians = segments;
-  for (let i = 1; i < rings; i++) {
-    const v = i / rings;
-    const phi = (v * Math.PI) - Math.PI / 2; // -pi/2..pi/2
-    const r = Math.cos(phi);
-    const y = Math.sin(phi);
-    for (let j = 0; j < meridians; j++) {
-      const a0 = (j / meridians) * Math.PI * 2;
-      const a1 = ((j + 1) / meridians) * Math.PI * 2;
-      addLine([Math.cos(a0) * r, y, Math.sin(a0) * r], [
-        Math.cos(a1) * r,
-        y,
-        Math.sin(a1) * r,
-      ]);
-    }
-  }
-  for (let j = 0; j < meridians; j++) {
-    const a = (j / meridians) * Math.PI * 2;
-    for (let i = 0; i < rings; i++) {
-      const v0 = i / rings;
-      const v1 = (i + 1) / rings;
-      const phi0 = (v0 * Math.PI) - Math.PI / 2;
-      const phi1 = (v1 * Math.PI) - Math.PI / 2;
-      const r0 = Math.cos(phi0), y0 = Math.sin(phi0);
-      const r1 = Math.cos(phi1), y1 = Math.sin(phi1);
-      addLine([Math.cos(a) * r0, y0, Math.sin(a) * r0], [
-        Math.cos(a) * r1,
-        y1,
-        Math.sin(a) * r1,
-      ]);
-    }
-  }
-  return { posCol: new Float32Array(lines) };
-}
-
-// ----------------------------
-// Layout: build nodes + geodesic polyline edges
-// ----------------------------
-
-type LayoutNode = { id: number; pos: Vec3; type: "S" | "K" | "I" | "@" };
-type LayoutEdge = { from: Vec3; to: Vec3 };
+type LayoutEdge = { from: Vec3; to: Vec3; color: Vec3 };
 
 function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
-  const headerView = new Uint32Array(memory.buffer, baseAddr, 32);
-  return headerView[16] >>> 0;
+  return new Uint32Array(memory.buffer, baseAddr, 32)[16] >>> 0;
 }
 
-function symToType(sym: number): "S" | "K" | "I" | "@" {
-  switch (sym as ArenaSym) {
-    case ArenaSym.S:
-      return "S";
-    case ArenaSym.K:
-      return "K";
-    case ArenaSym.I:
-      return "I";
-    default:
-      return "@";
-  }
-}
+function getNodeColor(
+  id: number,
+  kind: Uint8Array,
+  sym: Uint8Array,
+  cap: number,
+): Vec3 {
+  if (id >= cap) return [0.5, 0.5, 0.5];
+  const k = kind[id];
 
-function typeColor(t: "S" | "K" | "I" | "@"): Vec3 {
-  switch (t) {
-    case "S":
-      return [1.0, 0.0, 0.4]; // magenta
-    case "K":
-      return [0.0, 1.0, 0.8]; // cyan
-    case "I":
-      return [1.0, 0.8, 0.0]; // amber
-    default:
-      return [0.6, 0.6, 0.7]; // muted
+  // ArenaKind.Terminal = 1
+  if (k === 1) {
+    const s = sym[id];
+    // ArenaSym.S = 1, K = 2, I = 3
+    if (s === 1) return [1.0, 0.2, 0.4]; // S: Red/Magenta
+    if (s === 2) return [0.0, 0.8, 1.0]; // K: Cyan
+    if (s === 3) return [1.0, 0.8, 0.0]; // I: Yellow
+    return [0.8, 0.8, 0.8]; // Other Terminals
   }
+
+  // Non-Terminals (Applications) are standard grey
+  return [0.65, 0.65, 0.7];
 }
 
 function buildLayoutFromRoots(
@@ -414,46 +270,46 @@ function buildLayoutFromRoots(
   exports: { debugGetArenaBaseAddr?: () => number },
   roots: number[],
   cfg: ForestLayoutConfig,
-): {
-  nodes: LayoutNode[];
-  edges: LayoutEdge[];
-  stats: { roots: number; visited: number; edges: number; top: number };
-} {
+) {
   const baseAddr = exports.debugGetArenaBaseAddr?.() ?? 0;
   if (!baseAddr) {
-    return {
-      nodes: [],
-      edges: [],
-      stats: { roots: roots.length, visited: 0, edges: 0, top: 0 },
-    };
+    return { edges: [], stats: { roots: 0, visited: 0, edges: 0, top: 0 } };
   }
   const top = arenaTop(memory, baseAddr);
   const views = getOrBuildArenaViews(memory, exports);
   if (!views) {
-    return {
-      nodes: [],
-      edges: [],
-      stats: { roots: roots.length, visited: 0, edges: 0, top },
-    };
+    return { edges: [], stats: { roots: 0, visited: 0, edges: 0, top } };
   }
 
   const distE = hyperToEuclidDist(cfg.hStepSize);
   const branch = cfg.branchAngleDeg;
 
   const positioned = new Map<number, { pos: Vec3; rot: Quat }>();
-  const nodes: LayoutNode[] = [];
   const edges: LayoutEdge[] = [];
+  let visited = 0;
 
+  // Roots are placed side-by-side along X, facing the same direction.
   const enqueueRootFrames = (): Array<{ id: number; pos: Vec3; rot: Quat }> => {
     const frames: Array<{ id: number; pos: Vec3; rot: Quat }> = [];
-    const distinctRoots = Array.from(new Set(roots))
-      .filter((r) => r >= 0 && r < top);
-    const n = Math.max(1, distinctRoots.length);
-    for (let i = 0; i < distinctRoots.length; i++) {
+    const distinctRoots = Array.from(new Set(roots)).filter((r) =>
+      r >= 0 && r < top
+    );
+    const n = distinctRoots.length;
+    if (n === 0) return [];
+
+    // Calculate gallery width
+    const spacing = cfg.rootSpacing;
+    const totalW = (n - 1) * spacing;
+    const startX = -totalW / 2;
+
+    for (let i = 0; i < n; i++) {
       const id = distinctRoots[i]!;
-      // Spread roots around in yaw so multiple trees don't overlap immediately.
-      const yaw = (i * 360) / n;
-      frames.push({ id, pos: [0, 0, 0], rot: quatFromEulerDeg(0, yaw, 0) });
+      // Linear layout along X. Clamp to keep inside ball.
+      let x = startX + i * spacing;
+      x = Math.max(-0.95, Math.min(0.95, x));
+
+      // All roots face Identity (forward)
+      frames.push({ id, pos: [x, 0, 0], rot: [0, 0, 0, 1] });
     }
     return frames;
   };
@@ -463,130 +319,131 @@ function buildLayoutFromRoots(
     stack.push({ id: rf.id, frame: { pos: rf.pos, rot: rf.rot } });
   }
 
-  const getKind = (id: number): number => {
-    return id < views.capacity ? views.kind[id] : 0;
-  };
-  const getSym = (id: number): number => {
-    return id < views.capacity ? views.sym[id] : 0;
-  };
-  const getLeft = (id: number): number => {
-    return id < views.capacity ? views.leftId[id] : 0;
-  };
-  const getRight = (id: number): number => {
-    return id < views.capacity ? views.rightId[id] : 0;
-  };
+  const getKind = (id: number) => (id < views.capacity ? views.kind[id] : 0);
+  const getLeft = (id: number) => (id < views.capacity ? views.leftId[id] : 0);
+  const getRight = (
+    id: number,
+  ) => (id < views.capacity ? views.rightId[id] : 0);
 
-  while (stack.length > 0 && nodes.length < cfg.maxNodes) {
+  while (stack.length > 0 && visited < cfg.maxNodes) {
     const cur = stack.pop()!;
     const id = cur.id >>> 0;
     if (id >= top) continue;
+    if (positioned.has(id)) continue;
 
     const k = getKind(id);
     if (k !== ArenaKind.Terminal && k !== ArenaKind.NonTerm) continue;
 
-    let existing = positioned.get(id);
-    if (!existing) {
-      existing = { pos: cur.frame.pos, rot: cur.frame.rot };
-      positioned.set(id, existing);
-      const type = k === ArenaKind.Terminal ? symToType(getSym(id)) : "@";
-      nodes.push({ id, pos: existing.pos, type });
-    }
+    const currentFrame = { pos: cur.frame.pos, rot: cur.frame.rot };
+    positioned.set(id, currentFrame);
+    visited++;
 
     if (k === ArenaKind.Terminal) continue;
 
     const leftId = getLeft(id) >>> 0;
     const rightId = getRight(id) >>> 0;
 
-    // LEFT child frame
-    const qLeft = quatMul(existing.rot, quatFromEulerDeg(-branch, -branch, 0));
+    // Determine colors for children ahead of time
+    const colL = getNodeColor(leftId, views.kind, views.sym, views.capacity);
+    const colR = getNodeColor(rightId, views.kind, views.sym, views.capacity);
+
+    // Left
+    const qLeft = quatMul(
+      currentFrame.rot,
+      quatFromEulerDeg(-branch, -branch, 0),
+    );
     const stepL = v3RotateByQuat([0, 0, -distE], qLeft);
-    const posL = mobiusAdd(existing.pos, stepL);
-    edges.push({ from: existing.pos, to: posL });
-    if (!positioned.has(leftId)) {
+    const posL = mobiusAdd(currentFrame.pos, stepL);
+
+    const existL = positioned.get(leftId);
+    if (existL) {
+      edges.push({ from: currentFrame.pos, to: existL.pos, color: colL });
+    } else {
+      edges.push({ from: currentFrame.pos, to: posL, color: colL });
       stack.push({ id: leftId, frame: { pos: posL, rot: qLeft } });
     }
 
-    // RIGHT child frame
-    const qRight = quatMul(existing.rot, quatFromEulerDeg(branch, -branch, 0));
+    // Right
+    const qRight = quatMul(
+      currentFrame.rot,
+      quatFromEulerDeg(branch, -branch, 0),
+    );
     const stepR = v3RotateByQuat([0, 0, -distE], qRight);
-    const posR = mobiusAdd(existing.pos, stepR);
-    edges.push({ from: existing.pos, to: posR });
-    if (!positioned.has(rightId)) {
+    const posR = mobiusAdd(currentFrame.pos, stepR);
+
+    const existR = positioned.get(rightId);
+    if (existR) {
+      edges.push({ from: currentFrame.pos, to: existR.pos, color: colR });
+    } else {
+      edges.push({ from: currentFrame.pos, to: posR, color: colR });
       stack.push({ id: rightId, frame: { pos: posR, rot: qRight } });
     }
   }
 
   return {
-    nodes,
     edges,
-    stats: {
-      roots: roots.length,
-      visited: nodes.length,
-      edges: edges.length,
-      top,
-    },
+    stats: { roots: roots.length, visited, edges: edges.length, top },
   };
 }
 
-function buildGpuBuffers(
-  nodes: LayoutNode[],
+// --- Double Precision Storage for Stability ---
+
+// We store the "Master" world state in Float64.
+// Every frame/move, we update this master state, then copy to Float32 for GPU.
+type WorldBuffer = {
+  // Interleaved [x,y,z, r,g,b]
+  lines: Float64Array;
+};
+
+function buildWorldBuffers(
   edges: LayoutEdge[],
   geodesicSteps: number,
-): {
-  points: Float32Array;
-  lines: Float32Array;
-} {
-  // points: interleaved pos+col (x,y,z,r,g,b)
-  const pts = new Float32Array(nodes.length * 6);
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i]!;
-    const c = typeColor(n.type);
-    const o = i * 6;
-    pts[o + 0] = n.pos[0];
-    pts[o + 1] = n.pos[1];
-    pts[o + 2] = n.pos[2];
-    pts[o + 3] = c[0];
-    pts[o + 4] = c[1];
-    pts[o + 5] = c[2];
-  }
-
+): WorldBuffer {
   const steps = Math.max(2, geodesicSteps | 0);
   const lineVerts: number[] = [];
-  const col = [0.85, 0.85, 0.9];
+
   for (const e of edges) {
     let prev = getGeodesicPoint(e.from, e.to, 0);
+    const c = e.color;
+
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
       const cur = getGeodesicPoint(e.from, e.to, t);
-      lineVerts.push(prev[0], prev[1], prev[2], col[0], col[1], col[2]);
-      lineVerts.push(cur[0], cur[1], cur[2], col[0], col[1], col[2]);
+
+      // Push segment with color
+      lineVerts.push(prev[0], prev[1], prev[2], c[0], c[1], c[2]);
+      lineVerts.push(cur[0], cur[1], cur[2], c[0], c[1], c[2]);
+
       prev = cur;
     }
   }
-  return { points: pts, lines: new Float32Array(lineVerts) };
+  return { lines: new Float64Array(lineVerts) };
 }
 
-function applyWorldMobiusTranslation(buf: Float32Array, v: Vec3) {
-  // buf is interleaved [x,y,z,r,g,b] for points or lines.
+function applyWorldMobiusTranslation64(buf: Float64Array, v: Vec3) {
   const negV: Vec3 = [-v[0], -v[1], -v[2]];
+  // Stride is 6 (x,y,z, r,g,b)
   for (let i = 0; i < buf.length; i += 6) {
-    const p: Vec3 = [buf[i + 0]!, buf[i + 1]!, buf[i + 2]!];
+    const p: Vec3 = [buf[i], buf[i + 1], buf[i + 2]];
+    if (v3Dot(p, p) >= 1.0) continue;
     const p2 = mobiusAdd(p, negV);
-    buf[i + 0] = p2[0];
+    buf[i] = p2[0];
     buf[i + 1] = p2[1];
     buf[i + 2] = p2[2];
   }
 }
 
-function applyWorldRotation(buf: Float32Array, qInv: Quat) {
+function applyWorldRotation64(buf: Float64Array, qInv: Quat) {
   for (let i = 0; i < buf.length; i += 6) {
-    const p: Vec3 = [buf[i + 0]!, buf[i + 1]!, buf[i + 2]!];
+    const p: Vec3 = [buf[i], buf[i + 1], buf[i + 2]];
     const p2 = v3RotateByQuat(p, qInv);
-    buf[i + 0] = p2[0];
+    buf[i] = p2[0];
     buf[i + 1] = p2[1];
     buf[i + 2] = p2[2];
   }
 }
+
+// --- Main Viewer ---
 
 export function initWebglForestViewer(deps: ViewerDeps) {
   const cfg: ForestLayoutConfig = {
@@ -594,6 +451,7 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     branchAngleDeg: 45,
     geodesicSteps: 16,
     maxNodes: 20000,
+    rootSpacing: 0.4, // Good starting value for gallery spacing
   };
 
   const gl = deps.canvas.getContext("webgl", {
@@ -601,67 +459,65 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     alpha: false,
     depth: true,
   }) as WebGLRenderingContext | null;
+
   if (!gl) {
-    deps.statusEl && (deps.statusEl.textContent = "WebGL unavailable");
+    if (deps.statusEl) deps.statusEl.textContent = "WebGL unavailable";
     return {
-      setConfig: (_: Partial<ForestLayoutConfig>) => {},
+      setConfig: () => {},
       requestRebuild: () => {},
-      setActive: (_: boolean) => {},
+      setActive: () => {},
       clearWorldTransform: () => {},
+      destroy: () => {},
     };
   }
 
-  const prog = createProgram(gl);
-  gl.useProgram(prog.program);
+  const progBundle = createProgram(gl);
+  gl.useProgram(progBundle.program);
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
-  gl.clearDepth(1.0);
-  // Opaque render (no glow); blending off avoids driver-dependent artifacts.
   gl.disable(gl.BLEND);
+  gl.enableVertexAttribArray(progBundle.aPos);
+  gl.enableVertexAttribArray(progBundle.aCol);
 
-  // Enable vertex attribute arrays once (they stay enabled for all draw calls)
-  gl.enableVertexAttribArray(prog.aPos);
-  gl.enableVertexAttribArray(prog.aCol);
-
-  // Buffers
-  const pointBuf = gl.createBuffer();
   const lineBuf = gl.createBuffer();
+  // We use simple line sphere for boundary
+  const sphereGeom = (() => {
+    const lines: number[] = [];
+    const seg = 24;
+    const c = [0.3, 0.4, 0.5];
+    for (let i = 0; i < seg; i++) {
+      const t1 = (i / seg) * Math.PI * 2, t2 = ((i + 1) / seg) * Math.PI * 2;
+      lines.push(Math.cos(t1), Math.sin(t1), 0, c[0], c[1], c[2]);
+      lines.push(Math.cos(t2), Math.sin(t2), 0, c[0], c[1], c[2]);
+      lines.push(Math.cos(t1), 0, Math.sin(t1), c[0], c[1], c[2]);
+      lines.push(Math.cos(t2), 0, Math.sin(t2), c[0], c[1], c[2]);
+      lines.push(0, Math.cos(t1), Math.sin(t1), c[0], c[1], c[2]);
+      lines.push(0, Math.cos(t2), Math.sin(t2), c[0], c[1], c[2]);
+    }
+    return new Float32Array(lines);
+  })();
   const sphereBuf = gl.createBuffer();
-  if (!pointBuf || !lineBuf || !sphereBuf) {
-    throw new Error("WebGL buffer allocation failed");
-  }
-
-  const sphere = getSphereGeometry(18);
   gl.bindBuffer(gl.ARRAY_BUFFER, sphereBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, sphere.posCol, gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, sphereGeom, gl.STATIC_DRAW);
 
-  // Allocate matrix buffers once and reuse them in tick loop
+  // CPU-side double precision state
+  let world64: WorldBuffer = { lines: new Float64Array(0) };
+  // Temporary F32 buffers for upload
+  const renderF32 = { lines: new Float32Array(0) };
+
+  let active = false;
+  let raf = 0;
+  let camRot: Quat = [0, 0, 0, 1];
+  let camDist = 3.0;
+
   const mProj = new Float32Array(16);
   const mView = new Float32Array(16);
   const mMvp = new Float32Array(16);
 
-  let points: Float32Array<ArrayBufferLike> = new Float32Array(0);
-  let lines: Float32Array<ArrayBufferLike> = new Float32Array(0);
-  let active = false;
-  let raf = 0;
-
-  // Camera orientation (for computing movement direction); the world itself is transformed.
-  let camRot: Quat = quatIdentity();
-  // Camera distance for projection (zoom). World coordinates stay in the unit ball;
-  // we just move the view matrix back/forward to frame the scene.
-  let camDist = 3.0;
-
   const resize = () => {
-    // `devicePixelRatio` can be fractional (e.g. 1.25/1.5). Canvas width/height are
-    // integers. If we compare against fractional computed sizes, we can end up resizing
-    // every frame (blink). So: keep fractional dpr, but quantize final w/h to ints.
     const dpr = Math.max(1, globalThis.devicePixelRatio || 1);
-    const cw = deps.canvas.clientWidth;
-    const ch = deps.canvas.clientHeight;
-    // Avoid poisoning the canvas to 0x0 while the tab is hidden.
-    if (cw <= 0 || ch <= 0) return;
-    const w = Math.floor(cw * dpr);
-    const h = Math.floor(ch * dpr);
+    const w = Math.floor(deps.canvas.clientWidth * dpr);
+    const h = Math.floor(deps.canvas.clientHeight * dpr);
     if (deps.canvas.width !== w || deps.canvas.height !== h) {
       deps.canvas.width = w;
       deps.canvas.height = h;
@@ -669,94 +525,63 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     }
   };
 
-  const setStatus = (s: string) => {
-    if (deps.statusEl) deps.statusEl.textContent = s;
-  };
+  const syncBuffers = () => {
+    // Downcast F64 -> F32 for GPU
+    if (renderF32.lines.length !== world64.lines.length) {
+      renderF32.lines = new Float32Array(world64.lines);
+    } else {
+      renderF32.lines.set(world64.lines);
+    }
 
-  const uploadBuffers = () => {
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, points, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, lines, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, renderF32.lines, gl.DYNAMIC_DRAW);
   };
 
   const rebuild = () => {
     const ev = deps.getEvaluator();
-    if (!ev?.memory || !ev?.$) {
-      // Keep showing the last valid frame during startup; don't clear buffers.
-      setStatus("Waiting for WASM...");
-      return;
-    }
+    if (!ev?.memory || !ev?.$) return;
     const roots = deps.getRoots();
-    const { nodes, edges, stats } = buildLayoutFromRoots(
-      ev.memory,
-      ev.$,
-      roots,
-      cfg,
-    );
-    const gpu = buildGpuBuffers(nodes, edges, cfg.geodesicSteps);
-    points = gpu.points;
-    lines = gpu.lines;
-    uploadBuffers();
-    console.log(
-      `[WebGL] Rebuild complete. nodes=${nodes.length} edges=${edges.length} pointsFloats=${gpu.points.length} linesFloats=${gpu.lines.length}`,
-    );
-    setStatus(
-      `roots=${stats.roots} visited=${stats.visited} edges=${stats.edges} arenaTop=${stats.top}`,
-    );
-  };
+    const { edges, stats } = buildLayoutFromRoots(ev.memory, ev.$, roots, cfg);
 
-  const clearWorldTransform = () => {
-    // Best-effort: rebuild from scratch (layout is canonical) rather than trying to invert accumulated transforms.
-    rebuild();
+    // Create fresh F64 world
+    world64 = buildWorldBuffers(edges, cfg.geodesicSteps);
+    syncBuffers();
+
+    if (deps.statusEl) {
+      deps.statusEl.textContent =
+        `Roots: ${stats.roots} | Edges: ${stats.edges}`;
+    }
   };
 
   const drawInterleaved = (buf: WebGLBuffer) => {
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    // Vertex attrib arrays are enabled once during initialization
-    gl.vertexAttribPointer(prog.aPos, 3, gl.FLOAT, false, 24, 0);
-    gl.vertexAttribPointer(prog.aCol, 3, gl.FLOAT, false, 24, 12);
+    gl.vertexAttribPointer(progBundle.aPos, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(progBundle.aCol, 3, gl.FLOAT, false, 24, 12);
   };
 
-  const tick = (_now: number) => {
+  const tick = () => {
     if (!active) return;
     resize();
+    const aspect = deps.canvas.width / deps.canvas.height;
 
-    const aspect = Math.max(1e-6, deps.canvas.width / deps.canvas.height);
-    // Reuse existing matrix buffers to avoid GC pressure
-    mat4Perspective(mProj, (60 * Math.PI) / 180, aspect, 0.01, 50);
+    mat4Perspective(mProj, (60 * Math.PI) / 180, aspect, 0.1, 50.0);
     mat4Translate(mView, -camDist);
     mat4Mul(mMvp, mProj, mView);
-    gl.useProgram(prog.program);
-    // IMPORTANT: uniforms apply to the *currently bound* program.
-    // Setting uniforms before `useProgram()` can silently fail (INVALID_OPERATION),
-    // leaving stale matrices and causing apparent "blinks".
-    gl.uniformMatrix4fv(prog.uMvp, false, mMvp);
+    gl.useProgram(progBundle.program);
+    gl.uniformMatrix4fv(progBundle.uMvp, false, mMvp);
 
     gl.clearColor(0.02, 0.02, 0.03, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Sphere
-    // Draw the boundary sphere *without* depth testing to avoid z-fighting with
-    // edges/nodes near the boundary at certain orientations.
+    // 1. Boundary
     gl.disable(gl.DEPTH_TEST);
-    gl.uniform1f(prog.uUsePoints, 0.0);
     drawInterleaved(sphereBuf);
-    gl.drawArrays(gl.LINES, 0, sphere.posCol.length / 6);
+    gl.drawArrays(gl.LINES, 0, sphereGeom.length / 6);
 
-    // Lines
+    // 2. Lines
     gl.enable(gl.DEPTH_TEST);
-    gl.uniform1f(prog.uUsePoints, 0.0);
     drawInterleaved(lineBuf);
-    gl.drawArrays(gl.LINES, 0, lines.length / 6);
-
-    // Points
-    // Points last with depth testing enabled. We apply a small clip-space depth bias
-    // in the vertex shader (when u_use_points=1) to avoid z-fighting flicker.
-    gl.enable(gl.DEPTH_TEST);
-    gl.uniform1f(prog.uUsePoints, 1.0);
-    drawInterleaved(pointBuf);
-    gl.drawArrays(gl.POINTS, 0, points.length / 6);
+    gl.drawArrays(gl.LINES, 0, renderF32.lines.length / 6);
 
     raf = requestAnimationFrame(tick);
   };
@@ -765,123 +590,105 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     const distE = hyperToEuclidDist(hStep);
     const stepLocal = v3Scale(v3Norm(dir), distE);
     const stepWorld = v3RotateByQuat(stepLocal, camRot);
-    // Hyperbolic fly: apply inverse translation to whole world.
-    applyWorldMobiusTranslation(points, stepWorld);
-    applyWorldMobiusTranslation(lines, stepWorld);
-    uploadBuffers();
+
+    // Mutate F64 world
+    applyWorldMobiusTranslation64(world64.lines, stepWorld);
+    syncBuffers();
   };
 
-  const turn = (dxDeg: number, dyDeg: number) => {
-    // Update camera orientation (for movement direction), but rotate the world oppositely so view changes.
-    const qDelta = quatFromEulerDeg(dxDeg, dyDeg, 0);
+  const turn = (dx: number, dy: number) => {
+    const qDelta = quatFromEulerDeg(dx, dy, 0);
     camRot = quatMul(camRot, qDelta);
     const qInv = quatConj(qDelta);
-    applyWorldRotation(points, qInv);
-    applyWorldRotation(lines, qInv);
-    uploadBuffers();
+    applyWorldRotation64(world64.lines, qInv);
+    syncBuffers();
   };
 
-  const onKeyDown = (e: KeyboardEvent) => {
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      deps.canvas.requestFullscreen().catch((err) => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      document.exitFullscreen().catch((err) => {
+        console.error("Error attempting to exit fullscreen:", err);
+      });
+    }
+  };
+
+  const onKey = (e: KeyboardEvent) => {
     if (!active) return;
-    const fast = e.shiftKey ? 0.35 : 0.12;
-    const zoomStep = e.shiftKey ? 0.2 : 0.05;
-    switch (e.key) {
+    const fast = e.shiftKey ? 0.35 : 0.1;
+    const zoom = e.shiftKey ? 0.2 : 0.05;
+
+    switch (e.key.toLowerCase()) {
+      case "f":
+        toggleFullscreen();
+        break;
       case "w":
-      case "W":
         move([0, 0, -1], fast);
-        e.preventDefault();
         break;
       case "s":
-      case "S":
         move([0, 0, 1], fast);
-        e.preventDefault();
         break;
       case "a":
-      case "A":
         move([-1, 0, 0], fast);
-        e.preventDefault();
         break;
       case "d":
-      case "D":
         move([1, 0, 0], fast);
-        e.preventDefault();
         break;
       case "q":
-      case "Q":
         move([0, -1, 0], fast);
-        e.preventDefault();
         break;
       case "e":
-      case "E":
         move([0, 1, 0], fast);
-        e.preventDefault();
         break;
-      case "ArrowLeft":
+      case "arrowleft":
         turn(0, 3);
-        e.preventDefault();
         break;
-      case "ArrowRight":
+      case "arrowright":
         turn(0, -3);
-        e.preventDefault();
         break;
-      case "ArrowUp":
+      case "arrowup":
         turn(3, 0);
-        e.preventDefault();
         break;
-      case "ArrowDown":
+      case "arrowdown":
         turn(-3, 0);
-        e.preventDefault();
         break;
       case "z":
-      case "Z":
-        camDist = Math.max(1.1, camDist - zoomStep);
-        e.preventDefault();
+        camDist = Math.max(1.1, camDist - zoom);
         break;
       case "x":
-      case "X":
-        camDist = Math.min(10.0, camDist + zoomStep);
-        e.preventDefault();
+        camDist = Math.min(10.0, camDist + zoom);
         break;
     }
   };
 
-  globalThis.addEventListener("keydown", onKeyDown, { passive: false });
+  globalThis.addEventListener("keydown", onKey);
 
-  const setActive = (on: boolean) => {
-    active = on;
-    if (active) {
-      if (!raf) raf = requestAnimationFrame(tick);
-    } else {
-      if (raf) cancelAnimationFrame(raf);
-      raf = 0;
-    }
-  };
-
-  // Initial state
   resize();
   rebuild();
 
   return {
-    setConfig: (partial: Partial<ForestLayoutConfig>) => {
-      if (partial.hStepSize !== undefined) cfg.hStepSize = partial.hStepSize;
-      if (partial.branchAngleDeg !== undefined) {
-        cfg.branchAngleDeg = partial.branchAngleDeg;
-      }
-      if (partial.geodesicSteps !== undefined) {
-        cfg.geodesicSteps = partial.geodesicSteps;
-      }
-      if (partial.maxNodes !== undefined) cfg.maxNodes = partial.maxNodes;
+    setConfig: (p: Partial<ForestLayoutConfig>) => {
+      if (p.hStepSize) cfg.hStepSize = p.hStepSize;
+      if (p.branchAngleDeg) cfg.branchAngleDeg = p.branchAngleDeg;
+      if (p.rootSpacing) cfg.rootSpacing = p.rootSpacing;
     },
     requestRebuild: rebuild,
-    setActive,
-    clearWorldTransform,
+    setActive: (b: boolean) => {
+      active = b;
+      if (active && !raf) raf = requestAnimationFrame(tick);
+      if (!active && raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    },
+    clearWorldTransform: rebuild,
     destroy: () => {
-      setActive(false);
-      globalThis.removeEventListener("keydown", onKeyDown as EventListener);
-      gl.deleteProgram(prog.program);
-      gl.deleteBuffer(pointBuf);
-      gl.deleteBuffer(lineBuf);
-      gl.deleteBuffer(sphereBuf);
+      active = false;
+      globalThis.removeEventListener("keydown", onKey);
+      gl.deleteProgram(progBundle.program);
     },
   };
 }

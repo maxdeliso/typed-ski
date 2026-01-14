@@ -153,3 +153,23 @@ export function getOrBuildArenaViews(
 
   return views;
 }
+
+export function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
+  return new Uint32Array(memory.buffer, baseAddr, 32)[16] >>> 0;
+}
+
+export function getKind(id: number, views: ArenaViews): number {
+  return id < views.capacity ? views.kind[id] : -1;
+}
+
+export function getSym(id: number, views: ArenaViews): number {
+  return id < views.capacity ? views.sym[id] : -1;
+}
+
+export function getLeft(id: number, views: ArenaViews): number {
+  return id < views.capacity ? views.leftId[id] : -1;
+}
+
+export function getRight(id: number, views: ArenaViews): number {
+  return id < views.capacity ? views.rightId[id] : -1;
+}

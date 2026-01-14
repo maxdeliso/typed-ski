@@ -97,4 +97,4 @@ start: ## Start the profiling demo server
 		echo "Error: Generated source files not found. Run 'make build' first."; \
 		exit 1; \
 	fi
-	nix $(NIX_FLAGS) develop --command deno run --allow-net --allow-read --allow-env --allow-run server/serve-workbench.ts $(PORT)
+	nix $(NIX_FLAGS) develop --command deno run --allow-net --allow-read --allow-env --allow-run server/serveWorkbench.ts $(PORT)

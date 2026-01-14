@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-env --allow-run --allow-run
+
 /**
  * Simple HTTP server for WASM profiling demo
  * Sets required headers for SharedArrayBuffer support

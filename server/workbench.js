@@ -42,7 +42,6 @@ const panelWebgl = document.getElementById("panelWebgl");
 const forestCanvas = document.getElementById("forestCanvas");
 const webglStatus = document.getElementById("webglStatus");
 const webglRebuildBtn = document.getElementById("webglRebuildBtn");
-const webglClearRootsBtn = document.getElementById("webglClearRootsBtn");
 const webglHelpToggleBtn = document.getElementById("webglHelpToggleBtn");
 const webglHelp = document.getElementById("webglHelp");
 const webglMaxNodesInput = document.getElementById("webglMaxNodesInput");
@@ -56,18 +55,12 @@ let evaluatorDead = false; // Track if evaluator has crashed (WASM trap)
 let continuousMode = false;
 let continuousRunning = false;
 let memoryLogInterval = null;
-const SLOW_LOGGING = false; // Disable detailed logging in continuous mode for performance
 let stats = {
   completed: 0,
   errors: 0,
   totalTime: 0,
   startTime: null,
 };
-
-// Forest roots: track submitted and result node ids so the WebGL tab can visualize the arena.
-const forestRoots = new Set();
-const forestRootQueue = [];
-const MAX_FOREST_ROOTS = 256;
 let webglActive = false;
 let webglDirty = false;
 let webglRebuildTimer = null;
@@ -76,7 +69,6 @@ const webglViewer = forestCanvas
   ? initWebglForestViewer({
     canvas: forestCanvas,
     getEvaluator: () => evaluator,
-    getRoots: () => Array.from(forestRoots),
     statusEl: webglStatus,
   })
   : null;
@@ -113,18 +105,6 @@ function scheduleWebglRebuild() {
       console.error(e);
     }
   }, 500);
-}
-
-function addForestRoot(id) {
-  if (id === undefined || id === null) return;
-  const nid = id >>> 0;
-  if (forestRoots.has(nid)) return;
-  forestRoots.add(nid);
-  forestRootQueue.push(nid);
-  if (forestRootQueue.length > MAX_FOREST_ROOTS) {
-    const old = forestRootQueue.shift();
-    if (old !== undefined) forestRoots.delete(old);
-  }
 }
 
 function getPendingCountsSafe() {
@@ -289,8 +269,7 @@ function updatePendingCounts() {
 }
 
 function addLog(message, force = false) {
-  // FAST PATH: Skip DOM updates in continuous mode for performance (unless forced)
-  if (continuousMode && !SLOW_LOGGING && !force) return;
+  if (continuousMode && !force) return;
 
   if (!logOutput) return;
   const timestamp = new Date().toLocaleTimeString();
@@ -332,11 +311,11 @@ async function submitAndTrack(
   }
 
   const start = performance.now();
+
   try {
     markUiDirty({ pending: true });
     const startNodeId = evaluator.toArena(expr);
     addLog(`Queued node ${startNodeId}`);
-    addForestRoot(startNodeId);
     scheduleWebglRebuild();
 
     // Pass maxSteps directly to the request
@@ -348,7 +327,6 @@ async function submitAndTrack(
     const elapsed = performance.now() - start;
 
     addLog(`Result node ${resultNodeId}`);
-    addForestRoot(resultNodeId);
     scheduleWebglRebuild();
     stats.completed++;
     stats.totalTime += elapsed;
@@ -422,8 +400,6 @@ async function loadWasm() {
 
   // Reset dead flag when loading a new evaluator
   evaluatorDead = false;
-  forestRoots.clear();
-  forestRootQueue.length = 0;
   scheduleWebglRebuild();
 
   // Reset stats after cleaning up old evaluator
@@ -643,8 +619,6 @@ function resetEvaluator() {
     updateStats();
     if (logOutput) logOutput.textContent = "";
     updatePendingCounts();
-    forestRoots.clear();
-    forestRootQueue.length = 0;
     scheduleWebglRebuild();
   }
 }
@@ -703,14 +677,7 @@ if (webglRebuildBtn) {
     webglViewer.requestRebuild();
   });
 }
-if (webglClearRootsBtn) {
-  webglClearRootsBtn.addEventListener("click", () => {
-    forestRoots.clear();
-    forestRootQueue.length = 0;
-    scheduleWebglRebuild();
-    if (webglViewer && webglActive) webglViewer.requestRebuild();
-  });
-}
+
 if (webglHelpToggleBtn && webglHelp) {
   webglHelpToggleBtn.addEventListener("click", () => {
     const isHidden = webglHelp.classList.contains("hidden");

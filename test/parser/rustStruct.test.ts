@@ -31,6 +31,7 @@ struct TestStruct {
     assertEquals(result.fields[0].type, "u32");
     assertEquals(result.fields[1].name, "field2");
     assertEquals(result.fields[1].type, "String");
+    assertEquals(result.hasReprC, false); // No #[repr(C)] attribute
   });
 
   await t.step("should parse struct with attributes and comments", () => {
@@ -49,6 +50,7 @@ struct TestStruct {
     assertEquals(result.fields.length, 2);
     assertEquals(result.fields[0].name, "field1");
     assertEquals(result.fields[1].name, "field2");
+    assertEquals(result.hasReprC, true);
   });
 
   await t.step("should parse struct with generic types", () => {
@@ -96,6 +98,7 @@ struct TestStruct {
 
       assertEquals(result.name, "SabHeader");
       assertEquals(result.fields.length, 17);
+      assertEquals(result.hasReprC, true); // SabHeader has #[repr(C, align(64))]
 
       // Verify first and last fields
       assertEquals(result.fields[0].name, "magic");
@@ -213,5 +216,56 @@ struct TestStruct {
     assertEquals(result.fields.length, 2);
     assertEquals(result.fields[0].name, "field1");
     assertEquals(result.fields[1].name, "field2");
+    assertEquals(result.hasReprC, true);
   });
+
+  await t.step("should detect #[repr(C)] attribute", () => {
+    const source = `
+#[repr(C)]
+struct TestStruct {
+    field1: u32,
+}
+`;
+
+    const result = parseRustStruct(source, "TestStruct");
+    assertEquals(result.hasReprC, true);
+  });
+
+  await t.step("should detect #[repr(C, align(64))] attribute", () => {
+    const source = `
+#[repr(C, align(64))]
+struct TestStruct {
+    field1: u32,
+}
+`;
+
+    const result = parseRustStruct(source, "TestStruct");
+    assertEquals(result.hasReprC, true);
+  });
+
+  await t.step("should not detect repr(C) in non-repr attributes", () => {
+    const source = `
+#[derive(Debug)]
+struct TestStruct {
+    field1: u32,
+}
+`;
+
+    const result = parseRustStruct(source, "TestStruct");
+    assertEquals(result.hasReprC, false);
+  });
+
+  await t.step(
+    "should not detect repr(C) when struct has no attributes",
+    () => {
+      const source = `
+struct TestStruct {
+    field1: u32,
+}
+`;
+
+      const result = parseRustStruct(source, "TestStruct");
+      assertEquals(result.hasReprC, false);
+    },
+  );
 });

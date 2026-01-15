@@ -26,6 +26,7 @@ export interface StructField {
 export interface ParsedStruct {
   name: string;
   fields: StructField[];
+  hasReprC: boolean;
 }
 
 /**
@@ -120,6 +121,90 @@ function parseAttribute(state: ParserState): ParserState {
   }
 
   return skipCommentsAndWhitespace(current);
+}
+
+/**
+ * Parse attribute content and check if it's #[repr(C)] or #[repr(C, align(...))]
+ * Returns the attribute text and whether it's a repr(C) attribute
+ */
+function parseAttributeContent(
+  state: ParserState,
+): [string, boolean, ParserState] {
+  let current = state;
+  let content = "";
+  let hasReprC = false;
+
+  // Skip '#'
+  const [hash, hashState] = peekChar(current);
+  if (hash !== "#") {
+    throw new ParseError(`Expected '#' for attribute`);
+  }
+  current = consume(hashState);
+  content += "#";
+
+  // Skip '['
+  const [bracket, bracketState] = peekChar(current);
+  if (bracket !== "[") {
+    throw new ParseError(`Expected '[' after '#'`);
+  }
+  current = consume(bracketState);
+  content += "[";
+
+  // Parse until matching ]
+  let depth = 1;
+  const startIdx = current.idx;
+  while (current.idx < current.buf.length && depth > 0) {
+    const ch = current.buf[current.idx];
+    if (ch === "[") depth++;
+    else if (ch === "]") depth--;
+    current = consume(current);
+  }
+
+  if (depth !== 0) {
+    throw new ParseError("Unterminated attribute");
+  }
+
+  // Extract attribute content (without the brackets)
+  const attrContent = state.buf.substring(startIdx, current.idx - 1);
+  content += attrContent + "]";
+
+  // Check if it's #[repr(C)] or #[repr(C, align(...))]
+  // Match: repr(C) or repr(C, align(...))
+  const reprCMatch = attrContent.match(
+    /repr\s*\(\s*C\s*(?:,\s*align\s*\([^)]+\))?\s*\)/,
+  );
+  if (reprCMatch) {
+    hasReprC = true;
+  }
+
+  return [content, hasReprC, skipCommentsAndWhitespace(current)];
+}
+
+/**
+ * Parse all attributes at the current position, returning whether any is #[repr(C)]
+ * Returns: [hasReprC, finalState]
+ */
+function parseStructAttributes(
+  state: ParserState,
+): [boolean, ParserState] {
+  let current = state;
+  let hasReprC = false;
+
+  while (current.idx < current.buf.length) {
+    const saved = current;
+    current = skipCommentsAndWhitespace(current);
+    const [ch] = peekChar(current);
+    if (ch === "#") {
+      const [, attrHasReprC, afterAttr] = parseAttributeContent(current);
+      if (attrHasReprC) {
+        hasReprC = true;
+      }
+      current = afterAttr;
+    } else {
+      return [hasReprC, saved];
+    }
+  }
+  return [hasReprC, current];
 }
 
 /**
@@ -250,35 +335,85 @@ export function parseRustStruct(
 ): ParsedStruct {
   let state = createParserState(source);
 
-  // Find the struct definition
-  const structPattern = new RegExp(
-    `(?:^|\\s)struct\\s+${structName}\\s*\\{`,
-    "m",
-  );
-  const match = source.match(structPattern);
-  if (!match) {
+  // Parse from the beginning of the file, looking for the struct
+  // Parse attributes as we encounter them before the struct keyword
+  let hasReprC = false;
+  let foundStruct = false;
+  let name = "";
+
+  // Parse forward through the file until we find the struct
+  while (state.idx < state.buf.length) {
+    state = skipCommentsAndWhitespace(state);
+
+    // Check if we're at an attribute (# followed by [)
+    const [ch, chState] = peekChar(state);
+    if (ch === "#") {
+      // Check if it's actually an attribute (must be followed by '[')
+      const nextIdx = chState.idx + 1;
+      if (nextIdx < state.buf.length && state.buf[nextIdx] === "[") {
+        // Parse attributes and check for repr(C)
+        // These attributes might belong to the next struct we encounter
+        const [attrHasReprC, afterAttrs] = parseStructAttributes(state);
+        hasReprC = attrHasReprC;
+        state = afterAttrs;
+        state = skipCommentsAndWhitespace(state);
+        continue;
+      }
+    }
+
+    // Skip non-identifier characters
+    const [ch2] = peekChar(state);
+    if (!ch2 || !/[a-zA-Z_]/.test(ch2)) {
+      hasReprC = false;
+      state = consume(state);
+      continue;
+    }
+
+    // Try to parse an identifier
+    const saved = state;
+    let ident: string;
+    let afterIdent: ParserState;
+    try {
+      [ident, afterIdent] = parseIdentifier(state);
+    } catch {
+      // Failed to parse identifier, skip this character
+      hasReprC = false;
+      state = consume(state);
+      continue;
+    }
+
+    // Not a struct keyword, reset and continue
+    if (ident !== "struct") {
+      hasReprC = false;
+      state = saved;
+      state = consume(state);
+      continue;
+    }
+
+    // Found "struct" keyword, parse struct name
+    state = afterIdent;
+    state = skipCommentsAndWhitespace(state);
+    const [parsedName, afterName] = parseIdentifier(state);
+
+    // Wrong struct name, reset and continue searching
+    if (parsedName !== structName) {
+      hasReprC = false;
+      state = saved;
+      state = consume(state);
+      continue;
+    }
+
+    // Found the struct we're looking for!
+    name = parsedName;
+    state = afterName;
+    foundStruct = true;
+    break;
+  }
+
+  // If we didn't find the struct, throw an error
+  if (!foundStruct) {
     throw new ParseError(`Could not find struct '${structName}' in source`);
   }
-
-  // Start parsing from the struct keyword
-  state.idx = match.index!;
-  state = skipCommentsAndWhitespace(state);
-
-  // Skip "struct" keyword
-  const [structKw, afterStruct] = parseIdentifier(state);
-  if (structKw !== "struct") {
-    throw new ParseError("Internal error: struct keyword not found");
-  }
-  state = afterStruct;
-
-  state = skipCommentsAndWhitespace(state);
-
-  // Parse struct name
-  const [name, afterName] = parseIdentifier(state);
-  if (name !== structName) {
-    throw new ParseError(`Expected struct name '${structName}', got '${name}'`);
-  }
-  state = afterName;
 
   state = skipCommentsAndWhitespace(state);
 
@@ -308,5 +443,5 @@ export function parseRustStruct(
     state = afterField;
   }
 
-  return { name, fields };
+  return { name, fields, hasReprC };
 }

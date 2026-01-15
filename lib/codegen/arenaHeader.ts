@@ -100,6 +100,18 @@ export interface ValidationResult {
 }
 
 /**
+ * Check if a Rust type is u32-sized (safe for Uint32Array access)
+ * Valid types: u32, AtomicU32, and other 4-byte types
+ */
+function isU32SizedType(type: string): boolean {
+  const normalized = type.trim();
+  // Allow u32 and AtomicU32 (both are 4 bytes)
+  // Also allow types that end with u32 (like MyU32, etc.) but be conservative
+  return normalized === "u32" || normalized === "AtomicU32" ||
+    normalized.startsWith("AtomicU32");
+}
+
+/**
  * Validate that generated TypeScript constants match the Rust struct
  *
  * @param rustSource - The Rust source code
@@ -124,13 +136,39 @@ export function validateArenaHeader(
     return { valid: false, errors, fieldCount: 0 };
   }
 
-  const rustFields = parsedStruct.fields.map((f) => f.name);
+  // Validate struct has #[repr(C)] for predictable layout
+  if (!parsedStruct.hasReprC) {
+    errors.push(
+      `Struct ${structName} must have #[repr(C)] or #[repr(C, align(...))] attribute for predictable memory layout`,
+    );
+  }
 
-  // Parse generated TypeScript file
+  // Validate all fields are u32-sized (critical for Uint32Array access)
+  const invalidTypes: string[] = [];
+  for (const field of parsedStruct.fields) {
+    if (!isU32SizedType(field.type)) {
+      invalidTypes.push(
+        `Field '${field.name}' has type '${field.type}' which is not u32-sized (must be u32 or AtomicU32)`,
+      );
+    }
+  }
+  if (invalidTypes.length > 0) {
+    errors.push(
+      `Type validation failed:\n${
+        invalidTypes.map((e) => `  - ${e}`).join("\n")
+      }`,
+    );
+  }
+
+  const rustFields = parsedStruct.fields.map((f) => f.name);
   const fieldsArrayName = `${structName.toUpperCase()}_HEADER_FIELDS`;
   const fieldsMatch = generatedSource.match(
-    new RegExp(`export const ${fieldsArrayName} = \\[([^\\]]+)\\]`, "s"),
+    new RegExp(
+      `export\\s+const\\s+${fieldsArrayName}\\s*=\\s*\\[([^\\]]+)\\]`,
+      "s",
+    ),
   );
+
   if (!fieldsMatch) {
     errors.push(`Could not find ${fieldsArrayName} in generated file`);
     return { valid: false, errors, fieldCount: rustFields.length };
@@ -138,17 +176,15 @@ export function validateArenaHeader(
 
   const generatedFields = fieldsMatch[1]
     .split(",")
-    .map((f) => f.trim().replace(/^"|"$/g, ""))
+    .map((f) => f.trim().replace(/^["']|["']$/g, ""))
     .filter((f) => f.length > 0);
 
-  // Validate field count
   if (rustFields.length !== generatedFields.length) {
     errors.push(
       `Field count mismatch: Rust has ${rustFields.length}, generated has ${generatedFields.length}`,
     );
   }
 
-  // Validate field names match
   const minLen = Math.min(rustFields.length, generatedFields.length);
   for (let i = 0; i < minLen; i++) {
     if (rustFields[i] !== generatedFields[i]) {

@@ -155,7 +155,7 @@ export function getOrBuildArenaViews(
 }
 
 export function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
-  return new Uint32Array(memory.buffer, baseAddr, 32)[16] >>> 0;
+  return new Uint32Array(memory.buffer, baseAddr, 32)[SabHeaderField.TOP] >>> 0;
 }
 
 export function getKind(id: number, views: ArenaViews): number {

@@ -16,7 +16,8 @@
       "dist/**",
       "wasm/**",
       "lib/shared/version.ts",
-      "lib/shared/version.generated.ts"
+      "lib/shared/version.generated.ts",
+      "lib/evaluator/arenaHeader.generated.ts"
     ],
     "exclude": [
       "!wasm/debug.wasm",

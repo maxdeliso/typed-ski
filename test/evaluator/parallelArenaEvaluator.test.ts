@@ -2,6 +2,7 @@ import { assert, assertEquals } from "std/assert";
 import randomSeed from "random-seed";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
+import { SabHeaderField } from "../../lib/evaluator/arenaHeader.generated.ts";
 import {
   apply,
   prettyPrint,
@@ -409,7 +410,7 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
         "Arena should be initialized",
       );
       const headerView = new Uint32Array(memory.buffer, baseAddr, 32);
-      const initialCapacity = headerView[13];
+      const initialCapacity = headerView[SabHeaderField.CAPACITY];
 
       // Allocate many unique expressions to trigger arena growth
       // Each unique expression creates new nodes, so we need enough to exceed initial capacity
@@ -428,7 +429,7 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
 
       // Allocate expressions until we trigger growth or hit a reasonable limit
       // Use random expressions with varying sizes to ensure uniqueness
-      let lastTop = headerView[2]; // top is at offset 2
+      let lastTop = headerView[SabHeaderField.TOP];
       const targetTop = initialCapacity - 100; // Stop before hitting capacity to avoid issues
 
       for (let i = 0; i < 100000 && lastTop < targetTop; i++) {
@@ -446,8 +447,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
 
         // Check if capacity has grown (check every 5000 allocations for efficiency)
         if (i % 5000 === 0 || i === 99999) {
-          const currentCapacity = headerView[1];
-          const currentTop = headerView[2];
+          const currentCapacity = headerView[SabHeaderField.CAPACITY];
+          const currentTop = headerView[SabHeaderField.TOP];
           lastTop = currentTop;
 
           if (currentCapacity > initialCapacity) {

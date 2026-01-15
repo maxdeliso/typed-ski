@@ -7,6 +7,8 @@
  * @module
  */
 
+import { SabHeaderField } from "./arenaHeader.generated.ts";
+
 /**
  * Typed array views of the arena memory for direct access.
  * These views provide O(1) access to arena node data without WASM function calls.
@@ -55,17 +57,16 @@ function buildArenaViews(
   }
 
   const buffer = memory.buffer;
-  // Header layout (rust/src/arena.rs SabHeader):
-  // 0 magic, 1 ring_entries, 2 ring_mask, 3 offset_sq, 4 offset_cq,
-  // 5 offset_kind, 6 offset_sym, 7 offset_left_id, 8 offset_right_id,
-  // 9 offset_hash32, 10 offset_next_idx, 11 offset_buckets, 12 offset_term_cache,
-  // 13 capacity, 14 bucket_mask, 15 resize_seq, 16 top
+  // Read header as Uint32Array - offsets are stored in the header itself
+  // We use generated constants to access field indices, ensuring they match Rust struct layout
   const headerView = new Uint32Array(buffer, baseAddr, 32);
-  const capacity = headerView[13];
-  const offsetKind = headerView[5];
-  const offsetSym = headerView[6];
-  const offsetLeftId = headerView[7];
-  const offsetRightId = headerView[8];
+
+  // Read offsets from header (these are computed at runtime by Rust code)
+  const capacity = headerView[SabHeaderField.CAPACITY];
+  const offsetKind = headerView[SabHeaderField.OFFSET_KIND];
+  const offsetSym = headerView[SabHeaderField.OFFSET_SYM];
+  const offsetLeftId = headerView[SabHeaderField.OFFSET_LEFT_ID];
+  const offsetRightId = headerView[SabHeaderField.OFFSET_RIGHT_ID];
 
   // Create typed array views of the arena data arrays
   const kind = new Uint8Array(buffer, baseAddr + offsetKind, capacity);
@@ -97,7 +98,7 @@ export function validateAndRebuildViews(
   // Check current capacity from header
   const buffer = memory.buffer;
   const headerView = new Uint32Array(buffer, baseAddr, 32);
-  const currentCapacity = headerView[13];
+  const currentCapacity = headerView[SabHeaderField.CAPACITY];
 
   // If capacity changed, views are stale - rebuild them
   if (currentCapacity !== views.capacity) {

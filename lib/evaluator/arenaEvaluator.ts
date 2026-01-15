@@ -15,6 +15,7 @@ import { type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
+import { SabHeaderField } from "./arenaHeader.generated.ts";
 
 /**
  * Terminal cache: Maps exports instance -> {S, K, I} IDs
@@ -416,10 +417,8 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
     if (!baseAddr) return 0;
 
-    // Header layout (rust/src/arena.rs SabHeader):
-    // 13 = capacity, 16 = top (after removing max_steps field)
     const headerView = new Uint32Array(this.memory.buffer, baseAddr, 32);
-    return headerView[16];
+    return headerView[SabHeaderField.TOP];
   }
 
   /**

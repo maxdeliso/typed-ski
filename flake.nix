@@ -79,6 +79,14 @@
           echo "Generated lib/shared/version.generated.ts"
         '';
 
+        generateArenaHeader = pkgs.writeShellScriptBin "generate-arena-header" ''
+          ${deno}/bin/deno run -A scripts/generate-arena-header.ts
+        '';
+
+        validateArenaHeader = pkgs.writeShellScriptBin "validate-arena-header" ''
+          ${deno}/bin/deno run -A scripts/validate-arena-header.ts
+        '';
+
         # --- Main Build Derivation ---
         typedSki = pkgs.stdenv.mkDerivation {
           name = "typed-ski";
@@ -94,12 +102,16 @@
             verifyVersion
             generateCargoToml
             generateVersionTs
+            generateArenaHeader
+            validateArenaHeader
           ];
 
           buildPhase = ''
             verify-version
             generate-cargo-toml
             generate-version-ts
+            generate-arena-header
+            validate-arena-header
 
             cd rust
 
@@ -152,6 +164,8 @@
             verifyVersion
             generateCargoToml
             generateVersionTs
+            generateArenaHeader
+            validateArenaHeader
           ];
 
         };
@@ -165,6 +179,8 @@
            verify-version = { type = "app"; program = "${verifyVersion}/bin/verify-version"; };
            generate-cargo = { type = "app"; program = "${generateCargoToml}/bin/generate-cargo-toml"; };
            generate-version-ts = { type = "app"; program = "${generateVersionTs}/bin/generate-version-ts"; };
+           generate-arena-header = { type = "app"; program = "${generateArenaHeader}/bin/generate-arena-header"; };
+           validate-arena-header = { type = "app"; program = "${validateArenaHeader}/bin/validate-arena-header"; };
            test = {
             type = "app";
             program = toString (pkgs.writeShellScript "run-tests" ''

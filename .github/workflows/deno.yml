@@ -21,14 +21,16 @@ jobs:
       - name: Build artifacts
         run: make build
 
+      - name: Validate generated code
+        run: make validate
+
       - name: Run test suite
         run: make test
 
-      - name: Validate WASM files
+      - name: Print WASM files (for inspection)
         run: |
           ls -lh result/wasm/
-          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "wasm2wat --enable-threads result/wasm/release.wasm"
-          echo "WASM files validation successful"
+          make print-wasm
 
       - name: JSR dry run publish
         if: github.ref != 'refs/heads/main'

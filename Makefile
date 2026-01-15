@@ -1,4 +1,4 @@
-.PHONY: setup build test format format-check validate-wasm start help
+.PHONY: setup build test format format-check validate print-wasm start help
 .DEFAULT_GOAL := help
 
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
@@ -11,6 +11,8 @@ help:
 	@echo "  test         - Run the test suite"
 	@echo "  format       - Format code"
 	@echo "  format-check - Check code formatting"
+	@echo "  validate     - Validate generated code matches source (arena header, version, etc.)"
+	@echo "  print-wasm   - Print the generated WASM as WAT (WebAssembly Text format)"
 	@echo "  start        - Start the profiling demo server (PORT=8080)"
 
 setup: ## Prepare this machine by installing necessary tools
@@ -28,6 +30,7 @@ build: ## Compile the artifacts
 	nix $(NIX_FLAGS) run .#verify-version
 	nix $(NIX_FLAGS) run .#generate-cargo
 	nix $(NIX_FLAGS) run .#generate-version-ts
+	nix $(NIX_FLAGS) run .#generate-arena-header
 	nix $(NIX_FLAGS) build
 	@if [ ! -d result/wasm ] || [ ! -f result/wasm/debug.wasm ] || [ ! -f result/wasm/release.wasm ]; then \
 		echo "Error: WASM files not found in result/wasm/. Build may have failed."; \
@@ -42,7 +45,7 @@ build: ## Compile the artifacts
 		exit 1; \
 	fi
 
-validate-wasm: ## Inspect the generated WASM (prints full wat)
+print-wasm: ## Print the generated WASM as WAT (WebAssembly Text format)
 	@if [ ! -f result/wasm/release.wasm ]; then \
 		echo "Error: result/wasm/release.wasm not found. Run 'make build' first."; \
 		exit 1; \
@@ -76,6 +79,14 @@ format-check:
 		exit 1; \
 	fi
 	nix $(NIX_FLAGS) run .#fmt -- --check
+
+validate: ## Validate generated code matches source (arena header, version, etc.)
+	@if ! command -v nix >/dev/null 2>&1; then \
+		echo "Error: Nix is not installed. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	nix $(NIX_FLAGS) run .#verify-version
+	nix $(NIX_FLAGS) run .#validate-arena-header
 
 start: ## Start the profiling demo server
 	@if ! command -v nix >/dev/null 2>&1; then \

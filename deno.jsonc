@@ -16,7 +16,8 @@
       "dist/**",
       "wasm/**",
       "lib/shared/version.ts",
-      "lib/shared/version.generated.ts"
+      "lib/shared/version.generated.ts",
+      "lib/evaluator/arenaHeader.generated.ts"
     ],
     "exclude": [
       "!wasm/debug.wasm",
@@ -74,5 +75,5 @@
     "compile:tripc": "deno compile --allow-read --allow-write --output dist/tripc bin/tripc.ts",
     "dist": "mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task bundle:tripc:node && deno task compile:tripc"
   },
-  "version": "0.7.2"
+  "version": "0.7.3"
 }

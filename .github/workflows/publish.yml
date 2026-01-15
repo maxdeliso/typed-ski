@@ -24,6 +24,9 @@ jobs:
       - name: Build artifacts
         run: make build
 
+      - name: Validate generated code
+        run: make validate
+
       - name: Run test suite
         run: make test
 

@@ -30,6 +30,7 @@ build: ## Compile the artifacts
 	nix $(NIX_FLAGS) run .#verify-version
 	nix $(NIX_FLAGS) run .#generate-cargo
 	nix $(NIX_FLAGS) run .#generate-version-ts
+	nix $(NIX_FLAGS) run .#generate-arena-header
 	nix $(NIX_FLAGS) build
 	@if [ ! -d result/wasm ] || [ ! -f result/wasm/debug.wasm ] || [ ! -f result/wasm/release.wasm ]; then \
 		echo "Error: WASM files not found in result/wasm/. Build may have failed."; \

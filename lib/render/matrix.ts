@@ -145,3 +145,21 @@ export function mat4Translate(out: Float32Array, z: number) {
   out[14] = z;
   return out;
 }
+
+export function applyHyperbolicStep(
+  parentPos: Vec3,
+  parentRot: Quat,
+  angleDeg: number,
+  hDist: number,
+): { pos: Vec3; rot: Quat } {
+  const turnRot = quatFromEulerDeg(0, 0, angleDeg);
+  const newRot = quatMul(parentRot, turnRot);
+
+  const r = hyperToEuclidDist(hDist);
+  const localDisp: Vec3 = [r, 0, 0];
+  const globalDisp = v3RotateByQuat(localDisp, newRot);
+
+  const newPos = mobiusAdd(parentPos, globalDisp);
+
+  return { pos: newPos, rot: newRot };
+}

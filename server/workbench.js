@@ -3,7 +3,7 @@ import {
   ParallelArenaEvaluatorWasm,
   ResubmissionLimitExceededError,
 } from "../lib/evaluator/parallelArenaEvaluator.ts";
-import { initWebglForestViewer } from "./webglForest.ts";
+import { DEFAULT_MAX_NODES, initWebglForestViewer } from "./webglForest.ts";
 
 // Simple random source using JavaScript's built-in Math.random()
 // Implements the RandomSource interface (just needs intBetween method)
@@ -689,9 +689,11 @@ if (webglHelpToggleBtn && webglHelp) {
   });
 }
 if (webglMaxNodesInput) {
+  webglMaxNodesInput.value = String(DEFAULT_MAX_NODES);
   webglMaxNodesInput.addEventListener("change", () => {
     if (!webglViewer) return;
-    const maxNodes = parseInt(webglMaxNodesInput.value, 10) || 20000;
+    const maxNodes = parseInt(webglMaxNodesInput.value, 10) ||
+      DEFAULT_MAX_NODES;
     webglViewer.setConfig({ maxNodes });
     scheduleWebglRebuild();
   });

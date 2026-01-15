@@ -2,6 +2,7 @@ export type GLProgramBundle = {
   gl: WebGLRenderingContext;
   program: WebGLProgram;
   aPos: number;
+  aColor: number;
   uMvp: WebGLUniformLocation;
   uColor: WebGLUniformLocation;
 };
@@ -10,7 +11,9 @@ export function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
   const vertexShader = `
     precision highp float;
     attribute vec3 a_pos;
+    attribute vec3 a_color;
     uniform mat4 u_mvp;
+    varying highp vec3 v_color;
 
     void main() {
       vec4 pos = u_mvp * vec4(a_pos, 1.0);
@@ -21,14 +24,18 @@ export function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
       }
 
       gl_Position = pos;
+      v_color = a_color;
     }
   `;
 
   const fs = `
     precision mediump float;
+    varying highp vec3 v_color;
     uniform vec3 u_color;
+
     void main() {
-      gl_FragColor = vec4(u_color, 1.0);
+      vec3 finalColor = length(v_color) > 0.001 ? v_color : u_color;
+      gl_FragColor = vec4(finalColor, 0.1);
     }
   `;
 
@@ -58,6 +65,7 @@ export function createProgram(gl: WebGLRenderingContext): GLProgramBundle {
     gl,
     program: prog,
     aPos: gl.getAttribLocation(prog, "a_pos"),
+    aColor: gl.getAttribLocation(prog, "a_color"),
     uMvp: gl.getUniformLocation(prog, "u_mvp")!,
     uColor: gl.getUniformLocation(prog, "u_color")!,
   };

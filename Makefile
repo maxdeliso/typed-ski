@@ -1,4 +1,4 @@
-.PHONY: setup build test format format-check validate print-wasm start help
+.PHONY: setup build test coverage format format-check validate print-wasm start help
 .DEFAULT_GOAL := help
 
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
@@ -9,6 +9,7 @@ help:
 	@echo "  setup        - Prepare this machine by installing necessary tools"
 	@echo "  build        - Compile the artifacts"
 	@echo "  test         - Run the test suite"
+	@echo "  coverage     - Run tests with coverage and generate reports"
 	@echo "  format       - Format code"
 	@echo "  format-check - Check code formatting"
 	@echo "  validate     - Validate generated code matches source (arena header, version, etc.)"
@@ -65,6 +66,20 @@ test: ## Run the test suite
 	$(MAKE) format-check
 	nix $(NIX_FLAGS) run .#lint
 	nix $(NIX_FLAGS) run .#test
+
+coverage: ## Run tests with coverage and generate reports
+	@if ! command -v nix >/dev/null 2>&1; then \
+		echo "Error: Nix is not installed. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then \
+		echo "Error: WASM files not found. Run 'make build' first."; \
+		exit 1; \
+	fi
+	rm -rf coverage coverage.lcov
+	nix $(NIX_FLAGS) develop --command deno task test:coverage
+	nix $(NIX_FLAGS) develop --command deno task coverage:lcov
+	nix $(NIX_FLAGS) develop --command deno task coverage:report
 
 format:
 	@if ! command -v nix >/dev/null 2>&1; then \

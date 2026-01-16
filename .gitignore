@@ -34,3 +34,7 @@ deno.lock.bak
 wasm
 
 type_svg/
+
+# Test coverage
+coverage/
+coverage.lcov

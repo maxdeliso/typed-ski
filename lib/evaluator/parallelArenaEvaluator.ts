@@ -1138,9 +1138,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         const reqId = Number((packed >> 32n) & 0xffffffffn) >>> 0;
         const nodeId = Number(packed & 0xffffffffn) >>> 0;
 
-        // If the worker yielded, the nodeId is a Suspension node. Resubmit to continue.
+        // If the worker yielded, the nodeId is a Suspension or Continuation node. Resubmit to continue.
         // (Do not resolve the promise yet; the job is still in-flight.)
-        if (ex.kindOf(nodeId) === (ArenaKind.Suspension as number)) {
+        const nodeKind = ex.kindOf(nodeId);
+        if (
+          nodeKind === (ArenaKind.Suspension as number) ||
+          nodeKind === (ArenaKind.Continuation as number)
+        ) {
           // If the caller already gave up / was aborted, drop the yielded work.
           if (!this.pending.has(reqId)) continue;
 

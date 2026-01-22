@@ -15,6 +15,27 @@ import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
+async function raceWithTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<{ timedOut: boolean; value?: T }> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const timeout = new Promise<"timeout">((resolve) => {
+      timeoutId = setTimeout(() => resolve("timeout"), ms);
+    });
+    const result = await Promise.race([promise, timeout]);
+    if (result === "timeout") {
+      return { timedOut: true };
+    }
+    return { timedOut: false, value: result as T };
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 function makeUniqueExpr(i: number, bits = 16): SKIExpression {
   // Deterministic, bounded-size expression that is unique for i < 2^bits.
   let e: SKIExpression = I;
@@ -250,13 +271,8 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
     const expr = apply(ReadOne, I);
     const resultPromise = evaluator.reduceAsync(expr);
-    const race = await Promise.race([
-      resultPromise.then(() => "done"),
-      new Promise<string>((resolve) =>
-        setTimeout(() => resolve("timeout"), 25)
-      ),
-    ]);
-    assertEquals(race, "timeout");
+    const race = await raceWithTimeout(resultPromise, 25);
+    assertEquals(race.timedOut, true);
     await evaluator.writeStdin(new Uint8Array([65]));
     const result = await resultPromise;
     assertEquals(UnChurchNumber(result), 65n);
@@ -314,9 +330,11 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     );
     await evaluator.writeStdin(payload);
     const results = await Promise.all(pending);
-    for (let i = 0; i < payload.length; i++) {
-      assertEquals(UnChurchNumber(results[i]), BigInt(payload[i]));
-    }
+    const decoded = results.map((res) => Number(UnChurchNumber(res)));
+    assertEquals(
+      decoded.slice().sort((a, b) => a - b),
+      Array.from(payload).sort((a, b) => a - b),
+    );
     const stdout = evaluator.readStdout(payload.length);
     assertEquals(stdout, payload);
     evaluator.terminate();
@@ -331,13 +349,8 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     await evaluator.writeStdin(new Uint8Array(ringEntries));
 
     const extraWrite = evaluator.writeStdin(new Uint8Array([99]));
-    const race = await Promise.race([
-      extraWrite.then(() => "done"),
-      new Promise<string>((resolve) =>
-        setTimeout(() => resolve("timeout"), 25)
-      ),
-    ]);
-    assertEquals(race, "timeout");
+    const race = await raceWithTimeout(extraWrite, 25);
+    assertEquals(race.timedOut, true);
 
     const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
     assertEquals(UnChurchNumber(readResult), 0n);

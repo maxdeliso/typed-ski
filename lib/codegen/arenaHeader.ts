@@ -27,6 +27,26 @@ import { type ParsedStruct, parseRustStruct } from "../parser/rustStruct.ts";
  * @returns TypeScript code for Ring header constants
  */
 export function generateRingHeaderConstants(): string {
+  // Cache line size: 64 bytes = 16 u32 words
+  const _CACHE_LINE_BYTES = 64;
+  const _CACHE_LINE_U32 = _CACHE_LINE_BYTES / 4;
+
+  // First cache line: head and not_full
+  const _RING_HEAD_INDEX = 0;
+  const _RING_NOT_FULL_INDEX = 1;
+
+  // Second cache line: tail and not_empty
+  const _RING_TAIL_INDEX = _CACHE_LINE_U32;
+  const _RING_NOT_EMPTY_INDEX = _CACHE_LINE_U32 + 1;
+
+  // Third cache line: mask and entries
+  const _RING_MASK_INDEX = _CACHE_LINE_U32 * 2;
+  const _RING_ENTRIES_INDEX = _RING_MASK_INDEX + 1;
+
+  // Total header size: 3 cache lines
+  const _RING_HEADER_BYTES = _CACHE_LINE_BYTES * 3;
+  const _RING_HEADER_U32 = _RING_HEADER_BYTES / 4;
+
   return `/**
  * Ring buffer header constants
  *
@@ -34,27 +54,30 @@ export function generateRingHeaderConstants(): string {
  * from rust/src/arena.rs. Do not edit it manually.
  *
  * These constants match the memory layout of the Ring<T> struct defined in
- * rust/src/arena.rs (lines 424-481). The struct uses #[repr(C, align(64))]
- * for cache-line alignment.
+ * rust/src/arena.rs. The struct uses #[repr(C, align(64))] for cache-line
+ * alignment.
  *
  * Memory layout (when viewed as Uint32Array):
- * - Offset 0-15:   First cache line (head, not_full, padding)
- * - Offset 16-31:  Second cache line (tail, not_empty, padding)
- * - Offset 32-33:  mask and entries fields
- * - Offset 48+:    Slots array begins
+ * - First cache line:  head (RING_HEAD_INDEX), not_full (RING_NOT_FULL_INDEX), padding
+ * - Second cache line: tail (RING_TAIL_INDEX), not_empty (RING_NOT_EMPTY_INDEX), padding
+ * - Third cache line:  mask (RING_MASK_INDEX), entries (RING_ENTRIES_INDEX)
+ * - After header:      Slots array begins
  *
- * Total header size: 192 bytes (48 u32 words)
+ * Total header size: RING_HEADER_BYTES bytes (RING_HEADER_U32 u32 words)
  *
- * @see rust/src/arena.rs:450-481 for the Rust struct definition
+ * @see rust/src/arena.rs for the Rust struct definition
  */
-export const RING_HEADER_BYTES = 192;
+const CACHE_LINE_BYTES = ${_CACHE_LINE_BYTES};
+const CACHE_LINE_U32 = CACHE_LINE_BYTES / 4;
+
+export const RING_HEADER_BYTES = CACHE_LINE_BYTES * 3;
 export const RING_HEADER_U32 = RING_HEADER_BYTES / 4;
-export const RING_HEAD_INDEX = 0;
-export const RING_NOT_FULL_INDEX = 1;
-export const RING_TAIL_INDEX = 16;
-export const RING_NOT_EMPTY_INDEX = 17;
-export const RING_MASK_INDEX = 32;
-export const RING_ENTRIES_INDEX = 33;
+export const RING_HEAD_INDEX = ${_RING_HEAD_INDEX};
+export const RING_NOT_FULL_INDEX = ${_RING_NOT_FULL_INDEX};
+export const RING_TAIL_INDEX = CACHE_LINE_U32;
+export const RING_NOT_EMPTY_INDEX = RING_TAIL_INDEX + 1;
+export const RING_MASK_INDEX = RING_TAIL_INDEX + CACHE_LINE_U32;
+export const RING_ENTRIES_INDEX = RING_MASK_INDEX + 1;
 `;
 }
 

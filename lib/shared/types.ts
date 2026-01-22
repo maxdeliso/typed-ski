@@ -15,7 +15,7 @@ export interface ArenaNode {
   id: number;
   /** Type of node: terminal (leaf) or non-terminal (internal) */
   kind: "terminal" | "non-terminal";
-  /** Symbol for terminal nodes (S, K, I) */
+  /** Symbol for terminal nodes (S, K, I, readOne, writeOne) */
   sym?: string;
   /** Left child node ID for non-terminal nodes */
   left?: number;

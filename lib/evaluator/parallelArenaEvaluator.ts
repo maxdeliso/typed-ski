@@ -13,6 +13,10 @@ import type { Evaluator } from "./evaluator.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import { ArenaKind } from "../shared/arena.ts";
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "./arenaHeader.generated.ts";
 
 const EMPTY = -1n;
 // Cancellable sleep function that returns both the promise and a cleanup function
@@ -32,6 +36,156 @@ const sleep = (ms: number): { promise: Promise<void>; cancel: () => void } => {
 // Maximum number of resubmissions per work unit (when yielding suspensions)
 // This prevents a single divergent term from monopolizing resources
 const MAX_RESUBMITS_PER_WORK_UNIT = 10;
+const SUSPEND_MODE_IO_WAIT = 2;
+
+const RING_HEADER_BYTES = 192;
+const RING_HEADER_U32 = RING_HEADER_BYTES / 4;
+const RING_HEAD_INDEX = 0;
+const RING_NOT_FULL_INDEX = 1;
+const RING_TAIL_INDEX = 16;
+const RING_NOT_EMPTY_INDEX = 17;
+const RING_MASK_INDEX = 32;
+const RING_ENTRIES_INDEX = 33;
+
+type ArenaRingPayloadKind = "u8" | "u32";
+
+const toInt32 = (value: number): number => value | 0;
+
+class ArenaRingView {
+  private readonly headerI32: Int32Array;
+  private readonly slotsI32: Int32Array;
+  private readonly payloadU8: Uint8Array;
+  private readonly payloadU32: Uint32Array;
+  private readonly slotsBase: number;
+  private readonly slotBytes: number;
+  private readonly slotU32Stride: number;
+  private readonly entries: number;
+  private readonly mask: number;
+  private readonly payloadKind: ArenaRingPayloadKind;
+
+  constructor(
+    buffer: ArrayBuffer | SharedArrayBuffer,
+    baseAddr: number,
+    offset: number,
+    payloadKind: ArenaRingPayloadKind,
+  ) {
+    this.headerI32 = new Int32Array(buffer, baseAddr + offset, RING_HEADER_U32);
+    const headerU32 = new Uint32Array(
+      buffer,
+      baseAddr + offset,
+      RING_HEADER_U32,
+    );
+    this.entries = headerU32[RING_ENTRIES_INDEX];
+    this.mask = headerU32[RING_MASK_INDEX];
+    this.payloadKind = payloadKind;
+    const payloadBytes = payloadKind === "u8" ? 1 : 4;
+    this.slotBytes = (4 + payloadBytes + 3) & ~3;
+    this.slotU32Stride = this.slotBytes / 4;
+    this.slotsBase = baseAddr + offset + RING_HEADER_BYTES;
+    this.slotsI32 = new Int32Array(
+      buffer,
+      this.slotsBase,
+      this.entries * this.slotU32Stride,
+    );
+    this.payloadU8 = new Uint8Array(buffer);
+    this.payloadU32 = new Uint32Array(buffer);
+  }
+
+  tryEnqueue(value: number): boolean {
+    for (;;) {
+      const t = Atomics.load(this.headerI32, RING_TAIL_INDEX) >>> 0;
+      const slotIndex = (t & this.mask) * this.slotU32Stride;
+      const seq = Atomics.load(this.slotsI32, slotIndex) >>> 0;
+      const diff = (seq - t) | 0;
+      if (diff === 0) {
+        const next = (t + 1) >>> 0;
+        if (
+          Atomics.compareExchange(
+            this.headerI32,
+            RING_TAIL_INDEX,
+            toInt32(t),
+            toInt32(next),
+          ) === toInt32(t)
+        ) {
+          const payloadOffset = this.slotsBase + slotIndex * 4 + 4;
+          if (this.payloadKind === "u8") {
+            this.payloadU8[payloadOffset] = value & 0xff;
+          } else {
+            this.payloadU32[payloadOffset >>> 2] = value >>> 0;
+          }
+          Atomics.store(this.slotsI32, slotIndex, toInt32(next));
+          Atomics.add(this.headerI32, RING_NOT_EMPTY_INDEX, 1);
+          if (typeof Atomics.notify === "function") {
+            Atomics.notify(this.headerI32, RING_NOT_EMPTY_INDEX, 1);
+          }
+          return true;
+        }
+      } else if (diff < 0) {
+        return false;
+      }
+    }
+  }
+
+  tryDequeue(): number | null {
+    for (;;) {
+      const h = Atomics.load(this.headerI32, RING_HEAD_INDEX) >>> 0;
+      const slotIndex = (h & this.mask) * this.slotU32Stride;
+      const seq = Atomics.load(this.slotsI32, slotIndex) >>> 0;
+      const diff = (seq - ((h + 1) >>> 0)) | 0;
+      if (diff === 0) {
+        const next = (h + 1) >>> 0;
+        if (
+          Atomics.compareExchange(
+            this.headerI32,
+            RING_HEAD_INDEX,
+            toInt32(h),
+            toInt32(next),
+          ) === toInt32(h)
+        ) {
+          const payloadOffset = this.slotsBase + slotIndex * 4 + 4;
+          const value = this.payloadKind === "u8"
+            ? this.payloadU8[payloadOffset]
+            : this.payloadU32[payloadOffset >>> 2];
+          const nextSeq = (h + this.mask + 1) >>> 0;
+          Atomics.store(this.slotsI32, slotIndex, toInt32(nextSeq));
+          Atomics.add(this.headerI32, RING_NOT_FULL_INDEX, 1);
+          if (typeof Atomics.notify === "function") {
+            Atomics.notify(this.headerI32, RING_NOT_FULL_INDEX, 1);
+          }
+          return value;
+        }
+      } else if (diff < 0) {
+        return null;
+      }
+    }
+  }
+}
+
+class ArenaIoRings {
+  readonly stdin: ArenaRingView;
+  readonly stdout: ArenaRingView;
+  readonly stdinWait: ArenaRingView;
+
+  constructor(buffer: ArrayBuffer | SharedArrayBuffer, baseAddr: number) {
+    const headerView = new Uint32Array(
+      buffer,
+      baseAddr,
+      SABHEADER_HEADER_SIZE_U32,
+    );
+    const field = SabHeaderField as unknown as Record<string, number>;
+    const offsetStdin = headerView[field["OFFSET_STDIN"]];
+    const offsetStdout = headerView[field["OFFSET_STDOUT"]];
+    const offsetStdinWait = headerView[field["OFFSET_STDIN_WAIT"]];
+    this.stdin = new ArenaRingView(buffer, baseAddr, offsetStdin, "u8");
+    this.stdout = new ArenaRingView(buffer, baseAddr, offsetStdout, "u8");
+    this.stdinWait = new ArenaRingView(
+      buffer,
+      baseAddr,
+      offsetStdinWait,
+      "u32",
+    );
+  }
+}
 
 /**
  * Error thrown when a work unit exceeds the maximum number of resubmissions.
@@ -138,6 +292,16 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   private readonly reqToWorkerIndex = new Map<number, number>();
   private readonly reqToExpr = new Map<number, SKIExpression>();
   private readonly reqToResubmitCount = new Map<number, number>();
+  private readonly ioWait = new Map<number, number>();
+  private readonly pendingWaiters = new Set<number>();
+  private pendingWakeBudget = 0;
+  private ioRingsCache:
+    | {
+      buffer: ArrayBuffer | SharedArrayBuffer;
+      baseAddr: number;
+      rings: ArenaIoRings;
+    }
+    | null = null;
   private workerPendingCounts: number[] = [];
   private readonly ringStats = {
     submitOk: 0,
@@ -164,6 +328,10 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     this.reqToWorkerIndex.clear();
     this.reqToExpr.clear();
     this.reqToResubmitCount.clear();
+    this.ioWait.clear();
+    this.pendingWaiters.clear();
+    this.pendingWakeBudget = 0;
+    this.ioRingsCache = null;
     this.workerPendingCounts.fill(0);
     this.workers.forEach((w) => w.terminate());
   }
@@ -199,6 +367,145 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       pending: this.pending.size,
       completed: this.completed.size,
     };
+  }
+
+  private getIoRings(): ArenaIoRings {
+    const baseAddr = this.$.debugGetArenaBaseAddr?.();
+    if (!baseAddr) {
+      throw new Error("Arena base address not available");
+    }
+    const buffer = this.memory.buffer;
+    const cached = this.ioRingsCache;
+    if (!cached || cached.buffer !== buffer || cached.baseAddr !== baseAddr) {
+      const rings = new ArenaIoRings(buffer, baseAddr);
+      this.ioRingsCache = { buffer, baseAddr, rings };
+      return rings;
+    }
+    return cached.rings;
+  }
+
+  private async submitSuspension(nodeId: number, reqId: number): Promise<void> {
+    const ex = this.$ as unknown as {
+      hostSubmit?: (nodeId: number, reqId: number, maxSteps: number) => number;
+    };
+    if (!ex.hostSubmit) {
+      throw new Error("hostSubmit export missing");
+    }
+    let rc = ex.hostSubmit(nodeId >>> 0, reqId >>> 0, 0);
+    let fullStreak = 0;
+    while (rc === 1) {
+      this.ringStats.submitFull++;
+      if (this.aborted) {
+        throw (this.abortError ?? new Error("Evaluator terminated"));
+      }
+      fullStreak++;
+      if (fullStreak < 512) {
+        await new Promise<void>((r) => queueMicrotask(r));
+      } else {
+        if (this.aborted) {
+          throw (this.abortError ?? new Error("Evaluator terminated"));
+        }
+        const { promise, cancel } = sleep(0);
+        this.activeTimeouts.add(cancel);
+        try {
+          await promise;
+        } finally {
+          this.activeTimeouts.delete(cancel);
+        }
+        if (this.aborted) {
+          throw (this.abortError ?? new Error("Evaluator terminated"));
+        }
+      }
+      rc = ex.hostSubmit(nodeId >>> 0, reqId >>> 0, 0);
+    }
+    if (rc !== 0) {
+      throw new Error(`Resubmit failed for reqId ${reqId} with code ${rc}`);
+    }
+  }
+
+  private async wakeStdinWaiters(limit: number): Promise<number> {
+    const rings = this.getIoRings();
+    let budget = limit + this.pendingWakeBudget;
+    this.pendingWakeBudget = 0;
+    let woken = 0;
+
+    for (const nodeId of Array.from(this.pendingWaiters)) {
+      if (budget <= 0) break;
+      const reqId = this.ioWait.get(nodeId);
+      if (reqId === undefined) continue;
+      this.pendingWaiters.delete(nodeId);
+      this.ioWait.delete(nodeId);
+      await this.submitSuspension(nodeId, reqId);
+      budget--;
+      woken++;
+    }
+
+    while (budget > 0) {
+      const nodeId = rings.stdinWait.tryDequeue();
+      if (nodeId === null) break;
+      const reqId = this.ioWait.get(nodeId);
+      if (reqId === undefined) {
+        this.pendingWaiters.add(nodeId);
+        budget--;
+        continue;
+      }
+      this.ioWait.delete(nodeId);
+      await this.submitSuspension(nodeId, reqId);
+      budget--;
+      woken++;
+    }
+    this.pendingWakeBudget = budget;
+    return woken;
+  }
+
+  readStdout(maxBytes = 4096): Uint8Array {
+    const rings = this.getIoRings();
+    const bytes: number[] = [];
+    for (let i = 0; i < maxBytes; i++) {
+      const value = rings.stdout.tryDequeue();
+      if (value === null) break;
+      bytes.push(value);
+    }
+    return new Uint8Array(bytes);
+  }
+
+  async writeStdin(bytes: Uint8Array): Promise<number> {
+    if (this.aborted) {
+      throw (this.abortError ?? new Error("Evaluator terminated"));
+    }
+    const rings = this.getIoRings();
+    let written = 0;
+    for (const byte of bytes) {
+      let fullStreak = 0;
+      while (!rings.stdin.tryEnqueue(byte)) {
+        if (this.aborted) {
+          throw (this.abortError ?? new Error("Evaluator terminated"));
+        }
+        fullStreak++;
+        if (fullStreak < 512) {
+          await new Promise<void>((r) => queueMicrotask(r));
+        } else {
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
+          const { promise, cancel } = sleep(0);
+          this.activeTimeouts.add(cancel);
+          try {
+            await promise;
+          } finally {
+            this.activeTimeouts.delete(cancel);
+          }
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
+        }
+      }
+      written++;
+    }
+    if (written > 0) {
+      await this.wakeStdinWaiters(written);
+    }
+    return written;
   }
 
   /**
@@ -648,6 +955,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       };
       const ex = this.$ as unknown as {
         kindOf: (id: number) => number;
+        symOf: (id: number) => number;
         hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
       };
       for (;;) {
@@ -709,6 +1017,21 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         if (ex.kindOf(nodeId) === (ArenaKind.Suspension as number)) {
           // If the caller already gave up / was aborted, drop the yielded work.
           if (!this.pending.has(reqId)) continue;
+
+          if (ex.symOf(nodeId) === SUSPEND_MODE_IO_WAIT) {
+            this.ioWait.set(nodeId, reqId);
+            if (this.pendingWaiters.delete(nodeId)) {
+              this.ioWait.delete(nodeId);
+              await this.submitSuspension(nodeId, reqId);
+            } else if (this.pendingWakeBudget > 0) {
+              this.pendingWakeBudget--;
+              this.ioWait.delete(nodeId);
+              await this.submitSuspension(nodeId, reqId);
+            }
+            sliceEvents++;
+            await maybeYield();
+            continue;
+          }
 
           // Track resubmissions per work unit to prevent infinite loops from divergent terms.
           // Check BEFORE attempting to resubmit - if limit exceeded, stop this work unit.

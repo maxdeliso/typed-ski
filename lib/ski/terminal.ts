@@ -13,6 +13,10 @@ export enum SKITerminalSymbol {
   K = "K",
   /** The I combinator (identity combinator). */
   I = "I",
+  /** Read a single byte (brainfuck-style ","). */
+  ReadOne = ",",
+  /** Write a single byte (brainfuck-style "."). */
+  WriteOne = ".",
 }
 
 /**
@@ -60,3 +64,13 @@ export const K: SKITerminal = term(SKITerminalSymbol.K);
  * I x = x
  */
 export const I: SKITerminal = term(SKITerminalSymbol.I);
+
+/**
+ * The readOne terminal node (input).
+ */
+export const ReadOne: SKITerminal = term(SKITerminalSymbol.ReadOne);
+
+/**
+ * The writeOne terminal node (output).
+ */
+export const WriteOne: SKITerminal = term(SKITerminalSymbol.WriteOne);

@@ -7,7 +7,10 @@
  * @module
  */
 
-import { SabHeaderField } from "./arenaHeader.generated.ts";
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "./arenaHeader.generated.ts";
 
 /**
  * Typed array views of the arena memory for direct access.
@@ -59,7 +62,11 @@ function buildArenaViews(
   const buffer = memory.buffer;
   // Read header as Uint32Array - offsets are stored in the header itself
   // We use generated constants to access field indices, ensuring they match Rust struct layout
-  const headerView = new Uint32Array(buffer, baseAddr, 32);
+  const headerView = new Uint32Array(
+    buffer,
+    baseAddr,
+    SABHEADER_HEADER_SIZE_U32,
+  );
 
   // Read offsets from header (these are computed at runtime by Rust code)
   const capacity = headerView[SabHeaderField.CAPACITY];
@@ -97,7 +104,11 @@ export function validateAndRebuildViews(
 
   // Check current capacity from header
   const buffer = memory.buffer;
-  const headerView = new Uint32Array(buffer, baseAddr, 32);
+  const headerView = new Uint32Array(
+    buffer,
+    baseAddr,
+    SABHEADER_HEADER_SIZE_U32,
+  );
   const currentCapacity = headerView[SabHeaderField.CAPACITY];
 
   // If capacity changed, views are stale - rebuild them
@@ -155,7 +166,11 @@ export function getOrBuildArenaViews(
 }
 
 export function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
-  return new Uint32Array(memory.buffer, baseAddr, 32)[SabHeaderField.TOP] >>> 0;
+  return new Uint32Array(
+    memory.buffer,
+    baseAddr,
+    SABHEADER_HEADER_SIZE_U32,
+  )[SabHeaderField.TOP] >>> 0;
 }
 
 export function getKind(id: number, views: ArenaViews): number {

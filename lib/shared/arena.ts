@@ -31,6 +31,10 @@ export enum ArenaSym {
   K = 2,
   /** I combinator */
   I = 3,
+  /** readOne terminal */
+  ReadOne = 4,
+  /** writeOne terminal */
+  WriteOne = 5,
 }
 
 /**

@@ -8,7 +8,7 @@ import {
   prettyPrint,
   type SKIExpression,
 } from "../../lib/ski/expression.ts";
-import { I, K, S } from "../../lib/ski/terminal.ts";
+import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
 const assertReparse = (expr: string) => {
   const parsed = parseSKI(expr);
@@ -92,6 +92,23 @@ Deno.test("parseSKI", async (t) => {
     const mixed = parseSKI("sKi");
     assert.deepStrictEqual(upper, lower);
     assert.deepStrictEqual(upper, mixed);
+  });
+
+  await t.step("should parse IO terminals", () => {
+    const parsed = parseSKI(",.");
+    const expected = apply(ReadOne, WriteOne);
+    assert.deepStrictEqual(parsed, expected);
+    assertReparse(",.");
+  });
+
+  await t.step("should place IO terminals in correct tree locations", () => {
+    const parsed = parseSKI(".,I");
+    const expected = apply(apply(WriteOne, ReadOne), I);
+    assert.deepStrictEqual(parsed, expected);
+
+    const nested = parseSKI("(.I),");
+    const nestedExpected = apply(apply(WriteOne, I), ReadOne);
+    assert.deepStrictEqual(nested, nestedExpected);
   });
 
   await t.step("should parse input with extra whitespace", () => {

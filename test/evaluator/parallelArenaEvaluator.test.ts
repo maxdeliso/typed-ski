@@ -1,15 +1,19 @@
-import { assert, assertEquals } from "std/assert";
+import { assert, assertEquals, assertThrows } from "std/assert";
 import randomSeed from "random-seed";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { SabHeaderField } from "../../lib/evaluator/arenaHeader.generated.ts";
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "../../lib/evaluator/arenaHeader.generated.ts";
 import {
   apply,
   prettyPrint,
   type SKIExpression,
 } from "../../lib/ski/expression.ts";
+import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
-import { I, K, S } from "../../lib/ski/terminal.ts";
+import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
 function makeUniqueExpr(i: number, bits = 16): SKIExpression {
   // Deterministic, bounded-size expression that is unique for i < 2^bits.
@@ -241,6 +245,156 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
   );
 });
 
+Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
+  await t.step("readOne parks until stdin has data", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const expr = apply(ReadOne, I);
+    const resultPromise = evaluator.reduceAsync(expr);
+    const race = await Promise.race([
+      resultPromise.then(() => "done"),
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve("timeout"), 25)
+      ),
+    ]);
+    assertEquals(race, "timeout");
+    await evaluator.writeStdin(new Uint8Array([65]));
+    const result = await resultPromise;
+    assertEquals(UnChurchNumber(result), 65n);
+    evaluator.terminate();
+  });
+
+  await t.step("writeOne enqueues bytes to stdout", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const expr = apply(WriteOne, ChurchN(66));
+    const result = await evaluator.reduceAsync(expr);
+    assertEquals(UnChurchNumber(result), 66n);
+    const stdout = evaluator.readStdout(1);
+    assertEquals(stdout.length, 1);
+    assertEquals(stdout[0], 66);
+    evaluator.terminate();
+  });
+
+  await t.step("hello world writes expected stdout bytes", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const encoder = new TextEncoder();
+    const message = "hello\n";
+    const bytes = encoder.encode(message);
+    for (const byte of bytes) {
+      const expr = apply(WriteOne, ChurchN(byte));
+      await evaluator.reduceAsync(expr);
+    }
+    const stdout = evaluator.readStdout(bytes.length);
+    assertEquals(stdout, bytes);
+    evaluator.terminate();
+  });
+
+  await t.step("echo round-trip with readOne/writeOne", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const encoder = new TextEncoder();
+    const payload = encoder.encode("echo");
+    for (const byte of payload) {
+      const expr = apply(ReadOne, WriteOne);
+      const promise = evaluator.reduceAsync(expr);
+      await evaluator.writeStdin(new Uint8Array([byte]));
+      const result = await promise;
+      assertEquals(UnChurchNumber(result), BigInt(byte));
+    }
+    const stdout = evaluator.readStdout(payload.length);
+    assertEquals(stdout, payload);
+    evaluator.terminate();
+  });
+
+  await t.step("echo preserves order with queued readOne tasks", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const encoder = new TextEncoder();
+    const payload = encoder.encode("queued-echo");
+    const pending = Array.from(
+      payload,
+      () => evaluator.reduceAsync(apply(ReadOne, WriteOne)),
+    );
+    await evaluator.writeStdin(payload);
+    const results = await Promise.all(pending);
+    for (let i = 0; i < payload.length; i++) {
+      assertEquals(UnChurchNumber(results[i]), BigInt(payload[i]));
+    }
+    const stdout = evaluator.readStdout(payload.length);
+    assertEquals(stdout, payload);
+    evaluator.terminate();
+  });
+
+  await t.step("writeStdin blocks when stdin ring is full", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const ringEntries = evaluator.$.debugGetRingEntries?.() ??
+      (() => {
+        throw new Error("WASM export `debugGetRingEntries` is missing");
+      })();
+    await evaluator.writeStdin(new Uint8Array(ringEntries));
+
+    const extraWrite = evaluator.writeStdin(new Uint8Array([99]));
+    const race = await Promise.race([
+      extraWrite.then(() => "done"),
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve("timeout"), 25)
+      ),
+    ]);
+    assertEquals(race, "timeout");
+
+    const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
+    assertEquals(UnChurchNumber(readResult), 0n);
+    await extraWrite;
+    evaluator.terminate();
+  });
+});
+
+Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
+  await t.step("readStdout returns empty when idle", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const stdout = evaluator.readStdout(16);
+    assertEquals(stdout.length, 0);
+    evaluator.terminate();
+  });
+
+  await t.step("writeStdin returns bytes written", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const bytes = new Uint8Array([1, 2, 3]);
+    const written = await evaluator.writeStdin(bytes);
+    assertEquals(written, bytes.length);
+    for (const byte of bytes) {
+      const result = await evaluator.reduceAsync(apply(ReadOne, I));
+      assertEquals(UnChurchNumber(result), BigInt(byte));
+    }
+    evaluator.terminate();
+  });
+
+  await t.step(
+    "pending counts and ring stats reflect in-flight work",
+    async () => {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+      const pendingWork = evaluator.reduceAsync(apply(ReadOne, I));
+      assertEquals(evaluator.getTotalPending(), 1);
+      const pendingCounts = evaluator.getPendingCounts();
+      assertEquals(pendingCounts.reduce((sum, v) => sum + v, 0), 1);
+      const snapshot = evaluator.getRingStatsSnapshot();
+      assertEquals(snapshot.pending, 1);
+      await evaluator.writeStdin(new Uint8Array([7]));
+      const result = await pendingWork;
+      assertEquals(UnChurchNumber(result), 7n);
+      assertEquals(evaluator.getTotalPending(), 0);
+      evaluator.terminate();
+    },
+  );
+
+  await t.step("reduce throws in parallel evaluator", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    assertThrows(
+      () => evaluator.reduce(I),
+      Error,
+      "ParallelArenaEvaluatorWasm.reduce is disabled",
+    );
+    evaluator.terminate();
+  });
+});
+
 Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
   await t.step(
     "request correlation: results match inputs with maxSteps=0",
@@ -409,7 +563,11 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
         baseAddr !== undefined && baseAddr !== 0,
         "Arena should be initialized",
       );
-      const headerView = new Uint32Array(memory.buffer, baseAddr, 32);
+      const headerView = new Uint32Array(
+        memory.buffer,
+        baseAddr,
+        SABHEADER_HEADER_SIZE_U32,
+      );
       const initialCapacity = headerView[SabHeaderField.CAPACITY];
 
       // Allocate many unique expressions to trigger arena growth

@@ -97,7 +97,7 @@ struct TestStruct {
       const result = parseRustStruct(rustFile, "SabHeader");
 
       assertEquals(result.name, "SabHeader");
-      assertEquals(result.fields.length, 17);
+      assertEquals(result.fields.length, 20);
       assertEquals(result.hasReprC, true); // SabHeader has #[repr(C, align(64))]
 
       // Verify first and last fields
@@ -108,7 +108,15 @@ struct TestStruct {
 
       // Verify expected critical fields exist
       const fieldNames = result.fields.map((f: StructField) => f.name);
-      const expectedFields = ["magic", "ring_entries", "capacity", "top"];
+      const expectedFields = [
+        "magic",
+        "ring_entries",
+        "offset_stdin",
+        "offset_stdout",
+        "offset_stdin_wait",
+        "capacity",
+        "top",
+      ];
       for (const expected of expectedFields) {
         assertExists(
           fieldNames.find((name) => name === expected),

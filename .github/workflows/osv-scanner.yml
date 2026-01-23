@@ -35,7 +35,6 @@ jobs:
       scan-args: |-
         -r
         --skip-git
-        --lockfile=deno.lock
         --lockfile=rust/Cargo.lock
         ./
   scan-pr:
@@ -46,6 +45,5 @@ jobs:
       scan-args: |-
         -r
         --skip-git
-        --lockfile=deno.lock
         --lockfile=rust/Cargo.lock
         ./

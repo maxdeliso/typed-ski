@@ -336,16 +336,20 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
       })();
     await evaluator.writeStdin(new Uint8Array(ringEntries));
 
-    const extraWrite = evaluator.writeStdin(new Uint8Array([99]));
-    const readPromise = evaluator.reduceAsync(apply(ReadOne, I));
-    const first = await Promise.race([
-      extraWrite.then(() => "write"),
-      readPromise.then(() => "read"),
-    ]);
-    assertEquals(first, "read");
-    const readResult = await readPromise;
+    let writeResolved = false;
+    const extraWrite = evaluator.writeStdin(new Uint8Array([99]))
+      .then(() => {
+        writeResolved = true;
+      });
+    // Allow microtasks to flush; writeStdin should still be pending while full.
+    await Promise.resolve();
+    await Promise.resolve();
+    assertEquals(writeResolved, false);
+
+    const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
     assertEquals(UnChurchNumber(readResult), 0n);
     await extraWrite;
+    assertEquals(writeResolved, true);
     evaluator.terminate();
   });
 });

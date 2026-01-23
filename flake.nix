@@ -87,6 +87,7 @@
           ${deno}/bin/deno run -A scripts/validate-arena-header.ts
         '';
 
+
         # --- Main Build Derivation ---
         typedSki = pkgs.stdenv.mkDerivation {
           name = "typed-ski";

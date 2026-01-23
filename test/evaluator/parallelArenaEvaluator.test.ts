@@ -432,10 +432,15 @@ Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
           (() => {
             throw new Error("WASM export `debugGetRingEntries` is missing");
           })();
-        const N = ringEntries + 8192;
+        // Ensure we wrap at least once even for large rings, and exercise
+        // multiple cycles for small ones.
+        const extraEntries = Math.max(4096, ringEntries);
+        const N = ringEntries + extraEntries;
+        const exprBits = Math.ceil(Math.log2(N + 1));
         const exprs = Array.from(
           { length: N },
-          (_, i) => makeUniqueExpr(i, 20),
+          // Use enough bits so each expression is unique for this N.
+          (_, i) => makeUniqueExpr(i, exprBits),
         );
 
         const results = await Promise.all(

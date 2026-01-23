@@ -15,27 +15,6 @@ import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
-async function raceWithTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-): Promise<{ timedOut: boolean; value?: T }> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  try {
-    const timeout = new Promise<"timeout">((resolve) => {
-      timeoutId = setTimeout(() => resolve("timeout"), ms);
-    });
-    const result = await Promise.race([promise, timeout]);
-    if (result === "timeout") {
-      return { timedOut: true };
-    }
-    return { timedOut: false, value: result as T };
-  } finally {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-    }
-  }
-}
-
 function makeUniqueExpr(i: number, bits = 16): SKIExpression {
   // Deterministic, bounded-size expression that is unique for i < 2^bits.
   let e: SKIExpression = I;
@@ -271,9 +250,18 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
     const expr = apply(ReadOne, I);
     const resultPromise = evaluator.reduceAsync(expr);
-    const race = await raceWithTimeout(resultPromise, 25);
-    assertEquals(race.timedOut, true);
-    await evaluator.writeStdin(new Uint8Array([65]));
+    const first = await Promise.race([
+      resultPromise.then(() => "read"),
+      Promise.resolve().then(() => "tick"),
+    ]);
+    assertEquals(first, "tick");
+    const writePromise = evaluator.writeStdin(new Uint8Array([65]));
+    const firstAfterWrite = await Promise.race([
+      resultPromise.then(() => "read"),
+      writePromise.then(() => "write"),
+    ]);
+    assertEquals(firstAfterWrite, "write");
+    await writePromise;
     const result = await resultPromise;
     assertEquals(UnChurchNumber(result), 65n);
     evaluator.terminate();
@@ -349,10 +337,13 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     await evaluator.writeStdin(new Uint8Array(ringEntries));
 
     const extraWrite = evaluator.writeStdin(new Uint8Array([99]));
-    const race = await raceWithTimeout(extraWrite, 25);
-    assertEquals(race.timedOut, true);
-
-    const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
+    const readPromise = evaluator.reduceAsync(apply(ReadOne, I));
+    const first = await Promise.race([
+      extraWrite.then(() => "write"),
+      readPromise.then(() => "read"),
+    ]);
+    assertEquals(first, "read");
+    const readResult = await readPromise;
     assertEquals(UnChurchNumber(readResult), 0n);
     await extraWrite;
     evaluator.terminate();

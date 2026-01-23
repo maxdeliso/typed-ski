@@ -24,9 +24,6 @@ jobs:
       - name: Validate generated code
         run: make validate
 
-      - name: Run test suite
-        run: make test
-
       - name: Generate coverage report
         run: make coverage
 

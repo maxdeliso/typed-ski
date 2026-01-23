@@ -13,9 +13,9 @@ export enum SKITerminalSymbol {
   K = "K",
   /** The I combinator (identity combinator). */
   I = "I",
-  /** Read a single byte (brainfuck-style ","). */
+  /** Read a single byte (brainf***-style ","). */
   ReadOne = ",",
-  /** Write a single byte (brainfuck-style "."). */
+  /** Write a single byte (brainf***-style "."). */
   WriteOne = ".",
 }
 

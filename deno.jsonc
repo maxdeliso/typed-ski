@@ -23,7 +23,10 @@
     "exclude": [
       "!wasm/debug.wasm",
       "!wasm/release.wasm",
-      "!lib/evaluator/arenaWasm.embedded.ts"
+      "!lib/evaluator/arenaWasm.embedded.ts",
+      "codecov",
+      "codecov.SHA256SUM",
+      "codecov.SHA256SUM.sig"
     ]
   },
   "compilerOptions": {

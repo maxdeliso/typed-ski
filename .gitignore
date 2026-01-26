@@ -37,3 +37,8 @@ type_svg/
 # Test coverage
 coverage/
 coverage.lcov
+
+# Codecov artifacts (downloaded by CI)
+codecov
+codecov.SHA256SUM
+codecov.SHA256SUM.sig

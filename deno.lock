@@ -6,7 +6,7 @@
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/path@^1.1.4": "1.1.4",
     "npm:@types/chai@^5.2.3": "5.2.3",
-    "npm:@types/node@^25.0.9": "25.0.9",
+    "npm:@types/node@^25.0.10": "25.0.10",
     "npm:assemblyscript@0.28.8": "0.28.8",
     "npm:chai@6.2.2": "6.2.2",
     "npm:random-seed@0.3.0": "0.3.0"
@@ -46,8 +46,8 @@
     "@types/deep-eql@4.0.2": {
       "integrity": "sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw=="
     },
-    "@types/node@25.0.9": {
-      "integrity": "sha512-/rpCXHlCWeqClNBwUhDcusJxXYDjZTyE8v5oTO7WbL8eij2nKhUeU89/6xgjU7N4/Vh3He0BtyhJdQbDyhiXAw==",
+    "@types/node@25.0.10": {
+      "integrity": "sha512-zWW5KPngR/yvakJgGOmZ5vTBemDoSqF3AcV/LrO5u5wTWyEAVVh+IT39G4gtyAkh3CtTZs8aX/yRM82OfzHJRg==",
       "dependencies": [
         "undici-types"
       ]
@@ -92,7 +92,7 @@
       "jsr:@std/fs@^1.0.21",
       "jsr:@std/path@^1.1.4",
       "npm:@types/chai@^5.2.3",
-      "npm:@types/node@^25.0.9",
+      "npm:@types/node@^25.0.10",
       "npm:chai@6.2.2",
       "npm:random-seed@0.3.0"
     ]

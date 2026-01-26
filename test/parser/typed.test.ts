@@ -24,16 +24,16 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, mkTypeVariable("a"))).to.equal(true);
     });
 
-    await t.step("parses the type a→b", () => {
-      const src = "a→b";
+    await t.step("parses the type a->b", () => {
+      const src = "a->b";
       const [lit, ty] = parseType(src);
       expect(lit).to.equal(src);
       expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
         .to.equal(true);
     });
 
-    await t.step("parses the type a→b→c", () => {
-      const src = "a→b→c";
+    await t.step("parses the type a->b->c", () => {
+      const src = "a->b->c";
       const [lit, ty] = parseType(src);
       const expected = arrow(
         mkTypeVariable("a"),
@@ -43,8 +43,8 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses (a→b)→a→b", () => {
-      const src = "(a→b)→a→b";
+    await t.step("parses (a->b)->a->b", () => {
+      const src = "(a->b)->a->b";
       const [lit, ty] = parseType(src);
       const expected = arrow(
         arrow(mkTypeVariable("a"), mkTypeVariable("b")),
@@ -54,8 +54,8 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses a→b→a→b", () => {
-      const src = "a→b→a→b";
+    await t.step("parses a->b->a->b", () => {
+      const src = "a->b->a->b";
       const [lit, ty] = parseType(src);
       const expected = arrows(
         mkTypeVariable("a"),
@@ -68,7 +68,7 @@ Deno.test("Parser Tests", async (t) => {
     });
 
     await t.step("parses nested-parentheses arrow type", () => {
-      const src = "((a→b)→c)→d";
+      const src = "((a->b)->c)->d";
       const [lit, ty] = parseType(src);
       const expected = arrow(
         arrow(
@@ -82,10 +82,10 @@ Deno.test("Parser Tests", async (t) => {
     });
 
     await t.step("skips excess whitespace in types", () => {
-      const src = "   a   →    b   ";
+      const src = "   a   ->    b   ";
       const [lit, ty] = parseType(src);
       const expected = arrow(mkTypeVariable("a"), mkTypeVariable("b"));
-      expect(lit).to.equal("a→b");
+      expect(lit).to.equal("a->b");
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
   });
@@ -111,8 +111,8 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("λx:a.xx", () => {
-        const src = "λx:a.x x";
+      await t.step("\\x:a=>x x", () => {
+        const src = "\\x:a=>x x";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
           "x",
@@ -124,7 +124,7 @@ Deno.test("Parser Tests", async (t) => {
       });
 
       await t.step("combinator K", () => {
-        const src = "λx:a.λy:b.x";
+        const src = "\\x:a=>\\y:b=>x";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
           "x",
@@ -136,7 +136,7 @@ Deno.test("Parser Tests", async (t) => {
       });
 
       await t.step("combinator S", () => {
-        const src = "λx:a→b→c.λy:a→b.λz:a.x z (y z)";
+        const src = "\\x:a->b->c=>\\y:a->b=>\\z:a=>x z (y z)";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
           "x",
@@ -159,7 +159,7 @@ Deno.test("Parser Tests", async (t) => {
       });
 
       await t.step("parenthesised whole abstraction", () => {
-        const src = "(λx:a.x)";
+        const src = "(\\x:a=>x)";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs("x", mkTypeVariable("a"), mkVar("x"));
         expect(lit).to.equal(src);
@@ -167,7 +167,7 @@ Deno.test("Parser Tests", async (t) => {
       });
 
       await t.step("nested parentheses in type annotation", () => {
-        const src = "λx:(a→b)→c.x";
+        const src = "\\x:(a->b)->c=>x";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
           "x",
@@ -182,10 +182,10 @@ Deno.test("Parser Tests", async (t) => {
       });
 
       await t.step("skips extra whitespace", () => {
-        const src = "  λ   x  :  a   .   x   ";
+        const src = "  \\   x  :  a   =>   x   ";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs("x", mkTypeVariable("a"), mkVar("x"));
-        expect(lit).to.equal("λx:a.x");
+        expect(lit).to.equal("\\x:a=>x");
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
@@ -208,38 +208,49 @@ Deno.test("Parser Tests", async (t) => {
         expect(() => parseTypedLambda(src)).to.throw(ParseError, msg);
       };
 
-      await t.step("missing variable", shouldThrow("λ:a→b.x", /identifier/));
+      await t.step(
+        "missing variable",
+        shouldThrow("\\:a->b=>x", /identifier/),
+      );
 
       await t.step(
         "incomplete type",
-        shouldThrow("λx:a→.x", /identifier/),
+        shouldThrow("\\x:a->=>x", /identifier/),
       );
 
-      await t.step("missing term", shouldThrow("λx:a→b.", /term/));
+      await t.step("missing term", shouldThrow("\\x:a->b=>", /term/));
 
       await t.step(
         "unmatched left parenthesis",
-        shouldThrow("(λx:a.x"),
+        shouldThrow("(\\x:a=>x"),
       );
 
       await t.step(
         "extra right parenthesis",
-        shouldThrow("λx:a.x))"),
+        shouldThrow("\\x:a=>x))"),
       );
 
       await t.step(
         "incomplete lambda abstraction",
-        shouldThrow("λx:a→b.", /term/),
+        shouldThrow("\\x:a->b=>", /term/),
       );
 
       await t.step(
         "incomplete type annotation",
-        shouldThrow("λx:a→.x"),
+        shouldThrow("\\x:a->=>x"),
       );
 
       await t.step(
         "rejects purely numeric identifiers in lambda bindings",
-        shouldThrow("λ123:a.x", /not a valid identifier.*purely numeric/),
+        shouldThrow(
+          "\\123:a=>x",
+          /not a valid identifier.*purely numeric/,
+        ),
+      );
+
+      await t.step(
+        "rejects non-ASCII bytes",
+        shouldThrow("λx:a.x", /non-ASCII byte/),
       );
     });
   });

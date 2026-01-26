@@ -10,6 +10,7 @@ import { ParseError } from "./parseError.ts";
 import {
   isDigit,
   matchCh,
+  matchFatArrow,
   matchLP,
   matchRP,
   parseIdentifier,
@@ -33,8 +34,8 @@ import { createSystemFApplication } from "../terms/systemF.ts";
 /**
  * Parses an atomic System F term.
  * Atomic terms can be:
- *   - A term abstraction: "λx: T. t"
- *   - A type abstraction: "ΛX. t"
+ *   - A term abstraction: "\\x: T => t"
+ *   - A type abstraction: "#X => t"
  *   - A parenthesized term: "(" t ")"
  *   - A type application: "t [T]"
  *   - A variable: e.g. "x"
@@ -46,17 +47,19 @@ export function parseAtomicSystemFTerm(
 ): [string, SystemFTerm, ParserState] {
   const [ch, currentState] = peek(state);
 
-  if (ch === "λ") {
-    const stateAfterLambda = matchCh(currentState, "λ");
+  if (ch === "\\") {
+    const stateAfterLambda = matchCh(currentState, "\\");
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
     const stateAfterColon = matchCh(stateAfterVar, ":");
     const [typeLit, typeAnnotation, stateAfterType] = parseSystemFType(
       stateAfterColon,
     );
-    const stateAfterDot = matchCh(stateAfterType, ".");
-    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateAfterDot);
+    const stateAfterArrow = matchFatArrow(stateAfterType);
+    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(
+      stateAfterArrow,
+    );
     return [
-      `λ${varLit}:${typeLit}.${bodyLit}`,
+      `\\${varLit}:${typeLit}=>${bodyLit}`,
       mkSystemFAbs(varLit, typeAnnotation, bodyTerm),
       stateAfterBody,
     ];
@@ -67,13 +70,15 @@ export function parseAtomicSystemFTerm(
     );
     const stateAfterRP = matchRP(stateAfterTerm);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
-  } else if (ch === "Λ") {
-    const stateAfterLambdaT = matchCh(state, "Λ");
+  } else if (ch === "#") {
+    const stateAfterLambdaT = matchCh(state, "#");
     const [typeVar, stateAfterVar] = parseIdentifier(stateAfterLambdaT);
-    const stateAfterDot = matchCh(stateAfterVar, ".");
-    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateAfterDot);
+    const stateAfterArrow = matchFatArrow(stateAfterVar);
+    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(
+      stateAfterArrow,
+    );
     return [
-      `Λ${typeVar}.${bodyLit}`,
+      `#${typeVar}=>${bodyLit}`,
       mkSystemFTAbs(typeVar, bodyTerm),
       stateAfterBody,
     ];

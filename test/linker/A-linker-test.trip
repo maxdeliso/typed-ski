@@ -2,4 +2,4 @@ module A
 
 export addA
 
-poly addA = ΛX. λx: X. λy: X. x
+poly addA = #X => \x: X => \y: X => x

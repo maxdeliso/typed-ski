@@ -199,7 +199,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
 
 export helper
 
-poly helper = ΛX. λx: X. x`;
+poly helper = #X => \\x: X => x`;
 
     const helperFile = `${__dirname}/helper.trip`;
     await Deno.writeTextFile(helperFile, helperSource);

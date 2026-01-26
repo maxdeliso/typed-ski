@@ -104,13 +104,13 @@ Deno.test("CLI Tests", async (t) => {
 import Math add
 export id
 
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
   await t.step("Library function tests", async (t) => {
     await t.step("compileToObjectFile works with valid input", () => {
       const source = `module Test
 export id
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
       const result = compileToObjectFile(source);
 
@@ -130,7 +130,7 @@ poly id = Λa. λx:a. x`;
     await t.step("compileToObjectFileString works", () => {
       const source = `module Test
 export id
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
       const result = compileToObjectFileString(source);
 
@@ -162,7 +162,7 @@ poly id = invalid syntax here`;
     });
 
     await t.step("error handling for missing module", () => {
-      const noModuleSource = `poly id = Λa. λx:a. x`;
+      const noModuleSource = `poly id = #a => \\x:a => x`;
 
       expect(() => {
         compileToObjectFile(noModuleSource);
@@ -172,7 +172,7 @@ poly id = invalid syntax here`;
     await t.step("error handling for multiple modules", () => {
       const multipleModulesSource = `module First
 module Second
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
       expect(() => {
         compileToObjectFile(multipleModulesSource);
@@ -186,8 +186,8 @@ poly id = Λa. λx:a. x`;
 import Math add
 export id
 export double
-poly id = Λa. λx:a. x
-typed double = λx:Int. add x x`;
+poly id = #a => \\x:a => x
+typed double = \\x:Int => add x x`;
 
       const result = compileToObjectFile(source);
 
@@ -227,7 +227,7 @@ typed double = λx:Int. add x x`;
     await t.step("object file serialization/deserialization", () => {
       const source = `module Test
 export id
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
       const original = compileToObjectFile(source);
       const serialized = compileToObjectFileString(source);
@@ -245,7 +245,7 @@ poly id = Λa. λx:a. x`;
     await t.step("object file contains elaborated definitions", () => {
       const source = `module Test
 export id
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
       const result = compileToObjectFile(source);
       const idDef = result.definitions.id;

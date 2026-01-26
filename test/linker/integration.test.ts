@@ -21,7 +21,7 @@ Deno.test("TripLang Linker Integration", async (t) => {
 
 export main
 
-poly main = ΛX. λx: X. x`;
+poly main = #X => \\x: X => x`;
 
     const sourceFile = `${__dirname}/simple.trip`;
     await Deno.writeTextFile(sourceFile, simpleSource);
@@ -78,7 +78,7 @@ poly main = ΛX. λx: X. x`;
 
 export main
 
-poly main = ΛX. λx: X. λy: X. λz: X. x`;
+poly main = #X => \\x: X => \\y: X => \\z: X => x`;
 
     const sourceFile = `${__dirname}/complex_test.trip`;
     await Deno.writeTextFile(sourceFile, complexSource);
@@ -137,13 +137,13 @@ poly main = ΛX. λx: X. λy: X. λz: X. x`;
 
 export addA
 
-poly addA = ΛX. λx: X. λy: X. x`;
+poly addA = #X => \\x: X => \\y: X => x`;
 
     const moduleBSource = `module ModuleB
 
 export main
 
-poly main = ΛX. λx: X. x`;
+poly main = #X => \\x: X => x`;
 
     const sourceFileA = `${__dirname}/moduleA.trip`;
     const sourceFileB = `${__dirname}/moduleB.trip`;
@@ -222,7 +222,7 @@ poly main = ΛX. λx: X. x`;
 
 export main
 
-poly main = λx:Int. λy:Int. x + y`;
+poly main = \\x:Int => \\y:Int => x + y`;
 
     const sourceFile = `${__dirname}/invalid.trip`;
     await Deno.writeTextFile(sourceFile, invalidSource);
@@ -263,7 +263,7 @@ poly main = λx:Int. λy:Int. x + y`;
 
 export other
 
-typed other = λx: Int. x`;
+typed other = \\x: Int => x`;
 
     const sourceFile = `${__dirname}/noMain.trip`;
     await Deno.writeTextFile(sourceFile, noMainSource);
@@ -323,7 +323,7 @@ typed other = λx: Int. x`;
 
 export main
 
-poly main = ΛX. λx: X. λy: X. λz: X. λw: X. λv: X. λu: X. λt: X. λs: X. λr: X. λq: X. x`;
+poly main = #X => \\x: X => \\y: X => \\z: X => \\w: X => \\v: X => \\u: X => \\t: X => \\s: X => \\r: X => \\q: X => x`;
 
     const sourceFile = `${__dirname}/large.trip`;
     await Deno.writeTextFile(sourceFile, largeSource);

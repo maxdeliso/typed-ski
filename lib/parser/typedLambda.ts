@@ -7,8 +7,8 @@
  * ```ts
  * import { parseTypedLambda } from "jsr:@maxdeliso/typed-ski";
  *
- * const [literal, term] = parseTypedLambda("λx : A . x");
- * console.log(literal); // "λx:A.x"
+ * const [literal, term] = parseTypedLambda("\\x : A => x");
+ * console.log(literal); // "\\x:A=>x"
  * ```
  *
  * @module
@@ -23,6 +23,7 @@ import {
 import {
   isDigit,
   matchCh,
+  matchFatArrow,
   matchLP,
   matchRP,
   parseIdentifier,
@@ -39,7 +40,7 @@ import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
 /**
  * Parses an atomic typed lambda term.
  * Atomic terms can be:
- *   - A typed lambda abstraction: "λx : <type> . <body>"
+ *   - A typed lambda abstraction: "\\x : <type> => <body>"
  *   - A parenthesized term: "(" <term> ")"
  *   - A variable: e.g. "x"
  *
@@ -50,9 +51,9 @@ export function parseAtomicTypedLambda(
 ): [string, TypedLambda, ParserState] {
   const [peeked, s] = peek(state);
 
-  if (peeked === "λ") {
-    // Parse a typed lambda abstraction: λx : <type> . <body>
-    const stateAfterLambda = matchCh(s, "λ");
+  if (peeked === "\\") {
+    // Parse a typed lambda abstraction: \x : <type> => <body>
+    const stateAfterLambda = matchCh(s, "\\");
     const [next] = peek(stateAfterLambda);
     if (next === ":") {
       throw new ParseError("expected an identifier");
@@ -60,12 +61,12 @@ export function parseAtomicTypedLambda(
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
     const stateAfterColon = matchCh(stateAfterVar, ":");
     const [typeLit, ty, stateAfterType] = parseArrowType(stateAfterColon);
-    const stateAfterDot = matchCh(stateAfterType, ".");
+    const stateAfterArrow = matchFatArrow(stateAfterType);
     const [bodyLit, bodyTerm, stateAfterBody] = parseTypedLambdaInternal(
-      stateAfterDot,
+      stateAfterArrow,
     );
     return [
-      `λ${varLit}:${typeLit}.${bodyLit}`,
+      `\\${varLit}:${typeLit}=>${bodyLit}`,
       mkTypedAbs(varLit, ty, bodyTerm),
       stateAfterBody,
     ];

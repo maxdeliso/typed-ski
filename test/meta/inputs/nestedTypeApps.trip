@@ -1,9 +1,9 @@
 module NestedTypeApps
 
-type Nat = ∀X.((X→X)→(X→X))
-type Bool = ∀B.(B→(B→B))
-poly true = ΛB.λt:B.λf:B.t
-poly false = ΛB.λt:B.λf:B.f
-poly zero = ΛX.λs:(X→X).λz:X.z
-poly succ = λn:Nat.ΛX.λs:(X→X).λz:X.(s (n[X] s z))
-poly pred = λn:Nat.(n[Bool] λb:Bool.false true)
+type Nat = #X->(X->X)->(X->X)
+type Bool = #B->(B->(B->B))
+poly true = #B=>\t:B=>\f:B=>t
+poly false = #B=>\t:B=>\f:B=>f
+poly zero = #X=>\s:(X->X)=>\z:X=>z
+poly succ = \n:Nat=>#X=>\s:(X->X)=>\z:X=>(s (n[X] s z))
+poly pred = \n:Nat=>(n[Bool] \b:Bool=>false true)

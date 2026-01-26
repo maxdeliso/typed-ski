@@ -236,12 +236,12 @@ export const prettyPrintSystemFType = (ty: BaseType): string => {
     return ty.typeName;
   }
   if (ty.kind === "non-terminal") {
-    return `(${prettyPrintSystemFType(ty.lft)}→${
+    return `(${prettyPrintSystemFType(ty.lft)}->${
       prettyPrintSystemFType(ty.rgt)
     })`;
   }
   // Must be a forall type.
-  return `(∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)})`;
+  return `(#${ty.typeVar}->${prettyPrintSystemFType(ty.body)})`;
 };
 
 /**

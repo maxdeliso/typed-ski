@@ -54,17 +54,17 @@ export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
 };
 
 /**
- * Renders a base type as a compact UTF-8 string using ∀ and →.
+ * Renders a base type as a compact ASCII string.
  * @param ty the type to print
  * @returns a human-readable string representation
  */
 export const prettyPrintTy = (ty: BaseType): string => {
-  // Formats either a type variable, a forall, or an arrow type using →.
+  // Formats either a type variable, a forall, or an arrow type using ASCII.
   if (ty.kind === "type-var") {
     return ty.typeName;
   } else if (ty.kind === "forall") {
-    return `∀${ty.typeVar}.${prettyPrintTy(ty.body)}`;
+    return `#${ty.typeVar}->${prettyPrintTy(ty.body)}`;
   } else {
-    return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`;
+    return `(${prettyPrintTy(ty.lft)}->${prettyPrintTy(ty.rgt)})`;
   }
 };

@@ -50,7 +50,7 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
       () => {
         // Purely numeric strings should be parsed as numeric literals, not identifiers
         // This test verifies that lambda abstractions with numeric bindings are rejected
-        expect(() => parseLambda("λ123.x")).to.throw(
+        expect(() => parseLambda("\\123=>x")).to.throw(
           Error,
           /not a valid identifier.*purely numeric/,
         );
@@ -60,7 +60,7 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
 
   await t.step("parseLambda → complex expressions", async (t) => {
     await t.step("var applied to λ-expression", () => {
-      const src = "a (λb.b (a a))";
+      const src = "a (\\b=>b (a a))";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
       expect(term).to.deep.equal(
@@ -75,7 +75,8 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
     });
 
     await t.step("parses Church-style predecessor (pred)", () => {
-      const src = "λn. λf. λx. n (λg. λh. h (g f)) (λu. x) (λu. u)";
+      const src =
+        "\\n=> \\f=> \\x=> n (\\g=> \\h=> h (g f)) (\\u=> x) (\\u=> u)";
 
       // Expected AST
       const expected = mkUntypedAbs(

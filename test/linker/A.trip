@@ -3,5 +3,5 @@ module A
 export addA
 export main
 
-poly addA = ΛX. λx: X. λy: X. x
+poly addA = #X => \x: X => \y: X => x
 poly main = addA

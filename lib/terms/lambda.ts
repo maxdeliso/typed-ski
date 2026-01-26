@@ -96,7 +96,7 @@ export const typelessApp = (...uts: UntypedLambda[]) =>
   uts.reduce(createApplication);
 
 /**
- * Pretty-prints an untyped lambda expression using λ and parentheses.
+ * Pretty-prints an untyped lambda expression using ASCII syntax.
  * @param ut the untyped lambda term
  * @returns a human-readable string representation
  */
@@ -105,7 +105,7 @@ export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
     case "lambda-var":
       return ut.name;
     case "lambda-abs":
-      return `λ${ut.name}.${prettyPrintUntypedLambda(ut.body)}`;
+      return `\\${ut.name}=>${prettyPrintUntypedLambda(ut.body)}`;
     case "non-terminal":
       return `(${prettyPrintUntypedLambda(ut.lft)}` +
         ` ${prettyPrintUntypedLambda(ut.rgt)})`;

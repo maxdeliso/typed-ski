@@ -1,33 +1,33 @@
 module PolyFact
 
-type Nat = ∀X . (X → X) → X → X
+type Nat = #X -> (X -> X) -> X -> X
 
-poly zero = ΛX . λs: X → X . λz : X . z
+poly zero = #X => \s: X -> X => \z : X => z
 
 poly succ =
-  λn : Nat .
-    Λa. λs : a → a . λz : a .
+  \n : Nat =>
+    #a => \s : a -> a => \z : a =>
       s (n [a] s z)
 
-poly pair = ΛA . ΛB . λa : A . λb : B . ΛY . λk : A → B → Y . k a b
+poly pair = #A => #B => \a : A => \b : B => #Y => \k : A -> B -> Y => k a b
 
-poly fst = ΛA . ΛB . λp : ∀Y . (A→B→Y)→Y .
-  p [A] (λx:A . λy:B . x)
+poly fst = #A => #B => \p : #Y -> (A->B->Y)->Y =>
+  p [A] (\x:A => \y:B => x)
 
-poly snd = ΛA . ΛB . λp : ∀Y . (A→B→Y)→Y .
-  p [B] (λx:A . λy:B . y)
+poly snd = #A => #B => \p : #Y -> (A->B->Y)->Y =>
+  p [B] (\x:A => \y:B => y)
 
 poly mul =
-  λm : Nat . λn : Nat .
-    Λa . λs : a → a . λz : a .
+  \m : Nat => \n : Nat =>
+    #a => \s : a -> a => \z : a =>
       m [a] (n [a] s) z
 
 poly one = succ zero
 
-poly fact = λn : Nat .
+poly fact = \n : Nat =>
   fst Nat Nat
-    (n [∀Y . (Nat → Nat → Y) → Y]
-      (λp : ∀Y . (Nat → Nat → Y) → Y .
+    (n [#Y -> (Nat -> Nat -> Y) -> Y]
+      (\p : #Y -> (Nat -> Nat -> Y) -> Y =>
         pair Nat Nat
           (mul (fst Nat Nat p) (snd Nat Nat p))
           (succ (snd Nat Nat p))

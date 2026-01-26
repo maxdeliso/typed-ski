@@ -157,7 +157,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         prettyPrintSystemF(
           (succRaw as { kind: "poly"; term: SystemFTerm }).term,
         ),
-        "λn:Nat.ΛX.λs:(X→X).λz:X.(s (n[X] s z))",
+        "\\n:Nat=>#X=>\\s:(X->X)=>\\z:X=>(s (n[X] s z))",
       );
 
       const resolved = resolveExternalProgramReferences(
@@ -171,7 +171,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         prettyPrintSystemF(
           (succRes as { kind: "poly"; term: SystemFTerm }).term,
         ),
-        "λn:∀X.((X→X)→(X→X)).ΛX.λs:(X→X).λz:X.(s (n[X] s z))",
+        "\\n:#X->((X->X)->(X->X))=>#X=>\\s:(X->X)=>\\z:X=>(s (n[X] s z))",
       );
     });
 
@@ -199,11 +199,15 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         );
 
         // spot-check a few definitions
-        assertTypeDefinition(compiled.types, "zero", "∀X.((X→X)→(X→X))");
+        assertTypeDefinition(
+          compiled.types,
+          "zero",
+          "#X->((X->X)->(X->X))",
+        );
         assertTypeDefinition(
           compiled.types,
           "fact",
-          "(∀X.((X→X)→(X→X))→∀X.((X→X)→(X→X)))",
+          "(#X->((X->X)->(X->X))->#X->((X->X)->(X->X)))",
         );
         const mainPoly = resolvePoly(compiled, "main");
         const mainRes = await arenaEval.reduceAsync(

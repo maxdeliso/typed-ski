@@ -24,9 +24,9 @@
  *
  * const tripLangCode = `
  * module MyModule
- * type Nat = ∀X . (X → X) → X → X
- * poly zero = ΛX . λs : X → X . λz : X . z
- * poly succ = λn : Nat . Λa . λs : a → a . λz : a . s (n [a] s z)
+ * type Nat = #X -> (X -> X) -> X -> X
+ * poly zero = #X => \s : X -> X => \z : X => z
+ * poly succ = \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
  * poly one = succ zero
  * poly main = one
  * `;

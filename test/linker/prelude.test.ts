@@ -305,7 +305,7 @@ Deno.test("fails to link when module exports Nat conflicting with Prelude", asyn
 
 export Nat
 
-type Nat = ∀X . (X → X) → X → X
+type Nat = #X -> (X -> X) -> X -> X
 
 poly main = 3
 `;

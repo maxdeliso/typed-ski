@@ -1,8 +1,8 @@
 module Church
 
-type Nat = ∀X.(X→X)→X→X
+type Nat = #X->(X->X)->X->X
 
-poly id = ΛA.λx:A.x
+poly id = #A=>\x:A=>x
 
 combinator complex = S(K(SII))(S(S(KS)K)(K(SII)))
 

@@ -177,7 +177,7 @@ export const typecheckGiven = (
 };
 
 /**
- * Pretty-prints a simply typed lambda expression.
+ * Pretty-prints a simply typed lambda expression using ASCII syntax.
  *
  * Formats variables, abstractions, and applications using λ, colon-annotated types, and parentheses.
  * @param expr the typed lambda term
@@ -189,11 +189,11 @@ export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
       return expr.name;
     }
     case "typed-lambda-abstraction": {
-      return "λ" +
+      return "\\" +
         expr.varName +
         ":" +
         prettyPrintTy(expr.ty) +
-        "." +
+        "=>" +
         prettyPrintTypedLambda(expr.body);
     }
     case "non-terminal": {

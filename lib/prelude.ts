@@ -26,47 +26,47 @@ export cond
 export readOne
 export writeOne
 
-type Nat = ∀X . (X → X) → X → X
-type Bool = ∀B . B → B → B
+type Nat = #X -> (X -> X) -> X -> X
+type Bool = #B -> B -> B -> B
 
-poly id : ∀a.a→a = Λa. λx:a. x
+poly id : #a->a->a = #a => \\x:a => x
 
-poly zero = ΛX . λs : X → X . λz : X . z
+poly zero = #X => \\s : X -> X => \\z : X => z
 
-poly succ = λn : Nat .
-  Λa . λs : a → a . λz : a .
+poly succ = \\n : Nat =>
+  #a => \\s : a -> a => \\z : a =>
     s (n [a] s z)
 
-poly true = ΛB . λt : B . λf : B . t
-poly false = ΛB . λt : B . λf : B . f
+poly true = #B => \\t : B => \\f : B => t
+poly false = #B => \\t : B => \\f : B => f
 
-poly add = λm : Nat . λn : Nat .
-  Λa . λs : a → a . λz : a .
+poly add = \\m : Nat => \\n : Nat =>
+  #a => \\s : a -> a => \\z : a =>
     m [a] s (n [a] s z)
 
-poly mul = λm : Nat . λn : Nat .
-  Λa . λs : a → a . λz : a .
+poly mul = \\m : Nat => \\n : Nat =>
+  #a => \\s : a -> a => \\z : a =>
     m [a] (n [a] s) z
 
-poly isZero = λn : Nat .
-  n [Bool] (λx : Bool . false) true
+poly isZero = \\n : Nat =>
+  n [Bool] (\\x : Bool => false) true
 
-poly eq = λm : Nat . λn : Nat .
-  ΛX . λs : X → X . λz : X .
-    m [X] (λx : X . n [X] (λy : X . x) z) (n [X] (λx : X . z) z)
+poly eq = \\m : Nat => \\n : Nat =>
+  #X => \\s : X -> X => \\z : X =>
+    m [X] (\\x : X => n [X] (\\y : X => x) z) (n [X] (\\x : X => z) z)
 
-poly pair = ΛA . ΛB . λa : A . λb : B . ΛY . λk : A → B → Y . k a b
+poly pair = #A => #B => \\a : A => \\b : B => #Y => \\k : A -> B -> Y => k a b
 
-poly fst = ΛA . ΛB . λp : ∀Y . (A→B→Y)→Y .
-  p [A] (λx:A . λy:B . x)
+poly fst = #A => #B => \\p : #Y -> (A->B->Y)->Y =>
+  p [A] (\\x:A => \\y:B => x)
 
-poly snd = ΛA . ΛB . λp : ∀Y . (A→B→Y)→Y .
-  p [B] (λx:A . λy:B . y)
+poly snd = #A => #B => \\p : #Y -> (A->B->Y)->Y =>
+  p [B] (\\x:A => \\y:B => y)
 
-poly cond = ΛX .
-  λb : Bool .
-  λt : X .
-  λf : X .
+poly cond = #X =>
+  \\b : Bool =>
+  \\t : X =>
+  \\f : X =>
     b [X] t f
 
 combinator readOne = ,

@@ -10,6 +10,7 @@ import { mkUntypedAbs, mkVar, type UntypedLambda } from "../terms/lambda.ts";
 import {
   isDigit,
   matchCh,
+  matchFatArrow,
   matchLP,
   matchRP,
   parseIdentifier,
@@ -46,10 +47,10 @@ export function parseAtomicUntypedLambda(
 ): [string, UntypedLambda, ParserState] {
   const [peeked, s] = peek(state);
 
-  if (peeked === "λ") {
-    let currentState = matchCh(s, "λ");
+  if (peeked === "\\") {
+    let currentState = matchCh(s, "\\");
     const [varLit, stateAfterVar] = parseIdentifier(currentState);
-    currentState = matchCh(stateAfterVar, ".");
+    currentState = matchFatArrow(stateAfterVar);
     const [, bodyTerm, stateAfterBody] = parseUntypedLambdaInternal(
       currentState,
     );

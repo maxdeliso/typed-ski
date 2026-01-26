@@ -7,12 +7,13 @@
  * @module
  */
 import {
-  consume,
+  matchArrow,
   matchLP,
   matchRP,
   parseIdentifier,
   type ParserState,
   peek,
+  peekArrow,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
@@ -56,14 +57,14 @@ export function parseArrowType(
   state: ParserState,
 ): [string, BaseType, ParserState] {
   const [leftLit, leftType, stateAfterLeft] = parseSimpleType(state);
-  const [next, sAfterLeft] = peek(stateAfterLeft);
-  if (next === "→") {
-    const stateAfterArrow = consume(sAfterLeft);
+  const [isArrow] = peekArrow(stateAfterLeft);
+  if (isArrow) {
+    const stateAfterArrow = matchArrow(stateAfterLeft);
     const [rightLit, rightType, stateAfterRight] = parseArrowType(
       stateAfterArrow,
     );
     return [
-      `${leftLit}→${rightLit}`,
+      `${leftLit}->${rightLit}`,
       arrow(leftType, rightType),
       stateAfterRight,
     ];

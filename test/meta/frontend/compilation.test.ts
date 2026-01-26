@@ -10,7 +10,7 @@ Deno.test("Module validation", async (t) => {
     () => {
       const input = `
 module MyModule
-poly id = Λa.λx:a.x
+poly id = #a=>\\x:a=>x
     `;
 
       const result = compile(input);
@@ -21,7 +21,7 @@ poly id = Λa.λx:a.x
 
   await t.step("should reject program with no module definition", () => {
     const input = `
-poly id = Λa.λx:a.x
+poly id = #a=>\\x:a=>x
     `;
 
     assertThrows(
@@ -35,7 +35,7 @@ poly id = Λa.λx:a.x
     const input = `
 module MyModule
 module AnotherModule
-poly id = Λa.λx:a.x
+poly id = #a=>\\x:a=>x
     `;
 
     assertThrows(
@@ -52,7 +52,7 @@ poly id = Λa.λx:a.x
 module MyModule
 import Foo bar
 export Baz
-poly id = Λa.λx:a.x
+poly id = #a=>\\x:a=>x
     `;
 
       // Should not throw

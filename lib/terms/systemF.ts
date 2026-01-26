@@ -165,7 +165,7 @@ export const createSystemFApplication = (
 });
 
 /**
- * Pretty-prints a System F term using λ for term abstraction and Λ for type abstraction.
+ * Pretty-prints a System F term using ASCII syntax.
  * @param term the System F term
  * @returns a human-readable string representation
  */
@@ -178,11 +178,11 @@ export function prettyPrintSystemF(term: SystemFTerm): string {
     case "systemF-var":
       return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
     case "systemF-abs":
-      return `λ${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}.${
+      return `\\${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}=>${
         prettyPrintSystemF(term.body)
       }`;
     case "systemF-type-abs":
-      return `Λ${term.typeVar}.${prettyPrintSystemF(term.body)}`;
+      return `#${term.typeVar}=>${prettyPrintSystemF(term.body)}`;
     case "systemF-type-app":
       return `${prettyPrintSystemF(term.term)}[${
         prettyPrintSystemFType(term.typeArg)
@@ -206,15 +206,15 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
 }
 
 /**
- * Pretty-prints a System F type, using ∀ and → syntax.
+ * Pretty-prints a System F type using ASCII syntax.
  * @param ty the BaseType to pretty-print
  * @returns a human-readable string representation of the type
  */
 export function prettyPrintSystemFType(ty: BaseType): string {
   if (ty.kind === "forall") {
-    return `∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)}`;
+    return `#${ty.typeVar}->${prettyPrintSystemFType(ty.body)}`;
   } else if (ty.kind === "non-terminal" && "lft" in ty && "rgt" in ty) {
-    return `(${prettyPrintSystemFType(ty.lft)}→${
+    return `(${prettyPrintSystemFType(ty.lft)}->${
       prettyPrintSystemFType(ty.rgt)
     })`;
   } else {

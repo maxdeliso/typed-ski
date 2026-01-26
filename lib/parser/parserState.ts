@@ -23,12 +23,23 @@ const IDENTIFIER_CHAR_REGEX = /[a-zA-Z0-9_]/;
 const LEFT_PAREN = "(";
 const RIGHT_PAREN = ")";
 const COLON = ":";
+const ARROW = "->";
+const FAT_ARROW = "=>";
+const ASCII_MAX = 0x7f;
 
 export const isDigit = (ch: string | null): ch is string => {
   return ch !== null && DIGIT_REGEX.test(ch);
 };
 
 export function createParserState(buf: string): ParserState {
+  for (let i = 0; i < buf.length; i++) {
+    const code = buf.charCodeAt(i);
+    if (code > ASCII_MAX) {
+      throw new ParseError(
+        `non-ASCII byte 0x${code.toString(16).toUpperCase()} at offset ${i}`,
+      );
+    }
+  }
   return { buf, idx: 0 };
 }
 
@@ -66,6 +77,45 @@ export function matchLP(state: ParserState): ParserState {
 
 export function matchRP(state: ParserState): ParserState {
   return matchCh(state, RIGHT_PAREN);
+}
+
+export function peekArrow(state: ParserState): [boolean, ParserState] {
+  const newState = skipWhitespace(state);
+  return [
+    newState.buf.slice(newState.idx, newState.idx + ARROW.length) === ARROW,
+    newState,
+  ];
+}
+
+export function matchArrow(state: ParserState): ParserState {
+  const [isArrow, newState] = peekArrow(state);
+  if (!isArrow) {
+    const next = newState.idx < newState.buf.length
+      ? newState.buf[newState.idx]
+      : "EOF";
+    throw new ParseError(`expected '->' but found '${next}'`);
+  }
+  return { buf: newState.buf, idx: newState.idx + ARROW.length };
+}
+
+export function peekFatArrow(state: ParserState): [boolean, ParserState] {
+  const newState = skipWhitespace(state);
+  return [
+    newState.buf.slice(newState.idx, newState.idx + FAT_ARROW.length) ===
+      FAT_ARROW,
+    newState,
+  ];
+}
+
+export function matchFatArrow(state: ParserState): ParserState {
+  const [isArrow, newState] = peekFatArrow(state);
+  if (!isArrow) {
+    const next = newState.idx < newState.buf.length
+      ? newState.buf[newState.idx]
+      : "EOF";
+    throw new ParseError(`expected '=>' but found '${next}'`);
+  }
+  return { buf: newState.buf, idx: newState.idx + FAT_ARROW.length };
 }
 
 export function parseIdentifier(state: ParserState): [string, ParserState] {

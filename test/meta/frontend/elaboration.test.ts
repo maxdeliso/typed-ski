@@ -17,6 +17,8 @@ Deno.test("elaborateSystemF", async (t) => {
     const table: SymbolTable = {
       terms: new Map(),
       types: new Map(),
+      data: new Map(),
+      constructors: new Map(),
     };
 
     for (const { name, type } of types) {

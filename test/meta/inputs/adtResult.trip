@@ -1,0 +1,15 @@
+module AdtResult
+
+type Nat = #X -> (X -> X) -> X -> X
+type Bool = #B -> B -> B -> B
+
+poly zero = #X => \s : X -> X => \z : X => z
+poly succ = \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
+poly one = succ zero
+
+data Result E T = Err E | Ok T
+
+poly fromResult = #E => #T => \d : T => \r : #R -> (E -> R) -> (T -> R) -> R =>
+  r [T] (\_ : E => d) (\x : T => x)
+
+poly main = fromResult [Bool] [Nat] zero (Ok [Bool] [Nat] (succ one))

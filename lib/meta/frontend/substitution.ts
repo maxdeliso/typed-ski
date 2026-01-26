@@ -58,6 +58,14 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
         collect(t.term, bound);
         collect(t.typeArg, bound);
         break;
+      case "systemF-match": {
+        collect(t.scrutinee, bound);
+        collect(t.returnType, bound);
+        for (const arm of t.arms) {
+          collect(arm.body, new Set([...bound, ...arm.params]));
+        }
+        break;
+      }
       case "non-terminal":
         collect(t.lft, bound);
         collect(t.rgt, bound);
@@ -103,6 +111,13 @@ function usesSystemFNatLiteral(term: TripLangValueType): boolean {
       case "systemF-type-app":
         stack.push(current.term);
         stack.push(current.typeArg);
+        break;
+      case "systemF-match":
+        stack.push(current.scrutinee);
+        stack.push(current.returnType);
+        for (const arm of current.arms) {
+          stack.push(arm.body);
+        }
         break;
       case "typed-lambda-abstraction":
         stack.push(current.ty);
@@ -172,6 +187,13 @@ export function freeTypeVars(t: TripLangValueType): Set<string> {
       case "systemF-type-app":
         collect(t.term, bound);
         collect(t.typeArg, bound);
+        break;
+      case "systemF-match":
+        collect(t.scrutinee, bound);
+        collect(t.returnType, bound);
+        for (const arm of t.arms) {
+          collect(arm.body, new Set([...bound, ...arm.params]));
+        }
         break;
       case "non-terminal":
         collect(t.lft, bound);
@@ -279,6 +301,38 @@ export function alphaRenameTermBinder<T extends TripLangValueType>(
         term: alphaRenameTermBinder(term.term, oldName, newName),
         typeArg: alphaRenameTermBinder(term.typeArg, oldName, newName),
       } as T;
+    case "systemF-match": {
+      const scrutinee = alphaRenameTermBinder(
+        term.scrutinee,
+        oldName,
+        newName,
+      );
+      const returnType = alphaRenameTermBinder(
+        term.returnType,
+        oldName,
+        newName,
+      );
+      const arms = term.arms.map((arm) => {
+        if (arm.params.includes(newName)) {
+          return arm;
+        }
+        if (!arm.params.includes(oldName)) {
+          return {
+            ...arm,
+            body: alphaRenameTermBinder(arm.body, oldName, newName),
+          };
+        }
+        const updatedParams = arm.params.map((param) =>
+          param === oldName ? newName : param
+        );
+        return {
+          ...arm,
+          params: updatedParams,
+          body: alphaRenameTermBinder(arm.body, oldName, newName),
+        };
+      });
+      return { ...term, scrutinee, returnType, arms } as T;
+    }
     case "non-terminal":
       return {
         ...term,
@@ -339,6 +393,23 @@ export function alphaRenameTypeBinder<T extends TripLangValueType>(
         term: alphaRenameTypeBinder(term.term, oldName, newName),
         typeArg: alphaRenameTypeBinder(term.typeArg, oldName, newName),
       } as T;
+    case "systemF-match": {
+      const scrutinee = alphaRenameTypeBinder(
+        term.scrutinee,
+        oldName,
+        newName,
+      );
+      const returnType = alphaRenameTypeBinder(
+        term.returnType,
+        oldName,
+        newName,
+      );
+      const arms = term.arms.map((arm) => ({
+        ...arm,
+        body: alphaRenameTypeBinder(arm.body, oldName, newName),
+      }));
+      return { ...term, scrutinee, returnType, arms } as T;
+    }
     case "typed-lambda-abstraction":
       return {
         ...term,
@@ -472,6 +543,44 @@ export function substituteHygienic<T extends TripLangValueType>(
         term: substituteHygienic(term.term, termName, replacement, bound),
         typeArg: substituteHygienic(term.typeArg, termName, replacement, bound),
       } as T;
+    case "systemF-match": {
+      const scrutinee = substituteHygienic(
+        term.scrutinee,
+        termName,
+        replacement,
+        bound,
+      );
+      const returnType = substituteHygienic(
+        term.returnType,
+        termName,
+        replacement,
+        bound,
+      );
+      const fv = freeTermVars(replacement);
+      const arms = term.arms.map((arm) => {
+        let body = arm.body;
+        const params = [...arm.params];
+        const avoid = new Set([...fv, ...bound, ...params]);
+
+        for (let i = 0; i < params.length; i++) {
+          const param = params[i];
+          if (!fv.has(param)) continue;
+          const newName = fresh(param, avoid);
+          body = alphaRenameTermBinder(body, param, newName);
+          params[i] = newName;
+          avoid.add(newName);
+        }
+
+        const newBound = new Set(bound);
+        params.forEach((param) => newBound.add(param));
+        return {
+          ...arm,
+          params,
+          body: substituteHygienic(body, termName, replacement, newBound),
+        };
+      });
+      return { ...term, scrutinee, returnType, arms } as T;
+    }
     case "non-terminal":
       return {
         ...term,
@@ -553,6 +662,25 @@ export function substituteTypeHygienic<T extends TripLangValueType>(
           bound,
         ),
       } as T;
+    case "systemF-match": {
+      const scrutinee = substituteTypeHygienic(
+        term.scrutinee,
+        typeName,
+        replacement,
+        bound,
+      );
+      const returnType = substituteTypeHygienic(
+        term.returnType,
+        typeName,
+        replacement,
+        bound,
+      );
+      const arms = term.arms.map((arm) => ({
+        ...arm,
+        body: substituteTypeHygienic(arm.body, typeName, replacement, bound),
+      }));
+      return { ...term, scrutinee, returnType, arms } as T;
+    }
     case "typed-lambda-abstraction":
       return {
         ...term,
@@ -640,6 +768,12 @@ export function resolveExternalTermReferences(
   const [tRefs, tyRefs] = externalReferences(definitionValue);
   const externalTermRefs = Array.from(tRefs.keys());
   const externalTypeRefs = Array.from(tyRefs.keys());
+  if (term.kind === "poly" && term.rec) {
+    const idx = externalTermRefs.indexOf(term.name);
+    if (idx !== -1) {
+      externalTermRefs.splice(idx, 1);
+    }
+  }
 
   // First resolve all type references
   const withResolvedTypes = externalTypeRefs.reduce((acc, typeRef) => {
@@ -732,8 +866,7 @@ export function substituteTripLangTerm(
   switch (current.kind) {
     case "poly": {
       return {
-        kind: "poly",
-        name: current.name,
+        ...current,
         term: substituteHygienic(
           current.term,
           term.name,
@@ -765,11 +898,7 @@ export function substituteTripLangTerm(
     }
     case "combinator":
     case "type":
-      throw new CompilationError(
-        "Unexpected current kind on LHS",
-        "resolve",
-        { current },
-      );
+    case "data":
     case "module":
     case "import":
     case "export":
@@ -805,6 +934,13 @@ export function substituteTripLangType(
     case "poly":
       return {
         ...current,
+        type: current.type
+          ? substituteTypeHygienic(
+            current.type,
+            typeRef,
+            replacement,
+          )
+          : current.type,
         term: substituteTypeHygienic(
           current.term,
           typeRef,
@@ -814,20 +950,26 @@ export function substituteTripLangType(
     case "typed":
       return {
         ...current,
+        type: current.type
+          ? substituteTypeHygienic(
+            current.type,
+            typeRef,
+            replacement,
+          )
+          : current.type,
         term: substituteTypeHygienic(
           current.term,
           typeRef,
           replacement,
         ),
       };
+    case "data":
     case "untyped":
     case "combinator":
     case "module":
     case "import":
     case "export":
-      return {
-        ...current,
-      };
+      return current;
   }
 }
 
@@ -903,8 +1045,7 @@ export function substituteTripLangTermDirect(
   switch (current.kind) {
     case "poly": {
       return {
-        kind: "poly",
-        name: current.name,
+        ...current,
         term: substituteHygienic(
           current.term,
           substitutionName,
@@ -935,11 +1076,7 @@ export function substituteTripLangTermDirect(
     }
     case "combinator":
     case "type":
-      throw new CompilationError(
-        "Unexpected term kind for substitution",
-        "resolve",
-        { current },
-      );
+    case "data":
     case "module":
     case "import":
     case "export":
@@ -976,6 +1113,13 @@ export function substituteTripLangTypeDirect(
     case "poly": {
       return {
         ...current,
+        type: current.type
+          ? substituteTypeHygienic(
+            current.type,
+            type.name,
+            typeDefinitionValue,
+          )
+          : current.type,
         term: substituteTypeHygienic(
           current.term,
           type.name,
@@ -986,6 +1130,13 @@ export function substituteTripLangTypeDirect(
     case "typed": {
       return {
         ...current,
+        type: current.type
+          ? substituteTypeHygienic(
+            current.type,
+            type.name,
+            typeDefinitionValue,
+          )
+          : current.type,
         term: substituteTypeHygienic(
           current.term,
           type.name,
@@ -1003,6 +1154,7 @@ export function substituteTripLangTypeDirect(
         ),
       };
     }
+    case "data":
     case "untyped":
     case "combinator":
     case "module":

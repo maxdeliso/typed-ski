@@ -18,7 +18,9 @@ const def = " := ";
 export function prettyTerm(dt: TripLangTerm): string {
   switch (dt.kind) {
     case "poly":
-      return dt.name + def + unparseSystemF(dt.term);
+      return `${dt.name}${dt.rec ? " (rec)" : ""}${def}${
+        unparseSystemF(dt.term)
+      }`;
     case "typed":
       return dt.name + def + unparseTypedLambda(dt.term);
     case "untyped":
@@ -27,6 +29,19 @@ export function prettyTerm(dt: TripLangTerm): string {
       return dt.name + def + unparseSKI(dt.term);
     case "type":
       return dt.name + def + unparseType(dt.type);
+    case "data": {
+      const params = dt.typeParams.length > 0
+        ? ` ${dt.typeParams.join(" ")}`
+        : "";
+      const ctors = dt.constructors
+        .map((ctor) =>
+          ctor.fields.length > 0
+            ? `${ctor.name} ${ctor.fields.map(unparseType).join(" ")}`
+            : ctor.name
+        )
+        .join(" | ");
+      return `data ${dt.name}${params} = ${ctors}`;
+    }
     case "module":
       return `module ${dt.name}`;
     case "import":

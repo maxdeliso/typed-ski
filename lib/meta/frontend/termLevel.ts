@@ -8,9 +8,36 @@
  * @module
  */
 import { bracketLambda, eraseSystemF } from "../../index.ts";
+import {
+  createApplication,
+  mkUntypedAbs,
+  mkVar,
+  type UntypedLambda,
+} from "../../terms/lambda.ts";
 import { eraseTypedLambda } from "../../types/typedLambda.ts";
 import type { TripLangTerm } from "../trip.ts";
 import { CompilationError } from "./compilation.ts";
+import { freeTermVars, fresh } from "./substitution.ts";
+
+function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {
+  const free = freeTermVars(body);
+  free.delete(name);
+  const avoid = new Set([...free, name]);
+  const fName = fresh("__rec_f", avoid);
+  avoid.add(fName);
+  const xName = fresh("__rec_x", avoid);
+  avoid.add(xName);
+  const vName = fresh("__rec_v", avoid);
+
+  const xx = createApplication(mkVar(xName), mkVar(xName));
+  const xxv = createApplication(xx, mkVar(vName));
+  const protectedXX = mkUntypedAbs(vName, xxv);
+  const fxx = createApplication(mkVar(fName), protectedXX);
+  const inner = mkUntypedAbs(xName, fxx);
+  const y = mkUntypedAbs(fName, createApplication(inner, inner));
+  const recFn = mkUntypedAbs(name, body);
+  return createApplication(y, recFn);
+}
 
 export function termLevel(dt: TripLangTerm): number {
   switch (dt.kind) {
@@ -24,6 +51,8 @@ export function termLevel(dt: TripLangTerm): number {
       return 1;
     case "type":
       return -1;
+    case "data":
+      return -1;
     case "module":
     case "import":
     case "export":
@@ -35,11 +64,12 @@ export function lower(dt: TripLangTerm): TripLangTerm {
   switch (dt.kind) {
     case "poly": {
       const erased = eraseSystemF(dt.term);
+      const lowered = dt.rec ? applyFixpoint(dt.name, erased) : erased;
 
       return {
         kind: "untyped",
         name: dt.name,
-        term: erased,
+        term: lowered,
       };
     }
     case "typed": {
@@ -71,6 +101,12 @@ export function lower(dt: TripLangTerm): TripLangTerm {
         "Cannot lower a type",
         "resolve",
         { type: dt },
+      );
+    case "data":
+      throw new CompilationError(
+        "Cannot lower a data definition",
+        "resolve",
+        { term: dt },
       );
     case "module":
     case "import":

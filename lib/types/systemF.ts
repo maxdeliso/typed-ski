@@ -220,6 +220,8 @@ export const typecheckSystemF = (
       );
       return [resultType, updatedCtx];
     }
+    case "systemF-match":
+      throw new TypeError("match must be elaborated before typechecking");
   }
 };
 
@@ -257,6 +259,8 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
       return eraseSystemF(term.body);
     case "systemF-type-app":
       return eraseSystemF(term.term);
+    case "systemF-match":
+      throw new TypeError("match must be elaborated before erasure");
     default:
       return createApplication(
         eraseSystemF(term.lft),

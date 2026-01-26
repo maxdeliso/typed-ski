@@ -22,7 +22,8 @@ import { elaborateTerms } from "./elaboration.ts";
 import { resolveExternalProgramReferences } from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
-import { typecheckSystemF } from "../../index.ts";
+import { expandDataDefinitions } from "./data.ts";
+import { emptySystemFContext, typecheckSystemF } from "../../types/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
 import { typecheckTypedLambda } from "../../types/typedLambda.ts";
 import { prettyTerm } from "./prettyPrint.ts";
@@ -137,7 +138,8 @@ export function parse(input: string): ParsedProgram {
     );
   }
 
-  return { ...program, __moniker: Symbol() } as ParsedProgram;
+  const expanded = expandDataDefinitions(program);
+  return { ...expanded, __moniker: Symbol() } as ParsedProgram;
 }
 
 /**
@@ -201,7 +203,12 @@ export function resolve(
     const [ut, uty] = externalReferences(definitionValue);
 
     // Check for unresolved terms that are not imported
-    const unresolvedTerms = Array.from(ut.keys());
+    let unresolvedTerms = Array.from(ut.keys());
+    if (resolvedTerm.kind === "poly" && resolvedTerm.rec) {
+      unresolvedTerms = unresolvedTerms.filter((term) =>
+        term !== resolvedTerm.name
+      );
+    }
     const unresolvedTypes = Array.from(uty.keys());
 
     const nonImportedUnresolvedTerms = unresolvedTerms.filter((term) =>
@@ -289,7 +296,22 @@ export function typecheck(
 
       switch (term.kind) {
         case "poly":
-          types.set(term.name, typecheckSystemF(term.term));
+          if (term.rec) {
+            if (!term.type) {
+              throw new CompilationError(
+                `Recursive polymorphic definition '${term.name}' requires an explicit type annotation`,
+                "typecheck",
+                { term },
+              );
+            }
+            const ctx = emptySystemFContext();
+            ctx.termCtx.set(term.name, term.type);
+            const [ty] = typecheckSystemF(ctx, term.term);
+            types.set(term.name, ty);
+          } else {
+            const [ty] = typecheckSystemF(emptySystemFContext(), term.term);
+            types.set(term.name, ty);
+          }
           break;
         case "typed":
           types.set(term.name, typecheckTypedLambda(term.term));

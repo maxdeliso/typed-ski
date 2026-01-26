@@ -112,6 +112,15 @@ export function externalReferences(td: TripLangValueType): [
         defStack.push(current.typeArg);
         break;
       }
+      case "systemF-match": {
+        defStack.push(current.scrutinee);
+        defStack.push(current.returnType);
+        for (const arm of current.arms) {
+          arm.params.forEach((param) => absBindMap.set(param, arm.body));
+          defStack.push(arm.body);
+        }
+        break;
+      }
 
       case "terminal":
         // ignore - no bindings possible

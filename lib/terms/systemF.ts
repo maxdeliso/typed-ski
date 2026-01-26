@@ -92,6 +92,19 @@ export interface SystemFTypeApp {
   typeArg: BaseType;
 }
 
+export interface SystemFMatchArm {
+  constructorName: string;
+  params: string[];
+  body: SystemFTerm;
+}
+
+export interface SystemFMatch {
+  kind: "systemF-match";
+  scrutinee: SystemFTerm;
+  returnType: BaseType;
+  arms: SystemFMatchArm[];
+}
+
 /**
  * Creates a System F type application (t [T]).
  * @param term the polymorphic term to apply
@@ -146,7 +159,8 @@ export type SystemFTerm =
   | SystemFAbs
   | SystemFTAbs
   | SystemFTypeApp
-  | SystemFApplication;
+  | SystemFApplication
+  | SystemFMatch;
 
 /**
  * Creates an application of one System F term to another.

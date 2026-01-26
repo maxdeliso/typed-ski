@@ -10,12 +10,15 @@
 // Character constants
 export const LEFT_PAREN = "(";
 export const RIGHT_PAREN = ")";
+export const LEFT_BRACE = "{";
+export const RIGHT_BRACE = "}";
 export const COLON = ":";
 export const EQUALS = "=";
 export const BACKSLASH = "\\";
 export const HASH = "#";
 export const ARROW = "->";
 export const FAT_ARROW = "=>";
+export const PIPE = "|";
 
 // Regex patterns
 export const DIGIT_REGEX = /[0-9]/;

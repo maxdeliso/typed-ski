@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
 import {
+  createSystemFApplication,
   mkSystemFAbs,
   mkSystemFTAbs,
   mkSystemFVar,
@@ -37,6 +38,27 @@ Deno.test("parseTripLang", async (t) => {
           { kind: "type-var", typeName: "a" },
           mkSystemFVar("x"),
         ),
+      ),
+    });
+  });
+
+  await t.step("parses recursive polymorphic definitions", () => {
+    const input = loadInput("polyRec.trip", __dirname);
+    const [moduleDecl, term] = parseTripLang(input).terms;
+
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "PolyRec",
+    });
+    expect(term).to.deep.equal({
+      kind: "poly",
+      name: "fact",
+      rec: true,
+      type: undefined,
+      term: mkSystemFAbs(
+        "n",
+        { kind: "type-var", typeName: "Nat" },
+        createSystemFApplication(mkSystemFVar("fact"), mkSystemFVar("n")),
       ),
     });
   });
@@ -160,6 +182,28 @@ Deno.test("parseTripLang", async (t) => {
           arrow(X, X),
         ),
       },
+    });
+  });
+
+  await t.step("parses data definitions", () => {
+    const input = loadInput("dataMaybe.trip", __dirname);
+    const [moduleDecl, term] = parseTripLang(input).terms;
+
+    expect(moduleDecl).to.deep.equal({
+      kind: "module",
+      name: "DataMaybe",
+    });
+    expect(term).to.deep.equal({
+      kind: "data",
+      name: "Maybe",
+      typeParams: ["A"],
+      constructors: [
+        { name: "Nothing", fields: [] },
+        {
+          name: "Just",
+          fields: [{ kind: "type-var", typeName: "A" }],
+        },
+      ],
     });
   });
 

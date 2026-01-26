@@ -72,7 +72,7 @@ export function parseAtomicTypedLambda(
       stateAfterArrow,
     );
     return [
-      `${BACKSLASH}${varLit}:${typeLit}${FAT_ARROW}${bodyLit}`,
+      `${BACKSLASH}${varLit}${COLON}${typeLit}${FAT_ARROW}${bodyLit}`,
       mkTypedAbs(varLit, ty, bodyTerm),
       stateAfterBody,
     ];

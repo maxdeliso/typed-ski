@@ -8,6 +8,13 @@
  * @module
  */
 
+import {
+  ARROW,
+  HASH,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "../parser/consts.ts";
+
 export interface TypeVariable {
   kind: "type-var";
   typeName: string;
@@ -63,8 +70,8 @@ export const prettyPrintTy = (ty: BaseType): string => {
   if (ty.kind === "type-var") {
     return ty.typeName;
   } else if (ty.kind === "forall") {
-    return `#${ty.typeVar}->${prettyPrintTy(ty.body)}`;
+    return `${HASH}${ty.typeVar}${ARROW}${prettyPrintTy(ty.body)}`;
   } else {
-    return `(${prettyPrintTy(ty.lft)}->${prettyPrintTy(ty.rgt)})`;
+    return `${LEFT_PAREN}${prettyPrintTy(ty.lft)}${ARROW}${prettyPrintTy(ty.rgt)}${RIGHT_PAREN}`;
   }
 };

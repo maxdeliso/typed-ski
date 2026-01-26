@@ -9,6 +9,15 @@
  */
 import type { BaseType } from "../types/types.ts";
 import { parseNatLiteralIdentifier } from "../consts/nat.ts";
+import {
+  ARROW,
+  BACKSLASH,
+  COLON,
+  FAT_ARROW,
+  HASH,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "../parser/consts.ts";
 
 /**
  * A term variable in System F.
@@ -173,16 +182,16 @@ export function prettyPrintSystemF(term: SystemFTerm): string {
   switch (term.kind) {
     case "non-terminal": {
       const parts = flattenSystemFApp(term);
-      return `(${parts.map(prettyPrintSystemF).join(" ")})`;
+      return `${LEFT_PAREN}${parts.map(prettyPrintSystemF).join(" ")}${RIGHT_PAREN}`;
     }
     case "systemF-var":
       return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
     case "systemF-abs":
-      return `\\${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}=>${
+      return `${BACKSLASH}${term.name}${COLON}${prettyPrintSystemFType(term.typeAnnotation)}${FAT_ARROW}${
         prettyPrintSystemF(term.body)
       }`;
     case "systemF-type-abs":
-      return `#${term.typeVar}=>${prettyPrintSystemF(term.body)}`;
+      return `${HASH}${term.typeVar}${FAT_ARROW}${prettyPrintSystemF(term.body)}`;
     case "systemF-type-app":
       return `${prettyPrintSystemF(term.term)}[${
         prettyPrintSystemFType(term.typeArg)
@@ -212,11 +221,11 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
  */
 export function prettyPrintSystemFType(ty: BaseType): string {
   if (ty.kind === "forall") {
-    return `#${ty.typeVar}->${prettyPrintSystemFType(ty.body)}`;
+    return `${HASH}${ty.typeVar}${ARROW}${prettyPrintSystemFType(ty.body)}`;
   } else if (ty.kind === "non-terminal" && "lft" in ty && "rgt" in ty) {
-    return `(${prettyPrintSystemFType(ty.lft)}->${
+    return `${LEFT_PAREN}${prettyPrintSystemFType(ty.lft)}${ARROW}${
       prettyPrintSystemFType(ty.rgt)
-    })`;
+    }${RIGHT_PAREN}`;
   } else {
     return ty.typeName;
   }

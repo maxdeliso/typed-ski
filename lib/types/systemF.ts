@@ -26,6 +26,12 @@ import {
 } from "../terms/lambda.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
 import { normalize } from "./normalization.ts";
+import {
+  ARROW,
+  HASH,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "../parser/consts.ts";
 
 /*
  * https://en.wikipedia.org/wiki/System_F
@@ -236,12 +242,12 @@ export const prettyPrintSystemFType = (ty: BaseType): string => {
     return ty.typeName;
   }
   if (ty.kind === "non-terminal") {
-    return `(${prettyPrintSystemFType(ty.lft)}->${
+    return `${LEFT_PAREN}${prettyPrintSystemFType(ty.lft)}${ARROW}${
       prettyPrintSystemFType(ty.rgt)
-    })`;
+    }${RIGHT_PAREN}`;
   }
   // Must be a forall type.
-  return `(#${ty.typeVar}->${prettyPrintSystemFType(ty.body)})`;
+  return `${LEFT_PAREN}${HASH}${ty.typeVar}${ARROW}${prettyPrintSystemFType(ty.body)}${RIGHT_PAREN}`;
 };
 
 /**

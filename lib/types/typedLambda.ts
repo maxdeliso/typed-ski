@@ -13,6 +13,13 @@ import {
   mkUntypedAbs,
   type UntypedLambda,
 } from "../terms/lambda.ts";
+import {
+  BACKSLASH,
+  COLON,
+  FAT_ARROW,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "../parser/consts.ts";
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -189,18 +196,18 @@ export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
       return expr.name;
     }
     case "typed-lambda-abstraction": {
-      return "\\" +
+      return BACKSLASH +
         expr.varName +
-        ":" +
+        COLON +
         prettyPrintTy(expr.ty) +
-        "=>" +
+        FAT_ARROW +
         prettyPrintTypedLambda(expr.body);
     }
     case "non-terminal": {
-      return "(" +
+      return LEFT_PAREN +
         prettyPrintTypedLambda(expr.lft) +
         prettyPrintTypedLambda(expr.rgt) +
-        ")";
+        RIGHT_PAREN;
     }
     default:
       throw new Error("Unknown term kind");

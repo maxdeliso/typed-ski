@@ -8,6 +8,13 @@
  * @module
  */
 
+import {
+  BACKSLASH,
+  FAT_ARROW,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "../parser/consts.ts";
+
 /**
  * This is a single term variable with a name.
  *
@@ -105,9 +112,9 @@ export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
     case "lambda-var":
       return ut.name;
     case "lambda-abs":
-      return `\\${ut.name}=>${prettyPrintUntypedLambda(ut.body)}`;
+      return `${BACKSLASH}${ut.name}${FAT_ARROW}${prettyPrintUntypedLambda(ut.body)}`;
     case "non-terminal":
-      return `(${prettyPrintUntypedLambda(ut.lft)}` +
-        ` ${prettyPrintUntypedLambda(ut.rgt)})`;
+      return `${LEFT_PAREN}${prettyPrintUntypedLambda(ut.lft)}` +
+        ` ${prettyPrintUntypedLambda(ut.rgt)}${RIGHT_PAREN}`;
   }
 };

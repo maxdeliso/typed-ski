@@ -41,7 +41,7 @@ import {
   LEFT_PAREN,
   RIGHT_PAREN,
 } from "./consts.ts";
-import { parseNatLiteralIdentifier } from "../consts/nat.ts";
+import { parseNatLiteralIdentifier } from "../consts/natNames.ts";
 import { unparseSystemFType } from "./systemFType.ts";
 
 /**
@@ -104,20 +104,24 @@ export function parseAtomicSystemFTerm(
     ];
   } else if (ch !== null && /[a-zA-Z]/.test(ch)) {
     const [varLit, stateAfterVar] = parseIdentifier(state);
-    const [nextCh, stateAfterPeek] = peek(stateAfterVar);
-    if (nextCh === "[") {
+    let literal = varLit;
+    let term: SystemFTerm = { kind: "systemF-var", name: varLit };
+    let currentState = stateAfterVar;
+
+    for (;;) {
+      const [nextCh, stateAfterPeek] = peek(currentState);
+      if (nextCh !== "[") break;
       const stateAfterLBracket = matchCh(stateAfterPeek, "[");
       const [typeLit, typeArg, stateAfterType] = parseSystemFType(
         stateAfterLBracket,
       );
       const stateAfterRBracket = matchCh(stateAfterType, "]");
-      return [
-        `${varLit}[${typeLit}]`,
-        mkSystemFTypeApp({ kind: "systemF-var", name: varLit }, typeArg),
-        stateAfterRBracket,
-      ];
+      literal = `${literal}[${typeLit}]`;
+      term = mkSystemFTypeApp(term, typeArg);
+      currentState = stateAfterRBracket;
     }
-    return [varLit, { kind: "systemF-var", name: varLit }, stateAfterVar];
+
+    return [literal, term, currentState];
   } else {
     throw new ParseError(
       `unexpected end-of-input while parsing atomic term: ${ch ?? "EOF"}`,

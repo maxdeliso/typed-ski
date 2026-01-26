@@ -993,6 +993,16 @@ export function substituteTripLangTypeDirect(
         ),
       };
     }
+    case "type": {
+      return {
+        ...current,
+        type: substituteTypeHygienic(
+          current.type,
+          type.name,
+          typeDefinitionValue,
+        ),
+      };
+    }
     case "untyped":
     case "combinator":
     case "module":

@@ -3,17 +3,10 @@
  *
  * This module defines the fundamental types used throughout the type system,
  * including type variables, arrow types, universal types, and utility functions
- * for type manipulation and pretty printing.
+ * for type manipulation.
  *
  * @module
  */
-
-import {
-  ARROW,
-  HASH,
-  LEFT_PAREN,
-  RIGHT_PAREN,
-} from "../parser/consts.ts";
 
 export interface TypeVariable {
   kind: "type-var";
@@ -57,21 +50,5 @@ export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
     return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt);
   } else {
     return false;
-  }
-};
-
-/**
- * Renders a base type as a compact ASCII string.
- * @param ty the type to print
- * @returns a human-readable string representation
- */
-export const prettyPrintTy = (ty: BaseType): string => {
-  // Formats either a type variable, a forall, or an arrow type using ASCII.
-  if (ty.kind === "type-var") {
-    return ty.typeName;
-  } else if (ty.kind === "forall") {
-    return `${HASH}${ty.typeVar}${ARROW}${prettyPrintTy(ty.body)}`;
-  } else {
-    return `${LEFT_PAREN}${prettyPrintTy(ty.lft)}${ARROW}${prettyPrintTy(ty.rgt)}${RIGHT_PAREN}`;
   }
 };

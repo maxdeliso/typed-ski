@@ -6,11 +6,11 @@
  *
  * @module
  */
-import { prettyPrintSKI } from "../../index.ts";
-import { prettyPrintUntypedLambda } from "../../terms/lambda.ts";
-import { prettyPrintSystemF } from "../../terms/systemF.ts";
-import { prettyPrintTypedLambda } from "../../types/typedLambda.ts";
-import { prettyPrintTy } from "../../types/types.ts";
+import { unparseSKI } from "../../index.ts";
+import { unparseUntypedLambda } from "../../parser/untyped.ts";
+import { unparseSystemF } from "../../parser/systemFTerm.ts";
+import { unparseTypedLambda } from "../../parser/typedLambda.ts";
+import { unparseType } from "../../parser/type.ts";
 import type { TripLangTerm } from "../trip.ts";
 
 const def = " := ";
@@ -18,15 +18,15 @@ const def = " := ";
 export function prettyTerm(dt: TripLangTerm): string {
   switch (dt.kind) {
     case "poly":
-      return dt.name + def + prettyPrintSystemF(dt.term);
+      return dt.name + def + unparseSystemF(dt.term);
     case "typed":
-      return dt.name + def + prettyPrintTypedLambda(dt.term);
+      return dt.name + def + unparseTypedLambda(dt.term);
     case "untyped":
-      return dt.name + def + prettyPrintUntypedLambda(dt.term);
+      return dt.name + def + unparseUntypedLambda(dt.term);
     case "combinator":
-      return dt.name + def + prettyPrintSKI(dt.term);
+      return dt.name + def + unparseSKI(dt.term);
     case "type":
-      return dt.name + def + prettyPrintTy(dt.type);
+      return dt.name + def + unparseType(dt.type);
     case "module":
       return `module ${dt.name}`;
     case "import":

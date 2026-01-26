@@ -19,7 +19,7 @@ import {
   peek,
   peekArrow,
 } from "./parserState.ts";
-import { ARROW, HASH } from "./consts.ts";
+import { ARROW, HASH, LEFT_PAREN, RIGHT_PAREN } from "./consts.ts";
 
 /**
  * Parses a System F type.
@@ -98,4 +98,20 @@ function parseSimpleSystemFType(
     const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkTypeVariable(varLit), stateAfterVar];
   }
+}
+
+/**
+ * Unparses a System F type into ASCII syntax.
+ */
+export function unparseSystemFType(ty: BaseType): string {
+  if (ty.kind === "type-var") {
+    return ty.typeName;
+  }
+  if (ty.kind === "non-terminal") {
+    return `${LEFT_PAREN}${unparseSystemFType(ty.lft)}${ARROW}${
+      unparseSystemFType(ty.rgt)
+    }${RIGHT_PAREN}`;
+  }
+  // Must be a forall type.
+  return `${HASH}${ty.typeVar}${ARROW}${unparseSystemFType(ty.body)}`;
 }

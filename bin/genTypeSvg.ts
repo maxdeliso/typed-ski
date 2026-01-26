@@ -8,13 +8,10 @@
  */
 
 import { parseSystemF } from "../lib/parser/systemFTerm.ts";
-import {
-  forall,
-  prettyPrintSystemFType,
-  typecheck,
-} from "../lib/types/systemF.ts";
+import { forall, typecheck } from "../lib/types/systemF.ts";
+import { unparseSystemFType } from "../lib/parser/systemFType.ts";
 import { systemFToTypedLambda } from "../lib/meta/frontend/lowering.ts";
-import { prettyPrintTypedLambda } from "../lib/types/typedLambda.ts";
+import { unparseTypedLambda } from "../lib/parser/typedLambda.ts";
 import type { BaseType } from "../lib/types/types.ts";
 import type { TypedLambda } from "../lib/types/typedLambda.ts";
 import { arrow, mkTypeVariable } from "../lib/types/types.ts";
@@ -276,8 +273,8 @@ function termAndTypeToDot(
   );
 
   // Build DOT content
-  const termStr = prettyPrintTypedLambda(term);
-  const typeStr = prettyPrintSystemFType(overallType);
+  const termStr = unparseTypedLambda(term);
+  const typeStr = unparseSystemFType(overallType);
 
   let dotContent = `digraph "TermAndType_${number}" {\n`;
   // Escape quotes and special characters for the label
@@ -385,7 +382,7 @@ async function generateDotFiles(
       dotFiles.push(dotPath);
 
       if (verbose) {
-        const typeStr = prettyPrintSystemFType(overallType);
+        const typeStr = unparseSystemFType(overallType);
         console.error(`Number ${num}: type = ${typeStr}`);
       }
     } catch (error) {

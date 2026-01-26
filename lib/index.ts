@@ -29,9 +29,9 @@ export {
 
 // SKI expression exports
 export {
-  /** Generates a human-readable string representation of an SKI expression. */
-  prettyPrint as prettyPrintSKI,
   type SKIExpression,
+  /** Unparses an SKI expression into a string representation. */
+  unparseSKI,
 } from "./ski/expression.ts";
 
 // Parser exports
@@ -45,48 +45,44 @@ export { parseSystemF } from "./parser/systemFTerm.ts";
 export { parseTypedLambda } from "./parser/typedLambda.ts";
 
 // Lambda terms exports
-export {
-  /** Generates a human-readable string representation of an untyped lambda expression. */
-  prettyPrintUntypedLambda,
-  type UntypedLambda,
-} from "./terms/lambda.ts";
+export { type UntypedLambda } from "./terms/lambda.ts";
+/** Unparses an untyped lambda expression into a string representation. */
+export { unparseUntypedLambda } from "./parser/untyped.ts";
 
 // System F exports
-export {
-  /** Generates a human-readable string representation of a System F term. */
-  prettyPrintSystemF,
-  type SystemFTerm,
-} from "./terms/systemF.ts";
+export { type SystemFTerm } from "./terms/systemF.ts";
+/** Unparses a System F term into a string representation. */
+export { unparseSystemF } from "./parser/systemFTerm.ts";
 
 // Typed Lambda exports
 export {
   /** Converts a typed lambda expression into an untyped lambda expression by removing type annotations. */
   eraseTypedLambda,
-  /** Generates a human-readable string representation of a typed lambda expression. */
-  prettyPrintTypedLambda,
   /** Performs type checking on a typed lambda expression to ensure type correctness. */
   typecheckTypedLambda as typecheckTyped,
   type TypedLambda,
 } from "./types/typedLambda.ts";
+/** Unparses a typed lambda expression into a string representation. */
+export { unparseTypedLambda } from "./parser/typedLambda.ts";
 
 // System F type exports
 export {
   emptySystemFContext,
   /** Transforms a well-typed System F term into a simply typed lambda term. */
   eraseSystemF,
-  /** Generates a human-readable string representation of a System F type. */
-  prettyPrintSystemFType,
   /** Performs type checking on System F terms. */
   typecheck as typecheckSystemF,
 } from "./types/systemF.ts";
+/** Unparses a System F type into a string representation. */
+export { unparseSystemFType } from "./parser/systemFType.ts";
 
 // Conversion exports
 /** Converts a lambda expression to SKI combinators using bracket abstraction. */
 export { bracketLambda } from "./conversion/converter.ts";
 
 // Type system exports
-/** Generates a human-readable string representation of a type. */
-export { prettyPrintTy } from "./types/types.ts";
+/** Unparses a type into a string representation. */
+export { unparseType } from "./parser/type.ts";
 /** Infers the type of a typed lambda expression. */
 export { inferType } from "./types/inference.ts";
 
@@ -154,7 +150,7 @@ export {
   WriteOne,
 } from "./ski/terminal.ts";
 
-export { prettyPrint as prettyPrintSKIExpression } from "./ski/expression.ts";
+export { unparseSKI as unparseSKIExpression } from "./ski/expression.ts";
 
 export {
   randExpression,

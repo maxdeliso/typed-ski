@@ -8,16 +8,6 @@
  * @module
  */
 import type { BaseType } from "../types/types.ts";
-import { parseNatLiteralIdentifier } from "../consts/nat.ts";
-import {
-  ARROW,
-  BACKSLASH,
-  COLON,
-  FAT_ARROW,
-  HASH,
-  LEFT_PAREN,
-  RIGHT_PAREN,
-} from "../parser/consts.ts";
 
 /**
  * A term variable in System F.
@@ -174,32 +164,6 @@ export const createSystemFApplication = (
 });
 
 /**
- * Pretty-prints a System F term using ASCII syntax.
- * @param term the System F term
- * @returns a human-readable string representation
- */
-export function prettyPrintSystemF(term: SystemFTerm): string {
-  switch (term.kind) {
-    case "non-terminal": {
-      const parts = flattenSystemFApp(term);
-      return `${LEFT_PAREN}${parts.map(prettyPrintSystemF).join(" ")}${RIGHT_PAREN}`;
-    }
-    case "systemF-var":
-      return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
-    case "systemF-abs":
-      return `${BACKSLASH}${term.name}${COLON}${prettyPrintSystemFType(term.typeAnnotation)}${FAT_ARROW}${
-        prettyPrintSystemF(term.body)
-      }`;
-    case "systemF-type-abs":
-      return `${HASH}${term.typeVar}${FAT_ARROW}${prettyPrintSystemF(term.body)}`;
-    case "systemF-type-app":
-      return `${prettyPrintSystemF(term.term)}[${
-        prettyPrintSystemFType(term.typeArg)
-      }]`;
-  }
-}
-
-/**
  * Flattens a left-associated application tree into a list of terms.
  * For example, ((a b) c) becomes [a, b, c].
  * @param term the System F term to flatten
@@ -211,22 +175,5 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
     return [...leftParts, term.rgt];
   } else {
     return [term];
-  }
-}
-
-/**
- * Pretty-prints a System F type using ASCII syntax.
- * @param ty the BaseType to pretty-print
- * @returns a human-readable string representation of the type
- */
-export function prettyPrintSystemFType(ty: BaseType): string {
-  if (ty.kind === "forall") {
-    return `${HASH}${ty.typeVar}${ARROW}${prettyPrintSystemFType(ty.body)}`;
-  } else if (ty.kind === "non-terminal" && "lft" in ty && "rgt" in ty) {
-    return `${LEFT_PAREN}${prettyPrintSystemFType(ty.lft)}${ARROW}${
-      prettyPrintSystemFType(ty.rgt)
-    }${RIGHT_PAREN}`;
-  } else {
-    return ty.typeName;
   }
 }

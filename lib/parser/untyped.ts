@@ -22,7 +22,7 @@ import { makeUntypedChurchNumeral } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createApplication } from "../terms/lambda.ts";
 import { parseWithEOF } from "./eof.ts";
-import { BACKSLASH } from "./consts.ts";
+import { BACKSLASH, FAT_ARROW, LEFT_PAREN, RIGHT_PAREN } from "./consts.ts";
 
 /**
  * Parses an untyped lambda term (including applications) by chaining
@@ -88,4 +88,23 @@ export function parseAtomicUntypedLambda(
 export function parseLambda(input: string): [string, UntypedLambda] {
   const [lit, term] = parseWithEOF(input, parseUntypedLambdaInternal);
   return [lit, term];
+}
+
+/**
+ * Unparses an untyped lambda expression into ASCII syntax.
+ * @param ut the untyped lambda term
+ * @returns a human-readable string representation
+ */
+export function unparseUntypedLambda(ut: UntypedLambda): string {
+  switch (ut.kind) {
+    case "lambda-var":
+      return ut.name;
+    case "lambda-abs":
+      return `${BACKSLASH}${ut.name}${FAT_ARROW}${
+        unparseUntypedLambda(ut.body)
+      }`;
+    case "non-terminal":
+      return `${LEFT_PAREN}${unparseUntypedLambda(ut.lft)}` +
+        ` ${unparseUntypedLambda(ut.rgt)}${RIGHT_PAREN}`;
+  }
 }

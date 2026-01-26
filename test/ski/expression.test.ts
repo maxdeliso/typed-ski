@@ -3,9 +3,9 @@ import { assert } from "chai";
 import {
   apply,
   equivalent,
-  prettyPrint,
   terminals,
   toSKIKey,
+  unparseSKI,
 } from "../../lib/ski/expression.ts";
 import { K, S } from "../../lib/ski/terminal.ts";
 
@@ -34,8 +34,8 @@ Deno.test("expression functions", async (t) => {
     assert.strictEqual(equivalent(otherExpr, otherExpr), true);
   });
 
-  await t.step("prettyPrint", () => {
-    assert.deepStrictEqual(prettyPrint(expr), "((SK)K)");
+  await t.step("unparseSKI", () => {
+    assert.deepStrictEqual(unparseSKI(expr), "((SK)K)");
   });
 
   await t.step("terminals", () => {
@@ -44,15 +44,15 @@ Deno.test("expression functions", async (t) => {
 
   await t.step("apply", () => {
     const applied = apply(expr, otherExpr);
-    assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)(KS))");
+    assert.deepStrictEqual(unparseSKI(applied), "(((SK)K)(KS))");
   });
 
   await t.step("apply with one expression", () => {
     const applied = apply(expr, expr);
-    assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)((SK)K))");
+    assert.deepStrictEqual(unparseSKI(applied), "(((SK)K)((SK)K))");
   });
   await t.step("apply with two expressions", () => {
     const applied = apply(expr, otherExpr);
-    assert.deepStrictEqual(prettyPrint(applied), "(((SK)K)(KS))");
+    assert.deepStrictEqual(unparseSKI(applied), "(((SK)K)(KS))");
   });
 });

@@ -2,7 +2,7 @@ import { assert } from "chai";
 
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { prettyPrint, type SKIExpression } from "../../lib/ski/expression.ts";
+import { type SKIExpression, unparseSKI } from "../../lib/ski/expression.ts";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 import { randExpression } from "../../lib/ski/generator.ts";
@@ -17,13 +17,13 @@ Deno.test("stepOnce", async (t) => {
   const seventh = parseSKI("KI(KI)");
 
   const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
-    assert.deepStrictEqual(prettyPrint(a), prettyPrint(b));
+    assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
   };
 
   await t.step(
-    `evaluates ${prettyPrint(second)}
+    `evaluates ${unparseSKI(second)}
       =>
-      ${prettyPrint(third)}`,
+      ${unparseSKI(third)}`,
     () => {
       const result = arenaEvaluator.stepOnce(second);
       assert(result.altered);
@@ -32,9 +32,9 @@ Deno.test("stepOnce", async (t) => {
   );
 
   await t.step(
-    `evaluates ${prettyPrint(first)}
+    `evaluates ${unparseSKI(first)}
       =>
-      ${prettyPrint(third)}`,
+      ${unparseSKI(third)}`,
     () => {
       const firstStep = arenaEvaluator.stepOnce(first);
       assert(firstStep.altered);
@@ -45,9 +45,9 @@ Deno.test("stepOnce", async (t) => {
   );
 
   await t.step(
-    `evaluates ${prettyPrint(fourth)}
+    `evaluates ${unparseSKI(fourth)}
       =>
-      ${prettyPrint(third)}`,
+      ${unparseSKI(third)}`,
     () => {
       const result = arenaEvaluator.stepOnce(fourth);
       assert(result.altered);
@@ -57,9 +57,9 @@ Deno.test("stepOnce", async (t) => {
 
   await t.step(
     `evaluates
-      ${prettyPrint(fifth)}
+      ${unparseSKI(fifth)}
       =>
-      ${prettyPrint(seventh)}`,
+      ${unparseSKI(seventh)}`,
     () => {
       const first = arenaEvaluator.stepOnce(fifth);
       assert(first.altered);
@@ -68,9 +68,9 @@ Deno.test("stepOnce", async (t) => {
   );
 
   await t.step(
-    `${prettyPrint(sixth)}
+    `${unparseSKI(sixth)}
       =>
-      ${prettyPrint(third)}`,
+      ${unparseSKI(third)}`,
     () => {
       const firstStep = arenaEvaluator.stepOnce(sixth);
       assert(firstStep.altered);
@@ -116,10 +116,10 @@ Deno.test("stepOnce loop vs. reduce()", async (t) => {
         const { expr: reducedMany } = reduceByLoop(fresh);
 
         assert.deepStrictEqual(
-          prettyPrint(reducedOnce),
-          prettyPrint(reducedMany),
-          `expected: ${prettyPrint(reducedOnce)}, got: ${
-            prettyPrint(reducedMany)
+          unparseSKI(reducedOnce),
+          unparseSKI(reducedMany),
+          `expected: ${unparseSKI(reducedOnce)}, got: ${
+            unparseSKI(reducedMany)
           }`,
         );
       });

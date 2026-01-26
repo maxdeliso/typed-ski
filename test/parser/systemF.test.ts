@@ -1,6 +1,5 @@
 import { strict as assert } from "node:assert";
-import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
-import { prettyPrintSystemF } from "../../lib/terms/systemF.ts";
+import { parseSystemF, unparseSystemF } from "../../lib/parser/systemFTerm.ts";
 
 Deno.test("System F Parser", async (t) => {
   await t.step("parses a single variable", () => {
@@ -18,7 +17,7 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(lit, "123");
     assert.equal(ast.kind, "systemF-var");
     assert.match(ast.name, /__trip_nat_literal__/);
-    assert.equal(prettyPrintSystemF(ast), "123");
+    assert.equal(unparseSystemF(ast), "123");
   });
 
   await t.step("parses a term abstraction", () => {
@@ -159,7 +158,7 @@ Deno.test("System F Parser", async (t) => {
       // Parse the input to get its AST.
       const [, ast] = parseSystemF(input);
       // Pretty–print the AST to obtain a normalized string.
-      const pretty = prettyPrintSystemF(ast);
+      const pretty = unparseSystemF(ast);
 
       // Now re-parse the pretty printed output.
       const [roundTripLit, roundTripAst] = parseSystemF(pretty);
@@ -171,7 +170,7 @@ Deno.test("System F Parser", async (t) => {
         "Round-tripped literal should match pretty printed output (modulo whitespace)",
       );
 
-      const prettyRoundTrip = prettyPrintSystemF(roundTripAst);
+      const prettyRoundTrip = unparseSystemF(roundTripAst);
       assert.equal(
         prettyRoundTrip.replace(/\s+/g, ""),
         pretty.replace(/\s+/g, ""),

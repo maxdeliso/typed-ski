@@ -122,12 +122,12 @@ export const equivalent = (
 };
 
 /**
- * Returns the string representation of a SKI expression.
+ * Unparses a SKI expression into a string representation.
  *
  * This function calls toSKIKey to produce the key and then joins
  * the key array into a string.
  */
-export const prettyPrint = (expr: SKIExpression): string => {
+export const unparseSKI = (expr: SKIExpression): string => {
   return toSKIKey(expr).join("");
 };
 

@@ -7,7 +7,7 @@
  * Outputs JSONL format with evaluation paths and global arena information.
  */
 
-import { apply, prettyPrint } from "../lib/ski/expression.ts";
+import { apply, unparseSKI } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import { ArenaKind, ArenaSym } from "../lib/shared/arena.ts";
@@ -466,7 +466,7 @@ export async function* generateEvaluationForest(
         const promise = base.then((result) => ({
           slot,
           exprIndex,
-          result: { ...result, expr: prettyPrint(allExprs[exprIndex]) },
+          result: { ...result, expr: unparseSKI(allExprs[exprIndex]) },
         }));
         inFlights.push({ slot, exprIndex, promise });
       };
@@ -522,7 +522,7 @@ export async function* generateEvaluationForest(
       for (const nodeId of allNodeIds) {
         try {
           const expr = evaluator.fromArena(nodeId);
-          const label = prettyPrint(expr);
+          const label = unparseSKI(expr);
           yield JSON.stringify({ type: "nodeLabel", id: nodeId, label });
         } catch (_error) {
           // Skip nodes that can't be converted (e.g., internal WASM nodes)

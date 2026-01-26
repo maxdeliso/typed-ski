@@ -32,7 +32,7 @@ import {
   peek,
 } from "./parserState.ts";
 import { parseChain } from "./chain.ts";
-import { parseArrowType } from "./type.ts";
+import { parseArrowType, unparseType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
 import { ParseError } from "./parseError.ts";
 import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
@@ -120,3 +120,33 @@ export function parseTypedLambda(input: string): [string, TypedLambda] {
 }
 
 export { parseArrowType };
+
+/**
+ * Unparses a simply typed lambda expression into ASCII syntax.
+ *
+ * @param expr the typed lambda term
+ * @returns a human-readable string representation
+ */
+export function unparseTypedLambda(expr: TypedLambda): string {
+  switch (expr.kind) {
+    case "lambda-var": {
+      return expr.name;
+    }
+    case "typed-lambda-abstraction": {
+      return BACKSLASH +
+        expr.varName +
+        COLON +
+        unparseType(expr.ty) +
+        FAT_ARROW +
+        unparseTypedLambda(expr.body);
+    }
+    case "non-terminal": {
+      return LEFT_PAREN +
+        unparseTypedLambda(expr.lft) +
+        unparseTypedLambda(expr.rgt) +
+        RIGHT_PAREN;
+    }
+    default:
+      throw new Error("Unknown term kind");
+  }
+}

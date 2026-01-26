@@ -8,13 +8,6 @@
  * @module
  */
 
-import {
-  BACKSLASH,
-  FAT_ARROW,
-  LEFT_PAREN,
-  RIGHT_PAREN,
-} from "../parser/consts.ts";
-
 /**
  * This is a single term variable with a name.
  *
@@ -101,20 +94,3 @@ export const createApplication = (
  */
 export const typelessApp = (...uts: UntypedLambda[]) =>
   uts.reduce(createApplication);
-
-/**
- * Pretty-prints an untyped lambda expression using ASCII syntax.
- * @param ut the untyped lambda term
- * @returns a human-readable string representation
- */
-export const prettyPrintUntypedLambda = (ut: UntypedLambda): string => {
-  switch (ut.kind) {
-    case "lambda-var":
-      return ut.name;
-    case "lambda-abs":
-      return `${BACKSLASH}${ut.name}${FAT_ARROW}${prettyPrintUntypedLambda(ut.body)}`;
-    case "non-terminal":
-      return `${LEFT_PAREN}${prettyPrintUntypedLambda(ut.lft)}` +
-        ` ${prettyPrintUntypedLambda(ut.rgt)}${RIGHT_PAREN}`;
-  }
-};

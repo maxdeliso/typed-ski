@@ -1,11 +1,7 @@
 import { expect } from "chai";
 
-import {
-  mkUntypedAbs,
-  mkVar,
-  prettyPrintUntypedLambda,
-  typelessApp,
-} from "../../lib/terms/lambda.ts";
+import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
+import { unparseUntypedLambda } from "../../lib/parser/untyped.ts";
 import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
@@ -112,7 +108,7 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
       const [, term] = parseLambda(src);
       expect(term).to.deep.equal(expected);
 
-      const pretty = prettyPrintUntypedLambda(term);
+      const pretty = unparseUntypedLambda(term);
       const [, reparsed] = parseLambda(pretty);
       expect(reparsed).to.deep.equal(expected);
 

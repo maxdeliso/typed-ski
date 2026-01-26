@@ -29,8 +29,20 @@ import {
 } from "../terms/systemF.ts";
 import { makeNatLiteralIdentifier } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
-import { createSystemFApplication } from "../terms/systemF.ts";
-import { BACKSLASH, FAT_ARROW, HASH } from "./consts.ts";
+import {
+  createSystemFApplication,
+  flattenSystemFApp,
+} from "../terms/systemF.ts";
+import {
+  BACKSLASH,
+  COLON,
+  FAT_ARROW,
+  HASH,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "./consts.ts";
+import { parseNatLiteralIdentifier } from "../consts/nat.ts";
+import { unparseSystemFType } from "./systemFType.ts";
 
 /**
  * Parses an atomic System F term.
@@ -133,4 +145,32 @@ export function parseSystemFTerm(
 export function parseSystemF(input: string): [string, SystemFTerm] {
   const [lit, term] = parseWithEOF(input, parseSystemFTerm);
   return [lit, term];
+}
+
+/**
+ * Unparses a System F term into ASCII syntax.
+ * @param term the System F term
+ * @returns a human-readable string representation
+ */
+export function unparseSystemF(term: SystemFTerm): string {
+  switch (term.kind) {
+    case "non-terminal": {
+      const parts = flattenSystemFApp(term);
+      return `${LEFT_PAREN}${
+        parts.map(unparseSystemF).join(" ")
+      }${RIGHT_PAREN}`;
+    }
+    case "systemF-var":
+      return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
+    case "systemF-abs":
+      return `${BACKSLASH}${term.name}${COLON}${
+        unparseSystemFType(term.typeAnnotation)
+      }${FAT_ARROW}${unparseSystemF(term.body)}`;
+    case "systemF-type-abs":
+      return `${HASH}${term.typeVar}${FAT_ARROW}${unparseSystemF(term.body)}`;
+    case "systemF-type-app":
+      return `${unparseSystemF(term.term)}[${
+        unparseSystemFType(term.typeArg)
+      }]`;
+  }
 }

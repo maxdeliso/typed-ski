@@ -17,6 +17,7 @@ import {
   peek as peekChar,
   skipWhitespace,
 } from "./parserState.ts";
+import { HASH } from "./tripLang.ts";
 
 export interface StructField {
   name: string;
@@ -96,7 +97,7 @@ function skipCommentsAndWhitespace(state: ParserState): ParserState {
 function parseAttribute(state: ParserState): ParserState {
   let current = skipCommentsAndWhitespace(state);
   const [ch, chState] = peekChar(current);
-  if (ch !== "#") {
+  if (ch !== HASH) {
     throw new ParseError(`Expected '#' for attribute`);
   }
   current = consume(chState);
@@ -136,11 +137,11 @@ function parseAttributeContent(
 
   // Skip '#'
   const [hash, hashState] = peekChar(current);
-  if (hash !== "#") {
+  if (hash !== HASH) {
     throw new ParseError(`Expected '#' for attribute`);
   }
   current = consume(hashState);
-  content += "#";
+  content += HASH;
 
   // Skip '['
   const [bracket, bracketState] = peekChar(current);
@@ -194,7 +195,7 @@ function parseStructAttributes(
     const saved = current;
     current = skipCommentsAndWhitespace(current);
     const [ch] = peekChar(current);
-    if (ch === "#") {
+    if (ch === HASH) {
       const [, attrHasReprC, afterAttr] = parseAttributeContent(current);
       if (attrHasReprC) {
         hasReprC = true;
@@ -216,7 +217,7 @@ function skipAttributes(state: ParserState): ParserState {
     const saved = current;
     current = skipCommentsAndWhitespace(current);
     const [ch] = peekChar(current);
-    if (ch === "#") {
+    if (ch === HASH) {
       current = parseAttribute(current);
     } else {
       return saved;
@@ -347,7 +348,7 @@ export function parseRustStruct(
 
     // Check if we're at an attribute (# followed by [)
     const [ch, chState] = peekChar(state);
-    if (ch === "#") {
+    if (ch === HASH) {
       // Check if it's actually an attribute (must be followed by '[')
       const nextIdx = chState.idx + 1;
       if (nextIdx < state.buf.length && state.buf[nextIdx] === "[") {

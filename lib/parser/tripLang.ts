@@ -49,6 +49,7 @@ export const RIGHT_PAREN = ")";
 export const COLON = ":";
 export const EQUALS = "=";
 export const BACKSLASH = "\\";
+export const HASH = "#";
 
 export function parseTripLangDefinition(
   state: ParserState,

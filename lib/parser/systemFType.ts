@@ -19,6 +19,7 @@ import {
   peek,
   peekArrow,
 } from "./parserState.ts";
+import { HASH } from "./tripLang.ts";
 
 /**
  * Parses a System F type.
@@ -37,16 +38,16 @@ export function parseSystemFType(
   state: ParserState,
 ): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
-  if (ch === "#") {
+  if (ch === HASH) {
     // Parse universal type: #X -> T
-    const stateAfterForall = matchCh(s, "#"); // consume '#'
+    const stateAfterForall = matchCh(s, HASH); // consume '#'
     const [typeVar, stateAfterVar] = parseIdentifier(stateAfterForall);
     const stateAfterArrow = matchArrow(stateAfterVar);
     const [bodyLit, bodyType, stateAfterBody] = parseSystemFType(
       stateAfterArrow,
     );
     return [
-      `#${typeVar}->${bodyLit}`,
+      `${HASH}${typeVar}->${bodyLit}`,
       forall(typeVar, bodyType),
       stateAfterBody,
     ];

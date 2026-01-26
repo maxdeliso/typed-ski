@@ -36,7 +36,13 @@ import { parseArrowType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
 import { ParseError } from "./parseError.ts";
 import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
-import { BACKSLASH, FAT_ARROW } from "./consts.ts";
+import {
+  BACKSLASH,
+  COLON,
+  FAT_ARROW,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "./consts.ts";
 
 /**
  * Parses an atomic typed lambda term.
@@ -55,11 +61,11 @@ export function parseAtomicTypedLambda(
   if (peeked === BACKSLASH) {
     const stateAfterLambda = matchCh(s, BACKSLASH);
     const [next] = peek(stateAfterLambda);
-    if (next === ":") {
+    if (next === COLON) {
       throw new ParseError("expected an identifier");
     }
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
-    const stateAfterColon = matchCh(stateAfterVar, ":");
+    const stateAfterColon = matchCh(stateAfterVar, COLON);
     const [typeLit, ty, stateAfterType] = parseArrowType(stateAfterColon);
     const stateAfterArrow = matchFatArrow(stateAfterType);
     const [bodyLit, bodyTerm, stateAfterBody] = parseTypedLambdaInternal(
@@ -70,14 +76,14 @@ export function parseAtomicTypedLambda(
       mkTypedAbs(varLit, ty, bodyTerm),
       stateAfterBody,
     ];
-  } else if (peeked === "(") {
+  } else if (peeked === LEFT_PAREN) {
     // Parse a parenthesized term.
     const stateAfterLP = matchLP(s);
     const [innerLit, innerTerm, stateAfterInner] = parseTypedLambdaInternal(
       stateAfterLP,
     );
     const stateAfterRP = matchRP(stateAfterInner);
-    return [`(${innerLit})`, innerTerm, stateAfterRP];
+    return [`${LEFT_PAREN}${innerLit}${RIGHT_PAREN}`, innerTerm, stateAfterRP];
   } else if (isDigit(peeked)) {
     const [literal, value, nextState] = parseNumericLiteral(s);
     return [literal, makeTypedChurchNumeral(value), nextState];

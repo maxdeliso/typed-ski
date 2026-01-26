@@ -22,7 +22,7 @@ import { makeUntypedChurchNumeral } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createApplication } from "../terms/lambda.ts";
 import { parseWithEOF } from "./eof.ts";
-import { BACKSLASH } from "./tripLang.ts";
+import { BACKSLASH } from "./consts.ts";
 
 /**
  * Parses an untyped lambda term (including applications) by chaining

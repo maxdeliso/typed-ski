@@ -30,7 +30,7 @@ import {
 import { makeNatLiteralIdentifier } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createSystemFApplication } from "../terms/systemF.ts";
-import { BACKSLASH, HASH } from "./tripLang.ts";
+import { BACKSLASH, FAT_ARROW, HASH } from "./consts.ts";
 
 /**
  * Parses an atomic System F term.
@@ -60,7 +60,7 @@ export function parseAtomicSystemFTerm(
       stateAfterArrow,
     );
     return [
-      `${BACKSLASH}${varLit}:${typeLit}=>${bodyLit}`,
+      `${BACKSLASH}${varLit}:${typeLit}${FAT_ARROW}${bodyLit}`,
       mkSystemFAbs(varLit, typeAnnotation, bodyTerm),
       stateAfterBody,
     ];
@@ -79,7 +79,7 @@ export function parseAtomicSystemFTerm(
       stateAfterArrow,
     );
     return [
-      `${HASH}${typeVar}=>${bodyLit}`,
+      `${HASH}${typeVar}${FAT_ARROW}${bodyLit}`,
       mkSystemFTAbs(typeVar, bodyTerm),
       stateAfterBody,
     ];

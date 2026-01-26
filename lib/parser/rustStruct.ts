@@ -17,7 +17,7 @@ import {
   peek as peekChar,
   skipWhitespace,
 } from "./parserState.ts";
-import { HASH } from "./tripLang.ts";
+import { HASH } from "./consts.ts";
 
 export interface StructField {
   name: string;

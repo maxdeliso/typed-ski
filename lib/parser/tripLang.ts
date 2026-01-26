@@ -40,16 +40,7 @@ import type { SystemFTerm } from "../terms/systemF.ts";
 import type { TypedLambda } from "../types/typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import type { SKIExpression } from "../ski/expression.ts";
-
-export const WHITESPACE_REGEX = /\s/;
-export const IDENTIFIER_CHAR_REGEX = /[a-zA-Z0-9_]/;
-
-export const LEFT_PAREN = "(";
-export const RIGHT_PAREN = ")";
-export const COLON = ":";
-export const EQUALS = "=";
-export const BACKSLASH = "\\";
-export const HASH = "#";
+import { EQUALS } from "./consts.ts";
 
 export function parseTripLangDefinition(
   state: ParserState,

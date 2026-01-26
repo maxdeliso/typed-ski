@@ -18,6 +18,7 @@ import {
 import { ParseError } from "./parseError.ts";
 import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
 import { parseWithEOF } from "./eof.ts";
+import { ARROW } from "./consts.ts";
 
 /**
  * Parses a "simple" type.
@@ -64,7 +65,7 @@ export function parseArrowType(
       stateAfterArrow,
     );
     return [
-      `${leftLit}->${rightLit}`,
+      `${leftLit}${ARROW}${rightLit}`,
       arrow(leftType, rightType),
       stateAfterRight,
     ];

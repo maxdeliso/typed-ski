@@ -36,7 +36,7 @@ import { parseArrowType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
 import { ParseError } from "./parseError.ts";
 import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
-import { BACKSLASH } from "./tripLang.ts";
+import { BACKSLASH, FAT_ARROW } from "./consts.ts";
 
 /**
  * Parses an atomic typed lambda term.
@@ -66,7 +66,7 @@ export function parseAtomicTypedLambda(
       stateAfterArrow,
     );
     return [
-      `${BACKSLASH}${varLit}:${typeLit}=>${bodyLit}`,
+      `${BACKSLASH}${varLit}:${typeLit}${FAT_ARROW}${bodyLit}`,
       mkTypedAbs(varLit, ty, bodyTerm),
       stateAfterBody,
     ];

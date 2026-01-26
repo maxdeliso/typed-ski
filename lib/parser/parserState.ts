@@ -10,22 +10,23 @@ import { ParseError } from "./parseError.ts";
 import { isNatLiteralIdentifier } from "../consts/natNames.ts";
 import type { DefinitionKind } from "./definition.ts";
 import { DEFINITION_KEYWORDS } from "./definition.ts";
+import {
+  ARROW,
+  ASCII_MAX,
+  COLON,
+  DIGIT_REGEX,
+  FAT_ARROW,
+  IDENTIFIER_CHAR_REGEX,
+  LEFT_PAREN,
+  PURELY_NUMERIC_REGEX,
+  RIGHT_PAREN,
+  WHITESPACE_REGEX,
+} from "./consts.ts";
 
 export interface ParserState {
   buf: string;
   idx: number;
 }
-
-const DIGIT_REGEX = /[0-9]/;
-const PURELY_NUMERIC_REGEX = /^[0-9]+$/;
-const WHITESPACE_REGEX = /\s/;
-const IDENTIFIER_CHAR_REGEX = /[a-zA-Z0-9_]/;
-const LEFT_PAREN = "(";
-const RIGHT_PAREN = ")";
-const COLON = ":";
-const ARROW = "->";
-const FAT_ARROW = "=>";
-const ASCII_MAX = 0x7f;
 
 export const isDigit = (ch: string | null): ch is string => {
   return ch !== null && DIGIT_REGEX.test(ch);

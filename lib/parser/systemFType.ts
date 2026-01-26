@@ -19,7 +19,7 @@ import {
   peek,
   peekArrow,
 } from "./parserState.ts";
-import { HASH } from "./tripLang.ts";
+import { ARROW, HASH } from "./consts.ts";
 
 /**
  * Parses a System F type.
@@ -47,7 +47,7 @@ export function parseSystemFType(
       stateAfterArrow,
     );
     return [
-      `${HASH}${typeVar}->${bodyLit}`,
+      `${HASH}${typeVar}${ARROW}${bodyLit}`,
       forall(typeVar, bodyType),
       stateAfterBody,
     ];
@@ -61,7 +61,7 @@ export function parseSystemFType(
         stateAfterArrow,
       );
       return [
-        `${leftLit}->${rightLit}`,
+        `${leftLit}${ARROW}${rightLit}`,
         arrow(leftType, rightType),
         stateAfterRight,
       ];

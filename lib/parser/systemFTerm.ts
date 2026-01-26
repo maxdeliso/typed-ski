@@ -34,7 +34,7 @@ import { createSystemFApplication } from "../terms/systemF.ts";
 /**
  * Parses an atomic System F term.
  * Atomic terms can be:
- *   - A term abstraction: "\\x: T => t"
+ *   - A term abstraction: "\x: T => t"
  *   - A type abstraction: "#X => t"
  *   - A parenthesized term: "(" t ")"
  *   - A type application: "t [T]"

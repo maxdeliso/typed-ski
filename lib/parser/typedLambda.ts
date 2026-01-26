@@ -8,7 +8,7 @@
  * import { parseTypedLambda } from "jsr:@maxdeliso/typed-ski";
  *
  * const [literal, term] = parseTypedLambda("\\x : A => x");
- * console.log(literal); // "\\x:A=>x"
+ * console.log(literal); // "\x:A=>x"
  * ```
  *
  * @module
@@ -40,7 +40,7 @@ import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
 /**
  * Parses an atomic typed lambda term.
  * Atomic terms can be:
- *   - A typed lambda abstraction: "\\x : <type> => <body>"
+ *   - A typed lambda abstraction: "\x : <type> => <body>"
  *   - A parenthesized term: "(" <term> ")"
  *   - A variable: e.g. "x"
  *
@@ -52,7 +52,6 @@ export function parseAtomicTypedLambda(
   const [peeked, s] = peek(state);
 
   if (peeked === "\\") {
-    // Parse a typed lambda abstraction: \x : <type> => <body>
     const stateAfterLambda = matchCh(s, "\\");
     const [next] = peek(stateAfterLambda);
     if (next === ":") {

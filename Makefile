@@ -58,6 +58,10 @@ test: ## Run the test suite
 		echo "Error: Nix is not installed. Run 'make setup' first."; \
 		exit 1; \
 	fi
+	@if [ ! -f lib/evaluator/arenaHeader.generated.ts ]; then \
+		echo "Generating arena header before tests..."; \
+		nix $(NIX_FLAGS) run .#generate-arena-header; \
+	fi
 	@if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then \
 		echo "Error: WASM files not found. Run 'make build' first."; \
 		exit 1; \

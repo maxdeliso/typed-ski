@@ -40,6 +40,13 @@
 //! +-------------------+ <-- offset_cq (64-byte aligned)
 //! | Completion Ring   |
 //! | (1024 entries)    |
+//! +-------------------+ <-- offset_stdin (64-byte aligned)
+//! | Stdin Ring (u8)   |
+//! +-------------------+ <-- offset_stdout (64-byte aligned)
+//! | Stdout Ring (u8)  |
+//! +-------------------+ <-- offset_stdin_wait (64-byte aligned)
+//! | Stdin Wait Ring   |
+//! | (u32 node ids)    |
 //! +-------------------+ <-- offset_kind (64-byte aligned)
 //! | Kind Array        |  u8[capacity] - Node types
 //! +-------------------+ <-- offset_sym
@@ -175,6 +182,16 @@ pub enum ArenaSym {
     /// I combinator: `I x → x`
     /// The identity function, returns its argument unchanged.
     I = 3,
+
+    /// readOne terminal: consumes one byte from stdin, passes Church numeral to continuation.
+    ReadOne = 4,
+
+    /// writeOne terminal: writes one byte to stdout, returns its argument.
+    WriteOne = 5,
+
+    // Internal-only primitives for Church decoding (not surfaced in the language).
+    Inc = 6,
+    Num = 7,
 }
 
 // =============================================================================
@@ -256,6 +273,7 @@ mod wasm {
     // produce results faster than the host can drain them (a common cause of "stuttering"
     // worker timelines and main-thread saturation in profiles).
     const RING_ENTRIES: u32 = 1 << 16; // 65536
+    const TERM_CACHE_LEN: usize = 6; // 0..=WriteOne
 
     #[inline(always)]
     const fn align64(x: u32) -> u32 {
@@ -674,6 +692,23 @@ mod wasm {
     // -------------------------------------------------------------------------
     // Header layout (fixed offsets)
     // -------------------------------------------------------------------------
+    struct SabLayout {
+        offset_sq: u32,
+        offset_cq: u32,
+        offset_stdin: u32,
+        offset_stdout: u32,
+        offset_stdin_wait: u32,
+        offset_kind: u32,
+        offset_sym: u32,
+        offset_left_id: u32,
+        offset_right_id: u32,
+        offset_hash32: u32,
+        offset_next_idx: u32,
+        offset_buckets: u32,
+        offset_term_cache: u32,
+        total_size: u32,
+    }
+
     #[repr(C, align(64))]
     struct SabHeader {
         magic: u32,
@@ -681,6 +716,9 @@ mod wasm {
         ring_mask: u32,
         offset_sq: u32,
         offset_cq: u32,
+        offset_stdin: u32,
+        offset_stdout: u32,
+        offset_stdin_wait: u32,
         offset_kind: u32,
         offset_sym: u32,
         offset_left_id: u32,
@@ -696,12 +734,15 @@ mod wasm {
     }
 
     impl SabHeader {
-        fn layout(capacity: u32) -> (u32, u32, u32) {
+        fn layout(capacity: u32) -> SabLayout {
             let header_size = core::mem::size_of::<SabHeader>() as u32;
             let offset_sq = align64(header_size);
             let offset_cq = align64(offset_sq + ring_bytes::<Sqe>(RING_ENTRIES));
+            let offset_stdin = align64(offset_cq + ring_bytes::<Cqe>(RING_ENTRIES));
+            let offset_stdout = align64(offset_stdin + ring_bytes::<u8>(RING_ENTRIES));
+            let offset_stdin_wait = align64(offset_stdout + ring_bytes::<u8>(RING_ENTRIES));
 
-            let offset_kind = align64(offset_cq + ring_bytes::<Cqe>(RING_ENTRIES));
+            let offset_kind = align64(offset_stdin_wait + ring_bytes::<u32>(RING_ENTRIES));
             let offset_sym = offset_kind + capacity;
             let offset_left_id = align64(offset_sym + capacity);
             let offset_right_id = offset_left_id + 4 * capacity;
@@ -709,12 +750,23 @@ mod wasm {
             let offset_next_idx = offset_hash32 + 4 * capacity;
             let offset_buckets = align64(offset_next_idx + 4 * capacity);
             let offset_term_cache = offset_buckets + 4 * capacity;
-            let total_size = offset_term_cache + 16;
-            (
+            let total_size = offset_term_cache + (TERM_CACHE_LEN as u32) * 4;
+            SabLayout {
                 offset_sq,
                 offset_cq,
+                offset_stdin,
+                offset_stdout,
+                offset_stdin_wait,
+                offset_kind,
+                offset_sym,
+                offset_left_id,
+                offset_right_id,
+                offset_hash32,
+                offset_next_idx,
+                offset_buckets,
+                offset_term_cache,
                 total_size,
-            )
+            }
         }
     }
 
@@ -764,6 +816,24 @@ mod wasm {
     unsafe fn cq_ring() -> &'static Ring<Cqe> {
         let h = header();
         &*((ARENA_BASE_ADDR + h.offset_cq) as *const Ring<Cqe>)
+    }
+
+    #[inline(always)]
+    unsafe fn stdin_ring() -> &'static Ring<u8> {
+        let h = header();
+        &*((ARENA_BASE_ADDR + h.offset_stdin) as *const Ring<u8>)
+    }
+
+    #[inline(always)]
+    unsafe fn stdout_ring() -> &'static Ring<u8> {
+        let h = header();
+        &*((ARENA_BASE_ADDR + h.offset_stdout) as *const Ring<u8>)
+    }
+
+    #[inline(always)]
+    unsafe fn stdin_wait_ring() -> &'static Ring<u32> {
+        let h = header();
+        &*((ARENA_BASE_ADDR + h.offset_stdin_wait) as *const Ring<u32>)
     }
 
     // Array helpers
@@ -883,30 +953,39 @@ mod wasm {
     }
 
     unsafe fn init_header(capacity: u32) {
-        let (offset_sq, offset_cq, total_size) = SabHeader::layout(capacity);
+        let layout = SabHeader::layout(capacity);
         let h = &mut *(ARENA_BASE_ADDR as *mut SabHeader);
         h.magic = ARENA_MAGIC;
         h.ring_entries = RING_ENTRIES;
         h.ring_mask = RING_ENTRIES - 1;
-        h.offset_sq = offset_sq;
-        h.offset_cq = offset_cq;
-        h.offset_kind = align64(offset_cq + ring_bytes::<Cqe>(RING_ENTRIES));
-        h.offset_sym = h.offset_kind + capacity;
-        h.offset_left_id = align64(h.offset_sym + capacity);
-        h.offset_right_id = h.offset_left_id + 4 * capacity;
-        h.offset_hash32 = h.offset_right_id + 4 * capacity;
-        h.offset_next_idx = h.offset_hash32 + 4 * capacity;
-        h.offset_buckets = align64(h.offset_next_idx + 4 * capacity);
-        h.offset_term_cache = h.offset_buckets + 4 * capacity;
+        h.offset_sq = layout.offset_sq;
+        h.offset_cq = layout.offset_cq;
+        h.offset_stdin = layout.offset_stdin;
+        h.offset_stdout = layout.offset_stdout;
+        h.offset_stdin_wait = layout.offset_stdin_wait;
+        h.offset_kind = layout.offset_kind;
+        h.offset_sym = layout.offset_sym;
+        h.offset_left_id = layout.offset_left_id;
+        h.offset_right_id = layout.offset_right_id;
+        h.offset_hash32 = layout.offset_hash32;
+        h.offset_next_idx = layout.offset_next_idx;
+        h.offset_buckets = layout.offset_buckets;
+        h.offset_term_cache = layout.offset_term_cache;
         h.capacity = capacity;
         h.bucket_mask = capacity - 1;
         h.resize_seq.store(0, Ordering::Relaxed);
         h.top.store(0, Ordering::Relaxed);
 
-        zero_region((core::mem::size_of::<SabHeader>()) as u32, total_size - core::mem::size_of::<SabHeader>() as u32);
+        zero_region(
+            (core::mem::size_of::<SabHeader>()) as u32,
+            layout.total_size - core::mem::size_of::<SabHeader>() as u32,
+        );
 
         Ring::<Sqe>::init_at((ARENA_BASE_ADDR + h.offset_sq) as *mut u8, RING_ENTRIES);
         Ring::<Cqe>::init_at((ARENA_BASE_ADDR + h.offset_cq) as *mut u8, RING_ENTRIES);
+        Ring::<u8>::init_at((ARENA_BASE_ADDR + h.offset_stdin) as *mut u8, RING_ENTRIES);
+        Ring::<u8>::init_at((ARENA_BASE_ADDR + h.offset_stdout) as *mut u8, RING_ENTRIES);
+        Ring::<u32>::init_at((ARENA_BASE_ADDR + h.offset_stdin_wait) as *mut u8, RING_ENTRIES);
 
         // Buckets + cache init
         let buckets = buckets_ptr();
@@ -914,14 +993,14 @@ mod wasm {
             buckets.add(i).write(AtomicU32::new(EMPTY));
         }
         let cache = term_cache_ptr();
-        for i in 0..4 {
+        for i in 0..TERM_CACHE_LEN {
             cache.add(i).write(AtomicU32::new(EMPTY));
         }
     }
 
     unsafe fn allocate_raw_arena(capacity: u32) -> *mut SabHeader {
-        let (_, _, total_size) = SabHeader::layout(capacity);
-        let pages_needed = (total_size as usize + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
+        let layout = SabHeader::layout(capacity);
+        let pages_needed = (layout.total_size as usize + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
         let old_pages = wasm32::memory_grow(0, pages_needed);
         if old_pages == usize::MAX {
             return core::ptr::null_mut();
@@ -980,7 +1059,7 @@ mod wasm {
                 (*buckets.add(i)).store(EMPTY, Ordering::Release);
             }
             let cache = term_cache_ptr();
-            for i in 0..4 {
+            for i in 0..TERM_CACHE_LEN {
                 (*cache.add(i)).store(EMPTY, Ordering::Release);
             }
             h.resize_seq.store(h.resize_seq.load(Ordering::Relaxed) & !1, Ordering::Release);
@@ -1072,7 +1151,7 @@ mod wasm {
             ensure_arena();
             let h = header();
 
-            if sym < 4 {
+            if sym < TERM_CACHE_LEN as u32 {
                 let cached = (*term_cache_ptr().add(sym as usize)).load(Ordering::Acquire);
                 if cached != EMPTY {
                     return cached;
@@ -1091,7 +1170,7 @@ mod wasm {
                 (*sym_ptr().add(id as usize)).store(sym as u8, Ordering::Release);
                 (*hash_ptr().add(id as usize)).store(sym, Ordering::Release);
 
-                if sym < 4 {
+                if sym < TERM_CACHE_LEN as u32 {
                     (*term_cache_ptr().add(sym as usize)).store(id, Ordering::Release);
                 }
                 return id;
@@ -1326,8 +1405,8 @@ mod wasm {
             }
             let new_cap = (old_cap * 2).min(MAX_CAP);
 
-            let (offset_sq, offset_cq, total_size) = SabHeader::layout(new_cap);
-            let needed_bytes = ARENA_BASE_ADDR as usize + total_size as usize;
+            let layout = SabHeader::layout(new_cap);
+            let needed_bytes = ARENA_BASE_ADDR as usize + layout.total_size as usize;
             let current_bytes = wasm32::memory_size(0) * WASM_PAGE_SIZE;
             if needed_bytes > current_bytes {
                 let extra = needed_bytes - current_bytes;
@@ -1340,29 +1419,22 @@ mod wasm {
                 }
             }
 
-            // Compute new offsets (rings stay in place, but compute for completeness).
-            let offset_kind = align64(offset_cq + ring_bytes::<Cqe>(RING_ENTRIES));
-            let offset_sym = offset_kind + new_cap;
-            let offset_left_id = align64(offset_sym + new_cap);
-            let offset_right_id = offset_left_id + 4 * new_cap;
-            let offset_hash32 = offset_right_id + 4 * new_cap;
-            let offset_next_idx = offset_hash32 + 4 * new_cap;
-            let offset_buckets = align64(offset_next_idx + 4 * new_cap);
-            let offset_term_cache = offset_buckets + 4 * new_cap;
-
             // Update header (rings untouched)
             h.capacity = new_cap;
             h.bucket_mask = new_cap - 1;
-            h.offset_sq = offset_sq;
-            h.offset_cq = offset_cq;
-            h.offset_kind = offset_kind;
-            h.offset_sym = offset_sym;
-            h.offset_left_id = offset_left_id;
-            h.offset_right_id = offset_right_id;
-            h.offset_hash32 = offset_hash32;
-            h.offset_next_idx = offset_next_idx;
-            h.offset_buckets = offset_buckets;
-            h.offset_term_cache = offset_term_cache;
+            h.offset_sq = layout.offset_sq;
+            h.offset_cq = layout.offset_cq;
+            h.offset_stdin = layout.offset_stdin;
+            h.offset_stdout = layout.offset_stdout;
+            h.offset_stdin_wait = layout.offset_stdin_wait;
+            h.offset_kind = layout.offset_kind;
+            h.offset_sym = layout.offset_sym;
+            h.offset_left_id = layout.offset_left_id;
+            h.offset_right_id = layout.offset_right_id;
+            h.offset_hash32 = layout.offset_hash32;
+            h.offset_next_idx = layout.offset_next_idx;
+            h.offset_buckets = layout.offset_buckets;
+            h.offset_term_cache = layout.offset_term_cache;
 
             // Preserve top
             let count = old_top.min(old_cap);
@@ -1372,11 +1444,11 @@ mod wasm {
             // The layout is packed contiguously, and new_cap > old_cap means new regions can overlap
             // old regions during migration. Copy from the end back to the front.
 
-            // Term cache (16 bytes)
+            // Term cache
             core::ptr::copy(
                 (ARENA_BASE_ADDR + old_offset_term_cache) as *const u8,
                 (ARENA_BASE_ADDR + h.offset_term_cache) as *mut u8,
-                16,
+                (TERM_CACHE_LEN * 4) as usize,
             );
 
             // Next (u32)
@@ -1497,6 +1569,7 @@ mod wasm {
     // Suspension: kind=Suspension, sym=mode (0=descend, 1=return), left=curr, right=stack, hash=remaining_steps
     const MODE_DESCEND: u8 = 0;
     const MODE_RETURN: u8 = 1;
+    const MODE_IO_WAIT: u8 = 2;
 
     #[inline(always)]
     unsafe fn alloc_continuation(parent: u32, target: u32, stage: u8) -> u32 {
@@ -1506,6 +1579,60 @@ mod wasm {
     #[inline(always)]
     unsafe fn alloc_suspension(curr: u32, stack: u32, mode: u8, remaining_steps: u32) -> u32 {
         alloc_generic(ArenaKind::Suspension as u8, mode, curr, stack, remaining_steps)
+    }
+
+    #[inline(always)]
+    unsafe fn alloc_num(value: u32) -> u32 {
+        alloc_generic(ArenaKind::Terminal as u8, ArenaSym::Num as u8, 0, 0, value)
+    }
+
+    #[inline(always)]
+    unsafe fn alloc_inc() -> u32 {
+        allocTerminal(ArenaSym::Inc as u32)
+    }
+
+    #[inline(always)]
+    unsafe fn alloc_church_zero() -> u32 {
+        let k = allocTerminal(ArenaSym::K as u32);
+        let i = allocTerminal(ArenaSym::I as u32);
+        allocCons(k, i)
+    }
+
+    #[inline(always)]
+    unsafe fn alloc_church_succ() -> u32 {
+        let s = allocTerminal(ArenaSym::S as u32);
+        let k = allocTerminal(ArenaSym::K as u32);
+        let ks = allocCons(k, s);
+        let b = allocCons(allocCons(s, ks), k); // S(KS)K
+        allocCons(s, b) // S B
+    }
+
+    #[inline(always)]
+    unsafe fn alloc_church_byte(value: u8) -> u32 {
+        let mut cur = alloc_church_zero();
+        if value == 0 {
+            return cur;
+        }
+        let succ = alloc_church_succ();
+        for _ in 0..value {
+            cur = allocCons(succ, cur);
+        }
+        cur
+    }
+
+    #[inline(always)]
+    unsafe fn decode_church_u32(expr: u32) -> u32 {
+        let inc = alloc_inc();
+        let zero = alloc_num(0);
+        let app = allocCons(allocCons(expr, inc), zero);
+        let reduced = reduce(app, 1_000_000);
+        if kindOf(reduced) == ArenaKind::Terminal as u32
+            && symOf(reduced) == ArenaSym::Num as u32
+        {
+            hash_of_internal(reduced)
+        } else {
+            0
+        }
     }
 
     // --- OPTIMIZATION: Update existing node (Slot Reuse) ---
@@ -1700,6 +1827,74 @@ mod wasm {
 
                 // Yield IMMEDIATELY if limit hit zero.
                 // Don't waste gas traversing to the next redex.
+                if *remaining_steps == 0 {
+                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                }
+                continue;
+            }
+
+            // readOne k -> k (Church byte)
+            if kindOf(left) == ArenaKind::Terminal as u32
+                && symOf(left) == ArenaSym::ReadOne as u32
+            {
+                if let Some(byte) = stdin_ring().try_dequeue() {
+                    if *remaining_steps == 0 {
+                        return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                    }
+                    *remaining_steps = remaining_steps.saturating_sub(1);
+
+                    let numeral = alloc_church_byte(byte);
+                    curr = allocCons(right, numeral);
+                    mode = MODE_RETURN;
+
+                    if *remaining_steps == 0 {
+                        return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                    }
+                    continue;
+                }
+
+                let susp_id = alloc_suspension(curr, stack, MODE_IO_WAIT, *remaining_steps);
+                stdin_wait_ring().enqueue_blocking(susp_id);
+                return StepResult::Yield(susp_id);
+            }
+
+            // writeOne n -> n (enqueue byte)
+            if kindOf(left) == ArenaKind::Terminal as u32
+                && symOf(left) == ArenaSym::WriteOne as u32
+            {
+                if *remaining_steps == 0 {
+                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                }
+                *remaining_steps = remaining_steps.saturating_sub(1);
+
+                let value = decode_church_u32(right);
+                let byte = (value & 0xff) as u8;
+                stdout_ring().enqueue_blocking(byte);
+
+                curr = right;
+                mode = MODE_RETURN;
+
+                if *remaining_steps == 0 {
+                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                }
+                continue;
+            }
+
+            // Inc (Num n) -> Num (n + 1) [internal Church decoding]
+            if kindOf(left) == ArenaKind::Terminal as u32
+                && symOf(left) == ArenaSym::Inc as u32
+                && kindOf(right) == ArenaKind::Terminal as u32
+                && symOf(right) == ArenaSym::Num as u32
+            {
+                if *remaining_steps == 0 {
+                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                }
+                *remaining_steps = remaining_steps.saturating_sub(1);
+
+                let next_val = hash_of_internal(right).wrapping_add(1);
+                curr = alloc_num(next_val);
+                mode = MODE_RETURN;
+
                 if *remaining_steps == 0 {
                     return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
                 }
@@ -1908,6 +2103,9 @@ mod wasm {
                     curr = leftOf(susp);
                     stack = rightOf(susp);
                     mode = symOf(susp) as u8;
+                    if mode == MODE_IO_WAIT {
+                        mode = MODE_DESCEND;
+                    }
                     // Strict resume: Trust the suspension's counter 100%
                     // The suspension node's hash field contains the remaining_steps that were
                     // saved when the step yielded (before decrement, because the step didn't finish).
@@ -1992,8 +2190,7 @@ mod wasm {
 
     #[no_mangle]
     pub extern "C" fn debugCalculateArenaSize(capacity: u32) -> u32 {
-        let (_, _, total_size) = SabHeader::layout(capacity);
-        total_size
+        SabHeader::layout(capacity).total_size
     }
 
     #[no_mangle]

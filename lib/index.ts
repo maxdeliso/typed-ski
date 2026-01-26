@@ -144,10 +144,14 @@ export {
   I,
   /** The K combinator (constant function). */
   K,
+  /** The readOne terminal (input). */
+  ReadOne,
   /** The S combinator (substitution function). */
   S,
   type SKITerminal,
   type SKITerminalSymbol,
+  /** The writeOne terminal (output). */
+  WriteOne,
 } from "./ski/terminal.ts";
 
 export { prettyPrint as prettyPrintSKIExpression } from "./ski/expression.ts";

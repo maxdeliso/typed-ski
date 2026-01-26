@@ -11,13 +11,13 @@ import type { SKITerminal } from "./terminal.ts";
 /*
  * EBNF grammar:
  *
- * terminal = "S" | "K" | "I"
+ * terminal = "S" | "K" | "I" | "," | "."
  * non-terminal = "(", expression, expression, ")"
  * expression = terminal | non-terminal
  *
  * alphabet:
  *
- * "S" | "K" | "I" | "(" | ")"
+ * "S" | "K" | "I" | "," | "." | "(" | ")"
  *
  * non-terminals:
  *
@@ -44,7 +44,7 @@ export interface SKIApplication {
  * application of two expressions.
  */
 export type SKIExpression = SKITerminal | SKIApplication;
-export type SKIChar = "S" | "K" | "I" | "(" | ")";
+export type SKIChar = "S" | "K" | "I" | "," | "." | "(" | ")";
 export type SKIKey = SKIChar[];
 
 /**

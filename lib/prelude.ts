@@ -23,6 +23,8 @@ export pair
 export fst
 export snd
 export cond
+export readOne
+export writeOne
 
 type Nat = ∀X . (X → X) → X → X
 type Bool = ∀B . B → B → B
@@ -65,7 +67,10 @@ poly cond = ΛX .
   λb : Bool .
   λt : X .
   λf : X .
-    b [X] t f`;
+    b [X] t f
+
+combinator readOne = ,
+combinator writeOne = .`;
 
 /**
  * Compiled prelude object - generated at build time

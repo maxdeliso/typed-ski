@@ -9,13 +9,23 @@
 
 import type { SKIExpression } from "../ski/expression.ts";
 import { apply } from "../ski/expression.ts";
-import { I, K, S, SKITerminalSymbol } from "../ski/terminal.ts";
+import {
+  I,
+  K,
+  ReadOne,
+  S,
+  SKITerminalSymbol,
+  WriteOne,
+} from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
-import { SabHeaderField } from "./arenaHeader.generated.ts";
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "./arenaHeader.generated.ts";
 
 /**
  * Terminal cache: Maps exports instance -> {S, K, I} IDs
@@ -23,7 +33,7 @@ import { SabHeaderField } from "./arenaHeader.generated.ts";
  */
 const terminalCache = new WeakMap<
   Pick<ArenaWasmExports, "allocTerminal">,
-  { s: number; k: number; i: number }
+  { s: number; k: number; i: number; readOne: number; writeOne: number }
 >();
 
 /**
@@ -51,6 +61,8 @@ export function toArenaWithExports(
       s: exports.allocTerminal(ArenaSym.S),
       k: exports.allocTerminal(ArenaSym.K),
       i: exports.allocTerminal(ArenaSym.I),
+      readOne: exports.allocTerminal(ArenaSym.ReadOne),
+      writeOne: exports.allocTerminal(ArenaSym.WriteOne),
     };
     terminalCache.set(exports, cache);
   }
@@ -82,6 +94,12 @@ export function toArenaWithExports(
           break;
         case SKITerminalSymbol.I:
           id = cache.i;
+          break;
+        case SKITerminalSymbol.ReadOne:
+          id = cache.readOne;
+          break;
+        case SKITerminalSymbol.WriteOne:
+          id = cache.writeOne;
           break;
         default:
           throw new Error("Unrecognised terminal symbol");
@@ -181,6 +199,12 @@ export function fromArenaWithExports(
           break;
         case ArenaSym.I:
           expr = I;
+          break;
+        case ArenaSym.ReadOne:
+          expr = ReadOne;
+          break;
+        case ArenaSym.WriteOne:
+          expr = WriteOne;
           break;
         default:
           throw new Error(`Unknown symbol tag: ${sym}`);
@@ -417,7 +441,11 @@ export class ArenaEvaluatorWasm implements Evaluator {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
     if (!baseAddr) return 0;
 
-    const headerView = new Uint32Array(this.memory.buffer, baseAddr, 32);
+    const headerView = new Uint32Array(
+      this.memory.buffer,
+      baseAddr,
+      SABHEADER_HEADER_SIZE_U32,
+    );
     return headerView[SabHeaderField.TOP];
   }
 
@@ -453,6 +481,12 @@ export class ArenaEvaluatorWasm implements Evaluator {
           break;
         case ArenaSym.I:
           sym = "I";
+          break;
+        case ArenaSym.ReadOne:
+          sym = "readOne";
+          break;
+        case ArenaSym.WriteOne:
+          sym = "writeOne";
           break;
         default:
           sym = "?";

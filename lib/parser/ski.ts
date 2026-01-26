@@ -17,12 +17,26 @@ import {
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { parseWithEOF } from "./eof.ts";
-import { type SKITerminalSymbol, term } from "../ski/terminal.ts";
+import { SKITerminalSymbol, term } from "../ski/terminal.ts";
 
-const TERMINALS = new Set(["S", "K", "I"]);
+const TERMINAL_ALIASES: Record<string, SKITerminalSymbol> = {
+  S: SKITerminalSymbol.S,
+  K: SKITerminalSymbol.K,
+  I: SKITerminalSymbol.I,
+  ",": SKITerminalSymbol.ReadOne,
+  ".": SKITerminalSymbol.WriteOne,
+};
+
+function normalizeSymbol(tok: string | null): SKITerminalSymbol | null {
+  if (tok === null) return null;
+  const upper = tok.toUpperCase();
+  if (upper in TERMINAL_ALIASES) return TERMINAL_ALIASES[upper];
+  if (tok in TERMINAL_ALIASES) return TERMINAL_ALIASES[tok];
+  return null;
+}
 
 function isSymbol(tok: string | null): tok is SKITerminalSymbol {
-  return tok !== null && TERMINALS.has(tok.toUpperCase());
+  return normalizeSymbol(tok) !== null;
 }
 
 function isAtomStart(tok: string | null): boolean {
@@ -52,9 +66,9 @@ function parseAtomicOrParens(
   if (peeked === "(") {
     return parseParens(state);
   } else if (isSymbol(peeked)) {
-    const token = peeked.toUpperCase();
+    const token = normalizeSymbol(peeked)!;
     const stateAfterConsume = consume(state);
-    return [peeked, term(token as SKITerminalSymbol), stateAfterConsume];
+    return [peeked, term(token), stateAfterConsume];
   } else {
     const unexpected = peeked === null ? "EOF" : `"${peeked}"`;
     throw new ParseError(

@@ -36,6 +36,7 @@ import { parseArrowType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
 import { ParseError } from "./parseError.ts";
 import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
+import { BACKSLASH } from "./tripLang.ts";
 
 /**
  * Parses an atomic typed lambda term.
@@ -51,8 +52,8 @@ export function parseAtomicTypedLambda(
 ): [string, TypedLambda, ParserState] {
   const [peeked, s] = peek(state);
 
-  if (peeked === "\\") {
-    const stateAfterLambda = matchCh(s, "\\");
+  if (peeked === BACKSLASH) {
+    const stateAfterLambda = matchCh(s, BACKSLASH);
     const [next] = peek(stateAfterLambda);
     if (next === ":") {
       throw new ParseError("expected an identifier");
@@ -65,7 +66,7 @@ export function parseAtomicTypedLambda(
       stateAfterArrow,
     );
     return [
-      `\\${varLit}:${typeLit}=>${bodyLit}`,
+      `${BACKSLASH}${varLit}:${typeLit}=>${bodyLit}`,
       mkTypedAbs(varLit, ty, bodyTerm),
       stateAfterBody,
     ];

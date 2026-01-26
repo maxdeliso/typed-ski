@@ -22,6 +22,7 @@ import { makeUntypedChurchNumeral } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createApplication } from "../terms/lambda.ts";
 import { parseWithEOF } from "./eof.ts";
+import { BACKSLASH } from "./tripLang.ts";
 
 /**
  * Parses an untyped lambda term (including applications) by chaining
@@ -47,8 +48,8 @@ export function parseAtomicUntypedLambda(
 ): [string, UntypedLambda, ParserState] {
   const [peeked, s] = peek(state);
 
-  if (peeked === "\\") {
-    let currentState = matchCh(s, "\\");
+  if (peeked === BACKSLASH) {
+    let currentState = matchCh(s, BACKSLASH);
     const [varLit, stateAfterVar] = parseIdentifier(currentState);
     currentState = matchFatArrow(stateAfterVar);
     const [, bodyTerm, stateAfterBody] = parseUntypedLambdaInternal(

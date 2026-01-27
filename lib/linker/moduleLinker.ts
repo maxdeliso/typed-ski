@@ -704,32 +704,44 @@ function resolveSCC(
   while (iteration++ < maxIterations) {
     let hasChanged = false;
 
-    // Store current definitions before iteration to avoid stale references
-    const currentDefinitions = new Map<QualifiedName, TripLangTerm>();
-    for (const qualified of scc) {
-      const { moduleName: _moduleName, localName, module } = getModuleInfo(
-        ps,
-        qualified,
-      );
-      currentDefinitions.set(qualified, module.defs.get(localName)!);
-    }
-
+    // Store current definitions and module info before iteration to avoid stale references
+    // We need to snapshot all definitions first, then process them, to ensure
+    // each definition is processed using the state from the start of this iteration.
+    const snapshots = new Map<
+      QualifiedName,
+      {
+        moduleName: string;
+        localName: string;
+        module: LoadedModule;
+        currentDef: TripLangTerm;
+      }
+    >();
     for (const qualified of scc) {
       const { moduleName, localName, module } = getModuleInfo(ps, qualified);
-      const currentDef = currentDefinitions.get(qualified)!;
-      const prevHash = computeTermHash(currentDef);
-
-      const newDef = substituteDependencies(
-        currentDef,
+      snapshots.set(qualified, {
         moduleName,
         localName,
+        module,
+        currentDef: module.defs.get(localName)!,
+      });
+    }
+
+    // Process all definitions using the snapshots
+    for (const qualified of scc) {
+      const snapshot = snapshots.get(qualified)!;
+      const prevHash = computeTermHash(snapshot.currentDef);
+
+      const newDef = substituteDependencies(
+        snapshot.currentDef,
+        snapshot.moduleName,
+        snapshot.localName,
         ps,
       );
       const newHash = computeTermHash(newDef);
 
       if (prevHash !== newHash) {
         hasChanged = true;
-        module.defs.set(localName, newDef);
+        snapshot.module.defs.set(snapshot.localName, newDef);
         setGlobal(ps, qualified, newDef);
       }
     }

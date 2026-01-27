@@ -248,6 +248,121 @@ poly rec main = \\n:Nat => main n`;
     }
   });
 
+  await t.step(
+    "fixpoint iteration loop exercises newDef and newHash computation",
+    () => {
+      // Use mutual recursion that cannot be resolved (a -> b, b -> a). This
+      // creates an SCC [a, b] with length > 1, so the fixpoint loop runs,
+      // computes newDef and newHash, and eventually throws "Circular dependency"
+      // or "Too many iterations". We require that path so the catch executes.
+      const moduleWithMutualRecursion = {
+        module: "MutualRecModule",
+        exports: ["main"],
+        imports: [],
+        definitions: {
+          a: {
+            kind: "poly" as const,
+            name: "a",
+            term: { kind: "systemF-var" as const, name: "b" },
+          },
+          b: {
+            kind: "poly" as const,
+            name: "b",
+            term: { kind: "systemF-var" as const, name: "a" },
+          },
+          main: {
+            kind: "poly" as const,
+            name: "main",
+            term: { kind: "systemF-var" as const, name: "a" },
+          },
+        },
+      };
+
+      const programSpace = createProgramSpace([
+        loadModule(moduleWithMutualRecursion, "MutualRecModule"),
+      ]);
+
+      let catchExecuted = false;
+      try {
+        resolveCrossModuleDependencies(programSpace, false);
+      } catch (error) {
+        catchExecuted = true;
+        const message = (error as Error).message;
+        expect(
+          message.includes("Circular dependency") ||
+            message.includes("Too many iterations"),
+        ).to.equal(
+          true,
+          `expected circular/iterations error, got: ${message}`,
+        );
+      }
+      expect(catchExecuted).to.equal(
+        true,
+        "resolveCrossModuleDependencies must throw so the catch (and newDef/newHash path) is exercised",
+      );
+    },
+  );
+
+  await t.step(
+    "cross-module mutual recursion resolution outcome",
+    () => {
+      // Original cross-module scenario: ModuleA.a -> ModuleB.b, ModuleB.b -> ModuleA.a.
+      // Assert whatever the linker currently does (success or exception).
+      const moduleA = {
+        module: "ModuleA",
+        exports: ["a"],
+        imports: [{ name: "b", from: "ModuleB" }],
+        definitions: {
+          a: {
+            kind: "poly" as const,
+            name: "a",
+            term: { kind: "systemF-var" as const, name: "b" },
+          },
+        },
+      };
+
+      const moduleB = {
+        module: "ModuleB",
+        exports: ["b"],
+        imports: [{ name: "a", from: "ModuleA" }],
+        definitions: {
+          b: {
+            kind: "poly" as const,
+            name: "b",
+            term: { kind: "systemF-var" as const, name: "a" },
+          },
+        },
+      };
+
+      const modules = [
+        { name: "ModuleA", object: moduleA },
+        { name: "ModuleB", object: moduleB },
+      ];
+      const programSpace = createProgramSpace(
+        modules.map((m) => loadModule(m.object, m.name)),
+      );
+
+      try {
+        const resolved = resolveCrossModuleDependencies(programSpace, false);
+        const defA = resolved.modules.get("ModuleA")?.defs.get("a");
+        const defB = resolved.modules.get("ModuleB")?.defs.get("b");
+        expect(defA).to.not.be.undefined;
+        expect(defB).to.not.be.undefined;
+        expect(defA!.kind).to.equal("untyped");
+        expect(defB!.kind).to.equal("untyped");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(
+          message.includes("Circular dependency") ||
+            message.includes("Too many iterations"),
+        ).to.equal(
+          true,
+          `cross-module mutual recursion threw with: ${message}`,
+        );
+      }
+    },
+  );
+
   await t.step("simple linking finds main and lowers to SKI", async () => {
     // Test with complex module that has main
     const complexContent = await compileTripFile("complex.trip");

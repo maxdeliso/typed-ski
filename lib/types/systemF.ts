@@ -43,6 +43,12 @@ export const substituteSystemFType = (
   switch (original.kind) {
     case "type-var":
       return original.typeName === targetVarName ? replacement : original;
+    case "type-app":
+      return {
+        kind: "type-app",
+        fn: substituteSystemFType(original.fn, targetVarName, replacement),
+        arg: substituteSystemFType(original.arg, targetVarName, replacement),
+      };
     case "non-terminal":
       return arrow(
         substituteSystemFType(original.lft, targetVarName, replacement),
@@ -67,6 +73,9 @@ export const referencesVar = (
   switch (original.kind) {
     case "type-var":
       return original.typeName === varName;
+    case "type-app":
+      return referencesVar(original.fn, varName) ||
+        referencesVar(original.arg, varName);
     case "non-terminal":
       return referencesVar(original.lft, varName) ||
         referencesVar(original.rgt, varName);

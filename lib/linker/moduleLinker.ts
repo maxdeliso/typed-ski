@@ -482,6 +482,7 @@ function tarjanSCC(
 function substituteDependencies(
   def: TripLangTerm,
   moduleName: string,
+  localName: string,
   ps: ProgramSpace,
 ): TripLangTerm {
   const defValue = extractDefinitionValue(def);
@@ -500,6 +501,11 @@ function substituteDependencies(
 
   // Resolve term references iteratively until no new external references appear
   let currentExternalTermRefs = externalTermRefs;
+  if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
+    currentExternalTermRefs = currentExternalTermRefs.filter((ref) =>
+      ref !== localName
+    );
+  }
   let iteration = 0;
   const MAX_ITERATIONS = 10; // Prevent infinite loops
 
@@ -568,6 +574,9 @@ function substituteDependencies(
     }
 
     // Update for next iteration
+    if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
+      nextExternalTermRefs.delete(localName);
+    }
     currentExternalTermRefs = [...nextExternalTermRefs];
     iteration++;
   }
@@ -681,6 +690,7 @@ function resolveSCC(
     const resolvedDef = substituteDependencies(
       module.defs.get(localName)!,
       moduleName,
+      localName,
       ps,
     );
     module.defs.set(localName, resolvedDef);
@@ -709,7 +719,12 @@ function resolveSCC(
       const currentDef = currentDefinitions.get(qualified)!;
       const prevHash = computeTermHash(currentDef);
 
-      const newDef = substituteDependencies(currentDef, moduleName, ps);
+      const newDef = substituteDependencies(
+        currentDef,
+        moduleName,
+        localName,
+        ps,
+      );
       const newHash = computeTermHash(newDef);
 
       if (prevHash !== newHash) {
@@ -741,6 +756,16 @@ export function resolveCrossModuleDependencies(
   }
 
   const resolvedPS = deepCopyProgramSpace(programSpace);
+  // Pre-lower poly/typed terms to untyped to avoid recursive inlining loops.
+  for (const module of resolvedPS.modules.values()) {
+    for (const [name, def] of module.defs) {
+      if (def.kind === "poly" || def.kind === "typed") {
+        const lowered = lower(def);
+        module.defs.set(name, lowered);
+        setGlobal(resolvedPS, qualifiedName(module.name, name), lowered);
+      }
+    }
+  }
   const dependencyGraph = buildDependencyGraph(resolvedPS);
   const sccs = tarjanSCC(dependencyGraph).reverse(); // Topological sort
 

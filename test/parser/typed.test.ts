@@ -12,6 +12,7 @@ import {
   arrow,
   arrows,
   mkTypeVariable,
+  typeApp,
   typesLitEq,
 } from "../../lib/types/types.ts";
 
@@ -86,6 +87,33 @@ Deno.test("Parser Tests", async (t) => {
       const [lit, ty] = parseType(src);
       const expected = arrow(mkTypeVariable("a"), mkTypeVariable("b"));
       expect(lit).to.equal("a->b");
+      expect(typesLitEq(ty, expected)).to.equal(true);
+    });
+
+    await t.step("parses type applications", () => {
+      const src = "List Nat";
+      const [lit, ty] = parseType(src);
+      const expected = typeApp(
+        mkTypeVariable("List"),
+        mkTypeVariable("Nat"),
+      );
+      expect(lit).to.equal("List Nat");
+      expect(typesLitEq(ty, expected)).to.equal(true);
+    });
+
+    await t.step("parses nested type applications", () => {
+      const src = "Result ParseError (Pair A (List Nat))";
+      const [lit, ty] = parseType(src);
+      const listNat = typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"));
+      const pair = typeApp(
+        typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
+        listNat,
+      );
+      const expected = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("ParseError")),
+        pair,
+      );
+      expect(lit).to.equal(src);
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
   });

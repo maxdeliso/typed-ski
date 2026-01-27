@@ -7,6 +7,7 @@
  * @module
  */
 import { parseTripLang } from "../parser/tripLang.ts";
+import { expandDataDefinitions } from "../meta/frontend/data.ts";
 import { indexSymbols as indexSymbolsImpl } from "../meta/frontend/symbolTable.ts";
 import { elaborateTerms } from "../meta/frontend/elaboration.ts";
 import type {
@@ -123,7 +124,7 @@ function extractDefinitions(
 export function compileToObjectFile(source: string): TripCObject {
   try {
     // Parse the program
-    const parsedProgram = parseTripLang(source);
+    const parsedProgram = expandDataDefinitions(parseTripLang(source));
 
     // Extract module information
     const { moduleName, imports, exports } = extractModuleInfo(parsedProgram);

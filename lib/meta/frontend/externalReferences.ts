@@ -75,6 +75,11 @@ export function externalReferences(td: TripLangValueType): [
 
         break;
       }
+      case "type-app": {
+        defStack.push(current.fn);
+        defStack.push(current.arg);
+        break;
+      }
 
       case "lambda-abs": {
         defStack.push(current.body);

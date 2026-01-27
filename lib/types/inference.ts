@@ -42,6 +42,8 @@ interface InferenceResult {
 const occursIn = (tv: TypeVariable, ty: BaseType): boolean => {
   if (ty.kind === "type-var") {
     return ty.typeName === tv.typeName;
+  } else if (ty.kind === "type-app") {
+    return occursIn(tv, ty.fn) || occursIn(tv, ty.arg);
   } else if (ty.kind === "non-terminal") {
     return occursIn(tv, ty.lft) || occursIn(tv, ty.rgt);
   } else {
@@ -73,6 +75,12 @@ export const substituteType = (
   switch (original.kind) {
     case "type-var":
       return original;
+    case "type-app":
+      return {
+        kind: "type-app",
+        fn: substituteType(original.fn, lft, rgt),
+        arg: substituteType(original.arg, lft, rgt),
+      };
     case "non-terminal":
       return arrow(
         substituteType(original.lft, lft, rgt),
@@ -217,9 +225,14 @@ export const unify = (
     return newContext;
   }
 
+  // Type application unification.
+  if (t1.kind === "type-app" && t2.kind === "type-app") {
+    const context1 = unify(t1.fn, t2.fn, context);
+    return unify(t1.arg, t2.arg, context1);
+  }
+
   // At this point, both t1 and t2 are non-terminal (arrow) types.
-  // Ensure that both have lft and rgt.
-  if ("lft" in t1 && "lft" in t2) {
+  if (t1.kind === "non-terminal" && t2.kind === "non-terminal") {
     const context1 = unify(t1.lft, t2.lft, context);
     return unify(t1.rgt, t2.rgt, context1);
   } else {

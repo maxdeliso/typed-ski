@@ -66,6 +66,10 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
         }
         break;
       }
+      case "type-app":
+        collect(t.fn, bound);
+        collect(t.arg, bound);
+        break;
       case "non-terminal":
         collect(t.lft, bound);
         collect(t.rgt, bound);
@@ -111,6 +115,10 @@ function usesSystemFNatLiteral(term: TripLangValueType): boolean {
       case "systemF-type-app":
         stack.push(current.term);
         stack.push(current.typeArg);
+        break;
+      case "type-app":
+        stack.push(current.fn);
+        stack.push(current.arg);
         break;
       case "systemF-match":
         stack.push(current.scrutinee);
@@ -201,6 +209,10 @@ export function freeTypeVars(t: TripLangValueType): Set<string> {
         break;
       case "systemF-var":
       case "lambda-var":
+        break;
+      case "type-app":
+        collect(t.fn, bound);
+        collect(t.arg, bound);
         break;
       case "type-var":
         if (!bound.has(t.typeName)) {
@@ -392,6 +404,12 @@ export function alphaRenameTypeBinder<T extends TripLangValueType>(
         ...term,
         term: alphaRenameTypeBinder(term.term, oldName, newName),
         typeArg: alphaRenameTypeBinder(term.typeArg, oldName, newName),
+      } as T;
+    case "type-app":
+      return {
+        ...term,
+        fn: alphaRenameTypeBinder(term.fn, oldName, newName),
+        arg: alphaRenameTypeBinder(term.arg, oldName, newName),
       } as T;
     case "systemF-match": {
       const scrutinee = alphaRenameTypeBinder(
@@ -587,6 +605,12 @@ export function substituteHygienic<T extends TripLangValueType>(
         lft: substituteHygienic(term.lft, termName, replacement, bound),
         rgt: substituteHygienic(term.rgt, termName, replacement, bound),
       } as T;
+    case "type-app":
+      return {
+        ...term,
+        fn: substituteHygienic(term.fn, termName, replacement, bound),
+        arg: substituteHygienic(term.arg, termName, replacement, bound),
+      } as T;
     case "systemF-var":
     case "lambda-var":
       if (term.name === termName && !bound.has(term.name)) {
@@ -661,6 +685,12 @@ export function substituteTypeHygienic<T extends TripLangValueType>(
           replacement,
           bound,
         ),
+      } as T;
+    case "type-app":
+      return {
+        ...term,
+        fn: substituteTypeHygienic(term.fn, typeName, replacement, bound),
+        arg: substituteTypeHygienic(term.arg, typeName, replacement, bound),
       } as T;
     case "systemF-match": {
       const scrutinee = substituteTypeHygienic(

@@ -97,6 +97,15 @@ export interface DeBruijnTyApp {
 }
 
 /**
+ * A type application: TypeFn TypeArg
+ */
+export interface DeBruijnTypeApp {
+  kind: "DbTypeApp";
+  fn: DeBruijnTerm;
+  arg: DeBruijnTerm;
+}
+
+/**
  * A match arm in De Bruijn form.
  */
 export interface DeBruijnMatchArm {
@@ -138,6 +147,7 @@ export type DeBruijnTerm =
   | DeBruijnForall
   | DeBruijnApp
   | DeBruijnTyApp
+  | DeBruijnTypeApp
   | DeBruijnMatch
   | DeBruijnTerminal;
 
@@ -172,6 +182,12 @@ function toDeBruijnInternal(
         ? { kind: "DbFreeTypeVar", name: term.typeName }
         : { kind: "DbVar", index: idx };
     }
+    case "type-app":
+      return {
+        kind: "DbTypeApp",
+        fn: toDeBruijnInternal(term.fn, termCtx, typeCtx),
+        arg: toDeBruijnInternal(term.arg, termCtx, typeCtx),
+      };
     case "lambda-abs":
       return {
         kind: "DbAbs",

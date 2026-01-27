@@ -13,12 +13,12 @@ import {
   indexSymbols,
   parseSystemF,
   parseTripLang,
-  prettyPrintSystemF,
-  prettyPrintTy,
   resolveExternalProgramReferences,
   type SystemFTerm,
   type TripLangTerm,
   UnChurchNumber,
+  unparseSystemF,
+  unparseType,
 } from "../../lib/index.ts";
 
 import type { BaseType } from "../../lib/types/types.ts";
@@ -65,7 +65,7 @@ function assertTypeDefinition(
 ) {
   const ty = types.get(id);
   assert.isDefined(ty, `${id} should be defined`);
-  assert.strictEqual(prettyPrintTy(ty!), expected);
+  assert.strictEqual(unparseType(ty!), expected);
 }
 
 Deno.test("TripLang → System F compiler integration", async (t) => {
@@ -154,10 +154,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       )!;
 
       assertTermMatches(
-        prettyPrintSystemF(
+        unparseSystemF(
           (succRaw as { kind: "poly"; term: SystemFTerm }).term,
         ),
-        "λn:Nat.ΛX.λs:(X→X).λz:X.(s (n[X] s z))",
+        "\\n:Nat=>#X=>\\s:(X->X)=>\\z:X=>(s (n[X] s z))",
       );
 
       const resolved = resolveExternalProgramReferences(
@@ -168,10 +168,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         d.kind === "poly" && d.name === "succ"
       )!;
       assertTermMatches(
-        prettyPrintSystemF(
+        unparseSystemF(
           (succRes as { kind: "poly"; term: SystemFTerm }).term,
         ),
-        "λn:∀X.((X→X)→(X→X)).ΛX.λs:(X→X).λz:X.(s (n[X] s z))",
+        "\\n:#X->((X->X)->(X->X))=>#X=>\\s:(X->X)=>\\z:X=>(s (n[X] s z))",
       );
     });
 
@@ -199,11 +199,15 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         );
 
         // spot-check a few definitions
-        assertTypeDefinition(compiled.types, "zero", "∀X.((X→X)→(X→X))");
+        assertTypeDefinition(
+          compiled.types,
+          "zero",
+          "#X->((X->X)->(X->X))",
+        );
         assertTypeDefinition(
           compiled.types,
           "fact",
-          "(∀X.((X→X)→(X→X))→∀X.((X→X)→(X→X)))",
+          "(#X->((X->X)->(X->X))->#X->((X->X)->(X->X)))",
         );
         const mainPoly = resolvePoly(compiled, "main");
         const mainRes = await arenaEval.reduceAsync(

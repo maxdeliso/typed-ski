@@ -17,14 +17,14 @@ poly main = 3
 
 const WITH_NAT_SOURCE = `module LiteralWithNat
 
-type Nat = ∀X . (X → X) → X → X
+type Nat = #X -> (X -> X) -> X -> X
 
 poly main = 3
 `;
 
 const SHADOW_NAT_SOURCE = `module ShadowNat
 
-type Bool = ∀B . B → B → B
+type Bool = #B -> B -> B -> B
 type Nat = Bool
 
 poly main : Bool = 3
@@ -32,14 +32,14 @@ poly main : Bool = 3
 
 const TERM_ALIAS_SOURCE = `module TermNatAlias
 
-type Nat = ∀X . (X → X) → X → X
+type Nat = #X -> (X -> X) -> X -> X
 
-poly main : Nat = (λNat : Nat . Nat) 3
+poly main : Nat = (\\Nat : Nat => Nat) 3
 `;
 
 const SUBSTITUTION_SOURCE = `module LiteralSubstitution
 
-type Nat = ∀X . (X → X) → X → X
+type Nat = #X -> (X -> X) -> X -> X
 
 poly literal = 3
 poly passthrough = literal

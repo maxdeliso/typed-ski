@@ -19,7 +19,7 @@ import {
   substituteTripLangTermDirect,
   substituteTripLangTypeDirect,
 } from "../meta/frontend/substitution.ts";
-import { prettyPrint } from "../ski/expression.ts";
+import { unparseSKI } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 
 /**
@@ -878,7 +878,7 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
 
   // Extract the SKI expression and pretty print it
   const skiExpression = current.term;
-  return prettyPrint(skiExpression);
+  return unparseSKI(skiExpression);
 }
 
 /**

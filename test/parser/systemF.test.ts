@@ -1,6 +1,5 @@
 import { strict as assert } from "node:assert";
-import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
-import { prettyPrintSystemF } from "../../lib/terms/systemF.ts";
+import { parseSystemF, unparseSystemF } from "../../lib/parser/systemFTerm.ts";
 
 Deno.test("System F Parser", async (t) => {
   await t.step("parses a single variable", () => {
@@ -18,14 +17,14 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(lit, "123");
     assert.equal(ast.kind, "systemF-var");
     assert.match(ast.name, /__trip_nat_literal__/);
-    assert.equal(prettyPrintSystemF(ast), "123");
+    assert.equal(unparseSystemF(ast), "123");
   });
 
   await t.step("parses a term abstraction", () => {
-    // Example: λx:X.x
-    const input = "λx:X.x";
+    // Example: \x:X=>x
+    const input = "\\x:X=>x";
     const [lit, ast] = parseSystemF(input);
-    assert.equal(lit, "λx:X.x");
+    assert.equal(lit, "\\x:X=>x");
 
     // The AST should be a term abstraction.
     assert.equal(ast.kind, "systemF-abs");
@@ -43,10 +42,10 @@ Deno.test("System F Parser", async (t) => {
   });
 
   await t.step("parses a type abstraction", () => {
-    // Example: ΛX.λx:X.x
-    const input = "ΛX.λx:X.x";
+    // Example: #X=>\x:X=>x
+    const input = "#X=>\\x:X=>x";
     const [lit, ast] = parseSystemF(input);
-    assert.equal(lit, "ΛX.λx:X.x");
+    assert.equal(lit, "#X=>\\x:X=>x");
     // The AST should be a type abstraction.
     assert.equal(ast.kind, "systemF-type-abs");
     assert.equal(ast.typeVar, "X");
@@ -62,11 +61,11 @@ Deno.test("System F Parser", async (t) => {
   });
 
   await t.step("parses a term with type application", () => {
-    // Example: x[∀Y.Y→Y]
+    // Example: x[#Y->Y->Y]
     // This applies variable x to a type argument which is a universal type.
-    const input = "x[∀Y.Y→Y]";
+    const input = "x[#Y->Y->Y]";
     const [lit, ast] = parseSystemF(input);
-    assert.equal(lit, "x[∀Y.Y→Y]");
+    assert.equal(lit, "x[#Y->Y->Y]");
 
     // The AST should be a type application node.
     assert.equal(ast.kind, "systemF-type-app");
@@ -81,7 +80,7 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(typeArg.kind, "forall");
     assert.equal(typeArg.typeVar, "Y");
 
-    // The body of the forall is an arrow type (a cons cell) representing Y→Y.
+    // The body of the forall is an arrow type (a cons cell) representing Y->Y.
     assert.equal(typeArg.body.kind, "non-terminal");
     const left = typeArg.body.lft;
     const right = typeArg.body.rgt;
@@ -125,7 +124,7 @@ Deno.test("System F Parser", async (t) => {
     // This test verifies that lambda abstractions with numeric bindings are rejected
     assert.throws(
       () => {
-        parseSystemF("λ123:X.123");
+        parseSystemF("\\123:X=>123");
       },
       Error,
       "not a valid identifier",
@@ -135,10 +134,10 @@ Deno.test("System F Parser", async (t) => {
   await t.step("throws an error on incomplete or malformed input", () => {
     const badInputs = [
       "(", // missing closing parenthesis
-      "λx:X", // missing dot and body
+      "\\x:X", // missing fat arrow and body
       "x)", // unmatched closing parenthesis
       "x y )", // stray parenthesis at end
-      "∀X X", // missing dot after ∀X
+      "#X X", // missing fat arrow after #X
     ];
     badInputs.forEach((input) => {
       assert.throws(
@@ -155,11 +154,11 @@ Deno.test("System F Parser", async (t) => {
     "round-trips a well-formed expression through pretty printer and parser",
     () => {
       // Use a well–formed expression (here the polymorphic identity)
-      const input = "ΛX. λx: X. x";
+      const input = "#X=> \\x: X => x";
       // Parse the input to get its AST.
       const [, ast] = parseSystemF(input);
       // Pretty–print the AST to obtain a normalized string.
-      const pretty = prettyPrintSystemF(ast);
+      const pretty = unparseSystemF(ast);
 
       // Now re-parse the pretty printed output.
       const [roundTripLit, roundTripAst] = parseSystemF(pretty);
@@ -171,7 +170,7 @@ Deno.test("System F Parser", async (t) => {
         "Round-tripped literal should match pretty printed output (modulo whitespace)",
       );
 
-      const prettyRoundTrip = prettyPrintSystemF(roundTripAst);
+      const prettyRoundTrip = unparseSystemF(roundTripAst);
       assert.equal(
         prettyRoundTrip.replace(/\s+/g, ""),
         pretty.replace(/\s+/g, ""),

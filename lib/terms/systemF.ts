@@ -8,7 +8,6 @@
  * @module
  */
 import type { BaseType } from "../types/types.ts";
-import { parseNatLiteralIdentifier } from "../consts/nat.ts";
 
 /**
  * A term variable in System F.
@@ -165,32 +164,6 @@ export const createSystemFApplication = (
 });
 
 /**
- * Pretty-prints a System F term using λ for term abstraction and Λ for type abstraction.
- * @param term the System F term
- * @returns a human-readable string representation
- */
-export function prettyPrintSystemF(term: SystemFTerm): string {
-  switch (term.kind) {
-    case "non-terminal": {
-      const parts = flattenSystemFApp(term);
-      return `(${parts.map(prettyPrintSystemF).join(" ")})`;
-    }
-    case "systemF-var":
-      return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
-    case "systemF-abs":
-      return `λ${term.name}:${prettyPrintSystemFType(term.typeAnnotation)}.${
-        prettyPrintSystemF(term.body)
-      }`;
-    case "systemF-type-abs":
-      return `Λ${term.typeVar}.${prettyPrintSystemF(term.body)}`;
-    case "systemF-type-app":
-      return `${prettyPrintSystemF(term.term)}[${
-        prettyPrintSystemFType(term.typeArg)
-      }]`;
-  }
-}
-
-/**
  * Flattens a left-associated application tree into a list of terms.
  * For example, ((a b) c) becomes [a, b, c].
  * @param term the System F term to flatten
@@ -202,22 +175,5 @@ export function flattenSystemFApp(term: SystemFTerm): SystemFTerm[] {
     return [...leftParts, term.rgt];
   } else {
     return [term];
-  }
-}
-
-/**
- * Pretty-prints a System F type, using ∀ and → syntax.
- * @param ty the BaseType to pretty-print
- * @returns a human-readable string representation of the type
- */
-export function prettyPrintSystemFType(ty: BaseType): string {
-  if (ty.kind === "forall") {
-    return `∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)}`;
-  } else if (ty.kind === "non-terminal" && "lft" in ty && "rgt" in ty) {
-    return `(${prettyPrintSystemFType(ty.lft)}→${
-      prettyPrintSystemFType(ty.rgt)
-    })`;
-  } else {
-    return ty.typeName;
   }
 }

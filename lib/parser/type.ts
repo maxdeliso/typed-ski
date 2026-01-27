@@ -7,16 +7,18 @@
  * @module
  */
 import {
-  consume,
+  matchArrow,
   matchLP,
   matchRP,
   parseIdentifier,
   type ParserState,
   peek,
+  peekArrow,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
 import { parseWithEOF } from "./eof.ts";
+import { ARROW, HASH, LEFT_PAREN, RIGHT_PAREN } from "./consts.ts";
 
 /**
  * Parses a "simple" type.
@@ -56,14 +58,14 @@ export function parseArrowType(
   state: ParserState,
 ): [string, BaseType, ParserState] {
   const [leftLit, leftType, stateAfterLeft] = parseSimpleType(state);
-  const [next, sAfterLeft] = peek(stateAfterLeft);
-  if (next === "→") {
-    const stateAfterArrow = consume(sAfterLeft);
+  const [isArrow] = peekArrow(stateAfterLeft);
+  if (isArrow) {
+    const stateAfterArrow = matchArrow(stateAfterLeft);
     const [rightLit, rightType, stateAfterRight] = parseArrowType(
       stateAfterArrow,
     );
     return [
-      `${leftLit}→${rightLit}`,
+      `${leftLit}${ARROW}${rightLit}`,
       arrow(leftType, rightType),
       stateAfterRight,
     ];
@@ -78,4 +80,22 @@ export function parseArrowType(
 export function parseType(input: string): [string, BaseType] {
   const [lit, type] = parseWithEOF(input, parseArrowType);
   return [lit, type];
+}
+
+/**
+ * Unparses a base type into a compact ASCII string.
+ * @param ty the type to unparse
+ * @returns a human-readable string representation
+ */
+export function unparseType(ty: BaseType): string {
+  // Formats either a type variable, a forall, or an arrow type using ASCII.
+  if (ty.kind === "type-var") {
+    return ty.typeName;
+  } else if (ty.kind === "forall") {
+    return `${HASH}${ty.typeVar}${ARROW}${unparseType(ty.body)}`;
+  } else {
+    return `${LEFT_PAREN}${unparseType(ty.lft)}${ARROW}${
+      unparseType(ty.rgt)
+    }${RIGHT_PAREN}`;
+  }
 }

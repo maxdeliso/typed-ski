@@ -15,9 +15,9 @@ import {
   arrows,
   type BaseType,
   mkTypeVariable,
-  prettyPrintTy,
   typesLitEq,
 } from "../../lib/types/types.ts";
+import { unparseType } from "../../lib/parser/type.ts";
 
 import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
 import { normalize } from "../../lib/types/normalization.ts";
@@ -67,8 +67,8 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
           mkTypeVariable("a"),
           arrow(mkTypeVariable("b"), mkTypeVariable("a")),
         );
-        expect(prettyPrintTy(normalize(nonNorm))).to.equal(
-          prettyPrintTy(expected),
+        expect(unparseType(normalize(nonNorm))).to.equal(
+          unparseType(expected),
         );
       });
 
@@ -100,22 +100,22 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
     await t.step("successful cases", async (t) => {
       await t.step("I combinator", () => {
         const [term, ty] = inferType(mkUntypedAbs("x", mkVar("x")));
-        const [, typed] = parseTypedLambda("λx:a.x");
-        const [, parsed] = parseType("a→a");
+        const [, typed] = parseTypedLambda("\\x:a=>x");
+        const [, parsed] = parseType("a->a");
 
         expect(typedTermsLitEq(term, typed)).to.equal(true);
-        expect(prettyPrintTy(ty)).to.equal(prettyPrintTy(parsed));
+        expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
 
       await t.step("K combinator", () => {
         const [term, ty] = inferType(
           mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x"))),
         );
-        const [, typed] = parseTypedLambda("λx:a.λy:b.x");
-        const [, parsed] = parseType("a→b→a");
+        const [, typed] = parseTypedLambda("\\x:a=>\\y:b=>x");
+        const [, parsed] = parseType("a->b->a");
 
         expect(typedTermsLitEq(term, typed)).to.equal(true);
-        expect(prettyPrintTy(ty)).to.equal(prettyPrintTy(parsed));
+        expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
 
       await t.step("S combinator", () => {
@@ -134,10 +134,12 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
             ),
           ),
         );
-        const [, typed] = parseTypedLambda("λx:a→b→c.λy:a→b.λz:a.x z(y z)");
-        const [, parsed] = parseType("(a→b→c)→(a→b)→a→c");
+        const [, typed] = parseTypedLambda(
+          "\\x:a->b->c=>\\y:a->b=>\\z:a=>x z(y z)",
+        );
+        const [, parsed] = parseType("(a->b->c)->(a->b)->a->c");
 
-        expect(prettyPrintTy(ty)).to.equal(prettyPrintTy(parsed));
+        expect(unparseType(ty)).to.equal(unparseType(parsed));
         expect(typedTermsLitEq(term, typed)).to.equal(true);
       });
 
@@ -148,10 +150,10 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
             mkUntypedAbs("y", createApplication(mkVar("x"), mkVar("y"))),
           ),
         );
-        const [, typed] = parseTypedLambda("λx:a→b.λy:a.x y");
-        const [, parsed] = parseType("(a→b)→(a→b)");
+        const [, typed] = parseTypedLambda("\\x:a->b=>\\y:a=>x y");
+        const [, parsed] = parseType("(a->b)->(a->b)");
 
-        expect(prettyPrintTy(ty)).to.equal(prettyPrintTy(parsed));
+        expect(unparseType(ty)).to.equal(unparseType(parsed));
         expect(typedTermsLitEq(term, typed)).to.equal(true);
       });
     });

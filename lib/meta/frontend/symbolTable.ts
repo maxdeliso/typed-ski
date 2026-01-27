@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { prettyPrintTy } from "../../types/types.ts";
+import { unparseType } from "../../parser/type.ts";
 import type {
   SymbolTable,
   TripLangProgram,
@@ -51,7 +51,7 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
           const typeDef = term;
           if (tyMap.has(term.name)) {
             throw new CompilationError(
-              `Duplicate type: ${prettyPrintTy(typeDef.type)}`,
+              `Duplicate type: ${unparseType(typeDef.type)}`,
               "index",
               { typeDef },
             );

@@ -3,7 +3,7 @@
  *
  * This module defines the fundamental types used throughout the type system,
  * including type variables, arrow types, universal types, and utility functions
- * for type manipulation and pretty printing.
+ * for type manipulation.
  *
  * @module
  */
@@ -50,21 +50,5 @@ export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
     return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt);
   } else {
     return false;
-  }
-};
-
-/**
- * Renders a base type as a compact UTF-8 string using ∀ and →.
- * @param ty the type to print
- * @returns a human-readable string representation
- */
-export const prettyPrintTy = (ty: BaseType): string => {
-  // Formats either a type variable, a forall, or an arrow type using →.
-  if (ty.kind === "type-var") {
-    return ty.typeName;
-  } else if (ty.kind === "forall") {
-    return `∀${ty.typeVar}.${prettyPrintTy(ty.body)}`;
-  } else {
-    return `(${prettyPrintTy(ty.lft)}→${prettyPrintTy(ty.rgt)})`;
   }
 };

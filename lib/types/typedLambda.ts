@@ -6,7 +6,8 @@
  *
  * @module
  */
-import { arrow, type BaseType, prettyPrintTy, typesLitEq } from "./types.ts";
+import { arrow, type BaseType, typesLitEq } from "./types.ts";
+import { unparseType } from "../parser/type.ts";
 import {
   createApplication,
   type LambdaVar,
@@ -164,8 +165,8 @@ export const typecheckGiven = (
       if (!typesLitEq(tyRgt, takes)) {
         throw new TypeError(
           "Type mismatch in function application:\n" +
-            `Expected: ${prettyPrintTy(takes)}\n` +
-            `Got: ${prettyPrintTy(tyRgt)}`,
+            `Expected: ${unparseType(takes)}\n` +
+            `Got: ${unparseType(tyRgt)}`,
         );
       }
 
@@ -173,37 +174,6 @@ export const typecheckGiven = (
     }
     default:
       throw new TypeError("Unknown term kind");
-  }
-};
-
-/**
- * Pretty-prints a simply typed lambda expression.
- *
- * Formats variables, abstractions, and applications using λ, colon-annotated types, and parentheses.
- * @param expr the typed lambda term
- * @returns a human-readable string representation
- */
-export const prettyPrintTypedLambda = (expr: TypedLambda): string => {
-  switch (expr.kind) {
-    case "lambda-var": {
-      return expr.name;
-    }
-    case "typed-lambda-abstraction": {
-      return "λ" +
-        expr.varName +
-        ":" +
-        prettyPrintTy(expr.ty) +
-        "." +
-        prettyPrintTypedLambda(expr.body);
-    }
-    case "non-terminal": {
-      return "(" +
-        prettyPrintTypedLambda(expr.lft) +
-        prettyPrintTypedLambda(expr.rgt) +
-        ")";
-    }
-    default:
-      throw new Error("Unknown term kind");
   }
 };
 

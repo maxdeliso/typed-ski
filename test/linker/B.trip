@@ -4,4 +4,4 @@ import addA A
 
 export main
 
-typed main = λx:Int. addA x x
+typed main = \x:Int => addA x x

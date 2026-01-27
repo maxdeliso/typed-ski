@@ -1,3 +1,3 @@
 module TypedNoType
 
-typed id = λx:Int. x
+typed id = \x:Int => x

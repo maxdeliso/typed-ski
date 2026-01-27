@@ -10,6 +10,7 @@ import { ParseError } from "./parseError.ts";
 import {
   isDigit,
   matchCh,
+  matchFatArrow,
   matchLP,
   matchRP,
   parseIdentifier,
@@ -28,13 +29,26 @@ import {
 } from "../terms/systemF.ts";
 import { makeNatLiteralIdentifier } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
-import { createSystemFApplication } from "../terms/systemF.ts";
+import {
+  createSystemFApplication,
+  flattenSystemFApp,
+} from "../terms/systemF.ts";
+import {
+  BACKSLASH,
+  COLON,
+  FAT_ARROW,
+  HASH,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "./consts.ts";
+import { parseNatLiteralIdentifier } from "../consts/nat.ts";
+import { unparseSystemFType } from "./systemFType.ts";
 
 /**
  * Parses an atomic System F term.
  * Atomic terms can be:
- *   - A term abstraction: "λx: T. t"
- *   - A type abstraction: "ΛX. t"
+ *   - A term abstraction: "\x: T => t"
+ *   - A type abstraction: "#X => t"
  *   - A parenthesized term: "(" t ")"
  *   - A type application: "t [T]"
  *   - A variable: e.g. "x"
@@ -46,17 +60,19 @@ export function parseAtomicSystemFTerm(
 ): [string, SystemFTerm, ParserState] {
   const [ch, currentState] = peek(state);
 
-  if (ch === "λ") {
-    const stateAfterLambda = matchCh(currentState, "λ");
+  if (ch === BACKSLASH) {
+    const stateAfterLambda = matchCh(currentState, BACKSLASH);
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
     const stateAfterColon = matchCh(stateAfterVar, ":");
     const [typeLit, typeAnnotation, stateAfterType] = parseSystemFType(
       stateAfterColon,
     );
-    const stateAfterDot = matchCh(stateAfterType, ".");
-    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateAfterDot);
+    const stateAfterArrow = matchFatArrow(stateAfterType);
+    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(
+      stateAfterArrow,
+    );
     return [
-      `λ${varLit}:${typeLit}.${bodyLit}`,
+      `${BACKSLASH}${varLit}:${typeLit}${FAT_ARROW}${bodyLit}`,
       mkSystemFAbs(varLit, typeAnnotation, bodyTerm),
       stateAfterBody,
     ];
@@ -67,13 +83,15 @@ export function parseAtomicSystemFTerm(
     );
     const stateAfterRP = matchRP(stateAfterTerm);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
-  } else if (ch === "Λ") {
-    const stateAfterLambdaT = matchCh(state, "Λ");
+  } else if (ch === HASH) {
+    const stateAfterLambdaT = matchCh(state, HASH);
     const [typeVar, stateAfterVar] = parseIdentifier(stateAfterLambdaT);
-    const stateAfterDot = matchCh(stateAfterVar, ".");
-    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateAfterDot);
+    const stateAfterArrow = matchFatArrow(stateAfterVar);
+    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(
+      stateAfterArrow,
+    );
     return [
-      `Λ${typeVar}.${bodyLit}`,
+      `${HASH}${typeVar}${FAT_ARROW}${bodyLit}`,
       mkSystemFTAbs(typeVar, bodyTerm),
       stateAfterBody,
     ];
@@ -127,4 +145,32 @@ export function parseSystemFTerm(
 export function parseSystemF(input: string): [string, SystemFTerm] {
   const [lit, term] = parseWithEOF(input, parseSystemFTerm);
   return [lit, term];
+}
+
+/**
+ * Unparses a System F term into ASCII syntax.
+ * @param term the System F term
+ * @returns a human-readable string representation
+ */
+export function unparseSystemF(term: SystemFTerm): string {
+  switch (term.kind) {
+    case "non-terminal": {
+      const parts = flattenSystemFApp(term);
+      return `${LEFT_PAREN}${
+        parts.map(unparseSystemF).join(" ")
+      }${RIGHT_PAREN}`;
+    }
+    case "systemF-var":
+      return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
+    case "systemF-abs":
+      return `${BACKSLASH}${term.name}${COLON}${
+        unparseSystemFType(term.typeAnnotation)
+      }${FAT_ARROW}${unparseSystemF(term.body)}`;
+    case "systemF-type-abs":
+      return `${HASH}${term.typeVar}${FAT_ARROW}${unparseSystemF(term.body)}`;
+    case "systemF-type-app":
+      return `${unparseSystemF(term.term)}[${
+        unparseSystemFType(term.typeArg)
+      }]`;
+  }
 }

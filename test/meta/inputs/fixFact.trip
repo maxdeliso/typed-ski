@@ -1,54 +1,54 @@
 module FixFact
 
-type Nat = ∀X . (X → X) → X → X
+type Nat = #X -> (X -> X) -> X -> X
 
 poly succ =
-  λn : Nat .
-    Λa. λs : a → a . λz : a .
+  \n : Nat =>
+    #a => \s : a -> a => \z : a =>
       s (n [a] s z)
 
-poly zero = ΛX . λs: X → X . λz : X . z
+poly zero = #X => \s: X -> X => \z : X => z
 
 poly one = succ zero
 
-type Bool = ∀B. B → B → B
+type Bool = #B -> B -> B -> B
 
-poly true = ΛB . λt:B . λf:B . t
+poly true = #B => \t:B => \f:B => t
 
-poly false = ΛB . λt:B . λf:B . f
+poly false = #B => \t:B => \f:B => f
 
 poly cond =
-  ΛX .
-    λb : Bool .
-    λt : X .
-    λf : X .
+  #X =>
+    \b : Bool =>
+    \t : X =>
+    \f : X =>
       b [X] t f
 
 poly mul =
-  λm : Nat . λn : Nat .
-    Λa . λs : a → a . λz : a .
+  \m : Nat => \n : Nat =>
+    #a => \s : a -> a => \z : a =>
       m [a] (n [a] s) z
 
 poly isZero =
-  λn : Nat .
+  \n : Nat =>
     n [Bool]
-     (λb : Bool . false)
+     (\b : Bool => false)
      true
 
-poly pair = ΛA . ΛB . λa :
-  A . λb : B . ΛY . λk :
-  A → B → Y . k a b
+poly pair = #A => #B => \a :
+  A => \b : B => #Y => \k :
+  A -> B -> Y => k a b
 
-poly fst = ΛA . ΛB . λp : ∀Y . (A → B → Y) → Y .
-  p [A] (λx : A . λy : B . x)
+poly fst = #A => #B => \p : #Y -> (A -> B -> Y) -> Y =>
+  p [A] (\x : A => \y : B => x)
 
-poly snd = ΛA . ΛB . λp : ∀Y . (A → B → Y) → Y .
-  p [B] (λx : A . λy : B . y)
+poly snd = #A => #B => \p : #Y -> (A -> B -> Y) -> Y =>
+  p [B] (\x : A => \y : B => y)
 
-poly pred = λn : Nat .
+poly pred = \n : Nat =>
   fst Nat Nat
-    ( n [∀Y . (Nat → Nat → Y) → Y]
-        ( λp : ∀Y . (Nat → Nat → Y) → Y .
+    ( n [#Y -> (Nat -> Nat -> Y) -> Y]
+        ( \p : #Y -> (Nat -> Nat -> Y) -> Y =>
             pair Nat Nat
               (snd Nat Nat p)
               (succ (snd Nat Nat p))
@@ -57,12 +57,12 @@ poly pred = λn : Nat .
     )
 
 poly factKernel =
-  (λself : Nat → Nat . λn : Nat .
+  (\self : Nat -> Nat => \n : Nat =>
     cond
       [Nat] (isZero n) one
         (mul n (self (pred n))))
 
-untyped fix = λf.(λx. f (λv. x x v)) (λx. f (λv. x x v))
+untyped fix = \f =>(\x => f (\v => x x v)) (\x => f (\v => x x v))
 
 untyped fact = fix factKernel
 

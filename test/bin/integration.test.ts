@@ -79,7 +79,7 @@ Deno.test("CLI Integration Tests", async (t) => {
       name: "simple module",
       content: `module Simple
 export id
-poly id = Λa. λx:a. x`,
+poly id = #a => \\x:a => x`,
     },
     {
       name: "module with imports",
@@ -87,7 +87,7 @@ poly id = Λa. λx:a. x`,
 import Math add
 import Utils format
 export double
-typed double = λx:Int. add x x`,
+typed double = \\x:Int => add x x`,
     },
     {
       name: "module with types",
@@ -95,7 +95,7 @@ typed double = λx:Int. add x x`,
 export Nat
 export zero
 type Nat = Int
-poly zero = Λa. λs:a→a. λz:a. z`,
+poly zero = #a => \\s:a->a => \\z:a => z`,
     },
     {
       name: "module with combinators",
@@ -196,7 +196,7 @@ combinator S = S`,
     await t.step("object file contains elaborated definitions", async () => {
       const testFile = await createTestFile(`module Test
 export id
-poly id = Λa. λx:a. x`);
+poly id = #a => \\x:a => x`);
 
       try {
         const result = await runCommand([
@@ -258,7 +258,7 @@ poly id = invalid syntax here`;
     });
 
     await t.step("missing module definition", async () => {
-      const noModuleContent = `poly id = Λa. λx:a. x`;
+      const noModuleContent = `poly id = #a => \\x:a => x`;
 
       const testFile = await createTestFile(noModuleContent);
 
@@ -282,7 +282,7 @@ poly id = invalid syntax here`;
     await t.step("multiple module definitions", async () => {
       const multipleModulesContent = `module First
 module Second
-poly id = Λa. λx:a. x`;
+poly id = #a => \\x:a => x`;
 
       const testFile = await createTestFile(multipleModulesContent);
 
@@ -351,7 +351,7 @@ poly id = Λa. λx:a. x`;
       // Create a larger test file
       let largeContent = `module LargeModule\n`;
       for (let i = 0; i < 100; i++) {
-        largeContent += `export func${i}\npoly func${i} = Λa. λx:a. x\n`;
+        largeContent += `export func${i}\npoly func${i} = #a => \\x:a => x\n`;
       }
 
       const testFile = await createTestFile(largeContent);

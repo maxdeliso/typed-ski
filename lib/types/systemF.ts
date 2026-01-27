@@ -7,13 +7,8 @@
  *
  * @module
  */
-import {
-  arrow,
-  type BaseType,
-  type ForallType,
-  prettyPrintTy,
-  typesLitEq,
-} from "./types.ts";
+import { arrow, type BaseType, type ForallType, typesLitEq } from "./types.ts";
+import { unparseType } from "../parser/type.ts";
 import {
   makeNatType,
   makeUntypedChurchNumeral,
@@ -171,7 +166,7 @@ export const typecheckSystemF = (
       if (funTy.kind !== "non-terminal") {
         throw new TypeError(
           `expected an arrow type in function application, but got: ${
-            prettyPrintTy(funTy)
+            unparseType(funTy)
           }`,
         );
       }
@@ -183,15 +178,15 @@ export const typecheckSystemF = (
           if (!typesLitEq(normLft, normArg)) {
             throw new TypeError(
               `function argument type mismatch: expected ${
-                prettyPrintTy(funTy.lft)
-              }, got ${prettyPrintTy(argTy)}`,
+                unparseType(funTy.lft)
+              }, got ${unparseType(argTy)}`,
             );
           }
         } else {
           throw new TypeError(
             `function argument type mismatch: expected ${
-              prettyPrintTy(funTy.lft)
-            }, got ${prettyPrintTy(argTy)}`,
+              unparseType(funTy.lft)
+            }, got ${unparseType(argTy)}`,
           );
         }
       }
@@ -214,7 +209,7 @@ export const typecheckSystemF = (
       if (funTy.kind !== "forall") {
         throw new TypeError(
           `type application expected a universal type, but got: ${
-            prettyPrintTy(funTy)
+            unparseType(funTy)
           }`,
         );
       }
@@ -226,22 +221,6 @@ export const typecheckSystemF = (
       return [resultType, updatedCtx];
     }
   }
-};
-
-/**
- * Pretty prints a System F type.
- */
-export const prettyPrintSystemFType = (ty: BaseType): string => {
-  if (ty.kind === "type-var") {
-    return ty.typeName;
-  }
-  if (ty.kind === "non-terminal") {
-    return `(${prettyPrintSystemFType(ty.lft)}→${
-      prettyPrintSystemFType(ty.rgt)
-    })`;
-  }
-  // Must be a forall type.
-  return `(∀${ty.typeVar}.${prettyPrintSystemFType(ty.body)})`;
 };
 
 /**

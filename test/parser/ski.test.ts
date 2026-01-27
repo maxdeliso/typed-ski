@@ -5,16 +5,16 @@ import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
   apply,
-  prettyPrint,
   type SKIExpression,
+  unparseSKI,
 } from "../../lib/ski/expression.ts";
 import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
 const assertReparse = (expr: string) => {
   const parsed = parseSKI(expr);
-  const printed = prettyPrint(parsed);
+  const printed = unparseSKI(parsed);
   const reparsed = parseSKI(printed);
-  const reprinted = prettyPrint(reparsed);
+  const reprinted = unparseSKI(reparsed);
 
   assert.deepStrictEqual(printed, reprinted);
   assert.deepStrictEqual(parsed, reparsed);
@@ -28,7 +28,7 @@ Deno.test("parseSKI", async (t) => {
     a: SKIExpression,
     b: SKIExpression,
   ): void => {
-    assert.deepStrictEqual(prettyPrint(a), prettyPrint(b));
+    assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
     assert.deepStrictEqual(a, b);
   };
 
@@ -75,7 +75,7 @@ Deno.test("parseSKI", async (t) => {
   });
 
   await t.step("should parse the Y combinator", () => {
-    assertReparse(prettyPrint(Y));
+    assertReparse(unparseSKI(Y));
   });
 
   await t.step("should reparse complicated expressions", () => {

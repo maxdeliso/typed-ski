@@ -91,8 +91,8 @@
 //!
 //! #### 4. Lock-Free Ring Buffers (io_uring Style)
 //!
-//! - **Submission Queue (SQ)**: Main thread → Worker communication
-//! - **Completion Queue (CQ)**: Worker → Main thread results
+//! - **Submission Queue (SQ)**: Main thread -> Worker communication
+//! - **Completion Queue (CQ)**: Worker -> Main thread results
 //! - **Atomic operations** for thread-safe producer/consumer patterns
 //! - **Blocking waits** using WASM atomic wait/notify
 //!
@@ -171,15 +171,15 @@ pub enum ArenaKind {
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ArenaSym {
-    /// S combinator: `S x y z → x z (y z)`
+    /// S combinator: `S x y z -> x z (y z)`
     /// The most complex combinator, enabling arbitrary computation.
     S = 1,
 
-    /// K combinator: `K x y → x`
+    /// K combinator: `K x y -> x`
     /// The constant function, discards its second argument.
     K = 2,
 
-    /// I combinator: `I x → x`
+    /// I combinator: `I x -> x`
     /// The identity function, returns its argument unchanged.
     I = 3,
 
@@ -339,7 +339,7 @@ mod wasm {
     // Ring Buffer Types (io_uring Style)
     // -------------------------------------------------------------------------
 
-    /// Submission Queue Entry: Main thread → Worker communication.
+    /// Submission Queue Entry: Main thread -> Worker communication.
     ///
     /// Sent from main thread to worker to request evaluation of an expression.
     /// Workers dequeue these and perform the actual reduction work.
@@ -360,7 +360,7 @@ mod wasm {
         pub max_steps: u32,
     }
 
-    /// Completion Queue Entry: Worker → Main thread results.
+    /// Completion Queue Entry: Worker -> Main thread results.
     ///
     /// Workers enqueue these when they complete (or yield) evaluation work.
     /// The main thread polls the completion queue to retrieve results.
@@ -470,7 +470,7 @@ mod wasm {
         /// Cache line padding to prevent false sharing with head.
         _pad2: [u8; 56],
 
-        /// Bitmask for fast modulo: `index & mask` ≡ `index % entries`
+        /// Bitmask for fast modulo: `index & mask` == `index % entries`
         mask: u32,
 
         /// Ring capacity (must be power of 2).

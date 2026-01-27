@@ -11,10 +11,10 @@ import {
   arrow,
   type BaseType,
   mkTypeVariable,
-  prettyPrintTy,
   typesLitEq,
   type TypeVariable,
 } from "./types.ts";
+import { unparseType } from "../parser/type.ts";
 import { createTypedApplication } from "./typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import {
@@ -65,7 +65,7 @@ export const substituteType = (
   if (typesLitEq(lft, original)) {
     if (lft.kind === "type-var" && occursIn(lft, rgt)) {
       throw new TypeError(
-        `occurs check failed: ${lft.typeName} occurs in ${prettyPrintTy(rgt)}`,
+        `occurs check failed: ${lft.typeName} occurs in ${unparseType(rgt)}`,
       );
     }
     return rgt;
@@ -181,8 +181,8 @@ export const unify = (
       // You cannot unify a universal type with a non–universal type.
       throw new TypeError(
         `cannot unify universal type ${
-          prettyPrintTy(t1)
-        } with non-universal type ${prettyPrintTy(t2)}`,
+          unparseType(t1)
+        } with non-universal type ${unparseType(t2)}`,
       );
     }
   }
@@ -191,7 +191,7 @@ export const unify = (
   if (t1.kind === "type-var") {
     if (occursIn(t1, t2)) {
       throw new TypeError(
-        `occurs check failed: ${t1.typeName} occurs in ${prettyPrintTy(t2)}`,
+        `occurs check failed: ${t1.typeName} occurs in ${unparseType(t2)}`,
       );
     }
     const newContext = new Map(context);
@@ -205,7 +205,7 @@ export const unify = (
   if (t2.kind === "type-var") {
     if (occursIn(t2, t1)) {
       throw new TypeError(
-        `occurs check failed: ${t2.typeName} occurs in ${prettyPrintTy(t1)}`,
+        `occurs check failed: ${t2.typeName} occurs in ${unparseType(t1)}`,
       );
     }
 
@@ -224,7 +224,7 @@ export const unify = (
     return unify(t1.rgt, t2.rgt, context1);
   } else {
     throw new TypeError(
-      `cannot unify types: ${prettyPrintTy(t1)} and ${prettyPrintTy(t2)}`,
+      `cannot unify types: ${unparseType(t1)} and ${unparseType(t2)}`,
     );
   }
 };

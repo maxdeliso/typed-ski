@@ -8,7 +8,7 @@ import {
 } from "../../lib/evaluator/arenaEvaluator.ts";
 import { getOrBuildArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { prettyPrint } from "../../lib/ski/expression.ts";
+import { unparseSKI } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 
@@ -30,39 +30,39 @@ Deno.test("stepOnce", async (t) => {
   const e6 = parseSKI("SKKII");
   const e7 = parseSKI("KI(KI)");
 
-  await t.step(`${prettyPrint(e2)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${unparseSKI(e2)} ⇒ ${unparseSKI(e3)}`, () => {
     const r = arenaEval.stepOnce(e2);
     assertEquals(r.altered, true);
-    assertEquals(prettyPrint(r.expr), prettyPrint(e3));
+    assertEquals(unparseSKI(r.expr), unparseSKI(e3));
   });
 
-  await t.step(`${prettyPrint(e1)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${unparseSKI(e1)} ⇒ ${unparseSKI(e3)}`, () => {
     const r1 = arenaEval.stepOnce(e1);
     const r2 = arenaEval.stepOnce(r1.expr);
 
     assert(r1.altered && r2.altered);
-    assertEquals(prettyPrint(r2.expr), prettyPrint(e3));
+    assertEquals(unparseSKI(r2.expr), unparseSKI(e3));
   });
 
-  await t.step(`${prettyPrint(e4)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${unparseSKI(e4)} ⇒ ${unparseSKI(e3)}`, () => {
     const r = arenaEval.stepOnce(e4);
     assert(r.altered);
-    assertEquals(prettyPrint(r.expr), prettyPrint(e3));
+    assertEquals(unparseSKI(r.expr), unparseSKI(e3));
   });
 
-  await t.step(`${prettyPrint(e5)} ⇒ ${prettyPrint(e7)}`, () => {
+  await t.step(`${unparseSKI(e5)} ⇒ ${unparseSKI(e7)}`, () => {
     const r = arenaEval.stepOnce(e5);
     assert(r.altered);
-    assertEquals(prettyPrint(r.expr), prettyPrint(e7));
+    assertEquals(unparseSKI(r.expr), unparseSKI(e7));
   });
 
-  await t.step(`${prettyPrint(e6)} ⇒ ${prettyPrint(e3)}`, () => {
+  await t.step(`${unparseSKI(e6)} ⇒ ${unparseSKI(e3)}`, () => {
     const r1 = arenaEval.stepOnce(e6);
     const r2 = arenaEval.stepOnce(r1.expr);
     const r3 = arenaEval.stepOnce(r2.expr);
 
     assert(r1.altered && r2.altered && r3.altered);
-    assertEquals(prettyPrint(r3.expr), prettyPrint(e3));
+    assertEquals(unparseSKI(r3.expr), unparseSKI(e3));
   });
 });
 
@@ -82,11 +82,11 @@ Deno.test("singleton and fresh arena reduction equivalence", async (t) => {
       const symNormal = arenaEvaluator.reduce(input);
 
       assertEquals(
-        prettyPrint(arenaNormal),
-        prettyPrint(symNormal),
+        unparseSKI(arenaNormal),
+        unparseSKI(symNormal),
         `Mismatch in test #${testIdx + 1}:\nexpected: ${
-          prettyPrint(symNormal)
-        }\ngot: ${prettyPrint(arenaNormal)}`,
+          unparseSKI(symNormal)
+        }\ngot: ${unparseSKI(arenaNormal)}`,
       );
     }
   });
@@ -160,8 +160,8 @@ Deno.test("dumpArena", async (t) => {
     // Verify we can reconstruct the expression from the dump
     const reconstructed = evaluator.fromArena(id);
     assertEquals(
-      prettyPrint(reconstructed),
-      prettyPrint(expr),
+      unparseSKI(reconstructed),
+      unparseSKI(expr),
       "Reconstructed expression should match original",
     );
   });

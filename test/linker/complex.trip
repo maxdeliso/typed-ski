@@ -2,4 +2,4 @@ module Complex
 
 export main
 
-poly main = ΛX. λx: X. λy: X. λz: X. x
+poly main = #X => \x: X => \y: X => \z: X => x

@@ -9,7 +9,8 @@ import {
   type SystemFTerm,
 } from "../../lib/terms/systemF.ts";
 
-import { arrow, mkTypeVariable, prettyPrintTy } from "../../lib/types/types.ts";
+import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
+import { unparseType } from "../../lib/parser/type.ts";
 import {
   emptySystemFContext,
   eraseSystemF,
@@ -53,7 +54,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       );
       const [ty] = typecheckSystemF(emptySystemFContext(), K);
       expect(ty.kind).to.equal("forall");
-      expect(prettyPrintTy(ty)).to.match(/∀X\..*∀Y\..*X→\(Y→X\)/);
+      expect(unparseType(ty)).to.match(/#X->.*#Y->.*X->\(Y->X\)/);
     });
 
     await t.step("type application", () => {
@@ -111,8 +112,8 @@ Deno.test("System F type-checker and helpers", async (t) => {
         ),
       );
       const [ty] = typecheckSystemF(emptySystemFContext(), S);
-      expect(prettyPrintTy(ty))
-        .to.equal("∀A.∀B.∀C.((A→(B→C))→((A→B)→(A→C)))");
+      expect(unparseType(ty))
+        .to.equal("#A->#B->#C->((A->(B->C))->((A->B)->(A->C)))");
     });
   });
 
@@ -199,10 +200,10 @@ Deno.test("System F type-checker and helpers", async (t) => {
 
   /* ─────────────────  parser / pretty-printer round-trip  ──────────────── */
   await t.step("integration with parser & printer", () => {
-    const src = "ΛX. λx: X. x";
+    const src = "#X=> \\x: X => x";
     const [lit, term] = parseSystemF(src);
     const [ty] = typecheckSystemF(emptySystemFContext(), term);
-    expect(prettyPrintTy(ty)).to.match(/∀X\..*X→X/);
+    expect(unparseType(ty)).to.match(/#X->.*X->X/);
     expect(lit.replace(/\s+/g, "")).to.equal(src.replace(/\s+/g, ""));
   });
 

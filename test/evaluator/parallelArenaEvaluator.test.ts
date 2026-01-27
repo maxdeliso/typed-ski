@@ -8,8 +8,8 @@ import {
 } from "../../lib/evaluator/arenaHeader.generated.ts";
 import {
   apply,
-  prettyPrint,
   type SKIExpression,
+  unparseSKI,
 } from "../../lib/ski/expression.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
@@ -110,7 +110,7 @@ Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) 
 
       const expr = parseSKI("III");
       const result = await evaluator.reduceAsync(expr);
-      assertEquals(prettyPrint(result), "I");
+      assertEquals(unparseSKI(result), "I");
       evaluator.terminate();
     },
   );
@@ -120,7 +120,7 @@ Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) 
     const expr = parseSKI("II");
     const step = evaluator.stepOnce(expr);
     assert(step.altered);
-    assertEquals(prettyPrint(step.expr), "I");
+    assertEquals(unparseSKI(step.expr), "I");
     evaluator.terminate();
   });
 });
@@ -176,7 +176,7 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
     const testExpr = parseSKI("III");
 
     const result = await evaluator.reduceAsync(testExpr);
-    assertEquals(prettyPrint(result), "I");
+    assertEquals(unparseSKI(result), "I");
     evaluator.terminate();
   });
 
@@ -193,8 +193,8 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
       result2Promise,
     ]);
 
-    assertEquals(prettyPrint(result1), "I");
-    assertEquals(prettyPrint(result2), "I");
+    assertEquals(unparseSKI(result1), "I");
+    assertEquals(unparseSKI(result2), "I");
     evaluator.terminate();
   });
 
@@ -231,11 +231,11 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
         // when given the same expression and step limit, demonstrating
         // deterministic step counting regardless of suspension/resumption timing.
         assertEquals(
-          prettyPrint(result1),
-          prettyPrint(result2),
+          unparseSKI(result1),
+          unparseSKI(result2),
           "Parallel executions produced different results (violated determinism). " +
-            `Worker 1: ${prettyPrint(result1)}, Worker 2: ${
-              prettyPrint(result2)
+            `Worker 1: ${unparseSKI(result1)}, Worker 2: ${
+              unparseSKI(result2)
             }`,
         );
       } finally {
@@ -418,7 +418,7 @@ Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
           exprs.map((e) => evaluator.reduceAsync(e, 0)),
         );
         for (let i = 0; i < N; i++) {
-          assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
+          assertEquals(unparseSKI(results[i]), unparseSKI(exprs[i]));
         }
       } finally {
         evaluator.terminate();
@@ -451,7 +451,7 @@ Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
           exprs.map((e) => evaluator.reduceAsync(e, 0)),
         );
         for (let i = 0; i < N; i++) {
-          assertEquals(prettyPrint(results[i]), prettyPrint(exprs[i]));
+          assertEquals(unparseSKI(results[i]), unparseSKI(exprs[i]));
         }
       } finally {
         evaluator.terminate();
@@ -483,8 +483,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
         const reconstructed = evaluator.fromArena(arenaId);
         // Verify they match
         assertEquals(
-          prettyPrint(reconstructed),
-          prettyPrint(expr),
+          unparseSKI(reconstructed),
+          unparseSKI(expr),
           `fromArena failed for expression: ${exprStr}`,
         );
       }
@@ -500,7 +500,7 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       const expr = parseSKI("III");
       // Reduce using the ring-based async path
       const reduced = await evaluator.reduceAsync(expr, 100);
-      assertEquals(prettyPrint(reduced), "I");
+      assertEquals(unparseSKI(reduced), "I");
       evaluator.terminate();
     },
   );
@@ -512,11 +512,11 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       const expr = parseSKI("III");
       // Use reduceAsync which uses fromArena internally
       const result = await evaluator.reduceAsync(expr, 100);
-      assertEquals(prettyPrint(result), "I");
+      assertEquals(unparseSKI(result), "I");
       // Also verify we can manually convert to/from arena
       const arenaId = evaluator.toArena(expr);
       const manualResult = evaluator.fromArena(arenaId);
-      assertEquals(prettyPrint(manualResult), prettyPrint(expr));
+      assertEquals(unparseSKI(manualResult), unparseSKI(expr));
       evaluator.terminate();
     },
   );
@@ -535,8 +535,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       const reconstructed1 = evaluator.fromArena(arenaId1);
       const reconstructed2 = evaluator.fromArena(arenaId2);
       assertEquals(
-        prettyPrint(reconstructed1),
-        prettyPrint(reconstructed2),
+        unparseSKI(reconstructed1),
+        unparseSKI(reconstructed2),
         "Reconstructed expressions should match",
       );
       evaluator.terminate();
@@ -551,8 +551,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       const arenaId = evaluator.toArena(complexExpr);
       const reconstructed = evaluator.fromArena(arenaId);
       assertEquals(
-        prettyPrint(reconstructed),
-        prettyPrint(complexExpr),
+        unparseSKI(reconstructed),
+        unparseSKI(complexExpr),
         "Complex nested expression should be correctly reconstructed",
       );
       evaluator.terminate();
@@ -568,7 +568,7 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       const initialExpr = parseSKI("III");
       const initialId = evaluator.toArena(initialExpr);
       const initialReconstructed = evaluator.fromArena(initialId);
-      assertEquals(prettyPrint(initialReconstructed), prettyPrint(initialExpr));
+      assertEquals(unparseSKI(initialReconstructed), unparseSKI(initialExpr));
 
       // Get initial capacity from the arena header
       const memory = evaluator.memory;
@@ -630,8 +630,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
             const lastId = testIds[testIds.length - 1];
             const reconstructed = evaluator.fromArena(lastId);
             assertEquals(
-              prettyPrint(reconstructed),
-              prettyPrint(lastExpr),
+              unparseSKI(reconstructed),
+              unparseSKI(lastExpr),
               `fromArena should work correctly after arena growth (capacity: ${initialCapacity} -> ${currentCapacity})`,
             );
 
@@ -640,8 +640,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
               initialId,
             );
             assertEquals(
-              prettyPrint(initialReconstructedAfterGrow),
-              prettyPrint(initialExpr),
+              unparseSKI(initialReconstructedAfterGrow),
+              unparseSKI(initialExpr),
               "Initial expression should still be reconstructable after arena growth",
             );
 
@@ -654,8 +654,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
             ) {
               const testReconstructed = evaluator.fromArena(testIds[k]);
               assertEquals(
-                prettyPrint(testReconstructed),
-                prettyPrint(testExpressions[k]),
+                unparseSKI(testReconstructed),
+                unparseSKI(testExpressions[k]),
                 `Expression at index ${k} should be reconstructable after growth`,
               );
             }
@@ -671,8 +671,8 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       for (let i = 0; i < testExpressions.length; i++) {
         const reconstructed = evaluator.fromArena(testIds[i]);
         assertEquals(
-          prettyPrint(reconstructed),
-          prettyPrint(testExpressions[i]),
+          unparseSKI(reconstructed),
+          unparseSKI(testExpressions[i]),
           `Expression at index ${i} should be reconstructable`,
         );
       }

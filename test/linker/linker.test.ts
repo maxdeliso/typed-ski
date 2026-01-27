@@ -26,13 +26,16 @@ import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Helper function to compile a .trip file to .tripc format
+ * Helper function to compile a .trip file to .tripc format.
+ * Uses optional outputTripc so linker tests can write to linker_*.tripc (distinct from cli_*).
  */
-async function compileTripFile(tripFileName: string): Promise<string> {
-  const _tripPath = `${__dirname}/${tripFileName}`;
-  const tripcPath = `${__dirname}/${tripFileName.replace(".trip", ".tripc")}`;
+async function compileTripFile(
+  tripFileName: string,
+  outputTripc?: string,
+): Promise<string> {
+  const out = outputTripc ?? tripFileName.replace(".trip", ".tripc");
+  const tripcPath = `${__dirname}/${out}`;
 
-  // Compile the .trip file to .tripc
   const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -40,7 +43,7 @@ async function compileTripFile(tripFileName: string): Promise<string> {
       "--allow-write",
       "../../bin/tripc.ts",
       tripFileName,
-      tripFileName.replace(".trip", ".tripc"),
+      out,
     ],
     cwd: __dirname,
   });
@@ -50,14 +53,13 @@ async function compileTripFile(tripFileName: string): Promise<string> {
     throw new Error(`Failed to compile ${tripFileName}`);
   }
 
-  // Read and return the compiled content
   return await Deno.readTextFile(tripcPath);
 }
 
 Deno.test("TripLang Linker", async (t) => {
   await t.step("loads modules correctly", async () => {
-    // Load a compiled module
-    const aContent = await compileTripFile("A-linker-test.trip");
+    // Load a compiled module (linker_ prefix for parallel-safe distinct names)
+    const aContent = await compileTripFile("A-linker-test.trip", "linker_A_linker_test.tripc");
     const aObject = deserializeTripCObject(aContent);
 
     const loadedModule = loadModule(aObject, "A");
@@ -69,9 +71,9 @@ Deno.test("TripLang Linker", async (t) => {
   });
 
   await t.step("creates program space from multiple modules", async () => {
-    // Load multiple modules
-    const aContent = await compileTripFile("A-linker-test.trip");
-    const bContent = await compileTripFile("B.trip");
+    // Load multiple modules (linker_ prefix for parallel-safe distinct names)
+    const aContent = await compileTripFile("A-linker-test.trip", "linker_A_linker_test.tripc");
+    const bContent = await compileTripFile("B.trip", "linker_B.tripc");
 
     const aObject = deserializeTripCObject(aContent);
     const bObject = deserializeTripCObject(bContent);
@@ -95,7 +97,7 @@ Deno.test("TripLang Linker", async (t) => {
 
   await t.step("finds main function in program space", async () => {
     // Load modules and create program space - use only one module to avoid ambiguous exports
-    const aContent = await compileTripFile("A.trip");
+    const aContent = await compileTripFile("A.trip", "linker_A.tripc");
     const aObject = deserializeTripCObject(aContent);
 
     const loadedModules = [loadModule(aObject, "A")];
@@ -109,7 +111,7 @@ Deno.test("TripLang Linker", async (t) => {
 
   await t.step("resolves cross-module dependencies (simplified)", async () => {
     // Load modules and create program space - use only one module to avoid ambiguous exports
-    const aContent = await compileTripFile("A.trip");
+    const aContent = await compileTripFile("A.trip", "linker_A.tripc");
     const aObject = deserializeTripCObject(aContent);
 
     const loadedModules = [loadModule(aObject, "A")];
@@ -137,14 +139,14 @@ type Nat = #X -> (X -> X) -> X -> X
 poly rec loop = \\n:Nat => loop n
 poly main = loop`;
 
-      const fileName = "rec-linker-test.trip";
-      const tripcName = "rec-linker-test.tripc";
+      const fileName = "linker_rec.trip";
+      const tripcName = "linker_rec.tripc";
       const tripPath = `${__dirname}/${fileName}`;
       const tripcPath = `${__dirname}/${tripcName}`;
 
       await Deno.writeTextFile(tripPath, source);
       try {
-        const recContent = await compileTripFile(fileName);
+        const recContent = await compileTripFile(fileName, tripcName);
         const recObject = deserializeTripCObject(recContent);
         const loadedModules = [loadModule(recObject, "Rec")];
         const programSpace = createProgramSpace(loadedModules);
@@ -177,14 +179,14 @@ type Nat = #X -> (X -> X) -> X -> X
 
 poly rec main = \\n:Nat => main n`;
 
-    const fileName = "rec-only-linker-test.trip";
-    const tripcName = "rec-only-linker-test.tripc";
+    const fileName = "linker_rec_only.trip";
+    const tripcName = "linker_rec_only.tripc";
     const tripPath = `${__dirname}/${fileName}`;
     const tripcPath = `${__dirname}/${tripcName}`;
 
     await Deno.writeTextFile(tripPath, source);
     try {
-      const recContent = await compileTripFile(fileName);
+      const recContent = await compileTripFile(fileName, tripcName);
       const recObject = deserializeTripCObject(recContent);
       const loadedModules = [loadModule(recObject, "RecOnly")];
       const programSpace = createProgramSpace(loadedModules);
@@ -369,7 +371,7 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("simple linking finds main and lowers to SKI", async () => {
     // Test with complex module that has main
-    const complexContent = await compileTripFile("complex.trip");
+    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
@@ -382,7 +384,7 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("simple linking with complex expression", async () => {
     // Test with complex module
-    const complexContent = await compileTripFile("complex.trip");
+    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
@@ -397,7 +399,7 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("simple linking with multiple modules", async () => {
     // Test with multiple modules - use different modules to avoid ambiguous exports
-    const complexContent = await compileTripFile("complex.trip");
+    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
     const complexObject = deserializeTripCObject(complexContent);
 
     // Create a second module without main to avoid conflicts
@@ -457,7 +459,7 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("produces identity combinator for simple function", async () => {
     // Test with a simple identity function - use existing complex module
-    const complexContent = await compileTripFile("complex.trip");
+    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
@@ -478,7 +480,7 @@ poly rec main = \\n:Nat => main n`;
     };
 
     try {
-      const complexContent = await compileTripFile("complex.trip");
+      const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
       const complexObject = deserializeTripCObject(complexContent);
 
       const modules = [{ name: "Complex", object: complexObject }];

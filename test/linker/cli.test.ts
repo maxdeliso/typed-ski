@@ -15,9 +15,14 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Helper function to compile a .trip file to .tripc format
+ * Helper function to compile a .trip file to .tripc format.
+ * Uses cli_ prefix for output so parallel test runs do not collide with linker tests.
  */
-async function compileTripFile(tripFileName: string): Promise<void> {
+async function compileTripFile(
+  tripFileName: string,
+  outputTripc?: string,
+): Promise<void> {
+  const out = outputTripc ?? tripFileName.replace(".trip", ".tripc");
   const compileCommand = new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -25,7 +30,7 @@ async function compileTripFile(tripFileName: string): Promise<void> {
       "--allow-write",
       "../../bin/tripc.ts",
       tripFileName,
-      tripFileName.replace(".trip", ".tripc"),
+      out,
     ],
     cwd: __dirname,
   });
@@ -37,11 +42,11 @@ async function compileTripFile(tripFileName: string): Promise<void> {
 }
 
 Deno.test("TripLang Linker CLI", async (t) => {
-  // Setup: Compile required .trip files to .tripc
+  // Setup: Compile required .trip files to cli_*.tripc (distinct names for parallel runs)
   await t.step("setup: compile test files", async () => {
-    await compileTripFile("A.trip");
-    await compileTripFile("B.trip");
-    await compileTripFile("complex.trip");
+    await compileTripFile("A.trip", "cli_A.tripc");
+    await compileTripFile("B.trip", "cli_B.tripc");
+    await compileTripFile("complex.trip", "cli_complex.tripc");
   });
   await t.step("shows help message", async () => {
     const command = new Deno.Command(Deno.execPath(), {
@@ -135,7 +140,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
         "../../bin/tripc.ts",
         "--link",
         "--verbose",
-        "A.tripc",
+        "cli_A.tripc",
       ],
       cwd: __dirname,
     });
@@ -158,7 +163,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
         "../../bin/tripc.ts",
         "--link",
         "-V",
-        "A.tripc",
+        "cli_A.tripc",
       ],
       cwd: __dirname,
     });
@@ -180,7 +185,7 @@ Deno.test("TripLang Linker CLI", async (t) => {
         "--allow-write",
         "../../bin/tripc.ts",
         "--link",
-        "A.tripc",
+        "cli_A.tripc",
       ],
       cwd: __dirname,
     });
@@ -201,7 +206,7 @@ export helper
 
 poly helper = #X => \\x: X => x`;
 
-    const helperFile = `${__dirname}/helper.trip`;
+    const helperFile = `${__dirname}/cli_helper.trip`;
     await Deno.writeTextFile(helperFile, helperSource);
 
     // Compile the helper module
@@ -211,8 +216,8 @@ poly helper = #X => \\x: X => x`;
         "--allow-read",
         "--allow-write",
         "../../bin/tripc.ts",
-        "helper.trip",
-        "helper.tripc",
+        "cli_helper.trip",
+        "cli_helper.tripc",
       ],
       cwd: __dirname,
     });
@@ -222,7 +227,7 @@ poly helper = #X => \\x: X => x`;
       throw new Error("Failed to compile helper module");
     }
 
-    // Now link A.tripc with helper.tripc (only A has main)
+    // Now link cli_A.tripc with cli_helper.tripc (only A has main)
     const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
@@ -230,8 +235,8 @@ poly helper = #X => \\x: X => x`;
         "--allow-write",
         "../../bin/tripc.ts",
         "--link",
-        "A.tripc",
-        "helper.tripc",
+        "cli_A.tripc",
+        "cli_helper.tripc",
       ],
       cwd: __dirname,
     });
@@ -242,7 +247,7 @@ poly helper = #X => \\x: X => x`;
     // Clean up
     try {
       await Deno.remove(helperFile);
-      await Deno.remove(`${__dirname}/helper.tripc`);
+      await Deno.remove(`${__dirname}/cli_helper.tripc`);
     } catch {
       // Ignore cleanup errors
     }
@@ -260,7 +265,7 @@ poly helper = #X => \\x: X => x`;
         "--allow-write",
         "../../bin/tripc.ts",
         "--link",
-        "complex.tripc",
+        "cli_complex.tripc",
       ],
       cwd: __dirname,
     });
@@ -335,7 +340,7 @@ poly helper = #X => \\x: X => x`;
 
   await t.step("handles mixed valid and invalid files", async () => {
     // Create a temporary file with wrong extension to test extension validation
-    const tempFile = `${__dirname}/temp.txt`;
+    const tempFile = `${__dirname}/cli_temp.txt`;
     await Deno.writeTextFile(tempFile, "some content");
 
     try {
@@ -346,9 +351,9 @@ poly helper = #X => \\x: X => x`;
           "--allow-write",
           "../../bin/tripc.ts",
           "--link",
-          "A.tripc",
-          "temp.txt",
-          "B.tripc",
+          "cli_A.tripc",
+          "cli_temp.txt",
+          "cli_B.tripc",
         ],
         cwd: __dirname,
       });

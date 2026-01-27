@@ -116,6 +116,17 @@ Deno.test("Parser Tests", async (t) => {
       expect(lit).to.equal(src);
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
+
+    await t.step("application binds tighter than arrows", () => {
+      const src = "List Nat -> Bool";
+      const [lit, ty] = parseType(src);
+      const expected = arrow(
+        typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
+        mkTypeVariable("Bool"),
+      );
+      expect(lit).to.equal("List Nat->Bool");
+      expect(typesLitEq(ty, expected)).to.equal(true);
+    });
   });
 
   await t.step("parseTypedLambda", async (t) => {

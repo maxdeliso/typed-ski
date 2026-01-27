@@ -124,6 +124,50 @@ Deno.test("TripLang Linker", async (t) => {
     );
   });
 
+  await t.step(
+    "pre-lowers poly rec definitions during resolution",
+    async () => {
+      const source = `module Rec
+
+export loop
+export main
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly rec loop = \\n:Nat => loop n
+poly main = loop`;
+
+      const fileName = "rec-linker-test.trip";
+      const tripcName = "rec-linker-test.tripc";
+      const tripPath = `${__dirname}/${fileName}`;
+      const tripcPath = `${__dirname}/${tripcName}`;
+
+      await Deno.writeTextFile(tripPath, source);
+      try {
+        const recContent = await compileTripFile(fileName);
+        const recObject = deserializeTripCObject(recContent);
+        const loadedModules = [loadModule(recObject, "Rec")];
+        const programSpace = createProgramSpace(loadedModules);
+        const resolvedSpace = resolveCrossModuleDependencies(
+          programSpace,
+          false,
+        );
+        const loopDef = resolvedSpace.modules.get("Rec")?.defs.get("loop");
+        const mainDef = resolvedSpace.modules.get("Rec")?.defs.get("main");
+
+        expect(loopDef?.kind).to.equal("untyped");
+        expect(mainDef?.kind).to.equal("untyped");
+      } finally {
+        try {
+          await Deno.remove(tripPath);
+          await Deno.remove(tripcPath);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    },
+  );
+
   await t.step("simple linking finds main and lowers to SKI", async () => {
     // Test with complex module that has main
     const complexContent = await compileTripFile("complex.trip");

@@ -1,8 +1,13 @@
 import { expect } from "chai";
 
 import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
-import { inferType, substituteType } from "../../lib/types/inference.ts";
-import { arrow, mkTypeVariable, typesLitEq } from "../../lib/types/types.ts";
+import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
+import {
+  arrow,
+  mkTypeVariable,
+  typeApp,
+  typesLitEq,
+} from "../../lib/types/types.ts";
 
 Deno.test("Type inference utilities", async (t) => {
   await t.step("substituteType", async (t) => {
@@ -40,6 +45,44 @@ Deno.test("Type inference utilities", async (t) => {
       const out = substituteType(nested, a, b);
 
       expect(typesLitEq(out, arrow(arrow(b, b), arrow(b, b)))).to.equal(true);
+    });
+
+    await t.step("handles substitutions in type applications", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
+      const listA = typeApp(mkTypeVariable("List"), a);
+      const out = substituteType(listA, a, b);
+
+      expect(typesLitEq(out, typeApp(mkTypeVariable("List"), b))).to.equal(
+        true,
+      );
+    });
+  });
+
+  await t.step("unify", async (t) => {
+    await t.step("unifies type applications by components", () => {
+      const a = mkTypeVariable("A");
+      const b = mkTypeVariable("B");
+      const c = mkTypeVariable("C");
+      const ctx = unify(
+        typeApp(a, b),
+        typeApp(a, c),
+        new Map<string, ReturnType<typeof mkTypeVariable>>(),
+      );
+
+      const boundB = ctx.get("B");
+      const boundC = ctx.get("C");
+      const ok = (boundB !== undefined && typesLitEq(boundB, c)) ||
+        (boundC !== undefined && typesLitEq(boundC, b));
+      expect(ok).to.equal(true);
+    });
+
+    await t.step("rejects occurs check in type applications", () => {
+      const a = mkTypeVariable("A");
+      const b = mkTypeVariable("B");
+      expect(() => unify(a, typeApp(a, b), new Map())).to.throw(
+        /occurs check failed/,
+      );
     });
   });
 

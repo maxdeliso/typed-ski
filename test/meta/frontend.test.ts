@@ -85,6 +85,26 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       assert.equal(UnChurchNumber(nf), 3n);
     });
 
+    await t.step("Result data type with match expression", async () => {
+      const src = loadInput("resultMatch.trip", __dirname);
+      const compiled = compile(src);
+
+      const num = async (name: string) => {
+        const termPoly = compiled.program.terms.find(
+          (d) => d.kind === "poly" && d.name === name,
+        ) as { kind: "poly"; term: SystemFTerm };
+        const ski = bracketLambda(eraseSystemF(termPoly.term));
+        return UnChurchNumber(await arenaEval.reduceAsync(ski));
+      };
+
+      // testOk should return 2 (the value from Ok two)
+      assert.equal(await num("testOk"), 2n);
+      // testErr should return 0 (the default value)
+      assert.equal(await num("testErr"), 0n);
+      // main should return 2 (same as testOk)
+      assert.equal(await num("main"), 2n);
+    });
+
     await t.step("parses & runs pred example", async () => {
       const src = loadInput("pred.trip", __dirname);
       const compiled = compile(src);

@@ -310,97 +310,115 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
 
   await t.step("echo preserves order with queued readOne tasks", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    const encoder = new TextEncoder();
-    const payload = encoder.encode("queued-echo");
-    const pending = Array.from(
-      payload,
-      () => evaluator.reduceAsync(apply(ReadOne, WriteOne)),
-    );
-    await evaluator.writeStdin(payload);
-    const results = await Promise.all(pending);
-    const decoded = results.map((res) => Number(UnChurchNumber(res)));
-    assertEquals(
-      decoded.slice().sort((a, b) => a - b),
-      Array.from(payload).sort((a, b) => a - b),
-    );
-    const stdout = evaluator.readStdout(payload.length);
-    assertEquals(stdout, payload);
-    evaluator.terminate();
+    try {
+      const encoder = new TextEncoder();
+      const payload = encoder.encode("queued-echo");
+      const pending = Array.from(
+        payload,
+        () => evaluator.reduceAsync(apply(ReadOne, WriteOne)),
+      );
+      await evaluator.writeStdin(payload);
+      const results = await Promise.all(pending);
+      const decoded = results.map((res) => Number(UnChurchNumber(res)));
+      assertEquals(
+        decoded.slice().sort((a, b) => a - b),
+        Array.from(payload).sort((a, b) => a - b),
+      );
+      const stdout = evaluator.readStdout(payload.length);
+      assertEquals(stdout, payload);
+    } finally {
+      evaluator.terminate();
+    }
   });
 
   await t.step("writeStdin blocks when stdin ring is full", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    const ringEntries = evaluator.$.debugGetRingEntries?.() ??
-      (() => {
-        throw new Error("WASM export `debugGetRingEntries` is missing");
-      })();
-    await evaluator.writeStdin(new Uint8Array(ringEntries));
+    try {
+      const ringEntries = evaluator.$.debugGetRingEntries?.() ??
+        (() => {
+          throw new Error("WASM export `debugGetRingEntries` is missing");
+        })();
+      await evaluator.writeStdin(new Uint8Array(ringEntries));
 
-    let writeResolved = false;
-    const extraWrite = evaluator.writeStdin(new Uint8Array([99]))
-      .then(() => {
-        writeResolved = true;
-      });
-    // Allow microtasks to flush; writeStdin should still be pending while full.
-    await Promise.resolve();
-    await Promise.resolve();
-    assertEquals(writeResolved, false);
+      let writeResolved = false;
+      const extraWrite = evaluator.writeStdin(new Uint8Array([99]))
+        .then(() => {
+          writeResolved = true;
+        });
+      // Allow microtasks to flush; writeStdin should still be pending while full.
+      await Promise.resolve();
+      await Promise.resolve();
+      assertEquals(writeResolved, false);
 
-    const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
-    assertEquals(UnChurchNumber(readResult), 0n);
-    await extraWrite;
-    assertEquals(writeResolved, true);
-    evaluator.terminate();
+      const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
+      assertEquals(UnChurchNumber(readResult), 0n);
+      await extraWrite;
+      assertEquals(writeResolved, true);
+    } finally {
+      evaluator.terminate();
+    }
   });
 });
 
 Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
   await t.step("readStdout returns empty when idle", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    const stdout = evaluator.readStdout(16);
-    assertEquals(stdout.length, 0);
-    evaluator.terminate();
+    try {
+      const stdout = evaluator.readStdout(16);
+      assertEquals(stdout.length, 0);
+    } finally {
+      evaluator.terminate();
+    }
   });
 
   await t.step("writeStdin returns bytes written", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    const bytes = new Uint8Array([1, 2, 3]);
-    const written = await evaluator.writeStdin(bytes);
-    assertEquals(written, bytes.length);
-    for (const byte of bytes) {
-      const result = await evaluator.reduceAsync(apply(ReadOne, I));
-      assertEquals(UnChurchNumber(result), BigInt(byte));
+    try {
+      const bytes = new Uint8Array([1, 2, 3]);
+      const written = await evaluator.writeStdin(bytes);
+      assertEquals(written, bytes.length);
+      for (const byte of bytes) {
+        const result = await evaluator.reduceAsync(apply(ReadOne, I));
+        assertEquals(UnChurchNumber(result), BigInt(byte));
+      }
+    } finally {
+      evaluator.terminate();
     }
-    evaluator.terminate();
   });
 
   await t.step(
     "pending counts and ring stats are available during evaluation",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-      const pendingWork = evaluator.reduceAsync(apply(ReadOne, I));
-      // Verify stats APIs are accessible and reflect work state
-      assert(evaluator.getTotalPending() > 0);
-      assert(evaluator.getPendingCounts().length > 0);
-      const snapshot = evaluator.getRingStatsSnapshot();
-      assert(snapshot.pending > 0);
-      await evaluator.writeStdin(new Uint8Array([7]));
-      const result = await pendingWork;
-      assertEquals(UnChurchNumber(result), 7n);
-      // After completion, pending should be zero
-      assertEquals(evaluator.getTotalPending(), 0);
-      evaluator.terminate();
+      try {
+        const pendingWork = evaluator.reduceAsync(apply(ReadOne, I));
+        // Verify stats APIs are accessible and reflect work state
+        assert(evaluator.getTotalPending() > 0);
+        assert(evaluator.getPendingCounts().length > 0);
+        const snapshot = evaluator.getRingStatsSnapshot();
+        assert(snapshot.pending > 0);
+        await evaluator.writeStdin(new Uint8Array([7]));
+        const result = await pendingWork;
+        assertEquals(UnChurchNumber(result), 7n);
+        // After completion, pending should be zero
+        assertEquals(evaluator.getTotalPending(), 0);
+      } finally {
+        evaluator.terminate();
+      }
     },
   );
 
   await t.step("reduce throws in parallel evaluator", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    assertThrows(
-      () => evaluator.reduce(I),
-      Error,
-      "ParallelArenaEvaluatorWasm.reduce is disabled",
-    );
-    evaluator.terminate();
+    try {
+      assertThrows(
+        () => evaluator.reduce(I),
+        Error,
+        "ParallelArenaEvaluatorWasm.reduce is disabled",
+      );
+    } finally {
+      evaluator.terminate();
+    }
   });
 });
 
@@ -497,11 +515,14 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
     "fromArena reconstructs expressions correctly after async reduction",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-      const expr = parseSKI("III");
-      // Reduce using the ring-based async path
-      const reduced = await evaluator.reduceAsync(expr, 100);
-      assertEquals(unparseSKI(reduced), "I");
-      evaluator.terminate();
+      try {
+        const expr = parseSKI("III");
+        // Reduce using the ring-based async path
+        const reduced = await evaluator.reduceAsync(expr, 100);
+        assertEquals(unparseSKI(reduced), "I");
+      } finally {
+        evaluator.terminate();
+      }
     },
   );
 
@@ -509,15 +530,18 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
     "fromArena works with reduceAsync and manual toArena/fromArena round-trip",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-      const expr = parseSKI("III");
-      // Use reduceAsync which uses fromArena internally
-      const result = await evaluator.reduceAsync(expr, 100);
-      assertEquals(unparseSKI(result), "I");
-      // Also verify we can manually convert to/from arena
-      const arenaId = evaluator.toArena(expr);
-      const manualResult = evaluator.fromArena(arenaId);
-      assertEquals(unparseSKI(manualResult), unparseSKI(expr));
-      evaluator.terminate();
+      try {
+        const expr = parseSKI("III");
+        // Use reduceAsync which uses fromArena internally
+        const result = await evaluator.reduceAsync(expr, 100);
+        assertEquals(unparseSKI(result), "I");
+        // Also verify we can manually convert to/from arena
+        const arenaId = evaluator.toArena(expr);
+        const manualResult = evaluator.fromArena(arenaId);
+        assertEquals(unparseSKI(manualResult), unparseSKI(expr));
+      } finally {
+        evaluator.terminate();
+      }
     },
   );
 
@@ -525,21 +549,24 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
     "fromArena preserves DAG structure (hash consing)",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-      // Create an expression with shared sub-expressions
-      const expr = parseSKI("II");
-      const arenaId1 = evaluator.toArena(expr);
-      const arenaId2 = evaluator.toArena(expr);
-      // Hash consing should give us the same ID
-      assertEquals(arenaId1, arenaId2, "Hash consing should reuse nodes");
-      // Both should reconstruct to the same expression
-      const reconstructed1 = evaluator.fromArena(arenaId1);
-      const reconstructed2 = evaluator.fromArena(arenaId2);
-      assertEquals(
-        unparseSKI(reconstructed1),
-        unparseSKI(reconstructed2),
-        "Reconstructed expressions should match",
-      );
-      evaluator.terminate();
+      try {
+        // Create an expression with shared sub-expressions
+        const expr = parseSKI("II");
+        const arenaId1 = evaluator.toArena(expr);
+        const arenaId2 = evaluator.toArena(expr);
+        // Hash consing should give us the same ID
+        assertEquals(arenaId1, arenaId2, "Hash consing should reuse nodes");
+        // Both should reconstruct to the same expression
+        const reconstructed1 = evaluator.fromArena(arenaId1);
+        const reconstructed2 = evaluator.fromArena(arenaId2);
+        assertEquals(
+          unparseSKI(reconstructed1),
+          unparseSKI(reconstructed2),
+          "Reconstructed expressions should match",
+        );
+      } finally {
+        evaluator.terminate();
+      }
     },
   );
 
@@ -547,15 +574,18 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
     "fromArena handles complex nested expressions",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-      const complexExpr = parseSKI("S(SKK)(SKK)I");
-      const arenaId = evaluator.toArena(complexExpr);
-      const reconstructed = evaluator.fromArena(arenaId);
-      assertEquals(
-        unparseSKI(reconstructed),
-        unparseSKI(complexExpr),
-        "Complex nested expression should be correctly reconstructed",
-      );
-      evaluator.terminate();
+      try {
+        const complexExpr = parseSKI("S(SKK)(SKK)I");
+        const arenaId = evaluator.toArena(complexExpr);
+        const reconstructed = evaluator.fromArena(arenaId);
+        assertEquals(
+          unparseSKI(reconstructed),
+          unparseSKI(complexExpr),
+          "Complex nested expression should be correctly reconstructed",
+        );
+      } finally {
+        evaluator.terminate();
+      }
     },
   );
 
@@ -563,121 +593,121 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
     "views cache correctly invalidates and rebuilds when arena grows",
     async () => {
       const evaluator = await ParallelArenaEvaluatorWasm.create(2);
+      try {
+        // Create an initial expression and convert to arena (this will populate the cache)
+        const initialExpr = parseSKI("III");
+        const initialId = evaluator.toArena(initialExpr);
+        const initialReconstructed = evaluator.fromArena(initialId);
+        assertEquals(unparseSKI(initialReconstructed), unparseSKI(initialExpr));
 
-      // Create an initial expression and convert to arena (this will populate the cache)
-      const initialExpr = parseSKI("III");
-      const initialId = evaluator.toArena(initialExpr);
-      const initialReconstructed = evaluator.fromArena(initialId);
-      assertEquals(unparseSKI(initialReconstructed), unparseSKI(initialExpr));
+        // Get initial capacity from the arena header
+        const memory = evaluator.memory;
+        const baseAddr = evaluator.$.debugGetArenaBaseAddr?.();
+        assert(
+          baseAddr !== undefined && baseAddr !== 0,
+          "Arena should be initialized",
+        );
+        const headerView = new Uint32Array(
+          memory.buffer,
+          baseAddr,
+          SABHEADER_HEADER_SIZE_U32,
+        );
+        const initialCapacity = headerView[SabHeaderField.CAPACITY];
 
-      // Get initial capacity from the arena header
-      const memory = evaluator.memory;
-      const baseAddr = evaluator.$.debugGetArenaBaseAddr?.();
-      assert(
-        baseAddr !== undefined && baseAddr !== 0,
-        "Arena should be initialized",
-      );
-      const headerView = new Uint32Array(
-        memory.buffer,
-        baseAddr,
-        SABHEADER_HEADER_SIZE_U32,
-      );
-      const initialCapacity = headerView[SabHeaderField.CAPACITY];
+        // Allocate many unique expressions to trigger arena growth
+        // Each unique expression creates new nodes, so we need enough to exceed initial capacity
+        // We'll create simple expressions that are likely to be unique
 
-      // Allocate many unique expressions to trigger arena growth
-      // Each unique expression creates new nodes, so we need enough to exceed initial capacity
-      // We'll create simple expressions that are likely to be unique
+        // Create enough unique expressions to trigger at least one grow
+        // Initial capacity is 1 << 16 = 65536, so we need to allocate more than that
+        // Hash consing will deduplicate identical expressions, so we need truly unique ones
+        // Use random expression generator with fixed seed for reproducible unique expressions
+        const FIXED_SEED = "views-cache-test-seed-12345";
+        const rs = randomSeed.create(FIXED_SEED);
 
-      // Create enough unique expressions to trigger at least one grow
-      // Initial capacity is 1 << 16 = 65536, so we need to allocate more than that
-      // Hash consing will deduplicate identical expressions, so we need truly unique ones
-      // Use random expression generator with fixed seed for reproducible unique expressions
-      const FIXED_SEED = "views-cache-test-seed-12345";
-      const rs = randomSeed.create(FIXED_SEED);
+        // Track a few expressions for validation
+        const testExpressions: SKIExpression[] = [];
+        const testIds: number[] = [];
 
-      // Track a few expressions for validation
-      const testExpressions: SKIExpression[] = [];
-      const testIds: number[] = [];
+        // Allocate expressions until we trigger growth or hit a reasonable limit
+        // Use random expressions with varying sizes to ensure uniqueness
+        let lastTop = headerView[SabHeaderField.TOP];
+        const targetTop = initialCapacity - 100; // Stop before hitting capacity to avoid issues
 
-      // Allocate expressions until we trigger growth or hit a reasonable limit
-      // Use random expressions with varying sizes to ensure uniqueness
-      let lastTop = headerView[SabHeaderField.TOP];
-      const targetTop = initialCapacity - 100; // Stop before hitting capacity to avoid issues
+        for (let i = 0; i < 100000 && lastTop < targetTop; i++) {
+          // Generate random expressions with varying sizes (1 to 20 symbols)
+          // This ensures each expression is unique while keeping them reasonably sized
+          const symbolCount = (i % 20) + 1;
+          const expr = randExpression(rs, symbolCount);
+          const id = evaluator.toArena(expr);
 
-      for (let i = 0; i < 100000 && lastTop < targetTop; i++) {
-        // Generate random expressions with varying sizes (1 to 20 symbols)
-        // This ensures each expression is unique while keeping them reasonably sized
-        const symbolCount = (i % 20) + 1;
-        const expr = randExpression(rs, symbolCount);
-        const id = evaluator.toArena(expr);
+          // Store every 100th expression for validation
+          if (i % 100 === 0) {
+            testExpressions.push(expr);
+            testIds.push(id);
+          }
 
-        // Store every 100th expression for validation
-        if (i % 100 === 0) {
-          testExpressions.push(expr);
-          testIds.push(id);
-        }
+          // Check if capacity has grown (check every 5000 allocations for efficiency)
+          if (i % 5000 === 0 || i === 99999) {
+            const currentCapacity = headerView[SabHeaderField.CAPACITY];
+            const currentTop = headerView[SabHeaderField.TOP];
+            lastTop = currentTop;
 
-        // Check if capacity has grown (check every 5000 allocations for efficiency)
-        if (i % 5000 === 0 || i === 99999) {
-          const currentCapacity = headerView[SabHeaderField.CAPACITY];
-          const currentTop = headerView[SabHeaderField.TOP];
-          lastTop = currentTop;
-
-          if (currentCapacity > initialCapacity) {
-            // Arena has grown! Now test that fromArena still works correctly
-            // with the new capacity
-            const lastExpr = testExpressions[testExpressions.length - 1];
-            const lastId = testIds[testIds.length - 1];
-            const reconstructed = evaluator.fromArena(lastId);
-            assertEquals(
-              unparseSKI(reconstructed),
-              unparseSKI(lastExpr),
-              `fromArena should work correctly after arena growth (capacity: ${initialCapacity} -> ${currentCapacity})`,
-            );
-
-            // Also verify that the initial expression still works
-            const initialReconstructedAfterGrow = evaluator.fromArena(
-              initialId,
-            );
-            assertEquals(
-              unparseSKI(initialReconstructedAfterGrow),
-              unparseSKI(initialExpr),
-              "Initial expression should still be reconstructable after arena growth",
-            );
-
-            // Test a few stored expressions to ensure cache is working
-            const testCount = Math.min(10, testExpressions.length);
-            for (
-              let k = testExpressions.length - testCount;
-              k < testExpressions.length;
-              k++
-            ) {
-              const testReconstructed = evaluator.fromArena(testIds[k]);
+            if (currentCapacity > initialCapacity) {
+              // Arena has grown! Now test that fromArena still works correctly
+              // with the new capacity
+              const lastExpr = testExpressions[testExpressions.length - 1];
+              const lastId = testIds[testIds.length - 1];
+              const reconstructed = evaluator.fromArena(lastId);
               assertEquals(
-                unparseSKI(testReconstructed),
-                unparseSKI(testExpressions[k]),
-                `Expression at index ${k} should be reconstructable after growth`,
+                unparseSKI(reconstructed),
+                unparseSKI(lastExpr),
+                `fromArena should work correctly after arena growth (capacity: ${initialCapacity} -> ${currentCapacity})`,
               );
-            }
 
-            // Successfully validated cache invalidation and rebuild
-            evaluator.terminate();
-            return;
+              // Also verify that the initial expression still works
+              const initialReconstructedAfterGrow = evaluator.fromArena(
+                initialId,
+              );
+              assertEquals(
+                unparseSKI(initialReconstructedAfterGrow),
+                unparseSKI(initialExpr),
+                "Initial expression should still be reconstructable after arena growth",
+              );
+
+              // Test a few stored expressions to ensure cache is working
+              const testCount = Math.min(10, testExpressions.length);
+              for (
+                let k = testExpressions.length - testCount;
+                k < testExpressions.length;
+                k++
+              ) {
+                const testReconstructed = evaluator.fromArena(testIds[k]);
+                assertEquals(
+                  unparseSKI(testReconstructed),
+                  unparseSKI(testExpressions[k]),
+                  `Expression at index ${k} should be reconstructable after growth`,
+                );
+              }
+
+              // Successfully validated cache invalidation and rebuild
+              return;
+            }
           }
         }
-      }
 
-      // Still verify that stored expressions can be reconstructed
-      for (let i = 0; i < testExpressions.length; i++) {
-        const reconstructed = evaluator.fromArena(testIds[i]);
-        assertEquals(
-          unparseSKI(reconstructed),
-          unparseSKI(testExpressions[i]),
-          `Expression at index ${i} should be reconstructable`,
-        );
+        // Still verify that stored expressions can be reconstructed
+        for (let i = 0; i < testExpressions.length; i++) {
+          const reconstructed = evaluator.fromArena(testIds[i]);
+          assertEquals(
+            unparseSKI(reconstructed),
+            unparseSKI(testExpressions[i]),
+            `Expression at index ${i} should be reconstructable`,
+          );
+        }
+      } finally {
+        evaluator.terminate();
       }
-
-      evaluator.terminate();
     },
   );
 });

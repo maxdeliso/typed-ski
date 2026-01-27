@@ -31,8 +31,8 @@ poly three = succ two
 
 poly main = mul two three`;
 
-  // Write test source to file
-  const testFileName = "test-arithmetic.trip";
+  // Write test source to file (prelude_ prefix for parallel-safe distinct names)
+  const testFileName = "prelude_arithmetic.trip";
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
@@ -55,7 +55,7 @@ poly main = mul two three`;
   try {
     // Load test module
     const testContent = await Deno.readTextFile(
-      `${__dirname}/test-arithmetic.tripc`,
+      `${__dirname}/prelude_arithmetic.tripc`,
     );
     const testObject = deserializeTripCObject(testContent);
 
@@ -73,8 +73,8 @@ poly main = mul two three`;
   } finally {
     // Cleanup
     try {
-      await Deno.remove(`${__dirname}/test-arithmetic.trip`);
-      await Deno.remove(`${__dirname}/test-arithmetic.tripc`);
+      await Deno.remove(`${__dirname}/prelude_arithmetic.trip`);
+      await Deno.remove(`${__dirname}/prelude_arithmetic.tripc`);
     } catch {
       // Ignore cleanup errors
     }
@@ -99,8 +99,8 @@ poly two = succ one
 
 poly main = add one one`;
 
-  // Write test source to file
-  const testFileName = "test-simple.trip";
+  // Write test source to file (prelude_ prefix for parallel-safe distinct names)
+  const testFileName = "prelude_simple.trip";
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
@@ -125,7 +125,7 @@ poly main = add one one`;
 
   try {
     const testContent = await Deno.readTextFile(
-      `${__dirname}/test-simple.tripc`,
+      `${__dirname}/prelude_simple.tripc`,
     );
     const testObject = deserializeTripCObject(testContent);
 
@@ -140,8 +140,8 @@ poly main = add one one`;
     assertEquals(decoded, 2n, "add one one should equal 2");
   } finally {
     try {
-      await Deno.remove(`${__dirname}/test-simple.trip`);
-      await Deno.remove(`${__dirname}/test-simple.tripc`);
+      await Deno.remove(`${__dirname}/prelude_simple.trip`);
+      await Deno.remove(`${__dirname}/prelude_simple.tripc`);
     } catch {
       // Ignore cleanup errors
     }
@@ -167,8 +167,8 @@ poly three = succ two
 
 poly main = mul two three`;
 
-  // Write test source to file
-  const testFileName = "test-mult.trip";
+  // Write test source to file (prelude_ prefix for parallel-safe distinct names)
+  const testFileName = "prelude_mult.trip";
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
@@ -192,7 +192,9 @@ poly main = mul two three`;
   );
 
   try {
-    const testContent = await Deno.readTextFile(`${__dirname}/test-mult.tripc`);
+    const testContent = await Deno.readTextFile(
+      `${__dirname}/prelude_mult.tripc`,
+    );
     const testObject = deserializeTripCObject(testContent);
 
     const skiExpression = linkModules([
@@ -206,8 +208,8 @@ poly main = mul two three`;
     assertEquals(decoded, 6n, "mul two three should equal 6");
   } finally {
     try {
-      await Deno.remove(`${__dirname}/test-mult.trip`);
-      await Deno.remove(`${__dirname}/test-mult.tripc`);
+      await Deno.remove(`${__dirname}/prelude_mult.trip`);
+      await Deno.remove(`${__dirname}/prelude_mult.tripc`);
     } catch {
       // Ignore cleanup errors
     }
@@ -235,8 +237,8 @@ export main
 poly main = lit
 `;
 
-  const providerFileName = "literal-provider.trip";
-  const consumerFileName = "literal-consumer.trip";
+  const providerFileName = "prelude_literal_provider.trip";
+  const consumerFileName = "prelude_literal_consumer.trip";
 
   await Deno.writeTextFile(`${__dirname}/${providerFileName}`, providerSource);
   await Deno.writeTextFile(`${__dirname}/${consumerFileName}`, consumerSource);
@@ -262,10 +264,10 @@ poly main = lit
     await compile(consumerFileName);
 
     const providerBytes = await Deno.readTextFile(
-      `${__dirname}/literal-provider.tripc`,
+      `${__dirname}/prelude_literal_provider.tripc`,
     );
     const consumerBytes = await Deno.readTextFile(
-      `${__dirname}/literal-consumer.tripc`,
+      `${__dirname}/prelude_literal_consumer.tripc`,
     );
     const providerObject = deserializeTripCObject(providerBytes);
     const consumerObject = deserializeTripCObject(consumerBytes);
@@ -283,10 +285,10 @@ poly main = lit
   } finally {
     for (
       const file of [
-        "literal-provider.trip",
-        "literal-provider.tripc",
-        "literal-consumer.trip",
-        "literal-consumer.tripc",
+        "prelude_literal_provider.trip",
+        "prelude_literal_provider.tripc",
+        "prelude_literal_consumer.trip",
+        "prelude_literal_consumer.tripc",
       ]
     ) {
       try {
@@ -310,7 +312,7 @@ type Nat = #X -> (X -> X) -> X -> X
 poly main = 3
 `;
 
-  const conflictingFileName = "conflicting-nat.trip";
+  const conflictingFileName = "prelude_conflicting_nat.trip";
 
   await Deno.writeTextFile(
     `${__dirname}/${conflictingFileName}`,
@@ -337,7 +339,7 @@ poly main = 3
     await compile(conflictingFileName);
 
     const conflictingBytes = await Deno.readTextFile(
-      `${__dirname}/conflicting-nat.tripc`,
+      `${__dirname}/prelude_conflicting_nat.tripc`,
     );
     const conflictingObject = deserializeTripCObject(conflictingBytes);
 
@@ -352,7 +354,12 @@ poly main = 3
       "Ambiguous export 'Nat' found in multiple modules",
     );
   } finally {
-    for (const file of ["conflicting-nat.trip", "conflicting-nat.tripc"]) {
+    for (
+      const file of [
+        "prelude_conflicting_nat.trip",
+        "prelude_conflicting_nat.tripc",
+      ]
+    ) {
       try {
         await Deno.remove(`${__dirname}/${file}`);
       } catch {
@@ -384,8 +391,8 @@ poly five = succ four
 
 poly main = add (mul two three) (mul one four)`;
 
-  // Write test source to file
-  const testFileName = "test-complex.trip";
+  // Write test source to file (prelude_ prefix for parallel-safe distinct names)
+  const testFileName = "prelude_complex.trip";
   const testFilePath = `${__dirname}/${testFileName}`;
   await Deno.writeTextFile(testFilePath, testSource);
 
@@ -410,7 +417,7 @@ poly main = add (mul two three) (mul one four)`;
 
   try {
     const testContent = await Deno.readTextFile(
-      `${__dirname}/test-complex.tripc`,
+      `${__dirname}/prelude_complex.tripc`,
     );
     const testObject = deserializeTripCObject(testContent);
 
@@ -426,8 +433,8 @@ poly main = add (mul two three) (mul one four)`;
     assertEquals(decoded, 10n, "Complex arithmetic should equal 10");
   } finally {
     try {
-      await Deno.remove(`${__dirname}/test-complex.trip`);
-      await Deno.remove(`${__dirname}/test-complex.tripc`);
+      await Deno.remove(`${__dirname}/prelude_complex.trip`);
+      await Deno.remove(`${__dirname}/prelude_complex.tripc`);
     } catch {
       // Ignore cleanup errors
     }

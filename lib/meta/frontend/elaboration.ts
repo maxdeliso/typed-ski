@@ -92,6 +92,13 @@ export function elaborateSystemF(
       );
     case "systemF-match":
       return elaborateMatch(systemF, syms);
+    case "systemF-let":
+      return {
+        kind: "systemF-let",
+        name: systemF.name,
+        value: elaborateSystemF(systemF.value, syms),
+        body: elaborateSystemF(systemF.body, syms),
+      };
     case "non-terminal": {
       const elaboratedLft = elaborateSystemF(systemF.lft, syms);
       const elaboratedRgt = elaborateSystemF(systemF.rgt, syms);

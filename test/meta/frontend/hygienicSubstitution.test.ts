@@ -181,6 +181,36 @@ Deno.test("hygienic substitution functions", async (t) => {
         assertEquals(free.has("b"), false);
       },
     );
+
+    await t.step("should identify free variables in systemF-let", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-let",
+        name: "x",
+        value: { kind: "systemF-var", name: "y" },
+        body: { kind: "systemF-var", name: "z" },
+      };
+      const free = freeTermVars(term);
+      assertEquals(free.size, 2);
+      assertEquals(free.has("y"), true);
+      assertEquals(free.has("z"), true);
+      assertEquals(free.has("x"), false);
+    });
+
+    await t.step(
+      "should not count systemF-let binder as free in body",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "x",
+          value: { kind: "systemF-var", name: "y" },
+          body: { kind: "systemF-var", name: "x" },
+        };
+        const free = freeTermVars(term);
+        assertEquals(free.size, 1);
+        assertEquals(free.has("y"), true);
+        assertEquals(free.has("x"), false);
+      },
+    );
   });
 
   await t.step("freeTypeVars", async (t) => {
@@ -285,6 +315,23 @@ Deno.test("hygienic substitution functions", async (t) => {
         assertEquals(free.has("A"), false);
       },
     );
+
+    await t.step("should identify free type variables in systemF-let", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-let",
+        name: "x",
+        value: {
+          kind: "systemF-abs",
+          name: "z",
+          typeAnnotation: { kind: "type-var", typeName: "A" },
+          body: { kind: "systemF-var", name: "z" },
+        },
+        body: { kind: "systemF-var", name: "x" },
+      };
+      const free = freeTypeVars(term);
+      assertEquals(free.size, 1);
+      assertEquals(free.has("A"), true);
+    });
   });
 
   await t.step("fresh", async (t) => {
@@ -538,6 +585,80 @@ Deno.test("hygienic substitution functions", async (t) => {
         assertEquals(arm.body.name, "y");
       },
     );
+
+    await t.step("should rename systemF-let binder", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-let",
+        name: "x",
+        value: { kind: "systemF-var", name: "a" },
+        body: { kind: "systemF-var", name: "x" },
+      };
+      const renamed = alphaRenameTermBinder(term, "x", "y");
+      assertEquals(renamed.kind, "systemF-let");
+      assertEquals((renamed as { name: string }).name, "y");
+      assertEquals((renamed as { value: { name: string } }).value.name, "a");
+      assertEquals((renamed as { body: { name: string } }).body.name, "y");
+    });
+
+    await t.step(
+      "should not rename systemF-let binder when name doesn't match",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "x",
+          value: { kind: "systemF-var", name: "a" },
+          body: { kind: "systemF-var", name: "x" },
+        };
+        const renamed = alphaRenameTermBinder(term, "z", "w");
+        assertEquals(renamed.kind, "systemF-let");
+        assertEquals((renamed as { name: string }).name, "x");
+        assertEquals((renamed as { body: { name: string } }).body.name, "x");
+      },
+    );
+
+    await t.step(
+      "should rename free occurrence in systemF-let value and body when binder doesn't match",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "y",
+          value: { kind: "systemF-var", name: "x" },
+          body: { kind: "systemF-var", name: "y" },
+        };
+        const renamed = alphaRenameTermBinder(term, "x", "z");
+        assertEquals(renamed.kind, "systemF-let");
+        assertEquals((renamed as { name: string }).name, "y");
+        assertEquals((renamed as { value: { name: string } }).value.name, "z");
+        assertEquals((renamed as { body: { name: string } }).body.name, "y");
+      },
+    );
+
+    await t.step(
+      "should rename nested systemF-let binders when both bind same name (no early exit for newName)",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "x",
+          value: { kind: "systemF-var", name: "a" },
+          body: {
+            kind: "systemF-let",
+            name: "x",
+            value: { kind: "systemF-var", name: "b" },
+            body: { kind: "systemF-var", name: "x" },
+          },
+        };
+        const renamed = alphaRenameTermBinder(term, "x", "y");
+        assertEquals(renamed.kind, "systemF-let");
+        assertEquals((renamed as { name: string }).name, "y");
+        const inner = (renamed as { body: TripLangValueType }).body;
+        assertEquals(inner.kind, "systemF-let");
+        assertEquals((inner as { name: string }).name, "y");
+        assertEquals(
+          (inner as { body: { name: string } }).body.name,
+          "y",
+        );
+      },
+    );
   });
 
   await t.step("alphaRenameTypeBinder", async (t) => {
@@ -675,6 +796,31 @@ Deno.test("hygienic substitution functions", async (t) => {
         assertEquals(scrutinee.typeArg.typeName, "B");
         assertEquals(
           (renamed as { returnType: { typeName: string } }).returnType.typeName,
+          "B",
+        );
+      },
+    );
+
+    await t.step(
+      "should recurse into systemF-let value and body for type binder rename",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "x",
+          value: {
+            kind: "systemF-type-app",
+            term: { kind: "systemF-var", name: "f" },
+            typeArg: { kind: "type-var", typeName: "A" },
+          },
+          body: { kind: "systemF-var", name: "x" },
+        };
+        const renamed = alphaRenameTypeBinder(term, "A", "B");
+        assertEquals(renamed.kind, "systemF-let");
+        assertEquals((renamed as { name: string }).name, "x");
+        const value = (renamed as { value: TripLangValueType }).value;
+        assertEquals(value.kind, "systemF-type-app");
+        assertEquals(
+          (value as { typeArg: { typeName: string } }).typeArg.typeName,
           "B",
         );
       },
@@ -831,6 +977,54 @@ Deno.test("hygienic substitution functions", async (t) => {
         "x",
       );
     });
+
+    await t.step("should substitute in systemF-let value and body", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-let",
+        name: "x",
+        value: { kind: "systemF-var", name: "y" },
+        body: { kind: "systemF-var", name: "z" },
+      };
+      const replacement: TripLangValueType = {
+        kind: "systemF-var",
+        name: "w",
+      };
+      const resultY = substituteHygienic(term, "y", replacement);
+      assertEquals(resultY.kind, "systemF-let");
+      assertEquals((resultY as { name: string }).name, "x");
+      assertEquals((resultY as { value: { name: string } }).value.name, "w");
+      assertEquals((resultY as { body: { name: string } }).body.name, "z");
+
+      const resultZ = substituteHygienic(term, "z", replacement);
+      assertEquals(resultZ.kind, "systemF-let");
+      assertEquals((resultZ as { value: { name: string } }).value.name, "y");
+      assertEquals((resultZ as { body: { name: string } }).body.name, "w");
+    });
+
+    await t.step(
+      "should avoid variable capture when substituting into systemF-let and replacement contains let binder",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "x",
+          value: { kind: "systemF-var", name: "y" },
+          body: { kind: "systemF-var", name: "x" },
+        };
+        const replacement: TripLangValueType = {
+          kind: "systemF-var",
+          name: "x",
+        };
+        const result = substituteHygienic(term, "y", replacement);
+        assertEquals(result.kind, "systemF-let");
+        const binderName = (result as { name: string }).name;
+        assertEquals(binderName !== "x", true);
+        assertEquals((result as { value: { name: string } }).value.name, "x");
+        assertEquals(
+          (result as { body: { name: string } }).body.name,
+          binderName,
+        );
+      },
+    );
   });
 
   await t.step("substituteTypeHygienic", async (t) => {
@@ -922,6 +1116,36 @@ Deno.test("hygienic substitution functions", async (t) => {
         "B",
       );
     });
+
+    await t.step(
+      "should recurse into systemF-let value and body for type substitution",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-let",
+          name: "x",
+          value: {
+            kind: "systemF-type-app",
+            term: { kind: "systemF-var", name: "f" },
+            typeArg: { kind: "type-var", typeName: "A" },
+          },
+          body: { kind: "systemF-var", name: "x" },
+        };
+        const replacement: TripLangValueType = {
+          kind: "type-var",
+          typeName: "B",
+        };
+        const result = substituteTypeHygienic(term, "A", replacement);
+        assertEquals(result.kind, "systemF-let");
+        assertEquals((result as { name: string }).name, "x");
+        const value = (result as { value: TripLangValueType }).value;
+        assertEquals(value.kind, "systemF-type-app");
+        assertEquals(
+          (value as { typeArg: { typeName: string } }).typeArg.typeName,
+          "B",
+        );
+        assertEquals((result as { body: { name: string } }).body.name, "x");
+      },
+    );
 
     await t.step("should not substitute bound type variables", () => {
       const term: TripLangValueType = {

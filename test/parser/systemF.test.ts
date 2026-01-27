@@ -307,6 +307,67 @@ Deno.test("System F Parser", async (t) => {
     },
   );
 
+  await t.step("let bindings", async (t) => {
+    await t.step("parses let x = 1 in x (unannotated)", () => {
+      const [lit, ast] = parseSystemF("let x = 1 in x");
+      assert.equal(lit, "let x = 1 in x");
+      assert.equal(ast.kind, "systemF-let");
+      assert.equal(ast.name, "x");
+      assert.equal(ast.value.kind, "systemF-var");
+      assert.ok(parseNatLiteralIdentifier(ast.value.name) === 1n);
+      assert.equal(ast.body.kind, "systemF-var");
+      assert.equal(ast.body.name, "x");
+    });
+
+    await t.step(
+      "parses let x : Nat = 1 in x (annotated, desugars to App(Abs(...), 1))",
+      () => {
+        const [lit, ast] = parseSystemF("let x : Nat = 1 in x");
+        assert.equal(lit, "let x : Nat = 1 in x");
+        assert.equal(ast.kind, "non-terminal");
+        assert.equal(ast.lft.kind, "systemF-abs");
+        assert.equal(ast.lft.name, "x");
+        assert.equal(ast.lft.typeAnnotation.kind, "type-var");
+        assert.equal(ast.lft.typeAnnotation.typeName, "Nat");
+        assert.equal(ast.lft.body.kind, "systemF-var");
+        assert.equal(ast.lft.body.name, "x");
+        assert.equal(ast.rgt.kind, "systemF-var");
+        assert.ok(parseNatLiteralIdentifier(ast.rgt.name) === 1n);
+      },
+    );
+
+    await t.step("parses nested let bindings", () => {
+      const [lit, ast] = parseSystemF("let x = 1 in let y = 2 in x");
+      assert.equal(lit, "let x = 1 in let y = 2 in x");
+      assert.equal(ast.kind, "systemF-let");
+      assert.equal(ast.name, "x");
+      assert.equal(ast.body.kind, "systemF-let");
+      assert.equal(ast.body.name, "y");
+      assert.equal(ast.body.body.kind, "systemF-var");
+      assert.equal(ast.body.body.name, "x");
+    });
+
+    await t.step("missing 'in' triggers syntax error", () => {
+      assert.throws(() => parseSystemF("let x = 1"), Error);
+      assert.throws(() => parseSystemF("let x = 1 foo"), Error);
+    });
+
+    await t.step("missing '=' triggers syntax error", () => {
+      assert.throws(() => parseSystemF("let x 1 in x"), Error);
+      assert.throws(() => parseSystemF("let x in x"), Error);
+    });
+
+    await t.step("variable shadowing (inner let shadows outer)", () => {
+      const [_, ast] = parseSystemF("let x = 1 in let x = 2 in x");
+      assert.equal(ast.kind, "systemF-let");
+      assert.equal(ast.name, "x");
+      assert.equal(ast.body.kind, "systemF-let");
+      assert.equal(ast.body.name, "x");
+      assert.equal(ast.body.body.kind, "systemF-var");
+      assert.equal(ast.body.body.name, "x"); // inner x refers to inner binding
+    });
+  });
+
   await t.step(
     "parseAtomicSystemFTermNoTypeApp - match scrutinees",
     async (t) => {

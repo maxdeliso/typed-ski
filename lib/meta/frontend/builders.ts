@@ -25,6 +25,8 @@ export function mkBranch<T extends SystemFTerm | TypedLambda | UntypedLambda>(
       return [n.body] as T[];
     case "systemF-type-app":
       return [n.term] as T[];
+    case "systemF-let":
+      return [n.body, n.value] as T[];
     default:
       return [];
   }

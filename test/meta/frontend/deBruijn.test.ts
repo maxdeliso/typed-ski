@@ -103,6 +103,50 @@ Deno.test("De Bruijn Conversion", async (t) => {
     });
   });
 
+  await t.step("should convert systemF-let (let x = value in body)", () => {
+    // let x = y in x  — value y is free, body x is bound at index 0
+    const term: SystemFTerm = {
+      kind: "systemF-let",
+      name: "x",
+      value: { kind: "systemF-var", name: "y" },
+      body: { kind: "systemF-var", name: "x" },
+    };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, {
+      kind: "DbLet",
+      value: { kind: "DbFreeVar", name: "y" },
+      body: { kind: "DbVar", index: 0 },
+    });
+  });
+
+  await t.step(
+    "should convert nested systemF-let with correct binding depth",
+    () => {
+      // let x = a in let y = b in x  — outer x at index 1 in inner body
+      const term: SystemFTerm = {
+        kind: "systemF-let",
+        name: "x",
+        value: { kind: "systemF-var", name: "a" },
+        body: {
+          kind: "systemF-let",
+          name: "y",
+          value: { kind: "systemF-var", name: "b" },
+          body: { kind: "systemF-var", name: "x" },
+        },
+      };
+      const result = toDeBruijn(term);
+      assert.deepStrictEqual(result, {
+        kind: "DbLet",
+        value: { kind: "DbFreeVar", name: "a" },
+        body: {
+          kind: "DbLet",
+          value: { kind: "DbFreeVar", name: "b" },
+          body: { kind: "DbVar", index: 1 },
+        },
+      });
+    },
+  );
+
   await t.step("should convert typed lambda abstractions", () => {
     // λx: T. x
     const term: TypedLambda = {

@@ -31,19 +31,13 @@ import Prelude Nat
 export main
 
 poly main =
-  add
-    (cond [Nat] (not false) 1 0)
-    (add
-      (cond [Nat] (and true true) 1 0)
-      (add
-        (cond [Nat] (or false true) 1 0)
-        (add
-          (pred 2)
-          (add
-            (sub 3 1)
-            (add
-              (cond [Nat] (lte 1 2) 1 0)
-              (cond [Nat] (gte 2 1) 1 0))))))
+  let a = cond [Nat] (not false) 1 0 in
+  let b = add a (cond [Nat] (and true true) 1 0) in
+  let c = add b (cond [Nat] (or false true) 1 0) in
+  let d = add c (pred 2) in
+  let e = add d (sub 3 1) in
+  let f = add e (cond [Nat] (lte 1 2) 1 0) in
+  add f (cond [Nat] (gte 2 1) 1 0)
 `;
 
 Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {

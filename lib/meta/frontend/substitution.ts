@@ -66,6 +66,10 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
         }
         break;
       }
+      case "systemF-let":
+        collect(t.value, bound);
+        collect(t.body, new Set([...bound, t.name]));
+        break;
       case "type-app":
         collect(t.fn, bound);
         collect(t.arg, bound);
@@ -126,6 +130,10 @@ function usesSystemFNatLiteral(term: TripLangValueType): boolean {
         for (const arm of current.arms) {
           stack.push(arm.body);
         }
+        break;
+      case "systemF-let":
+        stack.push(current.value);
+        stack.push(current.body);
         break;
       case "typed-lambda-abstraction":
         stack.push(current.ty);
@@ -202,6 +210,10 @@ export function freeTypeVars(t: TripLangValueType): Set<string> {
         for (const arm of t.arms) {
           collect(arm.body, new Set([...bound, ...arm.params]));
         }
+        break;
+      case "systemF-let":
+        collect(t.value, bound);
+        collect(t.body, bound);
         break;
       case "non-terminal":
         collect(t.lft, bound);
@@ -345,6 +357,24 @@ export function alphaRenameTermBinder<T extends TripLangValueType>(
       });
       return { ...term, scrutinee, returnType, arms } as T;
     }
+    case "systemF-let": {
+      const bind = term.name;
+      const value = alphaRenameTermBinder(term.value, oldName, newName);
+      if (bind === oldName) {
+        return {
+          ...term,
+          name: newName,
+          value,
+          body: alphaRenameTermBinder(term.body, oldName, newName),
+        } as T;
+      }
+      if (bind === newName) return { ...term, value } as T;
+      return {
+        ...term,
+        value,
+        body: alphaRenameTermBinder(term.body, oldName, newName),
+      } as T;
+    }
     case "non-terminal":
       return {
         ...term,
@@ -442,6 +472,12 @@ export function alphaRenameTypeBinder<T extends TripLangValueType>(
           oldName,
           newName,
         ),
+        body: alphaRenameTypeBinder(term.body, oldName, newName),
+      } as T;
+    case "systemF-let":
+      return {
+        ...term,
+        value: alphaRenameTypeBinder(term.value, oldName, newName),
         body: alphaRenameTypeBinder(term.body, oldName, newName),
       } as T;
     case "non-terminal":
@@ -599,6 +635,33 @@ export function substituteHygienic<T extends TripLangValueType>(
       });
       return { ...term, scrutinee, returnType, arms } as T;
     }
+    case "systemF-let": {
+      const fv = freeTermVars(replacement);
+      let bind = term.name;
+      let currentTerm = term;
+      if (fv.has(bind)) {
+        const newName = fresh(bind, new Set([...fv, ...bound]));
+        currentTerm = alphaRenameTermBinder(currentTerm, bind, newName) as T;
+        bind = newName;
+      }
+      const newBound = new Set(bound);
+      newBound.add(bind);
+      return {
+        ...currentTerm,
+        value: substituteHygienic(
+          (currentTerm as Extract<T, { kind: "systemF-let" }>).value,
+          termName,
+          replacement,
+          bound,
+        ),
+        body: substituteHygienic(
+          (currentTerm as Extract<T, { kind: "systemF-let" }>).body,
+          termName,
+          replacement,
+          newBound,
+        ),
+      } as T;
+    }
     case "non-terminal":
       return {
         ...term,
@@ -711,6 +774,12 @@ export function substituteTypeHygienic<T extends TripLangValueType>(
       }));
       return { ...term, scrutinee, returnType, arms } as T;
     }
+    case "systemF-let":
+      return {
+        ...term,
+        value: substituteTypeHygienic(term.value, typeName, replacement, bound),
+        body: substituteTypeHygienic(term.body, typeName, replacement, bound),
+      } as T;
     case "typed-lambda-abstraction":
       return {
         ...term,

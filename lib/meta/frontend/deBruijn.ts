@@ -125,6 +125,15 @@ export interface DeBruijnMatch {
 }
 
 /**
+ * A let binding: let x = value in body (body has x at index 0 in termCtx).
+ */
+export interface DeBruijnLet {
+  kind: "DbLet";
+  value: DeBruijnTerm;
+  body: DeBruijnTerm;
+}
+
+/**
  * A terminal symbol (S, K, I).
  */
 export interface DeBruijnTerminal {
@@ -149,6 +158,7 @@ export type DeBruijnTerm =
   | DeBruijnTyApp
   | DeBruijnTypeApp
   | DeBruijnMatch
+  | DeBruijnLet
   | DeBruijnTerminal;
 
 /**
@@ -266,6 +276,12 @@ function toDeBruijnInternal(
         arms,
       };
     }
+    case "systemF-let":
+      return {
+        kind: "DbLet",
+        value: toDeBruijnInternal(term.value, termCtx, typeCtx),
+        body: toDeBruijnInternal(term.body, [term.name, ...termCtx], typeCtx),
+      };
     case "terminal":
       return { kind: "DbTerminal", sym: term.sym };
   }

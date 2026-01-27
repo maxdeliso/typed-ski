@@ -15,6 +15,7 @@ import {
   emptySystemFContext,
   eraseSystemF,
   forall,
+  reduceLets,
   typecheckSystemF,
 } from "../../lib/types/systemF.ts";
 
@@ -274,6 +275,190 @@ Deno.test("System F type-checker and helpers", async (t) => {
     const [ty] = typecheckSystemF(emptySystemFContext(), term);
     expect(unparseType(ty)).to.match(/#X->.*X->X/);
     expect(lit.replace(/\s+/g, "")).to.equal(src.replace(/\s+/g, ""));
+  });
+
+  await t.step("let bindings", async (t) => {
+    await t.step("unannotated let typechecks (infers Nat)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      expect(term.kind).to.equal("systemF-let");
+      const [ty] = typecheckSystemF(emptySystemFContext(), term);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
+
+    await t.step("annotated let with correct type typechecks", () => {
+      const [_, term] = parseSystemF("let x : Nat = 1 in x");
+      expect(term.kind).to.equal("non-terminal");
+      const [ty] = typecheckSystemF(emptySystemFContext(), term);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
+
+    await t.step("annotated let with incorrect type fails typecheck", () => {
+      const [_, term] = parseSystemF("let x : Bool = 1 in x");
+      expect(term.kind).to.equal("non-terminal");
+      expect(() => typecheckSystemF(emptySystemFContext(), term))
+        .to.throw(/function argument type mismatch/);
+    });
+  });
+
+  await t.step("reduceLets", async (t) => {
+    const hasSystemFLet = (term: SystemFTerm): boolean => {
+      if (term.kind === "systemF-let") return true;
+      switch (term.kind) {
+        case "systemF-var":
+          return false;
+        case "systemF-abs":
+          return hasSystemFLet(term.body);
+        case "systemF-type-abs":
+          return hasSystemFLet(term.body);
+        case "systemF-type-app":
+          return hasSystemFLet(term.term);
+        case "non-terminal":
+          return hasSystemFLet(term.lft) || hasSystemFLet(term.rgt);
+        case "systemF-match":
+          return (
+            hasSystemFLet(term.scrutinee) ||
+            term.arms.some((a) => hasSystemFLet(a.body))
+          );
+        default:
+          return false;
+      }
+    };
+
+    await t.step("expands unannotated let to App(Abs(...), value)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      expect(term.kind).to.equal("systemF-let");
+
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(hasSystemFLet(reduced)).to.equal(false);
+      expect(reduced.kind).to.equal("non-terminal");
+      if (reduced.kind === "non-terminal") {
+        expect(reduced.lft.kind).to.equal("systemF-abs");
+        if (reduced.lft.kind === "systemF-abs") {
+          expect(reduced.lft.name).to.equal("x");
+          expect(reduced.lft.body.kind).to.equal("systemF-var");
+          if (reduced.lft.body.kind === "systemF-var") {
+            expect(reduced.lft.body.name).to.equal("x");
+          }
+        }
+        expect(reduced.rgt.kind).to.equal("systemF-var"); // literal 1
+      }
+
+      const [ty] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
+
+    await t.step("expands nested lets and preserves type", () => {
+      const [_, term] = parseSystemF("let x = 1 in let y = 2 in x");
+      expect(term.kind).to.equal("systemF-let");
+
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(hasSystemFLet(reduced)).to.equal(false);
+
+      const [tyOriginal] = typecheckSystemF(emptySystemFContext(), term);
+      const [tyReduced] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(tyReduced)).to.equal(unparseType(tyOriginal));
+      expect(unparseType(tyReduced)).to.match(/Nat/);
+    });
+
+    await t.step("preserves type through reduceLets (let x = 1 in x)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      const reduced = reduceLets(emptySystemFContext(), term);
+      const [tyOrig] = typecheckSystemF(emptySystemFContext(), term);
+      const [tyRed] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(tyRed)).to.equal(unparseType(tyOrig));
+    });
+
+    await t.step("traverses systemF-var (identity)", () => {
+      const term = mkSystemFVar("x");
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(reduced).to.deep.equal(term);
+      expect(reduced.kind).to.equal("systemF-var");
+    });
+
+    await t.step("traverses systemF-abs (recurses body)", () => {
+      const term = mkSystemFAbs(
+        "y",
+        mkTypeVariable("Nat"),
+        mkSystemFVar("y"),
+      );
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(reduced.kind).to.equal("systemF-abs");
+      expect((reduced as { name: string }).name).to.equal("y");
+      expect((reduced as { body: SystemFTerm }).body.kind).to.equal(
+        "systemF-var",
+      );
+    });
+
+    await t.step("traverses systemF-type-abs (recurses body)", () => {
+      const term = mkSystemFTAbs("X", mkSystemFVar("x"));
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(reduced.kind).to.equal("systemF-type-abs");
+      expect((reduced as { typeVar: string }).typeVar).to.equal("X");
+      expect((reduced as { body: SystemFTerm }).body.kind).to.equal(
+        "systemF-var",
+      );
+    });
+
+    await t.step("traverses systemF-type-app (recurses term)", () => {
+      const id = mkSystemFTAbs(
+        "X",
+        mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
+      );
+      const term = mkSystemFTypeApp(id, mkTypeVariable("Nat"));
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(reduced.kind).to.equal("systemF-type-app");
+      expect((reduced as { term: SystemFTerm }).term.kind).to.equal(
+        "systemF-type-abs",
+      );
+      expect((reduced as { typeArg: { typeName: string } }).typeArg.typeName).to
+        .equal("Nat");
+    });
+
+    await t.step("traverses non-terminal (recurses lft and rgt)", () => {
+      const term = mkSystemFApp(mkSystemFVar("f"), mkSystemFVar("x"));
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(reduced.kind).to.equal("non-terminal");
+      expect((reduced as { lft: { name: string } }).lft.name).to.equal("f");
+      expect((reduced as { rgt: { name: string } }).rgt.name).to.equal("x");
+    });
+
+    await t.step(
+      "traverses systemF-match (recurses scrutinee and arm bodies)",
+      () => {
+        const term: SystemFTerm = {
+          kind: "systemF-match",
+          scrutinee: mkSystemFVar("m"),
+          returnType: mkTypeVariable("T"),
+          arms: [
+            {
+              constructorName: "A",
+              params: [],
+              body: mkSystemFVar("y"),
+            },
+          ],
+        };
+        const reduced = reduceLets(emptySystemFContext(), term);
+        expect(reduced.kind).to.equal("systemF-match");
+        expect((reduced as { scrutinee: { name: string } }).scrutinee.name).to
+          .equal("m");
+        const arm = (reduced as {
+          arms: Array<{ constructorName: string; body: { name: string } }>;
+        }).arms[0];
+        expect(arm.constructorName).to.equal("A");
+        expect(arm.body.name).to.equal("y");
+      },
+    );
+
+    await t.step("let whose value is systemF-abs exercises abs branch", () => {
+      const bodyUsesLet = parseSystemF("let x = (\\y : Nat => y) in x")[1];
+      expect(bodyUsesLet.kind).to.equal("systemF-let");
+      const value = (bodyUsesLet as { value: SystemFTerm }).value;
+      expect(value.kind).to.equal("systemF-abs");
+      const reduced = reduceLets(emptySystemFContext(), bodyUsesLet);
+      expect(hasSystemFLet(reduced)).to.equal(false);
+      const [ty] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
   });
 
   await t.step("eraseSystemF", async (t) => {

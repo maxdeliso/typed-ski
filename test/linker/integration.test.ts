@@ -23,7 +23,7 @@ export main
 
 poly main = #X => \\x: X => x`;
 
-    const sourceFile = `${__dirname}/simple.trip`;
+    const sourceFile = `${__dirname}/int_simple.trip`;
     await Deno.writeTextFile(sourceFile, simpleSource);
 
     try {
@@ -34,8 +34,8 @@ poly main = #X => \\x: X => x`;
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "simple.trip",
-          "simple.tripc",
+          "int_simple.trip",
+          "int_simple.tripc",
         ],
         cwd: __dirname,
       });
@@ -51,7 +51,7 @@ poly main = #X => \\x: X => x`;
           "--allow-write",
           "../../bin/tripc.ts",
           "--link",
-          "simple.tripc",
+          "int_simple.tripc",
         ],
         cwd: __dirname,
       });
@@ -65,7 +65,7 @@ poly main = #X => \\x: X => x`;
       // Cleanup
       try {
         await Deno.remove(sourceFile);
-        await Deno.remove(`${__dirname}/simple.tripc`);
+        await Deno.remove(`${__dirname}/int_simple.tripc`);
       } catch {
         // Ignore cleanup errors
       }
@@ -80,7 +80,7 @@ export main
 
 poly main = #X => \\x: X => \\y: X => \\z: X => x`;
 
-    const sourceFile = `${__dirname}/complex_test.trip`;
+    const sourceFile = `${__dirname}/int_complex.trip`;
     await Deno.writeTextFile(sourceFile, complexSource);
 
     try {
@@ -91,8 +91,8 @@ poly main = #X => \\x: X => \\y: X => \\z: X => x`;
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "complex_test.trip",
-          "complex_test.tripc",
+          "int_complex.trip",
+          "int_complex.tripc",
         ],
         cwd: __dirname,
       });
@@ -108,7 +108,7 @@ poly main = #X => \\x: X => \\y: X => \\z: X => x`;
           "--allow-write",
           "../../bin/tripc.ts",
           "--link",
-          "complex_test.tripc",
+          "int_complex.tripc",
         ],
         cwd: __dirname,
       });
@@ -124,7 +124,7 @@ poly main = #X => \\x: X => \\y: X => \\z: X => x`;
       // Cleanup
       try {
         await Deno.remove(sourceFile);
-        await Deno.remove(`${__dirname}/complex_test.tripc`);
+        await Deno.remove(`${__dirname}/int_complex.tripc`);
       } catch {
         // Ignore cleanup errors
       }
@@ -145,8 +145,8 @@ export main
 
 poly main = #X => \\x: X => x`;
 
-    const sourceFileA = `${__dirname}/moduleA.trip`;
-    const sourceFileB = `${__dirname}/moduleB.trip`;
+    const sourceFileA = `${__dirname}/int_mod_a.trip`;
+    const sourceFileB = `${__dirname}/int_mod_b.trip`;
 
     await Deno.writeTextFile(sourceFileA, moduleASource);
     await Deno.writeTextFile(sourceFileB, moduleBSource);
@@ -159,8 +159,8 @@ poly main = #X => \\x: X => x`;
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "moduleA.trip",
-          "moduleA.tripc",
+          "int_mod_a.trip",
+          "int_mod_a.tripc",
         ],
         cwd: __dirname,
       });
@@ -171,8 +171,8 @@ poly main = #X => \\x: X => x`;
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "moduleB.trip",
-          "moduleB.tripc",
+          "int_mod_b.trip",
+          "int_mod_b.tripc",
         ],
         cwd: __dirname,
       });
@@ -191,8 +191,8 @@ poly main = #X => \\x: X => x`;
           "--allow-write",
           "../../bin/tripc.ts",
           "--link",
-          "moduleA.tripc",
-          "moduleB.tripc",
+          "int_mod_a.tripc",
+          "int_mod_b.tripc",
         ],
         cwd: __dirname,
       });
@@ -208,8 +208,8 @@ poly main = #X => \\x: X => x`;
       try {
         await Deno.remove(sourceFileA);
         await Deno.remove(sourceFileB);
-        await Deno.remove(`${__dirname}/moduleA.tripc`);
-        await Deno.remove(`${__dirname}/moduleB.tripc`);
+        await Deno.remove(`${__dirname}/int_mod_a.tripc`);
+        await Deno.remove(`${__dirname}/int_mod_b.tripc`);
       } catch {
         // Ignore cleanup errors
       }
@@ -224,7 +224,7 @@ export main
 
 poly main = \\x:Int => \\y:Int => x + y`;
 
-    const sourceFile = `${__dirname}/invalid.trip`;
+    const sourceFile = `${__dirname}/int_invalid.trip`;
     await Deno.writeTextFile(sourceFile, invalidSource);
 
     try {
@@ -235,8 +235,8 @@ poly main = \\x:Int => \\y:Int => x + y`;
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "invalid.trip",
-          "invalid.tripc",
+          "int_invalid.trip",
+          "int_invalid.tripc",
         ],
         cwd: __dirname,
       });
@@ -250,7 +250,7 @@ poly main = \\x:Int => \\y:Int => x + y`;
       // Cleanup
       try {
         await Deno.remove(sourceFile);
-        await Deno.remove(`${__dirname}/invalid.tripc`);
+        await Deno.remove(`${__dirname}/int_invalid.tripc`);
       } catch {
         // Ignore cleanup errors
       }
@@ -265,7 +265,7 @@ export other
 
 typed other = \\x: Int => x`;
 
-    const sourceFile = `${__dirname}/noMain.trip`;
+    const sourceFile = `${__dirname}/int_noMain.trip`;
     await Deno.writeTextFile(sourceFile, noMainSource);
 
     try {
@@ -276,8 +276,8 @@ typed other = \\x: Int => x`;
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "noMain.trip",
-          "noMain.tripc",
+          "int_noMain.trip",
+          "int_noMain.tripc",
         ],
         cwd: __dirname,
       });
@@ -293,7 +293,7 @@ typed other = \\x: Int => x`;
           "--allow-write",
           "../../bin/tripc.ts",
           "--link",
-          "noMain.tripc",
+          "int_noMain.tripc",
         ],
         cwd: __dirname,
       });
@@ -310,7 +310,7 @@ typed other = \\x: Int => x`;
       // Cleanup
       try {
         await Deno.remove(sourceFile);
-        await Deno.remove(`${__dirname}/noMain.tripc`);
+        await Deno.remove(`${__dirname}/int_noMain.tripc`);
       } catch {
         // Ignore cleanup errors
       }
@@ -325,7 +325,7 @@ export main
 
 poly main = #X => \\x: X => \\y: X => \\z: X => \\w: X => \\v: X => \\u: X => \\t: X => \\s: X => \\r: X => \\q: X => x`;
 
-    const sourceFile = `${__dirname}/large.trip`;
+    const sourceFile = `${__dirname}/int_large.trip`;
     await Deno.writeTextFile(sourceFile, largeSource);
 
     try {
@@ -336,8 +336,8 @@ poly main = #X => \\x: X => \\y: X => \\z: X => \\w: X => \\v: X => \\u: X => \\
           "--allow-read",
           "--allow-write",
           "../../bin/tripc.ts",
-          "large.trip",
-          "large.tripc",
+          "int_large.trip",
+          "int_large.tripc",
         ],
         cwd: __dirname,
       });
@@ -353,7 +353,7 @@ poly main = #X => \\x: X => \\y: X => \\z: X => \\w: X => \\v: X => \\u: X => \\
           "--allow-write",
           "../../bin/tripc.ts",
           "--link",
-          "large.tripc",
+          "int_large.tripc",
         ],
         cwd: __dirname,
       });
@@ -368,7 +368,7 @@ poly main = #X => \\x: X => \\y: X => \\z: X => \\w: X => \\v: X => \\u: X => \\
       // Cleanup
       try {
         await Deno.remove(sourceFile);
-        await Deno.remove(`${__dirname}/large.tripc`);
+        await Deno.remove(`${__dirname}/int_large.tripc`);
       } catch {
         // Ignore cleanup errors
       }
@@ -376,40 +376,56 @@ poly main = #X => \\x: X => \\y: X => \\z: X => \\w: X => \\v: X => \\u: X => \\
   });
 
   await t.step("executable wrapper integration", async () => {
-    // Compile A.trip to A.tripc first
-    const compileCommand = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "A.trip",
-        "A.tripc",
-      ],
-      cwd: __dirname,
-    });
+    const sourceFile = `${__dirname}/int_exec_wrapper.trip`;
+    const tripcFile = `${__dirname}/int_exec_wrapper.tripc`;
+    const source = `module ExecWrapper
 
-    const { code: compileCode } = await compileCommand.output();
-    expect(compileCode).to.equal(0);
+export main
 
-    // Test the executable wrapper directly
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "A.tripc",
-      ],
-      cwd: __dirname,
-    });
+poly main = #X => \\x: X => x`;
 
-    const { stdout, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+    await Deno.writeTextFile(sourceFile, source);
+    try {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
+        args: [
+          "run",
+          "--allow-read",
+          "--allow-write",
+          "../../bin/tripc.ts",
+          "int_exec_wrapper.trip",
+          "int_exec_wrapper.tripc",
+        ],
+        cwd: __dirname,
+      });
 
-    expect(code).to.equal(0);
-    expect(output).to.be.a("string");
-    expect(output.length).to.be.greaterThan(0);
+      const { code: compileCode } = await compileCommand.output();
+      expect(compileCode).to.equal(0);
+
+      const command = new Deno.Command(Deno.execPath(), {
+        args: [
+          "run",
+          "--allow-read",
+          "--allow-write",
+          "../../bin/tripc.ts",
+          "--link",
+          "int_exec_wrapper.tripc",
+        ],
+        cwd: __dirname,
+      });
+
+      const { stdout, code } = await command.output();
+      const output = new TextDecoder().decode(stdout);
+
+      expect(code).to.equal(0);
+      expect(output).to.be.a("string");
+      expect(output.length).to.be.greaterThan(0);
+    } finally {
+      try {
+        await Deno.remove(sourceFile);
+        await Deno.remove(tripcFile);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   });
 });

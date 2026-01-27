@@ -44,6 +44,31 @@ poly main = consResult`;
   assertEquals(UnChurchNumber(result), 42n);
 });
 
+Deno.test("string literal length via matchList", async () => {
+  const source = `module TestStringLength
+
+import Prelude Nat
+import Prelude zero
+import Prelude succ
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude List
+
+export main
+
+poly length2 = \\xs : List =>
+  matchList [Nat] [Nat] xs zero
+    (\\h : Nat => \\t : List =>
+      succ (matchList [Nat] [Nat] t zero
+        (\\h2 : Nat => \\t2 : List => succ zero)))
+
+poly main = length2 "hi"`;
+
+  const result = await evaluateTrip(source);
+  assertEquals(UnChurchNumber(result), 2n);
+});
+
 Deno.test("trip harness evaluates IO programs", async () => {
   const source = `module EchoOne
 

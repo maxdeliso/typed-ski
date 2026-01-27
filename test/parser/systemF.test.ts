@@ -1,5 +1,35 @@
 import { strict as assert } from "node:assert";
 import { parseSystemF, unparseSystemF } from "../../lib/parser/systemFTerm.ts";
+import { parseNatLiteralIdentifier } from "../../lib/consts/natNames.ts";
+import type { SystemFTerm } from "../../lib/terms/systemF.ts";
+
+const assertNatLiteral = (term: SystemFTerm, expected: bigint) => {
+  assert.equal(term.kind, "systemF-var");
+  const value = parseNatLiteralIdentifier(term.name);
+  assert.equal(value, expected);
+};
+
+const assertNatList = (term: SystemFTerm, expected: bigint[]) => {
+  let current = term;
+  for (const value of expected) {
+    assert.equal(current.kind, "non-terminal");
+    const consApp = current.lft;
+    assert.equal(consApp.kind, "non-terminal");
+    const consTypeApp = consApp.lft;
+    assert.equal(consTypeApp.kind, "systemF-type-app");
+    assert.equal(consTypeApp.term.kind, "systemF-var");
+    assert.equal(consTypeApp.term.name, "cons");
+    assert.equal(consTypeApp.typeArg.kind, "type-var");
+    assert.equal(consTypeApp.typeArg.typeName, "Nat");
+    assertNatLiteral(consApp.rgt, value);
+    current = current.rgt;
+  }
+  assert.equal(current.kind, "systemF-type-app");
+  assert.equal(current.term.kind, "systemF-var");
+  assert.equal(current.term.name, "nil");
+  assert.equal(current.typeArg.kind, "type-var");
+  assert.equal(current.typeArg.typeName, "Nat");
+};
 
 Deno.test("System F Parser", async (t) => {
   await t.step("parses a single variable", () => {
@@ -18,6 +48,93 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(ast.kind, "systemF-var");
     assert.match(ast.name, /__trip_nat_literal__/);
     assert.equal(unparseSystemF(ast), "123");
+  });
+
+  await t.step("parses a character literal", () => {
+    const [lit, ast] = parseSystemF("'a'");
+    assert.equal(lit, "'a'");
+    assertNatLiteral(ast, 97n);
+    assert.equal(unparseSystemF(ast), "97");
+  });
+
+  await t.step("parses escaped character literals", () => {
+    const cases: Array<[string, bigint]> = [
+      ["'\\n'", 10n],
+      ["'\\\\'", 92n],
+      ["'\\''", 39n],
+      ["'\\\"'", 34n],
+    ];
+    for (const [input, expected] of cases) {
+      const [lit, ast] = parseSystemF(input);
+      assert.equal(lit, input);
+      assertNatLiteral(ast, expected);
+    }
+  });
+
+  await t.step("rejects malformed character literals", () => {
+    const badInputs = [
+      "''",
+      "'a",
+      "'ab'",
+      "'\n'",
+      "'\\t'",
+      "'\\x'",
+      "'\\u'",
+      "'\\0'",
+    ];
+    for (const input of badInputs) {
+      assert.throws(() => parseSystemF(input), Error);
+    }
+  });
+
+  await t.step("rejects non-printable character literals", () => {
+    assert.throws(() => parseSystemF("'\u0001'"), Error);
+    assert.throws(() => parseSystemF("'\u001F'"), Error);
+  });
+
+  await t.step("parses a string literal into a Nat list", () => {
+    const [lit, ast] = parseSystemF('"ab"');
+    assert.equal(lit, '"ab"');
+    assertNatList(ast, [97n, 98n]);
+  });
+
+  await t.step("parses string literal escapes", () => {
+    const [lit, ast] = parseSystemF('"a\\n\\"\\\\"');
+    assert.equal(lit, '"a\\n\\"\\\\"');
+    assertNatList(ast, [97n, 10n, 34n, 92n]);
+  });
+
+  await t.step("parses empty string literal", () => {
+    const [lit, ast] = parseSystemF('""');
+    assert.equal(lit, '""');
+    assertNatList(ast, []);
+  });
+
+  await t.step("parses string literals in applications", () => {
+    const [lit, ast] = parseSystemF('f "a"');
+    assert.equal(lit, 'f "a"');
+    assert.equal(ast.kind, "non-terminal");
+    assert.equal(ast.lft.kind, "systemF-var");
+    assert.equal(ast.lft.name, "f");
+    assertNatList(ast.rgt, [97n]);
+  });
+
+  await t.step("rejects malformed string literals", () => {
+    const badInputs = [
+      '"unterminated',
+      '"\\t"',
+      '"\\x"',
+      '"\\u"',
+      '"\\0"',
+    ];
+    for (const input of badInputs) {
+      assert.throws(() => parseSystemF(input), Error);
+    }
+  });
+
+  await t.step("rejects non-printable string literals", () => {
+    assert.throws(() => parseSystemF('"\u0001"'), Error);
+    assert.throws(() => parseSystemF('"\u001F"'), Error);
   });
 
   await t.step("parses a term abstraction", () => {
@@ -381,9 +498,22 @@ Deno.test("System F Parser", async (t) => {
 
         // The scrutinee should be a numeric literal variable
         const scrutinee = ast.scrutinee;
-        assert.equal(scrutinee.kind, "systemF-var");
-        assert.match(scrutinee.name, /__trip_nat_literal__/);
+        assertNatLiteral(scrutinee, 123n);
         assert.equal(unparseSystemF(scrutinee), "123");
+      });
+
+      await t.step("parses character literal as match scrutinee", () => {
+        const input = "match 'a' [T] { | None => y }";
+        const [_lit, ast] = parseSystemF(input);
+        assert.equal(ast.kind, "systemF-match");
+        assertNatLiteral(ast.scrutinee, 97n);
+      });
+
+      await t.step("parses string literal as match scrutinee", () => {
+        const input = 'match "hi" [T] { | None => y }';
+        const [_lit, ast] = parseSystemF(input);
+        assert.equal(ast.kind, "systemF-match");
+        assertNatList(ast.scrutinee, [104n, 105n]);
       });
 
       await t.step(

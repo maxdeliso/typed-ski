@@ -3,7 +3,7 @@ import { mkVar } from "../../lib/terms/lambda.ts";
 import { createTypedApplication } from "../../lib/types/typedLambda.ts";
 
 import { ParseError } from "../../lib/parser/parseError.ts";
-import { parseType, parseArrowTypeNoApp } from "../../lib/parser/type.ts";
+import { parseArrowTypeNoApp, parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 import { createParserState } from "../../lib/parser/parserState.ts";
 

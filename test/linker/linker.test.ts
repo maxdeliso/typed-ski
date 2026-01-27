@@ -233,9 +233,9 @@ poly rec main = \\n:Nat => main n`;
       name: "MutualRecModule",
       object: moduleWithMutualRecursion,
     }];
-    const programSpace = createProgramSpace(modules.map((m) =>
-      loadModule(m.object, m.name)
-    ));
+    const programSpace = createProgramSpace(
+      modules.map((m) => loadModule(m.object, m.name)),
+    );
 
     try {
       resolveCrossModuleDependencies(programSpace, false);

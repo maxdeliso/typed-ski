@@ -192,7 +192,9 @@ poly main = mul two three`;
   );
 
   try {
-    const testContent = await Deno.readTextFile(`${__dirname}/prelude_mult.tripc`);
+    const testContent = await Deno.readTextFile(
+      `${__dirname}/prelude_mult.tripc`,
+    );
     const testObject = deserializeTripCObject(testContent);
 
     const skiExpression = linkModules([
@@ -352,7 +354,12 @@ poly main = 3
       "Ambiguous export 'Nat' found in multiple modules",
     );
   } finally {
-    for (const file of ["prelude_conflicting_nat.trip", "prelude_conflicting_nat.tripc"]) {
+    for (
+      const file of [
+        "prelude_conflicting_nat.trip",
+        "prelude_conflicting_nat.tripc",
+      ]
+    ) {
       try {
         await Deno.remove(`${__dirname}/${file}`);
       } catch {

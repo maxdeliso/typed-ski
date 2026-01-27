@@ -59,7 +59,10 @@ async function compileTripFile(
 Deno.test("TripLang Linker", async (t) => {
   await t.step("loads modules correctly", async () => {
     // Load a compiled module (linker_ prefix for parallel-safe distinct names)
-    const aContent = await compileTripFile("A-linker-test.trip", "linker_A_linker_test.tripc");
+    const aContent = await compileTripFile(
+      "A-linker-test.trip",
+      "linker_A_linker_test.tripc",
+    );
     const aObject = deserializeTripCObject(aContent);
 
     const loadedModule = loadModule(aObject, "A");
@@ -72,7 +75,10 @@ Deno.test("TripLang Linker", async (t) => {
 
   await t.step("creates program space from multiple modules", async () => {
     // Load multiple modules (linker_ prefix for parallel-safe distinct names)
-    const aContent = await compileTripFile("A-linker-test.trip", "linker_A_linker_test.tripc");
+    const aContent = await compileTripFile(
+      "A-linker-test.trip",
+      "linker_A_linker_test.tripc",
+    );
     const bContent = await compileTripFile("B.trip", "linker_B.tripc");
 
     const aObject = deserializeTripCObject(aContent);
@@ -371,7 +377,10 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("simple linking finds main and lowers to SKI", async () => {
     // Test with complex module that has main
-    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
+    const complexContent = await compileTripFile(
+      "complex.trip",
+      "linker_complex.tripc",
+    );
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
@@ -384,7 +393,10 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("simple linking with complex expression", async () => {
     // Test with complex module
-    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
+    const complexContent = await compileTripFile(
+      "complex.trip",
+      "linker_complex.tripc",
+    );
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
@@ -399,7 +411,10 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("simple linking with multiple modules", async () => {
     // Test with multiple modules - use different modules to avoid ambiguous exports
-    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
+    const complexContent = await compileTripFile(
+      "complex.trip",
+      "linker_complex.tripc",
+    );
     const complexObject = deserializeTripCObject(complexContent);
 
     // Create a second module without main to avoid conflicts
@@ -459,7 +474,10 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step("produces identity combinator for simple function", async () => {
     // Test with a simple identity function - use existing complex module
-    const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
+    const complexContent = await compileTripFile(
+      "complex.trip",
+      "linker_complex.tripc",
+    );
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
@@ -480,7 +498,10 @@ poly rec main = \\n:Nat => main n`;
     };
 
     try {
-      const complexContent = await compileTripFile("complex.trip", "linker_complex.tripc");
+      const complexContent = await compileTripFile(
+        "complex.trip",
+        "linker_complex.tripc",
+      );
       const complexObject = deserializeTripCObject(complexContent);
 
       const modules = [{ name: "Complex", object: complexObject }];

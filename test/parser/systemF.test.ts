@@ -198,6 +198,78 @@ Deno.test("System F Parser", async (t) => {
         assert.equal(scrutinee.body.name, "x");
       });
 
+      await t.step(
+        "parses lambda abstraction with arrow type annotation as match scrutinee",
+        () => {
+          // Example: match (\f:X->Y=>f) [T] { | None => y }
+          const input = "match (\\f:X->Y=>f) [T] { | None => y }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-abs");
+          assert.equal(scrutinee.name, "f");
+          assert.equal(scrutinee.typeAnnotation.kind, "non-terminal");
+          assert.equal(scrutinee.typeAnnotation.lft.kind, "type-var");
+          assert.equal(scrutinee.typeAnnotation.lft.typeName, "X");
+          assert.equal(scrutinee.typeAnnotation.rgt.kind, "type-var");
+          assert.equal(scrutinee.typeAnnotation.rgt.typeName, "Y");
+        },
+      );
+
+      await t.step(
+        "parses lambda abstraction with complex body as match scrutinee",
+        () => {
+          // Example: match (\x:X=>x y) [T] { | None => z }
+          const input = "match (\\x:X=>x y) [T] { | None => z }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-abs");
+          assert.equal(scrutinee.name, "x");
+          assert.equal(scrutinee.body.kind, "non-terminal");
+          assert.equal(scrutinee.body.lft.kind, "systemF-var");
+          assert.equal(scrutinee.body.lft.name, "x");
+          assert.equal(scrutinee.body.rgt.kind, "systemF-var");
+          assert.equal(scrutinee.body.rgt.name, "y");
+        },
+      );
+
+      await t.step(
+        "parses nested lambda abstraction as match scrutinee",
+        () => {
+          // Example: match (\x:X=>\y:Y=>x) [T] { | None => z }
+          const input = "match (\\x:X=>\\y:Y=>x) [T] { | None => z }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-abs");
+          assert.equal(scrutinee.name, "x");
+          assert.equal(scrutinee.body.kind, "systemF-abs");
+          assert.equal(scrutinee.body.name, "y");
+          assert.equal(scrutinee.body.body.kind, "systemF-var");
+          assert.equal(scrutinee.body.body.name, "x");
+        },
+      );
+
+      await t.step(
+        "parses lambda abstraction with forall type annotation as match scrutinee",
+        () => {
+          // Example: match (\x:#Y->Y=>x) [T] { | None => y }
+          const input = "match (\\x:#Y->Y=>x) [T] { | None => y }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-abs");
+          assert.equal(scrutinee.name, "x");
+          assert.equal(scrutinee.typeAnnotation.kind, "forall");
+          assert.equal(scrutinee.typeAnnotation.typeVar, "Y");
+        },
+      );
+
       await t.step("parses parenthesized term as match scrutinee", () => {
         // Example: match (x y) [T] { | None => z }
         const input = "match (x y) [T] { | None => z }";
@@ -226,6 +298,80 @@ Deno.test("System F Parser", async (t) => {
         assert.equal(scrutinee.body.kind, "systemF-var");
         assert.equal(scrutinee.body.name, "x");
       });
+
+      await t.step(
+        "parses type abstraction with application body as match scrutinee",
+        () => {
+          // Example: match (#X=>x y) [T] { | None => z }
+          const input = "match (#X=>x y) [T] { | None => z }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-type-abs");
+          assert.equal(scrutinee.typeVar, "X");
+          assert.equal(scrutinee.body.kind, "non-terminal");
+          assert.equal(scrutinee.body.lft.kind, "systemF-var");
+          assert.equal(scrutinee.body.lft.name, "x");
+          assert.equal(scrutinee.body.rgt.kind, "systemF-var");
+          assert.equal(scrutinee.body.rgt.name, "y");
+        },
+      );
+
+      await t.step(
+        "parses type abstraction with lambda abstraction body as match scrutinee",
+        () => {
+          // Example: match (#X=>\x:X=>x) [T] { | None => y }
+          const input = "match (#X=>\\x:X=>x) [T] { | None => y }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-type-abs");
+          assert.equal(scrutinee.typeVar, "X");
+          assert.equal(scrutinee.body.kind, "systemF-abs");
+          assert.equal(scrutinee.body.name, "x");
+          assert.equal(scrutinee.body.typeAnnotation.kind, "type-var");
+          assert.equal(scrutinee.body.typeAnnotation.typeName, "X");
+        },
+      );
+
+      await t.step(
+        "parses nested type abstraction as match scrutinee",
+        () => {
+          // Example: match (#X=>#Y=>x) [T] { | None => z }
+          const input = "match (#X=>#Y=>x) [T] { | None => z }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-type-abs");
+          assert.equal(scrutinee.typeVar, "X");
+          assert.equal(scrutinee.body.kind, "systemF-type-abs");
+          assert.equal(scrutinee.body.typeVar, "Y");
+          assert.equal(scrutinee.body.body.kind, "systemF-var");
+          assert.equal(scrutinee.body.body.name, "x");
+        },
+      );
+
+      await t.step(
+        "parses type abstraction with complex nested body as match scrutinee",
+        () => {
+          // Example: match (#X=>(\x:X=>x) y) [T] { | None => z }
+          const input = "match (#X=>(\\x:X=>x) y) [T] { | None => z }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-type-abs");
+          assert.equal(scrutinee.typeVar, "X");
+          assert.equal(scrutinee.body.kind, "non-terminal");
+          assert.equal(scrutinee.body.lft.kind, "systemF-abs");
+          assert.equal(scrutinee.body.lft.name, "x");
+          assert.equal(scrutinee.body.rgt.kind, "systemF-var");
+          assert.equal(scrutinee.body.rgt.name, "y");
+        },
+      );
 
       await t.step("parses numeric literal as match scrutinee", () => {
         // Example: match 123 [T] { | None => y }
@@ -276,6 +422,28 @@ Deno.test("System F Parser", async (t) => {
   );
 
   await t.step("match parsing error cases", async (t) => {
+    await t.step(
+      "should throw error for unexpected character in match scrutinee",
+      () => {
+        const badInputs = [
+          "match !x [T] { | None => y }", // invalid character !
+          "match @x [T] { | None => y }", // invalid character @
+          "match $x [T] { | None => y }", // invalid character $
+          "match %x [T] { | None => y }", // invalid character %
+          "match &x [T] { | None => y }", // invalid character &
+        ];
+        badInputs.forEach((input) => {
+          assert.throws(
+            () => {
+              parseSystemF(input);
+            },
+            Error,
+            "unexpected end-of-input while parsing atomic term",
+          );
+        });
+      },
+    );
+
     await t.step(
       "should throw error when match requires explicit return type",
       () => {

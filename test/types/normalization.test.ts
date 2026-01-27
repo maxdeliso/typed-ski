@@ -1,7 +1,12 @@
 import { assert, expect } from "chai";
 
 import { normalize } from "../../lib/types/normalization.ts";
-import { arrow, type BaseType, mkTypeVariable } from "../../lib/types/types.ts";
+import {
+  arrow,
+  type BaseType,
+  mkTypeVariable,
+  typeApp,
+} from "../../lib/types/types.ts";
 import { forall as mkUniversal } from "../../lib/types/systemF.ts";
 
 function assertIsTypeVar(
@@ -150,6 +155,49 @@ Deno.test("type-normalization edge cases", async (t) => {
         checkSide(vRight, out.rgt.body);
       } else {
         expect.fail("expected arrow whose sides are forall");
+      }
+    },
+  );
+
+  /* type-app: List a, Result E T */
+  await t.step("normalises type application recursively", () => {
+    const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("a"));
+    const out = normalize(listA);
+
+    expect(out.kind).to.equal("type-app");
+    if (out.kind === "type-app") {
+      expect(out.fn.kind).to.equal("type-var");
+      expect(out.arg.kind).to.equal("type-var");
+      if (out.fn.kind === "type-var" && out.arg.kind === "type-var") {
+        expect(out.fn.typeName).to.match(/^[a-z]/);
+        expect(out.arg.typeName).to.match(/^[a-z]/);
+      }
+    }
+  });
+
+  await t.step(
+    "normalises nested type applications and aligns variables",
+    () => {
+      const a = mkTypeVariable("a");
+      const resultAT = typeApp(typeApp(mkTypeVariable("Result"), a), a);
+      const out = normalize(resultAT);
+
+      expect(out.kind).to.equal("type-app");
+      if (out.kind === "type-app") {
+        expect(out.fn.kind).to.equal("type-app");
+        if (out.fn.kind === "type-app") {
+          expect(out.fn.fn.kind).to.equal("type-var");
+          expect(out.fn.arg.kind).to.equal("type-var");
+          expect(out.arg.kind).to.equal("type-var");
+          const fnArg = out.fn.arg.kind === "type-var"
+            ? out.fn.arg.typeName
+            : "";
+          const topArg = out.arg.kind === "type-var" ? out.arg.typeName : "";
+          expect(fnArg).to.equal(
+            topArg,
+            "repeated 'a' should get same canonical name",
+          );
+        }
       }
     },
   );

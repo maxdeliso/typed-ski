@@ -57,6 +57,28 @@ Deno.test("Type inference utilities", async (t) => {
         true,
       );
     });
+
+    await t.step("substitutes in both fn and arg of nested type-app", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
+      const resultAB = typeApp(
+        typeApp(mkTypeVariable("Result"), a),
+        b,
+      );
+      const out = substituteType(resultAB, a, mkTypeVariable("Err"));
+      const expected = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("Err")),
+        b,
+      );
+      expect(typesLitEq(out, expected)).to.equal(true);
+
+      const out2 = substituteType(resultAB, b, mkTypeVariable("Ok"));
+      const expected2 = typeApp(
+        typeApp(mkTypeVariable("Result"), a),
+        mkTypeVariable("Ok"),
+      );
+      expect(typesLitEq(out2, expected2)).to.equal(true);
+    });
   });
 
   await t.step("unify", async (t) => {
@@ -83,6 +105,37 @@ Deno.test("Type inference utilities", async (t) => {
       expect(() => unify(a, typeApp(a, b), new Map())).to.throw(
         /occurs check failed/,
       );
+    });
+
+    await t.step("unifies nested type-apps by components", () => {
+      const resultAB = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("E1")),
+        mkTypeVariable("T1"),
+      );
+      const resultCD = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("E2")),
+        mkTypeVariable("T2"),
+      );
+      const ctx = unify(resultAB, resultCD, new Map());
+
+      // Unify binds LHS vars: E1 -> E2, T1 -> T2
+      const e1 = ctx.get("E1");
+      const t1 = ctx.get("T1");
+      expect(e1 !== undefined && typesLitEq(e1, mkTypeVariable("E2"))).to.equal(
+        true,
+      );
+      expect(t1 !== undefined && typesLitEq(t1, mkTypeVariable("T2"))).to.equal(
+        true,
+      );
+    });
+
+    await t.step("occurs check in type-app arg is rejected", () => {
+      const a = mkTypeVariable("X");
+      const nested = typeApp(
+        mkTypeVariable("F"),
+        typeApp(a, mkTypeVariable("Y")),
+      );
+      expect(() => unify(a, nested, new Map())).to.throw(/occurs check failed/);
     });
   });
 

@@ -25,7 +25,13 @@ export interface ArrowType {
   rgt: BaseType;
 }
 
-export type BaseType = TypeVariable | ArrowType | ForallType;
+export interface TypeApplication {
+  kind: "type-app";
+  fn: BaseType;
+  arg: BaseType;
+}
+
+export type BaseType = TypeVariable | ArrowType | ForallType | TypeApplication;
 
 export const mkTypeVariable = (name: string): TypeVariable => ({
   kind: "type-var",
@@ -38,12 +44,20 @@ export const arrow = (a: BaseType, b: BaseType): ArrowType => ({
   rgt: b,
 });
 
+export const typeApp = (fn: BaseType, arg: BaseType): TypeApplication => ({
+  kind: "type-app",
+  fn,
+  arg,
+});
+
 export const arrows = (...tys: BaseType[]): BaseType =>
   tys.reduceRight((acc, ty) => arrow(ty, acc));
 
 export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
   if (a.kind === "type-var" && b.kind === "type-var") {
     return a.typeName === b.typeName;
+  } else if (a.kind === "type-app" && b.kind === "type-app") {
+    return typesLitEq(a.fn, b.fn) && typesLitEq(a.arg, b.arg);
   } else if (a.kind === "forall" && b.kind === "forall") {
     return a.typeVar === b.typeVar && typesLitEq(a.body, b.body);
   } else if ("lft" in a && "rgt" in a && "lft" in b && "rgt" in b) {

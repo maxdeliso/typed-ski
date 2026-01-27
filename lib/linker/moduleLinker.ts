@@ -482,6 +482,7 @@ function tarjanSCC(
 function substituteDependencies(
   def: TripLangTerm,
   moduleName: string,
+  localName: string,
   ps: ProgramSpace,
 ): TripLangTerm {
   const defValue = extractDefinitionValue(def);
@@ -500,6 +501,11 @@ function substituteDependencies(
 
   // Resolve term references iteratively until no new external references appear
   let currentExternalTermRefs = externalTermRefs;
+  if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
+    currentExternalTermRefs = currentExternalTermRefs.filter((ref) =>
+      ref !== localName
+    );
+  }
   let iteration = 0;
   const MAX_ITERATIONS = 10; // Prevent infinite loops
 
@@ -568,6 +574,9 @@ function substituteDependencies(
     }
 
     // Update for next iteration
+    if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
+      nextExternalTermRefs.delete(localName);
+    }
     currentExternalTermRefs = [...nextExternalTermRefs];
     iteration++;
   }
@@ -681,6 +690,7 @@ function resolveSCC(
     const resolvedDef = substituteDependencies(
       module.defs.get(localName)!,
       moduleName,
+      localName,
       ps,
     );
     module.defs.set(localName, resolvedDef);
@@ -694,27 +704,44 @@ function resolveSCC(
   while (iteration++ < maxIterations) {
     let hasChanged = false;
 
-    // Store current definitions before iteration to avoid stale references
-    const currentDefinitions = new Map<QualifiedName, TripLangTerm>();
-    for (const qualified of scc) {
-      const { moduleName: _moduleName, localName, module } = getModuleInfo(
-        ps,
-        qualified,
-      );
-      currentDefinitions.set(qualified, module.defs.get(localName)!);
-    }
-
+    // Store current definitions and module info before iteration to avoid stale references
+    // We need to snapshot all definitions first, then process them, to ensure
+    // each definition is processed using the state from the start of this iteration.
+    const snapshots = new Map<
+      QualifiedName,
+      {
+        moduleName: string;
+        localName: string;
+        module: LoadedModule;
+        currentDef: TripLangTerm;
+      }
+    >();
     for (const qualified of scc) {
       const { moduleName, localName, module } = getModuleInfo(ps, qualified);
-      const currentDef = currentDefinitions.get(qualified)!;
-      const prevHash = computeTermHash(currentDef);
+      snapshots.set(qualified, {
+        moduleName,
+        localName,
+        module,
+        currentDef: module.defs.get(localName)!,
+      });
+    }
 
-      const newDef = substituteDependencies(currentDef, moduleName, ps);
+    // Process all definitions using the snapshots
+    for (const qualified of scc) {
+      const snapshot = snapshots.get(qualified)!;
+      const prevHash = computeTermHash(snapshot.currentDef);
+
+      const newDef = substituteDependencies(
+        snapshot.currentDef,
+        snapshot.moduleName,
+        snapshot.localName,
+        ps,
+      );
       const newHash = computeTermHash(newDef);
 
       if (prevHash !== newHash) {
         hasChanged = true;
-        module.defs.set(localName, newDef);
+        snapshot.module.defs.set(snapshot.localName, newDef);
         setGlobal(ps, qualified, newDef);
       }
     }
@@ -741,6 +768,16 @@ export function resolveCrossModuleDependencies(
   }
 
   const resolvedPS = deepCopyProgramSpace(programSpace);
+  // Pre-lower poly/typed terms to untyped to avoid recursive inlining loops.
+  for (const module of resolvedPS.modules.values()) {
+    for (const [name, def] of module.defs) {
+      if (def.kind === "poly" || def.kind === "typed") {
+        const lowered = lower(def);
+        module.defs.set(name, lowered);
+        setGlobal(resolvedPS, qualifiedName(module.name, name), lowered);
+      }
+    }
+  }
   const dependencyGraph = buildDependencyGraph(resolvedPS);
   const sccs = tarjanSCC(dependencyGraph).reverse(); // Topological sort
 

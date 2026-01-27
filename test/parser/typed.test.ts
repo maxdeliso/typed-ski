@@ -3,8 +3,9 @@ import { mkVar } from "../../lib/terms/lambda.ts";
 import { createTypedApplication } from "../../lib/types/typedLambda.ts";
 
 import { ParseError } from "../../lib/parser/parseError.ts";
-import { parseType } from "../../lib/parser/type.ts";
+import { parseArrowTypeNoApp, parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
+import { createParserState } from "../../lib/parser/parserState.ts";
 
 import { mkTypedAbs, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
 import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
@@ -12,6 +13,7 @@ import {
   arrow,
   arrows,
   mkTypeVariable,
+  typeApp,
   typesLitEq,
 } from "../../lib/types/types.ts";
 
@@ -87,6 +89,129 @@ Deno.test("Parser Tests", async (t) => {
       const expected = arrow(mkTypeVariable("a"), mkTypeVariable("b"));
       expect(lit).to.equal("a->b");
       expect(typesLitEq(ty, expected)).to.equal(true);
+    });
+
+    await t.step("parses type applications", () => {
+      const src = "List Nat";
+      const [lit, ty] = parseType(src);
+      const expected = typeApp(
+        mkTypeVariable("List"),
+        mkTypeVariable("Nat"),
+      );
+      expect(lit).to.equal("List Nat");
+      expect(typesLitEq(ty, expected)).to.equal(true);
+    });
+
+    await t.step("parses nested type applications", () => {
+      const src = "Result ParseError (Pair A (List Nat))";
+      const [lit, ty] = parseType(src);
+      const listNat = typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"));
+      const pair = typeApp(
+        typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
+        listNat,
+      );
+      const expected = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("ParseError")),
+        pair,
+      );
+      expect(lit).to.equal(src);
+      expect(typesLitEq(ty, expected)).to.equal(true);
+    });
+
+    await t.step("application binds tighter than arrows", () => {
+      const src = "List Nat -> Bool";
+      const [lit, ty] = parseType(src);
+      const expected = arrow(
+        typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
+        mkTypeVariable("Bool"),
+      );
+      expect(lit).to.equal("List Nat->Bool");
+      expect(typesLitEq(ty, expected)).to.equal(true);
+    });
+  });
+
+  await t.step("parseArrowTypeNoApp", async (t) => {
+    await t.step("parses a simple type variable", () => {
+      const src = "a";
+      const state = createParserState(src);
+      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      expect(lit).to.equal(src);
+      expect(typesLitEq(ty, mkTypeVariable("a"))).to.equal(true);
+      expect(finalState.idx).to.equal(src.length);
+    });
+
+    await t.step("parses simple arrow type", () => {
+      const src = "a->b";
+      const state = createParserState(src);
+      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      expect(lit).to.equal(src);
+      expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
+        .to.equal(true);
+      expect(finalState.idx).to.equal(src.length);
+    });
+
+    await t.step("parses multiple arrows", () => {
+      const src = "a->b->c";
+      const state = createParserState(src);
+      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      const expected = arrow(
+        mkTypeVariable("a"),
+        arrow(mkTypeVariable("b"), mkTypeVariable("c")),
+      );
+      expect(lit).to.equal(src);
+      expect(typesLitEq(ty, expected)).to.equal(true);
+      expect(finalState.idx).to.equal(src.length);
+    });
+
+    await t.step("parses parenthesized types", () => {
+      const src = "(a->b)->c";
+      const state = createParserState(src);
+      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      const expected = arrow(
+        arrow(mkTypeVariable("a"), mkTypeVariable("b")),
+        mkTypeVariable("c"),
+      );
+      expect(lit).to.equal(src);
+      expect(typesLitEq(ty, expected)).to.equal(true);
+      expect(finalState.idx).to.equal(src.length);
+    });
+
+    await t.step("does not parse type applications", () => {
+      const src = "List Nat";
+      const state = createParserState(src);
+      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      // Should only parse "List", not "List Nat" as a type application
+      expect(lit).to.equal("List");
+      expect(typesLitEq(ty, mkTypeVariable("List"))).to.equal(true);
+      // Should leave "Nat" in the remaining state
+      expect(finalState.idx).to.be.lessThan(src.length);
+      const remaining = src.slice(finalState.idx).trim();
+      expect(remaining).to.equal("Nat");
+    });
+
+    await t.step("skips whitespace", () => {
+      const src = "   a   ->    b   ";
+      const state = createParserState(src);
+      const [lit, ty, _finalState] = parseArrowTypeNoApp(state);
+      expect(lit).to.equal("a->b");
+      expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
+        .to.equal(true);
+    });
+
+    await t.step("handles nested parentheses", () => {
+      const src = "((a->b)->c)->d";
+      const state = createParserState(src);
+      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      const expected = arrow(
+        arrow(
+          arrow(mkTypeVariable("a"), mkTypeVariable("b")),
+          mkTypeVariable("c"),
+        ),
+        mkTypeVariable("d"),
+      );
+      expect(lit).to.equal(src);
+      expect(typesLitEq(ty, expected)).to.equal(true);
+      expect(finalState.idx).to.equal(src.length);
     });
   });
 

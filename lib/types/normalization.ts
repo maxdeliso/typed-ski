@@ -6,7 +6,7 @@
  *
  * @module
  */
-import { arrow } from "./types.ts";
+import { arrow, typeApp } from "./types.ts";
 import { type BaseType, mkTypeVariable } from "./types.ts";
 import { varSource } from "./varSource.ts";
 
@@ -29,6 +29,11 @@ export const normalizeTy = (
       } else {
         return [mkTypeVariable(mapped), mapping];
       }
+    }
+    case "type-app": {
+      const [fnType, fnMapping] = normalizeTy(ty.fn, mapping, vars);
+      const [argType, argMapping] = normalizeTy(ty.arg, fnMapping, vars);
+      return [typeApp(fnType, argType), argMapping];
     }
     case "non-terminal": {
       const [lftType, lftMapping] = normalizeTy(ty.lft, mapping, vars);

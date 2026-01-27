@@ -7,7 +7,12 @@
  * @module
  */
 import { forall } from "../types/systemF.ts";
-import { arrow, type BaseType, mkTypeVariable } from "../types/types.ts";
+import {
+  arrow,
+  type BaseType,
+  mkTypeVariable,
+  typeApp,
+} from "../types/types.ts";
 import { ParseError } from "./parseError.ts";
 import {
   matchArrow,
@@ -19,7 +24,13 @@ import {
   peek,
   peekArrow,
 } from "./parserState.ts";
-import { ARROW, HASH, LEFT_PAREN, RIGHT_PAREN } from "./consts.ts";
+import {
+  ARROW,
+  HASH,
+  IDENTIFIER_CHAR_REGEX,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+} from "./consts.ts";
 
 /**
  * Parses a System F type.
@@ -53,7 +64,7 @@ export function parseSystemFType(
     ];
   } else {
     // Parse an arrow type.
-    const [leftLit, leftType, stateAfterLeft] = parseSimpleSystemFType(s);
+    const [leftLit, leftType, stateAfterLeft] = parseTypeApplication(s);
     const [isArrow] = peekArrow(stateAfterLeft);
     if (isArrow) {
       const stateAfterArrow = matchArrow(stateAfterLeft);
@@ -69,6 +80,32 @@ export function parseSystemFType(
       return [leftLit, leftType, stateAfterLeft];
     }
   }
+}
+
+function isTypeAtomStart(ch: string | null): boolean {
+  return ch === LEFT_PAREN || (ch !== null && IDENTIFIER_CHAR_REGEX.test(ch));
+}
+
+function parseTypeApplication(
+  state: ParserState,
+): [string, BaseType, ParserState] {
+  const [leftLit, leftType, stateAfterLeft] = parseSimpleSystemFType(state);
+  let literal = leftLit;
+  let resultType = leftType;
+  let currentState = stateAfterLeft;
+
+  for (;;) {
+    const [nextCh, peekState] = peek(currentState);
+    const skipped = currentState.buf.slice(currentState.idx, peekState.idx);
+    if (skipped.includes("\n") || skipped.includes("\r")) break;
+    if (!isTypeAtomStart(nextCh)) break;
+    const [argLit, argType, stateAfterArg] = parseSimpleSystemFType(peekState);
+    literal = `${literal} ${argLit}`;
+    resultType = typeApp(resultType, argType);
+    currentState = stateAfterArg;
+  }
+
+  return [literal, resultType, currentState];
 }
 
 /**
@@ -106,6 +143,15 @@ function parseSimpleSystemFType(
 export function unparseSystemFType(ty: BaseType): string {
   if (ty.kind === "type-var") {
     return ty.typeName;
+  }
+  if (ty.kind === "type-app") {
+    const fn = ty.fn.kind === "type-var" || ty.fn.kind === "type-app"
+      ? unparseSystemFType(ty.fn)
+      : `${LEFT_PAREN}${unparseSystemFType(ty.fn)}${RIGHT_PAREN}`;
+    const arg = ty.arg.kind === "type-var"
+      ? unparseSystemFType(ty.arg)
+      : `${LEFT_PAREN}${unparseSystemFType(ty.arg)}${RIGHT_PAREN}`;
+    return `${fn} ${arg}`;
   }
   if (ty.kind === "non-terminal") {
     return `${LEFT_PAREN}${unparseSystemFType(ty.lft)}${ARROW}${

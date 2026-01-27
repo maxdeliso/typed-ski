@@ -1,7 +1,18 @@
 import { strict as assert } from "node:assert";
 import { parseSystemF, unparseSystemF } from "../../lib/parser/systemFTerm.ts";
+import {
+  parseSystemFType,
+  unparseSystemFType,
+} from "../../lib/parser/systemFType.ts";
+import { parseWithEOF } from "../../lib/parser/eof.ts";
 import { parseNatLiteralIdentifier } from "../../lib/consts/natNames.ts";
 import type { SystemFTerm } from "../../lib/terms/systemF.ts";
+import {
+  arrow,
+  mkTypeVariable,
+  typeApp,
+  typesLitEq,
+} from "../../lib/types/types.ts";
 
 const assertNatLiteral = (term: SystemFTerm, expected: bigint) => {
   assert.equal(term.kind, "systemF-var");
@@ -629,5 +640,54 @@ Deno.test("System F Parser", async (t) => {
         "multiple arrow case",
       );
     });
+  });
+});
+
+Deno.test("System F type parser", async (t) => {
+  await t.step("parses type applications", () => {
+    const [lit, ty] = parseWithEOF("List Nat", parseSystemFType);
+    const expected = typeApp(
+      mkTypeVariable("List"),
+      mkTypeVariable("Nat"),
+    );
+    assert.equal(lit, "List Nat");
+    assert.equal(typesLitEq(ty, expected), true);
+  });
+
+  await t.step("parses nested type applications", () => {
+    const [lit, ty] = parseWithEOF(
+      "Result ParseError (Pair A (List Nat))",
+      parseSystemFType,
+    );
+    const listNat = typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"));
+    const pair = typeApp(
+      typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
+      listNat,
+    );
+    const expected = typeApp(
+      typeApp(mkTypeVariable("Result"), mkTypeVariable("ParseError")),
+      pair,
+    );
+    assert.equal(lit, "Result ParseError (Pair A (List Nat))");
+    assert.equal(typesLitEq(ty, expected), true);
+  });
+
+  await t.step("application binds tighter than arrows", () => {
+    const [lit, ty] = parseWithEOF("List Nat -> Nat", parseSystemFType);
+    const expected = arrow(
+      typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
+      mkTypeVariable("Nat"),
+    );
+    assert.equal(lit, "List Nat->Nat");
+    assert.equal(typesLitEq(ty, expected), true);
+  });
+
+  await t.step("unparse renders type applications", () => {
+    const listNat = typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"));
+    const pair = typeApp(
+      typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
+      listNat,
+    );
+    assert.equal(unparseSystemFType(pair), "Pair A (List Nat)");
   });
 });

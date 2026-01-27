@@ -1,8 +1,13 @@
 import { expect } from "chai";
 
 import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
-import { inferType, substituteType } from "../../lib/types/inference.ts";
-import { arrow, mkTypeVariable, typesLitEq } from "../../lib/types/types.ts";
+import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
+import {
+  arrow,
+  mkTypeVariable,
+  typeApp,
+  typesLitEq,
+} from "../../lib/types/types.ts";
 
 Deno.test("Type inference utilities", async (t) => {
   await t.step("substituteType", async (t) => {
@@ -40,6 +45,97 @@ Deno.test("Type inference utilities", async (t) => {
       const out = substituteType(nested, a, b);
 
       expect(typesLitEq(out, arrow(arrow(b, b), arrow(b, b)))).to.equal(true);
+    });
+
+    await t.step("handles substitutions in type applications", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
+      const listA = typeApp(mkTypeVariable("List"), a);
+      const out = substituteType(listA, a, b);
+
+      expect(typesLitEq(out, typeApp(mkTypeVariable("List"), b))).to.equal(
+        true,
+      );
+    });
+
+    await t.step("substitutes in both fn and arg of nested type-app", () => {
+      const a = mkTypeVariable("a");
+      const b = mkTypeVariable("b");
+      const resultAB = typeApp(
+        typeApp(mkTypeVariable("Result"), a),
+        b,
+      );
+      const out = substituteType(resultAB, a, mkTypeVariable("Err"));
+      const expected = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("Err")),
+        b,
+      );
+      expect(typesLitEq(out, expected)).to.equal(true);
+
+      const out2 = substituteType(resultAB, b, mkTypeVariable("Ok"));
+      const expected2 = typeApp(
+        typeApp(mkTypeVariable("Result"), a),
+        mkTypeVariable("Ok"),
+      );
+      expect(typesLitEq(out2, expected2)).to.equal(true);
+    });
+  });
+
+  await t.step("unify", async (t) => {
+    await t.step("unifies type applications by components", () => {
+      const a = mkTypeVariable("A");
+      const b = mkTypeVariable("B");
+      const c = mkTypeVariable("C");
+      const ctx = unify(
+        typeApp(a, b),
+        typeApp(a, c),
+        new Map<string, ReturnType<typeof mkTypeVariable>>(),
+      );
+
+      const boundB = ctx.get("B");
+      const boundC = ctx.get("C");
+      const ok = (boundB !== undefined && typesLitEq(boundB, c)) ||
+        (boundC !== undefined && typesLitEq(boundC, b));
+      expect(ok).to.equal(true);
+    });
+
+    await t.step("rejects occurs check in type applications", () => {
+      const a = mkTypeVariable("A");
+      const b = mkTypeVariable("B");
+      expect(() => unify(a, typeApp(a, b), new Map())).to.throw(
+        /occurs check failed/,
+      );
+    });
+
+    await t.step("unifies nested type-apps by components", () => {
+      const resultAB = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("E1")),
+        mkTypeVariable("T1"),
+      );
+      const resultCD = typeApp(
+        typeApp(mkTypeVariable("Result"), mkTypeVariable("E2")),
+        mkTypeVariable("T2"),
+      );
+      const ctx = unify(resultAB, resultCD, new Map());
+
+      // Unify binds LHS vars: E1 -> E2, T1 -> T2
+      const e1 = ctx.get("E1");
+      const t1 = ctx.get("T1");
+      expect(e1 !== undefined && typesLitEq(e1, mkTypeVariable("E2"))).to.equal(
+        true,
+      );
+      expect(t1 !== undefined && typesLitEq(t1, mkTypeVariable("T2"))).to.equal(
+        true,
+      );
+    });
+
+    await t.step("occurs check in type-app arg is rejected", () => {
+      const a = mkTypeVariable("X");
+      const nested = typeApp(
+        mkTypeVariable("F"),
+        typeApp(a, mkTypeVariable("Y")),
+      );
+      expect(() => unify(a, nested, new Map())).to.throw(/occurs check failed/);
     });
   });
 

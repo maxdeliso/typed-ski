@@ -1,5 +1,11 @@
 import { assert } from "chai";
-import { substitute } from "../../../lib/meta/frontend/substitution.ts";
+import {
+  alphaRenameTypeBinder,
+  freeTermVars,
+  freeTypeVars,
+  substitute,
+  substituteTypeHygienic,
+} from "../../../lib/meta/frontend/substitution.ts";
 import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
 import {
   mkSystemFAbs,
@@ -9,6 +15,7 @@ import {
   mkSystemFVar,
   type SystemFTerm,
 } from "../../../lib/terms/systemF.ts";
+import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";
 
 Deno.test("substitute", async (t) => {
   await t.step("should throw on invalid type", () => {
@@ -169,5 +176,48 @@ Deno.test("substitute", async (t) => {
     );
 
     assert.deepEqual(result, expected);
+  });
+});
+
+Deno.test("substitution type-app helpers", async (t) => {
+  await t.step("freeTermVars ignores type-app in annotations", () => {
+    const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
+    const term = mkSystemFAbs("x", listA, mkSystemFVar("x"));
+    const result = freeTermVars(term);
+    assert.deepEqual(Array.from(result), []);
+  });
+
+  await t.step("freeTypeVars collects vars in type-app", () => {
+    const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
+    const result = freeTypeVars(listA);
+    assert.deepEqual(Array.from(result).sort(), ["A", "List"]);
+  });
+
+  await t.step("alphaRenameTypeBinder rewrites type-app", () => {
+    const pairAB = typeApp(
+      typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
+      mkTypeVariable("B"),
+    );
+    const result = alphaRenameTypeBinder(pairAB, "A", "X");
+    assert.deepEqual(
+      result,
+      typeApp(
+        typeApp(mkTypeVariable("Pair"), mkTypeVariable("X")),
+        mkTypeVariable("B"),
+      ),
+    );
+  });
+
+  await t.step("substituteTypeHygienic replaces vars in type-app", () => {
+    const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
+    const result = substituteTypeHygienic(
+      listA,
+      "A",
+      mkTypeVariable("Nat"),
+    );
+    assert.deepEqual(
+      result,
+      typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
+    );
   });
 });

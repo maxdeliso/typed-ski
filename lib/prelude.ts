@@ -32,10 +32,27 @@ export matchList
 export head
 export tail
 export error
+export Pair
+export MkPair
+export Result
+export Err
+export Ok
+export ParseError
+export MkParseError
+export Parser
+export append
+export map
+export foldl
+export takeWhile
+export dropWhile
 
 type Nat = #X -> (X -> X) -> X -> X
 type Bool = #B -> B -> B -> B
 type List = #A -> #R -> R -> (A -> R -> R) -> R
+data Pair A B = MkPair A B
+data Result E T = Err E | Ok T
+data ParseError = MkParseError Nat (List Nat)
+type Parser = #A -> List Nat -> Result ParseError (Pair A (List Nat))
 
 poly id : #a->a->a = #a => \\x:a => x
 
@@ -91,6 +108,32 @@ poly head = #A => \\l : List =>
 
 poly tail = #A => \\l : List =>
   l [List] (nil [A]) (\\h : A => \\t : List => t)
+
+poly rec append = #A => \\xs : List => \\ys : List =>
+  matchList [A] [List] xs ys
+    (\\h : A => \\t : List => cons [A] h (append [A] t ys))
+
+poly rec map = #A => #B => \\f : A -> B => \\l : List =>
+  matchList [A] [List] l (nil [B])
+    (\\h : A => \\t : List => cons [B] (f h) (map [A] [B] f t))
+
+poly rec foldl = #A => #B => \\f : B -> A -> B => \\acc : B => \\l : List =>
+  matchList [A] [B] l acc
+    (\\h : A => \\t : List => foldl [A] [B] f (f acc h) t)
+
+poly rec takeWhile = #A => \\p : A -> Bool => \\l : List =>
+  matchList [A] [List] l (nil [A])
+    (\\h : A => \\t : List =>
+      cond [List] (p h)
+        (cons [A] h (takeWhile [A] p t))
+        (nil [A]))
+
+poly rec dropWhile = #A => \\p : A -> Bool => \\l : List =>
+  matchList [A] [List] l (nil [A])
+    (\\h : A => \\t : List =>
+      cond [List] (p h)
+        (dropWhile [A] p t)
+        (cons [A] h t))
 
 poly error = #A =>
   (\\x : A => x) (\\x : A => x)

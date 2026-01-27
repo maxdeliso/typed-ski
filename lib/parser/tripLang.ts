@@ -46,6 +46,7 @@ import { parseSystemFTerm } from "./systemFTerm.ts";
 import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
 import { parseUntypedLambdaInternal } from "./untyped.ts";
 import { parseSKIDelimited } from "./ski.ts";
+import { parseArrowTypeNoApp } from "./type.ts";
 import type {
   DataDefinition,
   TripLangProgram,
@@ -99,7 +100,7 @@ function parseDataDefinition(
       ) {
         break;
       }
-      const [, fieldType, stateAfterType] = parseArrowType(currentState);
+      const [, fieldType, stateAfterType] = parseArrowTypeNoApp(currentState);
       fields.push(fieldType);
       currentState = skipWhitespace(stateAfterType);
     }

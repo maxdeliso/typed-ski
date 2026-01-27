@@ -245,7 +245,14 @@ data Token =
   );
 
   await t.step("parses lib/compiler/lexer.trip Token ADT", () => {
-    const lexerPath = join(__dirname, "..", "..", "lib", "compiler", "lexer.trip");
+    const lexerPath = join(
+      __dirname,
+      "..",
+      "..",
+      "lib",
+      "compiler",
+      "lexer.trip",
+    );
     const input = readFileSync(lexerPath, "utf-8").trim();
     const program = parseTripLang(input);
     const tokenData = program.terms.find(

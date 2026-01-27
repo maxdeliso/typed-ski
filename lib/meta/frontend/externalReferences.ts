@@ -127,6 +127,13 @@ export function externalReferences(td: TripLangValueType): [
         break;
       }
 
+      case "systemF-let": {
+        defStack.push(current.value);
+        defStack.push(current.body);
+        absBindMap.set(current.name, current.body);
+        break;
+      }
+
       case "terminal":
         // ignore - no bindings possible
         break;

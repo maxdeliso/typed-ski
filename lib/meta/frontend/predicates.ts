@@ -26,6 +26,7 @@ export function needsRebuild(
     case "systemF-abs":
     case "systemF-type-abs":
     case "systemF-type-app":
+    case "systemF-let":
     case "typed-lambda-abstraction":
       return true;
     case "systemF-var":

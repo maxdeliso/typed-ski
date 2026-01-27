@@ -19,7 +19,7 @@ import {
   mkUntypedAbs,
   type UntypedLambda,
 } from "../terms/lambda.ts";
-import type { SystemFTerm } from "../terms/systemF.ts";
+import { mkSystemFAbs, type SystemFTerm } from "../terms/systemF.ts";
 import { normalize } from "./normalization.ts";
 
 /*
@@ -116,6 +116,62 @@ export const createSystemFApplication = (
   lft: left,
   rgt: right,
 });
+
+/**
+ * Expands systemF-let to App(Abs(x, typeOfValue, body), value) using the
+ * type of value. Used before passes that expect no systemF-let (e.g. de Bruijn).
+ */
+export function reduceLets(
+  ctx: SystemFContext,
+  term: SystemFTerm,
+): SystemFTerm {
+  switch (term.kind) {
+    case "systemF-let": {
+      const reducedValue = reduceLets(ctx, term.value);
+      const [typeOfValue] = typecheckSystemF(ctx, reducedValue);
+      const reducedBody = reduceLets(ctx, term.body);
+      return createSystemFApplication(
+        mkSystemFAbs(term.name, typeOfValue, reducedBody),
+        reducedValue,
+      );
+    }
+    case "systemF-var":
+      return term;
+    case "systemF-abs":
+      return mkSystemFAbs(
+        term.name,
+        term.typeAnnotation,
+        reduceLets(ctx, term.body),
+      );
+    case "systemF-type-abs":
+      return {
+        kind: "systemF-type-abs",
+        typeVar: term.typeVar,
+        body: reduceLets(ctx, term.body),
+      };
+    case "systemF-type-app":
+      return {
+        kind: "systemF-type-app",
+        term: reduceLets(ctx, term.term),
+        typeArg: term.typeArg,
+      };
+    case "non-terminal":
+      return createSystemFApplication(
+        reduceLets(ctx, term.lft),
+        reduceLets(ctx, term.rgt),
+      );
+    case "systemF-match":
+      return {
+        kind: "systemF-match",
+        scrutinee: reduceLets(ctx, term.scrutinee),
+        returnType: term.returnType,
+        arms: term.arms.map((arm) => ({
+          ...arm,
+          body: reduceLets(ctx, arm.body),
+        })),
+      };
+  }
+}
 
 /**
  * Typechecks a System F term.
@@ -231,6 +287,16 @@ export const typecheckSystemF = (
     }
     case "systemF-match":
       throw new TypeError("match must be elaborated before typechecking");
+    case "systemF-let": {
+      const [typeOfValue] = typecheckSystemF(ctx, term.value);
+      const newTermCtx = new Map(ctx.termCtx);
+      newTermCtx.set(term.name, typeOfValue);
+      const [bodyTy] = typecheckSystemF(
+        { termCtx: newTermCtx, typeVars: ctx.typeVars },
+        term.body,
+      );
+      return [bodyTy, ctx];
+    }
   }
 };
 
@@ -270,6 +336,11 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
       return eraseSystemF(term.term);
     case "systemF-match":
       throw new TypeError("match must be elaborated before erasure");
+    case "systemF-let":
+      return createApplication(
+        mkUntypedAbs(term.name, eraseSystemF(term.body)),
+        eraseSystemF(term.value),
+      );
     default:
       return createApplication(
         eraseSystemF(term.lft),

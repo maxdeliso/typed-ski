@@ -276,6 +276,29 @@ Deno.test("System F type-checker and helpers", async (t) => {
     expect(lit.replace(/\s+/g, "")).to.equal(src.replace(/\s+/g, ""));
   });
 
+  await t.step("let bindings", async (t) => {
+    await t.step("unannotated let typechecks (infers Nat)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      expect(term.kind).to.equal("systemF-let");
+      const [ty] = typecheckSystemF(emptySystemFContext(), term);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
+
+    await t.step("annotated let with correct type typechecks", () => {
+      const [_, term] = parseSystemF("let x : Nat = 1 in x");
+      expect(term.kind).to.equal("non-terminal");
+      const [ty] = typecheckSystemF(emptySystemFContext(), term);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
+
+    await t.step("annotated let with incorrect type fails typecheck", () => {
+      const [_, term] = parseSystemF("let x : Bool = 1 in x");
+      expect(term.kind).to.equal("non-terminal");
+      expect(() => typecheckSystemF(emptySystemFContext(), term))
+        .to.throw(/function argument type mismatch/);
+    });
+  });
+
   await t.step("eraseSystemF", async (t) => {
     await t.step("erases simple polymorphic id", () => {
       const term = mkSystemFTAbs(

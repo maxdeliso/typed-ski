@@ -12,6 +12,7 @@ import type { TypedLambda } from "../../types/typedLambda.ts";
 import { createTypedApplication } from "../../types/typedLambda.ts";
 import { parseNatLiteralIdentifier } from "../../consts/nat.ts";
 import { makeTypedChurchNumeral } from "../../types/natLiteral.ts";
+import { typecheck } from "../../types/systemF.ts";
 
 /**
  * Converts System F to typed lambda calculus, preserving type annotations
@@ -45,6 +46,18 @@ export function systemFToTypedLambda(term: SystemFTerm): TypedLambda {
     case "systemF-type-app":
       // Erase type application - just return the term
       return systemFToTypedLambda(term.term);
+    case "systemF-let": {
+      const typeOfValue = typecheck(term.value);
+      return createTypedApplication(
+        {
+          kind: "typed-lambda-abstraction",
+          varName: term.name,
+          ty: typeOfValue,
+          body: systemFToTypedLambda(term.body),
+        },
+        systemFToTypedLambda(term.value),
+      );
+    }
     default:
       // Handle non-terminal (application)
       return createTypedApplication(

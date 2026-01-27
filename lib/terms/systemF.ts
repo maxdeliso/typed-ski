@@ -106,6 +106,18 @@ export interface SystemFMatch {
 }
 
 /**
+ * A let binding: let x = v in b (or let x : T = v in b).
+ * Desugars to (λx. b) v. Unannotated form infers the type from v at typecheck.
+ */
+export interface SystemFLet {
+  kind: "systemF-let";
+  name: string;
+  value: SystemFTerm;
+  body: SystemFTerm;
+  typeAnnotation?: BaseType;
+}
+
+/**
  * Creates a System F type application (t [T]).
  * @param term the polymorphic term to apply
  * @param typeArg the type argument
@@ -152,7 +164,8 @@ export interface SystemFApplication {
  * - a term abstraction λx:T.t (SystemFAbs),
  * - a type abstraction ΛX.t (SystemFTAbs),
  * - a type application t[T] (SystemFTypeApp), or
- * - a term application t u (SystemFApplication)
+ * - a term application t u (SystemFApplication),
+ * - a let binding let x = v in b (SystemFLet)
  */
 export type SystemFTerm =
   | SystemFVar
@@ -160,7 +173,8 @@ export type SystemFTerm =
   | SystemFTAbs
   | SystemFTypeApp
   | SystemFApplication
-  | SystemFMatch;
+  | SystemFMatch
+  | SystemFLet;
 
 /**
  * Creates an application of one System F term to another.

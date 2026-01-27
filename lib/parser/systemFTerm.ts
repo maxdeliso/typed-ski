@@ -27,6 +27,7 @@ import {
   skipWhitespace,
 } from "./parserState.ts";
 import type { ParserState } from "./parserState.ts";
+import type { BaseType } from "../types/types.ts";
 import { parseSystemFType } from "./systemFType.ts";
 import { parseWithEOF } from "./eof.ts";
 import {
@@ -46,6 +47,7 @@ import {
 import {
   BACKSLASH,
   COLON,
+  EQUALS,
   FAT_ARROW,
   HASH,
   LEFT_BRACE,
@@ -169,6 +171,76 @@ function parseMatchExpression(
     `match ${scrutineeLit} [${returnTypeLit}] {...}`,
     { kind: "systemF-match", scrutinee, returnType, arms },
     currentState,
+  ];
+}
+
+function parseLetExpression(
+  state: ParserState,
+): [string, SystemFTerm, ParserState] {
+  const [name, stateAfterName] = parseIdentifier(state);
+  let currentState = skipWhitespace(stateAfterName);
+  let typeAnnotation: BaseType | undefined;
+  let typeLit = "";
+
+  const [nextCh] = peek(currentState);
+  if (nextCh === COLON) {
+    currentState = matchCh(currentState, COLON);
+    [typeLit, typeAnnotation, currentState] = parseSystemFType(
+      skipWhitespace(currentState),
+    );
+    currentState = skipWhitespace(currentState);
+  }
+
+  currentState = matchCh(currentState, EQUALS);
+  currentState = skipWhitespace(currentState);
+  // Parse value term, stopping before the "in" keyword (so "in" is not parsed as a variable).
+  const valueParts: [string, SystemFTerm][] = [];
+  for (;;) {
+    const [ch, peekState] = peek(currentState);
+    if (ch !== null && /[a-zA-Z]/.test(ch)) {
+      const [id] = parseIdentifier(peekState);
+      if (id === "in") break;
+    }
+    const [lit, term, nextState] = parseAtomicSystemFTerm(currentState);
+    valueParts.push([lit, term]);
+    currentState = skipWhitespace(nextState);
+  }
+  if (valueParts.length === 0) {
+    throw new ParseError("let binding requires a value");
+  }
+  let valueLit = valueParts[0][0];
+  let valueTerm = valueParts[0][1];
+  for (let i = 1; i < valueParts.length; i++) {
+    valueLit = `${valueLit} ${valueParts[i][0]}`;
+    valueTerm = createSystemFApplication(valueTerm, valueParts[i][1]);
+  }
+  const [inKw, stateAfterIn] = parseIdentifier(currentState);
+  if (inKw !== "in") {
+    throw new ParseError(
+      `expected 'in' after let binding value, found '${inKw}'`,
+    );
+  }
+  currentState = skipWhitespace(stateAfterIn);
+  const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(currentState);
+
+  const letLit = typeLit
+    ? `let ${name} : ${typeLit} = ${valueLit} in ${bodyLit}`
+    : `let ${name} = ${valueLit} in ${bodyLit}`;
+
+  if (typeAnnotation !== undefined) {
+    return [
+      letLit,
+      createSystemFApplication(
+        mkSystemFAbs(name, typeAnnotation, bodyTerm),
+        valueTerm,
+      ),
+      stateAfterBody,
+    ];
+  }
+  return [
+    letLit,
+    { kind: "systemF-let", name, value: valueTerm, body: bodyTerm },
+    stateAfterBody,
   ];
 }
 
@@ -392,6 +464,9 @@ function parseAtomicSystemFTermNoTypeApp(
     if (varLit === "match") {
       return parseMatchExpression(stateAfterVar);
     }
+    if (varLit === "let") {
+      return parseLetExpression(stateAfterVar);
+    }
     return [varLit, { kind: "systemF-var", name: varLit }, stateAfterVar];
   } else {
     throw new ParseError(
@@ -455,6 +530,9 @@ export function parseAtomicSystemFTerm(
     const [varLit, stateAfterVar] = parseIdentifier(state);
     if (varLit === "match") {
       return parseMatchExpression(stateAfterVar);
+    }
+    if (varLit === "let") {
+      return parseLetExpression(stateAfterVar);
     }
     let literal = varLit;
     let term: SystemFTerm = { kind: "systemF-var", name: varLit };
@@ -537,6 +615,14 @@ export function unparseSystemF(term: SystemFTerm): string {
       return `match ${unparseSystemF(term.scrutinee)}[${
         unparseSystemFType(term.returnType)
       }] { ${arms} }`;
+    }
+    case "systemF-let": {
+      const ann = term.typeAnnotation !== undefined
+        ? ` : ${unparseSystemFType(term.typeAnnotation)}`
+        : "";
+      return `let ${term.name}${ann} = ${unparseSystemF(term.value)} in ${
+        unparseSystemF(term.body)
+      }`;
     }
   }
 }

@@ -23,20 +23,28 @@ function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {
   const free = freeTermVars(body);
   free.delete(name);
   const avoid = new Set([...free, name]);
+
   const fName = fresh("__rec_f", avoid);
   avoid.add(fName);
   const xName = fresh("__rec_x", avoid);
   avoid.add(xName);
   const vName = fresh("__rec_v", avoid);
 
+  // The Z-Combinator logic
+  // 1. x x
   const xx = createApplication(mkVar(xName), mkVar(xName));
+  // 2. x x v
   const xxv = createApplication(xx, mkVar(vName));
-  const protectedXX = mkUntypedAbs(vName, xxv);
-  const fxx = createApplication(mkVar(fName), protectedXX);
-  const inner = mkUntypedAbs(xName, fxx);
-  const y = mkUntypedAbs(fName, createApplication(inner, inner));
+  // 3. \v. x x v  (Delay thunk)
+  const delayed = mkUntypedAbs(vName, xxv);
+  // 4. f (\v. x x v)
+  const fDelayed = createApplication(mkVar(fName), delayed);
+  // 5. \x. f (\v. x x v)
+  const inner = mkUntypedAbs(xName, fDelayed);
+
+  const z = mkUntypedAbs(fName, createApplication(inner, inner));
   const recFn = mkUntypedAbs(name, body);
-  return createApplication(y, recFn);
+  return createApplication(z, recFn);
 }
 
 export function termLevel(dt: TripLangTerm): number {

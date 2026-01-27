@@ -108,7 +108,14 @@ export interface ModuleDefinition {
   name: string;
 }
 
-/** Declares an imported symbol `name` from module `ref`. */
+/**
+ * Declares an imported symbol.
+ *
+ * TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+ * Parser produces: {name: moduleName, ref: symbolName}
+ * - name: the module name (e.g., "Prelude")
+ * - ref: the symbol name being imported (e.g., "zero")
+ */
 export interface ImportDefinition {
   kind: "import";
   name: string;

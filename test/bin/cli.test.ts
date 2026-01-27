@@ -196,7 +196,7 @@ typed double = \\x:Int => add x x`;
 
       // Check imports
       expect(result.imports).to.have.length(1);
-      expect(result.imports[0]).to.deep.equal({ name: "Math", from: "add" });
+      expect(result.imports[0]).to.deep.equal({ name: "add", from: "Math" });
 
       // Check exports
       expect(result.exports).to.have.length(2);

@@ -727,10 +727,13 @@ export function resolveExternalProgramReferences(
   syms: SymbolTable,
 ): TripLangProgram {
   // Collect all imported symbol names
+  // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+  // Parser produces: {name: moduleName, ref: symbolName}
+  // We track the symbol name (ref) so imported symbols remain unresolved during substitution
   const importedSymbols = new Set<string>();
   for (const term of program.terms) {
     if (term.kind === "import") {
-      importedSymbols.add(term.name);
+      importedSymbols.add(term.ref);
     }
   }
 

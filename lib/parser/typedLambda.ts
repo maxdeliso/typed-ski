@@ -51,6 +51,10 @@ import {
  *   - A parenthesized term: "(" <term> ")"
  *   - A variable: e.g. "x"
  *
+ * Arrow Syntax:
+ * - Type arrows use "->": "T -> U" means function type from T to U
+ * - Term arrows use "=>": "\\x : T => body" uses fat arrow for the abstraction body
+ *
  * Returns a triple: [literal, TypedLambda, updated ParserState]
  */
 export function parseAtomicTypedLambda(

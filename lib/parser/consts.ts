@@ -16,6 +16,9 @@ export const COLON = ":";
 export const EQUALS = "=";
 export const BACKSLASH = "\\";
 export const HASH = "#";
+// Arrow syntax rules:
+// - ARROW ("->") is used for type arrows: "T -> U" means function type from T to U
+// - FAT_ARROW ("=>") is used for term arrows: "\\x => body" or "match x { | C => body }"
 export const ARROW = "->";
 export const FAT_ARROW = "=>";
 export const PIPE = "|";

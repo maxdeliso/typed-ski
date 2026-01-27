@@ -178,4 +178,62 @@ Deno.test("System F Parser", async (t) => {
       );
     },
   );
+
+  await t.step("match parsing error cases", async (t) => {
+    await t.step(
+      "should throw error when match requires explicit return type",
+      () => {
+        assert.throws(
+          () => {
+            parseSystemF("match x { | None => y }");
+          },
+          Error,
+          "match requires an explicit return type",
+        );
+      },
+    );
+
+    await t.step(
+      "should throw error when expected | to start match arm",
+      () => {
+        assert.throws(
+          () => {
+            parseSystemF("match x [T] { None => y }");
+          },
+          Error,
+          "expected '|' to start match arm",
+        );
+      },
+    );
+
+    await t.step("should throw error for empty match arm", () => {
+      assert.throws(
+        () => {
+          parseSystemF("match x [T] { | None => }");
+        },
+        Error,
+        "match arm requires a body",
+      );
+    });
+
+    await t.step("should throw error when match has no arms", () => {
+      assert.throws(
+        () => {
+          parseSystemF("match x [T] { }");
+        },
+        Error,
+        "match must declare at least one arm",
+      );
+    });
+
+    await t.step("should throw error for multiple arrow case", () => {
+      assert.throws(
+        () => {
+          parseSystemF("match x [T] { | None => => y }");
+        },
+        Error,
+        "multiple arrow case",
+      );
+    });
+  });
 });

@@ -378,4 +378,75 @@ Deno.test("De Bruijn Conversion", async (t) => {
       assert.strictEqual(result1, result2);
     },
   );
+
+  await t.step("should convert match expression with match arm", () => {
+    // match x [T] { | Cons a b => a }
+    const term: SystemFTerm = {
+      kind: "systemF-match",
+      scrutinee: { kind: "systemF-var", name: "x" },
+      returnType: { kind: "type-var", typeName: "T" },
+      arms: [
+        {
+          constructorName: "Cons",
+          params: ["a", "b"],
+          body: { kind: "systemF-var", name: "a" },
+        },
+      ],
+    };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, {
+      kind: "DbMatch",
+      scrutinee: { kind: "DbFreeVar", name: "x" },
+      returnType: { kind: "DbFreeTypeVar", name: "T" },
+      arms: [
+        {
+          constructorName: "Cons",
+          paramsCount: 2,
+          body: { kind: "DbVar", index: 1 }, // 'a' is at index 1 (b is at 0)
+        },
+      ],
+    });
+  });
+
+  await t.step(
+    "should convert match expression with multiple arms and nested bindings",
+    () => {
+      // match x [T] { | None => y | Some a => a }
+      const term: SystemFTerm = {
+        kind: "systemF-match",
+        scrutinee: { kind: "systemF-var", name: "x" },
+        returnType: { kind: "type-var", typeName: "T" },
+        arms: [
+          {
+            constructorName: "None",
+            params: [],
+            body: { kind: "systemF-var", name: "y" },
+          },
+          {
+            constructorName: "Some",
+            params: ["a"],
+            body: { kind: "systemF-var", name: "a" },
+          },
+        ],
+      };
+      const result = toDeBruijn(term);
+      assert.deepStrictEqual(result, {
+        kind: "DbMatch",
+        scrutinee: { kind: "DbFreeVar", name: "x" },
+        returnType: { kind: "DbFreeTypeVar", name: "T" },
+        arms: [
+          {
+            constructorName: "None",
+            paramsCount: 0,
+            body: { kind: "DbFreeVar", name: "y" },
+          },
+          {
+            constructorName: "Some",
+            paramsCount: 1,
+            body: { kind: "DbVar", index: 0 }, // 'a' is at index 0
+          },
+        ],
+      });
+    },
+  );
 });

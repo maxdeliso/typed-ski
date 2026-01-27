@@ -4,13 +4,17 @@
  * This module provides parsing functionality for System F (polymorphic lambda calculus)
  * terms, including variables, abstractions, type abstractions, and applications.
  *
+ * Arrow Syntax:
+ * - Type arrows use "->": "T -> U" means function type from T to U
+ * - Term arrows use "=>": "\\x => body" or "match x { | C => body }"
+ *   Match arms specifically use "=>" (fat arrow), not "->" (skinny arrow)
+ *
  * @module
  */
 import { ParseError } from "./parseError.ts";
 import {
   isAtDefinitionKeywordLine,
   isDigit,
-  matchArrow,
   matchCh,
   matchFatArrow,
   matchLP,
@@ -18,7 +22,7 @@ import {
   parseIdentifier,
   parseNumericLiteral,
   peek,
-  peekArrow,
+  peekFatArrow,
   remaining,
   skipWhitespace,
 } from "./parserState.ts";
@@ -134,9 +138,9 @@ function parseMatchExpression(
 
     const params: string[] = [];
     for (;;) {
-      const [isArrow, arrowState] = peekArrow(currentState);
+      const [isArrow, arrowState] = peekFatArrow(currentState);
       if (isArrow) {
-        currentState = matchArrow(arrowState);
+        currentState = matchFatArrow(arrowState);
         break;
       }
       const [param, stateAfterParam] = parseIdentifier(currentState);

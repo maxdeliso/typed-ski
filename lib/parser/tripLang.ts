@@ -5,6 +5,16 @@
  * module definitions, imports/exports, and term/type definitions across
  * System F, typed/untyped lambda calculus, SKI combinators, and base types.
  *
+ * Import/Export Syntax:
+ * - Import: "import <module> <symbol>" (e.g., "import Prelude zero")
+ *   Parses to: {name: moduleName, ref: symbolName}
+ * - Export: "export <symbol>" (e.g., "export main")
+ *   Parses to: {name: symbolName}
+ *
+ * Arrow Syntax:
+ * - Type arrows use "->": "T -> U" means function type from T to U
+ * - Term arrows use "=>": "\\x => body" or "match x { | C => body }"
+ *
  * @module
  */
 import {
@@ -160,10 +170,15 @@ export function parseTripLangDefinition(
       case MODULE:
         return [{ kind: MODULE, name }, skipWhitespace(stateAfterName)];
       case IMPORT: {
+        // TripLang import syntax: "import <module> <symbol>"
+        // Example: "import Prelude zero" imports symbol "zero" from module "Prelude"
+        // Parser produces: {name: "Prelude", ref: "zero"}
         const [ref, stateAfterRef] = parseIdentifier(stateAfterName);
         return [{ kind: IMPORT, name, ref }, skipWhitespace(stateAfterRef)];
       }
       case EXPORT:
+        // TripLang export syntax: "export <symbol>"
+        // Example: "export main" exports the symbol "main" from the current module
         return [{ kind: EXPORT, name }, skipWhitespace(stateAfterName)];
     }
   }

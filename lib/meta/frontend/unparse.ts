@@ -1,8 +1,8 @@
 /**
- * Pretty printing utilities for TripLang terms.
+ * Unparsing utilities for TripLang terms.
  *
- * This module provides pretty printing functionality for TripLang terms,
- * delegating to the appropriate pretty printer based on term type.
+ * This module provides unparsing functionality for TripLang terms,
+ * delegating to the appropriate unparser based on term type.
  *
  * @module
  */
@@ -15,7 +15,7 @@ import type { TripLangTerm } from "../trip.ts";
 
 const def = " := ";
 
-export function prettyTerm(dt: TripLangTerm): string {
+export function unparseTerm(dt: TripLangTerm): string {
   switch (dt.kind) {
     case "poly":
       return `${dt.name}${dt.rec ? " (rec)" : ""}${def}${
@@ -45,7 +45,10 @@ export function prettyTerm(dt: TripLangTerm): string {
     case "module":
       return `module ${dt.name}`;
     case "import":
-      return `import ${dt.name} from ${dt.ref}`;
+      // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+      // Parser produces: {name: moduleName, ref: symbolName}
+      // Unparse outputs: "import <symbol> from <module>" (e.g., "import zero from Prelude")
+      return `import ${dt.ref} from ${dt.name}`;
     case "export":
       return `export ${dt.name}`;
   }

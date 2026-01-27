@@ -682,5 +682,88 @@ Deno.test("hygienic substitution functions", async (t) => {
       assertEquals(result.kind, "type-var");
       assertEquals((result as { typeName: string }).typeName, "A");
     });
+
+    await t.step("should substitute in match expression", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-match",
+        scrutinee: {
+          kind: "systemF-var",
+          name: "x",
+        },
+        returnType: {
+          kind: "type-var",
+          typeName: "T",
+        },
+        arms: [
+          {
+            constructorName: "Cons",
+            params: ["a", "b"],
+            body: {
+              kind: "systemF-var",
+              name: "x",
+            },
+          },
+        ],
+      };
+      const replacement: TripLangValueType = {
+        kind: "systemF-var",
+        name: "y",
+      };
+      const result = substituteHygienic(term, "x", replacement);
+      assertEquals(result.kind, "systemF-match");
+      assertEquals(
+        (result as { scrutinee: { name: string } }).scrutinee.name,
+        "y",
+      );
+      // The x in the match arm body should be substituted
+      assertEquals(
+        (result as { arms: Array<{ body: { name: string } }> }).arms[0].body
+          .name,
+        "y",
+      );
+    });
+
+    await t.step(
+      "should avoid variable capture in match arm parameters",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["x"],
+              body: {
+                kind: "systemF-var",
+                name: "x",
+              },
+            },
+          ],
+        };
+        const replacement: TripLangValueType = {
+          kind: "systemF-var",
+          name: "x",
+        };
+        const result = substituteHygienic(term, "m", replacement);
+        assertEquals(result.kind, "systemF-match");
+        assertEquals(
+          (result as { scrutinee: { name: string } }).scrutinee.name,
+          "x",
+        );
+        // The match arm parameter 'x' should be renamed to avoid capture
+        const arm = (result as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms[0];
+        assertEquals(arm.params[0] !== "x", true); // Should be renamed
+        assertEquals(arm.body.name, arm.params[0]); // Body should reference renamed param
+      },
+    );
   });
 });

@@ -285,7 +285,7 @@ data Maybe A = Nothing | Just A`;
     await t.step("desugars match arms in constructor order", () => {
       const src = `module MatchBool
 data Bool = False | True
-poly flip = match True [Bool] { | True -> False | False -> True }`;
+poly flip = match True [Bool] { | True => False | False => True }`;
       const program = parseTripLang(src);
       const syms = indexSymbols(program);
       const elaborated = elaborateTerms(program, syms);
@@ -306,8 +306,8 @@ poly zero = #X => \\s : X -> X => \\z : X => z
 poly succ = \\n : Nat => #a => \\s : a -> a => \\z : a => s (n [a] s z)
 poly one = succ zero
 data Bool = False | True
-poly mainTrue = match True [Nat] { | True -> one | False -> zero }
-poly mainFalse = match False [Nat] { | True -> one | False -> zero }`;
+poly mainTrue = match True [Nat] { | True => one | False => zero }
+poly mainFalse = match False [Nat] { | True => one | False => zero }`;
       const compiled = compile(src);
 
       const mainTrue = resolvePoly(compiled, "mainTrue");
@@ -326,7 +326,7 @@ poly mainFalse = match False [Nat] { | True -> one | False -> zero }`;
     await t.step("rejects non-exhaustive match", () => {
       const src = `module MatchNonExhaustive
 data Bool = False | True
-poly main = match True [Bool] { | True -> False }`;
+poly main = match True [Bool] { | True => False }`;
       assert.throws(
         () => compile(src),
         /match is missing constructors: False/,

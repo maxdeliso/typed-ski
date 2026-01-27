@@ -5,13 +5,13 @@ import { evaluateTrip, evaluateTripWithIo } from "../util/tripHarness.ts";
 Deno.test("prelude scott lists support head/tail", async () => {
   const source = `module TestList
 
-import Nat Prelude
-import nil Prelude
-import cons Prelude
-import head Prelude
-import tail Prelude
-import error Prelude
-import List Prelude
+import Prelude Nat
+import Prelude nil
+import Prelude cons
+import Prelude head
+import Prelude tail
+import Prelude error
+import Prelude List
 
 export main
 
@@ -26,11 +26,11 @@ poly main = head [Nat] (tail [Nat] list)`;
 Deno.test("prelude scott lists support matchList", async () => {
   const source = `module TestMatchList
 
-import Nat Prelude
-import nil Prelude
-import cons Prelude
-import matchList Prelude
-import List Prelude
+import Prelude Nat
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude List
 
 export main
 
@@ -47,8 +47,8 @@ poly main = consResult`;
 Deno.test("trip harness evaluates IO programs", async () => {
   const source = `module EchoOne
 
-import readOne Prelude
-import writeOne Prelude
+import Prelude readOne
+import Prelude writeOne
 
 export main
 

@@ -92,6 +92,7 @@ export { parseTripLang } from "./parser/tripLang.ts";
 /** Compiles a given TripLang program through the full pipeline: parse → index → elaborate → resolve → typecheck. */
 export { compile } from "./meta/frontend.ts";
 export {
+  type DataDefinition,
   type PolyDefinition,
   type TripLangProgram,
   type TripLangTerm,

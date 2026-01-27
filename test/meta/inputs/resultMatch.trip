@@ -1,0 +1,27 @@
+module ResultMatch
+
+type Nat = #X -> (X -> X) -> X -> X
+type Bool = #B -> B -> B -> B
+
+poly zero = #X => \s : X -> X => \z : X => z
+poly succ = \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
+poly one = succ zero
+poly two = succ one
+poly true = #B => \t : B => \f : B => t
+poly false = #B => \t : B => \f : B => f
+
+data Result E T = Err E | Ok T
+
+poly fromResult =
+  #E => #T =>
+  \default : T =>
+  \res : #R -> (E -> R) -> (T -> R) -> R =>
+    match res [T] {
+      | Err e => default
+      | Ok val => val
+    }
+
+poly testOk = fromResult [Bool] [Nat] zero (Ok [Bool] [Nat] two)
+poly testErr = fromResult [Bool] [Nat] zero (Err [Bool] [Nat] false)
+
+poly main = testOk

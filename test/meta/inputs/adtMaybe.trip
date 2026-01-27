@@ -1,0 +1,14 @@
+module AdtMaybe
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly zero = #X => \s : X -> X => \z : X => z
+poly succ = \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
+poly one = succ zero
+
+data Maybe A = Nothing | Just A
+
+poly fromMaybe = #A => \d : A => \m : #R -> R -> (A -> R) -> R =>
+  m [A] d (\x : A => x)
+
+poly main = fromMaybe [Nat] zero (Just [Nat] (succ one))

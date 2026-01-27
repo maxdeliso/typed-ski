@@ -1,12 +1,14 @@
 import { expect } from "chai";
 import { elaborateSystemF } from "../../../lib/meta/frontend/elaboration.ts";
-import type { SymbolTable } from "../../../lib/meta/trip.ts";
+import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
+import type { DataDefinition, SymbolTable } from "../../../lib/meta/trip.ts";
 import {
   mkSystemFAbs,
   mkSystemFApp,
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFVar,
+  type SystemFTerm,
 } from "../../../lib/terms/systemF.ts";
 import { arrow, type BaseType } from "../../../lib/types/types.ts";
 
@@ -17,6 +19,8 @@ Deno.test("elaborateSystemF", async (t) => {
     const table: SymbolTable = {
       terms: new Map(),
       types: new Map(),
+      data: new Map(),
+      constructors: new Map(),
     };
 
     for (const { name, type } of types) {
@@ -228,6 +232,388 @@ Deno.test("elaborateSystemF", async (t) => {
           ),
         ),
       ),
+    );
+  });
+
+  await t.step("elaborateMatch error cases", async (t) => {
+    function createSymbolTableWithData(
+      dataDefs: DataDefinition[],
+    ): SymbolTable {
+      const table: SymbolTable = {
+        terms: new Map(),
+        types: new Map(),
+        data: new Map(),
+        constructors: new Map(),
+      };
+
+      for (const dataDef of dataDefs) {
+        table.data.set(dataDef.name, dataDef);
+        dataDef.constructors.forEach((ctor, index) => {
+          table.constructors.set(ctor.name, {
+            dataName: dataDef.name,
+            index,
+            constructor: ctor,
+          });
+        });
+      }
+
+      return table;
+    }
+
+    function createMatch(
+      scrutinee: SystemFTerm,
+      returnType: BaseType,
+      arms: { constructorName: string; params: string[]; body: SystemFTerm }[],
+    ): SystemFTerm {
+      return {
+        kind: "systemF-match",
+        scrutinee,
+        returnType,
+        arms,
+      };
+    }
+
+    await t.step(
+      "should throw error when match has no arms",
+      () => {
+        const syms = createSymbolTableWithData([]);
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(CompilationError, "match must declare at least one arm");
+      },
+    );
+
+    await t.step(
+      "should throw error for unknown constructor",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Option",
+            typeParams: ["T"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "None", fields: [] },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "UnknownCtor",
+              params: [],
+              body: mkSystemFVar("y"),
+            },
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(
+          CompilationError,
+          "Unknown constructor 'UnknownCtor' in match",
+        );
+      },
+    );
+
+    await t.step(
+      "should throw error when match arms target different data types",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Option",
+            typeParams: ["T"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "None", fields: [] },
+            ],
+          },
+          {
+            kind: "data",
+            name: "Result",
+            typeParams: ["T", "E"],
+            constructors: [
+              {
+                name: "Ok",
+                fields: [{ kind: "type-var", typeName: "T" }],
+              },
+              {
+                name: "Err",
+                fields: [{ kind: "type-var", typeName: "E" }],
+              },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "Some",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+            {
+              constructorName: "Ok",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(
+          CompilationError,
+          "match arms must all target the same data type",
+        );
+      },
+    );
+
+    await t.step(
+      "should throw error when data definition is missing",
+      () => {
+        const syms: SymbolTable = {
+          terms: new Map(),
+          types: new Map(),
+          data: new Map(), // Empty - no data definitions
+          constructors: new Map([
+            [
+              "Some",
+              {
+                dataName: "Option",
+                index: 0,
+                constructor: {
+                  name: "Some",
+                  fields: [{ kind: "type-var", typeName: "T" }],
+                },
+              },
+            ],
+          ]),
+        };
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "Some",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(CompilationError, "Missing data definition for Option");
+      },
+    );
+
+    await t.step(
+      "should throw error for duplicate match arm",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Option",
+            typeParams: ["T"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "None", fields: [] },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "Some",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+            {
+              constructorName: "Some",
+              params: ["val2"],
+              body: mkSystemFVar("val2"),
+            },
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(
+          CompilationError,
+          "Duplicate match arm for constructor 'Some'",
+        );
+      },
+    );
+
+    await t.step(
+      "should throw error when match is missing constructors",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Option",
+            typeParams: ["T"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "None", fields: [] },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "Some",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+            // Missing "None" arm
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(CompilationError, "match is missing constructors: None");
+      },
+    );
+
+    await t.step(
+      "should throw error when constructor parameter count doesn't match",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Option",
+            typeParams: ["T"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "None", fields: [] },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "Some",
+              params: [], // Wrong: Some expects 1 parameter
+              body: mkSystemFVar("y"),
+            },
+            {
+              constructorName: "None",
+              params: [],
+              body: mkSystemFVar("z"),
+            },
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(
+          CompilationError,
+          "Constructor 'Some' expects 1 parameter(s)",
+        );
+      },
+    );
+
+    await t.step(
+      "should throw error when constructor has too many parameters",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Option",
+            typeParams: ["T"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "None", fields: [] },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "Some",
+              params: ["val", "extra"], // Wrong: Some expects only 1 parameter
+              body: mkSystemFVar("val"),
+            },
+            {
+              constructorName: "None",
+              params: [],
+              body: mkSystemFVar("z"),
+            },
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(
+          CompilationError,
+          "Constructor 'Some' expects 1 parameter(s)",
+        );
+      },
+    );
+
+    await t.step(
+      "should throw error when match is missing multiple constructors",
+      () => {
+        const syms = createSymbolTableWithData([
+          {
+            kind: "data",
+            name: "Triple",
+            typeParams: ["T"],
+            constructors: [
+              { name: "First", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "Second", fields: [{ kind: "type-var", typeName: "T" }] },
+              { name: "Third", fields: [{ kind: "type-var", typeName: "T" }] },
+            ],
+          },
+        ]);
+
+        const match = createMatch(
+          mkSystemFVar("x"),
+          { kind: "type-var", typeName: "T" },
+          [
+            {
+              constructorName: "First",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+            // Missing Second and Third
+          ],
+        );
+
+        expect(() => {
+          elaborateSystemF(match, syms);
+        }).to.throw(
+          CompilationError,
+          "match is missing constructors: Second, Third",
+        );
+      },
     );
   });
 });

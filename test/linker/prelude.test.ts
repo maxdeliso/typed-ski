@@ -17,11 +17,11 @@ Deno.test("links prelude with basic arithmetic", async () => {
   // Create a test module that uses prelude functions
   const testSource = `module TestArithmetic
 
-import zero Prelude
-import succ Prelude
-import add Prelude
-import mul Prelude
-import Nat Prelude
+import Prelude zero
+import Prelude succ
+import Prelude add
+import Prelude mul
+import Prelude Nat
 
 export main
 
@@ -87,10 +87,10 @@ Deno.test("links prelude with simple arithmetic", async () => {
 
   const testSource = `module TestSimple
 
-import zero Prelude
-import succ Prelude
-import add Prelude
-import Nat Prelude
+import Prelude zero
+import Prelude succ
+import Prelude add
+import Prelude Nat
 
 export main
 
@@ -154,10 +154,10 @@ Deno.test("links prelude with multiplication", async () => {
 
   const testSource = `module TestMultiplication
 
-import zero Prelude
-import succ Prelude
-import mul Prelude
-import Nat Prelude
+import Prelude zero
+import Prelude succ
+import Prelude mul
+import Prelude Nat
 
 export main
 
@@ -219,7 +219,7 @@ Deno.test("links numeric literals across modules without leaking Nat", async () 
 
   const providerSource = `module LiteralProvider
 
-import Nat Prelude
+import Prelude Nat
 
 export lit
 
@@ -228,7 +228,7 @@ poly lit = 3
 
   const consumerSource = `module LiteralConsumer
 
-import lit LiteralProvider
+import LiteralProvider lit
 
 export main
 
@@ -368,11 +368,11 @@ Deno.test("links prelude with complex arithmetic", async () => {
 
   const testSource = `module TestComplexArithmetic
 
-import zero Prelude
-import succ Prelude
-import add Prelude
-import mul Prelude
-import Nat Prelude
+import Prelude zero
+import Prelude succ
+import Prelude add
+import Prelude mul
+import Prelude Nat
 
 export main
 

@@ -14,6 +14,7 @@ import { unparseType } from "../../lib/parser/type.ts";
 import {
   emptySystemFContext,
   eraseSystemF,
+  forall,
   typecheckSystemF,
 } from "../../lib/types/systemF.ts";
 
@@ -196,6 +197,74 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect(() => typecheckSystemF(emptySystemFContext(), term))
         .to.throw(/expected an arrow type/);
     });
+
+    await t.step(
+      "function argument type mismatch with non-equivalent forall types",
+      () => {
+        // Create a function expecting #X->X->X
+        const f = mkSystemFAbs(
+          "x",
+          forall("X", arrow(mkTypeVariable("X"), mkTypeVariable("X"))),
+          mkSystemFVar("x"),
+        );
+        // Create an argument with #Y->Y->Z (different structure, not alpha-equivalent)
+        const arg = mkSystemFTAbs(
+          "Y",
+          mkSystemFAbs(
+            "y",
+            mkTypeVariable("Y"),
+            mkSystemFVar("z"), // Different body structure
+          ),
+        );
+        let ctx = emptySystemFContext();
+        ctx = {
+          ...ctx,
+          termCtx: (() => {
+            const newCtx = new Map(ctx.termCtx);
+            newCtx.set("z", mkTypeVariable("Z"));
+            return newCtx;
+          })(),
+        };
+        ctx = {
+          ...ctx,
+          termCtx: (() => {
+            const newCtx = new Map(ctx.termCtx);
+            newCtx.set(
+              "f",
+              arrow(
+                forall("X", arrow(mkTypeVariable("X"), mkTypeVariable("X"))),
+                mkTypeVariable("A"),
+              ),
+            );
+            return newCtx;
+          })(),
+        };
+        const term = mkSystemFApp(f, arg);
+        // This should trigger the normalization path (both are forall) but fail after normalization
+        expect(() => typecheckSystemF(ctx, term))
+          .to.throw(/function argument type mismatch/);
+      },
+    );
+
+    await t.step(
+      "match expression must be elaborated before typechecking",
+      () => {
+        const matchTerm: SystemFTerm = {
+          kind: "systemF-match",
+          scrutinee: mkSystemFVar("x"),
+          returnType: mkTypeVariable("T"),
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["val"],
+              body: mkSystemFVar("val"),
+            },
+          ],
+        };
+        expect(() => typecheckSystemF(emptySystemFContext(), matchTerm))
+          .to.throw(/match must be elaborated before typechecking/);
+      },
+    );
   });
 
   /* ─────────────────  parser / pretty-printer round-trip  ──────────────── */

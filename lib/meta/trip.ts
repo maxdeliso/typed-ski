@@ -29,6 +29,7 @@ export type TripLangTerm =
   | UntypedDefinition
   | CombinatorDefinition
   | TypeDefinition
+  | DataDefinition
   | ModuleDefinition
   | ImportDefinition
   | ExportDefinition;
@@ -47,6 +48,8 @@ export type TripLangValueType =
 export interface PolyDefinition {
   kind: "poly";
   name: string;
+  /** Marks a recursive polymorphic definition (desugared via fixpoint). */
+  rec?: boolean;
   type?: BaseType;
   term: SystemFTerm;
 }
@@ -80,13 +83,39 @@ export interface TypeDefinition {
   type: BaseType;
 }
 
+export interface DataConstructor {
+  name: string;
+  fields: BaseType[];
+}
+
+/** A structural algebraic data type definition. */
+export interface DataDefinition {
+  kind: "data";
+  name: string;
+  typeParams: string[];
+  constructors: DataConstructor[];
+}
+
+export interface DataConstructorInfo {
+  dataName: string;
+  index: number;
+  constructor: DataConstructor;
+}
+
 /** Declares the single module name for the program. */
 export interface ModuleDefinition {
   kind: "module";
   name: string;
 }
 
-/** Declares an imported symbol `name` from module `ref`. */
+/**
+ * Declares an imported symbol.
+ *
+ * TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+ * Parser produces: {name: moduleName, ref: symbolName}
+ * - name: the module name (e.g., "Prelude")
+ * - ref: the symbol name being imported (e.g., "zero")
+ */
 export interface ImportDefinition {
   kind: "import";
   name: string;
@@ -105,4 +134,6 @@ export interface ExportDefinition {
 export interface SymbolTable {
   terms: Map<string, TripLangTerm>;
   types: Map<string, TypeDefinition>;
+  data: Map<string, DataDefinition>;
+  constructors: Map<string, DataConstructorInfo>;
 }

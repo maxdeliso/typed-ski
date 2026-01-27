@@ -1,6 +1,6 @@
 module B
 
-import addA A
+import A addA
 
 export main
 

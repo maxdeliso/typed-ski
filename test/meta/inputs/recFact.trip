@@ -1,0 +1,65 @@
+module RecFact
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly succ =
+  \n : Nat =>
+    #a => \s : a -> a => \z : a =>
+      s (n [a] s z)
+
+poly zero = #X => \s: X -> X => \z : X => z
+
+poly one = succ zero
+
+type Bool = #B -> B -> B -> B
+
+poly true = #B => \t:B => \f:B => t
+
+poly false = #B => \t:B => \f:B => f
+
+poly cond =
+  #X =>
+    \b : Bool =>
+    \t : X =>
+    \f : X =>
+      b [X] t f
+
+poly mul =
+  \m : Nat => \n : Nat =>
+    #a => \s : a -> a => \z : a =>
+      m [a] (n [a] s) z
+
+poly isZero =
+  \n : Nat =>
+    n [Bool]
+     (\b : Bool => false)
+     true
+
+poly pair = #A => #B => \a :
+  A => \b : B => #Y => \k :
+  A -> B -> Y => k a b
+
+poly fst = #A => #B => \p : #Y -> (A -> B -> Y) -> Y =>
+  p [A] (\x : A => \y : B => x)
+
+poly snd = #A => #B => \p : #Y -> (A -> B -> Y) -> Y =>
+  p [B] (\x : A => \y : B => y)
+
+poly pred = \n : Nat =>
+  fst Nat Nat
+    ( n [#Y -> (Nat -> Nat -> Y) -> Y]
+        ( \p : #Y -> (Nat -> Nat -> Y) -> Y =>
+            pair Nat Nat
+              (snd Nat Nat p)
+              (succ (snd Nat Nat p))
+        )
+        (pair Nat Nat zero zero)
+    )
+
+poly rec fact : Nat -> Nat =
+  \n : Nat =>
+    cond
+      [Nat] (isZero n) one
+        (mul n (fact (pred n)))
+
+untyped main = fact 5

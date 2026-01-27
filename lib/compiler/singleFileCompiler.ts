@@ -57,9 +57,13 @@ function extractModuleInfo(program: TripLangProgram): {
   const moduleName = moduleDefs[0].name;
 
   // Extract imports
+  // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+  // Parser produces: {name: moduleName, ref: symbolName}
+  // Object file format needs: {name: symbolName, from: moduleName}
+  // So we swap: name becomes the symbol, from becomes the module
   const imports: ModuleImport[] = program.terms
     .filter((term): term is ImportDefinition => term.kind === "import")
-    .map((imp) => ({ name: imp.name, from: imp.ref }));
+    .map((imp) => ({ name: imp.ref, from: imp.name }));
 
   // Extract exports
   const exports: string[] = program.terms

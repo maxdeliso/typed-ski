@@ -9,6 +9,8 @@
  */
 import { unparseType } from "../../parser/type.ts";
 import type {
+  DataConstructorInfo,
+  DataDefinition,
   SymbolTable,
   TripLangProgram,
   TripLangTerm,
@@ -27,6 +29,8 @@ import { CompilationError } from "./compilation.ts";
 export function indexSymbols(program: TripLangProgram): SymbolTable {
   const termMap = new Map<string, TripLangTerm>();
   const tyMap = new Map<string, TypeDefinition>();
+  const dataMap = new Map<string, DataDefinition>();
+  const constructorMap = new Map<string, DataConstructorInfo>();
 
   for (const term of program.terms) {
     switch (term.kind) {
@@ -60,11 +64,37 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
           tyMap.set(term.name, typeDef);
         }
         break;
+      case "data":
+        if (dataMap.has(term.name)) {
+          throw new CompilationError(
+            `Duplicate data definition: ${term.name}`,
+            "index",
+            { term },
+          );
+        }
+        dataMap.set(term.name, term);
+        term.constructors.forEach((ctor, index) => {
+          if (constructorMap.has(ctor.name)) {
+            throw new CompilationError(
+              `Duplicate constructor definition: ${ctor.name}`,
+              "index",
+              { term, ctor },
+            );
+          }
+          constructorMap.set(ctor.name, {
+            dataName: term.name,
+            index,
+            constructor: ctor,
+          });
+        });
+        break;
     }
   }
   return {
     terms: termMap,
     types: tyMap,
+    data: dataMap,
+    constructors: constructorMap,
   };
 }
 
@@ -88,6 +118,8 @@ export function extractDefinitionValue(
       return tt.term;
     case "type":
       return tt.type;
+    case "data":
+      return undefined;
     case "module":
     case "import":
     case "export":

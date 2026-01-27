@@ -25,9 +25,17 @@ export snd
 export cond
 export readOne
 export writeOne
+export List
+export nil
+export cons
+export matchList
+export head
+export tail
+export error
 
 type Nat = #X -> (X -> X) -> X -> X
 type Bool = #B -> B -> B -> B
+type List = #A -> #R -> R -> (A -> R -> R) -> R
 
 poly id : #a->a->a = #a => \\x:a => x
 
@@ -68,6 +76,24 @@ poly cond = #X =>
   \\t : X =>
   \\f : X =>
     b [X] t f
+
+poly nil = #A => #R => \\n : R => \\c : (A -> List -> R) => n
+
+poly cons = #A => \\x : A => \\xs : List =>
+  #R => \\n : R => \\c : (A -> List -> R) => c x xs
+
+poly matchList = #A => #R => \\l : List => \\onNil : R =>
+  \\onCons : (A -> List -> R) =>
+    l [R] onNil onCons
+
+poly head = #A => \\l : List =>
+  l [A] error (\\h : A => \\t : List => h)
+
+poly tail = #A => \\l : List =>
+  l [List] (nil [A]) (\\h : A => \\t : List => t)
+
+poly error = #A =>
+  (\\x : A => x) (\\x : A => x)
 
 combinator readOne = ,
 combinator writeOne = .`;

@@ -65,9 +65,9 @@ poly id = #a=>\\x:a=>x
     const input = `
 module MyModule
 import Foo bar
-poly usesFoo = Foo
+poly usesBar = bar
     `;
-    // Should not throw, since Foo is imported
+    // Should not throw, since bar is imported
     const result = compile(input);
     assertEquals(result.program.kind, "program");
   });
@@ -81,6 +81,19 @@ poly usesBar = Bar
       () => compile(input),
       CompilationError,
       "Unresolved external term reference: Bar",
+    );
+  });
+
+  await t.step("should fail on duplicate match arm", () => {
+    const input = `
+module MyModule
+data Bool = False | True
+poly test = match True [Bool] { | True => False | True => True }
+    `;
+    assertThrows(
+      () => compile(input),
+      CompilationError,
+      "Duplicate match arm for constructor 'True'",
     );
   });
 });

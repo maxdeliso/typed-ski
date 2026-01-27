@@ -97,6 +97,25 @@ export interface DeBruijnTyApp {
 }
 
 /**
+ * A match arm in De Bruijn form.
+ */
+export interface DeBruijnMatchArm {
+  constructorName: string;
+  paramsCount: number;
+  body: DeBruijnTerm;
+}
+
+/**
+ * A match expression: match scrutinee [returnType] { ... }
+ */
+export interface DeBruijnMatch {
+  kind: "DbMatch";
+  scrutinee: DeBruijnTerm;
+  returnType: DeBruijnTerm;
+  arms: DeBruijnMatchArm[];
+}
+
+/**
  * A terminal symbol (S, K, I).
  */
 export interface DeBruijnTerminal {
@@ -119,6 +138,7 @@ export type DeBruijnTerm =
   | DeBruijnForall
   | DeBruijnApp
   | DeBruijnTyApp
+  | DeBruijnMatch
   | DeBruijnTerminal;
 
 /**
@@ -211,6 +231,25 @@ function toDeBruijnInternal(
         term: toDeBruijnInternal(term.term, termCtx, typeCtx),
         typeArg: toDeBruijnInternal(term.typeArg, termCtx, typeCtx),
       };
+    case "systemF-match": {
+      const arms = term.arms.map((arm) => {
+        let nextTermCtx = [...termCtx];
+        for (const param of arm.params) {
+          nextTermCtx = [param, ...nextTermCtx];
+        }
+        return {
+          constructorName: arm.constructorName,
+          paramsCount: arm.params.length,
+          body: toDeBruijnInternal(arm.body, nextTermCtx, typeCtx),
+        };
+      });
+      return {
+        kind: "DbMatch",
+        scrutinee: toDeBruijnInternal(term.scrutinee, termCtx, typeCtx),
+        returnType: toDeBruijnInternal(term.returnType, termCtx, typeCtx),
+        arms,
+      };
+    }
     case "terminal":
       return { kind: "DbTerminal", sym: term.sym };
   }

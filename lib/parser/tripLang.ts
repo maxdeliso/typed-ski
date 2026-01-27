@@ -5,20 +5,33 @@
  * module definitions, imports/exports, and term/type definitions across
  * System F, typed/untyped lambda calculus, SKI combinators, and base types.
  *
+ * Import/Export Syntax:
+ * - Import: "import <module> <symbol>" (e.g., "import Prelude zero")
+ *   Parses to: {name: moduleName, ref: symbolName}
+ * - Export: "export <symbol>" (e.g., "export main")
+ *   Parses to: {name: symbolName}
+ *
+ * Arrow Syntax:
+ * - Type arrows use "->": "T -> U" means function type from T to U
+ * - Term arrows use "=>": "\\x => body" or "match x { | C => body }"
+ *
  * @module
  */
 import {
   createParserState,
+  isAtDefinitionKeywordLine,
   matchCh,
   parseDefinitionKeyword,
   parseIdentifier,
   parseOptionalTypeAnnotation,
   type ParserState,
+  peek,
   remaining,
   skipWhitespace,
 } from "./parserState.ts";
 import {
   COMBINATOR,
+  DATA,
   EXPORT,
   IMPORT,
   MODULE,
@@ -33,14 +46,88 @@ import { parseSystemFTerm } from "./systemFTerm.ts";
 import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
 import { parseUntypedLambdaInternal } from "./untyped.ts";
 import { parseSKIDelimited } from "./ski.ts";
-import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
+import type {
+  DataDefinition,
+  TripLangProgram,
+  TripLangTerm,
+} from "../meta/trip.ts";
 import { parseSystemFType } from "./systemFType.ts";
 import type { BaseType } from "../types/types.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
 import type { TypedLambda } from "../types/typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import type { SKIExpression } from "../ski/expression.ts";
-import { EQUALS } from "./consts.ts";
+import { EQUALS, PIPE } from "./consts.ts";
+
+function parseDataDefinition(
+  state: ParserState,
+): [DataDefinition, ParserState] {
+  const [name, stateAfterName] = parseIdentifier(state);
+  let currentState = skipWhitespace(stateAfterName);
+  const typeParams: string[] = [];
+
+  for (;;) {
+    const [nextCh] = peek(currentState);
+    if (nextCh === EQUALS) {
+      break;
+    }
+    const [param, stateAfterParam] = parseIdentifier(currentState);
+    typeParams.push(param);
+    currentState = skipWhitespace(stateAfterParam);
+  }
+
+  currentState = matchCh(currentState, EQUALS);
+  currentState = skipWhitespace(currentState);
+
+  const constructors: DataDefinition["constructors"] = [];
+  for (;;) {
+    const [hasRemaining] = remaining(currentState);
+    if (!hasRemaining || isAtDefinitionKeywordLine(currentState)) {
+      break;
+    }
+
+    const [ctorName, stateAfterCtor] = parseIdentifier(currentState);
+    currentState = skipWhitespace(stateAfterCtor);
+
+    const fields: BaseType[] = [];
+    for (;;) {
+      const [nextCh] = peek(currentState);
+      if (
+        nextCh === PIPE ||
+        nextCh === null ||
+        isAtDefinitionKeywordLine(currentState)
+      ) {
+        break;
+      }
+      const [, fieldType, stateAfterType] = parseArrowType(currentState);
+      fields.push(fieldType);
+      currentState = skipWhitespace(stateAfterType);
+    }
+
+    constructors.push({ name: ctorName, fields });
+
+    const [nextCh, stateAfterPeek] = peek(currentState);
+    if (nextCh === PIPE) {
+      currentState = skipWhitespace(matchCh(stateAfterPeek, PIPE));
+      continue;
+    }
+
+    break;
+  }
+
+  if (constructors.length === 0) {
+    throw new ParseError(
+      "data definition must declare at least one constructor",
+    );
+  }
+
+  return [{
+    kind: "data",
+    name,
+    typeParams,
+    constructors,
+  }, currentState];
+}
 
 export function parseTripLangDefinition(
   state: ParserState,
@@ -54,19 +141,44 @@ export function parseTripLangDefinition(
     | SKIExpression
     | BaseType;
   let finalState: ParserState;
+  let isRecursive = false;
 
   const [kind, stateAfterKind] = parseDefinitionKeyword(state);
-  const [name, stateAfterName] = parseIdentifier(stateAfterKind);
+  let name: string;
+  let stateAfterName: ParserState;
+
+  if (kind === DATA) {
+    const [dataDefinition, finalState] = parseDataDefinition(stateAfterKind);
+    return [dataDefinition, skipWhitespace(finalState)];
+  }
+
+  if (kind === POLY) {
+    const [maybeRec, stateAfterMaybeRec] = parseIdentifier(stateAfterKind);
+    if (maybeRec === "rec") {
+      isRecursive = true;
+      [name, stateAfterName] = parseIdentifier(stateAfterMaybeRec);
+    } else {
+      name = maybeRec;
+      stateAfterName = stateAfterMaybeRec;
+    }
+  } else {
+    [name, stateAfterName] = parseIdentifier(stateAfterKind);
+  }
 
   if (kind === MODULE || kind === IMPORT || kind === EXPORT) {
     switch (kind) {
       case MODULE:
         return [{ kind: MODULE, name }, skipWhitespace(stateAfterName)];
       case IMPORT: {
+        // TripLang import syntax: "import <module> <symbol>"
+        // Example: "import Prelude zero" imports symbol "zero" from module "Prelude"
+        // Parser produces: {name: "Prelude", ref: "zero"}
         const [ref, stateAfterRef] = parseIdentifier(stateAfterName);
         return [{ kind: IMPORT, name, ref }, skipWhitespace(stateAfterRef)];
       }
       case EXPORT:
+        // TripLang export syntax: "export <symbol>"
+        // Example: "export main" exports the symbol "main" from the current module
         return [{ kind: EXPORT, name }, skipWhitespace(stateAfterName)];
     }
   }
@@ -95,6 +207,7 @@ export function parseTripLangDefinition(
       return [{
         kind: POLY,
         name,
+        ...(isRecursive ? { rec: true } : {}),
         type,
         term: systemFTerm,
       }, skipWhitespace(finalState)];

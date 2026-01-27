@@ -16,6 +16,7 @@ import {
   type SystemFTerm,
 } from "../../terms/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
+import { CompilationError } from "./compilation.ts";
 
 export function elaborateTerms(
   parsed: TripLangProgram,
@@ -44,6 +45,8 @@ export function elaborateTerm(
     case "combinator":
       return term;
     case "type":
+      return term;
+    case "data":
       return term;
     case "module":
       return term;
@@ -87,6 +90,8 @@ export function elaborateSystemF(
         elaborateSystemF(systemF.term, syms),
         systemF.typeArg,
       );
+    case "systemF-match":
+      return elaborateMatch(systemF, syms);
     case "non-terminal": {
       const elaboratedLft = elaborateSystemF(systemF.lft, syms);
       const elaboratedRgt = elaborateSystemF(systemF.rgt, syms);
@@ -99,4 +104,102 @@ export function elaborateSystemF(
       return createSystemFApplication(elaboratedLft, elaboratedRgt);
     }
   }
+}
+
+function elaborateMatch(
+  match: Extract<SystemFTerm, { kind: "systemF-match" }>,
+  syms: SymbolTable,
+): SystemFTerm {
+  if (match.arms.length === 0) {
+    throw new CompilationError(
+      "match must declare at least one arm",
+      "elaborate",
+    );
+  }
+
+  const constructorInfos = match.arms.map((arm) => {
+    const info = syms.constructors.get(arm.constructorName);
+    if (!info) {
+      throw new CompilationError(
+        `Unknown constructor '${arm.constructorName}' in match`,
+        "elaborate",
+        { arm },
+      );
+    }
+    return { arm, info };
+  });
+
+  const dataName = constructorInfos[0].info.dataName;
+  for (const { info } of constructorInfos) {
+    if (info.dataName !== dataName) {
+      throw new CompilationError(
+        "match arms must all target the same data type",
+        "elaborate",
+        { dataName, got: info.dataName },
+      );
+    }
+  }
+
+  const dataDef = syms.data.get(dataName);
+  if (!dataDef) {
+    throw new CompilationError(
+      `Missing data definition for ${dataName}`,
+      "elaborate",
+      { dataName },
+    );
+  }
+
+  const expectedConstructors = new Set(
+    dataDef.constructors.map((ctor) => ctor.name),
+  );
+  const seenConstructors = new Set<string>();
+  for (const { arm } of constructorInfos) {
+    if (seenConstructors.has(arm.constructorName)) {
+      throw new CompilationError(
+        `Duplicate match arm for constructor '${arm.constructorName}'`,
+        "elaborate",
+        { arm },
+      );
+    }
+    seenConstructors.add(arm.constructorName);
+  }
+
+  const missing = Array.from(expectedConstructors).filter((ctor) =>
+    !seenConstructors.has(ctor)
+  );
+  if (missing.length > 0) {
+    throw new CompilationError(
+      `match is missing constructors: ${missing.join(", ")}`,
+      "elaborate",
+      { dataName, missing },
+    );
+  }
+
+  const orderedArms = constructorInfos
+    .slice()
+    .sort((a, b) => a.info.index - b.info.index)
+    .map(({ arm, info }) => {
+      const fields = info.constructor.fields;
+      if (arm.params.length !== fields.length) {
+        throw new CompilationError(
+          `Constructor '${arm.constructorName}' expects ${fields.length} parameter(s)`,
+          "elaborate",
+          { arm, fields },
+        );
+      }
+      let body = elaborateSystemF(arm.body, syms);
+      for (let i = arm.params.length - 1; i >= 0; i--) {
+        body = mkSystemFAbs(arm.params[i], fields[i], body);
+      }
+      return body;
+    });
+
+  let applied: SystemFTerm = mkSystemFTypeApp(
+    elaborateSystemF(match.scrutinee, syms),
+    match.returnType,
+  );
+  for (const armTerm of orderedArms) {
+    applied = createSystemFApplication(applied, armTerm);
+  }
+  return applied;
 }

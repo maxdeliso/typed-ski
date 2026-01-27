@@ -22,10 +22,11 @@ import { elaborateTerms } from "./elaboration.ts";
 import { resolveExternalProgramReferences } from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
-import { typecheckSystemF } from "../../index.ts";
+import { expandDataDefinitions } from "./data.ts";
+import { emptySystemFContext, typecheckSystemF } from "../../types/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
 import { typecheckTypedLambda } from "../../types/typedLambda.ts";
-import { prettyTerm } from "./prettyPrint.ts";
+import { unparseTerm } from "./unparse.ts";
 
 export class CompilationError extends Error {
   constructor(
@@ -44,7 +45,7 @@ export class CompilationError extends Error {
       if (
         "term" in causeObj && causeObj.term && typeof causeObj.term === "object"
       ) {
-        causeStr = `\nTerm: ${prettyTerm(causeObj.term as TripLangTerm)}`;
+        causeStr = `\nTerm: ${unparseTerm(causeObj.term as TripLangTerm)}`;
       }
       if ("error" in causeObj) {
         causeStr += `\nError: ${String(causeObj.error)}`;
@@ -137,7 +138,8 @@ export function parse(input: string): ParsedProgram {
     );
   }
 
-  return { ...program, __moniker: Symbol() } as ParsedProgram;
+  const expanded = expandDataDefinitions(program);
+  return { ...expanded, __moniker: Symbol() } as ParsedProgram;
 }
 
 /**
@@ -181,10 +183,13 @@ export function resolve(
   programWithSymbols: ElaboratedProgramWithSymbols,
 ): ResolvedProgram {
   // Collect imported symbol names
+  // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+  // Parser produces: {name: moduleName, ref: symbolName}
+  // We track the symbol name (ref) so we can skip resolution for imported symbols
   const importedSymbols = new Set<string>();
   for (const term of programWithSymbols.program.terms) {
     if (term.kind === "import") {
-      importedSymbols.add(term.name);
+      importedSymbols.add(term.ref);
     }
   }
 
@@ -201,7 +206,12 @@ export function resolve(
     const [ut, uty] = externalReferences(definitionValue);
 
     // Check for unresolved terms that are not imported
-    const unresolvedTerms = Array.from(ut.keys());
+    let unresolvedTerms = Array.from(ut.keys());
+    if (resolvedTerm.kind === "poly" && resolvedTerm.rec) {
+      unresolvedTerms = unresolvedTerms.filter((term) =>
+        term !== resolvedTerm.name
+      );
+    }
     const unresolvedTypes = Array.from(uty.keys());
 
     const nonImportedUnresolvedTerms = unresolvedTerms.filter((term) =>
@@ -257,10 +267,13 @@ export function typecheck(
   program: ResolvedProgram,
 ): TypecheckedProgramWithTypes {
   // Collect imported symbol names
+  // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
+  // Parser produces: {name: moduleName, ref: symbolName}
+  // We track the symbol name (ref) to skip typechecking for unresolved imported symbols
   const importedSymbols = new Set<string>();
   for (const term of program.terms) {
     if (term.kind === "import") {
-      importedSymbols.add(term.name);
+      importedSymbols.add(term.ref);
     }
   }
 
@@ -289,7 +302,22 @@ export function typecheck(
 
       switch (term.kind) {
         case "poly":
-          types.set(term.name, typecheckSystemF(term.term));
+          if (term.rec) {
+            if (!term.type) {
+              throw new CompilationError(
+                `Recursive polymorphic definition '${term.name}' requires an explicit type annotation`,
+                "typecheck",
+                { term },
+              );
+            }
+            const ctx = emptySystemFContext();
+            ctx.termCtx.set(term.name, term.type);
+            const [ty] = typecheckSystemF(ctx, term.term);
+            types.set(term.name, ty);
+          } else {
+            const [ty] = typecheckSystemF(emptySystemFContext(), term.term);
+            types.set(term.name, ty);
+          }
           break;
         case "typed":
           types.set(term.name, typecheckTypedLambda(term.term));

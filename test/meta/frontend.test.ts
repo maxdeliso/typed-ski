@@ -28,6 +28,7 @@ import {
   resolvePoly,
   resolveUntyped,
 } from "../../lib/meta/frontend/compilation.ts";
+import { elaborateTerms } from "../../lib/meta/frontend/elaboration.ts";
 
 function isSystemFTerm(term: unknown): term is SystemFTerm {
   return !!term && typeof term === "object" &&
@@ -82,6 +83,26 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       );
       const nf = await arenaEval.reduceAsync(skiMain);
       assert.equal(UnChurchNumber(nf), 3n);
+    });
+
+    await t.step("Result data type with match expression", async () => {
+      const src = loadInput("resultMatch.trip", __dirname);
+      const compiled = compile(src);
+
+      const num = async (name: string) => {
+        const termPoly = compiled.program.terms.find(
+          (d) => d.kind === "poly" && d.name === name,
+        ) as { kind: "poly"; term: SystemFTerm };
+        const ski = bracketLambda(eraseSystemF(termPoly.term));
+        return UnChurchNumber(await arenaEval.reduceAsync(ski));
+      };
+
+      // testOk should return 2 (the value from Ok two)
+      assert.equal(await num("testOk"), 2n);
+      // testErr should return 0 (the default value)
+      assert.equal(await num("testErr"), 0n);
+      // main should return 2 (same as testOk)
+      assert.equal(await num("main"), 2n);
     });
 
     await t.step("parses & runs pred example", async () => {
@@ -144,6 +165,46 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       const mainUntyped = resolveUntyped(compiled, "main");
       const mainSki = bracketLambda(mainUntyped.term);
       assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 120n);
+    });
+
+    await t.step("loads factorial with poly rec syntax", async () => {
+      const src = loadInput("recFact.trip", __dirname);
+      const program = parseTripLang(src);
+
+      const factDef = program.terms.find(
+        (d) => d.kind === "poly" && d.name === "fact",
+      ) as { kind: "poly"; term: SystemFTerm };
+      const [termRefs, typeRefs] = externalReferences(factDef.term);
+
+      assert.deepEqual(
+        Array.from(termRefs.keys()).sort(),
+        ["cond", "fact", "isZero", "mul", "one", "pred"].sort(),
+      );
+      assert.deepEqual(
+        Array.from(typeRefs.keys()).sort(),
+        ["Nat"],
+      );
+
+      const compiled = compile(src);
+      const mainUntyped = resolveUntyped(compiled, "main");
+      const mainSki = bracketLambda(mainUntyped.term);
+      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 120n);
+    });
+
+    await t.step("evaluates Maybe ADT constructors", async () => {
+      const src = loadInput("adtMaybe.trip", __dirname);
+      const compiled = compile(src);
+      const mainPoly = resolvePoly(compiled, "main");
+      const mainSki = bracketLambda(eraseSystemF(mainPoly.term));
+      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 2n);
+    });
+
+    await t.step("evaluates Result ADT constructors", async () => {
+      const src = loadInput("adtResult.trip", __dirname);
+      const compiled = compile(src);
+      const mainPoly = resolvePoly(compiled, "main");
+      const mainSki = bracketLambda(eraseSystemF(mainPoly.term));
+      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 2n);
     });
 
     await t.step("elaborates nested type applications", () => {
@@ -216,6 +277,81 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         assert.equal(UnChurchNumber(mainRes), 24n);
       },
     );
+
+    await t.step("expands data definitions into constructors", () => {
+      const src = `module DataMaybe
+data Maybe A = Nothing | Just A`;
+      const compiled = compile(src);
+      const terms = compiled.program.terms;
+
+      assert.deepEqual(terms[0], { kind: "module", name: "DataMaybe" });
+
+      const maybeType = terms.find((term) =>
+        term.kind === "type" && term.name === "Maybe"
+      );
+      assert.isDefined(maybeType);
+      assert.strictEqual(
+        unparseType((maybeType as { type: BaseType }).type),
+        "#A->#R->(R->((A->R)->R))",
+      );
+
+      const ctorNames = terms
+        .filter((term) => term.kind === "poly")
+        .map((term) => term.name)
+        .sort();
+      assert.deepEqual(ctorNames, ["Just", "Nothing"]);
+    });
+
+    await t.step("desugars match arms in constructor order", () => {
+      const src = `module MatchBool
+data Bool = False | True
+poly flip = match True [Bool] { | True => False | False => True }`;
+      const program = parseTripLang(src);
+      const syms = indexSymbols(program);
+      const elaborated = elaborateTerms(program, syms);
+      const flip = elaborated.terms.find((term) =>
+        term.kind === "poly" && term.name === "flip"
+      );
+      assert.isDefined(flip);
+      assert.strictEqual(
+        unparseSystemF((flip as { term: SystemFTerm }).term),
+        "(True[Bool] True False)",
+      );
+    });
+
+    await t.step("evaluates match with both alternatives", async () => {
+      const src = `module MatchBoolEval
+type Nat = #X -> (X -> X) -> X -> X
+poly zero = #X => \\s : X -> X => \\z : X => z
+poly succ = \\n : Nat => #a => \\s : a -> a => \\z : a => s (n [a] s z)
+poly one = succ zero
+data Bool = False | True
+poly mainTrue = match True [Nat] { | True => one | False => zero }
+poly mainFalse = match False [Nat] { | True => one | False => zero }`;
+      const compiled = compile(src);
+
+      const mainTrue = resolvePoly(compiled, "mainTrue");
+      const trueRes = await arenaEval.reduceAsync(
+        bracketLambda(eraseSystemF(mainTrue.term)),
+      );
+      assert.equal(UnChurchNumber(trueRes), 1n);
+
+      const mainFalse = resolvePoly(compiled, "mainFalse");
+      const falseRes = await arenaEval.reduceAsync(
+        bracketLambda(eraseSystemF(mainFalse.term)),
+      );
+      assert.equal(UnChurchNumber(falseRes), 0n);
+    });
+
+    await t.step("rejects non-exhaustive match", () => {
+      const src = `module MatchNonExhaustive
+data Bool = False | True
+poly main = match True [Bool] { | True => False }`;
+      assert.throws(
+        () => compile(src),
+        /match is missing constructors: False/,
+      );
+    });
   } finally {
     arenaEval.terminate();
     // Give the poller loop a chance to observe `aborted` after any pending backoff sleep.

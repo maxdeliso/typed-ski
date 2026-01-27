@@ -128,4 +128,46 @@ Deno.test("externalReferences", async (t) => {
       ]);
     },
   );
+
+  await t.step(
+    "identifies external references in a System F match expression",
+    () => {
+      const input =
+        "poly matchTest = match x [T] { | Cons a b => (a y) | None => z }";
+      const program = parseTripLang(input);
+      const [termRefs, typeRefs] = externalReferences(
+        extractDefinitionValue(program.terms[0])!,
+      );
+
+      // x, y, z are external; a and b are bound by match arm
+      assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), [
+        "x",
+        "y",
+        "z",
+      ]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), ["T"]);
+    },
+  );
+
+  await t.step(
+    "identifies external references in a System F match with nested match",
+    () => {
+      const input =
+        "poly nestedMatch = match x [T] { | Some a => match a [U] { | Cons b c => (b w) } }";
+      const program = parseTripLang(input);
+      const [termRefs, typeRefs] = externalReferences(
+        extractDefinitionValue(program.terms[0])!,
+      );
+
+      // x, w are external; a, b, c are bound by match arms
+      assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), [
+        "w",
+        "x",
+      ]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), [
+        "T",
+        "U",
+      ]);
+    },
+  );
 });

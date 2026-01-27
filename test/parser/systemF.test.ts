@@ -179,6 +179,102 @@ Deno.test("System F Parser", async (t) => {
     },
   );
 
+  await t.step(
+    "parseAtomicSystemFTermNoTypeApp - match scrutinees",
+    async (t) => {
+      await t.step("parses lambda abstraction as match scrutinee", () => {
+        // Example: match (\x:X=>x) [T] { | None => y }
+        const input = "match (\\x:X=>x) [T] { | None => y }";
+        const [_lit, ast] = parseSystemF(input);
+        assert.equal(ast.kind, "systemF-match");
+
+        // The scrutinee should be a lambda abstraction
+        const scrutinee = ast.scrutinee;
+        assert.equal(scrutinee.kind, "systemF-abs");
+        assert.equal(scrutinee.name, "x");
+        assert.equal(scrutinee.typeAnnotation.kind, "type-var");
+        assert.equal(scrutinee.typeAnnotation.typeName, "X");
+        assert.equal(scrutinee.body.kind, "systemF-var");
+        assert.equal(scrutinee.body.name, "x");
+      });
+
+      await t.step("parses parenthesized term as match scrutinee", () => {
+        // Example: match (x y) [T] { | None => z }
+        const input = "match (x y) [T] { | None => z }";
+        const [_lit, ast] = parseSystemF(input);
+        assert.equal(ast.kind, "systemF-match");
+
+        // The scrutinee should be a parenthesized application
+        const scrutinee = ast.scrutinee;
+        assert.equal(scrutinee.kind, "non-terminal");
+        assert.equal(scrutinee.lft.kind, "systemF-var");
+        assert.equal(scrutinee.lft.name, "x");
+        assert.equal(scrutinee.rgt.kind, "systemF-var");
+        assert.equal(scrutinee.rgt.name, "y");
+      });
+
+      await t.step("parses type abstraction as match scrutinee", () => {
+        // Example: match (#X=>x) [T] { | None => y }
+        const input = "match (#X=>x) [T] { | None => y }";
+        const [_lit, ast] = parseSystemF(input);
+        assert.equal(ast.kind, "systemF-match");
+
+        // The scrutinee should be a type abstraction
+        const scrutinee = ast.scrutinee;
+        assert.equal(scrutinee.kind, "systemF-type-abs");
+        assert.equal(scrutinee.typeVar, "X");
+        assert.equal(scrutinee.body.kind, "systemF-var");
+        assert.equal(scrutinee.body.name, "x");
+      });
+
+      await t.step("parses numeric literal as match scrutinee", () => {
+        // Example: match 123 [T] { | None => y }
+        const input = "match 123 [T] { | None => y }";
+        const [_lit, ast] = parseSystemF(input);
+        assert.equal(ast.kind, "systemF-match");
+
+        // The scrutinee should be a numeric literal variable
+        const scrutinee = ast.scrutinee;
+        assert.equal(scrutinee.kind, "systemF-var");
+        assert.match(scrutinee.name, /__trip_nat_literal__/);
+        assert.equal(unparseSystemF(scrutinee), "123");
+      });
+
+      await t.step(
+        "parses nested parenthesized term as match scrutinee",
+        () => {
+          // Example: match ((x)) [T] { | None => y }
+          const input = "match ((x)) [T] { | None => y }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          // The scrutinee should be a variable (double parentheses)
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "systemF-var");
+          assert.equal(scrutinee.name, "x");
+        },
+      );
+
+      await t.step(
+        "parses complex parenthesized expression as match scrutinee",
+        () => {
+          // Example: match ((\x:X=>x) y) [T] { | None => z }
+          const input = "match ((\\x:X=>x) y) [T] { | None => z }";
+          const [_lit, ast] = parseSystemF(input);
+          assert.equal(ast.kind, "systemF-match");
+
+          // The scrutinee should be an application of a lambda to y
+          const scrutinee = ast.scrutinee;
+          assert.equal(scrutinee.kind, "non-terminal");
+          assert.equal(scrutinee.lft.kind, "systemF-abs");
+          assert.equal(scrutinee.lft.name, "x");
+          assert.equal(scrutinee.rgt.kind, "systemF-var");
+          assert.equal(scrutinee.rgt.name, "y");
+        },
+      );
+    },
+  );
+
   await t.step("match parsing error cases", async (t) => {
     await t.step(
       "should throw error when match requires explicit return type",

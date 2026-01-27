@@ -8,6 +8,7 @@ import {
   type TypeDefinition,
 } from "../../../lib/index.ts";
 import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
+import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 
 Deno.test("Symbol Table", async (t) => {
   await t.step("should index a program with unique terms and types", () => {
@@ -84,6 +85,255 @@ Deno.test("Symbol Table", async (t) => {
       "Duplicate type",
     );
   });
+
+  await t.step(
+    "should throw on duplicate definitions across different term kinds",
+    async (t) => {
+      await t.step("poly vs typed", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "poly",
+              name: "id",
+              term: { kind: "systemF-var", name: "x" },
+            },
+            {
+              kind: "typed",
+              name: "id",
+              term: { kind: "lambda-var", name: "x" },
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate definition: id",
+        );
+      });
+
+      await t.step("poly vs untyped", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "poly",
+              name: "id",
+              term: { kind: "systemF-var", name: "x" },
+            },
+            {
+              kind: "untyped",
+              name: "id",
+              term: { kind: "lambda-var", name: "x" },
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate definition: id",
+        );
+      });
+
+      await t.step("poly vs combinator", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "poly",
+              name: "id",
+              term: { kind: "systemF-var", name: "x" },
+            },
+            {
+              kind: "combinator",
+              name: "id",
+              term: { kind: "terminal", sym: SKITerminalSymbol.I },
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate definition: id",
+        );
+      });
+
+      await t.step("typed vs untyped", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "typed",
+              name: "id",
+              term: { kind: "lambda-var", name: "x" },
+            },
+            {
+              kind: "untyped",
+              name: "id",
+              term: { kind: "lambda-var", name: "x" },
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate definition: id",
+        );
+      });
+
+      await t.step("typed vs combinator", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "typed",
+              name: "id",
+              term: { kind: "lambda-var", name: "x" },
+            },
+            {
+              kind: "combinator",
+              name: "id",
+              term: { kind: "terminal", sym: SKITerminalSymbol.I },
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate definition: id",
+        );
+      });
+
+      await t.step("untyped vs combinator", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "untyped",
+              name: "id",
+              term: { kind: "lambda-var", name: "x" },
+            },
+            {
+              kind: "combinator",
+              name: "id",
+              term: { kind: "terminal", sym: SKITerminalSymbol.I },
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate definition: id",
+        );
+      });
+    },
+  );
+
+  await t.step("should throw on duplicate data definitions", () => {
+    const program: TripLangProgram = {
+      kind: "program",
+      terms: [
+        {
+          kind: "data",
+          name: "Option",
+          typeParams: ["T"],
+          constructors: [
+            { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "None", fields: [] },
+          ],
+        },
+        {
+          kind: "data",
+          name: "Option",
+          typeParams: ["T"],
+          constructors: [
+            { name: "Just", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "Nothing", fields: [] },
+          ],
+        },
+      ],
+    };
+
+    assert.throws(
+      () => indexSymbols(program),
+      CompilationError,
+      "Duplicate data definition: Option",
+    );
+  });
+
+  await t.step(
+    "should throw on duplicate constructor definitions",
+    async (t) => {
+      await t.step("duplicate constructor within same data type", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "data",
+              name: "Option",
+              typeParams: ["T"],
+              constructors: [
+                { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+                { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] }, // Duplicate
+                { name: "None", fields: [] },
+              ],
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate constructor definition: Some",
+        );
+      });
+
+      await t.step("duplicate constructor across different data types", () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            {
+              kind: "data",
+              name: "Option",
+              typeParams: ["T"],
+              constructors: [
+                { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+                { name: "None", fields: [] },
+              ],
+            },
+            {
+              kind: "data",
+              name: "Result",
+              typeParams: ["T", "E"],
+              constructors: [
+                { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] }, // Duplicate
+                {
+                  name: "Ok",
+                  fields: [{ kind: "type-var", typeName: "T" }],
+                },
+                {
+                  name: "Err",
+                  fields: [{ kind: "type-var", typeName: "E" }],
+                },
+              ],
+            },
+          ],
+        };
+
+        assert.throws(
+          () => indexSymbols(program),
+          CompilationError,
+          "Duplicate constructor definition: Some",
+        );
+      });
+    },
+  );
 
   await t.step("should resolve poly term definition", () => {
     const term: PolyDefinition = {

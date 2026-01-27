@@ -111,6 +111,76 @@ Deno.test("hygienic substitution functions", async (t) => {
       assertEquals(free.has("f"), true);
       assertEquals(free.has("x"), true);
     });
+
+    await t.step("should identify free variables in match expression", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-match",
+        scrutinee: {
+          kind: "systemF-var",
+          name: "x",
+        },
+        returnType: {
+          kind: "type-var",
+          typeName: "T",
+        },
+        arms: [
+          {
+            constructorName: "Some",
+            params: ["a"],
+            body: {
+              kind: "systemF-var",
+              name: "y",
+            },
+          },
+          {
+            constructorName: "None",
+            params: [],
+            body: {
+              kind: "systemF-var",
+              name: "z",
+            },
+          },
+        ],
+      };
+      const free = freeTermVars(term);
+      assertEquals(free.size, 3);
+      assertEquals(free.has("x"), true);
+      assertEquals(free.has("y"), true);
+      assertEquals(free.has("z"), true);
+      assertEquals(free.has("a"), false); // Bound in match arm
+    });
+
+    await t.step(
+      "should not count match arm parameters as free variables",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Cons",
+              params: ["a", "b"],
+              body: {
+                kind: "systemF-var",
+                name: "a", // Bound by match arm parameter
+              },
+            },
+          ],
+        };
+        const free = freeTermVars(term);
+        assertEquals(free.size, 1);
+        assertEquals(free.has("m"), true);
+        assertEquals(free.has("a"), false);
+        assertEquals(free.has("b"), false);
+      },
+    );
   });
 
   await t.step("freeTypeVars", async (t) => {
@@ -149,6 +219,70 @@ Deno.test("hygienic substitution functions", async (t) => {
         assertEquals(free.has("x"), false);
         assertEquals(free.has("A"), false);
         assertEquals(free.has("B"), false);
+      },
+    );
+
+    await t.step(
+      "should identify free type variables in match expression",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "x",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["a"],
+              body: {
+                kind: "systemF-var",
+                name: "a",
+              },
+            },
+          ],
+        };
+        const free = freeTypeVars(term);
+        assertEquals(free.size, 1);
+        assertEquals(free.has("T"), true);
+      },
+    );
+
+    await t.step(
+      "should not count bound type variables in match expression",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-type-abs",
+          typeVar: "A",
+          body: {
+            kind: "systemF-match",
+            scrutinee: {
+              kind: "systemF-var",
+              name: "x",
+            },
+            returnType: {
+              kind: "type-var",
+              typeName: "A", // Bound by outer type abstraction
+            },
+            arms: [
+              {
+                constructorName: "None",
+                params: [],
+                body: {
+                  kind: "systemF-var",
+                  name: "x",
+                },
+              },
+            ],
+          },
+        };
+        const free = freeTypeVars(term);
+        assertEquals(free.size, 0);
+        assertEquals(free.has("A"), false);
       },
     );
   });
@@ -264,6 +398,146 @@ Deno.test("hygienic substitution functions", async (t) => {
         "x",
       );
     });
+
+    await t.step("should rename term binders in match expression", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-match",
+        scrutinee: {
+          kind: "systemF-var",
+          name: "x",
+        },
+        returnType: {
+          kind: "type-var",
+          typeName: "T",
+        },
+        arms: [
+          {
+            constructorName: "Some",
+            params: ["x"],
+            body: {
+              kind: "systemF-var",
+              name: "x",
+            },
+          },
+        ],
+      };
+      const renamed = alphaRenameTermBinder(term, "x", "y");
+      assertEquals(renamed.kind, "systemF-match");
+      assertEquals(
+        (renamed as { scrutinee: { name: string } }).scrutinee.name,
+        "y",
+      );
+      const arm = (renamed as {
+        arms: Array<{ params: string[]; body: { name: string } }>;
+      }).arms[0];
+      assertEquals(arm.params[0], "y");
+      assertEquals(arm.body.name, "y");
+    });
+
+    await t.step(
+      "should rename match arm parameters when they match oldName",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Cons",
+              params: ["a", "x"],
+              body: {
+                kind: "systemF-var",
+                name: "x",
+              },
+            },
+          ],
+        };
+        const renamed = alphaRenameTermBinder(term, "x", "y");
+        assertEquals(renamed.kind, "systemF-match");
+        const arm = (renamed as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms[0];
+        assertEquals(arm.params[0], "a");
+        assertEquals(arm.params[1], "y");
+        assertEquals(arm.body.name, "y");
+      },
+    );
+
+    await t.step(
+      "should not rename match arm parameters when newName already exists",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["x", "y"],
+              body: {
+                kind: "systemF-var",
+                name: "x",
+              },
+            },
+          ],
+        };
+        const renamed = alphaRenameTermBinder(term, "x", "y");
+        assertEquals(renamed.kind, "systemF-match");
+        const arm = (renamed as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms[0];
+        // Should not rename because "y" already exists in params
+        assertEquals(arm.params[0], "x");
+        assertEquals(arm.params[1], "y");
+        assertEquals(arm.body.name, "x");
+      },
+    );
+
+    await t.step(
+      "should rename in match arm body when param doesn't match",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["a"],
+              body: {
+                kind: "systemF-var",
+                name: "x",
+              },
+            },
+          ],
+        };
+        const renamed = alphaRenameTermBinder(term, "x", "y");
+        assertEquals(renamed.kind, "systemF-match");
+        const arm = (renamed as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms[0];
+        assertEquals(arm.params[0], "a");
+        assertEquals(arm.body.name, "y");
+      },
+    );
   });
 
   await t.step("alphaRenameTypeBinder", async (t) => {
@@ -318,6 +592,93 @@ Deno.test("hygienic substitution functions", async (t) => {
         "A",
       );
     });
+
+    await t.step("should rename type variables in match expression", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-match",
+        scrutinee: {
+          kind: "systemF-var",
+          name: "x",
+        },
+        returnType: {
+          kind: "type-var",
+          typeName: "A",
+        },
+        arms: [
+          {
+            constructorName: "Some",
+            params: ["a"],
+            body: {
+              kind: "systemF-var",
+              name: "a",
+            },
+          },
+        ],
+      };
+      const renamed = alphaRenameTypeBinder(term, "A", "B");
+      assertEquals(renamed.kind, "systemF-match");
+      assertEquals(
+        (renamed as { returnType: { typeName: string } }).returnType.typeName,
+        "B",
+      );
+      // Scrutinee and arms should remain unchanged
+      assertEquals(
+        (renamed as { scrutinee: { name: string } }).scrutinee.name,
+        "x",
+      );
+      const arm = (renamed as {
+        arms: Array<{ params: string[]; body: { name: string } }>;
+      }).arms[0];
+      assertEquals(arm.params[0], "a");
+      assertEquals(arm.body.name, "a");
+    });
+
+    await t.step(
+      "should rename type variables in match scrutinee and return type",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-type-app",
+            term: {
+              kind: "systemF-var",
+              name: "x",
+            },
+            typeArg: {
+              kind: "type-var",
+              typeName: "A",
+            },
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "A",
+          },
+          arms: [
+            {
+              constructorName: "None",
+              params: [],
+              body: {
+                kind: "systemF-var",
+                name: "x",
+              },
+            },
+          ],
+        };
+        const renamed = alphaRenameTypeBinder(term, "A", "B");
+        assertEquals(renamed.kind, "systemF-match");
+        const scrutinee = (renamed as {
+          scrutinee: {
+            kind: string;
+            typeArg: { typeName: string };
+          };
+        }).scrutinee;
+        assertEquals(scrutinee.typeArg.typeName, "B");
+        assertEquals(
+          (renamed as { returnType: { typeName: string } }).returnType.typeName,
+          "B",
+        );
+      },
+    );
   });
 
   await t.step("substituteHygienic", async (t) => {
@@ -763,6 +1124,303 @@ Deno.test("hygienic substitution functions", async (t) => {
         }).arms[0];
         assertEquals(arm.params[0] !== "x", true); // Should be renamed
         assertEquals(arm.body.name, arm.params[0]); // Body should reference renamed param
+      },
+    );
+
+    await t.step(
+      "should substitute in match scrutinee and return type",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "x",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "None",
+              params: [],
+              body: {
+                kind: "systemF-var",
+                name: "y",
+              },
+            },
+          ],
+        };
+        const replacement: TripLangValueType = {
+          kind: "systemF-var",
+          name: "z",
+        };
+        const result = substituteHygienic(term, "x", replacement);
+        assertEquals(result.kind, "systemF-match");
+        assertEquals(
+          (result as { scrutinee: { name: string } }).scrutinee.name,
+          "z",
+        );
+        // Return type should remain unchanged since it's a type-var, not a term variable
+        const returnType = (result as {
+          returnType: { typeName: string };
+        }).returnType;
+        assertEquals(returnType.typeName, "T");
+      },
+    );
+
+    await t.step(
+      "should handle multiple match arms with different parameter names",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["x"],
+              body: {
+                kind: "systemF-var",
+                name: "x",
+              },
+            },
+            {
+              constructorName: "None",
+              params: [],
+              body: {
+                kind: "systemF-var",
+                name: "y",
+              },
+            },
+          ],
+        };
+        const replacement: TripLangValueType = {
+          kind: "systemF-var",
+          name: "z",
+        };
+        const result = substituteHygienic(term, "y", replacement);
+        assertEquals(result.kind, "systemF-match");
+        const arms = (result as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms;
+        assertEquals(arms[0].body.name, "x"); // Should remain unchanged
+        assertEquals(arms[1].body.name, "z"); // Should be substituted
+      },
+    );
+
+    await t.step(
+      "should rename multiple match arm parameters to avoid capture",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-var",
+            name: "m",
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "T",
+          },
+          arms: [
+            {
+              constructorName: "Cons",
+              params: ["x", "y"],
+              body: {
+                kind: "non-terminal",
+                lft: {
+                  kind: "systemF-var",
+                  name: "x",
+                },
+                rgt: {
+                  kind: "systemF-var",
+                  name: "y",
+                },
+              },
+            },
+          ],
+        };
+        const replacement: TripLangValueType = {
+          kind: "non-terminal",
+          lft: {
+            kind: "systemF-var",
+            name: "x",
+          },
+          rgt: {
+            kind: "systemF-var",
+            name: "y",
+          },
+        };
+        const result = substituteHygienic(term, "m", replacement);
+        assertEquals(result.kind, "systemF-match");
+        const arm = (result as {
+          arms: Array<
+            {
+              params: string[];
+              body: { lft: { name: string }; rgt: { name: string } };
+            }
+          >;
+        }).arms[0];
+        // Both parameters should be renamed
+        assertEquals(arm.params[0] !== "x", true);
+        assertEquals(arm.params[1] !== "y", true);
+        assertEquals(arm.body.lft.name, arm.params[0]);
+        assertEquals(arm.body.rgt.name, arm.params[1]);
+      },
+    );
+  });
+
+  await t.step("substituteTypeHygienic - systemF-match", async (t) => {
+    await t.step("should substitute type variables in match expression", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-match",
+        scrutinee: {
+          kind: "systemF-var",
+          name: "x",
+        },
+        returnType: {
+          kind: "type-var",
+          typeName: "A",
+        },
+        arms: [
+          {
+            constructorName: "Some",
+            params: ["a"],
+            body: {
+              kind: "systemF-var",
+              name: "a",
+            },
+          },
+        ],
+      };
+      const replacement: TripLangValueType = {
+        kind: "type-var",
+        typeName: "B",
+      };
+      const result = substituteTypeHygienic(term, "A", replacement);
+      assertEquals(result.kind, "systemF-match");
+      assertEquals(
+        (result as { returnType: { typeName: string } }).returnType.typeName,
+        "B",
+      );
+    });
+
+    await t.step(
+      "should substitute type variables in match scrutinee and arms",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-match",
+          scrutinee: {
+            kind: "systemF-type-app",
+            term: {
+              kind: "systemF-var",
+              name: "x",
+            },
+            typeArg: {
+              kind: "type-var",
+              typeName: "A",
+            },
+          },
+          returnType: {
+            kind: "type-var",
+            typeName: "A",
+          },
+          arms: [
+            {
+              constructorName: "Some",
+              params: ["a"],
+              body: {
+                kind: "systemF-type-app",
+                term: {
+                  kind: "systemF-var",
+                  name: "a",
+                },
+                typeArg: {
+                  kind: "type-var",
+                  typeName: "A",
+                },
+              },
+            },
+          ],
+        };
+        const replacement: TripLangValueType = {
+          kind: "type-var",
+          typeName: "B",
+        };
+        const result = substituteTypeHygienic(term, "A", replacement);
+        assertEquals(result.kind, "systemF-match");
+        const scrutinee = (result as {
+          scrutinee: {
+            kind: string;
+            typeArg: { typeName: string };
+          };
+        }).scrutinee;
+        assertEquals(scrutinee.typeArg.typeName, "B");
+        assertEquals(
+          (result as { returnType: { typeName: string } }).returnType.typeName,
+          "B",
+        );
+        const arm = (result as {
+          arms: Array<{
+            body: {
+              kind: string;
+              typeArg: { typeName: string };
+            };
+          }>;
+        }).arms[0];
+        assertEquals(arm.body.typeArg.typeName, "B");
+      },
+    );
+
+    await t.step(
+      "should not substitute bound type variables in match arms",
+      () => {
+        const term: TripLangValueType = {
+          kind: "systemF-type-abs",
+          typeVar: "A",
+          body: {
+            kind: "systemF-match",
+            scrutinee: {
+              kind: "systemF-var",
+              name: "x",
+            },
+            returnType: {
+              kind: "type-var",
+              typeName: "A",
+            },
+            arms: [
+              {
+                constructorName: "None",
+                params: [],
+                body: {
+                  kind: "systemF-var",
+                  name: "x",
+                },
+              },
+            ],
+          },
+        };
+        const replacement: TripLangValueType = {
+          kind: "type-var",
+          typeName: "B",
+        };
+        const result = substituteTypeHygienic(term, "A", replacement);
+        assertEquals(result.kind, "systemF-type-abs");
+        const match = (result as {
+          body: {
+            kind: string;
+            returnType: { typeName: string };
+          };
+        }).body;
+        assertEquals(match.kind, "systemF-match");
+        // The A in returnType should remain A because it's bound by the outer type abstraction
+        assertEquals(match.returnType.typeName, "A");
       },
     );
   });

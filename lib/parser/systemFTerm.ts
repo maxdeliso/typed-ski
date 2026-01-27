@@ -37,7 +37,7 @@ import {
   type SystemFMatchArm,
   type SystemFTerm,
 } from "../terms/systemF.ts";
-import { makeNatLiteralIdentifier } from "../consts/nat.ts";
+import { makeNatLiteralIdentifier, makeNatType } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import {
   createSystemFApplication,
@@ -172,6 +172,159 @@ function parseMatchExpression(
   ];
 }
 
+const ASCII_PRINTABLE_MIN = 32;
+const ASCII_PRINTABLE_MAX = 126;
+
+const isPrintableAscii = (code: number): boolean =>
+  code >= ASCII_PRINTABLE_MIN && code <= ASCII_PRINTABLE_MAX;
+
+const consumeRaw = (state: ParserState, expected: string): ParserState => {
+  if (state.idx >= state.buf.length) {
+    throw new ParseError(`expected '${expected}' but found EOF`);
+  }
+  const ch = state.buf[state.idx];
+  if (ch !== expected) {
+    throw new ParseError(`expected '${expected}' but found '${ch}'`);
+  }
+  return { buf: state.buf, idx: state.idx + 1 };
+};
+
+const parseEscape = (
+  state: ParserState,
+  context: "character" | "string",
+): [string, number, ParserState] => {
+  if (state.idx >= state.buf.length) {
+    throw new ParseError(`unterminated ${context} literal`);
+  }
+  const esc = state.buf[state.idx];
+  let code: number;
+  switch (esc) {
+    case "n":
+      code = 10;
+      break;
+    case "\\":
+      code = 92;
+      break;
+    case "'":
+      code = 39;
+      break;
+    case '"':
+      code = 34;
+      break;
+    default:
+      throw new ParseError(
+        `unsupported escape sequence '\\${esc}' in ${context} literal`,
+      );
+  }
+  return [`\\${esc}`, code, { buf: state.buf, idx: state.idx + 1 }];
+};
+
+const parseLiteralChar = (
+  state: ParserState,
+  context: "character" | "string",
+): [string, number, ParserState] => {
+  if (state.idx >= state.buf.length) {
+    throw new ParseError(`unterminated ${context} literal`);
+  }
+  const ch = state.buf[state.idx];
+  if (ch === "\n" || ch === "\r") {
+    throw new ParseError(`unterminated ${context} literal`);
+  }
+  if (ch === "\\") {
+    return parseEscape({ buf: state.buf, idx: state.idx + 1 }, context);
+  }
+  const code = ch.charCodeAt(0);
+  if (!isPrintableAscii(code)) {
+    throw new ParseError(`non-printable ASCII in ${context} literal`);
+  }
+  return [ch, code, { buf: state.buf, idx: state.idx + 1 }];
+};
+
+const buildNatList = (codes: number[]): SystemFTerm => {
+  const natType = makeNatType();
+  let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), natType);
+  for (let i = codes.length - 1; i >= 0; i--) {
+    const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), natType);
+    const head = mkSystemFVar(makeNatLiteralIdentifier(BigInt(codes[i])));
+    term = createSystemFApplication(
+      createSystemFApplication(consTerm, head),
+      term,
+    );
+  }
+  return term;
+};
+
+const parseCharLiteralTerm = (
+  state: ParserState,
+): [string, SystemFTerm, ParserState] => {
+  let currentState = consumeRaw(state, "'");
+  if (currentState.idx >= currentState.buf.length) {
+    throw new ParseError("unterminated character literal");
+  }
+  const nextCh = currentState.buf[currentState.idx];
+  if (nextCh === "'" || nextCh === "\n" || nextCh === "\r") {
+    throw new ParseError("empty character literal");
+  }
+  let literalPart: string;
+  let code: number;
+  if (nextCh === "\\") {
+    [literalPart, code, currentState] = parseEscape(
+      { buf: currentState.buf, idx: currentState.idx + 1 },
+      "character",
+    );
+  } else {
+    [literalPart, code, currentState] = parseLiteralChar(
+      currentState,
+      "character",
+    );
+  }
+  currentState = consumeRaw(currentState, "'");
+  return [
+    `'${literalPart}'`,
+    mkSystemFVar(makeNatLiteralIdentifier(BigInt(code))),
+    currentState,
+  ];
+};
+
+const parseStringLiteralTerm = (
+  state: ParserState,
+): [string, SystemFTerm, ParserState] => {
+  let currentState = consumeRaw(state, '"');
+  const literalParts: string[] = [];
+  const codes: number[] = [];
+
+  for (;;) {
+    if (currentState.idx >= currentState.buf.length) {
+      throw new ParseError("unterminated string literal");
+    }
+    const ch = currentState.buf[currentState.idx];
+    if (ch === '"') {
+      currentState = consumeRaw(currentState, '"');
+      break;
+    }
+    if (ch === "\n" || ch === "\r") {
+      throw new ParseError("unterminated string literal");
+    }
+    let literalPart: string;
+    let code: number;
+    if (ch === "\\") {
+      [literalPart, code, currentState] = parseEscape(
+        { buf: currentState.buf, idx: currentState.idx + 1 },
+        "string",
+      );
+    } else {
+      [literalPart, code, currentState] = parseLiteralChar(
+        currentState,
+        "string",
+      );
+    }
+    literalParts.push(literalPart);
+    codes.push(code);
+  }
+
+  return [`"${literalParts.join("")}"`, buildNatList(codes), currentState];
+};
+
 /**
  * Parses an atomic System F term.
  * Atomic terms can be:
@@ -223,6 +376,10 @@ function parseAtomicSystemFTermNoTypeApp(
       mkSystemFTAbs(typeVar, bodyTerm),
       stateAfterBody,
     ];
+  } else if (ch === "'") {
+    return parseCharLiteralTerm(currentState);
+  } else if (ch === '"') {
+    return parseStringLiteralTerm(currentState);
   } else if (isDigit(ch)) {
     const [literal, value, stateAfterLiteral] = parseNumericLiteral(state);
     return [
@@ -283,6 +440,10 @@ export function parseAtomicSystemFTerm(
       mkSystemFTAbs(typeVar, bodyTerm),
       stateAfterBody,
     ];
+  } else if (ch === "'") {
+    return parseCharLiteralTerm(currentState);
+  } else if (ch === '"') {
+    return parseStringLiteralTerm(currentState);
   } else if (isDigit(ch)) {
     const [literal, value, stateAfterLiteral] = parseNumericLiteral(state);
     return [

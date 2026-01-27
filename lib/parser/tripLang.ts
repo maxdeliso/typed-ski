@@ -82,16 +82,21 @@ function parseDataDefinition(
 
   const constructors: DataDefinition["constructors"] = [];
   for (;;) {
+    currentState = skipWhitespace(currentState);
     const [hasRemaining] = remaining(currentState);
     if (!hasRemaining || isAtDefinitionKeywordLine(currentState)) {
       break;
     }
-
+    const [firstCh, afterPeek] = peek(currentState);
+    if (firstCh === PIPE) {
+      currentState = skipWhitespace(matchCh(afterPeek, PIPE));
+    }
     const [ctorName, stateAfterCtor] = parseIdentifier(currentState);
     currentState = skipWhitespace(stateAfterCtor);
 
     const fields: BaseType[] = [];
     for (;;) {
+      currentState = skipWhitespace(currentState);
       const [nextCh] = peek(currentState);
       if (
         nextCh === PIPE ||

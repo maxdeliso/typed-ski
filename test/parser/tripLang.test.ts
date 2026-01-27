@@ -1,5 +1,6 @@
 import { expect } from "chai";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,7 +11,7 @@ import {
 } from "../../lib/terms/systemF.ts";
 import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
 import { createTypedApplication } from "../../lib/types/typedLambda.ts";
-import { arrow } from "../../lib/types/types.ts";
+import { arrow, mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
@@ -205,6 +206,86 @@ Deno.test("parseTripLang", async (t) => {
         },
       ],
     });
+  });
+
+  await t.step(
+    "parses data definitions with leading pipe and type-application field types",
+    // Parser must: (1) accept optional leading | and whitespace before the first
+    // constructor (data T = \n  | C1); (2) skip whitespace before field types so
+    // "T_Keyword (List Nat)" parses; (3) allow type applications like (List Nat)
+    // in field types, with space between type and argument.
+    () => {
+      const input = `module Lexer
+data Token =
+  | T_LParen
+  | T_Keyword (List Nat)
+  | T_EOF`;
+      const [moduleDecl, term] = parseTripLang(input).terms;
+
+      expect(moduleDecl).to.deep.equal({
+        kind: "module",
+        name: "Lexer",
+      });
+      expect(term).to.deep.equal({
+        kind: "data",
+        name: "Token",
+        typeParams: [],
+        constructors: [
+          { name: "T_LParen", fields: [] },
+          {
+            name: "T_Keyword",
+            fields: [
+              typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
+            ],
+          },
+          { name: "T_EOF", fields: [] },
+        ],
+      });
+    },
+  );
+
+  await t.step("parses lib/compiler/lexer.trip Token ADT", () => {
+    const lexerPath = join(__dirname, "..", "..", "lib", "compiler", "lexer.trip");
+    const input = readFileSync(lexerPath, "utf-8").trim();
+    const program = parseTripLang(input);
+    const tokenData = program.terms.find(
+      (term): term is typeof term & { kind: "data"; name: string } =>
+        term.kind === "data" && term.name === "Token",
+    );
+    expect(tokenData).to.be.ok;
+    expect(tokenData!.kind).to.equal("data");
+    expect(tokenData!.name).to.equal("Token");
+    expect(tokenData!.typeParams).to.deep.equal([]);
+    expect(tokenData!.constructors).to.deep.equal([
+      { name: "T_LParen", fields: [] },
+      { name: "T_RParen", fields: [] },
+      { name: "T_LBrace", fields: [] },
+      { name: "T_RBrace", fields: [] },
+      { name: "T_LBracket", fields: [] },
+      { name: "T_RBracket", fields: [] },
+      { name: "T_Backslash", fields: [] },
+      { name: "T_Arrow", fields: [] },
+      { name: "T_FatArrow", fields: [] },
+      { name: "T_Eq", fields: [] },
+      { name: "T_Colon", fields: [] },
+      { name: "T_Hash", fields: [] },
+      { name: "T_Pipe", fields: [] },
+      { name: "T_Dot", fields: [] },
+      { name: "T_Comma", fields: [] },
+      {
+        name: "T_Keyword",
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
+      },
+      {
+        name: "T_Ident",
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
+      },
+      {
+        name: "T_Nat",
+        fields: [mkTypeVariable("Nat")],
+      },
+      { name: "T_EOF", fields: [] },
+    ]);
   });
 
   await t.step("parses multiple definitions", () => {

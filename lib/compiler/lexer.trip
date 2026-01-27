@@ -1,0 +1,53 @@
+module Lexer
+
+import Prelude Nat
+import Prelude Bool
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude head
+import Prelude tail
+import Prelude dropWhile
+import Prelude takeWhile
+import Prelude cond
+import Prelude eq
+import Prelude zero
+import Prelude succ
+import Prelude add
+import Prelude mul
+import Prelude isZero
+import Prelude true
+import Prelude false
+import Prelude Result
+import Prelude Err
+import Prelude Ok
+import Prelude ParseError
+import Prelude MkParseError
+import Prelude error
+import Prelude foldl
+
+export Token
+
+data Token =
+  | T_LParen
+  | T_RParen
+  | T_LBrace
+  | T_RBrace
+  | T_LBracket
+  | T_RBracket
+  | T_Backslash
+  | T_Arrow
+  | T_FatArrow
+  | T_Eq
+  | T_Colon
+  | T_Hash
+  | T_Pipe
+  | T_Dot
+  | T_Comma
+  | T_Keyword (List Nat)
+  | T_Ident (List Nat)
+  | T_Nat Nat
+  | T_EOF
+
+

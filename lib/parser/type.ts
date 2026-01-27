@@ -14,6 +14,7 @@ import {
   type ParserState,
   peek,
   peekArrow,
+  skipWhitespace,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import {
@@ -76,6 +77,7 @@ export function parseTypeApplication(
   let currentState = stateAfterLeft;
 
   for (;;) {
+    currentState = skipWhitespace(currentState);
     const [nextCh, peekState] = peek(currentState);
     const skipped = currentState.buf.slice(currentState.idx, peekState.idx);
     if (skipped.includes("\n") || skipped.includes("\r")) break;

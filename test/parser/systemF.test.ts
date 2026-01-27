@@ -76,11 +76,20 @@ Deno.test("System F Parser", async (t) => {
       "''",
       "'a",
       "'ab'",
+      "'\n'",
       "'\\t'",
+      "'\\x'",
+      "'\\u'",
+      "'\\0'",
     ];
     for (const input of badInputs) {
       assert.throws(() => parseSystemF(input), Error);
     }
+  });
+
+  await t.step("rejects non-printable character literals", () => {
+    assert.throws(() => parseSystemF("'\u0001'"), Error);
+    assert.throws(() => parseSystemF("'\u001F'"), Error);
   });
 
   await t.step("parses a string literal into a Nat list", () => {
@@ -114,10 +123,18 @@ Deno.test("System F Parser", async (t) => {
     const badInputs = [
       '"unterminated',
       '"\\t"',
+      '"\\x"',
+      '"\\u"',
+      '"\\0"',
     ];
     for (const input of badInputs) {
       assert.throws(() => parseSystemF(input), Error);
     }
+  });
+
+  await t.step("rejects non-printable string literals", () => {
+    assert.throws(() => parseSystemF('"\u0001"'), Error);
+    assert.throws(() => parseSystemF('"\u001F"'), Error);
   });
 
   await t.step("parses a term abstraction", () => {

@@ -1,8 +1,8 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@std/assert@^1.0.16": "1.0.16",
-    "jsr:@std/fs@^1.0.21": "1.0.21",
+    "jsr:@std/assert@^1.0.17": "1.0.17",
+    "jsr:@std/fs@^1.0.22": "1.0.22",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/path@^1.1.4": "1.1.4",
     "npm:@types/chai@^5.2.3": "5.2.3",
@@ -12,14 +12,14 @@
     "npm:random-seed@0.3.0": "0.3.0"
   },
   "jsr": {
-    "@std/assert@1.0.16": {
-      "integrity": "6a7272ed1eaa77defe76e5ff63ca705d9c495077e2d5fd0126d2b53fc5bd6532",
+    "@std/assert@1.0.17": {
+      "integrity": "df5ebfffe77c03b3fa1401e11c762cc8f603d51021c56c4d15a8c7ab45e90dbe",
       "dependencies": [
         "jsr:@std/internal"
       ]
     },
-    "@std/fs@1.0.21": {
-      "integrity": "d720fe1056d78d43065a4d6e0eeb2b19f34adb8a0bc7caf3a4dbf1d4178252cd",
+    "@std/fs@1.0.22": {
+      "integrity": "de0f277a58a867147a8a01bc1b181d0dfa80bfddba8c9cf2bacd6747bcec9308",
       "dependencies": [
         "jsr:@std/internal",
         "jsr:@std/path"
@@ -88,8 +88,8 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/assert@^1.0.16",
-      "jsr:@std/fs@^1.0.21",
+      "jsr:@std/assert@^1.0.17",
+      "jsr:@std/fs@^1.0.22",
       "jsr:@std/path@^1.1.4",
       "npm:@types/chai@^5.2.3",
       "npm:@types/node@^25.0.10",

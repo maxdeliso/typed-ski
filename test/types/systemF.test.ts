@@ -15,6 +15,7 @@ import {
   emptySystemFContext,
   eraseSystemF,
   forall,
+  reduceLets,
   typecheckSystemF,
 } from "../../lib/types/systemF.ts";
 
@@ -296,6 +297,75 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect(term.kind).to.equal("non-terminal");
       expect(() => typecheckSystemF(emptySystemFContext(), term))
         .to.throw(/function argument type mismatch/);
+    });
+  });
+
+  await t.step("reduceLets", async (t) => {
+    const hasSystemFLet = (term: SystemFTerm): boolean => {
+      if (term.kind === "systemF-let") return true;
+      switch (term.kind) {
+        case "systemF-var":
+          return false;
+        case "systemF-abs":
+          return hasSystemFLet(term.body);
+        case "systemF-type-abs":
+          return hasSystemFLet(term.body);
+        case "systemF-type-app":
+          return hasSystemFLet(term.term);
+        case "non-terminal":
+          return hasSystemFLet(term.lft) || hasSystemFLet(term.rgt);
+        case "systemF-match":
+          return (
+            hasSystemFLet(term.scrutinee) ||
+            term.arms.some((a) => hasSystemFLet(a.body))
+          );
+        default:
+          return false;
+      }
+    };
+
+    await t.step("expands unannotated let to App(Abs(...), value)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      expect(term.kind).to.equal("systemF-let");
+
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(hasSystemFLet(reduced)).to.equal(false);
+      expect(reduced.kind).to.equal("non-terminal");
+      if (reduced.kind === "non-terminal") {
+        expect(reduced.lft.kind).to.equal("systemF-abs");
+        if (reduced.lft.kind === "systemF-abs") {
+          expect(reduced.lft.name).to.equal("x");
+          expect(reduced.lft.body.kind).to.equal("systemF-var");
+          if (reduced.lft.body.kind === "systemF-var") {
+            expect(reduced.lft.body.name).to.equal("x");
+          }
+        }
+        expect(reduced.rgt.kind).to.equal("systemF-var"); // literal 1
+      }
+
+      const [ty] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(ty)).to.match(/Nat/);
+    });
+
+    await t.step("expands nested lets and preserves type", () => {
+      const [_, term] = parseSystemF("let x = 1 in let y = 2 in x");
+      expect(term.kind).to.equal("systemF-let");
+
+      const reduced = reduceLets(emptySystemFContext(), term);
+      expect(hasSystemFLet(reduced)).to.equal(false);
+
+      const [tyOriginal] = typecheckSystemF(emptySystemFContext(), term);
+      const [tyReduced] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(tyReduced)).to.equal(unparseType(tyOriginal));
+      expect(unparseType(tyReduced)).to.match(/Nat/);
+    });
+
+    await t.step("preserves type through reduceLets (let x = 1 in x)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      const reduced = reduceLets(emptySystemFContext(), term);
+      const [tyOrig] = typecheckSystemF(emptySystemFContext(), term);
+      const [tyRed] = typecheckSystemF(emptySystemFContext(), reduced);
+      expect(unparseType(tyRed)).to.equal(unparseType(tyOrig));
     });
   });
 

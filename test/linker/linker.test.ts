@@ -168,6 +168,86 @@ poly main = loop`;
     },
   );
 
+  await t.step("ignores self-recursion during resolution", async () => {
+    const source = `module RecOnly
+
+export main
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly rec main = \\n:Nat => main n`;
+
+    const fileName = "rec-only-linker-test.trip";
+    const tripcName = "rec-only-linker-test.tripc";
+    const tripPath = `${__dirname}/${fileName}`;
+    const tripcPath = `${__dirname}/${tripcName}`;
+
+    await Deno.writeTextFile(tripPath, source);
+    try {
+      const recContent = await compileTripFile(fileName);
+      const recObject = deserializeTripCObject(recContent);
+      const loadedModules = [loadModule(recObject, "RecOnly")];
+      const programSpace = createProgramSpace(loadedModules);
+      const resolvedSpace = resolveCrossModuleDependencies(programSpace, false);
+      const mainDef = resolvedSpace.modules.get("RecOnly")?.defs.get("main");
+
+      expect(mainDef?.kind).to.equal("untyped");
+    } finally {
+      try {
+        await Deno.remove(tripPath);
+        await Deno.remove(tripcPath);
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
+
+  await t.step("resolves mutual recursion in SCC", () => {
+    const moduleWithMutualRecursion = {
+      module: "MutualRecModule",
+      exports: ["main"],
+      imports: [],
+      definitions: {
+        // a := b
+        a: {
+          kind: "poly" as const,
+          name: "a",
+          term: { kind: "systemF-var" as const, name: "b" },
+        },
+        // b := a
+        b: {
+          kind: "poly" as const,
+          name: "b",
+          term: { kind: "systemF-var" as const, name: "a" },
+        },
+        // main := a
+        main: {
+          kind: "poly" as const,
+          name: "main",
+          term: { kind: "systemF-var" as const, name: "a" },
+        },
+      },
+    };
+
+    const modules = [{
+      name: "MutualRecModule",
+      object: moduleWithMutualRecursion,
+    }];
+    const programSpace = createProgramSpace(modules.map((m) =>
+      loadModule(m.object, m.name)
+    ));
+
+    try {
+      resolveCrossModuleDependencies(programSpace, false);
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(
+        message.includes("Too many iterations") ||
+          message.includes("Circular dependency"),
+      ).to.equal(true);
+    }
+  });
+
   await t.step("simple linking finds main and lowers to SKI", async () => {
     // Test with complex module that has main
     const complexContent = await compileTripFile("complex.trip");

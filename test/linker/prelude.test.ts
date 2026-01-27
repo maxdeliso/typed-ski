@@ -1,8 +1,8 @@
 import { assertEquals, assertThrows } from "std/assert";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
+import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";

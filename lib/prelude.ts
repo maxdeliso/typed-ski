@@ -23,6 +23,13 @@ export pair
 export fst
 export snd
 export cond
+export not
+export and
+export or
+export pred
+export sub
+export lte
+export gte
 export readOne
 export writeOne
 export List
@@ -93,6 +100,29 @@ poly cond = #X =>
   \\t : X =>
   \\f : X =>
     b [X] t f
+
+poly not = \\b : Bool => cond [Bool] b false true
+
+poly and = \\a : Bool => \\b : Bool => cond [Bool] a b false
+
+poly or = \\a : Bool => \\b : Bool => cond [Bool] a true b
+
+poly pred = \\n : Nat =>
+  fst [Nat] [Nat]
+    ( n [#Y -> (Nat -> Nat -> Y) -> Y]
+        ( \\p : #Y -> (Nat -> Nat -> Y) -> Y =>
+            pair [Nat] [Nat]
+              (snd [Nat] [Nat] p)
+              (succ (snd [Nat] [Nat] p))
+        )
+        (pair [Nat] [Nat] zero zero)
+    )
+
+poly sub = \\a : Nat => \\b : Nat => b [Nat] pred a
+
+poly lte = \\a : Nat => \\b : Nat => isZero (sub a b)
+
+poly gte = \\a : Nat => \\b : Nat => lte b a
 
 poly nil = #A => #R => \\n : R => \\c : (A -> List -> R) => n
 

@@ -192,7 +192,7 @@ Deno.test("Parser Tests", async (t) => {
     await t.step("skips whitespace", () => {
       const src = "   a   ->    b   ";
       const state = createParserState(src);
-      const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+      const [lit, ty, _finalState] = parseArrowTypeNoApp(state);
       expect(lit).to.equal("a->b");
       expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
         .to.equal(true);

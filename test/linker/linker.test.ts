@@ -237,13 +237,16 @@ poly rec main = \\n:Nat => main n`;
       modules.map((m) => loadModule(m.object, m.name)),
     );
 
+    let caughtMessage: string | null = null;
     try {
       resolveCrossModuleDependencies(programSpace, false);
     } catch (error) {
-      const message = (error as Error).message;
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
       expect(
-        message.includes("Too many iterations") ||
-          message.includes("Circular dependency"),
+        caughtMessage!.includes("Too many iterations") ||
+          caughtMessage!.includes("Circular dependency"),
       ).to.equal(true);
     }
   });
@@ -282,24 +285,21 @@ poly rec main = \\n:Nat => main n`;
         loadModule(moduleWithMutualRecursion, "MutualRecModule"),
       ]);
 
-      let catchExecuted = false;
+      let caughtMessage: string | null = null;
       try {
         resolveCrossModuleDependencies(programSpace, false);
       } catch (error) {
-        catchExecuted = true;
-        const message = (error as Error).message;
+        caughtMessage = (error as Error).message;
+      } finally {
+        expect(caughtMessage).to.not.be.null;
         expect(
-          message.includes("Circular dependency") ||
-            message.includes("Too many iterations"),
+          caughtMessage!.includes("Circular dependency") ||
+            caughtMessage!.includes("Too many iterations"),
         ).to.equal(
           true,
-          `expected circular/iterations error, got: ${message}`,
+          `expected circular/iterations error, got: ${caughtMessage}`,
         );
       }
-      expect(catchExecuted).to.equal(
-        true,
-        "resolveCrossModuleDependencies must throw so the catch (and newDef/newHash path) is exercised",
-      );
     },
   );
 
@@ -342,6 +342,7 @@ poly rec main = \\n:Nat => main n`;
         modules.map((m) => loadModule(m.object, m.name)),
       );
 
+      let caughtMessage: string | null = null;
       try {
         const resolved = resolveCrossModuleDependencies(programSpace, false);
         const defA = resolved.modules.get("ModuleA")?.defs.get("a");
@@ -351,14 +352,17 @@ poly rec main = \\n:Nat => main n`;
         expect(defA!.kind).to.equal("untyped");
         expect(defB!.kind).to.equal("untyped");
       } catch (error) {
-        const message = (error as Error).message;
-        expect(
-          message.includes("Circular dependency") ||
-            message.includes("Too many iterations"),
-        ).to.equal(
-          true,
-          `cross-module mutual recursion threw with: ${message}`,
-        );
+        caughtMessage = (error as Error).message;
+      } finally {
+        if (caughtMessage !== null) {
+          expect(
+            caughtMessage.includes("Circular dependency") ||
+              caughtMessage.includes("Too many iterations"),
+          ).to.equal(
+            true,
+            `cross-module mutual recursion threw with: ${caughtMessage}`,
+          );
+        }
       }
     },
   );
@@ -369,7 +373,7 @@ poly rec main = \\n:Nat => main n`;
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
-    const result = await linkModules(modules, false);
+    const result = linkModules(modules, false);
 
     // Should find the main function and lower it to SKI
     expect(result).to.be.a("string");
@@ -382,7 +386,7 @@ poly rec main = \\n:Nat => main n`;
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
-    const result = await linkModules(modules, false);
+    const result = linkModules(modules, false);
 
     // Should produce a complex SKI expression
     expect(result).to.be.a("string");
@@ -415,14 +419,14 @@ poly rec main = \\n:Nat => main n`;
       { name: "Helper", object: moduleWithoutMain },
     ];
 
-    const result = await linkModules(modules, false);
+    const result = linkModules(modules, false);
 
     // Should find main in one of the modules and produce SKI
     expect(result).to.be.a("string");
     expect(result.length).to.be.greaterThan(0);
   });
 
-  await t.step("handles missing main function gracefully", async () => {
+  await t.step("handles missing main function gracefully", () => {
     // Create a module without main
     const moduleWithoutMain = {
       module: "NoMain",
@@ -439,11 +443,15 @@ poly rec main = \\n:Nat => main n`;
 
     const modules = [{ name: "NoMain", object: moduleWithoutMain }];
 
+    let caughtMessage: string | null = null;
     try {
-      await linkModules(modules, false);
+      linkModules(modules, false);
       expect.fail("Should have thrown an error for missing main");
     } catch (error) {
-      expect((error as Error).message).to.include("No 'main' function found");
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.include("No 'main' function found");
     }
   });
 
@@ -453,7 +461,7 @@ poly rec main = \\n:Nat => main n`;
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
-    const result = await linkModules(modules, false);
+    const result = linkModules(modules, false);
 
     // Should produce a valid SKI expression
     expect(result).to.be.a("string");
@@ -474,7 +482,7 @@ poly rec main = \\n:Nat => main n`;
       const complexObject = deserializeTripCObject(complexContent);
 
       const modules = [{ name: "Complex", object: complexObject }];
-      await linkModules(modules, true);
+      linkModules(modules, true);
 
       // Should have produced verbose output
       expect(errorMessages.length).to.be.greaterThan(0);
@@ -486,7 +494,7 @@ poly rec main = \\n:Nat => main n`;
     }
   });
 
-  await t.step("detects duplicate exports across modules", async () => {
+  await t.step("detects duplicate exports across modules", () => {
     const module1 = {
       module: "Module1",
       exports: ["main"],
@@ -518,12 +526,16 @@ poly rec main = \\n:Nat => main n`;
       { name: "Module2", object: module2 },
     ];
 
+    let caughtMessage: string | null = null;
     try {
-      await linkModules(modules, false);
+      linkModules(modules, false);
       expect.fail("Should have thrown an error for duplicate exports");
     } catch (error) {
-      expect((error as Error).message).to.include("Ambiguous export 'main'");
-      expect((error as Error).message).to.include("Module1, Module2");
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.include("Ambiguous export 'main'");
+      expect(caughtMessage!).to.include("Module1, Module2");
     }
   });
 
@@ -571,7 +583,7 @@ poly rec main = \\n:Nat => main n`;
     },
   );
 
-  await t.step("detects missing imported modules", async () => {
+  await t.step("detects missing imported modules", () => {
     const moduleWithMissingImport = {
       module: "ImportModule",
       exports: ["main"],
@@ -588,7 +600,7 @@ poly rec main = \\n:Nat => main n`;
     const modules = [{ name: "ImportModule", object: moduleWithMissingImport }];
 
     try {
-      await linkModules(modules, false);
+      linkModules(modules, false);
       expect.fail("Should have thrown an error for missing module");
     } catch (error) {
       expect((error as Error).message).to.include(
@@ -597,7 +609,7 @@ poly rec main = \\n:Nat => main n`;
     }
   });
 
-  await t.step("detects imports of non-exported symbols", async () => {
+  await t.step("detects imports of non-exported symbols", () => {
     const module1 = {
       module: "Module1",
       exports: ["exported"],
@@ -634,17 +646,21 @@ poly rec main = \\n:Nat => main n`;
       { name: "Module2", object: module2 },
     ];
 
+    let caughtMessage: string | null = null;
     try {
-      await linkModules(modules, false);
+      linkModules(modules, false);
       expect.fail("Should have thrown an error for non-exported import");
     } catch (error) {
-      expect((error as Error).message).to.include(
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.include(
         "'Module1.notExported' is not exported",
       );
     }
   });
 
-  await t.step("handles multiple main functions correctly", async () => {
+  await t.step("handles multiple main functions correctly", () => {
     const module1 = {
       module: "Module1",
       exports: ["main"],
@@ -677,7 +693,7 @@ poly rec main = \\n:Nat => main n`;
     ];
 
     try {
-      await linkModules(modules, false);
+      linkModules(modules, false);
       expect.fail("Should have thrown an error for multiple main functions");
     } catch (error) {
       // The error is now caught earlier as ambiguous exports
@@ -686,7 +702,7 @@ poly rec main = \\n:Nat => main n`;
     }
   });
 
-  await t.step("term substitution does not rename type binders", async () => {
+  await t.step("term substitution does not rename type binders", () => {
     // Test that term substitution doesn't rename type binders in systemF-type-abs and forall
     // This tests the fix for cross-namespace capture avoidance
 
@@ -732,7 +748,7 @@ poly rec main = \\n:Nat => main n`;
     const modules = [{ name: "TypeAbsModule", object: moduleWithTypeAbs }];
 
     try {
-      const result = await linkModules(modules, false);
+      const result = linkModules(modules, false);
       // Should successfully link without errors
       expect(result).to.be.a("string");
       expect(result.length).to.be.greaterThan(0);
@@ -743,7 +759,7 @@ poly rec main = \\n:Nat => main n`;
     }
   });
 
-  await t.step("type substitution correctly renames type binders", async () => {
+  await t.step("type substitution correctly renames type binders", () => {
     // Test that type substitution DOES rename type binders when needed
     // This ensures our fix only affects term substitution, not type substitution
 
@@ -784,19 +800,23 @@ poly rec main = \\n:Nat => main n`;
       object: moduleWithTypeSubstitution,
     }];
 
+    let caughtMessage: string | null = null;
     try {
-      const result = await linkModules(modules, false);
+      const result = linkModules(modules, false);
       // Should successfully link - type substitution should rename inner Y to avoid capture
       expect(result).to.be.a("string");
       expect(result.length).to.be.greaterThan(0);
     } catch (error) {
       // If it fails due to unresolved type 'X', that's expected since we're testing
       // that type substitution correctly handles type binders
-      expect((error as Error).message).to.include("Symbol 'X' is not defined");
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.include("Symbol 'X' is not defined");
     }
   });
 
-  await t.step("local mutual recursion resolves in one SCC", async () => {
+  await t.step("local mutual recursion resolves in one SCC", () => {
     // Test that local mutual recursion (f = g; g = f) resolves in one SCC to a fixpoint
 
     const moduleWithMutualRecursion = {
@@ -830,20 +850,25 @@ poly rec main = \\n:Nat => main n`;
       object: moduleWithMutualRecursion,
     }];
 
+    let caughtMessage: string | null = null;
     try {
-      const result = await linkModules(modules, false);
+      const result = linkModules(modules, false);
       // Should either resolve or detect circular dependency
       expect(result).to.be.a("string");
     } catch (error) {
       // If it fails, it should be a circular dependency error or too many iterations
-      const errorMsg = (error as Error).message;
-      expect(errorMsg).to.match(/Circular dependency|Too many iterations/);
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.match(
+        /Circular dependency|Too many iterations/,
+      );
     }
   });
 
   await t.step(
     "cross-module ambiguity error provides clear fix hints",
-    async () => {
+    () => {
       // Test that ambiguous exports provide helpful error messages with fix hints
 
       const module1 = {
@@ -891,19 +916,22 @@ poly rec main = \\n:Nat => main n`;
         { name: "Consumer", object: module3 },
       ];
 
+      let caughtMessage: string | null = null;
       try {
-        await linkModules(modules, false);
+        linkModules(modules, false);
         expect.fail("Should have thrown an error for ambiguous exports");
       } catch (error) {
-        const errorMsg = (error as Error).message;
-        expect(errorMsg).to.include("Ambiguous export 'util'");
-        expect(errorMsg).to.include("Utils1, Utils2");
-        expect(errorMsg).to.include("Use qualified imports");
+        caughtMessage = (error as Error).message;
+      } finally {
+        expect(caughtMessage).to.not.be.null;
+        expect(caughtMessage!).to.include("Ambiguous export 'util'");
+        expect(caughtMessage!).to.include("Utils1, Utils2");
+        expect(caughtMessage!).to.include("Use qualified imports");
       }
     },
   );
 
-  await t.step("unresolved symbols show term vs type distinction", async () => {
+  await t.step("unresolved symbols show term vs type distinction", () => {
     // Test that error messages clearly distinguish between term and type symbols
 
     const moduleWithUnresolved = {
@@ -929,7 +957,7 @@ poly rec main = \\n:Nat => main n`;
     }];
 
     try {
-      await linkModules(modules, false);
+      linkModules(modules, false);
       expect.fail("Should have thrown an error for unresolved symbols");
     } catch (error) {
       const errorMsg = (error as Error).message;
@@ -940,7 +968,7 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step(
     "deduplication prevents quadratic churn in iterative resolution",
-    async () => {
+    () => {
       // Test that the Set-based deduplication prevents quadratic behavior
       // This is more of a performance test - we can't easily measure the performance
       // but we can ensure it doesn't crash with many duplicate references
@@ -977,7 +1005,7 @@ poly rec main = \\n:Nat => main n`;
       };
 
       const modules = [{ name: "ManyRefsModule", object: moduleWithManyRefs }];
-      const result = await linkModules(modules, false);
+      const result = linkModules(modules, false);
 
       // Should resolve efficiently without hanging or crashing
       expect(result).to.be.a("string");
@@ -987,7 +1015,7 @@ poly rec main = \\n:Nat => main n`;
 
   await t.step(
     "type edges use programSpace.types.has() for robustness",
-    async () => {
+    () => {
       // Test that type edges correctly check programSpace.types.has() rather than module.defs.has()
       // This prevents type edges from pointing to terms when names are overloaded
 
@@ -1021,18 +1049,20 @@ poly rec main = \\n:Nat => main n`;
         object: moduleWithOverloadedNames,
       }];
 
+      let caughtMessage: string | null = null;
       try {
         // This should work correctly - type references should go to the type definition
         // and term references should go to the term definition
-        const result = await linkModules(modules, false);
+        const result = linkModules(modules, false);
         expect(result).to.be.a("string");
         expect(result.length).to.be.greaterThan(0);
       } catch (error) {
         // If it fails due to unresolved type 'X', that's expected since we're testing
         // that type edges correctly use programSpace.types.has()
-        expect((error as Error).message).to.include(
-          "Symbol 'X' is not defined",
-        );
+        caughtMessage = (error as Error).message;
+      } finally {
+        expect(caughtMessage).to.not.be.null;
+        expect(caughtMessage!).to.include("Symbol 'X' is not defined");
       }
     },
   );

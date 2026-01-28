@@ -10,13 +10,23 @@
  */
 import type { BaseType } from "../../types/types.ts";
 import type { TripLangValueType } from "../trip.ts";
-import { CompilationError } from "./compilation.ts";
 import { parseNatLiteralIdentifier } from "../../consts/nat.ts";
+
+/**
+ * Memoization cache for external references computation.
+ * Uses WeakMap to avoid memory leaks - entries are garbage collected when AST nodes are no longer referenced.
+ */
+const refCache = new WeakMap<
+  TripLangValueType,
+  [Map<string, TripLangValueType>, Map<string, BaseType>]
+>();
 
 /**
  * Collects all free (external) term and type references appearing inside a TripLang value.
  *
  * A reference is considered external if it is not bound by any enclosing abstraction in the value.
+ *
+ * Uses memoization to avoid recomputing references for the same AST nodes.
  *
  * @param td the TripLang value to analyze (System F term, typed/untyped lambda, SKI expression, or type)
  * @returns a pair of Maps: [freeTermRefs, freeTypeRefs], each mapping the referenced name to its node
@@ -25,126 +35,177 @@ export function externalReferences(td: TripLangValueType): [
   Map<string, TripLangValueType>,
   Map<string, BaseType>,
 ] {
+  // Check cache first
+  const cached = refCache.get(td);
+  if (cached) {
+    return cached;
+  }
+
   const externalTermRefs = new Map<string, TripLangValueType>();
   const externalTypeRefs = new Map<string, BaseType>();
   const absBindMap = new Map<string, TripLangValueType>();
-  const defStack: TripLangValueType[] = [td];
 
-  while (defStack.length) {
-    const current = defStack.pop();
+  // Iterative collector with tail-call optimization for App chains
+  collectIterative(td, externalTermRefs, externalTypeRefs, absBindMap);
 
-    if (current === undefined) {
-      throw new CompilationError(
-        "Underflow in external references stack",
-        "resolve",
-        { stack: defStack },
-      );
-    }
+  const result: [Map<string, TripLangValueType>, Map<string, BaseType>] = [
+    externalTermRefs,
+    externalTypeRefs,
+  ];
 
-    switch (current.kind) {
-      case "systemF-var": {
-        const literalValue = parseNatLiteralIdentifier(current.name);
-        if (literalValue !== null) {
+  // Cache result for future lookups
+  refCache.set(td, result);
+
+  return result;
+}
+
+/**
+ * Iterative collector to prevent stack overflow on deep ASTs (like lists).
+ * Uses tail-call optimization for App chains to handle lists efficiently.
+ */
+function collectIterative(
+  root: TripLangValueType,
+  externalTermRefs: Map<string, TripLangValueType>,
+  externalTypeRefs: Map<string, BaseType>,
+  _absBindMap: Map<string, TripLangValueType>,
+): void {
+  // Stack stores nodes to visit and their surrounding lexical scope.
+  // Optimization: For App chains (lists), we don't change scope, so we share the Set reference.
+  const stack: {
+    term: TripLangValueType;
+    bound: Map<string, TripLangValueType>;
+  }[] = [
+    { term: root, bound: new Map() },
+  ];
+
+  while (stack.length > 0) {
+    let { term, bound } = stack.pop()!;
+
+    // "Tail Call" loop: Flatten the spine of Applications to avoid stack growth
+    // This turns list traversal from O(N) stack to O(1) stack.
+    while (true) {
+      switch (term.kind) {
+        case "systemF-var": {
+          const literalValue = parseNatLiteralIdentifier(term.name);
+          if (literalValue !== null) {
+            break;
+          }
+          const external = !bound.has(term.name);
+          if (external) {
+            externalTermRefs.set(term.name, term);
+          }
           break;
         }
-        const external = !absBindMap.has(current.name);
 
-        if (external) {
-          externalTermRefs.set(current.name, current);
+        case "lambda-var": {
+          const external = !bound.has(term.name);
+          if (external) {
+            externalTermRefs.set(term.name, term);
+          }
+          break;
         }
 
-        break;
-      }
-
-      case "lambda-var": {
-        const external = !absBindMap.has(current.name);
-
-        if (external) {
-          externalTermRefs.set(current.name, current);
+        case "type-var": {
+          const external = !bound.has(term.typeName);
+          if (external) {
+            externalTypeRefs.set(term.typeName, term);
+          }
+          break;
         }
 
-        break;
-      }
-
-      case "type-var": {
-        const external = !absBindMap.has(current.typeName);
-
-        if (external) {
-          externalTypeRefs.set(current.typeName, current);
+        case "non-terminal": {
+          // STRUCTURE: App(fn, arg) or (lft rgt)
+          // For lists: App(App(Cons, Head), Tail) -> Tail is 'rgt'.
+          // We push 'lft' to the stack and loop on 'rgt' to linearize the list.
+          stack.push({ term: term.lft, bound }); // Push function/left side
+          term = term.rgt; // Loop on argument/right side (tail)
+          continue; // Jump back to start of while(true) with new 'term'
         }
 
-        break;
-      }
-      case "type-app": {
-        defStack.push(current.fn);
-        defStack.push(current.arg);
-        break;
-      }
-
-      case "lambda-abs": {
-        defStack.push(current.body);
-        absBindMap.set(current.name, current.body);
-        break;
-      }
-
-      case "systemF-abs": {
-        defStack.push(current.typeAnnotation);
-        defStack.push(current.body);
-        absBindMap.set(current.name, current.body);
-        break;
-      }
-
-      case "systemF-type-abs": {
-        defStack.push(current.body);
-        absBindMap.set(current.typeVar, current.body);
-        break;
-      }
-
-      case "typed-lambda-abstraction": {
-        defStack.push(current.ty);
-        defStack.push(current.body);
-        absBindMap.set(current.varName, current.body);
-        break;
-      }
-
-      case "forall":
-        defStack.push(current.body);
-        absBindMap.set(current.typeVar, current.body);
-        break;
-
-      case "systemF-type-app": {
-        defStack.push(current.term);
-        defStack.push(current.typeArg);
-        break;
-      }
-      case "systemF-match": {
-        defStack.push(current.scrutinee);
-        defStack.push(current.returnType);
-        for (const arm of current.arms) {
-          arm.params.forEach((param) => absBindMap.set(param, arm.body));
-          defStack.push(arm.body);
+        case "type-app": {
+          stack.push({ term: term.fn, bound });
+          term = term.arg;
+          continue;
         }
-        break;
-      }
 
-      case "systemF-let": {
-        defStack.push(current.value);
-        defStack.push(current.body);
-        absBindMap.set(current.name, current.body);
-        break;
-      }
+        case "systemF-abs": {
+          // Abs(name, type, body) -> New Scope
+          const newBound = new Map(bound);
+          newBound.set(term.name, term.body);
+          // Can't loop easily because bound changed; push and break.
+          stack.push({ term: term.typeAnnotation, bound });
+          stack.push({ term: term.body, bound: newBound });
+          break;
+        }
 
-      case "terminal":
-        // ignore - no bindings possible
-        break;
+        case "lambda-abs": {
+          const newBound = new Map(bound);
+          newBound.set(term.name, term.body);
+          stack.push({ term: term.body, bound: newBound });
+          break;
+        }
 
-      case "non-terminal": {
-        defStack.push(current.lft);
-        defStack.push(current.rgt);
-        break;
+        case "typed-lambda-abstraction": {
+          const newBound = new Map(bound);
+          newBound.set(term.varName, term.body);
+          stack.push({ term: term.ty, bound });
+          stack.push({ term: term.body, bound: newBound });
+          break;
+        }
+
+        case "systemF-let": {
+          // Let(name, value, body)
+          // 1. Visit value (current scope)
+          stack.push({ term: term.value, bound });
+
+          // 2. Visit body (new scope)
+          const newBound = new Map(bound);
+          newBound.set(term.name, term.body);
+          stack.push({ term: term.body, bound: newBound });
+          break;
+        }
+
+        case "systemF-match": {
+          stack.push({ term: term.scrutinee, bound });
+          stack.push({ term: term.returnType, bound });
+          for (const arm of term.arms) {
+            const armBound = new Map(bound);
+            for (const param of arm.params) {
+              armBound.set(param, arm.body);
+            }
+            stack.push({ term: arm.body, bound: armBound });
+          }
+          break;
+        }
+
+        case "systemF-type-abs": {
+          const newBound = new Map(bound);
+          newBound.set(term.typeVar, term.body);
+          term = term.body; // Types don't shadow terms, pass through
+          bound = newBound;
+          continue;
+        }
+
+        case "systemF-type-app": {
+          stack.push({ term: term.term, bound });
+          term = term.typeArg;
+          continue;
+        }
+
+        case "forall": {
+          const newBound = new Map(bound);
+          newBound.set(term.typeVar, term.body);
+          term = term.body;
+          bound = newBound;
+          continue;
+        }
+
+        case "terminal":
+          // ignore - no bindings possible
+          break;
       }
+      // If we didn't 'continue', we are done with this node.
+      break;
     }
   }
-
-  return [externalTermRefs, externalTypeRefs];
 }

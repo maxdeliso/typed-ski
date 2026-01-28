@@ -9,6 +9,9 @@
  * @module
  */
 import type { BaseType } from "../../types/types.ts";
+import type { TypedLambda } from "../../types/typedLambda.ts";
+import type { UntypedLambda } from "../../terms/lambda.ts";
+import type { SystemFTerm } from "../../terms/systemF.ts";
 import type {
   SymbolTable,
   TripLangProgram,
@@ -30,72 +33,137 @@ import { isNatLiteralIdentifier, NAT_TYPE_NAME } from "../../consts/nat.ts";
  */
 
 /**
- * Computes free term variables in a TripLang value type
+ * Global cache for free variables to avoid O(N^2) behavior in linker.
+ */
+const freeVarCache = new WeakMap<TripLangValueType, Set<string>>();
+
+/**
+ * Computes free term variables in a TripLang value type.
+ * Uses iterative stack-based collector with tail-call optimization for App chains.
+ * Prevents stack overflow on deep structures like lists.
+ * Results are cached to avoid repeated traversals of the same AST nodes.
  */
 export function freeTermVars(t: TripLangValueType): Set<string> {
-  const free = new Set<string>();
+  // Check cache first
+  const cached = freeVarCache.get(t);
+  if (cached) return cached;
 
-  function collect(t: TripLangValueType, bound: Set<string>) {
-    switch (t.kind) {
-      case "lambda-abs":
-        collect(t.body, new Set([...bound, t.name]));
-        break;
-      case "systemF-abs":
-        collect(t.typeAnnotation, bound);
-        collect(t.body, new Set([...bound, t.name]));
-        break;
-      case "systemF-type-abs":
-        collect(t.body, new Set([...bound, t.typeVar]));
-        break;
-      case "typed-lambda-abstraction":
-        collect(t.ty, bound);
-        collect(t.body, new Set([...bound, t.varName]));
-        break;
-      case "forall":
-        collect(t.body, new Set([...bound, t.typeVar]));
-        break;
-      case "systemF-type-app":
-        collect(t.term, bound);
-        collect(t.typeArg, bound);
-        break;
-      case "systemF-match": {
-        collect(t.scrutinee, bound);
-        collect(t.returnType, bound);
-        for (const arm of t.arms) {
-          collect(arm.body, new Set([...bound, ...arm.params]));
+  const result = new Set<string>();
+
+  // Iterative stack
+  const stack: { term: TripLangValueType; bound: Set<string> }[] = [
+    { term: t, bound: new Set() },
+  ];
+
+  while (stack.length > 0) {
+    let { term, bound } = stack.pop()!;
+
+    // Tail-call optimization loop for App chains
+    while (true) {
+      switch (term.kind) {
+        case "systemF-var":
+          if (!isNatLiteralIdentifier(term.name) && !bound.has(term.name)) {
+            result.add(term.name);
+          }
+          break;
+
+        case "lambda-var":
+          if (!bound.has(term.name)) {
+            result.add(term.name);
+          }
+          break;
+
+        case "non-terminal": {
+          // Tail optimize: push left, loop on right (list tail)
+          stack.push({ term: term.lft, bound });
+          term = term.rgt;
+          continue;
         }
-        break;
-      }
-      case "systemF-let":
-        collect(t.value, bound);
-        collect(t.body, new Set([...bound, t.name]));
-        break;
-      case "type-app":
-        collect(t.fn, bound);
-        collect(t.arg, bound);
-        break;
-      case "non-terminal":
-        collect(t.lft, bound);
-        collect(t.rgt, bound);
-        break;
-      case "systemF-var":
-        if (isNatLiteralIdentifier(t.name)) {
+
+        case "systemF-abs": {
+          const newBound = new Set(bound);
+          newBound.add(term.name);
+          stack.push({ term: term.typeAnnotation, bound });
+          stack.push({ term: term.body, bound: newBound });
           break;
         }
-      // fall through
-      case "lambda-var":
-        if (!bound.has(t.name)) {
-          free.add(t.name);
+
+        case "lambda-abs": {
+          const newBound = new Set(bound);
+          newBound.add(term.name);
+          stack.push({ term: term.body, bound: newBound });
+          break;
         }
-        break;
-      case "type-var":
-      case "terminal":
-        break;
+
+        case "typed-lambda-abstraction": {
+          const newBound = new Set(bound);
+          newBound.add(term.varName);
+          stack.push({ term: term.ty, bound });
+          stack.push({ term: term.body, bound: newBound });
+          break;
+        }
+
+        case "systemF-let": {
+          stack.push({ term: term.value, bound });
+          const newBound = new Set(bound);
+          newBound.add(term.name);
+          stack.push({ term: term.body, bound: newBound });
+          break;
+        }
+
+        case "systemF-match": {
+          stack.push({ term: term.scrutinee, bound });
+          stack.push({ term: term.returnType, bound });
+          for (const arm of term.arms) {
+            const armBound = new Set(bound);
+            for (const param of arm.params) {
+              armBound.add(param);
+            }
+            stack.push({ term: arm.body, bound: armBound });
+          }
+          break;
+        }
+
+        case "systemF-type-app": {
+          stack.push({ term: term.term, bound });
+          term = term.typeArg;
+          continue;
+        }
+
+        case "systemF-type-abs": {
+          const newBound = new Set(bound);
+          newBound.add(term.typeVar);
+          term = term.body;
+          bound = newBound;
+          continue;
+        }
+
+        case "forall": {
+          const newBound = new Set(bound);
+          newBound.add(term.typeVar);
+          term = term.body;
+          bound = newBound;
+          continue;
+        }
+
+        case "type-app": {
+          stack.push({ term: term.fn, bound });
+          term = term.arg;
+          continue;
+        }
+
+        case "type-var":
+        case "terminal":
+          break;
+      }
+      // If we didn't 'continue', we are done with this node.
+      break;
     }
   }
 
-  collect(t, new Set());
-  return free;
+  // Cache result before returning
+  freeVarCache.set(t, result);
+  return result;
 }
 
 function usesSystemFNatLiteral(term: TripLangValueType): boolean {
@@ -178,53 +246,62 @@ function ensureNatAvailabilityIfNeeded(
 /**
  * Computes free type variables in a TripLang value type
  */
+/**
+ * Computes free type variables in a TripLang value type.
+ * Uses mutable accumulator pattern to avoid quadratic Set copying.
+ */
 export function freeTypeVars(t: TripLangValueType): Set<string> {
   const free = new Set<string>();
 
-  function collect(t: TripLangValueType, bound: Set<string>) {
+  function collectFree(t: TripLangValueType, bound: Set<string>) {
     switch (t.kind) {
       case "lambda-abs":
-        collect(t.body, bound);
+        collectFree(t.body, bound);
         break;
       case "systemF-abs":
-        collect(t.typeAnnotation, bound);
-        collect(t.body, bound);
+        collectFree(t.typeAnnotation, bound);
+        collectFree(t.body, bound);
         break;
       case "systemF-type-abs":
-        collect(t.body, new Set([...bound, t.typeVar]));
+        bound.add(t.typeVar);
+        collectFree(t.body, bound);
+        bound.delete(t.typeVar);
         break;
       case "typed-lambda-abstraction":
-        collect(t.ty, bound);
-        collect(t.body, bound);
+        collectFree(t.ty, bound);
+        collectFree(t.body, bound);
         break;
       case "forall":
-        collect(t.body, new Set([...bound, t.typeVar]));
+        bound.add(t.typeVar);
+        collectFree(t.body, bound);
+        bound.delete(t.typeVar);
         break;
       case "systemF-type-app":
-        collect(t.term, bound);
-        collect(t.typeArg, bound);
+        collectFree(t.term, bound);
+        collectFree(t.typeArg, bound);
         break;
       case "systemF-match":
-        collect(t.scrutinee, bound);
-        collect(t.returnType, bound);
+        collectFree(t.scrutinee, bound);
+        collectFree(t.returnType, bound);
         for (const arm of t.arms) {
-          collect(arm.body, new Set([...bound, ...arm.params]));
+          // Note: arm.params are term variables, not type variables, so we don't add them to bound
+          collectFree(arm.body, bound);
         }
         break;
       case "systemF-let":
-        collect(t.value, bound);
-        collect(t.body, bound);
+        collectFree(t.value, bound);
+        collectFree(t.body, bound);
         break;
       case "non-terminal":
-        collect(t.lft, bound);
-        collect(t.rgt, bound);
+        collectFree(t.lft, bound);
+        collectFree(t.rgt, bound);
         break;
       case "systemF-var":
       case "lambda-var":
         break;
       case "type-app":
-        collect(t.fn, bound);
-        collect(t.arg, bound);
+        collectFree(t.fn, bound);
+        collectFree(t.arg, bound);
         break;
       case "type-var":
         if (!bound.has(t.typeName)) {
@@ -236,7 +313,7 @@ export function freeTypeVars(t: TripLangValueType): Set<string> {
     }
   }
 
-  collect(t, new Set());
+  collectFree(t, new Set());
   return free;
 }
 
@@ -491,6 +568,430 @@ export function alphaRenameTypeBinder<T extends TripLangValueType>(
         ? ({ ...term, typeName: newName } as T)
         : term;
     default:
+      return term;
+  }
+}
+
+/**
+ * Batched version of substituteHygienic.
+ * Substitutes multiple variables in one pass.
+ * Preserves object identity if no changes are made (crucial for performance).
+ *
+ * @param replacementFVs Precomputed union of free variables from all replacements.
+ *                        This allows O(1) capture checks instead of O(n) where n is number of replacements.
+ */
+export function substituteTermHygienicBatch(
+  term: TripLangValueType,
+  substitutions: Map<string, TripLangValueType>,
+  replacementFVs: Set<string>,
+  bound: Set<string> = new Set(),
+): TripLangValueType {
+  // Optimization: If map is empty, no work to do
+  if (substitutions.size === 0) return term;
+
+  switch (term.kind) {
+    case "systemF-var":
+    case "lambda-var": {
+      // Don't substitute nat literal identifiers - they're special placeholders
+      if (!isNatLiteralIdentifier(term.name) && !bound.has(term.name)) {
+        const sub = substitutions.get(term.name);
+        if (sub) return sub;
+      }
+      return term;
+    }
+
+    case "non-terminal": {
+      const lft = substituteTermHygienicBatch(
+        term.lft,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      const rgt = substituteTermHygienicBatch(
+        term.rgt,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      // Preserve identity if unchanged
+      if (lft === term.lft && rgt === term.rgt) return term;
+      return { ...term, lft, rgt } as TripLangValueType;
+    }
+
+    case "systemF-abs": {
+      // FAST CAPTURE CHECK: Use precomputed replacementFVs
+      // If the binder name is present in ANY of the free variables of the replacements,
+      // we must rename it to avoid capture.
+      let bind = term.name;
+      let currentTerm = term;
+      if (replacementFVs.has(bind)) {
+        // Generate fresh name
+        const used = new Set([...replacementFVs, ...bound]);
+        let suffix = 1;
+        let newName = `${bind}_${suffix}`;
+        while (used.has(newName)) {
+          suffix++;
+          newName = `${bind}_${suffix}`;
+        }
+        currentTerm = alphaRenameTermBinder(
+          currentTerm,
+          bind,
+          newName,
+        ) as typeof term;
+        bind = newName;
+      }
+
+      const newBound = new Set(bound);
+      newBound.add(bind);
+
+      // Remove shadowed var from substitutions for the body
+      let newSubs = substitutions;
+      if (substitutions.has(bind)) {
+        newSubs = new Map(substitutions);
+        newSubs.delete(bind);
+      }
+
+      const typeAnnotation = substituteTermHygienicBatch(
+        currentTerm.typeAnnotation,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      const body = substituteTermHygienicBatch(
+        currentTerm.body,
+        newSubs,
+        replacementFVs,
+        newBound,
+      );
+
+      // Preserve identity if unchanged
+      if (
+        typeAnnotation === term.typeAnnotation &&
+        body === term.body &&
+        bind === term.name
+      ) {
+        return term;
+      }
+
+      return {
+        ...currentTerm,
+        name: bind,
+        typeAnnotation,
+        body,
+      } as TripLangValueType;
+    }
+
+    case "lambda-abs": {
+      // FAST CAPTURE CHECK
+      let bind = term.name;
+      let currentTerm = term;
+      if (replacementFVs.has(bind)) {
+        const used = new Set([...replacementFVs, ...bound]);
+        let suffix = 1;
+        let newName = `${bind}_${suffix}`;
+        while (used.has(newName)) {
+          suffix++;
+          newName = `${bind}_${suffix}`;
+        }
+        currentTerm = alphaRenameTermBinder(
+          currentTerm,
+          bind,
+          newName,
+        ) as typeof term;
+        bind = newName;
+      }
+
+      const newBound = new Set(bound);
+      newBound.add(bind);
+      let newSubs = substitutions;
+      if (substitutions.has(bind)) {
+        newSubs = new Map(substitutions);
+        newSubs.delete(bind);
+      }
+
+      const body = substituteTermHygienicBatch(
+        currentTerm.body,
+        newSubs,
+        replacementFVs,
+        newBound,
+      );
+
+      if (body === term.body && bind === term.name) return term;
+
+      return {
+        ...currentTerm,
+        name: bind,
+        body,
+      } as TripLangValueType;
+    }
+
+    case "typed-lambda-abstraction": {
+      // FAST CAPTURE CHECK
+      let bind = term.varName;
+      let currentTerm = term;
+      if (replacementFVs.has(bind)) {
+        const used = new Set([...replacementFVs, ...bound]);
+        let suffix = 1;
+        let newName = `${bind}_${suffix}`;
+        while (used.has(newName)) {
+          suffix++;
+          newName = `${bind}_${suffix}`;
+        }
+        currentTerm = alphaRenameTermBinder(
+          currentTerm,
+          bind,
+          newName,
+        ) as typeof term;
+        bind = newName;
+      }
+
+      const newBound = new Set(bound);
+      newBound.add(bind);
+      let newSubs = substitutions;
+      if (substitutions.has(bind)) {
+        newSubs = new Map(substitutions);
+        newSubs.delete(bind);
+      }
+
+      const ty = substituteTermHygienicBatch(
+        currentTerm.ty,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      const body = substituteTermHygienicBatch(
+        currentTerm.body,
+        newSubs,
+        replacementFVs,
+        newBound,
+      );
+
+      if (ty === term.ty && body === term.body && bind === term.varName) {
+        return term;
+      }
+
+      return {
+        ...currentTerm,
+        varName: bind,
+        ty: ty as BaseType,
+        body: body as TypedLambda,
+      } as TripLangValueType;
+    }
+
+    case "systemF-let": {
+      // Value is in current scope
+      const value = substituteTermHygienicBatch(
+        term.value,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+
+      // Body introduces binder - FAST CAPTURE CHECK
+      let bind = term.name;
+      let currentTerm = term;
+      if (replacementFVs.has(bind)) {
+        const used = new Set([...replacementFVs, ...bound]);
+        let suffix = 1;
+        let newName = `${bind}_${suffix}`;
+        while (used.has(newName)) {
+          suffix++;
+          newName = `${bind}_${suffix}`;
+        }
+        currentTerm = alphaRenameTermBinder(
+          currentTerm,
+          bind,
+          newName,
+        ) as typeof term;
+        bind = newName;
+      }
+
+      const newBound = new Set(bound);
+      newBound.add(bind);
+      let newSubs = substitutions;
+      if (substitutions.has(bind)) {
+        newSubs = new Map(substitutions);
+        newSubs.delete(bind);
+      }
+
+      const body = substituteTermHygienicBatch(
+        currentTerm.body,
+        newSubs,
+        replacementFVs,
+        newBound,
+      );
+
+      if (value === term.value && body === term.body && bind === term.name) {
+        return term;
+      }
+
+      return {
+        ...currentTerm,
+        name: bind,
+        value,
+        body,
+      } as TripLangValueType;
+    }
+
+    case "systemF-match": {
+      const scrutinee = substituteTermHygienicBatch(
+        term.scrutinee,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      const returnType = substituteTermHygienicBatch(
+        term.returnType,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+
+      let armsChanged = false;
+      const newArms = term.arms.map((arm) => {
+        const armBound = new Set(bound);
+        let armSubs = substitutions;
+        const params = [...arm.params];
+
+        // Check for capture and rename if needed using precomputed replacementFVs
+        const avoid = new Set([...replacementFVs, ...bound, ...params]);
+        let renamed = false;
+        for (let i = 0; i < params.length; i++) {
+          const param = params[i];
+          if (replacementFVs.has(param)) {
+            let suffix = 1;
+            let newName = `${param}_${suffix}`;
+            while (avoid.has(newName)) {
+              suffix++;
+              newName = `${param}_${suffix}`;
+            }
+            // Rename in body
+            const renamedBody = alphaRenameTermBinder(arm.body, param, newName);
+            params[i] = newName;
+            armBound.add(newName);
+            if (!renamed) {
+              armSubs = new Map(armSubs);
+              renamed = true;
+            }
+            armSubs.delete(newName);
+            avoid.add(newName);
+
+            const body = substituteTermHygienicBatch(
+              renamedBody,
+              armSubs,
+              replacementFVs,
+              armBound,
+            );
+            if (body !== arm.body) armsChanged = true;
+            return { ...arm, params, body };
+          } else {
+            armBound.add(param);
+            if (armSubs.has(param)) {
+              if (!renamed) {
+                armSubs = new Map(armSubs);
+                renamed = true;
+              }
+              armSubs.delete(param);
+            }
+          }
+        }
+
+        if (!renamed) {
+          const body = substituteTermHygienicBatch(
+            arm.body,
+            armSubs,
+            replacementFVs,
+            armBound,
+          );
+          if (body !== arm.body) armsChanged = true;
+          return { ...arm, body };
+        }
+
+        return arm;
+      });
+
+      if (
+        scrutinee === term.scrutinee && returnType === term.returnType &&
+        !armsChanged
+      ) {
+        return term;
+      }
+      return {
+        ...term,
+        scrutinee,
+        returnType,
+        arms: newArms,
+      } as TripLangValueType;
+    }
+
+    case "systemF-type-app": {
+      const termPart = substituteTermHygienicBatch(
+        term.term,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      const typeArg = substituteTermHygienicBatch(
+        term.typeArg,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (termPart === term.term && typeArg === term.typeArg) return term;
+      return {
+        ...term,
+        term: termPart as SystemFTerm,
+        typeArg: typeArg as BaseType,
+      } as TripLangValueType;
+    }
+
+    case "systemF-type-abs": {
+      // Type binders don't shadow term variables
+      const body = substituteTermHygienicBatch(
+        term.body,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (body === term.body) return term;
+      return { ...term, body: body as SystemFTerm } as TripLangValueType;
+    }
+
+    case "forall": {
+      // Type binders don't shadow term variables
+      const body = substituteTermHygienicBatch(
+        term.body,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (body === term.body) return term;
+      return { ...term, body: body as BaseType } as TripLangValueType;
+    }
+
+    case "type-app": {
+      const fn = substituteTermHygienicBatch(
+        term.fn,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      const arg = substituteTermHygienicBatch(
+        term.arg,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (fn === term.fn && arg === term.arg) return term;
+      return {
+        ...term,
+        fn: fn as BaseType,
+        arg: arg as BaseType,
+      } as TripLangValueType;
+    }
+
+    case "type-var":
+    case "terminal":
       return term;
   }
 }
@@ -1174,6 +1675,88 @@ export function substituteTripLangTermDirect(
           substitutionName,
           termDefinitionValue,
         ),
+      };
+    }
+    case "combinator":
+    case "type":
+    case "data":
+    case "module":
+    case "import":
+    case "export":
+      return current;
+  }
+}
+
+/**
+ * Batched version of substituteTripLangTermDirect.
+ * Performs multiple term substitutions in a single pass.
+ */
+export function substituteTripLangTermDirectBatch(
+  current: TripLangTerm,
+  substitutions: Map<string, TripLangTerm>,
+): TripLangTerm {
+  if (substitutions.size === 0) return current;
+
+  const currentDefinitionValue = extractDefinitionValue(current);
+  if (!currentDefinitionValue) {
+    return current;
+  }
+
+  // Build a map of name -> value for the batch substitution
+  const valueSubstitutions = new Map<string, TripLangValueType>();
+  for (const [name, term] of substitutions) {
+    const value = extractDefinitionValue(term);
+    if (value) {
+      valueSubstitutions.set(name, value);
+    }
+  }
+
+  if (valueSubstitutions.size === 0) return current;
+
+  // OPTIMIZATION: Precompute union of free variables for all replacements.
+  // This allows substituteTermHygienicBatch to check for capture in O(1) time
+  // per node instead of iterating all substitutions.
+  const combinedFVs = new Set<string>();
+  for (const val of valueSubstitutions.values()) {
+    const fvs = freeTermVars(val); // This is now CACHED
+    for (const fv of fvs) combinedFVs.add(fv);
+  }
+
+  switch (current.kind) {
+    case "poly": {
+      const newTerm = substituteTermHygienicBatch(
+        current.term,
+        valueSubstitutions,
+        combinedFVs,
+      );
+      if (newTerm === current.term) return current;
+      return {
+        ...current,
+        term: newTerm as SystemFTerm,
+      };
+    }
+    case "typed": {
+      const newTerm = substituteTermHygienicBatch(
+        current.term,
+        valueSubstitutions,
+        combinedFVs,
+      );
+      if (newTerm === current.term) return current;
+      return {
+        ...current,
+        term: newTerm as TypedLambda,
+      };
+    }
+    case "untyped": {
+      const newTerm = substituteTermHygienicBatch(
+        current.term,
+        valueSubstitutions,
+        combinedFVs,
+      );
+      if (newTerm === current.term) return current;
+      return {
+        ...current,
+        term: newTerm as UntypedLambda,
       };
     }
     case "combinator":

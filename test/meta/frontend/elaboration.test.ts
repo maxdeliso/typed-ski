@@ -21,6 +21,7 @@ Deno.test("elaborateSystemF", async (t) => {
       types: new Map(),
       data: new Map(),
       constructors: new Map(),
+      imports: new Set(),
     };
 
     for (const { name, type } of types) {
@@ -244,6 +245,7 @@ Deno.test("elaborateSystemF", async (t) => {
         types: new Map(),
         data: new Map(),
         constructors: new Map(),
+        imports: new Set(),
       };
 
       for (const dataDef of dataDefs) {
@@ -401,6 +403,7 @@ Deno.test("elaborateSystemF", async (t) => {
               },
             ],
           ]),
+          imports: new Set(),
         };
 
         const match = createMatch(

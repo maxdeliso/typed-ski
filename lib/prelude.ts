@@ -22,7 +22,7 @@ export eq
 export pair
 export fst
 export snd
-export cond
+export if
 export not
 export and
 export or
@@ -47,11 +47,15 @@ export Ok
 export ParseError
 export MkParseError
 export Parser
+export Maybe
+export Some
+export None
 export append
 export map
 export foldl
 export takeWhile
 export dropWhile
+export span
 
 type Nat = #X -> (X -> X) -> X -> X
 type Bool = #B -> B -> B -> B
@@ -59,6 +63,7 @@ type List = #A -> #R -> R -> (A -> R -> R) -> R
 data Pair A B = MkPair A B
 data Result E T = Err E | Ok T
 data ParseError = MkParseError Nat (List Nat)
+data Maybe A = None | Some A
 type Parser = #A -> List Nat -> Result ParseError (Pair A (List Nat))
 
 poly id : #a->a->a = #a => \\x:a => x
@@ -95,17 +100,16 @@ poly fst = #A => #B => \\p : #Y -> (A->B->Y)->Y =>
 poly snd = #A => #B => \\p : #Y -> (A->B->Y)->Y =>
   p [B] (\\x:A => \\y:B => y)
 
-poly cond = #X =>
-  \\b : Bool =>
-  \\t : X =>
-  \\f : X =>
-    b [X] t f
+poly not = \\b : Bool =>
+  b [Bool] false true
 
-poly not = \\b : Bool => cond [Bool] b false true
+poly and = \\a : Bool => \\b : Bool =>
+  a [Bool] b false
 
-poly and = \\a : Bool => \\b : Bool => cond [Bool] a b false
+poly or = \\a : Bool => \\b : Bool =>
+  a [Bool] true b
 
-poly or = \\a : Bool => \\b : Bool => cond [Bool] a true b
+poly if = #A => \\b : Bool => \\t : Nat -> A => \\f : Nat -> A => b [Nat -> A] t f 0
 
 poly pred = \\n : Nat =>
   fst [Nat] [Nat]
@@ -151,19 +155,29 @@ poly rec foldl = #A => #B => \\f : B -> A -> B => \\acc : B => \\l : List =>
   matchList [A] [B] l acc
     (\\h : A => \\t : List => foldl [A] [B] f (f acc h) t)
 
-poly rec takeWhile = #A => \\p : A -> Bool => \\l : List =>
-  matchList [A] [List] l (nil [A])
-    (\\h : A => \\t : List =>
-      cond [List] (p h)
-        (cons [A] h (takeWhile [A] p t))
-        (nil [A]))
+poly rec takeWhile = #A => \\p : A -> Bool => \\l : List A =>
+  matchList [A] [List A] l (nil [A])
+    (\\h : A => \\t : List A =>
+      if [List A] (p h)
+        (\\u : Nat => cons [A] h (takeWhile [A] p t))
+        (\\u : Nat => nil [A]))
 
-poly rec dropWhile = #A => \\p : A -> Bool => \\l : List =>
-  matchList [A] [List] l (nil [A])
-    (\\h : A => \\t : List =>
-      cond [List] (p h)
-        (dropWhile [A] p t)
-        (cons [A] h t))
+poly rec dropWhile = #A => \\p : A -> Bool => \\l : List A =>
+  matchList [A] [List A] l (nil [A])
+    (\\h : A => \\t : List A =>
+      if [List A] (p h)
+        (\\u : Nat => dropWhile [A] p t)
+        (\\u : Nat => cons [A] h t))
+
+poly rec span = #A => \\p : A -> Bool => \\l : List A =>
+  matchList [A] [Pair (List A) (List A)] l
+    (MkPair [List A] [List A] (nil [A]) (nil [A]))
+    (\\h : A => \\t : List A =>
+      if [Pair (List A) (List A)] (p h)
+        (\\u : Nat =>
+           let res = span [A] p t in
+           MkPair [List A] [List A] (cons [A] h (fst [List A] [List A] res)) (snd [List A] [List A] res))
+        (\\u : Nat => MkPair [List A] [List A] (nil [A]) l))
 
 poly error = #A =>
   (\\x : A => x) (\\x : A => x)

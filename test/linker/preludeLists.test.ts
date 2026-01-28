@@ -111,7 +111,7 @@ import Prelude takeWhile
 import Prelude dropWhile
 import Prelude foldl
 import Prelude head
-import Prelude cond
+import Prelude if
 import Prelude error
 import Prelude matchList
 

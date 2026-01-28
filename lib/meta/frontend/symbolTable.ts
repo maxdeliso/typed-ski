@@ -31,7 +31,16 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
   const tyMap = new Map<string, TypeDefinition>();
   const dataMap = new Map<string, DataDefinition>();
   const constructorMap = new Map<string, DataConstructorInfo>();
+  const importsSet = new Set<string>();
 
+  // First pass: collect imports
+  for (const term of program.terms) {
+    if (term.kind === "import") {
+      importsSet.add(term.ref);
+    }
+  }
+
+  // Second pass: index definitions
   for (const term of program.terms) {
     switch (term.kind) {
       case "poly":
@@ -95,6 +104,7 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
     types: tyMap,
     data: dataMap,
     constructors: constructorMap,
+    imports: importsSet,
   };
 }
 

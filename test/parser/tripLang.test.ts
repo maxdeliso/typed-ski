@@ -3,12 +3,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
+import { parseNatLiteralIdentifier } from "../../lib/consts/natNames.ts";
 import {
   createSystemFApplication,
   mkSystemFAbs,
   mkSystemFTAbs,
   mkSystemFVar,
 } from "../../lib/terms/systemF.ts";
+import type { SystemFTerm } from "../../lib/terms/systemF.ts";
 import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
 import { createTypedApplication } from "../../lib/types/typedLambda.ts";
 import { arrow, mkTypeVariable, typeApp } from "../../lib/types/types.ts";
@@ -18,6 +20,21 @@ import { loadInput } from "../util/fileLoader.ts";
 import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const expectSystemFApp = (t: SystemFTerm) => {
+  expect(t.kind).to.equal("non-terminal");
+  return t as Extract<SystemFTerm, { kind: "non-terminal" }>;
+};
+
+const expectSystemFTypeApp = (t: SystemFTerm) => {
+  expect(t.kind).to.equal("systemF-type-app");
+  return t as Extract<SystemFTerm, { kind: "systemF-type-app" }>;
+};
+
+const expectSystemFVar = (t: SystemFTerm) => {
+  expect(t.kind).to.equal("systemF-var");
+  return t as Extract<SystemFTerm, { kind: "systemF-var" }>;
+};
 
 Deno.test("parseTripLang", async (t) => {
   await t.step("parses polymorphic definitions", () => {
@@ -255,6 +272,155 @@ data Token =
     );
     const input = readFileSync(lexerPath, "utf-8").trim();
     const program = parseTripLang(input);
+
+    // Lightweight "whole file" sanity checks (beyond just the Token ADT)
+    expect(program.kind).to.equal("program");
+    expect(program.terms[0]).to.deep.equal({ kind: "module", name: "Lexer" });
+    expect(
+      program.terms.some((t) => t.kind === "export" && t.name === "Token"),
+      "expected lexer.trip to export Token",
+    ).to.equal(true);
+    expect(
+      program.terms.some((t) => t.kind === "poly" && t.name === "tokenize"),
+      "expected lexer.trip to define poly tokenize",
+    ).to.equal(true);
+
+    // Assert that every top-level TripLang definition in lexer.trip
+    // has a corresponding entry in the parsed program.
+    //
+    // NOTE: This list is intentionally hardcoded (no regex parsing) so that
+    // changes to lexer.trip require an explicit update here.
+    const expectedImports = [
+      { name: "Prelude", ref: "Nat" },
+      { name: "Prelude", ref: "Bool" },
+      { name: "Prelude", ref: "List" },
+      { name: "Prelude", ref: "nil" },
+      { name: "Prelude", ref: "cons" },
+      { name: "Prelude", ref: "matchList" },
+      { name: "Prelude", ref: "head" },
+      { name: "Prelude", ref: "tail" },
+      { name: "Prelude", ref: "dropWhile" },
+      { name: "Prelude", ref: "span" },
+      { name: "Prelude", ref: "if" },
+      { name: "Prelude", ref: "eq" },
+      { name: "Prelude", ref: "isZero" },
+      { name: "Prelude", ref: "and" },
+      { name: "Prelude", ref: "or" },
+      { name: "Prelude", ref: "zero" },
+      { name: "Prelude", ref: "succ" },
+      { name: "Prelude", ref: "add" },
+      { name: "Prelude", ref: "mul" },
+      { name: "Prelude", ref: "sub" },
+      { name: "Prelude", ref: "pred" },
+      { name: "Prelude", ref: "gte" },
+      { name: "Prelude", ref: "lte" },
+      { name: "Prelude", ref: "true" },
+      { name: "Prelude", ref: "false" },
+      { name: "Prelude", ref: "Result" },
+      { name: "Prelude", ref: "Err" },
+      { name: "Prelude", ref: "Ok" },
+      { name: "Prelude", ref: "ParseError" },
+      { name: "Prelude", ref: "MkParseError" },
+      { name: "Prelude", ref: "Maybe" },
+      { name: "Prelude", ref: "Some" },
+      { name: "Prelude", ref: "None" },
+      { name: "Prelude", ref: "Pair" },
+      { name: "Prelude", ref: "MkPair" },
+      { name: "Prelude", ref: "pair" },
+      { name: "Prelude", ref: "fst" },
+      { name: "Prelude", ref: "snd" },
+      { name: "Prelude", ref: "error" },
+      { name: "Prelude", ref: "foldl" },
+    ] as const;
+
+    const expectedExports = [
+      "Token",
+      "T_LParen",
+      "T_RParen",
+      "T_LBrace",
+      "T_RBrace",
+      "T_LBracket",
+      "T_RBracket",
+      "T_Backslash",
+      "T_Arrow",
+      "T_FatArrow",
+      "T_Eq",
+      "T_Colon",
+      "T_Hash",
+      "T_Pipe",
+      "T_Dot",
+      "T_Comma",
+      "T_Keyword",
+      "T_Ident",
+      "T_Nat",
+      "T_EOF",
+      "simpleTokens",
+      "lookupToken",
+      "tokenize",
+      "isSpace",
+      "isAlpha",
+      "isDigit",
+      "isIdentChar",
+      "eqList",
+      "kwPoly",
+      "isKeywordPoly",
+      "natFromDigitList",
+      "mapResult",
+    ] as const;
+
+    const expectedData = ["Token"] as const;
+
+    const expectedPoly = [
+      "isSpace",
+      "anyEq",
+      "digits",
+      "lowers",
+      "uppers",
+      "isDigit",
+      "isAlpha",
+      "isIdentChar",
+      "eqList",
+      "kwPoly",
+      "isKeywordPoly",
+      "natFromDigitList",
+      "mapResult",
+      "simpleTokens",
+      "lookupToken",
+      "reverse",
+      "tokenizeAcc",
+      "tokenize",
+    ] as const;
+
+    for (const { name, ref } of expectedImports) {
+      expect(
+        program.terms.some((t) =>
+          t.kind === "import" && t.name === name && t.ref === ref
+        ),
+        `expected import ${name} ${ref}`,
+      ).to.equal(true);
+    }
+
+    for (const name of expectedExports) {
+      expect(
+        program.terms.some((t) => t.kind === "export" && t.name === name),
+        `expected export ${name}`,
+      ).to.equal(true);
+    }
+
+    for (const name of expectedData) {
+      expect(
+        program.terms.some((t) => t.kind === "data" && t.name === name),
+        `expected data ${name} = ...`,
+      ).to.equal(true);
+    }
+
+    for (const name of expectedPoly) {
+      expect(
+        program.terms.some((t) => t.kind === "poly" && t.name === name),
+        `expected poly ${name} = ...`,
+      ).to.equal(true);
+    }
+
     const tokenData = program.terms.find(
       (term): term is typeof term & { kind: "data"; name: string } =>
         term.kind === "data" && term.name === "Token",
@@ -473,5 +639,48 @@ data Token =
     expect(() => parseTripLang(input)).to.throw(
       "expected an identifier",
     );
+  });
+});
+
+Deno.test("parse single poly", async (t) => {
+  await t.step("parses single poly", () => {
+    const input = 'poly foo = "foo"';
+    const result = parseTripLang(input);
+
+    expect(result.kind).to.equal("program");
+    expect(result.terms).to.have.length(1);
+    const [term] = result.terms;
+
+    if (term.kind !== "poly") {
+      throw new Error(`expected 'poly' term, got '${term.kind}'`);
+    }
+    expect(term.name).to.equal("foo");
+    expect(term.type).to.equal(undefined);
+
+    // The string literal "foo" is desugared into a Nat list term:
+    // cons 102 (cons 111 (cons 111 (nil Nat)))
+    const expectedCodes = [102n, 111n, 111n];
+    let current: SystemFTerm = term.term;
+    for (const code of expectedCodes) {
+      const outerApp = expectSystemFApp(current);
+
+      // left is (cons [Nat] <head>)
+      const consApp = expectSystemFApp(outerApp.lft);
+      const consTypeApp = expectSystemFTypeApp(consApp.lft);
+      const consVar = expectSystemFVar(consTypeApp.term);
+      expect(consVar.name).to.equal("cons");
+
+      // head is a nat-literal identifier var whose decoded value matches
+      const headVar = expectSystemFVar(consApp.rgt);
+      expect(parseNatLiteralIdentifier(headVar.name)).to.equal(code);
+
+      // tail
+      current = outerApp.rgt;
+    }
+
+    // tail is (nil [Nat])
+    const nilApp = expectSystemFTypeApp(current);
+    const nilVar = expectSystemFVar(nilApp.term);
+    expect(nilVar.name).to.equal("nil");
   });
 });

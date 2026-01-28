@@ -23,6 +23,7 @@ import {
   type ParserState,
   peek,
   peekArrow,
+  withParserState,
 } from "./parserState.ts";
 import {
   ARROW,
@@ -126,7 +127,9 @@ function parseSimpleSystemFType(
     );
     const [closing, sAfterInner] = peek(stateAfterInner);
     if (closing !== ")") {
-      throw new ParseError("expected ')' after type expression");
+      throw new ParseError(
+        withParserState(sAfterInner, "expected ')' after type expression"),
+      );
     }
     const stateAfterRP = matchRP(sAfterInner);
     return [`(${innerLit})`, innerType, stateAfterRP];

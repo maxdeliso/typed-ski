@@ -37,7 +37,10 @@ export function createParserState(buf: string): ParserState {
     const code = buf.charCodeAt(i);
     if (code > ASCII_MAX) {
       throw new ParseError(
-        `non-ASCII byte 0x${code.toString(16).toUpperCase()} at offset ${i}`,
+        withParserState(
+          { buf, idx: i },
+          `non-ASCII byte 0x${code.toString(16).toUpperCase()} at offset ${i}`,
+        ),
       );
     }
   }
@@ -64,10 +67,32 @@ export function consume(state: ParserState): ParserState {
   return { buf: state.buf, idx: state.idx + 1 };
 }
 
+export function formatParserState(state: ParserState): string {
+  const contextLength = 20;
+  const start = Math.max(0, state.idx - contextLength);
+  const end = Math.min(state.buf.length, state.idx + contextLength + 1);
+  const snippet = state.buf.slice(start, end);
+  const relativePos = state.idx - start;
+  const caret = " ".repeat(relativePos) + "^";
+  const lines = state.buf.slice(0, state.idx).split("\n");
+  const lineNum = lines.length;
+  const colNum = lines[lines.length - 1].length + 1;
+  return `at position ${state.idx} (line ${lineNum}, column ${colNum}):\n${snippet}\n${caret}`;
+}
+
+export function withParserState(state: ParserState, msg: string): string {
+  return `${msg}\n${formatParserState(state)}`;
+}
+
 export function matchCh(state: ParserState, ch: string): ParserState {
   const [next, newState] = peek(state);
   if (next !== ch) {
-    throw new ParseError(`expected '${ch}' but found '${next ?? "EOF"}'`);
+    throw new ParseError(
+      withParserState(
+        newState,
+        `expected '${ch}' but found '${next ?? "EOF"}'`,
+      ),
+    );
   }
   return consume(newState);
 }
@@ -94,7 +119,9 @@ export function matchArrow(state: ParserState): ParserState {
     const next = newState.idx < newState.buf.length
       ? newState.buf[newState.idx]
       : "EOF";
-    throw new ParseError(`expected '->' but found '${next}'`);
+    throw new ParseError(
+      withParserState(newState, `expected '->' but found '${next}'`),
+    );
   }
   return { buf: newState.buf, idx: newState.idx + ARROW.length };
 }
@@ -114,7 +141,9 @@ export function matchFatArrow(state: ParserState): ParserState {
     const next = newState.idx < newState.buf.length
       ? newState.buf[newState.idx]
       : "EOF";
-    throw new ParseError(`expected '=>' but found '${next}'`);
+    throw new ParseError(
+      withParserState(newState, `expected '=>' but found '${next}'`),
+    );
   }
   return { buf: newState.buf, idx: newState.idx + FAT_ARROW.length };
 }
@@ -129,16 +158,23 @@ export function parseIdentifier(state: ParserState): [string, ParserState] {
     currentState = consume(currentState);
   }
   if (id.length === 0) {
-    throw new ParseError("expected an identifier");
+    throw new ParseError(
+      withParserState(currentState, "expected an identifier"),
+    );
   }
   // Reject purely numeric identifiers (e.g., "123") to avoid ambiguity with numeric literals
   if (PURELY_NUMERIC_REGEX.test(id)) {
     throw new ParseError(
-      `'${id}' is not a valid identifier (purely numeric strings are reserved for numeric literals)`,
+      withParserState(
+        currentState,
+        `'${id}' is not a valid identifier (purely numeric strings are reserved for numeric literals)`,
+      ),
     );
   }
   if (isNatLiteralIdentifier(id)) {
-    throw new ParseError(`'${id}' is reserved for numeric literals`);
+    throw new ParseError(
+      withParserState(currentState, `'${id}' is reserved for numeric literals`),
+    );
   }
   return [id, currentState];
 }
@@ -167,7 +203,9 @@ export function parseDefinitionKeyword(
 ): [DefinitionKind, ParserState] {
   const [word, nextState] = parseIdentifier(state);
   if (!DEFINITION_KEYWORDS.includes(word as DefinitionKind)) {
-    throw new ParseError(`expected definition keyword, found ${word}`);
+    throw new ParseError(
+      withParserState(nextState, `expected definition keyword, found ${word}`),
+    );
   }
   return [word as DefinitionKind, nextState];
 }
@@ -186,7 +224,9 @@ export function parseNumericLiteral(
   }
 
   if (literal.length === 0) {
-    throw new ParseError("expected numeric literal");
+    throw new ParseError(
+      withParserState(currentState, "expected numeric literal"),
+    );
   }
 
   return [literal, BigInt(literal), currentState];

@@ -1,5 +1,10 @@
 import { assert } from "chai";
-import { assertEquals, assertNotEquals, assertStrictEquals, assertThrows } from "std/assert";
+import {
+  assertEquals,
+  assertNotEquals,
+  assertStrictEquals,
+  assertThrows,
+} from "std/assert";
 
 import type {
   SymbolTable,
@@ -9,8 +14,8 @@ import type {
 } from "../../../lib/meta/trip.ts";
 import {
   resolveExternalProgramReferences,
-  substituteTripLangTermDirectBatch,
   substituteTermHygienicBatch,
+  substituteTripLangTermDirectBatch,
 } from "../../../lib/meta/frontend/substitution.ts";
 import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
 import {
@@ -20,7 +25,7 @@ import {
   mkSystemFVar,
 } from "../../../lib/terms/systemF.ts";
 import { mkTypedAbs } from "../../../lib/types/typedLambda.ts";
-import { mkVar, mkUntypedAbs } from "../../../lib/terms/lambda.ts";
+import { mkUntypedAbs, mkVar } from "../../../lib/terms/lambda.ts";
 import { forall } from "../../../lib/types/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";
 import { K } from "../../../lib/ski/terminal.ts";
@@ -38,36 +43,49 @@ function emptySyms(): SymbolTable {
 
 Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
   await t.step("substituteTripLangTermDirectBatch", async (t) => {
-    await t.step("preserves object identity when substitutions are empty", () => {
-      const current: TripLangTerm = {
-        kind: "poly",
-        name: "main",
-        term: mkSystemFVar("x"),
-      };
-      const result = substituteTripLangTermDirectBatch(current, new Map());
-      assertStrictEquals(result, current);
-    });
+    await t.step(
+      "preserves object identity when substitutions are empty",
+      () => {
+        const current: TripLangTerm = {
+          kind: "poly",
+          name: "main",
+          term: mkSystemFVar("x"),
+        };
+        const result = substituteTripLangTermDirectBatch(current, new Map());
+        assertStrictEquals(result, current);
+      },
+    );
 
-    await t.step("does not substitute Nat literal identifiers (placeholders)", () => {
-      const lit = makeNatLiteralIdentifier(3n);
-      const current: TripLangTerm = {
-        kind: "poly",
-        name: "main",
-        term: mkSystemFVar(lit),
-      };
-      const substitutions = new Map<string, TripLangTerm>([
-        ["__irrelevant__", { kind: "poly", name: "__irrelevant__", term: mkSystemFVar("z") }],
-        [lit, { kind: "poly", name: lit, term: mkSystemFVar("oops") }],
-      ]);
+    await t.step(
+      "does not substitute Nat literal identifiers (placeholders)",
+      () => {
+        const lit = makeNatLiteralIdentifier(3n);
+        const current: TripLangTerm = {
+          kind: "poly",
+          name: "main",
+          term: mkSystemFVar(lit),
+        };
+        const substitutions = new Map<string, TripLangTerm>([
+          ["__irrelevant__", {
+            kind: "poly",
+            name: "__irrelevant__",
+            term: mkSystemFVar("z"),
+          }],
+          [lit, { kind: "poly", name: lit, term: mkSystemFVar("oops") }],
+        ]);
 
-      const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "no substitution should occur");
-      assertStrictEquals(
-        (result as { term: unknown }).term,
-        (current as { term: unknown }).term,
-        "term object identity should be preserved",
-      );
-    });
+        const result = substituteTripLangTermDirectBatch(
+          current,
+          substitutions,
+        );
+        assertStrictEquals(result, current, "no substitution should occur");
+        assertStrictEquals(
+          (result as { term: unknown }).term,
+          (current as { term: unknown }).term,
+          "term object identity should be preserved",
+        );
+      },
+    );
 
     await t.step("renames match arm params to avoid capture (batch)", () => {
       const current: TripLangTerm = {
@@ -93,12 +111,18 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertNotEquals(result, current, "should return a new object when changes occur");
+      assertNotEquals(
+        result,
+        current,
+        "should return a new object when changes occur",
+      );
 
       const term = (result as { term: unknown }).term as {
         kind: "systemF-match";
         scrutinee: { kind: string; name?: string };
-        arms: Array<{ params: string[]; body: { kind: string; name?: string } }>;
+        arms: Array<
+          { params: string[]; body: { kind: string; name?: string } }
+        >;
       };
       assertEquals(term.kind, "systemF-match");
       assertEquals(term.scrutinee.kind, "systemF-var");
@@ -107,9 +131,17 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
 
       const arm0 = term.arms[0];
       assertEquals(arm0.params.length, 1);
-      assertNotEquals(arm0.params[0], "x", "arm param should be renamed to avoid capture");
+      assertNotEquals(
+        arm0.params[0],
+        "x",
+        "arm param should be renamed to avoid capture",
+      );
       assertEquals(arm0.body.kind, "systemF-var");
-      assertEquals(arm0.body.name, arm0.params[0], "arm body should reference renamed param");
+      assertEquals(
+        arm0.body.name,
+        arm0.params[0],
+        "arm body should reference renamed param",
+      );
     });
 
     await t.step(
@@ -134,9 +166,15 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
 
         assertEquals(out.kind, "systemF-abs");
         if (out.kind !== "systemF-abs") throw new Error("expected systemF-abs");
-        assertNotEquals(out.name, "x", "binder should be renamed to avoid capture");
+        assertNotEquals(
+          out.name,
+          "x",
+          "binder should be renamed to avoid capture",
+        );
         assertEquals(out.body.kind, "systemF-var");
-        if (out.body.kind !== "systemF-var") throw new Error("expected systemF-var");
+        if (out.body.kind !== "systemF-var") {
+          throw new Error("expected systemF-var");
+        }
         assertEquals(
           out.body.name,
           "x",
@@ -168,9 +206,15 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
         if (out.kind !== "typed-lambda-abstraction") {
           throw new Error("expected typed-lambda-abstraction");
         }
-        assertNotEquals(out.varName, "x", "binder should be renamed to avoid capture");
+        assertNotEquals(
+          out.varName,
+          "x",
+          "binder should be renamed to avoid capture",
+        );
         assertEquals(out.body.kind, "lambda-var");
-        if (out.body.kind !== "lambda-var") throw new Error("expected lambda-var");
+        if (out.body.kind !== "lambda-var") {
+          throw new Error("expected lambda-var");
+        }
         assertEquals(
           out.body.name,
           "x",
@@ -208,15 +252,23 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
 
         // Value should be substituted (y -> x)
         assertEquals(out.value.kind, "systemF-var");
-        if (out.value.kind !== "systemF-var") throw new Error("expected systemF-var");
+        if (out.value.kind !== "systemF-var") {
+          throw new Error("expected systemF-var");
+        }
         assertEquals(out.value.name, "x", "value should be substituted");
 
         // Binder should be renamed to avoid capture
-        assertNotEquals(out.name, "x", "binder should be renamed to avoid capture");
+        assertNotEquals(
+          out.name,
+          "x",
+          "binder should be renamed to avoid capture",
+        );
 
         // Body should have the substituted variable (x), which should remain free
         assertEquals(out.body.kind, "systemF-var");
-        if (out.body.kind !== "systemF-var") throw new Error("expected systemF-var");
+        if (out.body.kind !== "systemF-var") {
+          throw new Error("expected systemF-var");
+        }
         assertEquals(
           out.body.name,
           "x",
@@ -242,13 +294,19 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
           new Set<string>(),
         );
         assertEquals(out.kind, "systemF-type-app");
-        if (out.kind !== "systemF-type-app") throw new Error("expected systemF-type-app");
+        if (out.kind !== "systemF-type-app") {
+          throw new Error("expected systemF-type-app");
+        }
         assertEquals(out.term.kind, "systemF-var");
-        if (out.term.kind !== "systemF-var") throw new Error("expected systemF-var");
+        if (out.term.kind !== "systemF-var") {
+          throw new Error("expected systemF-var");
+        }
         assertEquals(out.term.name, "x", "term part should be substituted");
         // typeArg branch is also traversed (even though type vars aren't substituted)
         assertEquals(out.typeArg.kind, "type-var");
-        if (out.typeArg.kind !== "type-var") throw new Error("expected type-var");
+        if (out.typeArg.kind !== "type-var") {
+          throw new Error("expected type-var");
+        }
         assertEquals(out.typeArg.typeName, "T");
       },
     );
@@ -270,10 +328,14 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
         );
 
         assertEquals(out.kind, "systemF-type-abs");
-        if (out.kind !== "systemF-type-abs") throw new Error("expected systemF-type-abs");
+        if (out.kind !== "systemF-type-abs") {
+          throw new Error("expected systemF-type-abs");
+        }
         assertEquals(out.typeVar, "X", "type binder should remain unchanged");
         assertEquals(out.body.kind, "systemF-var");
-        if (out.body.kind !== "systemF-var") throw new Error("expected systemF-var");
+        if (out.body.kind !== "systemF-var") {
+          throw new Error("expected systemF-var");
+        }
         assertEquals(out.body.name, "x", "body should be substituted");
       },
     );
@@ -303,7 +365,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
         assertEquals(out.typeVar, "X", "type binder should remain unchanged");
         assertEquals(out.body.kind, "type-var");
         if (out.body.kind !== "type-var") throw new Error("expected type-var");
-        assertEquals(out.body.typeName, "Y", "body remains unchanged (type vars aren't substituted)");
+        assertEquals(
+          out.body.typeName,
+          "Y",
+          "body remains unchanged (type vars aren't substituted)",
+        );
         // The important thing is that the branch was traversed
       },
     );
@@ -329,10 +395,18 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
         if (out.kind !== "type-app") throw new Error("expected type-app");
         assertEquals(out.fn.kind, "type-var");
         if (out.fn.kind !== "type-var") throw new Error("expected type-var");
-        assertEquals(out.fn.typeName, "F", "fn remains unchanged (type vars aren't substituted)");
+        assertEquals(
+          out.fn.typeName,
+          "F",
+          "fn remains unchanged (type vars aren't substituted)",
+        );
         assertEquals(out.arg.kind, "type-var");
         if (out.arg.kind !== "type-var") throw new Error("expected type-var");
-        assertEquals(out.arg.typeName, "A", "arg remains unchanged (type vars aren't substituted)");
+        assertEquals(
+          out.arg.typeName,
+          "A",
+          "arg remains unchanged (type vars aren't substituted)",
+        );
         // The important thing is that both branches (fn and arg) were traversed
       },
     );
@@ -358,7 +432,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertNotEquals(result, current, "should return new object when substitution occurs");
+      assertNotEquals(
+        result,
+        current,
+        "should return new object when substitution occurs",
+      );
       assertEquals(result.kind, "typed");
       if (result.kind !== "typed") throw new Error("expected typed");
       assertEquals(result.name, "f");
@@ -367,8 +445,14 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
         throw new Error("expected typed-lambda-abstraction");
       }
       assertEquals(result.term.body.kind, "lambda-var");
-      if (result.term.body.kind !== "lambda-var") throw new Error("expected lambda-var");
-      assertEquals(result.term.body.name, "z", "variable should be substituted");
+      if (result.term.body.kind !== "lambda-var") {
+        throw new Error("expected lambda-var");
+      }
+      assertEquals(
+        result.term.body.name,
+        "z",
+        "variable should be substituted",
+      );
     });
 
     await t.step("substitutes untyped lambda term", () => {
@@ -388,15 +472,27 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertNotEquals(result, current, "should return new object when substitution occurs");
+      assertNotEquals(
+        result,
+        current,
+        "should return new object when substitution occurs",
+      );
       assertEquals(result.kind, "untyped");
       if (result.kind !== "untyped") throw new Error("expected untyped");
       assertEquals(result.name, "f");
       assertEquals(result.term.kind, "lambda-abs");
-      if (result.term.kind !== "lambda-abs") throw new Error("expected lambda-abs");
+      if (result.term.kind !== "lambda-abs") {
+        throw new Error("expected lambda-abs");
+      }
       assertEquals(result.term.body.kind, "lambda-var");
-      if (result.term.body.kind !== "lambda-var") throw new Error("expected lambda-var");
-      assertEquals(result.term.body.name, "z", "variable should be substituted");
+      if (result.term.body.kind !== "lambda-var") {
+        throw new Error("expected lambda-var");
+      }
+      assertEquals(
+        result.term.body.name,
+        "z",
+        "variable should be substituted",
+      );
     });
 
     await t.step("returns combinator unchanged (no-op)", () => {
@@ -411,7 +507,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "combinator should be returned unchanged");
+      assertStrictEquals(
+        result,
+        current,
+        "combinator should be returned unchanged",
+      );
     });
 
     await t.step("returns type definition unchanged (no-op)", () => {
@@ -426,7 +526,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "type definition should be returned unchanged");
+      assertStrictEquals(
+        result,
+        current,
+        "type definition should be returned unchanged",
+      );
     });
 
     await t.step("returns data definition unchanged (no-op)", () => {
@@ -442,7 +546,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "data definition should be returned unchanged");
+      assertStrictEquals(
+        result,
+        current,
+        "data definition should be returned unchanged",
+      );
     });
 
     await t.step("returns module definition unchanged (no-op)", () => {
@@ -456,7 +564,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "module definition should be returned unchanged");
+      assertStrictEquals(
+        result,
+        current,
+        "module definition should be returned unchanged",
+      );
     });
 
     await t.step("returns import definition unchanged (no-op)", () => {
@@ -471,7 +583,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "import definition should be returned unchanged");
+      assertStrictEquals(
+        result,
+        current,
+        "import definition should be returned unchanged",
+      );
     });
 
     await t.step("returns export definition unchanged (no-op)", () => {
@@ -485,7 +601,11 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       ]);
 
       const result = substituteTripLangTermDirectBatch(current, substitutions);
-      assertStrictEquals(result, current, "export definition should be returned unchanged");
+      assertStrictEquals(
+        result,
+        current,
+        "export definition should be returned unchanged",
+      );
     });
   });
 
@@ -501,27 +621,32 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       };
 
       const resolved = resolveExternalProgramReferences(program, emptySyms());
-      const main = resolved.terms.find((x) => x.kind === "poly" && x.name === "main") as
+      const main = resolved.terms.find((x) =>
+        x.kind === "poly" && x.name === "main"
+      ) as
         | undefined
         | { kind: "poly"; term: unknown };
       assert.isDefined(main);
       assert.deepEqual(main!.term, mkSystemFVar("foo"));
     });
 
-    await t.step("throws on unresolved external term references when not imported", () => {
-      const program: TripLangProgram = {
-        kind: "program",
-        terms: [
-          { kind: "module", name: "M" },
-          { kind: "poly", name: "main", term: mkSystemFVar("foo") },
-        ],
-      };
-      assertThrows(
-        () => resolveExternalProgramReferences(program, emptySyms()),
-        CompilationError,
-        "Unresolved external term reference: foo",
-      );
-    });
+    await t.step(
+      "throws on unresolved external term references when not imported",
+      () => {
+        const program: TripLangProgram = {
+          kind: "program",
+          terms: [
+            { kind: "module", name: "M" },
+            { kind: "poly", name: "main", term: mkSystemFVar("foo") },
+          ],
+        };
+        assertThrows(
+          () => resolveExternalProgramReferences(program, emptySyms()),
+          CompilationError,
+          "Unresolved external term reference: foo",
+        );
+      },
+    );
 
     await t.step("throws on unresolved external type references", () => {
       // System F abstraction with a type annotation that references an unknown type var name.
@@ -549,4 +674,3 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
     });
   });
 });
-

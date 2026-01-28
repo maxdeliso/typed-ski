@@ -28,22 +28,25 @@ Deno.test("externalReferences edge cases (coverage)", async (t) => {
     assertEquals(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step("collects refs from typed-lambda-abstraction (ty + body)", () => {
-    const term: TripLangValueType = {
-      kind: "typed-lambda-abstraction",
-      varName: "x",
-      ty: { kind: "type-var", typeName: "A" },
-      body: {
-        kind: "non-terminal",
-        lft: { kind: "lambda-var", name: "x" }, // bound
-        rgt: { kind: "lambda-var", name: "f" }, // free
-      },
-    };
+  await t.step(
+    "collects refs from typed-lambda-abstraction (ty + body)",
+    () => {
+      const term: TripLangValueType = {
+        kind: "typed-lambda-abstraction",
+        varName: "x",
+        ty: { kind: "type-var", typeName: "A" },
+        body: {
+          kind: "non-terminal",
+          lft: { kind: "lambda-var", name: "x" }, // bound
+          rgt: { kind: "lambda-var", name: "f" }, // free
+        },
+      };
 
-    const [termRefs, typeRefs] = externalReferences(term);
-    assertEquals(Array.from(termRefs.keys()).sort(), ["f"]);
-    assertEquals(Array.from(typeRefs.keys()).sort(), ["A"]);
-  });
+      const [termRefs, typeRefs] = externalReferences(term);
+      assertEquals(Array.from(termRefs.keys()).sort(), ["f"]);
+      assertEquals(Array.from(typeRefs.keys()).sort(), ["A"]);
+    },
+  );
 
   await t.step("collects refs inside BaseType type-app and forall", () => {
     const ty: TripLangValueType = {
@@ -61,24 +64,29 @@ Deno.test("externalReferences edge cases (coverage)", async (t) => {
   });
 
   await t.step("ignores SKI terminal nodes", () => {
-    const ski: TripLangValueType = { kind: "terminal", sym: SKITerminalSymbol.S };
+    const ski: TripLangValueType = {
+      kind: "terminal",
+      sym: SKITerminalSymbol.S,
+    };
     const [termRefs, typeRefs] = externalReferences(ski);
     assertEquals(Array.from(termRefs.keys()), []);
     assertEquals(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step("memoizes results (same tuple identity on repeated calls)", () => {
-    const term: TripLangValueType = {
-      kind: "non-terminal",
-      lft: { kind: "lambda-var", name: "x" },
-      rgt: { kind: "lambda-var", name: "y" },
-    };
-    const r1 = externalReferences(term);
-    const r2 = externalReferences(term);
-    assertStrictEquals(r1, r2);
-    // and the maps themselves should be referentially identical
-    assertStrictEquals(r1[0], r2[0]);
-    assertStrictEquals(r1[1], r2[1]);
-  });
+  await t.step(
+    "memoizes results (same tuple identity on repeated calls)",
+    () => {
+      const term: TripLangValueType = {
+        kind: "non-terminal",
+        lft: { kind: "lambda-var", name: "x" },
+        rgt: { kind: "lambda-var", name: "y" },
+      };
+      const r1 = externalReferences(term);
+      const r2 = externalReferences(term);
+      assertStrictEquals(r1, r2);
+      // and the maps themselves should be referentially identical
+      assertStrictEquals(r1[0], r2[0]);
+      assertStrictEquals(r1[1], r2[1]);
+    },
+  );
 });
-

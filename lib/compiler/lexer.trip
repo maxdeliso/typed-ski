@@ -40,6 +40,7 @@ import Prelude fst
 import Prelude snd
 import Prelude error
 import Prelude foldl
+import Prelude append
 
 export Token
 export T_LParen
@@ -71,8 +72,28 @@ export isIdentChar
 export eqList
 export kwPoly
 export isKeywordPoly
+export fromSNat
+export sAdd
+export sMul
+export sSub
+export snatFromDigitList
 export natFromDigitList
 export mapResult
+export SNat
+export SZ
+export SS
+export toSNat
+export seq
+export slte
+export isSpaceSNat
+export isDigitSNat
+export isAlphaSNat
+export isIdentCharSNat
+export sn_space
+export sn_newline
+export sn_cr
+export sn_tab
+export sn_underscore
 
 data Token =
   | T_LParen
@@ -95,8 +116,77 @@ data Token =
   | T_Nat Nat
   | T_EOF
 
-poly isSpace = \c : Nat =>
-  or (eq c ' ') (or (eq c '\n') (or (eq c 13) (eq c 9)))
+data SNat =
+  | SZ
+  | SS SNat
+
+poly toSNat = \n : Nat => n [SNat] (\x : SNat => SS x) SZ
+
+poly rec fromSNat = \n : SNat =>
+  match n [Nat] {
+    | SZ => zero
+    | SS p => succ (fromSNat p)
+  }
+
+poly rec sAdd = \a : SNat => \b : SNat =>
+  match a [SNat] {
+    | SZ => b
+    | SS pa => SS (sAdd pa b)
+  }
+
+poly rec sMul = \a : SNat => \b : SNat =>
+  match b [SNat] {
+    | SZ => SZ
+    | SS pb => sAdd a (sMul a pb)
+  }
+
+poly rec sSub = \a : SNat => \b : SNat =>
+  match b [SNat] {
+    | SZ => a
+    | SS pb =>
+        match a [SNat] {
+          | SZ => SZ
+          | SS pa => sSub pa pb
+        }
+  }
+
+poly rec seq = \a : SNat => \b : SNat =>
+  match a [Bool] {
+    | SZ => match b [Bool] {
+        | SZ => true
+        | SS _ => false
+      }
+    | SS pa => match b [Bool] {
+        | SZ => false
+        | SS pb => seq pa pb
+      }
+  }
+
+poly rec slte = \a : SNat => \b : SNat =>
+  match a [Bool] {
+    | SZ => true
+    | SS pa => match b [Bool] {
+        | SZ => false
+        | SS pb => slte pa pb
+      }
+  }
+poly sn_space = toSNat ' '
+poly sn_newline = toSNat '\n'
+poly sn_cr = toSNat 13
+poly sn_tab = toSNat 9
+poly sn_underscore = toSNat 95
+
+poly isSpaceSNat = \c : SNat =>
+  if [Bool] (seq c sn_space) (\u : Nat => true)
+  (\u : Nat => if [Bool] (seq c sn_newline) (\u : Nat => true)
+  (\u : Nat => if [Bool] (seq c sn_cr) (\u : Nat => true)
+  (\u : Nat => seq c sn_tab)))
+poly isSpace = \c : Nat => isSpaceSNat (toSNat c)
+
+poly rec anyEqSNat = \c : SNat => \xs : List SNat =>
+  matchList [SNat] [Bool] xs false
+    (\h : SNat => \t : List SNat =>
+      if [Bool] (seq c h) (\u : Nat => true) (\u : Nat => anyEqSNat c t))
 
 poly rec anyEq = \c : Nat => \xs : List Nat =>
   matchList [Nat] [Bool] xs false
@@ -115,6 +205,19 @@ poly digits =
   (cons [Nat] '8'
   (cons [Nat] '9'
   (nil [Nat]))))))))))
+
+poly digitsSNat =
+  cons [SNat] (toSNat '0')
+  (cons [SNat] (toSNat '1')
+  (cons [SNat] (toSNat '2')
+  (cons [SNat] (toSNat '3')
+  (cons [SNat] (toSNat '4')
+  (cons [SNat] (toSNat '5')
+  (cons [SNat] (toSNat '6')
+  (cons [SNat] (toSNat '7')
+  (cons [SNat] (toSNat '8')
+  (cons [SNat] (toSNat '9')
+  (nil [SNat]))))))))))
 
 poly lowers =
   cons [Nat] 'a'
@@ -145,6 +248,35 @@ poly lowers =
   (cons [Nat] 'z'
   (nil [Nat]))))))))))))))))))))))))))
 
+poly lowersSNat =
+  cons [SNat] (toSNat 'a')
+  (cons [SNat] (toSNat 'b')
+  (cons [SNat] (toSNat 'c')
+  (cons [SNat] (toSNat 'd')
+  (cons [SNat] (toSNat 'e')
+  (cons [SNat] (toSNat 'f')
+  (cons [SNat] (toSNat 'g')
+  (cons [SNat] (toSNat 'h')
+  (cons [SNat] (toSNat 'i')
+  (cons [SNat] (toSNat 'j')
+  (cons [SNat] (toSNat 'k')
+  (cons [SNat] (toSNat 'l')
+  (cons [SNat] (toSNat 'm')
+  (cons [SNat] (toSNat 'n')
+  (cons [SNat] (toSNat 'o')
+  (cons [SNat] (toSNat 'p')
+  (cons [SNat] (toSNat 'q')
+  (cons [SNat] (toSNat 'r')
+  (cons [SNat] (toSNat 's')
+  (cons [SNat] (toSNat 't')
+  (cons [SNat] (toSNat 'u')
+  (cons [SNat] (toSNat 'v')
+  (cons [SNat] (toSNat 'w')
+  (cons [SNat] (toSNat 'x')
+  (cons [SNat] (toSNat 'y')
+  (cons [SNat] (toSNat 'z')
+  (nil [SNat]))))))))))))))))))))))))))
+
 poly uppers =
   cons [Nat] 'A'
   (cons [Nat] 'B'
@@ -174,9 +306,45 @@ poly uppers =
   (cons [Nat] 'Z'
   (nil [Nat]))))))))))))))))))))))))))
 
-poly isDigit = \c : Nat => anyEq c digits
-poly isAlpha = \c : Nat => or (anyEq c lowers) (anyEq c uppers)
-poly isIdentChar = \c : Nat => or (isAlpha c) (or (isDigit c) (eq c '_'))
+poly uppersSNat =
+  cons [SNat] (toSNat 'A')
+  (cons [SNat] (toSNat 'B')
+  (cons [SNat] (toSNat 'C')
+  (cons [SNat] (toSNat 'D')
+  (cons [SNat] (toSNat 'E')
+  (cons [SNat] (toSNat 'F')
+  (cons [SNat] (toSNat 'G')
+  (cons [SNat] (toSNat 'H')
+  (cons [SNat] (toSNat 'I')
+  (cons [SNat] (toSNat 'J')
+  (cons [SNat] (toSNat 'K')
+  (cons [SNat] (toSNat 'L')
+  (cons [SNat] (toSNat 'M')
+  (cons [SNat] (toSNat 'N')
+  (cons [SNat] (toSNat 'O')
+  (cons [SNat] (toSNat 'P')
+  (cons [SNat] (toSNat 'Q')
+  (cons [SNat] (toSNat 'R')
+  (cons [SNat] (toSNat 'S')
+  (cons [SNat] (toSNat 'T')
+  (cons [SNat] (toSNat 'U')
+  (cons [SNat] (toSNat 'V')
+  (cons [SNat] (toSNat 'W')
+  (cons [SNat] (toSNat 'X')
+  (cons [SNat] (toSNat 'Y')
+  (cons [SNat] (toSNat 'Z')
+  (nil [SNat]))))))))))))))))))))))))))
+
+poly isDigitSNat = \c : SNat => anyEqSNat c digitsSNat
+poly isAlphaSNat = \c : SNat =>
+  if [Bool] (anyEqSNat c lowersSNat) (\u : Nat => true) (\u : Nat => anyEqSNat c uppersSNat)
+poly isIdentCharSNat = \c : SNat =>
+  if [Bool] (isAlphaSNat c) (\u : Nat => true)
+  (\u : Nat => if [Bool] (isDigitSNat c) (\u : Nat => true) (\u : Nat => seq c sn_underscore))
+
+poly isDigit = \c : Nat => isDigitSNat (toSNat c)
+poly isAlpha = \c : Nat => isAlphaSNat (toSNat c)
+poly isIdentChar = \c : Nat => isIdentCharSNat (toSNat c)
 
 poly rec eqList = \a : List Nat => \b : List Nat =>
   matchList [Nat] [Bool] a
@@ -190,11 +358,18 @@ poly kwPoly = "poly"
 
 poly isKeywordPoly = \word : List Nat => eqList word kwPoly
 
-poly natFromDigitList = \digits : List Nat =>
-  foldl [Nat] [Nat]
-    (\acc : Nat => \d : Nat => add (mul acc 10) (sub d '0'))
-    zero
+poly snatFromDigitList = \digits : List Nat =>
+  let ten = toSNat 10 in
+  let zeroChar = toSNat '0' in
+  foldl [Nat] [SNat]
+    (\acc : SNat => \d : Nat =>
+      let digit = sSub (toSNat d) zeroChar in
+      sAdd (sMul acc ten) digit)
+    SZ
     digits
+
+poly natFromDigitList = \digits : List Nat =>
+  fromSNat (snatFromDigitList digits)
 
 poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
   match res [Result ParseError B] {
@@ -231,33 +406,37 @@ poly reverse = #A => \xs : List A =>
     (nil [A])
     xs
 
+poly snatEqChar = \c_snat : SNat => \char_nat : Nat =>
+  seq c_snat (toSNat char_nat)
+
 poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
   let clean = dropWhile [Nat] isSpace input in
 
   matchList [Nat] [Result ParseError (List Token)] clean
     (Ok [ParseError] [List Token] accRev)
-    (\c : Nat => \cs : List Nat =>
+    (\c_church : Nat => \cs : List Nat =>
+      let c = toSNat c_church in
 
       if [Result ParseError (List Token)]
-        (and (eq c '-') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => eq h '>')))
+        (and (snatEqChar c '-') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => eq h '>')))
         (\u : Nat =>
           let rest = tail [Nat] cs in
           tokenizeAcc rest (cons [Token] T_Arrow accRev))
         (\u : Nat =>
 
       if [Result ParseError (List Token)]
-        (and (eq c '=') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => eq h '>')))
+        (and (snatEqChar c '=') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => eq h '>')))
         (\u : Nat =>
           let rest = tail [Nat] cs in
           tokenizeAcc rest (cons [Token] T_FatArrow accRev))
         (\u : Nat =>
 
-      match (lookupToken c simpleTokens) [Result ParseError (List Token)] {
+      match (lookupToken c_church simpleTokens) [Result ParseError (List Token)] {
         | Some tok =>
             tokenizeAcc cs (cons [Token] tok accRev)
 
         | None =>
-            if [Result ParseError (List Token)] (isAlpha c)
+            if [Result ParseError (List Token)] (isAlphaSNat c)
               (\u : Nat =>
                 let split = span [Nat] isIdentChar clean in
                 let taken = fst [List Nat] [List Nat] split in
@@ -270,12 +449,12 @@ poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
                 tokenizeAcc remaining (cons [Token] tok accRev))
 
               (\u : Nat =>
-                if [Result ParseError (List Token)] (isDigit c)
+                if [Result ParseError (List Token)] (isDigitSNat c)
                   (\u : Nat =>
                     let split = span [Nat] isDigit clean in
                     let taken = fst [List Nat] [List Nat] split in
                     let remaining = snd [List Nat] [List Nat] split in
-                    let n = natFromDigitList taken in
+                    let n = fromSNat (snatFromDigitList taken) in
                     tokenizeAcc remaining (cons [Token] (T_Nat n) accRev))
 
                   (\u : Nat =>

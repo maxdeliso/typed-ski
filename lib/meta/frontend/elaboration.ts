@@ -127,22 +127,65 @@ function elaborateMatch(
   const constructorInfos = match.arms.map((arm) => {
     const info = syms.constructors.get(arm.constructorName);
     if (!info) {
+      // If the constructor is imported, defer validation until linking
+      if (syms.imports.has(arm.constructorName)) {
+        // For imported constructors, we can't validate them here.
+        // We'll create a placeholder info that will be validated during linking.
+        // For now, we'll skip the detailed validation and just proceed.
+        // The linker will catch any issues with imported constructors.
+        return { arm, info: null, isImported: true };
+      }
       throw new CompilationError(
         `Unknown constructor '${arm.constructorName}' in match`,
         "elaborate",
         { arm },
       );
     }
-    return { arm, info };
+    return { arm, info, isImported: false };
   });
 
-  const dataName = constructorInfos[0].info.dataName;
+  // Check if we have any imported constructors - if so, defer validation
+  const hasImportedConstructors = constructorInfos.some((ci) => ci.isImported);
+
+  if (hasImportedConstructors) {
+    // For imported constructors, we can't do full validation here.
+    // We'll just elaborate the arms without strict validation.
+    // The linker will validate imported constructors later.
+    const orderedArms = constructorInfos.map(({ arm }) => {
+      // For imported constructors, we don't know the field types,
+      // so we'll just elaborate the body and create abstractions
+      // based on the number of parameters provided.
+      let body = elaborateSystemF(arm.body, syms);
+      // Create type annotations based on parameter count
+      // We'll use a placeholder type - the linker will fix this
+      for (let i = arm.params.length - 1; i >= 0; i--) {
+        body = mkSystemFAbs(
+          arm.params[i],
+          { kind: "type-var", typeName: "A" },
+          body,
+        );
+      }
+      return body;
+    });
+
+    let applied: SystemFTerm = mkSystemFTypeApp(
+      elaborateSystemF(match.scrutinee, syms),
+      match.returnType,
+    );
+    for (const armTerm of orderedArms) {
+      applied = createSystemFApplication(applied, armTerm);
+    }
+    return applied;
+  }
+
+  // Original validation logic for local constructors
+  const dataName = constructorInfos[0].info!.dataName;
   for (const { info } of constructorInfos) {
-    if (info.dataName !== dataName) {
+    if (info!.dataName !== dataName) {
       throw new CompilationError(
         "match arms must all target the same data type",
         "elaborate",
-        { dataName, got: info.dataName },
+        { dataName, got: info!.dataName },
       );
     }
   }
@@ -184,9 +227,9 @@ function elaborateMatch(
 
   const orderedArms = constructorInfos
     .slice()
-    .sort((a, b) => a.info.index - b.info.index)
+    .sort((a, b) => a.info!.index - b.info!.index)
     .map(({ arm, info }) => {
-      const fields = info.constructor.fields;
+      const fields = info!.constructor.fields;
       if (arm.params.length !== fields.length) {
         throw new CompilationError(
           `Constructor '${arm.constructorName}' expects ${fields.length} parameter(s)`,

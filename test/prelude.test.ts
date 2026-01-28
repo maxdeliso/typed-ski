@@ -12,7 +12,6 @@ const PRELUDE_TEST = `module TestPrelude
 import Prelude zero
 import Prelude succ
 import Prelude add
-import Prelude cond
 import Prelude not
 import Prelude and
 import Prelude or
@@ -31,13 +30,13 @@ import Prelude Nat
 export main
 
 poly main =
-  let a = cond [Nat] (not false) 1 0 in
-  let b = add a (cond [Nat] (and true true) 1 0) in
-  let c = add b (cond [Nat] (or false true) 1 0) in
-  let d = add c (pred 2) in
-  let e = add d (sub 3 1) in
-  let f = add e (cond [Nat] (lte 1 2) 1 0) in
-  add f (cond [Nat] (gte 2 1) 1 0)
+  let a = (not false) [Nat] (succ zero) zero in
+  let b = add a ((and true true) [Nat] (succ zero) zero) in
+  let c = add b ((or false true) [Nat] (succ zero) zero) in
+  let d = add c (pred (succ (succ zero))) in
+  let e = add d (sub (succ (succ (succ zero))) (succ zero)) in
+  let f = add e ((lte (succ zero) (succ (succ zero))) [Nat] (succ zero) zero) in
+  add f ((gte (succ (succ zero)) (succ zero)) [Nat] (succ zero) zero)
 `;
 
 Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {

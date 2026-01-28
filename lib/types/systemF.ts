@@ -88,19 +88,38 @@ export const referencesVar = (
  * The type checking context for System F.
  * - termCtx maps term variables (strings) to their types (SystemFType) using a Map.
  * - typeVars is the set of bound type variables using a Set.
+ * - typeAliases maps type alias names to their definitions (optional, for resolving type variables).
  */
 export interface SystemFContext {
   termCtx: Map<string, BaseType>;
   typeVars: Set<string>;
+  typeAliases?: Map<string, BaseType>;
 }
 
 /**
  * Returns an empty System F context.
  */
-export const emptySystemFContext = (): SystemFContext => ({
+export const emptySystemFContext = (
+  typeAliases?: Map<string, BaseType>,
+): SystemFContext => ({
   termCtx: new Map<string, BaseType>(),
   typeVars: new Set<string>(),
+  typeAliases,
 });
+
+/**
+ * Resolves a type variable to its definition if it's a type alias.
+ * Returns the original type if it's not a type variable or has no alias definition.
+ */
+function resolveTypeAlias(
+  ty: BaseType,
+  typeAliases?: Map<string, BaseType>,
+): BaseType {
+  if (ty.kind === "type-var" && typeAliases?.has(ty.typeName)) {
+    return typeAliases.get(ty.typeName)!;
+  }
+  return ty;
+}
 
 /**
  * Creates an application of one System F term to another.
@@ -178,7 +197,7 @@ export function reduceLets(
  * Returns just the type (discarding the final context).
  */
 export const typecheck = (term: SystemFTerm): BaseType => {
-  return typecheckSystemF(emptySystemFContext(), term)[0];
+  return typecheckSystemF(emptySystemFContext(undefined), term)[0];
 };
 
 /**
@@ -204,13 +223,15 @@ export const typecheckSystemF = (
     case "systemF-var": {
       const literalValue = parseNatLiteralIdentifier(term.name);
       if (literalValue !== null) {
-        return [makeNatType(), ctx];
+        const natType = makeNatType();
+        // Resolve type variable to type alias definition if available
+        return [resolveTypeAlias(natType, ctx.typeAliases), ctx];
       }
       const ty = ctx.termCtx.get(term.name);
       if (ty === undefined) {
         throw new TypeError(`unknown variable: ${term.name}`);
       }
-      return [ty, ctx];
+      return [resolveTypeAlias(ty, ctx.typeAliases), ctx];
     }
     case "systemF-abs": {
       // Extend the term context locally with x:T.
@@ -219,6 +240,7 @@ export const typecheckSystemF = (
       const localCtx: SystemFContext = {
         termCtx: newTermCtx,
         typeVars: ctx.typeVars, // persistent: no need to copy
+        typeAliases: ctx.typeAliases, // preserve type aliases
       };
       const [bodyTy] = typecheckSystemF(localCtx, term.body);
       // The local binding for x is scoped; we return the parent context.
@@ -235,11 +257,15 @@ export const typecheckSystemF = (
           }`,
         );
       }
-      if (!typesLitEq(funTy.lft, argTy)) {
+      // Resolve type aliases before comparison
+      const resolvedLft = resolveTypeAlias(funTy.lft, ctxAfterLeft.typeAliases);
+      const resolvedArg = resolveTypeAlias(argTy, ctxAfterRight.typeAliases);
+
+      if (!typesLitEq(resolvedLft, resolvedArg)) {
         // Only use normalization for forall types (alpha-equivalence)
-        if (funTy.lft.kind === "forall" && argTy.kind === "forall") {
-          const normLft = normalize(funTy.lft);
-          const normArg = normalize(argTy);
+        if (resolvedLft.kind === "forall" && resolvedArg.kind === "forall") {
+          const normLft = normalize(resolvedLft);
+          const normArg = normalize(resolvedArg);
           if (!typesLitEq(normLft, normArg)) {
             throw new TypeError(
               `function argument type mismatch: expected ${
@@ -264,6 +290,7 @@ export const typecheckSystemF = (
       const localCtx: SystemFContext = {
         termCtx: ctx.termCtx,
         typeVars: newTypeVars,
+        typeAliases: ctx.typeAliases, // preserve type aliases
       };
       const [bodyTy] = typecheckSystemF(localCtx, term.body);
       // The local type variable binding is scoped; return the parent context.

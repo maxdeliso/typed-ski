@@ -136,4 +136,6 @@ export interface SymbolTable {
   types: Map<string, TypeDefinition>;
   data: Map<string, DataDefinition>;
   constructors: Map<string, DataConstructorInfo>;
+  /** Set of imported symbol names (for deferring validation until linking) */
+  imports: Set<string>;
 }

@@ -11,12 +11,16 @@ import type {
   ModuleImport as _ModuleImport,
   TripCObject,
 } from "../compiler/objectFile.ts";
-import type { TripLangTerm } from "../meta/trip.ts";
+import type { TripLangTerm, TripLangValueType } from "../meta/trip.ts";
+import type { SystemFTerm } from "../terms/systemF.ts";
+import type { TypedLambda } from "../types/typedLambda.ts";
+import type { UntypedLambda } from "../terms/lambda.ts";
 import { externalReferences } from "../meta/frontend/externalReferences.ts";
 import { extractDefinitionValue } from "../meta/frontend/symbolTable.ts";
 import { lower } from "../meta/frontend/termLevel.ts";
 import {
-  substituteTripLangTermDirect,
+  freeTermVars,
+  substituteTermHygienicBatch,
   substituteTripLangTypeDirect,
 } from "../meta/frontend/substitution.ts";
 import { unparseSKI } from "../ski/expression.ts";
@@ -269,8 +273,23 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
 
 /**
  * Helper to get module info from a qualified name
+ * Caches results to avoid repeated string operations
  */
+const moduleInfoCache = new Map<QualifiedName, {
+  moduleName: string;
+  localName: string;
+  module: LoadedModule;
+}>();
+
 function getModuleInfo(ps: ProgramSpace, qualified: QualifiedName) {
+  const cached = moduleInfoCache.get(qualified);
+  if (cached) {
+    // Verify module still exists (should always be true, but be safe)
+    if (ps.modules.has(cached.moduleName)) {
+      return cached;
+    }
+  }
+
   const lastDotIndex = qualified.lastIndexOf(".");
   const moduleName = qualified.slice(0, lastDotIndex);
   const localName = qualified.slice(lastDotIndex + 1);
@@ -280,35 +299,37 @@ function getModuleInfo(ps: ProgramSpace, qualified: QualifiedName) {
       `Module '${moduleName}' not found for qualified name '${qualified}'`,
     );
   }
-  return { moduleName, localName, module };
+  const result = { moduleName, localName, module };
+  moduleInfoCache.set(qualified, result);
+  return result;
 }
 
 /**
- * Creates a deep copy of a program space to avoid mutation during resolution
+ * Clears the module info cache - call this when starting a new linking operation
  */
-function deepCopyProgramSpace(ps: ProgramSpace): ProgramSpace {
+function clearModuleInfoCache(): void {
+  moduleInfoCache.clear();
+}
+
+/**
+ * Creates a shallow copy of program space structure, but shares module definitions
+ * to avoid expensive deep copying. Definitions are mutated in-place during resolution.
+ */
+function shallowCopyProgramSpace(ps: ProgramSpace): ProgramSpace {
   const resolvedPS: ProgramSpace = {
     modules: new Map(),
-    terms: new Map(),
-    types: new Map(),
+    terms: new Map(ps.terms), // Shallow copy - terms will be updated
+    types: new Map(ps.types), // Shallow copy - types will be updated
     termEnv: new Map(),
     typeEnv: new Map(),
   };
 
-  // Copy modules
+  // Copy modules - share the defs Map but we'll mutate it
   for (const [moduleName, module] of ps.modules) {
     resolvedPS.modules.set(moduleName, {
       ...module,
-      defs: new Map(module.defs),
+      defs: new Map(module.defs), // Only copy the defs map structure
     });
-  }
-
-  // Copy global indices
-  for (const [qualified, term] of ps.terms) {
-    resolvedPS.terms.set(qualified, term);
-  }
-  for (const [qualified, type] of ps.types) {
-    resolvedPS.types.set(qualified, type);
   }
 
   // Copy environments
@@ -426,7 +447,8 @@ function buildDependencyGraph(
 }
 
 /**
- * Tarjan's algorithm for finding strongly connected components
+ * Tarjan's algorithm for finding strongly connected components (iterative version)
+ * Avoids recursion stack overflow and is more efficient
  */
 function tarjanSCC(
   graph: Map<QualifiedName, Set<QualifiedName>>,
@@ -438,38 +460,87 @@ function tarjanSCC(
   const sccs: QualifiedName[][] = [];
   let currentIndex = 0;
 
-  function strongconnect(node: QualifiedName): void {
-    index.set(node, currentIndex);
-    lowlink.set(node, currentIndex);
-    currentIndex++;
-    stack.push(node);
-    onStack.add(node);
-
-    const deps = graph.get(node) || new Set();
-    for (const dep of deps) {
-      if (!index.has(dep)) {
-        strongconnect(dep);
-        lowlink.set(node, Math.min(lowlink.get(node)!, lowlink.get(dep)!));
-      } else if (onStack.has(dep)) {
-        lowlink.set(node, Math.min(lowlink.get(node)!, index.get(dep)!));
-      }
-    }
-
-    if (lowlink.get(node) === index.get(node)) {
-      const scc: QualifiedName[] = [];
-      let w: QualifiedName;
-      do {
-        w = stack.pop()!;
-        onStack.delete(w);
-        scc.push(w);
-      } while (w !== node);
-      sccs.push(scc);
-    }
-  }
+  // Iterative stack-based implementation
+  const workStack: Array<{
+    node: QualifiedName;
+    phase: "enter" | "process";
+    deps?: QualifiedName[];
+    depIndex?: number;
+  }> = [];
 
   for (const node of graph.keys()) {
-    if (!index.has(node)) {
-      strongconnect(node);
+    if (index.has(node)) continue;
+
+    workStack.push({ node, phase: "enter" });
+
+    while (workStack.length > 0) {
+      const work = workStack.pop()!;
+
+      if (work.phase === "enter") {
+        // First visit to this node
+        index.set(work.node, currentIndex);
+        lowlink.set(work.node, currentIndex);
+        currentIndex++;
+        stack.push(work.node);
+        onStack.add(work.node);
+
+        const deps = Array.from(graph.get(work.node) || []);
+        workStack.push({
+          node: work.node,
+          phase: "process",
+          deps,
+          depIndex: 0,
+        });
+      } else {
+        // Processing dependencies
+        const deps = work.deps!;
+        let depIndex = work.depIndex!;
+
+        while (depIndex < deps.length) {
+          const dep = deps[depIndex];
+          if (!index.has(dep)) {
+            // Recurse into dependency
+            workStack.push({
+              node: work.node,
+              phase: "process",
+              deps,
+              depIndex: depIndex + 1,
+            });
+            workStack.push({ node: dep, phase: "enter" });
+            break;
+          } else if (onStack.has(dep)) {
+            lowlink.set(
+              work.node,
+              Math.min(lowlink.get(work.node)!, index.get(dep)!),
+            );
+          }
+          depIndex++;
+        }
+
+        if (depIndex >= deps.length) {
+          // Finished processing all dependencies
+          if (lowlink.get(work.node) === index.get(work.node)) {
+            const scc: QualifiedName[] = [];
+            let w: QualifiedName;
+            do {
+              w = stack.pop()!;
+              onStack.delete(w);
+              scc.push(w);
+            } while (w !== work.node);
+            sccs.push(scc);
+          }
+          // Update parent's lowlink if we have a parent
+          if (workStack.length > 0) {
+            const parent = workStack[workStack.length - 1];
+            if (parent.phase === "process") {
+              lowlink.set(
+                parent.node,
+                Math.min(lowlink.get(parent.node)!, lowlink.get(work.node)!),
+              );
+            }
+          }
+        }
+      }
     }
   }
 
@@ -478,16 +549,20 @@ function tarjanSCC(
 
 /**
  * Performs iterative substitution on a single definition until no new external references appear.
+ * Uses export index for fast candidate module lookup.
  */
 function substituteDependencies(
   def: TripLangTerm,
   moduleName: string,
   localName: string,
   ps: ProgramSpace,
+  exportIndex: Map<string, Set<string>>,
+  verbose = false,
 ): TripLangTerm {
   const defValue = extractDefinitionValue(def);
   if (!defValue) return def;
 
+  // Cache external references computation
   const [termRefs, typeRefs] = externalReferences(defValue);
   const externalTermRefs = Array.from(termRefs.keys());
   const externalTypeRefs = Array.from(typeRefs.keys());
@@ -510,74 +585,192 @@ function substituteDependencies(
   const MAX_ITERATIONS = 10; // Prevent infinite loops
 
   while (currentExternalTermRefs.length > 0 && iteration < MAX_ITERATIONS) {
-    const nextExternalTermRefs = new Set<string>();
+    const iterationStartTime = performance.now();
+
+    if (verbose && currentExternalTermRefs.length > 0) {
+      console.error(
+        `  Term resolution iteration ${iteration} for ${moduleName}.${localName}: resolving terms [${
+          currentExternalTermRefs.join(", ")
+        }]`,
+      );
+    }
+
+    // 1. COLLECT replacements
+    const replacements = new Map<string, TripLangTerm>();
+    const pendingRefs = new Set<string>();
 
     for (const termRef of currentExternalTermRefs) {
+      // Self-ref check
+      if (
+        termRef === localName && resolvedDefinition.kind === "poly" &&
+        resolvedDefinition.rec
+      ) {
+        continue;
+      }
+
       const targetQualified = termEnv.get(termRef);
       if (targetQualified) {
+        // It's an import (in termEnv)
         const targetTerm = ps.terms.get(targetQualified);
         if (targetTerm) {
-          resolvedDefinition = substituteTripLangTermDirect(
-            resolvedDefinition,
-            targetTerm,
-            termRef,
-          );
-          // Check for new external references after substitution
-          const [newTermRefs, _newTypeRefs] = externalReferences(
-            extractDefinitionValue(resolvedDefinition)!,
-          );
-          const newExternalTermRefs = Array.from(newTermRefs.keys());
-          newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
+          replacements.set(termRef, targetTerm);
+        } else {
+          pendingRefs.add(termRef);
         }
       } else {
         // Check if it's a local definition
         const module = ps.modules.get(moduleName)!;
         if (module.defs.has(termRef)) {
           const localTerm = module.defs.get(termRef)!;
-          resolvedDefinition = substituteTripLangTermDirect(
-            resolvedDefinition,
-            localTerm,
-            termRef,
-          );
-          // Check for new external references after substitution
-          const [newTermRefs, _newTypeRefs] = externalReferences(
-            extractDefinitionValue(resolvedDefinition)!,
-          );
-          const newExternalTermRefs = Array.from(newTermRefs.keys());
-          newExternalTermRefs.forEach((ref) => nextExternalTermRefs.add(ref));
+          replacements.set(termRef, localTerm);
         } else {
-          // Find candidate modules that export this symbol
-          const candidateModules: string[] = [];
-          for (const [candidateModuleName, candidateModule] of ps.modules) {
-            if (candidateModule.exports.has(termRef)) {
-              candidateModules.push(candidateModuleName);
+          // It's a cross-module reference
+          const candidateModules = exportIndex.get(termRef)
+            ? Array.from(exportIndex.get(termRef)!)
+            : [];
+
+          if (candidateModules.length === 0) {
+            const candidatesText = " (no modules export this symbol)";
+            throw new Error(
+              `Symbol '${termRef}' is not defined in module '${moduleName}' and is not imported${candidatesText}`,
+            );
+          } else if (candidateModules.length === 1) {
+            // Unambiguous: resolve it
+            const modName = candidateModules[0];
+            const qualified = qualifiedName(modName, termRef);
+            const targetTerm = ps.terms.get(qualified);
+            if (targetTerm) {
+              replacements.set(termRef, targetTerm);
+            } else {
+              pendingRefs.add(termRef);
             }
-          }
-
-          const candidatesText = candidateModules.length > 0
-            ? ` (candidate modules: ${candidateModules.join(", ")})`
-            : " (no modules export this symbol)";
-
-          const fixHint = candidateModules.length > 0
-            ? ` To fix: add 'import ${
+          } else {
+            // Ambiguous - keep pending
+            const candidatesText = ` (candidate modules: ${
+              candidateModules.join(", ")
+            })`;
+            const fixHint = ` To fix: add 'import ${
               candidateModules[0]
             } ${termRef}' or use qualified name '${
               candidateModules[0]
-            }.${termRef}'.`
-            : "";
-
-          throw new Error(
-            `Symbol '${termRef}' is not defined in module '${moduleName}' and is not imported${candidatesText}${fixHint}`,
-          );
+            }.${termRef}'.`;
+            throw new Error(
+              `Symbol '${termRef}' is not defined in module '${moduleName}' and is not imported${candidatesText}${fixHint}`,
+            );
+          }
         }
       }
     }
 
-    // Update for next iteration
-    if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
-      nextExternalTermRefs.delete(localName);
+    // 2. BATCH SUBSTITUTION
+    if (replacements.size > 0) {
+      // Build a map of name -> value for the batch substitution
+      const valueSubstitutions = new Map<string, TripLangValueType>();
+      for (const [name, term] of replacements) {
+        const value = extractDefinitionValue(term);
+        if (value) {
+          valueSubstitutions.set(name, value);
+        }
+      }
+
+      if (valueSubstitutions.size > 0) {
+        // Calculate union of free vars for capture checking (CACHED!)
+        const combinedFVs = new Set<string>();
+        for (const val of valueSubstitutions.values()) {
+          // This is now fast because freeTermVars uses the WeakMap cache
+          const fvs = freeTermVars(val);
+          for (const fv of fvs) combinedFVs.add(fv);
+        }
+
+        // Apply batch substitution directly to the definition value
+        const defValue = extractDefinitionValue(resolvedDefinition);
+        if (defValue) {
+          const newDefValue = substituteTermHygienicBatch(
+            defValue,
+            valueSubstitutions,
+            combinedFVs,
+          );
+
+          // Reconstruct the term with the new value
+          if (newDefValue !== defValue) {
+            switch (resolvedDefinition.kind) {
+              case "poly":
+                resolvedDefinition = {
+                  ...resolvedDefinition,
+                  term: newDefValue as SystemFTerm,
+                };
+                break;
+              case "typed":
+                resolvedDefinition = {
+                  ...resolvedDefinition,
+                  term: newDefValue as TypedLambda,
+                };
+                break;
+              case "untyped":
+                resolvedDefinition = {
+                  ...resolvedDefinition,
+                  term: newDefValue as UntypedLambda,
+                };
+                break;
+            }
+          }
+        }
+      }
+
+      // 3. Re-calculate refs (Fast because untouched subtrees are identity-preserved)
+      const [newTermRefs, _newTypeRefs] = externalReferences(
+        extractDefinitionValue(resolvedDefinition)!,
+      );
+
+      // Update for next iteration
+      const nextExternalTermRefs = new Set<string>();
+      for (const ref of newTermRefs.keys()) {
+        nextExternalTermRefs.add(ref);
+      }
+      // Add back pending refs that we couldn't resolve
+      for (const ref of pendingRefs) {
+        nextExternalTermRefs.add(ref);
+      }
+
+      if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
+        nextExternalTermRefs.delete(localName);
+      }
+
+      // Check if we made progress
+      const refsChanged =
+        nextExternalTermRefs.size !== currentExternalTermRefs.length ||
+        Array.from(nextExternalTermRefs).some((ref) =>
+          !currentExternalTermRefs.includes(ref)
+        );
+
+      if (!refsChanged) {
+        if (verbose) {
+          console.error(
+            `  Term resolution converged for ${moduleName}.${localName} after ${iteration} iterations (no new references)`,
+          );
+        }
+        break;
+      }
+
+      currentExternalTermRefs = Array.from(nextExternalTermRefs);
+
+      if (verbose) {
+        console.error(
+          `  Batch resolved ${replacements.size} terms in ${
+            (performance.now() - iterationStartTime).toFixed(2)
+          }ms`,
+        );
+      }
+    } else {
+      // No progress possible
+      if (verbose) {
+        console.error(
+          `  Term resolution converged for ${moduleName}.${localName} after ${iteration} iterations (no substitutions available)`,
+        );
+      }
+      break;
     }
-    currentExternalTermRefs = [...nextExternalTermRefs];
+
     iteration++;
   }
 
@@ -597,33 +790,23 @@ function substituteDependencies(
   ) {
     const nextExternalTypeRefs = new Set<string>();
     const typeEnv = ps.typeEnv.get(moduleName)!;
+    let changed = false; // Track if any substitution actually occurred
 
     for (const typeRef of currentExternalTypeRefs) {
       const targetQualified = typeEnv.get(typeRef);
+
+      // Case 1: Resolution via Environment (Imports)
       if (targetQualified) {
         const targetType = ps.types.get(targetQualified);
         if (targetType) {
+          const oldDef = resolvedDefinition; // Capture state before substitution
           resolvedDefinition = substituteTripLangTypeDirect(
             resolvedDefinition,
             targetType,
           );
-          // Check for new external references after substitution
-          const [_newTermRefs, newTypeRefs] = externalReferences(
-            extractDefinitionValue(resolvedDefinition)!,
-          );
-          const newExternalTypeRefs = Array.from(newTypeRefs.keys());
-          newExternalTypeRefs.forEach((ref) => nextExternalTypeRefs.add(ref));
-        }
-      } else {
-        // Check if it's a local type definition
-        const module = ps.modules.get(moduleName)!;
-        if (module.defs.has(typeRef)) {
-          const localType = module.defs.get(typeRef)!;
-          if (localType.kind === "type") {
-            resolvedDefinition = substituteTripLangTypeDirect(
-              resolvedDefinition,
-              localType,
-            );
+          // FIX: Only mark as changed if substitution actually happened
+          if (resolvedDefinition !== oldDef) {
+            changed = true;
             // Check for new external references after substitution
             const [_newTermRefs, newTypeRefs] = externalReferences(
               extractDefinitionValue(resolvedDefinition)!,
@@ -631,14 +814,50 @@ function substituteDependencies(
             const newExternalTypeRefs = Array.from(newTypeRefs.keys());
             newExternalTypeRefs.forEach((ref) => nextExternalTypeRefs.add(ref));
           }
-        } else {
-          // Find candidate modules that export this type
-          const candidateModules: string[] = [];
-          for (const [candidateModuleName, candidateModule] of ps.modules) {
-            if (candidateModule.exports.has(typeRef)) {
-              candidateModules.push(candidateModuleName);
+        }
+      } else {
+        // Case 2: Local Resolution / Candidates
+        const module = ps.modules.get(moduleName)!;
+        if (module.defs.has(typeRef)) {
+          const localType = module.defs.get(typeRef)!;
+
+          // FIX: Robust Self-Reference Check
+          // We are already looking at the current module's defs, so strictly check the name.
+          const isSelfReference = typeRef === localName;
+
+          if (isSelfReference) {
+            // Skip self-references to prevent infinite loops
+            continue;
+          }
+
+          // Handle Type Aliases (Substitution)
+          if (localType.kind === "type") {
+            const oldDef = resolvedDefinition; // Capture state before substitution
+            resolvedDefinition = substituteTripLangTypeDirect(
+              resolvedDefinition,
+              localType,
+            );
+            // FIX: Only mark as changed if substitution actually happened
+            if (resolvedDefinition !== oldDef) {
+              changed = true;
+              // Check for new external references after substitution
+              const [_newTermRefs, newTypeRefs] = externalReferences(
+                extractDefinitionValue(resolvedDefinition)!,
+              );
+              const newExternalTypeRefs = Array.from(newTypeRefs.keys());
+              newExternalTypeRefs.forEach((ref) =>
+                nextExternalTypeRefs.add(ref)
+              );
             }
           }
+          // Handle Data Types: For data definitions, we don't substitute/expand,
+          // so we don't mark 'changed'. If all refs are data types or self-refs,
+          // 'changed' remains false and we break the loop.
+        } else {
+          // Use export index for fast lookup instead of iterating all modules
+          const candidateModules = exportIndex.get(typeRef)
+            ? Array.from(exportIndex.get(typeRef)!)
+            : [];
 
           const candidatesText = candidateModules.length > 0
             ? ` (candidate modules: ${candidateModules.join(", ")})`
@@ -659,14 +878,27 @@ function substituteDependencies(
       }
     }
 
+    // BREAK IF STABLE: If nothing changed, we've converged (e.g., all remaining refs
+    // are data types or self-references that we can't/won't substitute).
+    // This prevents infinite loops when encountering large structures with data type refs.
+    if (!changed) {
+      if (verbose) {
+        console.error(
+          `  Type resolution converged for ${moduleName}.${localName} after ${typeIteration} iterations (no substitutions occurred)`,
+        );
+      }
+      break;
+    }
+
     // Update for next iteration
     currentExternalTypeRefs = [...nextExternalTypeRefs];
     typeIteration++;
   }
 
   if (typeIteration >= MAX_TYPE_ITERATIONS) {
+    const remainingTypes = currentExternalTypeRefs.join(", ");
     throw new Error(
-      `Too many iterations (${typeIteration}) resolving external type references for definition - possible circular dependency`,
+      `Too many iterations (${typeIteration}) resolving external type references for definition ${moduleName}.${localName} - possible circular dependency. Remaining unresolved types: [${remainingTypes}]`,
     );
   }
 
@@ -675,10 +907,13 @@ function substituteDependencies(
 
 /**
  * Resolves a single Strongly Connected Component (SCC), iterating to a fixpoint if it's a cycle.
+ * Uses hash caching to avoid redundant computations.
  */
 function resolveSCC(
   scc: QualifiedName[],
   ps: ProgramSpace,
+  exportIndex: Map<string, Set<string>>,
+  hashCache: Map<TripLangTerm, string>,
   verbose: boolean,
 ): void {
   if (verbose) console.error(`Processing SCC: ${scc.join(", ")}`);
@@ -692,6 +927,8 @@ function resolveSCC(
       moduleName,
       localName,
       ps,
+      exportIndex,
+      verbose,
     );
     module.defs.set(localName, resolvedDef);
     setGlobal(ps, qualified, resolvedDef);
@@ -729,20 +966,37 @@ function resolveSCC(
     // Process all definitions using the snapshots
     for (const qualified of scc) {
       const snapshot = snapshots.get(qualified)!;
-      const prevHash = computeTermHash(snapshot.currentDef);
+
+      // Use cached hash if available, otherwise compute and cache
+      let prevHash = hashCache.get(snapshot.currentDef);
+      if (!prevHash) {
+        prevHash = computeTermHash(snapshot.currentDef);
+        hashCache.set(snapshot.currentDef, prevHash);
+      }
 
       const newDef = substituteDependencies(
         snapshot.currentDef,
         snapshot.moduleName,
         snapshot.localName,
         ps,
+        exportIndex,
+        verbose,
       );
-      const newHash = computeTermHash(newDef);
+
+      // Use cached hash if available, otherwise compute and cache
+      let newHash = hashCache.get(newDef);
+      if (!newHash) {
+        newHash = computeTermHash(newDef);
+        hashCache.set(newDef, newHash);
+      }
 
       if (prevHash !== newHash) {
         hasChanged = true;
         snapshot.module.defs.set(snapshot.localName, newDef);
         setGlobal(ps, qualified, newDef);
+        // Update cache entry for the qualified name
+        hashCache.delete(snapshot.currentDef);
+        hashCache.set(newDef, newHash);
       }
     }
     if (!hasChanged) {
@@ -757,6 +1011,23 @@ function resolveSCC(
 }
 
 /**
+ * Builds a reverse index: symbol name -> set of modules that export it
+ * This avoids iterating through all modules when looking for candidates
+ */
+function buildExportIndex(ps: ProgramSpace): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>();
+  for (const [moduleName, module] of ps.modules) {
+    for (const exportName of module.exports) {
+      if (!index.has(exportName)) {
+        index.set(exportName, new Set());
+      }
+      index.get(exportName)!.add(moduleName);
+    }
+  }
+  return index;
+}
+
+/**
  * Resolves cross-module dependencies using dependency graph fixpoint algorithm
  */
 export function resolveCrossModuleDependencies(
@@ -767,7 +1038,9 @@ export function resolveCrossModuleDependencies(
     console.error("Resolving cross-module dependencies...");
   }
 
-  const resolvedPS = deepCopyProgramSpace(programSpace);
+  clearModuleInfoCache();
+  const resolvedPS = shallowCopyProgramSpace(programSpace);
+  const exportIndex = buildExportIndex(resolvedPS);
   // Pre-lower poly/typed terms to untyped to avoid recursive inlining loops.
   for (const module of resolvedPS.modules.values()) {
     for (const [name, def] of module.defs) {
@@ -786,8 +1059,11 @@ export function resolveCrossModuleDependencies(
     console.error(`Found ${sccs.length} strongly connected components`);
   }
 
+  // Create hash cache to avoid redundant computations
+  const hashCache = new Map<TripLangTerm, string>();
+
   for (const scc of sccs) {
-    resolveSCC(scc, resolvedPS, verbose);
+    resolveSCC(scc, resolvedPS, exportIndex, hashCache, verbose);
   }
 
   // Sanity check: verify that all exported definitions have no external references

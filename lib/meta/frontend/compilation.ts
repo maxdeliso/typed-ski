@@ -277,6 +277,14 @@ export function typecheck(
     }
   }
 
+  // Build type alias map from program's type definitions
+  const typeAliases = new Map<string, BaseType>();
+  for (const term of program.terms) {
+    if (term.kind === "type") {
+      typeAliases.set(term.name, term.type);
+    }
+  }
+
   const types = new Map<string, BaseType>();
 
   for (const term of program.terms) {
@@ -310,12 +318,15 @@ export function typecheck(
                 { term },
               );
             }
-            const ctx = emptySystemFContext();
+            const ctx = emptySystemFContext(typeAliases);
             ctx.termCtx.set(term.name, term.type);
             const [ty] = typecheckSystemF(ctx, term.term);
             types.set(term.name, ty);
           } else {
-            const [ty] = typecheckSystemF(emptySystemFContext(), term.term);
+            const [ty] = typecheckSystemF(
+              emptySystemFContext(typeAliases),
+              term.term,
+            );
             types.set(term.name, ty);
           }
           break;

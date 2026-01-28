@@ -16,6 +16,7 @@ import {
   eraseSystemF,
   forall,
   reduceLets,
+  typecheck,
   typecheckSystemF,
 } from "../../lib/types/systemF.ts";
 
@@ -23,6 +24,27 @@ import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
 
 Deno.test("System F type-checker and helpers", async (t) => {
   await t.step("positive cases", async (t) => {
+    await t.step("typecheck wrapper uses emptySystemFContext(undefined)", () => {
+      // Regression coverage: ensure the exported `typecheck()` wrapper is exercised
+      // (it should delegate via emptySystemFContext(undefined)).
+      const id: SystemFTerm = mkSystemFTAbs(
+        "X",
+        mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
+      );
+      const ty = typecheck(id);
+      expect(ty.kind).to.equal("forall");
+      if (
+        ty.kind === "forall" &&
+        ty.body.kind === "non-terminal" &&
+        ty.body.lft.kind === "type-var" &&
+        ty.body.rgt.kind === "type-var"
+      ) {
+        expect(ty.typeVar).to.equal("X");
+        expect(ty.body.lft.typeName).to.equal("X");
+        expect(ty.body.rgt.typeName).to.equal("X");
+      }
+    });
+
     await t.step("polymorphic identity", () => {
       const id: SystemFTerm = mkSystemFTAbs(
         "X",

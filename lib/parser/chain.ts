@@ -14,6 +14,7 @@ import {
   peek,
   remaining,
   skipWhitespace,
+  withParserState,
 } from "./parserState.ts";
 
 /**
@@ -38,7 +39,7 @@ export function parseChain<T>(
   let resultTerm: T | undefined = undefined;
   let currentState = skipWhitespace(state);
 
-  for (;;) {
+  for (let chainLength = 0;; chainLength = chainLength + 1) {
     const [hasRemaining] = remaining(currentState);
     if (!hasRemaining) break;
     const [peeked] = peek(currentState);
@@ -62,7 +63,7 @@ export function parseChain<T>(
   }
 
   if (resultTerm === undefined) {
-    throw new ParseError("expected a term");
+    throw new ParseError(withParserState(currentState, "expected a term"));
   }
 
   return [literals.join(" "), resultTerm, currentState];

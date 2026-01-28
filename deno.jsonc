@@ -66,7 +66,7 @@
     "std/path": "jsr:@std/path@^1.1.4",
     "std/fs": "jsr:@std/fs@^1.0.22",
     "std/assert": "jsr:@std/assert@^1.0.17",
-    "chai": "npm:chai@6.2.2",
+    "chai": "npm:chai@^6.2.2",
     "random-seed": "npm:random-seed@0.3.0"
   },
   "tasks": {
@@ -83,5 +83,5 @@
     "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/"
   },
-  "version": "0.14.0"
+  "version": "0.14.1"
 }

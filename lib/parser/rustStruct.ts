@@ -16,6 +16,7 @@ import {
   type ParserState,
   peek as peekChar,
   skipWhitespace,
+  withParserState,
 } from "./parserState.ts";
 import { HASH } from "./consts.ts";
 
@@ -60,7 +61,7 @@ function skipBlockComment(state: ParserState): ParserState {
     }
     current = consume(current);
   }
-  throw new ParseError("Unterminated block comment");
+  throw new ParseError(withParserState(current, "Unterminated block comment"));
 }
 
 /**
@@ -98,13 +99,17 @@ function parseAttribute(state: ParserState): ParserState {
   let current = skipCommentsAndWhitespace(state);
   const [ch, chState] = peekChar(current);
   if (ch !== HASH) {
-    throw new ParseError(`Expected '#' for attribute`);
+    throw new ParseError(
+      withParserState(chState, `Expected '#' for attribute`),
+    );
   }
   current = consume(chState);
 
   const [bracket, bracketState] = peekChar(current);
   if (bracket !== "[") {
-    throw new ParseError(`Expected '[' after '#'`);
+    throw new ParseError(
+      withParserState(bracketState, `Expected '[' after '#'`),
+    );
   }
   current = consume(bracketState);
 
@@ -118,7 +123,7 @@ function parseAttribute(state: ParserState): ParserState {
   }
 
   if (depth !== 0) {
-    throw new ParseError("Unterminated attribute");
+    throw new ParseError(withParserState(current, "Unterminated attribute"));
   }
 
   return skipCommentsAndWhitespace(current);
@@ -138,7 +143,9 @@ function parseAttributeContent(
   // Skip '#'
   const [hash, hashState] = peekChar(current);
   if (hash !== HASH) {
-    throw new ParseError(`Expected '#' for attribute`);
+    throw new ParseError(
+      withParserState(hashState, `Expected '#' for attribute`),
+    );
   }
   current = consume(hashState);
   content += HASH;
@@ -146,7 +153,9 @@ function parseAttributeContent(
   // Skip '['
   const [bracket, bracketState] = peekChar(current);
   if (bracket !== "[") {
-    throw new ParseError(`Expected '[' after '#'`);
+    throw new ParseError(
+      withParserState(bracketState, `Expected '[' after '#'`),
+    );
   }
   current = consume(bracketState);
   content += "[";
@@ -162,7 +171,7 @@ function parseAttributeContent(
   }
 
   if (depth !== 0) {
-    throw new ParseError("Unterminated attribute");
+    throw new ParseError(withParserState(current, "Unterminated attribute"));
   }
 
   // Extract attribute content (without the brackets)
@@ -301,7 +310,10 @@ function parseStructField(
   const [colon] = peekChar(current);
   if (colon !== ":") {
     throw new ParseError(
-      `Expected ':' after field name '${fieldName}'`,
+      withParserState(
+        current,
+        `Expected ':' after field name '${fieldName}'`,
+      ),
     );
   }
   current = consume(current);
@@ -413,7 +425,12 @@ export function parseRustStruct(
 
   // If we didn't find the struct, throw an error
   if (!foundStruct) {
-    throw new ParseError(`Could not find struct '${structName}' in source`);
+    throw new ParseError(
+      withParserState(
+        state,
+        `Could not find struct '${structName}' in source`,
+      ),
+    );
   }
 
   state = skipCommentsAndWhitespace(state);
@@ -421,7 +438,9 @@ export function parseRustStruct(
   // Expect opening brace
   const [brace] = peekChar(state);
   if (brace !== "{") {
-    throw new ParseError(`Expected '{' after struct name`);
+    throw new ParseError(
+      withParserState(state, `Expected '{' after struct name`),
+    );
   }
   state = consume(state);
 

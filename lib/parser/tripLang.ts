@@ -28,6 +28,7 @@ import {
   peek,
   remaining,
   skipWhitespace,
+  withParserState,
 } from "./parserState.ts";
 import {
   COMBINATOR,
@@ -123,7 +124,10 @@ function parseDataDefinition(
 
   if (constructors.length === 0) {
     throw new ParseError(
-      "data definition must declare at least one constructor",
+      withParserState(
+        currentState,
+        "data definition must declare at least one constructor",
+      ),
     );
   }
 
@@ -242,7 +246,9 @@ export function parseTripLangDefinition(
       return [{ kind: TYPE, name, type }, skipWhitespace(finalState)];
 
     default:
-      throw new ParseError(`Unknown definition kind: ${kind}`);
+      throw new ParseError(
+        withParserState(currentState, `Unknown definition kind: ${kind}`),
+      );
   }
 }
 

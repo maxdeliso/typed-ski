@@ -15,6 +15,7 @@ import {
   peek,
   peekArrow,
   skipWhitespace,
+  withParserState,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import {
@@ -49,7 +50,9 @@ export function parseSimpleType(
     const [innerLit, innerType, stateAfterInner] = parseArrowType(stateAfterLP);
     const [next, sAfterInner] = peek(stateAfterInner);
     if (next !== ")") {
-      throw new ParseError("expected ')' after type expression");
+      throw new ParseError(
+        withParserState(sAfterInner, "expected ')' after type expression"),
+      );
     }
     const stateAfterRP = matchRP(sAfterInner);
     return [`(${innerLit})`, innerType, stateAfterRP];

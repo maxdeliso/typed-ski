@@ -30,6 +30,7 @@ import {
   parseNumericLiteral,
   type ParserState,
   peek,
+  withParserState,
 } from "./parserState.ts";
 import { parseChain } from "./chain.ts";
 import { parseArrowType, unparseType } from "./type.ts";
@@ -66,7 +67,9 @@ export function parseAtomicTypedLambda(
     const stateAfterLambda = matchCh(s, BACKSLASH);
     const [next] = peek(stateAfterLambda);
     if (next === COLON) {
-      throw new ParseError("expected an identifier");
+      throw new ParseError(
+        withParserState(stateAfterLambda, "expected an identifier"),
+      );
     }
     const [varLit, stateAfterVar] = parseIdentifier(stateAfterLambda);
     const stateAfterColon = matchCh(stateAfterVar, COLON);

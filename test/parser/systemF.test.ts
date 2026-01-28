@@ -7,6 +7,7 @@ import {
 import { parseWithEOF } from "../../lib/parser/eof.ts";
 import { parseNatLiteralIdentifier } from "../../lib/consts/natNames.ts";
 import type { SystemFTerm } from "../../lib/terms/systemF.ts";
+import { flattenSystemFApp } from "../../lib/terms/systemF.ts";
 import {
   arrow,
   mkTypeVariable,
@@ -702,6 +703,393 @@ Deno.test("System F Parser", async (t) => {
       );
     });
   });
+});
+
+/**
+ * The system F parser parses expression on the right hand side of the equals according to triplang keywords.
+ * e.g. in `poly foo = "foo"` the "foo" is the system F expression.
+ */
+Deno.test("parsed a naked atomic", () => {
+  const input = '"poly"';
+  const [lit, result] = parseSystemF(input);
+  assert.equal(lit, input);
+  assert.equal(result.kind, "non-terminal");
+  // Verify that each character in "poly" is parsed as a natural number
+  // 'p'=112, 'o'=111, 'l'=108, 'y'=121
+  assertNatList(result, [112n, 111n, 108n, 121n]);
+});
+
+Deno.test("parses let inside match arm", () => {
+  const input = `\\input : List Nat =>
+  match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {
+    | Err e => Err [ParseError] [List Token] e
+    | Ok rev =>
+        let toks = reverse [Token] rev in
+        Ok [ParseError] [List Token]
+          (append [Token] toks (cons [Token] T_EOF (nil [Token])))
+  }`;
+  const [_lit, tr] = parseSystemF(input);
+
+  // Top level should be a lambda abstraction
+  assert.equal(tr.kind, "systemF-abs");
+  assert.equal(tr.name, "input");
+
+  // Type annotation should be List Nat (type application)
+  assert.equal(tr.typeAnnotation.kind, "type-app");
+  assert.equal(tr.typeAnnotation.fn.kind, "type-var");
+  assert.equal(tr.typeAnnotation.fn.typeName, "List");
+  assert.equal(tr.typeAnnotation.arg.kind, "type-var");
+  assert.equal(tr.typeAnnotation.arg.typeName, "Nat");
+
+  // Body should be a match expression
+  assert.equal(tr.body.kind, "systemF-match");
+  const matchExpr = tr.body;
+
+  // Match scrutinee: (tokenizeAcc input (nil [Token]))
+  // This is a parenthesized application
+  assert.equal(matchExpr.scrutinee.kind, "non-terminal");
+  const scrutineeApp = matchExpr.scrutinee;
+  assert.equal(scrutineeApp.lft.kind, "non-terminal");
+  assert.equal(scrutineeApp.lft.lft.kind, "systemF-var");
+  assert.equal(scrutineeApp.lft.lft.name, "tokenizeAcc");
+  assert.equal(scrutineeApp.lft.rgt.kind, "systemF-var");
+  assert.equal(scrutineeApp.lft.rgt.name, "input");
+  assert.equal(scrutineeApp.rgt.kind, "systemF-type-app");
+  assert.equal(scrutineeApp.rgt.term.kind, "systemF-var");
+  assert.equal(scrutineeApp.rgt.term.name, "nil");
+  assert.equal(scrutineeApp.rgt.typeArg.kind, "type-var");
+  assert.equal(scrutineeApp.rgt.typeArg.typeName, "Token");
+
+  // Match return type: Result ParseError (List Token)
+  // This is a nested type application: typeApp(typeApp(Result, ParseError), typeApp(List, Token))
+  assert.equal(matchExpr.returnType.kind, "type-app");
+  const returnTypeApp = matchExpr.returnType;
+  // Outer: typeApp(Result ParseError, List Token)
+  assert.equal(returnTypeApp.fn.kind, "type-app");
+  assert.equal(returnTypeApp.fn.fn.kind, "type-var");
+  assert.equal(returnTypeApp.fn.fn.typeName, "Result");
+  assert.equal(returnTypeApp.fn.arg.kind, "type-var");
+  assert.equal(returnTypeApp.fn.arg.typeName, "ParseError");
+  assert.equal(returnTypeApp.arg.kind, "type-app");
+  assert.equal(returnTypeApp.arg.fn.kind, "type-var");
+  assert.equal(returnTypeApp.arg.fn.typeName, "List");
+  assert.equal(returnTypeApp.arg.arg.kind, "type-var");
+  assert.equal(returnTypeApp.arg.arg.typeName, "Token");
+
+  // Match should have 2 arms
+  assert.equal(matchExpr.arms.length, 2);
+
+  // First arm: | Err e => Err [ParseError] [List Token] e
+  const errArm = matchExpr.arms[0];
+  assert.equal(errArm.constructorName, "Err");
+  assert.equal(errArm.params.length, 1);
+  assert.equal(errArm.params[0], "e");
+  // Body: Err [ParseError] [List Token] e
+  // Structure: ((Err [ParseError]) [List Token]) e
+  assert.equal(errArm.body.kind, "non-terminal");
+  const errBody = errArm.body;
+  // Left side: (Err [ParseError]) [List Token] - nested type application
+  assert.equal(errBody.lft.kind, "systemF-type-app");
+  const outerTypeApp = errBody.lft;
+  // Inner: Err [ParseError]
+  assert.equal(outerTypeApp.term.kind, "systemF-type-app");
+  assert.equal(outerTypeApp.term.term.kind, "systemF-var");
+  assert.equal(outerTypeApp.term.term.name, "Err");
+  assert.equal(outerTypeApp.term.typeArg.kind, "type-var");
+  assert.equal(outerTypeApp.term.typeArg.typeName, "ParseError");
+  // Outer type arg: List Token (type application)
+  assert.equal(outerTypeApp.typeArg.kind, "type-app");
+  assert.equal(outerTypeApp.typeArg.fn.kind, "type-var");
+  assert.equal(outerTypeApp.typeArg.fn.typeName, "List");
+  assert.equal(outerTypeApp.typeArg.arg.kind, "type-var");
+  assert.equal(outerTypeApp.typeArg.arg.typeName, "Token");
+  // Right side: e
+  assert.equal(errBody.rgt.kind, "systemF-var");
+  assert.equal(errBody.rgt.name, "e");
+
+  // Second arm: | Ok rev => let toks = reverse [Token] rev in ...
+  const okArm = matchExpr.arms[1];
+  assert.equal(okArm.constructorName, "Ok");
+  assert.equal(okArm.params.length, 1);
+  assert.equal(okArm.params[0], "rev");
+  // Body should be a let expression
+  assert.equal(okArm.body.kind, "systemF-let");
+  assert.equal(okArm.body.name, "toks");
+  // Let value: reverse [Token] rev
+  assert.equal(okArm.body.value.kind, "non-terminal");
+  const letValue = okArm.body.value;
+  assert.equal(letValue.lft.kind, "systemF-type-app");
+  assert.equal(letValue.lft.term.kind, "systemF-var");
+  assert.equal(letValue.lft.term.name, "reverse");
+  assert.equal(letValue.lft.typeArg.kind, "type-var");
+  assert.equal(letValue.lft.typeArg.typeName, "Token");
+  assert.equal(letValue.rgt.kind, "systemF-var");
+  assert.equal(letValue.rgt.name, "rev");
+  // Let body: Ok [ParseError] [List Token] (append [Token] toks (cons [Token] T_EOF (nil [Token])))
+  assert.equal(okArm.body.body.kind, "non-terminal");
+  const letBody = okArm.body.body;
+  // Ok [ParseError] [List Token] (...)
+  // Structure: ((Ok [ParseError]) [List Token]) (append ...)
+  assert.equal(letBody.lft.kind, "systemF-type-app");
+  const okTypeApp = letBody.lft;
+  // Inner: Ok [ParseError]
+  assert.equal(okTypeApp.term.kind, "systemF-type-app");
+  assert.equal(okTypeApp.term.term.kind, "systemF-var");
+  assert.equal(okTypeApp.term.term.name, "Ok");
+  assert.equal(okTypeApp.term.typeArg.kind, "type-var");
+  assert.equal(okTypeApp.term.typeArg.typeName, "ParseError");
+  // Outer type arg: List Token (type application)
+  assert.equal(okTypeApp.typeArg.kind, "type-app");
+  assert.equal(okTypeApp.typeArg.fn.kind, "type-var");
+  assert.equal(okTypeApp.typeArg.fn.typeName, "List");
+  assert.equal(okTypeApp.typeArg.arg.kind, "type-var");
+  assert.equal(okTypeApp.typeArg.arg.typeName, "Token");
+  // Right side: (append [Token] toks (cons [Token] T_EOF (nil [Token])))
+  // Structure: ((append [Token]) toks) (cons [Token] T_EOF (nil [Token]))
+  const appendApp = letBody.rgt;
+  assert.equal(appendApp.kind, "non-terminal");
+  // Left: (append [Token]) toks
+  assert.equal(appendApp.lft.kind, "non-terminal");
+  assert.equal(appendApp.lft.lft.kind, "systemF-type-app");
+  assert.equal(appendApp.lft.lft.term.kind, "systemF-var");
+  assert.equal(appendApp.lft.lft.term.name, "append");
+  assert.equal(appendApp.lft.lft.typeArg.kind, "type-var");
+  assert.equal(appendApp.lft.lft.typeArg.typeName, "Token");
+  assert.equal(appendApp.lft.rgt.kind, "systemF-var");
+  assert.equal(appendApp.lft.rgt.name, "toks");
+  // Right: (cons [Token] T_EOF (nil [Token]))
+  assert.equal(appendApp.rgt.kind, "non-terminal");
+  const consApp = appendApp.rgt;
+  assert.equal(consApp.lft.kind, "non-terminal");
+  assert.equal(consApp.lft.lft.kind, "systemF-type-app");
+  assert.equal(consApp.lft.lft.term.kind, "systemF-var");
+  assert.equal(consApp.lft.lft.term.name, "cons");
+  assert.equal(consApp.lft.lft.typeArg.kind, "type-var");
+  assert.equal(consApp.lft.lft.typeArg.typeName, "Token");
+  assert.equal(consApp.lft.rgt.kind, "systemF-var");
+  assert.equal(consApp.lft.rgt.name, "T_EOF");
+  assert.equal(consApp.rgt.kind, "systemF-type-app");
+  assert.equal(consApp.rgt.term.kind, "systemF-var");
+  assert.equal(consApp.rgt.term.name, "nil");
+  assert.equal(consApp.rgt.typeArg.kind, "type-var");
+  assert.equal(consApp.rgt.typeArg.typeName, "Token");
+});
+
+Deno.test("parses complex nested expr", () => {
+  const input = `#A => \\xs : List A =>
+  foldl [A] [List A]
+    (\\acc : List A => \\x : A => cons [A] x acc)
+    (nil [A])
+    xs
+  `;
+  const [_lit, tr] = parseSystemF(input);
+
+  // Top level should be a type abstraction
+  assert.equal(tr.kind, "systemF-type-abs");
+  assert.equal(tr.typeVar, "A");
+
+  // Body should be a term abstraction
+  const termAbs = tr.body;
+  assert.equal(termAbs.kind, "systemF-abs");
+  assert.equal(termAbs.name, "xs");
+
+  // Type annotation should be List A (type application)
+  assert.equal(termAbs.typeAnnotation.kind, "type-app");
+  assert.equal(termAbs.typeAnnotation.fn.kind, "type-var");
+  assert.equal(termAbs.typeAnnotation.fn.typeName, "List");
+  assert.equal(termAbs.typeAnnotation.arg.kind, "type-var");
+  assert.equal(termAbs.typeAnnotation.arg.typeName, "A");
+
+  // Body should be a left-associative application chain:
+  // foldl [A] [List A] (\acc : List A => \x : A => cons [A] x acc) (nil [A]) xs
+  const body = termAbs.body;
+  assert.equal(body.kind, "non-terminal");
+
+  // Rightmost argument: xs
+  assert.equal(body.rgt.kind, "systemF-var");
+  assert.equal(body.rgt.name, "xs");
+
+  // Second-to-rightmost: (nil [A])
+  const secondArg = body.lft;
+  assert.equal(secondArg.kind, "non-terminal");
+  assert.equal(secondArg.rgt.kind, "systemF-type-app");
+  assert.equal(secondArg.rgt.term.kind, "systemF-var");
+  assert.equal(secondArg.rgt.term.name, "nil");
+  assert.equal(secondArg.rgt.typeArg.kind, "type-var");
+  assert.equal(secondArg.rgt.typeArg.typeName, "A");
+
+  // Third argument: (\acc : List A => \x : A => cons [A] x acc)
+  const thirdArg = secondArg.lft;
+  assert.equal(thirdArg.kind, "non-terminal");
+  assert.equal(thirdArg.rgt.kind, "systemF-abs");
+  const innerAbs = thirdArg.rgt;
+  assert.equal(innerAbs.name, "acc");
+  assert.equal(innerAbs.typeAnnotation.kind, "type-app");
+  assert.equal(innerAbs.typeAnnotation.fn.kind, "type-var");
+  assert.equal(innerAbs.typeAnnotation.fn.typeName, "List");
+  assert.equal(innerAbs.typeAnnotation.arg.kind, "type-var");
+  assert.equal(innerAbs.typeAnnotation.arg.typeName, "A");
+
+  // Inner lambda: \x : A => cons [A] x acc
+  assert.equal(innerAbs.body.kind, "systemF-abs");
+  const nestedAbs = innerAbs.body;
+  assert.equal(nestedAbs.name, "x");
+  assert.equal(nestedAbs.typeAnnotation.kind, "type-var");
+  assert.equal(nestedAbs.typeAnnotation.typeName, "A");
+
+  // Body: cons [A] x acc
+  assert.equal(nestedAbs.body.kind, "non-terminal");
+  const consApp = nestedAbs.body;
+  assert.equal(consApp.rgt.kind, "systemF-var");
+  assert.equal(consApp.rgt.name, "acc");
+  assert.equal(consApp.lft.kind, "non-terminal");
+  assert.equal(consApp.lft.rgt.kind, "systemF-var");
+  assert.equal(consApp.lft.rgt.name, "x");
+  assert.equal(consApp.lft.lft.kind, "systemF-type-app");
+  assert.equal(consApp.lft.lft.term.kind, "systemF-var");
+  assert.equal(consApp.lft.lft.term.name, "cons");
+  assert.equal(consApp.lft.lft.typeArg.kind, "type-var");
+  assert.equal(consApp.lft.lft.typeArg.typeName, "A");
+
+  // Leftmost: foldl [A] [List A]
+  const foldlApp = thirdArg.lft;
+  assert.equal(foldlApp.kind, "systemF-type-app");
+  assert.equal(foldlApp.term.kind, "systemF-type-app");
+  assert.equal(foldlApp.term.term.kind, "systemF-var");
+  assert.equal(foldlApp.term.term.name, "foldl");
+  assert.equal(foldlApp.term.typeArg.kind, "type-var");
+  assert.equal(foldlApp.term.typeArg.typeName, "A");
+  assert.equal(foldlApp.typeArg.kind, "type-app");
+  assert.equal(foldlApp.typeArg.fn.kind, "type-var");
+  assert.equal(foldlApp.typeArg.fn.typeName, "List");
+  assert.equal(foldlApp.typeArg.arg.kind, "type-var");
+  assert.equal(foldlApp.typeArg.arg.typeName, "A");
+});
+
+Deno.test("parses nested let bindings", () => {
+  const input = `
+  \\input : List Nat => \\accRev : List Token =>
+  let clean = dropWhile [Nat] isSpace input in
+
+  matchList [Nat] [Result ParseError (List Token)] clean
+    (Ok [ParseError] [List Token] accRev)
+    (\\c : Nat => \\cs : List Nat =>
+
+      if [Result ParseError (List Token)]
+        (and (eq c '-') (matchList [Nat] [Bool] cs false (\\h : Nat => \\t : List Nat => eq h '>')))
+        (\\u : Nat =>
+          let rest = tail [Nat] cs in
+          tokenizeAcc rest (cons [Token] T_Arrow accRev))
+        (\\u : Nat =>
+
+      if [Result ParseError (List Token)]
+        (and (eq c '=') (matchList [Nat] [Bool] cs false (\\h : Nat => \\t : List Nat => eq h '>')))
+        (\\u : Nat =>
+          let rest = tail [Nat] cs in
+          tokenizeAcc rest (cons [Token] T_FatArrow accRev))
+        (\\u : Nat =>
+
+      match (lookupToken c simpleTokens) [Result ParseError (List Token)] {
+        | Some tok =>
+            tokenizeAcc cs (cons [Token] tok accRev)
+
+        | None =>
+            if [Result ParseError (List Token)] (isAlpha c)
+              (\\u : Nat =>
+                let split = span [Nat] isIdentChar clean in
+                let taken = fst [List Nat] [List Nat] split in
+                let remaining = snd [List Nat] [List Nat] split in
+                let tok =
+                  if [Token] (isKeywordPoly taken)
+                    (\\u : Nat => T_Keyword taken)
+                    (\\u : Nat => T_Ident taken)
+                in
+                tokenizeAcc remaining (cons [Token] tok accRev))
+
+              (\\u : Nat =>
+                if [Result ParseError (List Token)] (isDigit c)
+                  (\\u : Nat =>
+                    let split = span [Nat] isDigit clean in
+                    let taken = fst [List Nat] [List Nat] split in
+                    let remaining = snd [List Nat] [List Nat] split in
+                    let n = natFromDigitList taken in
+                    tokenizeAcc remaining (cons [Token] (T_Nat n) accRev))
+
+                  (\\u : Nat =>
+                    Err [ParseError] [List Token] (MkParseError zero (nil [Nat]))))
+      }
+
+      )))
+  `;
+
+  const [lit, ast] = parseSystemF(input);
+
+  // Basic sanity checks on the parse tree (non-exhaustive)
+  assert.ok(
+    lit.includes("let clean ="),
+    "expected literal to include top-level let",
+  );
+  assert.equal(ast.kind, "systemF-abs");
+  assert.equal(ast.name, "input");
+  assert.equal(ast.typeAnnotation.kind, "type-app");
+  assert.equal(ast.typeAnnotation.fn.kind, "type-var");
+  assert.equal(ast.typeAnnotation.fn.typeName, "List");
+  assert.equal(ast.typeAnnotation.arg.kind, "type-var");
+  assert.equal(ast.typeAnnotation.arg.typeName, "Nat");
+
+  // Second lambda: \accRev : List Token => ...
+  assert.equal(ast.body.kind, "systemF-abs");
+  const abs2 = ast.body;
+  assert.equal(abs2.name, "accRev");
+  assert.equal(abs2.typeAnnotation.kind, "type-app");
+  assert.equal(abs2.typeAnnotation.fn.kind, "type-var");
+  assert.equal(abs2.typeAnnotation.fn.typeName, "List");
+  assert.equal(abs2.typeAnnotation.arg.kind, "type-var");
+  assert.equal(abs2.typeAnnotation.arg.typeName, "Token");
+
+  // Outer let: let clean = dropWhile [Nat] isSpace input in ...
+  assert.equal(abs2.body.kind, "systemF-let");
+  const cleanLet = abs2.body;
+  assert.equal(cleanLet.name, "clean");
+
+  // The body after the let should be an application chain starting with matchList.
+  assert.equal(cleanLet.body.kind, "non-terminal");
+  const appParts = flattenSystemFApp(cleanLet.body);
+  assert.ok(
+    appParts.length >= 4,
+    "expected matchList application with multiple args",
+  );
+  assert.equal(appParts[0].kind, "systemF-type-app");
+  const head0 = appParts[0];
+  assert.equal(head0.term.kind, "systemF-type-app");
+  assert.equal(head0.term.term.kind, "systemF-var");
+  assert.equal(head0.term.term.name, "matchList");
+
+  // Find a nested `match ... { | Some tok => ... | None => ... }` inside the body.
+  const findFirstMatch = (t: SystemFTerm): SystemFTerm | undefined => {
+    if (t.kind === "systemF-match") return t;
+    if (t.kind === "systemF-abs") return findFirstMatch(t.body);
+    if (t.kind === "systemF-type-abs") return findFirstMatch(t.body);
+    if (t.kind === "systemF-type-app") return findFirstMatch(t.term);
+    if (t.kind === "systemF-let") {
+      return findFirstMatch(t.value) ?? findFirstMatch(t.body);
+    }
+    if (t.kind === "non-terminal") {
+      return findFirstMatch(t.lft) ?? findFirstMatch(t.rgt);
+    }
+    return undefined;
+  };
+
+  const matchNode = findFirstMatch(cleanLet.body);
+  assert.ok(
+    matchNode !== undefined,
+    "expected to find a nested match expression",
+  );
+  assert.equal(matchNode!.kind, "systemF-match");
+  assert.equal(matchNode!.arms.length, 2);
+  assert.equal(matchNode!.arms[0].constructorName, "Some");
+  assert.deepEqual(matchNode!.arms[0].params, ["tok"]);
+  assert.equal(matchNode!.arms[1].constructorName, "None");
 });
 
 Deno.test("System F type parser", async (t) => {

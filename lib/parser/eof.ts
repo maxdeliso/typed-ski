@@ -10,6 +10,7 @@ import {
   createParserState,
   type ParserState,
   remaining,
+  withParserState,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 
@@ -32,7 +33,10 @@ export function parseWithEOF<T>(
   const [hasRemaining, finalState] = remaining(updatedState);
   if (hasRemaining) {
     throw new ParseError(
-      `unexpected extra input: "${finalState.buf.slice(finalState.idx)}"`,
+      withParserState(
+        finalState,
+        `unexpected extra input: "${finalState.buf.slice(finalState.idx)}"`,
+      ),
     );
   }
   return [lit, result, finalState];

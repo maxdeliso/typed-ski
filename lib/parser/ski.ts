@@ -14,6 +14,7 @@ import {
   matchRP,
   type ParserState,
   peek,
+  withParserState,
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { parseWithEOF } from "./eof.ts";
@@ -72,7 +73,10 @@ function parseAtomicOrParens(
   } else {
     const unexpected = peeked === null ? "EOF" : `"${peeked}"`;
     throw new ParseError(
-      `unexpected token ${unexpected} when expecting an SKI term`,
+      withParserState(
+        state,
+        `unexpected token ${unexpected} when expecting an SKI term`,
+      ),
     );
   }
 }

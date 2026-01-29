@@ -582,7 +582,7 @@ function substituteDependencies(
     );
   }
   let iteration = 0;
-  const MAX_ITERATIONS = 10; // Prevent infinite loops
+  const MAX_ITERATIONS = 20; // Prevent infinite loops
 
   while (currentExternalTermRefs.length > 0 && iteration < MAX_ITERATIONS) {
     const iterationStartTime = performance.now();

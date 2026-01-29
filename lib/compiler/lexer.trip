@@ -9,9 +9,7 @@ import Prelude matchList
 import Prelude head
 import Prelude tail
 import Prelude dropWhile
-import Prelude span
 import Prelude if
-import Prelude eq
 import Prelude isZero
 import Prelude and
 import Prelude or
@@ -62,14 +60,12 @@ export T_Keyword
 export T_Ident
 export T_Nat
 export T_EOF
-export simpleTokens
-export lookupToken
 export tokenize
+export tokenizeAcc
 export isSpace
 export isAlpha
 export isDigit
 export isIdentChar
-export eqList
 export kwPoly
 export isKeywordPoly
 export fromSNat
@@ -85,6 +81,8 @@ export SS
 export toSNat
 export seq
 export slte
+export anyEqSNat
+export snatEqChar
 export isSpaceSNat
 export isDigitSNat
 export isAlphaSNat
@@ -94,6 +92,26 @@ export sn_newline
 export sn_cr
 export sn_tab
 export sn_underscore
+export reverse
+export simpleTokensSNat
+export lookupTokenSNat
+export eqListFast
+export sn_0
+export sn_9
+export sn_a
+export sn_z
+export sn_A
+export sn_Z
+export isDigitSNat
+export isLowerSNat
+export isUpperSNat
+export isAlphaSNat
+export isIdentCharSNat
+export isDigit
+export isAlpha
+export isIdentChar
+export consumeIdent
+export consumeDigits
 
 data Token =
   | T_LParen
@@ -170,6 +188,7 @@ poly rec slte = \a : SNat => \b : SNat =>
         | SS pb => slte pa pb
       }
   }
+
 poly sn_space = toSNat ' '
 poly sn_newline = toSNat '\n'
 poly sn_cr = toSNat 13
@@ -188,156 +207,25 @@ poly rec anyEqSNat = \c : SNat => \xs : List SNat =>
     (\h : SNat => \t : List SNat =>
       if [Bool] (seq c h) (\u : Nat => true) (\u : Nat => anyEqSNat c t))
 
-poly rec anyEq = \c : Nat => \xs : List Nat =>
-  matchList [Nat] [Bool] xs false
-    (\h : Nat => \t : List Nat =>
-      or (eq c h) (anyEq c t))
+poly sn_0 = toSNat '0'
+poly sn_9 = toSNat '9'
+poly sn_a = toSNat 'a'
+poly sn_z = toSNat 'z'
+poly sn_A = toSNat 'A'
+poly sn_Z = toSNat 'Z'
 
-poly digits =
-  cons [Nat] '0'
-  (cons [Nat] '1'
-  (cons [Nat] '2'
-  (cons [Nat] '3'
-  (cons [Nat] '4'
-  (cons [Nat] '5'
-  (cons [Nat] '6'
-  (cons [Nat] '7'
-  (cons [Nat] '8'
-  (cons [Nat] '9'
-  (nil [Nat]))))))))))
+poly isDigitSNat = \c : SNat =>
+  and (slte sn_0 c) (slte c sn_9)
 
-poly digitsSNat =
-  cons [SNat] (toSNat '0')
-  (cons [SNat] (toSNat '1')
-  (cons [SNat] (toSNat '2')
-  (cons [SNat] (toSNat '3')
-  (cons [SNat] (toSNat '4')
-  (cons [SNat] (toSNat '5')
-  (cons [SNat] (toSNat '6')
-  (cons [SNat] (toSNat '7')
-  (cons [SNat] (toSNat '8')
-  (cons [SNat] (toSNat '9')
-  (nil [SNat]))))))))))
+poly isLowerSNat = \c : SNat =>
+  and (slte sn_a c) (slte c sn_z)
 
-poly lowers =
-  cons [Nat] 'a'
-  (cons [Nat] 'b'
-  (cons [Nat] 'c'
-  (cons [Nat] 'd'
-  (cons [Nat] 'e'
-  (cons [Nat] 'f'
-  (cons [Nat] 'g'
-  (cons [Nat] 'h'
-  (cons [Nat] 'i'
-  (cons [Nat] 'j'
-  (cons [Nat] 'k'
-  (cons [Nat] 'l'
-  (cons [Nat] 'm'
-  (cons [Nat] 'n'
-  (cons [Nat] 'o'
-  (cons [Nat] 'p'
-  (cons [Nat] 'q'
-  (cons [Nat] 'r'
-  (cons [Nat] 's'
-  (cons [Nat] 't'
-  (cons [Nat] 'u'
-  (cons [Nat] 'v'
-  (cons [Nat] 'w'
-  (cons [Nat] 'x'
-  (cons [Nat] 'y'
-  (cons [Nat] 'z'
-  (nil [Nat]))))))))))))))))))))))))))
+poly isUpperSNat = \c : SNat =>
+  and (slte sn_A c) (slte c sn_Z)
 
-poly lowersSNat =
-  cons [SNat] (toSNat 'a')
-  (cons [SNat] (toSNat 'b')
-  (cons [SNat] (toSNat 'c')
-  (cons [SNat] (toSNat 'd')
-  (cons [SNat] (toSNat 'e')
-  (cons [SNat] (toSNat 'f')
-  (cons [SNat] (toSNat 'g')
-  (cons [SNat] (toSNat 'h')
-  (cons [SNat] (toSNat 'i')
-  (cons [SNat] (toSNat 'j')
-  (cons [SNat] (toSNat 'k')
-  (cons [SNat] (toSNat 'l')
-  (cons [SNat] (toSNat 'm')
-  (cons [SNat] (toSNat 'n')
-  (cons [SNat] (toSNat 'o')
-  (cons [SNat] (toSNat 'p')
-  (cons [SNat] (toSNat 'q')
-  (cons [SNat] (toSNat 'r')
-  (cons [SNat] (toSNat 's')
-  (cons [SNat] (toSNat 't')
-  (cons [SNat] (toSNat 'u')
-  (cons [SNat] (toSNat 'v')
-  (cons [SNat] (toSNat 'w')
-  (cons [SNat] (toSNat 'x')
-  (cons [SNat] (toSNat 'y')
-  (cons [SNat] (toSNat 'z')
-  (nil [SNat]))))))))))))))))))))))))))
-
-poly uppers =
-  cons [Nat] 'A'
-  (cons [Nat] 'B'
-  (cons [Nat] 'C'
-  (cons [Nat] 'D'
-  (cons [Nat] 'E'
-  (cons [Nat] 'F'
-  (cons [Nat] 'G'
-  (cons [Nat] 'H'
-  (cons [Nat] 'I'
-  (cons [Nat] 'J'
-  (cons [Nat] 'K'
-  (cons [Nat] 'L'
-  (cons [Nat] 'M'
-  (cons [Nat] 'N'
-  (cons [Nat] 'O'
-  (cons [Nat] 'P'
-  (cons [Nat] 'Q'
-  (cons [Nat] 'R'
-  (cons [Nat] 'S'
-  (cons [Nat] 'T'
-  (cons [Nat] 'U'
-  (cons [Nat] 'V'
-  (cons [Nat] 'W'
-  (cons [Nat] 'X'
-  (cons [Nat] 'Y'
-  (cons [Nat] 'Z'
-  (nil [Nat]))))))))))))))))))))))))))
-
-poly uppersSNat =
-  cons [SNat] (toSNat 'A')
-  (cons [SNat] (toSNat 'B')
-  (cons [SNat] (toSNat 'C')
-  (cons [SNat] (toSNat 'D')
-  (cons [SNat] (toSNat 'E')
-  (cons [SNat] (toSNat 'F')
-  (cons [SNat] (toSNat 'G')
-  (cons [SNat] (toSNat 'H')
-  (cons [SNat] (toSNat 'I')
-  (cons [SNat] (toSNat 'J')
-  (cons [SNat] (toSNat 'K')
-  (cons [SNat] (toSNat 'L')
-  (cons [SNat] (toSNat 'M')
-  (cons [SNat] (toSNat 'N')
-  (cons [SNat] (toSNat 'O')
-  (cons [SNat] (toSNat 'P')
-  (cons [SNat] (toSNat 'Q')
-  (cons [SNat] (toSNat 'R')
-  (cons [SNat] (toSNat 'S')
-  (cons [SNat] (toSNat 'T')
-  (cons [SNat] (toSNat 'U')
-  (cons [SNat] (toSNat 'V')
-  (cons [SNat] (toSNat 'W')
-  (cons [SNat] (toSNat 'X')
-  (cons [SNat] (toSNat 'Y')
-  (cons [SNat] (toSNat 'Z')
-  (nil [SNat]))))))))))))))))))))))))))
-
-poly isDigitSNat = \c : SNat => anyEqSNat c digitsSNat
 poly isAlphaSNat = \c : SNat =>
-  if [Bool] (anyEqSNat c lowersSNat) (\u : Nat => true) (\u : Nat => anyEqSNat c uppersSNat)
+  if [Bool] (isLowerSNat c) (\u : Nat => true) (\u : Nat => isUpperSNat c)
+
 poly isIdentCharSNat = \c : SNat =>
   if [Bool] (isAlphaSNat c) (\u : Nat => true)
   (\u : Nat => if [Bool] (isDigitSNat c) (\u : Nat => true) (\u : Nat => seq c sn_underscore))
@@ -346,21 +234,22 @@ poly isDigit = \c : Nat => isDigitSNat (toSNat c)
 poly isAlpha = \c : Nat => isAlphaSNat (toSNat c)
 poly isIdentChar = \c : Nat => isIdentCharSNat (toSNat c)
 
-poly rec eqList = \a : List Nat => \b : List Nat =>
+poly rec eqListFast = \a : List Nat => \b : List Nat =>
   matchList [Nat] [Bool] a
     (matchList [Nat] [Bool] b true (\hb : Nat => \tb : List Nat => false))
     (\ha : Nat => \ta : List Nat =>
       matchList [Nat] [Bool] b false
         (\hb : Nat => \tb : List Nat =>
-          and (eq ha hb) (eqList ta tb)))
+          if [Bool] (seq (toSNat ha) (toSNat hb))
+            (\u : Nat => eqListFast ta tb)
+            (\u : Nat => false)))
 
 poly kwPoly = "poly"
-
-poly isKeywordPoly = \word : List Nat => eqList word kwPoly
+poly isKeywordPoly = \word : List Nat => eqListFast word kwPoly
 
 poly snatFromDigitList = \digits : List Nat =>
   let ten = toSNat 10 in
-  let zeroChar = toSNat '0' in
+  let zeroChar = sn_0 in
   foldl [Nat] [SNat]
     (\acc : SNat => \d : Nat =>
       let digit = sSub (toSNat d) zeroChar in
@@ -377,28 +266,30 @@ poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
     | Ok val => Ok [ParseError] [B] (f val)
   }
 
-poly simpleTokens =
-  cons [Pair Nat Token] (MkPair [Nat] [Token] '(' T_LParen)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] ')' T_RParen)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '{' T_LBrace)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '}' T_RBrace)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '[' T_LBracket)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] ']' T_RBracket)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '\\' T_Backslash)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] ':' T_Colon)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '#' T_Hash)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '|' T_Pipe)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] '.' T_Dot)
-  (cons [Pair Nat Token] (MkPair [Nat] [Token] ',' T_Comma)
-  (nil [Pair Nat Token]))))))))))))
+poly simpleTokensSNat =
+  cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '(') T_LParen)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ')') T_RParen)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '{') T_LBrace)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '}') T_RBrace)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '[') T_LBracket)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ']') T_RBracket)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '\\') T_Backslash)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ':') T_Colon)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '#') T_Hash)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '|') T_Pipe)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '.') T_Dot)
+  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ',') T_Comma)
+  (nil [Pair SNat Token]))))))))))))
 
-poly rec lookupToken = \c : Nat => \list : List (Pair Nat Token) =>
-  matchList [Pair Nat Token] [Maybe Token] list
-    None
-    (\h : Pair Nat Token => \t : List (Pair Nat Token) =>
-      if [Maybe Token] (eq c (fst [Nat] [Token] h))
-        (\u : Nat => Some [Token] (snd [Nat] [Token] h))
-        (\u : Nat => lookupToken c t))
+poly rec lookupTokenSNat = \c : SNat => \list : List (Pair SNat Token) =>
+  matchList [Pair SNat Token] [Maybe Token] list
+    (None [Token])
+    (\h : Pair SNat Token => \t : List (Pair SNat Token) =>
+       if [Maybe Token]
+         (seq c (fst [SNat] [Token] h))
+         (\u : Nat => Some [Token] (snd [SNat] [Token] h))
+         (\u : Nat => lookupTokenSNat c t)
+    )
 
 poly reverse = #A => \xs : List A =>
   foldl [A] [List A]
@@ -409,6 +300,24 @@ poly reverse = #A => \xs : List A =>
 poly snatEqChar = \c_snat : SNat => \char_nat : Nat =>
   seq c_snat (toSNat char_nat)
 
+poly rec consumeIdent = \acc : List Nat => \input : List Nat =>
+  matchList [Nat] [Pair (List Nat) (List Nat)] input
+    (MkPair [List Nat] [List Nat] (reverse [Nat] acc) (nil [Nat]))
+    (\h : Nat => \t : List Nat =>
+       if [Pair (List Nat) (List Nat)] (isIdentChar h)
+         (\u : Nat => consumeIdent (cons [Nat] h acc) t)
+         (\u : Nat => MkPair [List Nat] [List Nat] (reverse [Nat] acc) input)
+    )
+
+poly rec consumeDigits = \acc : List Nat => \input : List Nat =>
+  matchList [Nat] [Pair (List Nat) (List Nat)] input
+    (MkPair [List Nat] [List Nat] (reverse [Nat] acc) (nil [Nat]))
+    (\h : Nat => \t : List Nat =>
+       if [Pair (List Nat) (List Nat)] (isDigit h)
+         (\u : Nat => consumeDigits (cons [Nat] h acc) t)
+         (\u : Nat => MkPair [List Nat] [List Nat] (reverse [Nat] acc) input)
+    )
+
 poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
   let clean = dropWhile [Nat] isSpace input in
 
@@ -418,47 +327,50 @@ poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
       let c = toSNat c_church in
 
       if [Result ParseError (List Token)]
-        (and (snatEqChar c '-') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => eq h '>')))
+        (and (snatEqChar c '-') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => snatEqChar (toSNat '>') h)))
         (\u : Nat =>
           let rest = tail [Nat] cs in
           tokenizeAcc rest (cons [Token] T_Arrow accRev))
         (\u : Nat =>
 
       if [Result ParseError (List Token)]
-        (and (snatEqChar c '=') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => eq h '>')))
+        (and (snatEqChar c '=') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => snatEqChar (toSNat '>') h)))
         (\u : Nat =>
           let rest = tail [Nat] cs in
           tokenizeAcc rest (cons [Token] T_FatArrow accRev))
         (\u : Nat =>
 
-      match (lookupToken c_church simpleTokens) [Result ParseError (List Token)] {
+      match (lookupTokenSNat c simpleTokensSNat) [Result ParseError (List Token)] {
         | Some tok =>
             tokenizeAcc cs (cons [Token] tok accRev)
 
         | None =>
             if [Result ParseError (List Token)] (isAlphaSNat c)
               (\u : Nat =>
-                let split = span [Nat] isIdentChar clean in
-                let taken = fst [List Nat] [List Nat] split in
-                let remaining = snd [List Nat] [List Nat] split in
-                let tok =
-                  if [Token] (isKeywordPoly taken)
-                    (\u : Nat => T_Keyword taken)
-                    (\u : Nat => T_Ident taken)
-                in
-                tokenizeAcc remaining (cons [Token] tok accRev))
+                match (consumeIdent (nil [Nat]) clean) [Result ParseError (List Token)] {
+                  | MkPair taken remaining =>
+                      let tok =
+                        if [Token] (isKeywordPoly taken)
+                          (\u : Nat => T_Keyword taken)
+                          (\u : Nat => T_Ident taken)
+                      in
+                      tokenizeAcc remaining (cons [Token] tok accRev)
+                })
 
               (\u : Nat =>
                 if [Result ParseError (List Token)] (isDigitSNat c)
                   (\u : Nat =>
-                    let split = span [Nat] isDigit clean in
-                    let taken = fst [List Nat] [List Nat] split in
-                    let remaining = snd [List Nat] [List Nat] split in
-                    let n = fromSNat (snatFromDigitList taken) in
-                    tokenizeAcc remaining (cons [Token] (T_Nat n) accRev))
+                    match (consumeDigits (nil [Nat]) clean) [Result ParseError (List Token)] {
+                      | MkPair taken remaining =>
+                          let n = fromSNat (snatFromDigitList taken) in
+                          tokenizeAcc remaining (cons [Token] (T_Nat n) accRev)
+                    })
 
                   (\u : Nat =>
-                    Err [ParseError] [List Token] (MkParseError zero (nil [Nat]))))
+                    if [Result ParseError (List Token)] (snatEqChar c '=')
+                      (\u : Nat => tokenizeAcc cs (cons [Token] T_Eq accRev))
+                      (\u : Nat => Err [ParseError] [List Token] (MkParseError zero (nil [Nat])))
+                  ))
       }
 
       )))

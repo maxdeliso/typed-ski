@@ -5,7 +5,7 @@
  * they appear in the lexer module.
  */
 
-import { expect } from "chai";
+import { assert, expect } from "chai";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
@@ -13,8 +13,10 @@ import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
-import type { SKIExpression } from "../../lib/ski/expression.ts";
+import { type SKIExpression, toSKIKey } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
+import { UnChurchNumber } from "../../lib/ski/church.ts";
+import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const lexerObjectPath = join(
@@ -113,14 +115,9 @@ async function compileTestProgram(
   return deserializeTripCObject(testContent);
 }
 
-// Helper to compile and validate a test program
 async function compileAndValidateTestProgram(
   inputFileName: string,
-): Promise<{
-  compiledObject: ReturnType<typeof deserializeTripCObject>;
-  linkedSKI: string;
-  parsedSKI: SKIExpression;
-}> {
+): Promise<SKIExpression> {
   // Step 1: Compile the test program
   const testObj = await compileTestProgram(inputFileName);
 
@@ -142,112 +139,25 @@ async function compileAndValidateTestProgram(
     { name: "Test", object: testObj },
   ], true);
 
-  // Validate linked SKI expression
   expect(skiExpression).to.be.a("string");
   expect(skiExpression.length).to.be.greaterThan(0);
-
-  // Step 3: Parse SKI expression
-  const skiExpr = parseSKI(skiExpression);
-
-  // Validate parsed SKI expression structure
-  expect(skiExpr).to.not.be.null;
-  expect(skiExpr).to.have.property("kind");
-  expect(["terminal", "non-terminal"]).to.include(skiExpr.kind);
-
-  return {
-    compiledObject: testObj,
-    linkedSKI: skiExpression,
-    parsedSKI: skiExpr,
-  };
+  return parseSKI(skiExpression);
 }
 
 Deno.test("Lexer unit tests - bottom up", async (t) => {
   await t.step(
-    "isSpace - structure validation (note: full evaluation with large numbers diverges)",
+    "isSpace - structure validation",
     async () => {
-      // First validate compilation and linking
-      const { compiledObject, linkedSKI, parsedSKI } =
-        await compileAndValidateTestProgram(
-          "testIsSpace.trip",
-        );
+      const program = await compileAndValidateTestProgram("testIsSpace.trip");
+      const evaluator = await ParallelArenaEvaluatorWasm.create();
 
-      // Log structure for debugging
-      console.log("Compiled object module:", compiledObject.module);
-      console.log("Compiled object exports:", compiledObject.exports);
-      console.log(
-        "Compiled object has main definition:",
-        "main" in compiledObject.definitions,
-      );
-      console.log(
-        "Linked SKI expression (first 200 chars):",
-        linkedSKI.substring(0, 200),
-      );
-      console.log("Parsed SKI expression kind:", parsedSKI.kind);
-
-      // Now evaluate and check result
-      // Use stepOnce in a loop to track progress and detect when we reach normal form
-      let current = parsedSKI;
-      let steps = 0;
-      const maxSteps = 10000;
-      let lastAltered = true;
-
-      while (steps < maxSteps && lastAltered) {
-        const result = arenaEvaluator.stepOnce(current);
-        lastAltered = result.altered;
-        if (!lastAltered) {
-          break; // Reached normal form
-        }
-        current = result.expr;
-        steps++;
-        if (steps % 1000 === 0) {
-          console.log(`Reduction step ${steps}...`);
-        }
+      try {
+        const nf = await evaluator.reduceAsync(program);
+        const decodedResult = UnChurchBoolean(nf);
+        assert.equal(decodedResult, false);
+      } finally {
+        evaluator.terminate();
       }
-
-      const nf = current;
-      console.log(`Evaluation completed in ${steps} steps`);
-      console.log("Evaluation result kind:", nf.kind);
-      console.log("Reached normal form:", !lastAltered);
-
-      // Import utilities to debug the result
-      const { unparseSKI } = await import(
-        "../../lib/ski/expression.ts"
-      );
-
-      const resultStr = unparseSKI(nf);
-      console.log(
-        "Evaluation result (first 500 chars):",
-        resultStr.substring(0, 500),
-      );
-      console.log("Evaluation result length:", resultStr.length);
-
-      // Decode Church boolean result
-      const decodedResult = UnChurchBoolean(nf);
-      console.log("Decoded boolean result:", decodedResult);
-
-      // NOTE: Church numeral equality (eq) is exponential in SKI calculus.
-      // Comparing large numbers (like 32) causes exponential growth and divergence.
-      // This is a known limitation - the function is correct but doesn't reduce efficiently.
-      //
-      // For now, we just validate that:
-      // 1. The program compiles and links successfully
-      // 2. The expression structure is valid
-      // 3. The expression doesn't immediately error
-
-      // The test input uses 0, which should evaluate to false (KI) if it reduces
-      // But even with 0, the expression may not reduce due to the complexity of eq
-      console.log(
-        "NOTE: Full evaluation of isSpace with Church numerals may not reach normal form",
-      );
-      console.log(
-        "This is expected due to the exponential cost of Church numeral equality",
-      );
-
-      // For now, we just verify compilation and linking succeeded
-      // The actual behavior can be tested at a higher level or with native number support
-      expect(compiledObject).to.not.be.null;
-      expect(linkedSKI).to.be.a("string");
-      expect(linkedSKI.length).to.be.greaterThan(0);
     },
   );
 
@@ -293,6 +203,8 @@ poly main = isSpace ${charCode}
           const testFilePath = join(__dirname, testFileName);
           const testObjectFilePath = join(__dirname, testObjectFileName);
 
+          const evaluator = await ParallelArenaEvaluatorWasm.create();
+
           try {
             await Deno.writeTextFile(testFilePath, testSource);
 
@@ -327,9 +239,7 @@ poly main = isSpace ${charCode}
 
             // Parse and evaluate
             const skiExpr = parseSKI(skiExpression);
-            const nf = arenaEvaluator.reduce(skiExpr);
-
-            // Apply the boolean to ChurchN(1) and ChurchN(0) to decode it
+            const nf = await evaluator.reduceAsync(skiExpr);
             const decodedResult = UnChurchBoolean(nf);
 
             expect(
@@ -337,6 +247,8 @@ poly main = isSpace ${charCode}
               `isSpace(${charCode}) should be ${expected}, but got ${decodedResult}`,
             ).to.equal(expected);
           } finally {
+            evaluator.terminate();
+
             // Cleanup temp files
             try {
               await Deno.remove(testFilePath);
@@ -355,4 +267,78 @@ poly main = isSpace ${charCode}
       }
     },
   );
+});
+
+Deno.test("tokenize - verify token count for lexer.trip input", async () => {
+  const testSource = `module Test
+
+import Lexer tokenize
+import Lexer tokenizeAcc
+import Lexer Token
+import Lexer reverse
+import Prelude Nat
+import Prelude zero
+import Prelude succ
+import Prelude nil
+import Prelude cons
+import Prelude foldl
+import Prelude Result
+import Prelude Err
+import Prelude Ok
+import Prelude ParseError
+import Prelude List
+
+export main
+
+poly rec length = \\xs : List Token =>
+  foldl [Token] [Nat]
+    (\\acc : Nat => \\_ : Token => succ acc)
+    zero
+    xs
+
+poly main =
+  match (tokenize "1 2") [Nat] {
+    | Err _ => zero
+    | Ok tokens => length tokens
+  }`;
+
+  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const testFileName = "testTokenizeLength.trip";
+  const testFilePath = join(__dirname, "inputs", testFileName);
+
+  await Deno.writeTextFile(testFilePath, testSource);
+
+  try {
+    const testObj = await compileTestProgram(testFileName);
+    const lexerObj = await getLexerObject();
+    const preludeObj = await getPreludeObjectCached();
+
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObj },
+      { name: "Lexer", object: lexerObj },
+      { name: "Test", object: testObj },
+    ], true);
+
+    const skiExpr = parseSKI(skiExpression);
+    const key = toSKIKey(skiExpr);
+
+    console.log("Evaluating program with ", key.length, " terminals");
+
+    const nf = arenaEvaluator.reduce(skiExpr);
+    const tokenCount = UnChurchNumber(nf);
+
+    console.log(`Token count: ${tokenCount}`);
+
+    assert.equal(tokenCount, 2n);
+  } finally {
+    evaluator.terminate();
+
+    try {
+      await Deno.remove(testFilePath);
+      const testObjectPath = testFilePath.replace(/\.trip$/, ".tripc");
+      await Deno.remove(testObjectPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 });

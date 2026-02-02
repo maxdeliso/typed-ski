@@ -7,12 +7,20 @@ import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { apply, applyMany } from "../../lib/ski/expression.ts";
 import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
+import { ConversionError } from "../../lib/conversion/conversionError.ts";
 import {
   createApplication,
   mkUntypedAbs,
   mkVar,
 } from "../../lib/terms/lambda.ts";
 import type { UntypedLambda } from "../../lib/terms/lambda.ts";
+import {
+  mkSystemFTAbs,
+  mkSystemFTypeApp,
+  mkSystemFVar,
+  type SystemFTerm,
+} from "../../lib/terms/systemF.ts";
+import { mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 
 Deno.test("Lambda conversion", async (t) => {
   const N = 5;
@@ -180,5 +188,59 @@ Deno.test("Lambda conversion", async (t) => {
     const ski = bracketLambda(literal);
     const result = UnChurchNumber(arenaEvaluator.reduce(ski));
     expect(result).to.equal(8n);
+  });
+
+  await t.step("toCore conversion errors on unsupported constructs", () => {
+    expect(() => bracketLambda(mkVar("x"))).to.throw(
+      ConversionError,
+      /free variable detected: x/,
+    );
+
+    expect(() => bracketLambda(mkTypeVariable("X"))).to.throw(
+      ConversionError,
+      /free type variable detected: X/,
+    );
+
+    const typeAbs = mkSystemFTAbs("X", mkSystemFVar("x"));
+    expect(() => bracketLambda(typeAbs)).to.throw(
+      ConversionError,
+      /type-level constructs present/,
+    );
+
+    const typeAppTerm = mkSystemFTypeApp(
+      mkSystemFVar("f"),
+      mkTypeVariable("X"),
+    );
+    expect(() => bracketLambda(typeAppTerm)).to.throw(
+      ConversionError,
+      /type-level constructs present/,
+    );
+
+    const forallType = {
+      kind: "forall",
+      typeVar: "X",
+      body: mkTypeVariable("X"),
+    } as const;
+    expect(() => bracketLambda(forallType)).to.throw(
+      ConversionError,
+      /type-level constructs present/,
+    );
+
+    const typeApplication = typeApp(mkTypeVariable("F"), mkTypeVariable("X"));
+    expect(() => bracketLambda(typeApplication)).to.throw(
+      ConversionError,
+      /type-level constructs present/,
+    );
+
+    const matchTerm: SystemFTerm = {
+      kind: "systemF-match",
+      scrutinee: mkSystemFVar("x"),
+      returnType: mkTypeVariable("R"),
+      arms: [],
+    };
+    expect(() => bracketLambda(matchTerm)).to.throw(
+      ConversionError,
+      /match expressions are not supported/,
+    );
   });
 });

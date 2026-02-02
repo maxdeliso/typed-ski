@@ -1,12 +1,13 @@
 import { assert } from "chai";
 
 import { ChurchN, UnChurchBoolean } from "../../lib/ski/church.ts";
-import { I, K, S } from "../../lib/ski/terminal.ts";
+import { I, K, S, SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { apply, applyMany } from "../../lib/ski/expression.ts";
 
 import {
   mkNativeInc,
   mkNativeNum,
+  mkNativeTerminal,
   type NativeExpr,
   reduceNat,
   stepOnceNat,
@@ -26,6 +27,12 @@ function assertIsNonTerm(
 ): asserts e is { kind: "non-terminal"; lft: NativeExpr; rgt: NativeExpr } {
   assert.equal(e.kind, "non-terminal", "expected kind 'non-terminal'");
 }
+
+const mkNativeApp = (lft: NativeExpr, rgt: NativeExpr): NativeExpr => ({
+  kind: "non-terminal",
+  lft,
+  rgt,
+});
 
 Deno.test("Native-expression & Church-numeral utilities", async (t) => {
   await t.step("basic construction helpers", async (t) => {
@@ -95,6 +102,33 @@ Deno.test("Native-expression & Church-numeral utilities", async (t) => {
       assert.equal(r.expr.lft.value, 2n);
       assertIsNum(r.expr.rgt);
       assert.equal(r.expr.rgt.value, 2n);
+    });
+
+    await t.step("B' w x y z → w x (y z)", () => {
+      const w = mkNativeTerminal(SKITerminalSymbol.S);
+      const x = mkNativeTerminal(SKITerminalSymbol.K);
+      const y = mkNativeTerminal(SKITerminalSymbol.I);
+      const z = mkNativeTerminal(SKITerminalSymbol.B);
+      const expr = mkNativeApp(
+        mkNativeApp(
+          mkNativeApp(
+            mkNativeApp(mkNativeTerminal(SKITerminalSymbol.BPrime), w),
+            x,
+          ),
+          y,
+        ),
+        z,
+      );
+
+      const { altered, expr: out } = stepOnceNat(expr);
+      assert.ok(altered);
+      assert.deepStrictEqual(
+        out,
+        mkNativeApp(
+          mkNativeApp(w, x),
+          mkNativeApp(y, z),
+        ),
+      );
     });
   });
 

@@ -17,10 +17,15 @@ import {
   createProgramSpace,
   findMainFunction,
   loadModule,
+  lowerToSKI,
   resolveCrossModuleDependencies,
 } from "../../lib/linker/moduleLinker.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import type { TripLangTerm as _TripLangTerm } from "../../lib/meta/trip.ts";
+import { bracketLambda } from "../../lib/conversion/converter.ts";
+import { parseSKI } from "../../lib/parser/ski.ts";
+import { unparseSKI } from "../../lib/ski/expression.ts";
+import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -404,9 +409,8 @@ poly rec main = \\n:Nat => main n`;
 
     // Should produce a complex SKI expression
     expect(result).to.be.a("string");
-    expect(result).to.include("S");
     expect(result).to.include("K");
-    expect(result).to.include("(");
+    expect(() => parseSKI(result)).to.not.throw();
   });
 
   await t.step("simple linking with multiple modules", async () => {
@@ -1035,6 +1039,17 @@ poly rec main = \\n:Nat => main n`;
       expect(result.length).to.be.greaterThan(0);
     },
   );
+
+  await t.step("lowerToSKI matches bracketLambda output", () => {
+    const term: _TripLangTerm = {
+      kind: "untyped",
+      name: "id",
+      term: mkUntypedAbs("x", mkVar("x")),
+    };
+    const lowerResult = lowerToSKI(term);
+    const directResult = unparseSKI(bracketLambda(term.term));
+    expect(lowerResult).to.equal(directResult);
+  });
 
   await t.step(
     "type edges use programSpace.types.has() for robustness",

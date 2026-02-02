@@ -11,12 +11,15 @@ import type { SKIExpression } from "../ski/expression.ts";
 import { apply } from "../ski/expression.ts";
 import {
   B,
+  BPrime,
   C,
+  CPrime,
   I,
   K,
   ReadOne,
   S,
   SKITerminalSymbol,
+  SPrime,
   WriteOne,
 } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
@@ -41,6 +44,9 @@ const terminalCache = new WeakMap<
     i: number;
     b: number;
     c: number;
+    sPrime: number;
+    bPrime: number;
+    cPrime: number;
     readOne: number;
     writeOne: number;
   }
@@ -73,6 +79,9 @@ export function toArenaWithExports(
       i: exports.allocTerminal(ArenaSym.I),
       b: exports.allocTerminal(ArenaSym.B),
       c: exports.allocTerminal(ArenaSym.C),
+      sPrime: exports.allocTerminal(ArenaSym.SPrime),
+      bPrime: exports.allocTerminal(ArenaSym.BPrime),
+      cPrime: exports.allocTerminal(ArenaSym.CPrime),
       readOne: exports.allocTerminal(ArenaSym.ReadOne),
       writeOne: exports.allocTerminal(ArenaSym.WriteOne),
     };
@@ -112,6 +121,15 @@ export function toArenaWithExports(
           break;
         case SKITerminalSymbol.C:
           id = cache.c;
+          break;
+        case SKITerminalSymbol.SPrime:
+          id = cache.sPrime;
+          break;
+        case SKITerminalSymbol.BPrime:
+          id = cache.bPrime;
+          break;
+        case SKITerminalSymbol.CPrime:
+          id = cache.cPrime;
           break;
         case SKITerminalSymbol.ReadOne:
           id = cache.readOne;
@@ -223,6 +241,15 @@ export function fromArenaWithExports(
           break;
         case ArenaSym.C:
           expr = C;
+          break;
+        case ArenaSym.SPrime:
+          expr = SPrime;
+          break;
+        case ArenaSym.BPrime:
+          expr = BPrime;
+          break;
+        case ArenaSym.CPrime:
+          expr = CPrime;
           break;
         case ArenaSym.ReadOne:
           expr = ReadOne;
@@ -511,6 +538,15 @@ export class ArenaEvaluatorWasm implements Evaluator {
           break;
         case ArenaSym.C:
           sym = "C";
+          break;
+        case ArenaSym.SPrime:
+          sym = "P";
+          break;
+        case ArenaSym.BPrime:
+          sym = "Q";
+          break;
+        case ArenaSym.CPrime:
+          sym = "R";
           break;
         case ArenaSym.ReadOne:
           sym = "readOne";

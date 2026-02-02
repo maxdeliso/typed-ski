@@ -55,6 +55,12 @@ export type NativeExpr =
   | NativeInc
   | NativeApplication;
 
+const mkNativeApp = (lft: NativeExpr, rgt: NativeExpr): NativeApplication => ({
+  kind: "non-terminal",
+  lft,
+  rgt,
+});
+
 /**
  * Creates a numeric literal with the given value
  */
@@ -133,6 +139,115 @@ const stepNative = (e: NativeExpr): NativeStepResult => {
             kind: "non-terminal",
             lft: { kind: "non-terminal", lft: x, rgt: z },
             rgt: { kind: "non-terminal", lft: y, rgt: z },
+          },
+        };
+      }
+
+      // B x y z -> x (y z)
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.kind === "terminal" &&
+        e.lft.lft.lft.sym === "B"
+      ) {
+        const x = e.lft.lft.rgt;
+        const y = e.lft.rgt;
+        const z = e.rgt;
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: x,
+            rgt: { kind: "non-terminal", lft: y, rgt: z },
+          },
+        };
+      }
+
+      // C x y z -> x z y
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.kind === "terminal" &&
+        e.lft.lft.lft.sym === "C"
+      ) {
+        const x = e.lft.lft.rgt;
+        const y = e.lft.rgt;
+        const z = e.rgt;
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: { kind: "non-terminal", lft: x, rgt: z },
+            rgt: y,
+          },
+        };
+      }
+
+      // S' w x y z -> w (x z) (y z)
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.lft.kind === "terminal" &&
+        e.lft.lft.lft.lft.sym === "P"
+      ) {
+        const w = e.lft.lft.lft.rgt;
+        const x = e.lft.lft.rgt;
+        const y = e.lft.rgt;
+        const z = e.rgt;
+        const xz = mkNativeApp(x, z);
+        const yz = mkNativeApp(y, z);
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: mkNativeApp(w, xz),
+            rgt: yz,
+          },
+        };
+      }
+
+      // B' w x y z -> w x (y z)
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.lft.kind === "terminal" &&
+        e.lft.lft.lft.lft.sym === "Q"
+      ) {
+        const w = e.lft.lft.lft.rgt;
+        const x = e.lft.lft.rgt;
+        const y = e.lft.rgt;
+        const z = e.rgt;
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: mkNativeApp(w, x),
+            rgt: mkNativeApp(y, z),
+          },
+        };
+      }
+
+      // C' w x y z -> w (x z) y
+      if (
+        e.lft.kind === "non-terminal" &&
+        e.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.kind === "non-terminal" &&
+        e.lft.lft.lft.lft.kind === "terminal" &&
+        e.lft.lft.lft.lft.sym === "R"
+      ) {
+        const w = e.lft.lft.lft.rgt;
+        const x = e.lft.lft.rgt;
+        const y = e.lft.rgt;
+        const z = e.rgt;
+        const xz = mkNativeApp(x, z);
+        return {
+          altered: true,
+          expr: {
+            kind: "non-terminal",
+            lft: mkNativeApp(w, xz),
+            rgt: y,
           },
         };
       }

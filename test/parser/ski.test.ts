@@ -8,7 +8,18 @@ import {
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
-import { B, C, I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
+import {
+  B,
+  BPrime,
+  C,
+  CPrime,
+  I,
+  K,
+  ReadOne,
+  S,
+  SPrime,
+  WriteOne,
+} from "../../lib/ski/terminal.ts";
 
 const assertReparse = (expr: string) => {
   const parsed = parseSKI(expr);
@@ -40,7 +51,7 @@ Deno.test("parseSKI", async (t) => {
   });
 
   await t.step("should fail to parse an unrecognized literal", () => {
-    expect(() => parseSKI("(Q")).to.throw(ParseError, /unexpected token/);
+    expect(() => parseSKI("(Z")).to.throw(ParseError, /unexpected token/);
   });
 
   await t.step(`should parse ${secondLiteral} and variations`, () => {
@@ -109,6 +120,17 @@ Deno.test("parseSKI", async (t) => {
     const expected = apply(apply(B, C), I);
     assert.deepStrictEqual(parsed, expected);
     assertReparse("BCI");
+  });
+
+  await t.step("should parse Turner prime terminals", () => {
+    assert.deepStrictEqual(parseSKI("P"), SPrime);
+    assert.deepStrictEqual(parseSKI("Q"), BPrime);
+    assert.deepStrictEqual(parseSKI("R"), CPrime);
+
+    const parsed = parseSKI("PQR");
+    const expected = apply(apply(SPrime, BPrime), CPrime);
+    assert.deepStrictEqual(parsed, expected);
+    assertReparse("PQR");
   });
 
   await t.step("should parse mixed-case B and C terminals", () => {

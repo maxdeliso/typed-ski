@@ -42,6 +42,12 @@ export enum ArenaSym {
   B = 8,
   /** C combinator: `C x y z -> x z y` */
   C = 9,
+  /** S' combinator (Turner PSI) */
+  SPrime = 10,
+  /** B' combinator (Turner B-prime) */
+  BPrime = 11,
+  /** C' combinator (Turner GAMMA) */
+  CPrime = 12,
 }
 
 /**

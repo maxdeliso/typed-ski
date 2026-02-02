@@ -218,8 +218,10 @@ Deno.test("dumpArena", async (t) => {
         const sym = node.sym;
         assert(
           sym !== undefined &&
-            ["S", "K", "I", "B", "C", "readOne", "writeOne", "?"].includes(sym),
-          `Terminal symbol should be S, K, I, B, C, readOne, writeOne, or ? (got ${sym})`,
+            ["S", "K", "I", "B", "C", "P", "Q", "R", "readOne", "writeOne", "?"]
+              .includes(sym),
+          "Terminal symbol should be S, K, I, B, C, P, Q, R, readOne, writeOne, or ? " +
+            `(got ${sym})`,
         );
       } else {
         assert(

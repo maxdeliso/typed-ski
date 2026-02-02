@@ -5,7 +5,7 @@ import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import { apply, applyMany } from "../../lib/ski/expression.ts";
-import { I } from "../../lib/ski/terminal.ts";
+import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import {
   createApplication,
@@ -22,6 +22,52 @@ Deno.test("Lambda conversion", async (t) => {
     "x",
     mkUntypedAbs("y", createApplication(mkVar("y"), mkVar("x"))),
   );
+  const lambdaB = mkUntypedAbs(
+    "x",
+    mkUntypedAbs(
+      "y",
+      mkUntypedAbs(
+        "z",
+        createApplication(
+          mkVar("x"),
+          createApplication(mkVar("y"), mkVar("z")),
+        ),
+      ),
+    ),
+  );
+  const lambdaC = mkUntypedAbs(
+    "x",
+    mkUntypedAbs(
+      "y",
+      mkUntypedAbs(
+        "z",
+        createApplication(
+          createApplication(mkVar("x"), mkVar("z")),
+          mkVar("y"),
+        ),
+      ),
+    ),
+  );
+  const lambdaS = mkUntypedAbs(
+    "x",
+    mkUntypedAbs(
+      "y",
+      mkUntypedAbs(
+        "z",
+        createApplication(
+          createApplication(mkVar("x"), mkVar("z")),
+          createApplication(mkVar("y"), mkVar("z")),
+        ),
+      ),
+    ),
+  );
+  const selfApply = mkUntypedAbs(
+    "x",
+    createApplication(mkVar("x"), mkVar("x")),
+  );
+
+  const reduceToKey = (...exps: Parameters<typeof applyMany>) =>
+    arenaEvaluator.reduce(applyMany(...exps));
 
   await t.step("basic combinators", async (t) => {
     await t.step("converts identity function (λx.x) to I combinator", () => {
@@ -44,6 +90,47 @@ Deno.test("Lambda conversion", async (t) => {
         }
       },
     );
+  });
+
+  await t.step("combinator equivalences", async (t) => {
+    await t.step("lambda B behaves like B", () => {
+      const args = [I, K, S];
+      const reducedLambda = reduceToKey(
+        bracketLambda(lambdaB),
+        ...args,
+      );
+      const reducedB = reduceToKey(B, ...args);
+      expect(reducedLambda).to.deep.equal(reducedB);
+    });
+
+    await t.step("lambda C behaves like C", () => {
+      const args = [K, S, I];
+      const reducedLambda = reduceToKey(
+        bracketLambda(lambdaC),
+        ...args,
+      );
+      const reducedC = reduceToKey(C, ...args);
+      expect(reducedLambda).to.deep.equal(reducedC);
+    });
+
+    await t.step("lambda S behaves like S", () => {
+      const args = [B, C, K];
+      const reducedLambda = reduceToKey(
+        bracketLambda(lambdaS),
+        ...args,
+      );
+      const reducedS = reduceToKey(S, ...args);
+      expect(reducedLambda).to.deep.equal(reducedS);
+    });
+
+    await t.step("self-application matches S I I", () => {
+      const reducedLambda = reduceToKey(
+        bracketLambda(selfApply),
+        K,
+      );
+      const reducedExpected = reduceToKey(applyMany(S, I, I), K);
+      expect(reducedLambda).to.deep.equal(reducedExpected);
+    });
   });
 
   await t.step("arithmetic operations", async (t) => {

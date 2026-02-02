@@ -334,7 +334,6 @@ poly main =
     evaluator.terminate();
 
     try {
-      await Deno.remove(testFilePath);
       const testObjectPath = testFilePath.replace(/\.trip$/, ".tripc");
       await Deno.remove(testObjectPath);
     } catch {

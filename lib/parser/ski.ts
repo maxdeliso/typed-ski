@@ -24,6 +24,8 @@ const TERMINAL_ALIASES: Record<string, SKITerminalSymbol> = {
   S: SKITerminalSymbol.S,
   K: SKITerminalSymbol.K,
   I: SKITerminalSymbol.I,
+  B: SKITerminalSymbol.B,
+  C: SKITerminalSymbol.C,
   ",": SKITerminalSymbol.ReadOne,
   ".": SKITerminalSymbol.WriteOne,
 };

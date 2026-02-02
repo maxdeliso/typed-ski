@@ -192,6 +192,12 @@ pub enum ArenaSym {
     // Internal-only primitives for Church decoding (not surfaced in the language).
     Inc = 6,
     Num = 7,
+
+    /// B combinator: `B x y z -> x (y z)
+    B = 8,
+
+    /// C combinator: `C x y z -> x z y`
+    C = 9,
 }
 
 // =============================================================================
@@ -199,65 +205,95 @@ pub enum ArenaSym {
 // =============================================================================
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn initArena(_cap: u32) -> u32 { 0 }
+pub extern "C" fn initArena(_cap: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn connectArena(_p: u32) -> u32 { 0 }
+pub extern "C" fn connectArena(_p: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn allocTerminal(_s: u32) -> u32 { 0 }
+pub extern "C" fn allocTerminal(_s: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn allocCons(_l: u32, _r: u32) -> u32 { 0 }
+pub extern "C" fn allocCons(_l: u32, _r: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn kindOf(_n: u32) -> u32 { 0 }
+pub extern "C" fn kindOf(_n: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn symOf(_n: u32) -> u32 { 0 }
+pub extern "C" fn symOf(_n: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn leftOf(_n: u32) -> u32 { 0 }
+pub extern "C" fn leftOf(_n: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn rightOf(_n: u32) -> u32 { 0 }
+pub extern "C" fn rightOf(_n: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
 pub extern "C" fn reset() {}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn arenaKernelStep(x: u32) -> u32 { x }
+pub extern "C" fn arenaKernelStep(x: u32) -> u32 {
+    x
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn hostSubmit(_id: u32) -> u32 { 1 }
+pub extern "C" fn hostSubmit(_id: u32) -> u32 {
+    1
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn hostPull() -> u32 { u32::MAX }
+pub extern "C" fn hostPull() -> u32 {
+    u32::MAX
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
 pub extern "C" fn workerLoop() {}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn debugGetArenaBaseAddr() -> u32 { 0 }
+pub extern "C" fn debugGetArenaBaseAddr() -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn getArenaMode() -> u32 { 0 }
+pub extern "C" fn getArenaMode() -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn debugCalculateArenaSize(_c: u32) -> u32 { 0 }
+pub extern "C" fn debugCalculateArenaSize(_c: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn debugLockState() -> u32 { 0xffff_ffff }
+pub extern "C" fn debugLockState() -> u32 {
+    0xffff_ffff
+}
 
 // =============================================================================
 // WASM implementation
 // =============================================================================
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    use crate::{ArenaKind, ArenaSym};
     use core::arch::wasm32;
     use core::cell::UnsafeCell;
     use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
-    use crate::{ArenaKind, ArenaSym};
 
     // -------------------------------------------------------------------------
     // Constants / helpers
@@ -273,7 +309,7 @@ mod wasm {
     // produce results faster than the host can drain them (a common cause of "stuttering"
     // worker timelines and main-thread saturation in profiles).
     const RING_ENTRIES: u32 = 1 << 16; // 65536
-    const TERM_CACHE_LEN: usize = 6; // 0..=WriteOne
+    const TERM_CACHE_LEN: usize = 10;
 
     #[inline(always)]
     const fn align64(x: u32) -> u32 {
@@ -320,11 +356,8 @@ mod wasm {
         #[inline(always)]
         pub fn wait32(ptr: &AtomicU32, expected: u32) {
             unsafe {
-                let _ = wasm32::memory_atomic_wait32(
-                    ptr as *const _ as *mut i32,
-                    expected as i32,
-                    -1,
-                );
+                let _ =
+                    wasm32::memory_atomic_wait32(ptr as *const _ as *mut i32, expected as i32, -1);
             }
         }
         #[inline(always)]
@@ -625,8 +658,10 @@ mod wasm {
                             // Successfully claimed slot. Read payload and release for reuse.
                             let item = *slot.payload.get();
                             // Set sequence for next cycle: h + mask + 1 prevents ABA issues
-                            slot.seq
-                                .store(h.wrapping_add(self.mask).wrapping_add(1), Ordering::Release);
+                            slot.seq.store(
+                                h.wrapping_add(self.mask).wrapping_add(1),
+                                Ordering::Release,
+                            );
                             // Notify waiting producers (Release: publish slot availability)
                             self.not_full.fetch_add(1, Ordering::Release);
                             sys::notify(&self.not_full, 1);
@@ -985,7 +1020,10 @@ mod wasm {
         Ring::<Cqe>::init_at((ARENA_BASE_ADDR + h.offset_cq) as *mut u8, RING_ENTRIES);
         Ring::<u8>::init_at((ARENA_BASE_ADDR + h.offset_stdin) as *mut u8, RING_ENTRIES);
         Ring::<u8>::init_at((ARENA_BASE_ADDR + h.offset_stdout) as *mut u8, RING_ENTRIES);
-        Ring::<u32>::init_at((ARENA_BASE_ADDR + h.offset_stdin_wait) as *mut u8, RING_ENTRIES);
+        Ring::<u32>::init_at(
+            (ARENA_BASE_ADDR + h.offset_stdin_wait) as *mut u8,
+            RING_ENTRIES,
+        );
 
         // Buckets + cache init
         let buckets = buckets_ptr();
@@ -1016,7 +1054,10 @@ mod wasm {
     // -------------------------------------------------------------------------
     #[no_mangle]
     pub extern "C" fn initArena(initial_capacity: u32) -> u32 {
-        if initial_capacity < 1024 || initial_capacity > MAX_CAP || !initial_capacity.is_power_of_two() {
+        if initial_capacity < 1024
+            || initial_capacity > MAX_CAP
+            || !initial_capacity.is_power_of_two()
+        {
             return 0;
         }
         unsafe {
@@ -1062,7 +1103,8 @@ mod wasm {
             for i in 0..TERM_CACHE_LEN {
                 (*cache.add(i)).store(EMPTY, Ordering::Release);
             }
-            h.resize_seq.store(h.resize_seq.load(Ordering::Relaxed) & !1, Ordering::Release);
+            h.resize_seq
+                .store(h.resize_seq.load(Ordering::Relaxed) & !1, Ordering::Release);
         }
     }
 
@@ -1211,7 +1253,9 @@ mod wasm {
             let hl = loop {
                 let (seq, h) = enter_stable();
                 if l >= h.capacity {
-                    if !check_stable(seq) { continue; }
+                    if !check_stable(seq) {
+                        continue;
+                    }
                     return EMPTY; // Invalid left node
                 }
                 let val = (*hash_ptr().add(l as usize)).load(Ordering::Acquire);
@@ -1223,7 +1267,9 @@ mod wasm {
             let hr = loop {
                 let (seq, h) = enter_stable();
                 if r >= h.capacity {
-                    if !check_stable(seq) { continue; }
+                    if !check_stable(seq) {
+                        continue;
+                    }
                     return EMPTY; // Invalid right node
                 }
                 let val = (*hash_ptr().add(r as usize)).load(Ordering::Acquire);
@@ -1243,7 +1289,9 @@ mod wasm {
                 // Validate bucket index is safe before dereferencing
                 if bucket_idx >= h.capacity as usize {
                     // Capacity changed mid-read? Retry.
-                    if !check_stable(seq) { continue; }
+                    if !check_stable(seq) {
+                        continue;
+                    }
                     // Should be unreachable if logic is correct, but safe fallback
                     continue;
                 }
@@ -1256,7 +1304,9 @@ mod wasm {
 
                 while cur != EMPTY {
                     // Bounds check for safety
-                    if cur >= h.capacity { break; }
+                    if cur >= h.capacity {
+                        break;
+                    }
 
                     let k = (*kind_ptr().add(cur as usize)).load(Ordering::Acquire);
                     if k == ArenaKind::NonTerm as u8 {
@@ -1381,7 +1431,10 @@ mod wasm {
                 }
                 // Acquire exclusive "writer" by flipping even->odd with CAS.
                 // See "WASM atomics / CAS safety notes" above (cmpxchg winner/loser).
-                if h.resize_seq.compare_exchange(expected, expected | 1, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+                if h.resize_seq
+                    .compare_exchange(expected, expected | 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
                     break;
                 }
                 expected = h.resize_seq.load(Ordering::Acquire);
@@ -1458,10 +1511,7 @@ mod wasm {
                 (count as usize) * 4,
             );
             if new_cap > old_cap {
-                zero_region(
-                    h.offset_next_idx + old_cap * 4,
-                    (new_cap - old_cap) * 4,
-                );
+                zero_region(h.offset_next_idx + old_cap * 4, (new_cap - old_cap) * 4);
             }
 
             // Hash (u32)
@@ -1471,10 +1521,7 @@ mod wasm {
                 (count as usize) * 4,
             );
             if new_cap > old_cap {
-                zero_region(
-                    h.offset_hash32 + old_cap * 4,
-                    (new_cap - old_cap) * 4,
-                );
+                zero_region(h.offset_hash32 + old_cap * 4, (new_cap - old_cap) * 4);
             }
 
             // Right (u32)
@@ -1484,10 +1531,7 @@ mod wasm {
                 (count as usize) * 4,
             );
             if new_cap > old_cap {
-                zero_region(
-                    h.offset_right_id + old_cap * 4,
-                    (new_cap - old_cap) * 4,
-                );
+                zero_region(h.offset_right_id + old_cap * 4, (new_cap - old_cap) * 4);
             }
 
             // Left (u32)
@@ -1497,10 +1541,7 @@ mod wasm {
                 (count as usize) * 4,
             );
             if new_cap > old_cap {
-                zero_region(
-                    h.offset_left_id + old_cap * 4,
-                    (new_cap - old_cap) * 4,
-                );
+                zero_region(h.offset_left_id + old_cap * 4, (new_cap - old_cap) * 4);
             }
 
             // Sym (u8)
@@ -1510,10 +1551,7 @@ mod wasm {
                 count as usize,
             );
             if new_cap > old_cap {
-                zero_region(
-                    h.offset_sym + old_cap,
-                    new_cap - old_cap,
-                );
+                zero_region(h.offset_sym + old_cap, new_cap - old_cap);
             }
 
             // Kind (u8)
@@ -1523,10 +1561,7 @@ mod wasm {
                 count as usize,
             );
             if new_cap > old_cap {
-                zero_region(
-                    h.offset_kind + old_cap,
-                    new_cap - old_cap,
-                );
+                zero_region(h.offset_kind + old_cap, new_cap - old_cap);
             }
 
             // Rebuild buckets (hash-consing table) for NonTerm only.
@@ -1578,7 +1613,13 @@ mod wasm {
 
     #[inline(always)]
     unsafe fn alloc_suspension(curr: u32, stack: u32, mode: u8, remaining_steps: u32) -> u32 {
-        alloc_generic(ArenaKind::Suspension as u8, mode, curr, stack, remaining_steps)
+        alloc_generic(
+            ArenaKind::Suspension as u8,
+            mode,
+            curr,
+            stack,
+            remaining_steps,
+        )
     }
 
     #[inline(always)]
@@ -1626,9 +1667,7 @@ mod wasm {
         let zero = alloc_num(0);
         let app = allocCons(allocCons(expr, inc), zero);
         let reduced = reduce(app, 1_000_000);
-        if kindOf(reduced) == ArenaKind::Terminal as u32
-            && symOf(reduced) == ArenaSym::Num as u32
-        {
+        if kindOf(reduced) == ArenaKind::Terminal as u32 && symOf(reduced) == ArenaSym::Num as u32 {
             hash_of_internal(reduced)
         } else {
             0
@@ -1749,7 +1788,14 @@ mod wasm {
     ///
     /// - `StepResult::Done(node)`: Reduction completed, `node` is the result
     /// - `StepResult::Yield(susp_id)`: Yielded mid-step, `susp_id` is Suspension node
-    unsafe fn step_iterative(mut curr: u32, mut stack: u32, mut mode: u8, gas: &mut u32, remaining_steps: &mut u32, mut free_node: u32) -> StepResult {
+    unsafe fn step_iterative(
+        mut curr: u32,
+        mut stack: u32,
+        mut mode: u8,
+        gas: &mut u32,
+        remaining_steps: &mut u32,
+        mut free_node: u32,
+    ) -> StepResult {
         loop {
             // Gas exhaustion yield
             if *gas == 0 {
@@ -1764,8 +1810,8 @@ mod wasm {
                 }
 
                 // POP FRAME
-                let recycled = stack;         // <--- This frame is now dead/recyclable
-                stack = leftOf(recycled);     // Parent
+                let recycled = stack; // <--- This frame is now dead/recyclable
+                stack = leftOf(recycled); // Parent
                 let parent_node = rightOf(recycled);
                 let stage = symOf(recycled) as u8;
 
@@ -1834,8 +1880,7 @@ mod wasm {
             }
 
             // readOne k -> k (Church byte)
-            if kindOf(left) == ArenaKind::Terminal as u32
-                && symOf(left) == ArenaSym::ReadOne as u32
+            if kindOf(left) == ArenaKind::Terminal as u32 && symOf(left) == ArenaSym::ReadOne as u32
             {
                 if let Some(byte) = stdin_ring().try_dequeue() {
                     if *remaining_steps == 0 {
@@ -1919,29 +1964,76 @@ mod wasm {
                     }
                     continue;
                 }
-                // S x y z -> x z (y z)
+
                 if kindOf(ll) == ArenaKind::NonTerm as u32 {
                     let lll = leftOf(ll);
-                    if kindOf(lll) == ArenaKind::Terminal as u32 && symOf(lll) == ArenaSym::S as u32 {
-                        if *remaining_steps == 0 {
-                            return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
-                        }
-                        // Use saturating_sub for consistency
-                        *remaining_steps = remaining_steps.saturating_sub(1);
 
-                        let x = rightOf(ll);
-                        let y = rightOf(left);
-                        let z = right;
-                        let xz = allocCons(x, z);
-                        let yz = allocCons(y, z);
-                        curr = allocCons(xz, yz);
-                        mode = MODE_RETURN;
+                    if kindOf(lll) == ArenaKind::Terminal as u32 {
+                        let sym = symOf(lll);
 
-                        // Yield IMMEDIATELY
-                        if *remaining_steps == 0 {
-                            return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                        // S x y z -> x z (y z)
+                        if sym == ArenaSym::S as u32 {
+                            if *remaining_steps == 0 {
+                                return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                            }
+                            *remaining_steps = remaining_steps.saturating_sub(1);
+
+                            let x = rightOf(ll);
+                            let y = rightOf(left);
+                            let z = right;
+
+                            // Optimization: Check for I to avoid allocating identity application?
+                            // For now, standard S-reduction:
+                            let xz = allocCons(x, z);
+                            let yz = allocCons(y, z);
+                            curr = allocCons(xz, yz);
+                            mode = MODE_RETURN;
+
+                            if *remaining_steps == 0 {
+                                return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                            }
+                            continue;
                         }
-                        continue;
+
+                        // B x y z -> x (y z)
+                        if sym == ArenaSym::B as u32 {
+                            if *remaining_steps == 0 {
+                                return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                            }
+                            *remaining_steps = remaining_steps.saturating_sub(1);
+
+                            let x = rightOf(ll);
+                            let y = rightOf(left);
+                            let z = right;
+                            let yz = allocCons(y, z);
+                            curr = allocCons(x, yz);
+                            mode = MODE_RETURN;
+
+                            if *remaining_steps == 0 {
+                                return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                            }
+                            continue;
+                        }
+
+                        // C x y z -> x z y
+                        if sym == ArenaSym::C as u32 {
+                            if *remaining_steps == 0 {
+                                return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                            }
+                            *remaining_steps = remaining_steps.saturating_sub(1);
+
+                            let x = rightOf(ll);
+                            let y = rightOf(left);
+                            let z = right;
+                            let xz = allocCons(x, z);
+                            curr = allocCons(xz, y);
+                            mode = MODE_RETURN;
+
+                            if *remaining_steps == 0 {
+                                return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                            }
+                            continue;
+                        }
                     }
                 }
             }
@@ -1974,13 +2066,17 @@ mod wasm {
 
     #[no_mangle]
     pub extern "C" fn arenaKernelStep(expr: u32) -> u32 {
-        unsafe { ensure_arena(); }
+        unsafe {
+            ensure_arena();
+        }
         step_internal(expr)
     }
 
     #[no_mangle]
     pub extern "C" fn reduce(expr: u32, max: u32) -> u32 {
-        unsafe { ensure_arena(); }
+        unsafe {
+            ensure_arena();
+        }
         let limit = if max == 0xffff_ffff { u32::MAX } else { max };
         let mut cur = expr;
         for _ in 0..limit {
@@ -2028,7 +2124,11 @@ mod wasm {
             if ARENA_BASE_ADDR == 0 {
                 return 2;
             }
-            if sq_ring().try_enqueue(Sqe { node_id, req_id, max_steps }) {
+            if sq_ring().try_enqueue(Sqe {
+                node_id,
+                req_id,
+                max_steps,
+            }) {
                 0
             } else {
                 1
@@ -2114,7 +2214,11 @@ mod wasm {
                 } else {
                     // Set strict limit from the job packet
                     let limit = job.max_steps;
-                    remaining_steps = if limit == 0xffff_ffff { u32::MAX } else { limit };
+                    remaining_steps = if limit == 0xffff_ffff {
+                        u32::MAX
+                    } else {
+                        limit
+                    };
                 }
 
                 loop {
@@ -2138,7 +2242,14 @@ mod wasm {
 
                     let mut gas = batch_gas;
 
-                    match step_iterative(curr, stack, mode, &mut gas, &mut remaining_steps, free_node) {
+                    match step_iterative(
+                        curr,
+                        stack,
+                        mode,
+                        &mut gas,
+                        &mut remaining_steps,
+                        free_node,
+                    ) {
                         StepResult::Yield(susp_id) => {
                             // Yielded (gas or limit). 'susp_id' has the correct remaining count
                             // because step_iterative updated 'remaining_steps' in place for each

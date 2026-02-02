@@ -47,6 +47,7 @@ import { parseSystemFTerm } from "./systemFTerm.ts";
 import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
 import { parseUntypedLambdaInternal } from "./untyped.ts";
 import { parseSKIDelimited } from "./ski.ts";
+import { parseWithEOF } from "./eof.ts";
 import { parseArrowTypeNoApp } from "./type.ts";
 import type {
   DataDefinition,
@@ -60,6 +61,17 @@ import type { TypedLambda } from "../types/typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import type { SKIExpression } from "../ski/expression.ts";
 import { EQUALS, PIPE } from "./consts.ts";
+
+function parseSKIUntilLineEnd(
+  state: ParserState,
+): [SKIExpression, ParserState] {
+  const start = state.idx;
+  const lineEnd = state.buf.indexOf("\n", start);
+  const end = lineEnd === -1 ? state.buf.length : lineEnd;
+  const slice = state.buf.slice(start, end);
+  const [, term] = parseWithEOF(slice, parseSKIDelimited);
+  return [term, { buf: state.buf, idx: end }];
+}
 
 function parseDataDefinition(
   state: ParserState,
@@ -238,7 +250,7 @@ export function parseTripLangDefinition(
       return [{ kind: UNTYPED, name, term }, skipWhitespace(finalState)];
 
     case COMBINATOR:
-      [, term, finalState] = parseSKIDelimited(currentState);
+      [term, finalState] = parseSKIUntilLineEnd(currentState);
       return [{ kind: COMBINATOR, name, term }, skipWhitespace(finalState)];
 
     case TYPE:

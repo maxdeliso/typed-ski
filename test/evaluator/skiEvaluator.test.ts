@@ -2,7 +2,12 @@ import { assert } from "chai";
 
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { type SKIExpression, unparseSKI } from "../../lib/ski/expression.ts";
+import {
+  applyMany,
+  type SKIExpression,
+  unparseSKI,
+} from "../../lib/ski/expression.ts";
+import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 import { randExpression } from "../../lib/ski/generator.ts";
@@ -81,6 +86,36 @@ Deno.test("stepOnce", async (t) => {
       compareExpressions(thirdStep.expr, third);
     },
   );
+});
+
+Deno.test("B and C combinators", async (t) => {
+  const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
+    assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
+  };
+
+  await t.step("B x y z = x (y z)", () => {
+    const expr = applyMany(B, I, I, I);
+    const reduced = arenaEvaluator.reduce(expr);
+    compareExpressions(reduced, I);
+  });
+
+  await t.step("B with distinct args preserves order", () => {
+    const left = arenaEvaluator.reduce(applyMany(B, K, I, S));
+    const right = arenaEvaluator.reduce(applyMany(K, applyMany(I, S)));
+    compareExpressions(left, right);
+  });
+
+  await t.step("C x y z = x z y", () => {
+    const expr = applyMany(C, I, I, I);
+    const reduced = arenaEvaluator.reduce(expr);
+    compareExpressions(reduced, I);
+  });
+
+  await t.step("C with distinct args preserves order", () => {
+    const left = arenaEvaluator.reduce(applyMany(C, K, I, S));
+    const right = arenaEvaluator.reduce(applyMany(K, S, I));
+    compareExpressions(left, right);
+  });
 });
 
 const MAX_ITER = 100;

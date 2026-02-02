@@ -118,6 +118,17 @@ Deno.test("dumpArena", async (t) => {
     }
   });
 
+  await t.step("round-trips B and C terminals", () => {
+    const evaluator = arenaEval;
+    const exprB = parseSKI("B");
+    const exprC = parseSKI("C");
+    const idB = evaluator.toArena(exprB);
+    const idC = evaluator.toArena(exprC);
+
+    assertEquals(unparseSKI(evaluator.fromArena(idB)), "B");
+    assertEquals(unparseSKI(evaluator.fromArena(idC)), "C");
+  });
+
   await t.step("correctly dumps non-terminal nodes", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("II");
@@ -207,8 +218,8 @@ Deno.test("dumpArena", async (t) => {
         const sym = node.sym;
         assert(
           sym !== undefined &&
-            ["S", "K", "I", "readOne", "writeOne", "?"].includes(sym),
-          `Terminal symbol should be S, K, I, readOne, writeOne, or ? (got ${sym})`,
+            ["S", "K", "I", "B", "C", "readOne", "writeOne", "?"].includes(sym),
+          `Terminal symbol should be S, K, I, B, C, readOne, writeOne, or ? (got ${sym})`,
         );
       } else {
         assert(

@@ -10,6 +10,8 @@
 import type { SKIExpression } from "../ski/expression.ts";
 import { apply } from "../ski/expression.ts";
 import {
+  B,
+  C,
   I,
   K,
   ReadOne,
@@ -28,12 +30,20 @@ import {
 } from "./arenaHeader.generated.ts";
 
 /**
- * Terminal cache: Maps exports instance -> {S, K, I} IDs
+ * Terminal cache: Maps exports instance -> {S, K, I, ...} IDs
  * This allows each evaluator instance to have its own terminal cache
  */
 const terminalCache = new WeakMap<
   Pick<ArenaWasmExports, "allocTerminal">,
-  { s: number; k: number; i: number; readOne: number; writeOne: number }
+  {
+    s: number;
+    k: number;
+    i: number;
+    b: number;
+    c: number;
+    readOne: number;
+    writeOne: number;
+  }
 >();
 
 /**
@@ -61,6 +71,8 @@ export function toArenaWithExports(
       s: exports.allocTerminal(ArenaSym.S),
       k: exports.allocTerminal(ArenaSym.K),
       i: exports.allocTerminal(ArenaSym.I),
+      b: exports.allocTerminal(ArenaSym.B),
+      c: exports.allocTerminal(ArenaSym.C),
       readOne: exports.allocTerminal(ArenaSym.ReadOne),
       writeOne: exports.allocTerminal(ArenaSym.WriteOne),
     };
@@ -94,6 +106,12 @@ export function toArenaWithExports(
           break;
         case SKITerminalSymbol.I:
           id = cache.i;
+          break;
+        case SKITerminalSymbol.B:
+          id = cache.b;
+          break;
+        case SKITerminalSymbol.C:
+          id = cache.c;
           break;
         case SKITerminalSymbol.ReadOne:
           id = cache.readOne;
@@ -199,6 +217,12 @@ export function fromArenaWithExports(
           break;
         case ArenaSym.I:
           expr = I;
+          break;
+        case ArenaSym.B:
+          expr = B;
+          break;
+        case ArenaSym.C:
+          expr = C;
           break;
         case ArenaSym.ReadOne:
           expr = ReadOne;
@@ -481,6 +505,12 @@ export class ArenaEvaluatorWasm implements Evaluator {
           break;
         case ArenaSym.I:
           sym = "I";
+          break;
+        case ArenaSym.B:
+          sym = "B";
+          break;
+        case ArenaSym.C:
+          sym = "C";
           break;
         case ArenaSym.ReadOne:
           sym = "readOne";

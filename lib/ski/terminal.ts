@@ -13,6 +13,10 @@ export enum SKITerminalSymbol {
   K = "K",
   /** The I combinator (identity combinator). */
   I = "I",
+  /** The B combinator (composition combinator). */
+  B = "B",
+  /** The C combinator (exchange combinator). */
+  C = "C",
   /** Read a single byte (brainf***-style ","). */
   ReadOne = ",",
   /** Write a single byte (brainf***-style "."). */
@@ -64,6 +68,22 @@ export const K: SKITerminal = term(SKITerminalSymbol.K);
  * I x = x
  */
 export const I: SKITerminal = term(SKITerminalSymbol.I);
+
+/**
+ * The B combinator terminal node.
+ *
+ * The B combinator is the composition combinator:
+ * B x y z = x (y z)
+ */
+export const B: SKITerminal = term(SKITerminalSymbol.B);
+
+/**
+ * The C combinator terminal node.
+ *
+ * The C combinator is the exchange combinator:
+ * C x y z = x z y
+ */
+export const C: SKITerminal = term(SKITerminalSymbol.C);
 
 /**
  * The readOne terminal node (input).

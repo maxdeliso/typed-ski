@@ -8,7 +8,7 @@ import {
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
-import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
+import { B, C, I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
 const assertReparse = (expr: string) => {
   const parsed = parseSKI(expr);
@@ -99,6 +99,24 @@ Deno.test("parseSKI", async (t) => {
     const expected = apply(ReadOne, WriteOne);
     assert.deepStrictEqual(parsed, expected);
     assertReparse(",.");
+  });
+
+  await t.step("should parse B and C terminals", () => {
+    assert.deepStrictEqual(parseSKI("B"), B);
+    assert.deepStrictEqual(parseSKI("C"), C);
+
+    const parsed = parseSKI("BCI");
+    const expected = apply(apply(B, C), I);
+    assert.deepStrictEqual(parsed, expected);
+    assertReparse("BCI");
+  });
+
+  await t.step("should parse mixed-case B and C terminals", () => {
+    const upper = parseSKI("BCI");
+    const lower = parseSKI("bci");
+    const mixed = parseSKI("bCi");
+    assert.deepStrictEqual(upper, lower);
+    assert.deepStrictEqual(upper, mixed);
   });
 
   await t.step("should place IO terminals in correct tree locations", () => {

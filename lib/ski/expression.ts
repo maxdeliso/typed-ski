@@ -6,18 +6,18 @@
  *
  * @module
  */
-import type { SKITerminal } from "./terminal.ts";
+import type { SKITerminal, SKITerminalSymbol } from "./terminal.ts";
 
 /*
  * EBNF grammar:
  *
- * terminal = "S" | "K" | "I" | "," | "."
+ * terminal = "S" | "K" | "I" | "B" | "C" | "," | "."
  * non-terminal = "(", expression, expression, ")"
  * expression = terminal | non-terminal
  *
  * alphabet:
  *
- * "S" | "K" | "I" | "," | "." | "(" | ")"
+ * "S" | "K" | "I" | "B" | "C" | "," | "." | "(" | ")"
  *
  * non-terminals:
  *
@@ -44,7 +44,7 @@ export interface SKIApplication {
  * application of two expressions.
  */
 export type SKIExpression = SKITerminal | SKIApplication;
-export type SKIChar = "S" | "K" | "I" | "," | "." | "(" | ")";
+export type SKIChar = SKITerminalSymbol | "(" | ")";
 export type SKIKey = SKIChar[];
 
 /**

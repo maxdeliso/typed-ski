@@ -270,43 +270,9 @@ poly main = isSpace ${charCode}
 });
 
 Deno.test("tokenize - verify token count for lexer.trip input", async () => {
-  const testSource = `module Test
-
-import Lexer tokenize
-import Lexer tokenizeAcc
-import Lexer Token
-import Lexer reverse
-import Prelude Nat
-import Prelude zero
-import Prelude succ
-import Prelude nil
-import Prelude cons
-import Prelude foldl
-import Prelude Result
-import Prelude Err
-import Prelude Ok
-import Prelude ParseError
-import Prelude List
-
-export main
-
-poly rec length = \\xs : List Token =>
-  foldl [Token] [Nat]
-    (\\acc : Nat => \\_ : Token => succ acc)
-    zero
-    xs
-
-poly main =
-  match (tokenize "1 2") [Nat] {
-    | Err _ => zero
-    | Ok tokens => length tokens
-  }`;
-
   const evaluator = await ParallelArenaEvaluatorWasm.create();
   const testFileName = "testTokenizeLength.trip";
   const testFilePath = join(__dirname, "inputs", testFileName);
-
-  await Deno.writeTextFile(testFilePath, testSource);
 
   try {
     const testObj = await compileTestProgram(testFileName);

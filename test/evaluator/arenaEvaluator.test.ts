@@ -118,6 +118,17 @@ Deno.test("dumpArena", async (t) => {
     }
   });
 
+  await t.step("round-trips B and C terminals", () => {
+    const evaluator = arenaEval;
+    const exprB = parseSKI("B");
+    const exprC = parseSKI("C");
+    const idB = evaluator.toArena(exprB);
+    const idC = evaluator.toArena(exprC);
+
+    assertEquals(unparseSKI(evaluator.fromArena(idB)), "B");
+    assertEquals(unparseSKI(evaluator.fromArena(idC)), "C");
+  });
+
   await t.step("correctly dumps non-terminal nodes", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("II");

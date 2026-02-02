@@ -30,7 +30,7 @@ import {
 } from "./arenaHeader.generated.ts";
 
 /**
- * Terminal cache: Maps exports instance -> {S, K, I} IDs
+ * Terminal cache: Maps exports instance -> {S, K, I, ...} IDs
  * This allows each evaluator instance to have its own terminal cache
  */
 const terminalCache = new WeakMap<
@@ -39,10 +39,10 @@ const terminalCache = new WeakMap<
     s: number;
     k: number;
     i: number;
-    readOne: number;
-    writeOne: number;
     b: number;
     c: number;
+    readOne: number;
+    writeOne: number;
   }
 >();
 

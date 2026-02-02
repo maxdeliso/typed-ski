@@ -7,21 +7,23 @@ import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
+import { getNatObject } from "../../lib/nat.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 Deno.test("links prelude with basic arithmetic", async () => {
   // Get the bundled prelude object
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
 
   // Create a test module that uses prelude functions
   const testSource = `module TestArithmetic
 
-import Prelude zero
-import Prelude succ
-import Prelude add
-import Prelude mul
-import Prelude Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Nat mul
+import Nat Nat
 
 export main
 
@@ -62,6 +64,7 @@ poly main = mul two three`;
     // Link modules
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Nat", object: natObject },
       { name: "TestArithmetic", object: testObject },
     ], true);
 
@@ -84,13 +87,14 @@ poly main = mul two three`;
 Deno.test("links prelude with simple arithmetic", async () => {
   // Get the bundled prelude object
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
 
   const testSource = `module TestSimple
 
-import Prelude zero
-import Prelude succ
-import Prelude add
-import Prelude Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Nat Nat
 
 export main
 
@@ -131,6 +135,7 @@ poly main = add one one`;
 
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Nat", object: natObject },
       { name: "TestSimple", object: testObject },
     ], true);
 
@@ -151,13 +156,14 @@ poly main = add one one`;
 Deno.test("links prelude with multiplication", async () => {
   // Get the bundled prelude object
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
 
   const testSource = `module TestMultiplication
 
-import Prelude zero
-import Prelude succ
-import Prelude mul
-import Prelude Nat
+import Nat zero
+import Nat succ
+import Nat mul
+import Nat Nat
 
 export main
 
@@ -199,6 +205,7 @@ poly main = mul two three`;
 
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Nat", object: natObject },
       { name: "TestMultiplication", object: testObject },
     ], true);
 
@@ -218,14 +225,16 @@ poly main = mul two three`;
 
 Deno.test("links numeric literals across modules without leaking Nat", async () => {
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
 
   const providerSource = `module LiteralProvider
 
-import Prelude Nat
+import Nat Nat
+import Nat fromBin
 
 export lit
 
-poly lit = 3
+poly lit = fromBin 3
 `;
 
   const consumerSource = `module LiteralConsumer
@@ -274,6 +283,7 @@ poly main = lit
 
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Nat", object: natObject },
       { name: "LiteralProvider", object: providerObject },
       { name: "LiteralConsumer", object: consumerObject },
     ], true);
@@ -302,6 +312,7 @@ poly main = lit
 
 Deno.test("fails to link when module exports Nat conflicting with Prelude", async () => {
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
 
   const conflictingSource = `module ConflictingNat
 
@@ -347,6 +358,7 @@ poly main = 3
       () => {
         linkModules([
           { name: "Prelude", object: preludeObject },
+          { name: "Nat", object: natObject },
           { name: "ConflictingNat", object: conflictingObject },
         ], true);
       },
@@ -372,14 +384,15 @@ poly main = 3
 Deno.test("links prelude with complex arithmetic", async () => {
   // Get the bundled prelude object
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
 
   const testSource = `module TestComplexArithmetic
 
-import Prelude zero
-import Prelude succ
-import Prelude add
-import Prelude mul
-import Prelude Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Nat mul
+import Nat Nat
 
 export main
 
@@ -423,6 +436,7 @@ poly main = add (mul two three) (mul one four)`;
 
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Nat", object: natObject },
       { name: "TestComplexArithmetic", object: testObject },
     ], true);
 

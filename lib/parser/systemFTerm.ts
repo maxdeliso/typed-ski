@@ -30,6 +30,7 @@ import {
 } from "./parserState.ts";
 import type { ParserState } from "./parserState.ts";
 import type { BaseType } from "../types/types.ts";
+import { mkTypeVariable } from "../types/types.ts";
 import { parseSystemFType } from "./systemFType.ts";
 import { parseWithEOF } from "./eof.ts";
 import {
@@ -40,7 +41,6 @@ import {
   type SystemFMatchArm,
   type SystemFTerm,
 } from "../terms/systemF.ts";
-import { makeNatLiteralIdentifier, makeNatType } from "../consts/nat.ts";
 import {
   createSystemFApplication,
   flattenSystemFApp,
@@ -367,12 +367,32 @@ const parseLiteralChar = (
   return [ch, code, { buf: state.buf, idx: state.idx + 1 }];
 };
 
-const buildNatList = (codes: number[]): SystemFTerm => {
-  const natType = makeNatType();
-  let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), natType);
+const makeBinType = (): BaseType => mkTypeVariable("Bin");
+
+const buildBinTerm = (code: bigint): SystemFTerm => {
+  if (code <= 0n) {
+    return mkSystemFVar("BZ");
+  }
+  const bits: number[] = [];
+  let n = code;
+  while (n > 0n) {
+    bits.push(n & 1n ? 1 : 0);
+    n = n / 2n;
+  }
+  let term: SystemFTerm = mkSystemFVar("BZ");
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const ctor = bits[i] === 0 ? "B0" : "B1";
+    term = createSystemFApplication(mkSystemFVar(ctor), term);
+  }
+  return term;
+};
+
+const buildBinList = (codes: number[]): SystemFTerm => {
+  const binType = makeBinType();
+  let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), binType);
   for (let i = codes.length - 1; i >= 0; i--) {
-    const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), natType);
-    const head = mkSystemFVar(makeNatLiteralIdentifier(BigInt(codes[i])));
+    const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), binType);
+    const head = buildBinTerm(BigInt(codes[i]));
     term = createSystemFApplication(
       createSystemFApplication(consTerm, head),
       term,
@@ -410,11 +430,7 @@ const parseCharLiteralTerm = (
     );
   }
   currentState = consumeRaw(currentState, "'");
-  return [
-    `'${literalPart}'`,
-    mkSystemFVar(makeNatLiteralIdentifier(BigInt(code))),
-    currentState,
-  ];
+  return [`'${literalPart}'`, buildBinList([code]), currentState];
 };
 
 const parseStringLiteralTerm = (
@@ -457,7 +473,7 @@ const parseStringLiteralTerm = (
     codes.push(code);
   }
 
-  return [`"${literalParts.join("")}"`, buildNatList(codes), currentState];
+  return [`"${literalParts.join("")}"`, buildBinList(codes), currentState];
 };
 
 /**
@@ -540,11 +556,7 @@ export function parseAtomicSystemFTerm(
     return parseStringLiteralTerm(currentState);
   } else if (isDigit(ch)) {
     const [literal, value, stateAfterLiteral] = parseNumericLiteral(state);
-    return [
-      literal,
-      mkSystemFVar(makeNatLiteralIdentifier(value)),
-      stateAfterLiteral,
-    ];
+    return [literal, buildBinTerm(value), stateAfterLiteral];
   } // 5. Identifiers and Keywords
   else if (ch !== null && /[a-zA-Z]/.test(ch)) {
     const [varLit, stateAfterVar] = parseIdentifier(state);

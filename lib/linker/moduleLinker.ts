@@ -26,6 +26,20 @@ import {
 import { unparseSKI } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 
+function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
+  if (typeDef.kind !== "type") {
+    return false;
+  }
+
+  const defValue = extractDefinitionValue(typeDef);
+  if (!defValue) {
+    return false;
+  }
+
+  const [_termRefs, typeRefs] = externalReferences(defValue);
+  return typeRefs.has(typeDef.name);
+}
+
 /**
  * Qualified name type for module.symbol references
  *
@@ -799,6 +813,9 @@ function substituteDependencies(
       if (targetQualified) {
         const targetType = ps.types.get(targetQualified);
         if (targetType) {
+          if (isRecursiveTypeDefinition(targetType)) {
+            continue;
+          }
           const oldDef = resolvedDefinition; // Capture state before substitution
           resolvedDefinition = substituteTripLangTypeDirect(
             resolvedDefinition,
@@ -820,6 +837,9 @@ function substituteDependencies(
         const module = ps.modules.get(moduleName)!;
         if (module.defs.has(typeRef)) {
           const localType = module.defs.get(typeRef)!;
+          if (isRecursiveTypeDefinition(localType)) {
+            continue;
+          }
 
           // FIX: Robust Self-Reference Check
           // We are already looking at the current module's defs, so strictly check the name.

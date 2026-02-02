@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
+import { getNatObject } from "../../lib/nat.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +54,8 @@ Deno.test("linking with recursive ADT", async () => {
   // Step 1: Create a module with a recursive ADT (similar to SNat)
   const recursiveAdtSource = `module RecursiveAdt
 
-import Prelude Nat
+import Nat Nat
+import Nat fromBin
 
 export Tree
 export Leaf
@@ -73,7 +75,7 @@ poly makeNode = \\left : Tree => \\right : Tree => Node left right
 poly getValue = \\t : Tree =>
   match t [Nat] {
     | Leaf n => n
-    | Node _ _ => 0
+    | Node _ _ => fromBin 0
   }
 `;
 
@@ -93,11 +95,12 @@ import RecursiveAdt Node
 import RecursiveAdt makeLeaf
 import RecursiveAdt makeNode
 import RecursiveAdt getValue
-import Prelude Nat
+import Nat Nat
+import Nat fromBin
 
 export main
 
-poly main = getValue (makeNode (makeLeaf 1) (makeLeaf 2))
+poly main = getValue (makeNode (makeLeaf (fromBin 1)) (makeLeaf (fromBin 2)))
 `;
 
     const testFile = join(__dirname, "test_recursive.trip");
@@ -109,9 +112,11 @@ poly main = getValue (makeNode (makeLeaf 1) (makeLeaf 2))
 
       // Step 5: Link both modules together with Prelude
       const preludeObject = await getPreludeObject();
+      const natObject = await getNatObject();
 
       const skiExpression = linkModules([
         { name: "Prelude", object: preludeObject },
+        { name: "Nat", object: natObject },
         { name: "RecursiveAdt", object: adtObject },
         { name: "TestRecursive", object: testObject },
       ], false);
@@ -150,10 +155,10 @@ Deno.test("linking with self-referential recursive ADT (SNat-like)", async () =>
   // Step 1: Create a module with a self-referential recursive ADT (like SNat)
   const snatLikeSource = `module SNatLike
 
-import Prelude Nat
-import Prelude add
-import Prelude succ
-import Prelude zero
+import Nat Nat
+import Nat add
+import Nat succ
+import Nat zero
 
 export SNat
 export SZ
@@ -185,9 +190,9 @@ import SNatLike SZ
 import SNatLike SS
 import SNatLike toSNat
 import SNatLike fromSNat
-import Prelude Nat
-import Prelude zero
-import Prelude succ
+import Nat Nat
+import Nat zero
+import Nat succ
 
 export main
 
@@ -203,9 +208,11 @@ poly main = fromSNat (SS (SS SZ))
 
       // Step 5: Link both modules together with Prelude
       const preludeObject = await getPreludeObject();
+      const natObject = await getNatObject();
 
       const skiExpression = linkModules([
         { name: "Prelude", object: preludeObject },
+        { name: "Nat", object: natObject },
         { name: "SNatLike", object: snatObject },
         { name: "TestSNat", object: testObject },
       ], false);

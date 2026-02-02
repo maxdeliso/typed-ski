@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
-import { parseNatLiteralIdentifier } from "../../lib/consts/natNames.ts";
 import {
   createSystemFApplication,
   mkSystemFAbs,
@@ -291,26 +290,17 @@ data Token =
     // NOTE: This list is intentionally hardcoded (no regex parsing) so that
     // changes to lexer.trip require an explicit update here.
     const expectedImports = [
-      { name: "Prelude", ref: "Nat" },
+      { name: "Nat", ref: "Nat" },
+      { name: "Nat", ref: "toBin" },
       { name: "Prelude", ref: "Bool" },
       { name: "Prelude", ref: "List" },
       { name: "Prelude", ref: "nil" },
       { name: "Prelude", ref: "cons" },
       { name: "Prelude", ref: "matchList" },
-      { name: "Prelude", ref: "head" },
       { name: "Prelude", ref: "tail" },
       { name: "Prelude", ref: "if" },
-      { name: "Prelude", ref: "isZero" },
       { name: "Prelude", ref: "and" },
       { name: "Prelude", ref: "or" },
-      { name: "Prelude", ref: "zero" },
-      { name: "Prelude", ref: "succ" },
-      { name: "Prelude", ref: "add" },
-      { name: "Prelude", ref: "mul" },
-      { name: "Prelude", ref: "sub" },
-      { name: "Prelude", ref: "pred" },
-      { name: "Prelude", ref: "gte" },
-      { name: "Prelude", ref: "lte" },
       { name: "Prelude", ref: "true" },
       { name: "Prelude", ref: "false" },
       { name: "Prelude", ref: "Result" },
@@ -323,11 +313,16 @@ data Token =
       { name: "Prelude", ref: "None" },
       { name: "Prelude", ref: "Pair" },
       { name: "Prelude", ref: "MkPair" },
-      { name: "Prelude", ref: "pair" },
       { name: "Prelude", ref: "fst" },
       { name: "Prelude", ref: "snd" },
-      { name: "Prelude", ref: "error" },
       { name: "Prelude", ref: "foldl" },
+      { name: "Prelude", ref: "append" },
+      { name: "Prelude", ref: "Bin" },
+      { name: "Prelude", ref: "addBin" },
+      { name: "Prelude", ref: "mulBin" },
+      { name: "Prelude", ref: "subBin" },
+      { name: "Prelude", ref: "eqBin" },
+      { name: "Prelude", ref: "lteBin" },
     ] as const;
 
     const expectedExports = [
@@ -352,20 +347,16 @@ data Token =
       "T_Nat",
       "T_EOF",
       "tokenize",
-      "isSpace",
-      "isAlpha",
-      "isDigit",
-      "isIdentChar",
+      "tokenizeBin",
       "kwPoly",
       "isKeywordPoly",
-      "natFromDigitList",
+      "binFromDigitList",
       "mapResult",
     ] as const;
 
     const expectedData = ["Token"] as const;
 
     const expectedPoly = [
-      "isSpace",
       "reverse",
       "tokenizeAcc",
       "tokenize",
@@ -427,15 +418,15 @@ data Token =
       { name: "T_Comma", fields: [] },
       {
         name: "T_Keyword",
-        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Bin"))],
       },
       {
         name: "T_Ident",
-        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Bin"))],
       },
       {
         name: "T_Nat",
-        fields: [mkTypeVariable("Nat")],
+        fields: [mkTypeVariable("Bin")],
       },
       { name: "T_EOF", fields: [] },
     ]);
@@ -637,28 +628,46 @@ Deno.test("parse single poly", async (t) => {
     expect(term.name).to.equal("foo");
     expect(term.type).to.equal(undefined);
 
-    // The string literal "foo" is desugared into a Nat list term:
-    // cons 102 (cons 111 (cons 111 (nil Nat)))
-    const expectedCodes = [102n, 111n, 111n];
+    // The string literal "foo" is desugared into a Bin list term:
+    // cons (bin 102) (cons (bin 111) (cons (bin 111) (nil Bin)))
+    const expectedCodes = [102, 111, 111];
+    const decodeBinTerm = (t: SystemFTerm): number => {
+      if (t.kind === "systemF-var") {
+        if (t.name !== "BZ") {
+          throw new Error(`expected 'BZ', got '${t.name}'`);
+        }
+        return 0;
+      }
+      const app = expectSystemFApp(t);
+      const ctor = expectSystemFVar(app.lft);
+      const rest = decodeBinTerm(app.rgt);
+      if (ctor.name === "B0") {
+        return rest * 2;
+      }
+      if (ctor.name === "B1") {
+        return rest * 2 + 1;
+      }
+      throw new Error(`expected 'B0' or 'B1', got '${ctor.name}'`);
+    };
     let current: SystemFTerm = term.term;
     for (const code of expectedCodes) {
       const outerApp = expectSystemFApp(current);
 
-      // left is (cons [Nat] <head>)
+      // left is (cons [Bin] <head>)
       const consApp = expectSystemFApp(outerApp.lft);
       const consTypeApp = expectSystemFTypeApp(consApp.lft);
       const consVar = expectSystemFVar(consTypeApp.term);
       expect(consVar.name).to.equal("cons");
 
-      // head is a nat-literal identifier var whose decoded value matches
-      const headVar = expectSystemFVar(consApp.rgt);
-      expect(parseNatLiteralIdentifier(headVar.name)).to.equal(code);
+      // head is a Bin constructor chain whose decoded value matches
+      const decoded = decodeBinTerm(consApp.rgt);
+      expect(decoded).to.equal(code);
 
       // tail
       current = outerApp.rgt;
     }
 
-    // tail is (nil [Nat])
+    // tail is (nil [Bin])
     const nilApp = expectSystemFTypeApp(current);
     const nilVar = expectSystemFVar(nilApp.term);
     expect(nilVar.name).to.equal("nil");

@@ -1,12 +1,11 @@
 module Test
 
-import Lexer tokenize
+import Lexer tokenizeBin
 import Lexer tokenizeAcc
 import Lexer Token
 import Lexer reverse
-import Prelude Nat
-import Prelude zero
-import Prelude succ
+import Prelude Bin
+import Prelude incBin
 import Prelude nil
 import Prelude cons
 import Prelude foldl
@@ -15,17 +14,19 @@ import Prelude Err
 import Prelude Ok
 import Prelude ParseError
 import Prelude List
+import Nat fromBin
+import Nat Nat
 
 export main
 
 poly rec length = \xs : List Token =>
-  foldl [Token] [Nat]
-    (\acc : Nat => \_ : Token => succ acc)
-    zero
+  foldl [Token] [Bin]
+    (\acc : Bin => \_ : Token => incBin acc)
+    0
     xs
 
 poly main =
-  match (tokenize "1 2") [Nat] {
-    | Err _ => zero
-    | Ok tokens => length tokens
+  match (tokenizeBin "1 2") [Nat] {
+    | Err _ => 0
+    | Ok tokens => fromBin (length tokens)
   }

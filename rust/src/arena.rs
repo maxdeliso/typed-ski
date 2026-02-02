@@ -183,15 +183,11 @@ pub enum ArenaSym {
     /// The identity function, returns its argument unchanged.
     I = 3,
 
-    /// readOne terminal: consumes one byte from stdin, passes Church numeral to continuation.
+    /// readOne terminal: consumes one byte from stdin, passes Bin numeral to continuation.
     ReadOne = 4,
 
     /// writeOne terminal: writes one byte to stdout, returns its argument.
     WriteOne = 5,
-
-    // Internal-only primitives for Church decoding (not surfaced in the language).
-    Inc = 6,
-    Num = 7,
 
     /// B combinator: `B x y z -> x (y z)
     B = 8,
@@ -819,6 +815,9 @@ mod wasm {
     // -------------------------------------------------------------------------
     static mut ARENA_BASE_ADDR: u32 = 0;
     static mut ARENA_MODE: u32 = 0;
+    static BIN_CTOR_BZ: AtomicU32 = AtomicU32::new(EMPTY);
+    static BIN_CTOR_B0: AtomicU32 = AtomicU32::new(EMPTY);
+    static BIN_CTOR_B1: AtomicU32 = AtomicU32::new(EMPTY);
 
     #[inline(always)]
     unsafe fn ensure_arena() {
@@ -1112,6 +1111,9 @@ mod wasm {
             for i in 0..TERM_CACHE_LEN {
                 (*cache.add(i)).store(EMPTY, Ordering::Release);
             }
+            BIN_CTOR_BZ.store(EMPTY, Ordering::Release);
+            BIN_CTOR_B0.store(EMPTY, Ordering::Release);
+            BIN_CTOR_B1.store(EMPTY, Ordering::Release);
             h.resize_seq
                 .store(h.resize_seq.load(Ordering::Relaxed) & !1, Ordering::Release);
         }
@@ -1632,55 +1634,211 @@ mod wasm {
     }
 
     #[inline(always)]
-    unsafe fn alloc_num(value: u32) -> u32 {
-        alloc_generic(ArenaKind::Terminal as u8, ArenaSym::Num as u8, 0, 0, value)
+    unsafe fn alloc_app(left: u32, right: u32) -> u32 {
+        allocCons(left, right)
     }
 
     #[inline(always)]
-    unsafe fn alloc_inc() -> u32 {
-        allocTerminal(ArenaSym::Inc as u32)
-    }
-
-    #[inline(always)]
-    unsafe fn alloc_church_zero() -> u32 {
-        let k = allocTerminal(ArenaSym::K as u32);
+    unsafe fn alloc_bin_ctor_bz() -> u32 {
+        // BZ = ((B((BI)K))K)
+        let b = allocTerminal(ArenaSym::B as u32);
         let i = allocTerminal(ArenaSym::I as u32);
-        allocCons(k, i)
+        let k = allocTerminal(ArenaSym::K as u32);
+        let bi = alloc_app(b, i);
+        let bik = alloc_app(bi, k);
+        let b_bik = alloc_app(b, bik);
+        alloc_app(b_bik, k)
     }
 
     #[inline(always)]
-    unsafe fn alloc_church_succ() -> u32 {
+    unsafe fn alloc_bin_ctor_b0() -> u32 {
+        // B0 = (((P(P(PS)))(K(K((BI)K))))((B((B((BI)K))K))K))
+        let p = allocTerminal(ArenaSym::SPrime as u32);
         let s = allocTerminal(ArenaSym::S as u32);
         let k = allocTerminal(ArenaSym::K as u32);
-        let ks = allocCons(k, s);
-        let b = allocCons(allocCons(s, ks), k); // S(KS)K
-        allocCons(s, b) // S B
+        let b = allocTerminal(ArenaSym::B as u32);
+        let i = allocTerminal(ArenaSym::I as u32);
+
+        let ps = alloc_app(p, s);
+        let pps = alloc_app(p, ps);
+        let ppps = alloc_app(p, pps);
+
+        let bi = alloc_app(b, i);
+        let bik = alloc_app(bi, k);
+        let k_bik = alloc_app(k, bik);
+        let k_k_bik = alloc_app(k, k_bik);
+
+        let left = alloc_app(ppps, k_k_bik);
+
+        let b_bi_k = alloc_app(b, bik); // B ((B I) K)
+        let b_bi_k_k = alloc_app(b_bi_k, k); // (B ((B I) K)) K
+        let b_b_bi_k_k = alloc_app(b, b_bi_k_k);
+        let right = alloc_app(b_b_bi_k_k, k);
+
+        alloc_app(left, right)
     }
 
     #[inline(always)]
-    unsafe fn alloc_church_byte(value: u8) -> u32 {
-        let mut cur = alloc_church_zero();
-        if value == 0 {
-            return cur;
+    unsafe fn alloc_bin_ctor_b1() -> u32 {
+        // B1 = (((P(P(PS)))(K(K(KI))))((B((B((BI)K))K))K))
+        let p = allocTerminal(ArenaSym::SPrime as u32);
+        let s = allocTerminal(ArenaSym::S as u32);
+        let k = allocTerminal(ArenaSym::K as u32);
+        let b = allocTerminal(ArenaSym::B as u32);
+        let i = allocTerminal(ArenaSym::I as u32);
+
+        let ps = alloc_app(p, s);
+        let pps = alloc_app(p, ps);
+        let ppps = alloc_app(p, pps);
+
+        let ki = alloc_app(k, i);
+        let k_ki = alloc_app(k, ki);
+        let k_k_ki = alloc_app(k, k_ki);
+
+        let left = alloc_app(ppps, k_k_ki);
+
+        let bi = alloc_app(b, i);
+        let bik = alloc_app(bi, k);
+        let b_bi_k = alloc_app(b, bik);
+        let b_bi_k_k = alloc_app(b_bi_k, k);
+        let b_b_bi_k_k = alloc_app(b, b_bi_k_k);
+        let right = alloc_app(b_b_bi_k_k, k);
+
+        alloc_app(left, right)
+    }
+
+    #[inline(always)]
+    unsafe fn ensure_bin_ctors() -> (u32, u32, u32) {
+        let bz = BIN_CTOR_BZ.load(Ordering::Acquire);
+        if bz != EMPTY {
+            return (
+                bz,
+                BIN_CTOR_B0.load(Ordering::Acquire),
+                BIN_CTOR_B1.load(Ordering::Acquire),
+            );
         }
-        let succ = alloc_church_succ();
-        for _ in 0..value {
-            cur = allocCons(succ, cur);
+
+        let b0 = alloc_bin_ctor_b0();
+        let b1 = alloc_bin_ctor_b1();
+        let bz_new = alloc_bin_ctor_bz();
+
+        BIN_CTOR_B0.store(b0, Ordering::Release);
+        BIN_CTOR_B1.store(b1, Ordering::Release);
+        BIN_CTOR_BZ.store(bz_new, Ordering::Release);
+
+        (bz_new, b0, b1)
+    }
+
+    #[inline(always)]
+    unsafe fn alloc_bin_byte(value: u8) -> u32 {
+        let (bz, b0, b1) = ensure_bin_ctors();
+        if value == 0 {
+            return bz;
+        }
+        let mut cur = bz;
+        let mut n = value;
+        let mut bits: [u8; 8] = [0; 8];
+        let mut len = 0usize;
+        while n > 0 {
+            bits[len] = n & 1;
+            len += 1;
+            n >>= 1;
+        }
+        let mut i = len;
+        while i > 0 {
+            i -= 1;
+            let ctor = if bits[i] == 0 { b0 } else { b1 };
+            cur = alloc_app(ctor, cur);
         }
         cur
     }
 
     #[inline(always)]
-    unsafe fn decode_church_u32(expr: u32) -> u32 {
-        let inc = alloc_inc();
-        let zero = alloc_num(0);
-        let app = allocCons(allocCons(expr, inc), zero);
-        let reduced = reduce(app, 1_000_000);
-        if kindOf(reduced) == ArenaKind::Terminal as u32 && symOf(reduced) == ArenaSym::Num as u32 {
-            hash_of_internal(reduced)
-        } else {
-            0
+    unsafe fn expr_equiv(a: u32, b: u32) -> bool {
+        if a == b {
+            return true;
         }
+
+        const MAX_EQUIV_STACK: usize = 128;
+        let mut stack_a = [0u32; MAX_EQUIV_STACK];
+        let mut stack_b = [0u32; MAX_EQUIV_STACK];
+        let mut sp = 0usize;
+        stack_a[sp] = a;
+        stack_b[sp] = b;
+        sp += 1;
+
+        while sp > 0 {
+            sp -= 1;
+            let x = stack_a[sp];
+            let y = stack_b[sp];
+            if x == y {
+                continue;
+            }
+
+            let kx = kindOf(x);
+            let ky = kindOf(y);
+            if kx != ky {
+                return false;
+            }
+
+            if kx == ArenaKind::Terminal as u32 {
+                if symOf(x) != symOf(y) {
+                    return false;
+                }
+                continue;
+            }
+
+            if kx == ArenaKind::NonTerm as u32 {
+                if sp + 2 > MAX_EQUIV_STACK {
+                    return false;
+                }
+                stack_a[sp] = leftOf(x);
+                stack_b[sp] = leftOf(y);
+                sp += 1;
+                stack_a[sp] = rightOf(x);
+                stack_b[sp] = rightOf(y);
+                sp += 1;
+                continue;
+            }
+
+            if symOf(x) != symOf(y) || leftOf(x) != leftOf(y) || rightOf(x) != rightOf(y) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    #[inline(always)]
+    unsafe fn decode_bin_u8(expr: u32) -> u8 {
+        let (bz, b0, b1) = ensure_bin_ctors();
+        let mut cur = expr;
+        let mut result: u8 = 0;
+        let mut bit: u8 = 1;
+
+        for _ in 0..8 {
+            if expr_equiv(cur, bz) {
+                break;
+            }
+            if kindOf(cur) != ArenaKind::NonTerm as u32 {
+                break;
+            }
+
+            let l = leftOf(cur);
+            let r = rightOf(cur);
+
+            if expr_equiv(l, b0) {
+                cur = r;
+            } else if expr_equiv(l, b1) {
+                result |= bit;
+                cur = r;
+            } else {
+                break;
+            }
+            bit <<= 1;
+        }
+
+        result
     }
 
     // --- OPTIMIZATION: Update existing node (Slot Reuse) ---
@@ -1710,6 +1868,7 @@ mod wasm {
             }
         }
     }
+
 
     /// Unwind the continuation stack to reconstruct the full expression tree.
     ///
@@ -1888,7 +2047,7 @@ mod wasm {
                 continue;
             }
 
-            // readOne k -> k (Church byte)
+            // readOne k -> k (Bin byte)
             if kindOf(left) == ArenaKind::Terminal as u32 && symOf(left) == ArenaSym::ReadOne as u32
             {
                 if let Some(byte) = stdin_ring().try_dequeue() {
@@ -1897,7 +2056,7 @@ mod wasm {
                     }
                     *remaining_steps = remaining_steps.saturating_sub(1);
 
-                    let numeral = alloc_church_byte(byte);
+                    let numeral = alloc_bin_byte(byte);
                     curr = allocCons(right, numeral);
                     mode = MODE_RETURN;
 
@@ -1921,32 +2080,10 @@ mod wasm {
                 }
                 *remaining_steps = remaining_steps.saturating_sub(1);
 
-                let value = decode_church_u32(right);
-                let byte = (value & 0xff) as u8;
+                let byte = decode_bin_u8(right);
                 stdout_ring().enqueue_blocking(byte);
 
                 curr = right;
-                mode = MODE_RETURN;
-
-                if *remaining_steps == 0 {
-                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
-                }
-                continue;
-            }
-
-            // Inc (Num n) -> Num (n + 1) [internal Church decoding]
-            if kindOf(left) == ArenaKind::Terminal as u32
-                && symOf(left) == ArenaSym::Inc as u32
-                && kindOf(right) == ArenaKind::Terminal as u32
-                && symOf(right) == ArenaSym::Num as u32
-            {
-                if *remaining_steps == 0 {
-                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
-                }
-                *remaining_steps = remaining_steps.saturating_sub(1);
-
-                let next_val = hash_of_internal(right).wrapping_add(1);
-                curr = alloc_num(next_val);
                 mode = MODE_RETURN;
 
                 if *remaining_steps == 0 {

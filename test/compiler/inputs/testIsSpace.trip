@@ -1,13 +1,13 @@
 module Test
 
-import Lexer isSpace
-import Prelude eq
+import Lexer isSpaceBin
+import Prelude eqBin
 import Prelude or
 import Prelude true
 import Prelude false
-import Prelude Nat
+import Prelude Bin
 import Prelude Bool
 
 export main
 
-poly main = isSpace 0
+poly main = isSpaceBin 0

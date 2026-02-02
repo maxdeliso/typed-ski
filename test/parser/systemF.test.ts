@@ -5,7 +5,6 @@ import {
   unparseSystemFType,
 } from "../../lib/parser/systemFType.ts";
 import { parseWithEOF } from "../../lib/parser/eof.ts";
-import { parseNatLiteralIdentifier } from "../../lib/consts/natNames.ts";
 import type { SystemFTerm } from "../../lib/terms/systemF.ts";
 import { flattenSystemFApp } from "../../lib/terms/systemF.ts";
 import {
@@ -15,13 +14,25 @@ import {
   typesLitEq,
 } from "../../lib/types/types.ts";
 
-const assertNatLiteral = (term: SystemFTerm, expected: bigint) => {
-  assert.equal(term.kind, "systemF-var");
-  const value = parseNatLiteralIdentifier(term.name);
-  assert.equal(value, expected);
+const decodeBinTerm = (term: SystemFTerm): number => {
+  if (term.kind === "systemF-var") {
+    assert.equal(term.name, "BZ");
+    return 0;
+  }
+  assert.equal(term.kind, "non-terminal");
+  const ctor = term.lft;
+  assert.equal(ctor.kind, "systemF-var");
+  const rest = decodeBinTerm(term.rgt);
+  if (ctor.name === "B0") {
+    return rest * 2;
+  }
+  if (ctor.name === "B1") {
+    return rest * 2 + 1;
+  }
+  throw new Error(`expected B0/B1 constructor, got ${ctor.name}`);
 };
 
-const assertNatList = (term: SystemFTerm, expected: bigint[]) => {
+const assertBinList = (term: SystemFTerm, expected: number[]) => {
   let current = term;
   for (const value of expected) {
     assert.equal(current.kind, "non-terminal");
@@ -32,15 +43,15 @@ const assertNatList = (term: SystemFTerm, expected: bigint[]) => {
     assert.equal(consTypeApp.term.kind, "systemF-var");
     assert.equal(consTypeApp.term.name, "cons");
     assert.equal(consTypeApp.typeArg.kind, "type-var");
-    assert.equal(consTypeApp.typeArg.typeName, "Nat");
-    assertNatLiteral(consApp.rgt, value);
+    assert.equal(consTypeApp.typeArg.typeName, "Bin");
+    assert.equal(decodeBinTerm(consApp.rgt), value);
     current = current.rgt;
   }
   assert.equal(current.kind, "systemF-type-app");
   assert.equal(current.term.kind, "systemF-var");
   assert.equal(current.term.name, "nil");
   assert.equal(current.typeArg.kind, "type-var");
-  assert.equal(current.typeArg.typeName, "Nat");
+  assert.equal(current.typeArg.typeName, "Bin");
 };
 
 Deno.test("System F Parser", async (t) => {
@@ -57,29 +68,26 @@ Deno.test("System F Parser", async (t) => {
   await t.step("parses a natural number literal", () => {
     const [lit, ast] = parseSystemF("123");
     assert.equal(lit, "123");
-    assert.equal(ast.kind, "systemF-var");
-    assert.match(ast.name, /__trip_nat_literal__/);
-    assert.equal(unparseSystemF(ast), "123");
+    assert.equal(decodeBinTerm(ast), 123);
   });
 
   await t.step("parses a character literal", () => {
     const [lit, ast] = parseSystemF("'a'");
     assert.equal(lit, "'a'");
-    assertNatLiteral(ast, 97n);
-    assert.equal(unparseSystemF(ast), "97");
+    assertBinList(ast, [97]);
   });
 
   await t.step("parses escaped character literals", () => {
-    const cases: Array<[string, bigint]> = [
-      ["'\\n'", 10n],
-      ["'\\\\'", 92n],
-      ["'\\''", 39n],
-      ["'\\\"'", 34n],
+    const cases: Array<[string, number]> = [
+      ["'\\n'", 10],
+      ["'\\\\'", 92],
+      ["'\\''", 39],
+      ["'\\\"'", 34],
     ];
     for (const [input, expected] of cases) {
       const [lit, ast] = parseSystemF(input);
       assert.equal(lit, input);
-      assertNatLiteral(ast, expected);
+      assertBinList(ast, [expected]);
     }
   });
 
@@ -104,22 +112,22 @@ Deno.test("System F Parser", async (t) => {
     assert.throws(() => parseSystemF("'\u001F'"), Error);
   });
 
-  await t.step("parses a string literal into a Nat list", () => {
+  await t.step("parses a string literal into a Bin list", () => {
     const [lit, ast] = parseSystemF('"ab"');
     assert.equal(lit, '"ab"');
-    assertNatList(ast, [97n, 98n]);
+    assertBinList(ast, [97, 98]);
   });
 
   await t.step("parses string literal escapes", () => {
     const [lit, ast] = parseSystemF('"a\\n\\"\\\\"');
     assert.equal(lit, '"a\\n\\"\\\\"');
-    assertNatList(ast, [97n, 10n, 34n, 92n]);
+    assertBinList(ast, [97, 10, 34, 92]);
   });
 
   await t.step("parses empty string literal", () => {
     const [lit, ast] = parseSystemF('""');
     assert.equal(lit, '""');
-    assertNatList(ast, []);
+    assertBinList(ast, []);
   });
 
   await t.step("parses string literals in applications", () => {
@@ -128,7 +136,7 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(ast.kind, "non-terminal");
     assert.equal(ast.lft.kind, "systemF-var");
     assert.equal(ast.lft.name, "f");
-    assertNatList(ast.rgt, [97n]);
+    assertBinList(ast.rgt, [97]);
   });
 
   await t.step("rejects malformed string literals", () => {
@@ -314,8 +322,7 @@ Deno.test("System F Parser", async (t) => {
       assert.equal(lit, "let x = 1 in x");
       assert.equal(ast.kind, "systemF-let");
       assert.equal(ast.name, "x");
-      assert.equal(ast.value.kind, "systemF-var");
-      assert.ok(parseNatLiteralIdentifier(ast.value.name) === 1n);
+      assert.equal(decodeBinTerm(ast.value), 1);
       assert.equal(ast.body.kind, "systemF-var");
       assert.equal(ast.body.name, "x");
     });
@@ -332,8 +339,7 @@ Deno.test("System F Parser", async (t) => {
         assert.equal(ast.lft.typeAnnotation.typeName, "Nat");
         assert.equal(ast.lft.body.kind, "systemF-var");
         assert.equal(ast.lft.body.name, "x");
-        assert.equal(ast.rgt.kind, "systemF-var");
-        assert.ok(parseNatLiteralIdentifier(ast.rgt.name) === 1n);
+        assert.equal(decodeBinTerm(ast.rgt), 1);
       },
     );
 
@@ -569,24 +575,23 @@ Deno.test("System F Parser", async (t) => {
         const [_lit, ast] = parseSystemF(input);
         assert.equal(ast.kind, "systemF-match");
 
-        // The scrutinee should be a numeric literal variable
+        // The scrutinee should be a Bin literal term
         const scrutinee = ast.scrutinee;
-        assertNatLiteral(scrutinee, 123n);
-        assert.equal(unparseSystemF(scrutinee), "123");
+        assert.equal(decodeBinTerm(scrutinee), 123);
       });
 
       await t.step("parses character literal as match scrutinee", () => {
         const input = "match 'a' [T] { | None => y }";
         const [_lit, ast] = parseSystemF(input);
         assert.equal(ast.kind, "systemF-match");
-        assertNatLiteral(ast.scrutinee, 97n);
+        assertBinList(ast.scrutinee, [97]);
       });
 
       await t.step("parses string literal as match scrutinee", () => {
         const input = 'match "hi" [T] { | None => y }';
         const [_lit, ast] = parseSystemF(input);
         assert.equal(ast.kind, "systemF-match");
-        assertNatList(ast.scrutinee, [104n, 105n]);
+        assertBinList(ast.scrutinee, [104, 105]);
       });
 
       await t.step(
@@ -716,11 +721,11 @@ Deno.test("parsed a naked atomic", () => {
   assert.equal(result.kind, "non-terminal");
   // Verify that each character in "poly" is parsed as a natural number
   // 'p'=112, 'o'=111, 'l'=108, 'y'=121
-  assertNatList(result, [112n, 111n, 108n, 121n]);
+  assertBinList(result, [112, 111, 108, 121]);
 });
 
 Deno.test("parses let inside match arm", () => {
-  const input = `\\input : List Nat =>
+  const input = `\\input : List Bin =>
   match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {
     | Err e => Err [ParseError] [List Token] e
     | Ok rev =>
@@ -734,12 +739,12 @@ Deno.test("parses let inside match arm", () => {
   assert.equal(tr.kind, "systemF-abs");
   assert.equal(tr.name, "input");
 
-  // Type annotation should be List Nat (type application)
+  // Type annotation should be List Bin (type application)
   assert.equal(tr.typeAnnotation.kind, "type-app");
   assert.equal(tr.typeAnnotation.fn.kind, "type-var");
   assert.equal(tr.typeAnnotation.fn.typeName, "List");
   assert.equal(tr.typeAnnotation.arg.kind, "type-var");
-  assert.equal(tr.typeAnnotation.arg.typeName, "Nat");
+  assert.equal(tr.typeAnnotation.arg.typeName, "Bin");
 
   // Body should be a match expression
   assert.equal(tr.body.kind, "systemF-match");
@@ -968,55 +973,55 @@ Deno.test("parses complex nested expr", () => {
 
 Deno.test("parses nested let bindings", () => {
   const input = `
-  \\input : List Nat => \\accRev : List Token =>
-  let clean = dropWhile [Nat] isSpace input in
+  \\input : List Bin => \\accRev : List Token =>
+  let clean = dropWhile [Bin] isSpaceBin input in
 
-  matchList [Nat] [Result ParseError (List Token)] clean
+  matchList [Bin] [Result ParseError (List Token)] clean
     (Ok [ParseError] [List Token] accRev)
-    (\\c : Nat => \\cs : List Nat =>
+    (\\c : Bin => \\cs : List Bin =>
 
       if [Result ParseError (List Token)]
-        (and (eq c '-') (matchList [Nat] [Bool] cs false (\\h : Nat => \\t : List Nat => eq h '>')))
-        (\\u : Nat =>
-          let rest = tail [Nat] cs in
+        (and (eqBin c bin_dash) (matchList [Bin] [Bool] cs false (\\h : Bin => \\t : List Bin => eqBin h bin_3e)))
+        (\\u : Bin =>
+          let rest = tail [Bin] cs in
           tokenizeAcc rest (cons [Token] T_Arrow accRev))
-        (\\u : Nat =>
+        (\\u : Bin =>
 
       if [Result ParseError (List Token)]
-        (and (eq c '=') (matchList [Nat] [Bool] cs false (\\h : Nat => \\t : List Nat => eq h '>')))
-        (\\u : Nat =>
-          let rest = tail [Nat] cs in
+        (and (eqBin c bin_eq) (matchList [Bin] [Bool] cs false (\\h : Bin => \\t : List Bin => eqBin h bin_3e)))
+        (\\u : Bin =>
+          let rest = tail [Bin] cs in
           tokenizeAcc rest (cons [Token] T_FatArrow accRev))
-        (\\u : Nat =>
+        (\\u : Bin =>
 
-      match (lookupToken c simpleTokens) [Result ParseError (List Token)] {
+      match (lookupTokenBin c simpleTokensBin) [Result ParseError (List Token)] {
         | Some tok =>
             tokenizeAcc cs (cons [Token] tok accRev)
 
         | None =>
-            if [Result ParseError (List Token)] (isAlpha c)
-              (\\u : Nat =>
-                let split = span [Nat] isIdentChar clean in
-                let taken = fst [List Nat] [List Nat] split in
-                let remaining = snd [List Nat] [List Nat] split in
+            if [Result ParseError (List Token)] (isAlphaBin c)
+              (\\u : Bin =>
+                let split = span [Bin] isIdentCharBin clean in
+                let taken = fst [List Bin] [List Bin] split in
+                let remaining = snd [List Bin] [List Bin] split in
                 let tok =
                   if [Token] (isKeywordPoly taken)
-                    (\\u : Nat => T_Keyword taken)
-                    (\\u : Nat => T_Ident taken)
+                    (\\u : Bin => T_Keyword taken)
+                    (\\u : Bin => T_Ident taken)
                 in
                 tokenizeAcc remaining (cons [Token] tok accRev))
 
-              (\\u : Nat =>
-                if [Result ParseError (List Token)] (isDigit c)
-                  (\\u : Nat =>
-                    let split = span [Nat] isDigit clean in
-                    let taken = fst [List Nat] [List Nat] split in
-                    let remaining = snd [List Nat] [List Nat] split in
-                    let n = natFromDigitList taken in
+              (\\u : Bin =>
+                if [Result ParseError (List Token)] (isDigitBin c)
+                  (\\u : Bin =>
+                    let split = span [Bin] isDigitBin clean in
+                    let taken = fst [List Bin] [List Bin] split in
+                    let remaining = snd [List Bin] [List Bin] split in
+                    let n = binFromDigitList taken in
                     tokenizeAcc remaining (cons [Token] (T_Nat n) accRev))
 
-                  (\\u : Nat =>
-                    Err [ParseError] [List Token] (MkParseError zero (nil [Nat]))))
+                  (\\u : Bin =>
+                    Err [ParseError] [List Token] (MkParseError 0 (nil [Bin]))))
       }
 
       )))
@@ -1035,7 +1040,7 @@ Deno.test("parses nested let bindings", () => {
   assert.equal(ast.typeAnnotation.fn.kind, "type-var");
   assert.equal(ast.typeAnnotation.fn.typeName, "List");
   assert.equal(ast.typeAnnotation.arg.kind, "type-var");
-  assert.equal(ast.typeAnnotation.arg.typeName, "Nat");
+  assert.equal(ast.typeAnnotation.arg.typeName, "Bin");
 
   // Second lambda: \accRev : List Token => ...
   assert.equal(ast.body.kind, "systemF-abs");

@@ -2,12 +2,14 @@ import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
+import { getNatObject } from "../../lib/nat.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 
 export interface TripHarnessOptions {
   includePrelude?: boolean;
+  includeNat?: boolean;
 }
 
 export interface TripIoOptions extends TripHarnessOptions {
@@ -26,10 +28,15 @@ export async function compileAndLink(
   options: TripHarnessOptions = {},
 ): Promise<string> {
   const includePrelude = options.includePrelude ?? true;
+  const includeNat = options.includeNat ?? false;
   const moduleObject = compileToObjectFile(source);
   const modules = includePrelude
     ? [{ name: "Prelude", object: await getPreludeObject() }]
     : [];
+
+  if (includeNat) {
+    modules.push({ name: "Nat", object: await getNatObject() });
+  }
 
   modules.push({ name: moduleObject.module, object: moduleObject });
   return linkModules(modules, true);

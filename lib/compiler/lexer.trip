@@ -1,25 +1,14 @@
 module Lexer
 
-import Prelude Nat
 import Prelude Bool
 import Prelude List
 import Prelude nil
 import Prelude cons
 import Prelude matchList
-import Prelude head
 import Prelude tail
 import Prelude if
-import Prelude isZero
 import Prelude and
 import Prelude or
-import Prelude zero
-import Prelude succ
-import Prelude add
-import Prelude mul
-import Prelude sub
-import Prelude pred
-import Prelude gte
-import Prelude lte
 import Prelude true
 import Prelude false
 import Prelude Result
@@ -32,12 +21,18 @@ import Prelude Some
 import Prelude None
 import Prelude Pair
 import Prelude MkPair
-import Prelude pair
 import Prelude fst
 import Prelude snd
-import Prelude error
 import Prelude foldl
 import Prelude append
+import Prelude Bin
+import Prelude addBin
+import Prelude mulBin
+import Prelude subBin
+import Prelude eqBin
+import Prelude lteBin
+import Nat Nat
+import Nat toBin
 
 export Token
 export T_LParen
@@ -60,55 +55,40 @@ export T_Ident
 export T_Nat
 export T_EOF
 export tokenize
+export tokenizeBin
 export tokenizeAcc
-export isSpace
-export isAlpha
-export isDigit
-export isIdentChar
 export kwPoly
 export isKeywordPoly
-export fromSNat
-export sAdd
-export sMul
-export sSub
-export snatFromDigitList
-export natFromDigitList
-export mapResult
-export SNat
-export SZ
-export SS
-export toSNat
-export seq
-export slte
-export anyEqSNat
-export snatEqChar
-export isSpaceSNat
-export isDigitSNat
-export isAlphaSNat
-export isIdentCharSNat
-export sn_space
-export sn_newline
-export sn_cr
-export sn_tab
-export sn_underscore
-export reverse
-export simpleTokensSNat
-export lookupTokenSNat
 export eqListFast
-export sn_0
-export sn_9
-export sn_a
-export sn_z
-export sn_A
-export sn_Z
-export isDigitSNat
-export isLowerSNat
-export isUpperSNat
-export isAlphaSNat
-export isIdentCharSNat
-export isDigit
-export isAlpha
-export isIdentChar
+export binFromDigitList
+export mapResult
+export anyEqBin
+export isSpaceBin
+export isDigitBin
+export isAlphaBin
+export isIdentCharBin
+export bin_space
+export bin_newline
+export bin_cr
+export bin_tab
+export bin_underscore
+export bin_3e
+export bin_dash
+export bin_eq
+export reverse
+export simpleTokensBin
+export lookupTokenBin
+export bin_0
+export bin_9
+export bin_a
+export bin_z
+export bin_A
+export bin_Z
+export isDigitBin
+export isLowerBin
+export isUpperBin
+export isAlphaBin
+export isIdentCharBin
 export consumeIdent
 export consumeDigits
 
@@ -128,136 +108,77 @@ data Token =
   | T_Pipe
   | T_Dot
   | T_Comma
-  | T_Keyword (List Nat)
-  | T_Ident (List Nat)
-  | T_Nat Nat
+  | T_Keyword (List Bin)
+  | T_Ident (List Bin)
+  | T_Nat Bin
   | T_EOF
 
-data SNat =
-  | SZ
-  | SS SNat
+poly bin_space = 32
+poly bin_newline = 10
+poly bin_cr = 13
+poly bin_tab = 9
+poly bin_underscore = 95
+poly bin_3e = 62
+poly bin_dash = 45
+poly bin_eq = 61
 
-poly toSNat = \n : Nat => n [SNat] (\x : SNat => SS x) SZ
+poly isSpaceBin = \c : Bin =>
+  if [Bool] (eqBin c bin_space) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c bin_newline) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c bin_cr) (\u : Bin => true)
+  (\u : Bin => eqBin c bin_tab)))
 
-poly rec fromSNat = \n : SNat =>
-  match n [Nat] {
-    | SZ => zero
-    | SS p => succ (fromSNat p)
-  }
+poly rec anyEqBin = \c : Bin => \xs : List Bin =>
+  matchList [Bin] [Bool] xs false
+    (\h : Bin => \t : List Bin =>
+      if [Bool] (eqBin c h) (\u : Bin => true) (\u : Bin => anyEqBin c t))
 
-poly rec sAdd = \a : SNat => \b : SNat =>
-  match a [SNat] {
-    | SZ => b
-    | SS pa => SS (sAdd pa b)
-  }
+poly bin_0 = 48
+poly bin_9 = 57
+poly bin_a = 97
+poly bin_z = 122
+poly bin_A = 65
+poly bin_Z = 90
 
-poly rec sMul = \a : SNat => \b : SNat =>
-  match b [SNat] {
-    | SZ => SZ
-    | SS pb => sAdd a (sMul a pb)
-  }
+poly isDigitBin = \c : Bin =>
+  and (lteBin bin_0 c) (lteBin c bin_9)
 
-poly rec sSub = \a : SNat => \b : SNat =>
-  match b [SNat] {
-    | SZ => a
-    | SS pb =>
-        match a [SNat] {
-          | SZ => SZ
-          | SS pa => sSub pa pb
-        }
-  }
+poly isLowerBin = \c : Bin =>
+  and (lteBin bin_a c) (lteBin c bin_z)
 
-poly rec seq = \a : SNat => \b : SNat =>
-  match a [Bool] {
-    | SZ => match b [Bool] {
-        | SZ => true
-        | SS _ => false
-      }
-    | SS pa => match b [Bool] {
-        | SZ => false
-        | SS pb => seq pa pb
-      }
-  }
+poly isUpperBin = \c : Bin =>
+  and (lteBin bin_A c) (lteBin c bin_Z)
 
-poly rec slte = \a : SNat => \b : SNat =>
-  match a [Bool] {
-    | SZ => true
-    | SS pa => match b [Bool] {
-        | SZ => false
-        | SS pb => slte pa pb
-      }
-  }
+poly isAlphaBin = \c : Bin =>
+  if [Bool] (isLowerBin c) (\u : Bin => true) (\u : Bin => isUpperBin c)
 
-poly sn_space = toSNat ' '
-poly sn_newline = toSNat '\n'
-poly sn_cr = toSNat 13
-poly sn_tab = toSNat 9
-poly sn_underscore = toSNat 95
+poly isIdentCharBin = \c : Bin =>
+  if [Bool] (isAlphaBin c) (\u : Bin => true)
+  (\u : Bin => if [Bool] (isDigitBin c) (\u : Bin => true) (\u : Bin => eqBin c bin_underscore))
 
-poly isSpaceSNat = \c : SNat =>
-  if [Bool] (seq c sn_space) (\u : Nat => true)
-  (\u : Nat => if [Bool] (seq c sn_newline) (\u : Nat => true)
-  (\u : Nat => if [Bool] (seq c sn_cr) (\u : Nat => true)
-  (\u : Nat => seq c sn_tab)))
-poly isSpace = \c : Nat => isSpaceSNat (toSNat c)
 
-poly rec anyEqSNat = \c : SNat => \xs : List SNat =>
-  matchList [SNat] [Bool] xs false
-    (\h : SNat => \t : List SNat =>
-      if [Bool] (seq c h) (\u : Nat => true) (\u : Nat => anyEqSNat c t))
-
-poly sn_0 = toSNat '0'
-poly sn_9 = toSNat '9'
-poly sn_a = toSNat 'a'
-poly sn_z = toSNat 'z'
-poly sn_A = toSNat 'A'
-poly sn_Z = toSNat 'Z'
-
-poly isDigitSNat = \c : SNat =>
-  and (slte sn_0 c) (slte c sn_9)
-
-poly isLowerSNat = \c : SNat =>
-  and (slte sn_a c) (slte c sn_z)
-
-poly isUpperSNat = \c : SNat =>
-  and (slte sn_A c) (slte c sn_Z)
-
-poly isAlphaSNat = \c : SNat =>
-  if [Bool] (isLowerSNat c) (\u : Nat => true) (\u : Nat => isUpperSNat c)
-
-poly isIdentCharSNat = \c : SNat =>
-  if [Bool] (isAlphaSNat c) (\u : Nat => true)
-  (\u : Nat => if [Bool] (isDigitSNat c) (\u : Nat => true) (\u : Nat => seq c sn_underscore))
-
-poly isDigit = \c : Nat => isDigitSNat (toSNat c)
-poly isAlpha = \c : Nat => isAlphaSNat (toSNat c)
-poly isIdentChar = \c : Nat => isIdentCharSNat (toSNat c)
-
-poly rec eqListFast = \a : List Nat => \b : List Nat =>
-  matchList [Nat] [Bool] a
-    (matchList [Nat] [Bool] b true (\hb : Nat => \tb : List Nat => false))
-    (\ha : Nat => \ta : List Nat =>
-      matchList [Nat] [Bool] b false
-        (\hb : Nat => \tb : List Nat =>
-          if [Bool] (seq (toSNat ha) (toSNat hb))
-            (\u : Nat => eqListFast ta tb)
-            (\u : Nat => false)))
+poly rec eqListFast = \a : List Bin => \b : List Bin =>
+  matchList [Bin] [Bool] a
+    (matchList [Bin] [Bool] b true (\hb : Bin => \tb : List Bin => false))
+    (\ha : Bin => \ta : List Bin =>
+      matchList [Bin] [Bool] b false
+        (\hb : Bin => \tb : List Bin =>
+          if [Bool] (eqBin ha hb)
+            (\u : Bin => eqListFast ta tb)
+            (\u : Bin => false)))
 
 poly kwPoly = "poly"
-poly isKeywordPoly = \word : List Nat => eqListFast word kwPoly
+poly isKeywordPoly = \word : List Bin => eqListFast word kwPoly
 
-poly snatFromDigitList = \digits : List Nat =>
-  let ten = toSNat 10 in
-  let zeroChar = sn_0 in
-  foldl [Nat] [SNat]
-    (\acc : SNat => \d : Nat =>
-      let digit = sSub (toSNat d) zeroChar in
-      sAdd (sMul acc ten) digit)
-    SZ
+poly binFromDigitList = \digits : List Bin =>
+  let ten = 10 in
+  let zeroChar = bin_0 in
+  foldl [Bin] [Bin]
+    (\acc : Bin => \d : Bin =>
+      let digit = subBin d zeroChar in
+      addBin (mulBin acc ten) digit)
+    0
     digits
-
-poly natFromDigitList = \digits : List Nat =>
-  fromSNat (snatFromDigitList digits)
 
 poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
   match res [Result ParseError B] {
@@ -265,29 +186,29 @@ poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
     | Ok val => Ok [ParseError] [B] (f val)
   }
 
-poly simpleTokensSNat =
-  cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '(') T_LParen)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ')') T_RParen)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '{') T_LBrace)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '}') T_RBrace)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '[') T_LBracket)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ']') T_RBracket)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '\\') T_Backslash)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ':') T_Colon)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '#') T_Hash)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '|') T_Pipe)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat '.') T_Dot)
-  (cons [Pair SNat Token] (MkPair [SNat] [Token] (toSNat ',') T_Comma)
-  (nil [Pair SNat Token]))))))))))))
+poly simpleTokensBin =
+  cons [Pair Bin Token] (MkPair [Bin] [Token] 40 T_LParen)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 41 T_RParen)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 123 T_LBrace)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 125 T_RBrace)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 91 T_LBracket)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 93 T_RBracket)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 92 T_Backslash)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 58 T_Colon)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 35 T_Hash)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 124 T_Pipe)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 46 T_Dot)
+  (cons [Pair Bin Token] (MkPair [Bin] [Token] 44 T_Comma)
+  (nil [Pair Bin Token]))))))))))))
 
-poly rec lookupTokenSNat = \c : SNat => \list : List (Pair SNat Token) =>
-  matchList [Pair SNat Token] [Maybe Token] list
+poly rec lookupTokenBin = \c : Bin => \list : List (Pair Bin Token) =>
+  matchList [Pair Bin Token] [Maybe Token] list
     (None [Token])
-    (\h : Pair SNat Token => \t : List (Pair SNat Token) =>
+    (\h : Pair Bin Token => \t : List (Pair Bin Token) =>
        if [Maybe Token]
-         (seq c (fst [SNat] [Token] h))
-         (\u : Nat => Some [Token] (snd [SNat] [Token] h))
-         (\u : Nat => lookupTokenSNat c t)
+         (eqBin c (fst [Bin] [Token] h))
+         (\u : Bin => Some [Token] (snd [Bin] [Token] h))
+         (\u : Bin => lookupTokenBin c t)
     )
 
 poly reverse = #A => \xs : List A =>
@@ -296,87 +217,87 @@ poly reverse = #A => \xs : List A =>
     (nil [A])
     xs
 
-poly snatEqChar = \c_snat : SNat => \char_nat : Nat =>
-  seq c_snat (toSNat char_nat)
-
-poly rec consumeIdent = \acc : List Nat => \input : List Nat =>
-  matchList [Nat] [Pair (List Nat) (List Nat)] input
-    (MkPair [List Nat] [List Nat] (reverse [Nat] acc) (nil [Nat]))
-    (\h : Nat => \t : List Nat =>
-       if [Pair (List Nat) (List Nat)] (isIdentChar h)
-         (\u : Nat => consumeIdent (cons [Nat] h acc) t)
-         (\u : Nat => MkPair [List Nat] [List Nat] (reverse [Nat] acc) input)
+poly rec consumeIdent = \acc : List Bin => \input : List Bin =>
+  matchList [Bin] [Pair (List Bin) (List Bin)] input
+    (MkPair [List Bin] [List Bin] (reverse [Bin] acc) (nil [Bin]))
+    (\h : Bin => \t : List Bin =>
+       if [Pair (List Bin) (List Bin)] (isIdentCharBin h)
+         (\u : Bin => consumeIdent (cons [Bin] h acc) t)
+         (\u : Bin => MkPair [List Bin] [List Bin] (reverse [Bin] acc) input)
     )
 
-poly rec consumeDigits = \acc : List Nat => \input : List Nat =>
-  matchList [Nat] [Pair (List Nat) (List Nat)] input
-    (MkPair [List Nat] [List Nat] (reverse [Nat] acc) (nil [Nat]))
-    (\h : Nat => \t : List Nat =>
-       if [Pair (List Nat) (List Nat)] (isDigit h)
-         (\u : Nat => consumeDigits (cons [Nat] h acc) t)
-         (\u : Nat => MkPair [List Nat] [List Nat] (reverse [Nat] acc) input)
+poly rec consumeDigits = \acc : List Bin => \input : List Bin =>
+  matchList [Bin] [Pair (List Bin) (List Bin)] input
+    (MkPair [List Bin] [List Bin] (reverse [Bin] acc) (nil [Bin]))
+    (\h : Bin => \t : List Bin =>
+       if [Pair (List Bin) (List Bin)] (isDigitBin h)
+         (\u : Bin => consumeDigits (cons [Bin] h acc) t)
+         (\u : Bin => MkPair [List Bin] [List Bin] (reverse [Bin] acc) input)
     )
 
-poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
-  matchList [Nat] [Result ParseError (List Token)] input
+poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
+  matchList [Bin] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
-    (\c_church : Nat => \cs : List Nat =>
-      let c = toSNat c_church in
-
-      if [Result ParseError (List Token)] (isSpaceSNat c)
-        (\u : Nat => tokenizeAcc cs accRev)
-        (\u : Nat =>
+    (\c : Bin => \cs : List Bin =>
+      if [Result ParseError (List Token)] (isSpaceBin c)
+        (\u : Bin => tokenizeAcc cs accRev)
+        (\u : Bin =>
 
       if [Result ParseError (List Token)]
-        (and (snatEqChar c '-') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => snatEqChar (toSNat '>') h)))
-        (\u : Nat =>
-          let rest = tail [Nat] cs in
+        (and (eqBin c bin_dash) (matchList [Bin] [Bool] cs false (\h : Bin => \t : List Bin => eqBin bin_3e h)))
+        (\u : Bin =>
+          let rest = tail [Bin] cs in
           tokenizeAcc rest (cons [Token] T_Arrow accRev))
-        (\u : Nat =>
+        (\u : Bin =>
 
       if [Result ParseError (List Token)]
-        (and (snatEqChar c '=') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => snatEqChar (toSNat '>') h)))
-        (\u : Nat =>
-          let rest = tail [Nat] cs in
+        (and (eqBin c bin_eq) (matchList [Bin] [Bool] cs false (\h : Bin => \t : List Bin => eqBin bin_3e h)))
+        (\u : Bin =>
+          let rest = tail [Bin] cs in
           tokenizeAcc rest (cons [Token] T_FatArrow accRev))
-        (\u : Nat =>
+        (\u : Bin =>
 
-      match (lookupTokenSNat c simpleTokensSNat) [Result ParseError (List Token)] {
+      match (lookupTokenBin c simpleTokensBin) [Result ParseError (List Token)] {
         | Some tok =>
             tokenizeAcc cs (cons [Token] tok accRev)
 
         | None =>
-            if [Result ParseError (List Token)] (isAlphaSNat c)
-              (\u : Nat =>
-                match (consumeIdent (cons [Nat] c_church (nil [Nat])) cs) [Result ParseError (List Token)] {
+            if [Result ParseError (List Token)] (isAlphaBin c)
+              (\u : Bin =>
+                match (consumeIdent (cons [Bin] c (nil [Bin])) cs) [Result ParseError (List Token)] {
                   | MkPair taken remaining =>
                       let tok =
                         if [Token] (isKeywordPoly taken)
-                          (\u : Nat => T_Keyword taken)
-                          (\u : Nat => T_Ident taken)
+                          (\u : Bin => T_Keyword taken)
+                          (\u : Bin => T_Ident taken)
                       in
                       tokenizeAcc remaining (cons [Token] tok accRev)
                 })
 
-              (\u : Nat =>
-                if [Result ParseError (List Token)] (isDigitSNat c)
-                  (\u : Nat =>
-                    match (consumeDigits (cons [Nat] c_church (nil [Nat])) cs) [Result ParseError (List Token)] {
+              (\u : Bin =>
+                if [Result ParseError (List Token)] (isDigitBin c)
+                  (\u : Bin =>
+                    match (consumeDigits (cons [Bin] c (nil [Bin])) cs) [Result ParseError (List Token)] {
                       | MkPair taken remaining =>
-                          let n = fromSNat (snatFromDigitList taken) in
+                          let n = binFromDigitList taken in
                           tokenizeAcc remaining (cons [Token] (T_Nat n) accRev)
                     })
 
-                  (\u : Nat =>
-                    if [Result ParseError (List Token)] (snatEqChar c '=')
-                      (\u : Nat => tokenizeAcc cs (cons [Token] T_Eq accRev))
-                      (\u : Nat => Err [ParseError] [List Token] (MkParseError zero (nil [Nat])))
+                  (\u : Bin =>
+                    if [Result ParseError (List Token)] (eqBin c bin_eq)
+                      (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
+                      (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
                   ))
       }
 
       ))))
 
-poly tokenize = \input : List Nat =>
+poly rec mapToBin = \xs : List Nat =>
+  matchList [Nat] [List Bin] xs
+    (nil [Bin])
+    (\h : Nat => \t : List Nat => cons [Bin] (toBin h) (mapToBin t))
+
+poly tokenizeBin = \input : List Bin =>
   match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {
     | Err e => Err [ParseError] [List Token] e
     | Ok rev =>
@@ -385,3 +306,5 @@ poly tokenize = \input : List Nat =>
           (append [Token] toks (cons [Token] T_EOF (nil [Token])))
   }
 
+poly tokenize = \input : List Nat =>
+  tokenizeBin (mapToBin input)

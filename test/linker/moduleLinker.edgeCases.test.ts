@@ -2,12 +2,14 @@ import { assertEquals, assertThrows } from "std/assert";
 import { expect } from "chai";
 
 import type { ProgramSpace } from "../../lib/linker/moduleLinker.ts";
+import type { TripLangTerm } from "../../lib/meta/trip.ts";
 import {
   createProgramSpace,
   findMainFunction,
   loadModule,
   resolveCrossModuleDependencies,
 } from "../../lib/linker/moduleLinker.ts";
+import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 
 Deno.test("moduleLinker edge cases (coverage)", async (t) => {
@@ -209,11 +211,19 @@ Deno.test("moduleLinker edge cases (coverage)", async (t) => {
       const resolved = resolveCrossModuleDependencies(ps);
       // It should not crash; it will keep `x` unresolved.
       const main = resolved.modules.get("Consumer")?.defs.get("main") as
-        | undefined
-        | { kind: string; term: { kind: string; name: string } };
+        | TripLangTerm
+        | undefined;
       assertEquals(main?.kind, "untyped"); // pre-lowered
-      assertEquals(main?.term.kind, "lambda-var");
-      assertEquals(main?.term.name, "x");
+      if (main?.kind === "untyped") {
+        assertEquals(main.term.kind, "lambda-var");
+        if (main.term.kind !== "lambda-var") {
+          throw new Error("expected lambda-var");
+        }
+        assertEquals(main.term.name, "x");
+        const [termRefs, typeRefs] = externalReferences(main.term);
+        assertEquals(Array.from(termRefs.keys()), ["x"]);
+        assertEquals(typeRefs.size, 0);
+      }
     },
   );
 });

@@ -306,13 +306,10 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
 
     const skiExpr = parseSKI(skiExpression);
     const key = toSKIKey(skiExpr);
-
-    console.log("Evaluating program with ", key.length, " terminals");
+    assert.isAtLeast(key.length, 1, "expected non-empty SKI key");
 
     const nf = arenaEvaluator.reduce(skiExpr);
     const tokenCount = UnChurchNumber(nf);
-
-    console.log(`Token count: ${tokenCount}`);
 
     assert.equal(tokenCount, 2n);
   } finally {

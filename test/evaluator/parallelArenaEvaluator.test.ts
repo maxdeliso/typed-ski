@@ -26,9 +26,30 @@ function makeUniqueExpr(i: number, bits = 16): SKIExpression {
 
 Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
   await t.step("creates evaluator with shared memory", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(2, true);
-    assert(evaluator !== null);
-    evaluator.terminate();
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((arg) => String(arg)).join(" "));
+    };
+    try {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(2, true);
+      assert(evaluator !== null);
+      evaluator.terminate();
+    } finally {
+      console.error = originalError;
+    }
+    assert(
+      errors.some((line) =>
+        line.includes(
+          "[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: 2",
+        )
+      ),
+      "expected verbose create debug output",
+    );
+    assert(
+      errors.some((line) => line.includes("[DEBUG] Spawning 2 workers")),
+      "expected worker spawn debug output",
+    );
   });
 
   await t.step("memory buffer is SharedArrayBuffer", async () => {

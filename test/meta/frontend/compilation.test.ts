@@ -14,8 +14,8 @@ poly id = #a=>\\x:a=>x
     `;
 
       const result = compile(input);
-      console.log("Compilation result:", result);
       assertEquals(result.program.kind, "program");
+      assertEquals(result.types.get("id")?.kind, "forall");
     },
   );
 

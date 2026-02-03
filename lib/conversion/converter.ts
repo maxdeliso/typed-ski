@@ -110,39 +110,71 @@ const toCore = (term: DeBruijnTerm): CoreTerm => {
   }
 };
 
-const selectorCache = new Map<number, SKIExpression>();
+const selectOuterCache: SKIExpression[] = [];
 
 const selectOuter = (arity: number): SKIExpression => {
   if (arity <= 0) {
     throw new ConversionError("invalid De Bruijn index (negative arity)");
   }
-  const cached = selectorCache.get(arity);
+  const cached = selectOuterCache[arity];
   if (cached) return cached;
-  let expr: SKIExpression = I;
-  for (let i = 2; i <= arity; i++) {
-    expr = applyMany(B, expr, K);
+
+  let start = arity - 1;
+  while (start >= 1 && !selectOuterCache[start]) {
+    start--;
   }
-  selectorCache.set(arity, expr);
+
+  let expr: SKIExpression;
+  if (start >= 1 && selectOuterCache[start]) {
+    expr = selectOuterCache[start];
+  } else {
+    expr = I;
+    start = 1;
+    selectOuterCache[1] = expr;
+  }
+
+  for (let i = start + 1; i <= arity; i++) {
+    expr = applyMany(B, expr, K);
+    selectOuterCache[i] = expr;
+  }
   return expr;
 };
 
-const bulkCache = new Map<string, SKIExpression>();
+const bulkCache: Record<"S" | "B" | "C", SKIExpression[]> = {
+  S: [],
+  B: [],
+  C: [],
+};
 
 const emitBulk = (kind: "S" | "B" | "C", depth: number): SKIExpression => {
   if (depth < 1) {
     throw new ConversionError("bulk combinator depth must be >= 1");
   }
-  const cacheKey = `${kind}:${depth}`;
-  const cached = bulkCache.get(cacheKey);
+  const cache = bulkCache[kind];
+  const cached = cache[depth];
   if (cached) return cached;
-  let expr: SKIExpression = kind === "S" ? S : kind === "B" ? B : C;
-  for (let i = 2; i <= depth; i++) {
+
+  let start = depth - 1;
+  while (start >= 1 && !cache[start]) {
+    start--;
+  }
+
+  let expr: SKIExpression;
+  if (start >= 1 && cache[start]) {
+    expr = cache[start];
+  } else {
+    expr = kind === "S" ? S : kind === "B" ? B : C;
+    start = 1;
+    cache[1] = expr;
+  }
+
+  for (let i = start + 1; i <= depth; i++) {
     expr = apply(
       kind === "S" ? PSI : kind === "B" ? BETA : GAMMA,
       expr,
     );
+    cache[i] = expr;
   }
-  bulkCache.set(cacheKey, expr);
   return expr;
 };
 

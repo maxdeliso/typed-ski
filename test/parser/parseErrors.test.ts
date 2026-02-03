@@ -278,7 +278,7 @@ Deno.test("Parser Error Coverage", async (t) => {
 
   await t.step("ski.ts errors", async (t) => {
     await t.step("unexpected token when expecting SKI term", () => {
-      expect(() => parseSKI("Q")).to.throw(
+      expect(() => parseSKI("Z")).to.throw(
         ParseError,
         /unexpected token.*when expecting an SKI term/,
       );

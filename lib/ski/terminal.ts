@@ -17,6 +17,12 @@ export enum SKITerminalSymbol {
   B = "B",
   /** The C combinator (exchange combinator). */
   C = "C",
+  /** The S' combinator (Turner PSI). */
+  SPrime = "P",
+  /** The B' combinator (Turner B-prime). */
+  BPrime = "Q",
+  /** The C' combinator (Turner GAMMA). */
+  CPrime = "R",
   /** Read a single byte (brainf***-style ","). */
   ReadOne = ",",
   /** Write a single byte (brainf***-style "."). */
@@ -84,6 +90,21 @@ export const B: SKITerminal = term(SKITerminalSymbol.B);
  * C x y z = x z y
  */
 export const C: SKITerminal = term(SKITerminalSymbol.C);
+
+/**
+ * The S' combinator terminal node (Turner PSI).
+ */
+export const SPrime: SKITerminal = term(SKITerminalSymbol.SPrime);
+
+/**
+ * The B' combinator terminal node (Turner B-prime).
+ */
+export const BPrime: SKITerminal = term(SKITerminalSymbol.BPrime);
+
+/**
+ * The C' combinator terminal node (Turner GAMMA).
+ */
+export const CPrime: SKITerminal = term(SKITerminalSymbol.CPrime);
 
 /**
  * The readOne terminal node (input).

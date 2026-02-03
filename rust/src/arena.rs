@@ -198,6 +198,15 @@ pub enum ArenaSym {
 
     /// C combinator: `C x y z -> x z y`
     C = 9,
+
+    /// S' combinator (Turner PSI): `S' w x y z -> w (x z) (y z)`
+    SPrime = 10,
+
+    /// B' combinator (Turner B-prime): `B' w x y z -> w x (y z)`
+    BPrime = 11,
+
+    /// C' combinator (Turner GAMMA): `C' w x y z -> w (x z) y`
+    CPrime = 12,
 }
 
 // =============================================================================
@@ -1982,8 +1991,6 @@ mod wasm {
                             let y = rightOf(left);
                             let z = right;
 
-                            // Optimization: Check for I to avoid allocating identity application?
-                            // For now, standard S-reduction:
                             let xz = allocCons(x, z);
                             let yz = allocCons(y, z);
                             curr = allocCons(xz, yz);
@@ -2033,6 +2040,81 @@ mod wasm {
                                 return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
                             }
                             continue;
+                        }
+                    } else if kindOf(lll) == ArenaKind::NonTerm as u32 {
+                        let llll = leftOf(lll);
+                        if kindOf(llll) == ArenaKind::Terminal as u32 {
+                            let sym = symOf(llll);
+
+                            // S' w x y z -> w (x z) (y z)
+                            if sym == ArenaSym::SPrime as u32 {
+                                if *remaining_steps == 0 {
+                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                }
+                                *remaining_steps = remaining_steps.saturating_sub(1);
+
+                                let w = rightOf(lll);
+                                let x = rightOf(ll);
+                                let y = rightOf(left);
+                                let z = right;
+
+                                let xz = allocCons(x, z);
+                                let yz = allocCons(y, z);
+                                let w_xz = allocCons(w, xz);
+                                curr = allocCons(w_xz, yz);
+                                mode = MODE_RETURN;
+
+                                if *remaining_steps == 0 {
+                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                }
+                                continue;
+                            }
+
+                            // B' w x y z -> w x (y z)
+                            if sym == ArenaSym::BPrime as u32 {
+                                if *remaining_steps == 0 {
+                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                }
+                                *remaining_steps = remaining_steps.saturating_sub(1);
+
+                                let w = rightOf(lll);
+                                let x = rightOf(ll);
+                                let y = rightOf(left);
+                                let z = right;
+
+                                let yz = allocCons(y, z);
+                                let wx = allocCons(w, x);
+                                curr = allocCons(wx, yz);
+                                mode = MODE_RETURN;
+
+                                if *remaining_steps == 0 {
+                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                }
+                                continue;
+                            }
+
+                            // C' w x y z -> w (x z) y
+                            if sym == ArenaSym::CPrime as u32 {
+                                if *remaining_steps == 0 {
+                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                }
+                                *remaining_steps = remaining_steps.saturating_sub(1);
+
+                                let w = rightOf(lll);
+                                let x = rightOf(ll);
+                                let y = rightOf(left);
+                                let z = right;
+
+                                let xz = allocCons(x, z);
+                                let wxz = allocCons(w, xz);
+                                curr = allocCons(wxz, y);
+                                mode = MODE_RETURN;
+
+                                if *remaining_steps == 0 {
+                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                }
+                                continue;
+                            }
                         }
                     }
                 }

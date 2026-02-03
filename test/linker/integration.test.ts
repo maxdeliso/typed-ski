@@ -9,6 +9,7 @@
  */
 
 import { expect } from "chai";
+import { parseSKI } from "../../lib/parser/ski.ts";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -117,9 +118,8 @@ poly main = #X => \\x: X => \\y: X => \\z: X => x`;
       const output = new TextDecoder().decode(stdout);
 
       expect(linkCode).to.equal(0);
-      expect(output).to.include("S");
       expect(output).to.include("K");
-      expect(output).to.include("(");
+      expect(() => parseSKI(output.trim())).to.not.throw();
     } finally {
       // Cleanup
       try {

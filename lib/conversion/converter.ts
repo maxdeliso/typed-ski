@@ -1,244 +1,253 @@
 /**
  * Lambda to SKI combinator conversion.
  *
- * This module provides the core algorithm for converting untyped lambda
- * calculus expressions to SKI combinator expressions using bracket abstraction.
- * It implements the standard conversion rules including S, K, I, B, and C combinators.
+ * This module uses a De Bruijn conversion + arity-tracking abstraction pipeline.
+ * It avoids the classic exponential blowup of naive S-expansion by tracking
+ * openness (how many arguments a term depends on) and using bulk S/B/C where possible.
  *
  * @module
  */
-import { B, C } from "../consts/combinators.ts";
-import type { LambdaVar, UntypedLambda } from "../terms/lambda.ts";
+import type { TripLangValueType } from "../meta/trip.ts";
+import type { DeBruijnTerm } from "../meta/frontend/deBruijn.ts";
 import type { SKIExpression } from "../ski/expression.ts";
-import { apply } from "../ski/expression.ts";
-import { I, K, S, type SKITerminal } from "../ski/terminal.ts";
+import { apply, applyMany } from "../ski/expression.ts";
+import {
+  B,
+  BPrime,
+  C,
+  CPrime,
+  I,
+  K,
+  ReadOne,
+  S,
+  SPrime,
+  WriteOne,
+} from "../ski/terminal.ts";
 import { ConversionError } from "./conversionError.ts";
+import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 
-/**
- * Internal mixed-domain lambda abstraction.
- * (Uses a distinct tag so as not to conflict with untyped lambda abstractions.)
- */
-interface LambdaAbsMixed {
-  kind: "lambda-abs-mixed";
-  name: string;
-  body: LambdaMixed;
+type CoreTerm =
+  | { kind: "idx"; index: number }
+  | { kind: "app"; lft: CoreTerm; rgt: CoreTerm }
+  | { kind: "lam"; body: CoreTerm }
+  | { kind: "terminal"; expr: SKIExpression };
+
+interface Res {
+  n: number;
+  expr: SKIExpression;
 }
 
-/**
- * Internal union type for the conversion process.
- * It includes:
- *   - SKI terminals,
- *   - Lambda variables (imported from your untyped lambda module),
- *   - Mixed lambda abstractions (with kind "lambda-abs-mixed"),
- *   - And applications (cons cells) over LambdaMixed.
- */
-type LambdaMixed =
-  | SKITerminal
-  | LambdaVar
-  | LambdaAbsMixed
-  | LambdaMixedApplication;
+const PSI = SPrime;
+const BETA = BPrime;
+const GAMMA = CPrime;
 
-export interface LambdaMixedApplication {
-  kind: "non-terminal";
-  lft: LambdaMixed;
-  rgt: LambdaMixed;
-}
-
-/**
- * Creates an application of one LambdaMixed term to another.
- * @param left the function term
- * @param right the argument term
- * @returns a new application node
- */
-export const createLambdaMixedApplication = (
-  left: LambdaMixed,
-  right: LambdaMixed,
-): LambdaMixed => ({
-  kind: "non-terminal",
-  lft: left,
-  rgt: right,
-});
-
-/**
- * Helper constructor for a mixed-domain abstraction.
- */
-const mkAbstractMixed = (name: string, body: LambdaMixed): LambdaAbsMixed => ({
-  kind: "lambda-abs-mixed",
-  name,
-  body,
-});
-
-/**
- * Lift an untyped lambda expression (UntypedLambda) into the internal mixed domain.
- * (This simply replaces the abstraction tag "lambda-abs" with "lambda-abs-mixed".)
- */
-const lift = (ut: UntypedLambda): LambdaMixed => {
-  switch (ut.kind) {
-    case "lambda-var":
-      return ut;
-    case "lambda-abs":
-      // Convert the untyped abstraction into our mixed abstraction.
-      return mkAbstractMixed(ut.name, lift(ut.body));
-    case "non-terminal":
-      return createLambdaMixedApplication(lift(ut.lft), lift(ut.rgt));
+const terminalFromSym = (sym: string): SKIExpression => {
+  switch (sym) {
+    case "S":
+      return S;
+    case "K":
+      return K;
+    case "I":
+      return I;
+    case "B":
+      return B;
+    case "C":
+      return C;
+    case "P":
+      return SPrime;
+    case "Q":
+      return BPrime;
+    case "R":
+      return CPrime;
+    case ",":
+      return ReadOne;
+    case ".":
+      return WriteOne;
+    default:
+      throw new ConversionError(`unknown SKI terminal: ${sym}`);
   }
 };
 
-/**
- * NOTE: I referenced https://github.com/ngzhian/ski while coming up with this
- * implementation.
- *
- * @see also https://en.wikipedia.org/wiki/Combinatory_logic#Combinators_B,_C
- *
- * The core conversion function.
- * Recursively converts a mixed-domain lambda expression to one built solely from SKI combinators.
- *
- * The conversion follows these rules:
- *  1. For a variable, return it unchanged.
- *  2. For an application, recursively convert both parts.
- *  3. For an abstraction:
- *     - If the bound variable is not free in the body, convert to (K body).
- *     - Otherwise, inspect the body:
- *          a. If the body is a variable identical to the binder, yield I.
- *          b. If the body is an abstraction, apply Rule 5.
- *          c. If the body is an application, use Rules 6–8.
- */
-const convertMixed = (lm: LambdaMixed): LambdaMixed => {
-  switch (lm.kind) {
-    case "lambda-var":
-      // Rule 1: T[x] ⇒ x
-      return lm;
-    case "non-terminal":
-      // Rule 2: T[(E₁ E₂)] ⇒ (T[E₁] T[E₂])
-      return createLambdaMixedApplication(
-        convertMixed(lm.lft),
-        convertMixed(lm.rgt),
+const toCore = (term: DeBruijnTerm): CoreTerm => {
+  switch (term.kind) {
+    case "DbVar":
+      return { kind: "idx", index: term.index };
+    case "DbAbs":
+      return { kind: "lam", body: toCore(term.body) };
+    case "DbSysFAbs":
+      return { kind: "lam", body: toCore(term.body) };
+    case "DbTypedAbs":
+      return { kind: "lam", body: toCore(term.body) };
+    case "DbApp":
+      return {
+        kind: "app",
+        lft: toCore(term.left),
+        rgt: toCore(term.right),
+      };
+    case "DbLet":
+      return {
+        kind: "app",
+        lft: { kind: "lam", body: toCore(term.body) },
+        rgt: toCore(term.value),
+      };
+    case "DbTerminal":
+      return { kind: "terminal", expr: terminalFromSym(term.sym) };
+    case "DbFreeVar":
+      throw new ConversionError(`free variable detected: ${term.name}`);
+    case "DbFreeTypeVar":
+      throw new ConversionError(`free type variable detected: ${term.name}`);
+    case "DbTyAbs":
+    case "DbForall":
+    case "DbTyApp":
+    case "DbTypeApp":
+      throw new ConversionError(
+        "type-level constructs present; erase types before SKI conversion",
       );
-    case "lambda-abs-mixed":
-      if (!free(lm.name, lm.body)) {
-        // Rule 3: T[λx.E] ⇒ (K T[E])
-        return createLambdaMixedApplication(K, convertMixed(lm.body));
-      }
-      switch (lm.body.kind) {
-        case "lambda-var":
-          if (lm.name === lm.body.name) {
-            // Rule 4: T[λx.x] ⇒ I
-            return I;
-          } else {
-            throw new ConversionError("single variable non-match");
-          }
-        case "lambda-abs-mixed": {
-          const x = lm.name;
-          const y = lm.body.name;
-          const E = lm.body.body;
-          if (free(x, E)) {
-            // Rule 5: T[λx.λy.E] ⇒ T[λx.T[λy.E]]
-            return convertMixed(
-              mkAbstractMixed(x, convertMixed(mkAbstractMixed(y, E))),
-            );
-          } else {
-            // Rule 5: T[λx.λy.E] ⇒ T[λy.E] (when x is not free in E)
-            return convertMixed(mkAbstractMixed(y, E));
-          }
-        }
-        case "non-terminal": {
-          const x = lm.name;
-          const E1 = lm.body.lft;
-          const E2 = lm.body.rgt;
-          if (free(x, E1) && free(x, E2)) {
-            // Rule 6: T[λx.(E₁ E₂)] ⇒ (S T[λx.E₁] T[λx.E₂])
-            return createLambdaMixedApplication(
-              createLambdaMixedApplication(
-                S,
-                convertMixed(mkAbstractMixed(x, E1)),
-              ),
-              convertMixed(mkAbstractMixed(x, E2)),
-            );
-          } else if (free(x, E1) && !free(x, E2)) {
-            // Rule 7: T[λx.(E₁ E₂)] ⇒ (C T[λx.E₁] T[E₂])
-            return createLambdaMixedApplication(
-              createLambdaMixedApplication(
-                C,
-                convertMixed(mkAbstractMixed(x, E1)),
-              ),
-              convertMixed(E2),
-            );
-          } else if (!free(x, E1) && free(x, E2)) {
-            // Rule 8: T[λx.(E₁ E₂)] ⇒ (B T[E₁] T[λx.E₂])
-            return createLambdaMixedApplication(
-              createLambdaMixedApplication(B, convertMixed(E1)),
-              convertMixed(mkAbstractMixed(x, E2)),
-            );
-          } else {
-            throw new ConversionError("x not free in E1 or E2");
-          }
-        }
-        default:
-          throw new ConversionError(
-            "unexpected body kind in lambda abstraction",
-          );
-      }
-    case "terminal":
-      // Already a SKI terminal—return it as is.
-      return lm;
+    case "DbMatch":
+      throw new ConversionError(
+        "match expressions are not supported in SKI conversion",
+      );
   }
 };
 
-const free = (name: string, lm: LambdaMixed): boolean => {
-  switch (lm.kind) {
-    case "lambda-var":
-      return lm.name === name;
-    case "non-terminal":
-      return free(name, lm.lft) || free(name, lm.rgt);
-    case "lambda-abs-mixed":
-      // If the abstraction binds the variable 'name', then it is not free.
-      if (lm.name === name) {
-        return false;
-      } else {
-        return free(name, lm.body);
+const selectOuterCache: SKIExpression[] = [];
+
+const selectOuter = (arity: number): SKIExpression => {
+  if (arity <= 0) {
+    throw new ConversionError("invalid De Bruijn index (negative arity)");
+  }
+  const cached = selectOuterCache[arity];
+  if (cached) return cached;
+
+  let start = arity - 1;
+  while (start >= 1 && !selectOuterCache[start]) {
+    start--;
+  }
+
+  let expr: SKIExpression;
+  if (start >= 1 && selectOuterCache[start]) {
+    expr = selectOuterCache[start];
+  } else {
+    expr = I;
+    start = 1;
+    selectOuterCache[1] = expr;
+  }
+
+  for (let i = start + 1; i <= arity; i++) {
+    expr = applyMany(B, expr, K);
+    selectOuterCache[i] = expr;
+  }
+  return expr;
+};
+
+const bulkCache: Record<"S" | "B" | "C", SKIExpression[]> = {
+  S: [],
+  B: [],
+  C: [],
+};
+
+const emitBulk = (kind: "S" | "B" | "C", depth: number): SKIExpression => {
+  if (depth < 1) {
+    throw new ConversionError("bulk combinator depth must be >= 1");
+  }
+  const cache = bulkCache[kind];
+  const cached = cache[depth];
+  if (cached) return cached;
+
+  let start = depth - 1;
+  while (start >= 1 && !cache[start]) {
+    start--;
+  }
+
+  let expr: SKIExpression;
+  if (start >= 1 && cache[start]) {
+    expr = cache[start];
+  } else {
+    expr = kind === "S" ? S : kind === "B" ? B : C;
+    start = 1;
+    cache[1] = expr;
+  }
+
+  for (let i = start + 1; i <= depth; i++) {
+    expr = apply(
+      kind === "S" ? PSI : kind === "B" ? BETA : GAMMA,
+      expr,
+    );
+    cache[i] = expr;
+  }
+  return expr;
+};
+
+const liftArity = (
+  expr: SKIExpression,
+  from: number,
+  to: number,
+): SKIExpression => {
+  if (to < from) {
+    throw new ConversionError("cannot lower arity during lift");
+  }
+  let lifted = expr;
+  for (let i = 0; i < to - from; i++) {
+    lifted = apply(K, lifted);
+  }
+  return lifted;
+};
+
+const zip = (l: Res, r: Res): Res => {
+  const { n, expr: A } = l;
+  const { n: m, expr: Bexpr } = r;
+
+  if (n === 0 && m === 0) {
+    return { n: 0, expr: apply(A, Bexpr) };
+  }
+
+  if (n === 0) {
+    return { n: m, expr: applyMany(emitBulk("B", m), A, Bexpr) };
+  }
+
+  if (m === 0) {
+    return { n, expr: applyMany(emitBulk("C", n), A, Bexpr) };
+  }
+
+  if (n === m) {
+    return { n, expr: applyMany(emitBulk("S", n), A, Bexpr) };
+  }
+
+  if (n < m) {
+    const liftedA = liftArity(A, n, m);
+    return { n: m, expr: applyMany(emitBulk("S", m), liftedA, Bexpr) };
+  }
+
+  const liftedB = liftArity(Bexpr, m, n);
+  return { n, expr: applyMany(emitBulk("S", n), A, liftedB) };
+};
+
+const compile = (term: CoreTerm): Res => {
+  switch (term.kind) {
+    case "idx":
+      return { n: term.index + 1, expr: selectOuter(term.index + 1) };
+    case "app":
+      return zip(compile(term.lft), compile(term.rgt));
+    case "lam": {
+      const body = compile(term.body);
+      if (body.n === 0) {
+        return { n: 0, expr: apply(K, body.expr) };
       }
+      return { n: body.n - 1, expr: body.expr };
+    }
     case "terminal":
-      // SKI terminals do not contribute any free variables.
-      return false;
-    default:
-      return false;
+      return { n: 0, expr: term.expr };
   }
 };
 
 /**
- * Helper function to convert LambdaMixed to SKIExpression.
- * This is used internally during conversion when we know the expression is already converted.
+ * Converts a TripLang value type into an SKI expression.
  */
-const toSKI = (lm: LambdaMixed): SKIExpression => {
-  switch (lm.kind) {
-    case "terminal":
-      return lm;
-    case "lambda-var":
-      // Variables should not remain after conversion - this indicates an error
-      throw new ConversionError("Free variable detected after conversion");
-    case "non-terminal":
-      return apply(toSKI(lm.lft), toSKI(lm.rgt));
-    case "lambda-abs-mixed":
-      throw new ConversionError("lambda abstraction detected at top");
-    default:
-      throw new ConversionError("lambda abstraction detected at top");
+export const bracketLambda = (term: TripLangValueType): SKIExpression => {
+  const deb = toDeBruijn(term);
+  const compiled = compile(toCore(deb));
+  if (compiled.n !== 0) {
+    throw new ConversionError("free variable detected after conversion");
   }
-};
-
-/**
- * Checks that the given mixed-domain lambda expression contains no lambda abstractions,
- * returning a SKI expression.
- */
-const assertCombinator = (lm: LambdaMixed): SKIExpression => {
-  return toSKI(lm);
-};
-
-/**
- * Public function.
- * Converts an untyped lambda expression (UntypedLambda) into an SKI expression.
- */
-export const bracketLambda = (ut: UntypedLambda): SKIExpression => {
-  const lifted = lift(ut);
-  const converted = convertMixed(lifted);
-  return assertCombinator(converted);
+  return compiled.expr;
 };

@@ -26,7 +26,7 @@ import {
 import { unparseSKI } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 
-function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
+export function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
   if (typeDef.kind !== "type") {
     return false;
   }
@@ -1094,8 +1094,47 @@ export function resolveCrossModuleDependencies(
         const definitionValue = extractDefinitionValue(definition);
         if (definitionValue) {
           const [termRefs, typeRefs] = externalReferences(definitionValue);
-          const externalTermRefs = Array.from(termRefs.keys());
-          const externalTypeRefs = Array.from(typeRefs.keys());
+
+          // Filter out valid references (recursive definitions that are intentionally not inlined)
+          const externalTermRefs = Array.from(termRefs.keys()).filter((ref) => {
+            // Allow self-reference for recursive definitions
+            if (
+              ref === exportName && definition.kind === "poly" && definition.rec
+            ) return false;
+
+            // Allow references to other recursive definitions (local)
+            const localDef = module.defs.get(ref);
+            if (localDef && localDef.kind === "poly" && localDef.rec) {
+              return false;
+            }
+
+            // Allow references to other recursive definitions (imported)
+            const qualified = resolvedPS.termEnv.get(moduleName)?.get(ref);
+            if (qualified) {
+              const target = resolvedPS.terms.get(qualified);
+              if (target && target.kind === "poly" && target.rec) return false;
+            }
+
+            return true;
+          });
+
+          const externalTypeRefs = Array.from(typeRefs.keys()).filter((ref) => {
+            // Allow self-reference for types
+            if (ref === exportName && definition.kind === "type") return false;
+
+            // Allow references to recursive types (local)
+            const localDef = module.defs.get(ref);
+            if (localDef && isRecursiveTypeDefinition(localDef)) return false;
+
+            // Allow references to recursive types (imported)
+            const qualified = resolvedPS.typeEnv.get(moduleName)?.get(ref);
+            if (qualified) {
+              const target = resolvedPS.types.get(qualified);
+              if (target && isRecursiveTypeDefinition(target)) return false;
+            }
+
+            return true;
+          });
 
           if (externalTermRefs.length > 0 || externalTypeRefs.length > 0) {
             console.warn(

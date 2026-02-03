@@ -66,7 +66,7 @@ poly main = mul two three`;
       { name: "Prelude", object: preludeObject },
       { name: "Nat", object: natObject },
       { name: "TestArithmetic", object: testObject },
-    ], true);
+    ], false);
 
     // Parse the SKI expression string and evaluate it
     const skiExpr = parseSKI(skiExpression);
@@ -207,7 +207,7 @@ poly main = mul two three`;
       { name: "Prelude", object: preludeObject },
       { name: "Nat", object: natObject },
       { name: "TestMultiplication", object: testObject },
-    ], true);
+    ], false);
 
     const skiExpr = parseSKI(skiExpression);
     const evaluated = arenaEvaluator.reduce(skiExpr);
@@ -286,7 +286,7 @@ poly main = lit
       { name: "Nat", object: natObject },
       { name: "LiteralProvider", object: providerObject },
       { name: "LiteralConsumer", object: consumerObject },
-    ], true);
+    ], false);
 
     const skiExpr = parseSKI(skiExpression);
     const evaluated = arenaEvaluator.reduce(skiExpr);
@@ -360,7 +360,7 @@ poly main = 3
           { name: "Prelude", object: preludeObject },
           { name: "Nat", object: natObject },
           { name: "ConflictingNat", object: conflictingObject },
-        ], true);
+        ], false);
       },
       Error,
       "Ambiguous export 'Nat' found in multiple modules",
@@ -438,7 +438,7 @@ poly main = add (mul two three) (mul one four)`;
       { name: "Prelude", object: preludeObject },
       { name: "Nat", object: natObject },
       { name: "TestComplexArithmetic", object: testObject },
-    ], true);
+    ], false);
 
     const skiExpr = parseSKI(skiExpression);
     const evaluated = arenaEvaluator.reduce(skiExpr);

@@ -336,10 +336,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
   static async create(
     workerCount = navigator.hardwareConcurrency || 4,
+    verbose = false,
   ): Promise<ParallelArenaEvaluatorWasm> {
-    console.error(
-      `[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: ${workerCount}, navigator.hardwareConcurrency: ${navigator.hardwareConcurrency}`,
-    );
+    if (verbose) {
+      console.error(
+        `[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: ${workerCount}, navigator.hardwareConcurrency: ${navigator.hardwareConcurrency}`,
+      );
+    }
     if (workerCount < 1) {
       throw new Error(
         "ParallelArenaEvaluatorWasm requires at least one worker",
@@ -406,6 +409,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       workerCount,
       workerUrl,
       sharedMemory,
+      verbose,
     );
 
     await WorkerManager.connectWorkersToArena(workers, arenaPointer);

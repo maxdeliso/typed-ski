@@ -4,7 +4,11 @@ import { predLambda } from "../../lib/consts/lambdas.ts";
 import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
-import { apply, applyMany } from "../../lib/ski/expression.ts";
+import {
+  apply,
+  applyMany,
+  type SKIExpression,
+} from "../../lib/ski/expression.ts";
 import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { ConversionError } from "../../lib/conversion/conversionError.ts";
@@ -241,6 +245,17 @@ Deno.test("Lambda conversion", async (t) => {
     expect(() => bracketLambda(matchTerm)).to.throw(
       ConversionError,
       /match expressions are not supported/,
+    );
+
+    // Create an object that structurally matches a terminal but has an invalid symbol
+    const invalidTerminal = {
+      kind: "terminal",
+      sym: "Z",
+    } as unknown as SKIExpression;
+
+    expect(() => bracketLambda(invalidTerminal)).to.throw(
+      ConversionError,
+      /unknown SKI terminal: Z/,
     );
   });
 });

@@ -128,7 +128,7 @@ Deno.test("TripLang Linker", async (t) => {
     const loadedModules = [loadModule(aObject, "A")];
 
     const programSpace = createProgramSpace(loadedModules);
-    const resolvedSpace = resolveCrossModuleDependencies(programSpace, false);
+    const resolvedSpace = resolveCrossModuleDependencies(programSpace);
 
     // Should return the same program space (simplified implementation)
     expect(resolvedSpace.modules.size).to.equal(programSpace.modules.size);
@@ -161,10 +161,7 @@ poly main = loop`;
         const recObject = deserializeTripCObject(recContent);
         const loadedModules = [loadModule(recObject, "Rec")];
         const programSpace = createProgramSpace(loadedModules);
-        const resolvedSpace = resolveCrossModuleDependencies(
-          programSpace,
-          false,
-        );
+        const resolvedSpace = resolveCrossModuleDependencies(programSpace);
         const loopDef = resolvedSpace.modules.get("Rec")?.defs.get("loop");
         const mainDef = resolvedSpace.modules.get("Rec")?.defs.get("main");
 
@@ -201,7 +198,7 @@ poly rec main = \\n:Nat => main n`;
       const recObject = deserializeTripCObject(recContent);
       const loadedModules = [loadModule(recObject, "RecOnly")];
       const programSpace = createProgramSpace(loadedModules);
-      const resolvedSpace = resolveCrossModuleDependencies(programSpace, false);
+      const resolvedSpace = resolveCrossModuleDependencies(programSpace);
       const mainDef = resolvedSpace.modules.get("RecOnly")?.defs.get("main");
 
       expect(mainDef?.kind).to.equal("untyped");
@@ -252,7 +249,7 @@ poly rec main = \\n:Nat => main n`;
 
     let caughtMessage: string | null = null;
     try {
-      resolveCrossModuleDependencies(programSpace, false);
+      resolveCrossModuleDependencies(programSpace);
     } catch (error) {
       caughtMessage = (error as Error).message;
     } finally {
@@ -357,7 +354,7 @@ poly rec main = \\n:Nat => main n`;
 
       let caughtMessage: string | null = null;
       try {
-        const resolved = resolveCrossModuleDependencies(programSpace, false);
+        const resolved = resolveCrossModuleDependencies(programSpace);
         const defA = resolved.modules.get("ModuleA")?.defs.get("a");
         const defB = resolved.modules.get("ModuleB")?.defs.get("b");
         expect(defA).to.not.be.undefined;

@@ -58,7 +58,7 @@ Deno.test("Bin operations - add/mul/sub round trip", async () => {
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObj },
     { name: "Test", object: testObj },
-  ], true);
+  ], false);
 
   const evaluator = await ParallelArenaEvaluatorWasm.create();
   try {

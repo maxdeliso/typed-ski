@@ -26,7 +26,7 @@ function makeUniqueExpr(i: number, bits = 16): SKIExpression {
 
 Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
   await t.step("creates evaluator with shared memory", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(2);
+    const evaluator = await ParallelArenaEvaluatorWasm.create(2, true);
     assert(evaluator !== null);
     evaluator.terminate();
   });
@@ -83,7 +83,8 @@ Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) 
   await t.step(
     "async evaluation works and arena is in SAB mode",
     async () => {
-      const evaluator = await ParallelArenaEvaluatorWasm.create(2);
+      const verbose = false;
+      const evaluator = await ParallelArenaEvaluatorWasm.create(2, verbose);
       const { $: exports } = evaluator;
 
       assert(
@@ -95,14 +96,18 @@ Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) 
         "debugLockState helper function must be present",
       );
       const mode = exports.getArenaMode();
-      console.log(
-        `[DEBUG] Arena mode before reduce: ${mode} (1=SAB, 0=heap)`,
-      );
+      if (verbose) {
+        console.log(
+          `[DEBUG] Arena mode before reduce: ${mode} (1=SAB, 0=heap)`,
+        );
+      }
       assertEquals(mode, 1, "Arena should be in SAB mode");
       const lockState = exports.debugLockState();
-      console.log(
-        `[DEBUG] Lock state before reduce: ${lockState} (0=unlocked, 1=locked, 0xffffffff=uninit)`,
-      );
+      if (verbose) {
+        console.log(
+          `[DEBUG] Lock state before reduce: ${lockState} (0=unlocked, 1=locked, 0xffffffff=uninit)`,
+        );
+      }
 
       if (lockState === 0xffffffff) {
         throw new Error("Arena not initialized (lock state = 0xffffffff)");

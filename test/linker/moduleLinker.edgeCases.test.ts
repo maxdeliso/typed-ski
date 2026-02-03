@@ -80,7 +80,7 @@ Deno.test("moduleLinker edge cases (coverage)", async (t) => {
       });
 
       assertThrows(
-        () => resolveCrossModuleDependencies(ps, false),
+        () => resolveCrossModuleDependencies(ps),
         Error,
         "Module 'MissingMod' not found for qualified name 'MissingMod.x'",
       );
@@ -206,7 +206,7 @@ Deno.test("moduleLinker edge cases (coverage)", async (t) => {
       // Remove the global term entry so resolution cannot fetch the imported term.
       ps.terms.delete("Provider.x");
 
-      const resolved = resolveCrossModuleDependencies(ps, false);
+      const resolved = resolveCrossModuleDependencies(ps);
       // It should not crash; it will keep `x` unresolved.
       const main = resolved.modules.get("Consumer")?.defs.get("main") as
         | undefined

@@ -16,6 +16,7 @@ export interface TripIoOptions extends TripHarnessOptions {
   stdin?: Uint8Array;
   stdoutMaxBytes?: number;
   stepLimit?: number;
+  verbose?: boolean;
 }
 
 export interface TripIoResult {
@@ -26,6 +27,7 @@ export interface TripIoResult {
 export async function compileAndLink(
   source: string,
   options: TripHarnessOptions = {},
+  verbose = false,
 ): Promise<string> {
   const includePrelude = options.includePrelude ?? true;
   const includeNat = options.includeNat ?? false;
@@ -39,7 +41,7 @@ export async function compileAndLink(
   }
 
   modules.push({ name: moduleObject.module, object: moduleObject });
-  return linkModules(modules, true);
+  return linkModules(modules, verbose);
 }
 
 export async function evaluateTrip(
@@ -55,9 +57,10 @@ export async function evaluateTripWithIo(
   source: string,
   options: TripIoOptions = {},
 ): Promise<TripIoResult> {
-  const skiExpression = await compileAndLink(source, options);
+  const verbose = options.verbose ?? false;
+  const skiExpression = await compileAndLink(source, options, verbose);
   const skiExpr = parseSKI(skiExpression);
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1, verbose);
 
   try {
     const resultPromise = evaluator.reduceAsync(skiExpr, options.stepLimit);

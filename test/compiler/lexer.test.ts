@@ -158,7 +158,7 @@ async function compileAndValidateTestProgram(
     { name: "Nat", object: natObj },
     { name: "Lexer", object: lexerObj },
     { name: "Test", object: testObj },
-  ], false);
+  ]);
 
   expect(skiExpression).to.be.a("string");
   expect(skiExpression.length).to.be.greaterThan(0);
@@ -252,7 +252,7 @@ poly main = isSpaceBin ${charCode}
               { name: "Nat", object: natObj },
               { name: "Lexer", object: lexerObj },
               { name: "Test", object: testObj },
-            ], false); // Enable verbose mode to debug type resolution
+            ]);
 
             // Parse and evaluate
             const skiExpr = parseSKI(skiExpression);
@@ -302,7 +302,7 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
       { name: "Nat", object: natObj },
       { name: "Lexer", object: lexerObj },
       { name: "Test", object: testObj },
-    ], false);
+    ]);
 
     const skiExpr = parseSKI(skiExpression);
     const key = toSKIKey(skiExpr);

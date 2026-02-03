@@ -1136,10 +1136,7 @@ export function resolveCrossModuleDependencies(
             return true;
           });
 
-          if (
-            verbose &&
-            (externalTermRefs.length > 0 || externalTypeRefs.length > 0)
-          ) {
+          if (verbose) {
             console.warn(
               `Warning: Exported definition '${
                 qualifiedName(moduleName, exportName)
@@ -1147,15 +1144,20 @@ export function resolveCrossModuleDependencies(
                 externalTermRefs.join(", ")
               }], types=[${externalTypeRefs.join(", ")}]`,
             );
-            console.error(
-              `  Definition value: ${
-                JSON.stringify(
-                  definitionValue,
-                  BIGINT_JSON_REPLACER,
-                  2,
-                )
-              }`,
-            );
+
+            if (
+              externalTermRefs.length > 0 || externalTypeRefs.length > 0
+            ) {
+              console.error(
+                `  Definition value: ${
+                  JSON.stringify(
+                    definitionValue,
+                    BIGINT_JSON_REPLACER,
+                    2,
+                  )
+                }`,
+              );
+            }
           }
         }
       }

@@ -1,0 +1,7 @@
+module RecOnly
+
+export main
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly rec main = \n:Nat => main n

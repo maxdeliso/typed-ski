@@ -18,6 +18,7 @@ import {
   findMainFunction,
   loadModule,
   lowerToSKI,
+  type ProgramSpace,
   resolveCrossModuleDependencies,
 } from "../../lib/linker/moduleLinker.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -27,6 +28,7 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
+import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -140,76 +142,34 @@ Deno.test("TripLang Linker", async (t) => {
   await t.step(
     "pre-lowers poly rec definitions during resolution",
     async () => {
-      const source = `module Rec
-
-export loop
-export main
-
-type Nat = #X -> (X -> X) -> X -> X
-
-poly rec loop = \\n:Nat => loop n
-poly main = loop`;
-
       const fileName = "linker_rec.trip";
       const tripcName = "linker_rec.tripc";
-      const tripPath = `${__dirname}/${fileName}`;
-      const tripcPath = `${__dirname}/${tripcName}`;
 
-      await Deno.writeTextFile(tripPath, source);
-      try {
-        const recContent = await compileTripFile(fileName, tripcName);
-        const recObject = deserializeTripCObject(recContent);
-        const loadedModules = [loadModule(recObject, "Rec")];
-        const programSpace = createProgramSpace(loadedModules);
-        const resolvedSpace = resolveCrossModuleDependencies(programSpace);
-        const loopDef = resolvedSpace.modules.get("Rec")?.defs.get("loop");
-        const mainDef = resolvedSpace.modules.get("Rec")?.defs.get("main");
+      const recContent = await compileTripFile(fileName, tripcName);
+      const recObject = deserializeTripCObject(recContent);
+      const loadedModules = [loadModule(recObject, "Rec")];
+      const programSpace = createProgramSpace(loadedModules);
+      const resolvedSpace = resolveCrossModuleDependencies(programSpace);
+      const loopDef = resolvedSpace.modules.get("Rec")?.defs.get("loop");
+      const mainDef = resolvedSpace.modules.get("Rec")?.defs.get("main");
 
-        expect(loopDef?.kind).to.equal("untyped");
-        expect(mainDef?.kind).to.equal("untyped");
-      } finally {
-        try {
-          await Deno.remove(tripPath);
-          await Deno.remove(tripcPath);
-        } catch {
-          // ignore cleanup errors
-        }
-      }
+      expect(loopDef?.kind).to.equal("untyped");
+      expect(mainDef?.kind).to.equal("untyped");
     },
   );
 
   await t.step("ignores self-recursion during resolution", async () => {
-    const source = `module RecOnly
-
-export main
-
-type Nat = #X -> (X -> X) -> X -> X
-
-poly rec main = \\n:Nat => main n`;
-
     const fileName = "linker_rec_only.trip";
     const tripcName = "linker_rec_only.tripc";
-    const tripPath = `${__dirname}/${fileName}`;
-    const tripcPath = `${__dirname}/${tripcName}`;
 
-    await Deno.writeTextFile(tripPath, source);
-    try {
-      const recContent = await compileTripFile(fileName, tripcName);
-      const recObject = deserializeTripCObject(recContent);
-      const loadedModules = [loadModule(recObject, "RecOnly")];
-      const programSpace = createProgramSpace(loadedModules);
-      const resolvedSpace = resolveCrossModuleDependencies(programSpace);
-      const mainDef = resolvedSpace.modules.get("RecOnly")?.defs.get("main");
+    const recContent = await compileTripFile(fileName, tripcName);
+    const recObject = deserializeTripCObject(recContent);
+    const loadedModules = [loadModule(recObject, "RecOnly")];
+    const programSpace = createProgramSpace(loadedModules);
+    const resolvedSpace = resolveCrossModuleDependencies(programSpace);
+    const mainDef = resolvedSpace.modules.get("RecOnly")?.defs.get("main");
 
-      expect(mainDef?.kind).to.equal("untyped");
-    } finally {
-      try {
-        await Deno.remove(tripPath);
-        await Deno.remove(tripcPath);
-      } catch {
-        // ignore cleanup errors
-      }
-    }
+    expect(mainDef?.kind).to.equal("untyped");
   });
 
   await t.step("resolves mutual recursion in SCC", () => {
@@ -1099,6 +1059,218 @@ poly rec main = \\n:Nat => main n`;
         expect(caughtMessage).to.not.be.null;
         expect(caughtMessage!).to.include("Symbol 'X' is not defined");
       }
+    },
+  );
+
+  await t.step(
+    "createProgramSpace: export listed but definition missing",
+    () => {
+      // This hits inferImportKind()'s failure path via buildEnvironments():
+      // origin.exports has the symbol, but it is neither a term nor a type in the global indices.
+      const origin = {
+        module: "Origin",
+        exports: ["ghost"],
+        imports: [],
+        definitions: {
+          // intentionally empty / missing `ghost`
+        },
+      };
+
+      const consumer = {
+        module: "Consumer",
+        exports: ["main"],
+        imports: [{ from: "Origin", name: "ghost" }],
+        definitions: {
+          main: {
+            kind: "combinator" as const,
+            name: "main",
+            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+          },
+        },
+      };
+
+      const loaded = [
+        loadModule(origin, "Origin"),
+        loadModule(consumer, "Consumer"),
+      ];
+
+      expect(() => createProgramSpace(loaded)).to.throw(
+        Error,
+        "No symbol 'Origin.ghost' to import",
+      );
+    },
+  );
+
+  await t.step(
+    "resolveCrossModuleDependencies: getModuleInfo missing module",
+    () => {
+      // Create a valid program space, then inject a bogus qualified name into the
+      // global terms map so resolution tries to look up a missing module.
+      const ok = {
+        module: "OK",
+        exports: ["main"],
+        imports: [],
+        definitions: {
+          main: {
+            kind: "combinator" as const,
+            name: "main",
+            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+          },
+        },
+      };
+
+      const ps = createProgramSpace([loadModule(ok, "OK")]) as ProgramSpace & {
+        terms: Map<string, unknown>;
+      };
+
+      ps.terms.set("MissingMod.x", {
+        kind: "combinator",
+        name: "x",
+        term: { kind: "terminal", sym: SKITerminalSymbol.K },
+      });
+
+      expect(() => resolveCrossModuleDependencies(ps)).to.throw(
+        Error,
+        "Module 'MissingMod' not found for qualified name 'MissingMod.x'",
+      );
+    },
+  );
+
+  await t.step("findMainFunction: exported main is a type (error)", () => {
+    const mod = {
+      module: "TypeMain",
+      exports: ["main"],
+      imports: [],
+      definitions: {
+        main: {
+          kind: "type" as const,
+          name: "main",
+          type: { kind: "type-var" as const, typeName: "X" },
+        },
+      },
+    };
+    const ps = createProgramSpace([loadModule(mod, "TypeMain")]);
+    expect(() => findMainFunction(ps)).to.throw(
+      Error,
+      "Exported 'main' is a type",
+    );
+  });
+
+  await t.step(
+    "findMainFunction: multiple candidates when bypassing export validation",
+    () => {
+      // validateExports prevents this in linkModules(), so call findMainFunction directly
+      // with a constructed program space to exercise the error branch.
+      const fake: ProgramSpace = {
+        modules: new Map([
+          [
+            "A",
+            {
+              name: "A",
+              object: {} as never,
+              defs: new Map([
+                ["main", {
+                  kind: "combinator",
+                  name: "main",
+                  term: { kind: "terminal", sym: SKITerminalSymbol.I },
+                }],
+              ]),
+              exports: new Set(["main"]),
+              imports: [],
+            },
+          ],
+          [
+            "B",
+            {
+              name: "B",
+              object: {} as never,
+              defs: new Map([
+                ["main", {
+                  kind: "combinator",
+                  name: "main",
+                  term: { kind: "terminal", sym: SKITerminalSymbol.K },
+                }],
+              ]),
+              exports: new Set(["main"]),
+              imports: [],
+            },
+          ],
+        ]),
+        terms: new Map(),
+        types: new Map(),
+        termEnv: new Map(),
+        typeEnv: new Map(),
+      };
+
+      expect(() => findMainFunction(fake)).to.throw(
+        "Multiple 'main' functions found",
+      );
+    },
+  );
+
+  await t.step(
+    "term resolution: imported ref present in env but missing in global index",
+    () => {
+      // This drives the 'pendingRefs' path so replacements.size=0 and we converge with
+      // "no substitutions available" (without throwing).
+      const provider = {
+        module: "Provider",
+        exports: ["x"],
+        imports: [],
+        definitions: {
+          x: {
+            kind: "combinator" as const,
+            name: "x",
+            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+          },
+        },
+      };
+
+      const consumer = {
+        module: "Consumer",
+        exports: ["main"],
+        imports: [{ from: "Provider", name: "x" }],
+        definitions: {
+          // This references the imported name `x`, but we will delete Provider.x from ps.terms
+          // to simulate a missing global index entry during resolution.
+          main: {
+            kind: "poly" as const,
+            name: "main",
+            term: { kind: "systemF-var" as const, name: "x" },
+          },
+        },
+      };
+
+      const ps = createProgramSpace([
+        loadModule(provider, "Provider"),
+        loadModule(consumer, "Consumer"),
+      ]);
+
+      // Remove the global term entry so resolution cannot fetch the imported term.
+      ps.terms.delete("Provider.x");
+
+      const resolved = resolveCrossModuleDependencies(ps);
+      // It should not crash; it will keep `x` unresolved.
+      const main = resolved.modules.get("Consumer")?.defs.get("main") as
+        | _TripLangTerm
+        | undefined;
+
+      expect(main?.kind).to.equal("untyped"); // pre-lowered
+      if (main?.kind !== "untyped") {
+        throw new Error(`Expected kind 'untyped', got '${main?.kind}'`);
+      }
+      // Narrowed to UntypedDefinition
+      const term = main.term;
+
+      expect(term.kind).to.equal("lambda-var");
+      if (term.kind !== "lambda-var") {
+        throw new Error(`Expected term.kind 'lambda-var', got '${term.kind}'`);
+      }
+
+      expect(term.name).to.equal("x");
+      const [termRefs, typeRefs] = externalReferences(term);
+      expect(Array.from(termRefs.keys())).to.deep.equal(["x"]);
+      expect(typeRefs.size).to.equal(0);
     },
   );
 });

@@ -1,0 +1,30 @@
+module Test
+
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Prelude addBin
+import Prelude mulBin
+import Prelude subBin
+
+export main
+
+type Church = #X -> (X -> X) -> X -> X
+
+poly zero : Church = #X => \s : X -> X => \z : X => z
+poly succ : Church = \n : Church => #X => \s : X -> X => \z : X => s (n [X] s z)
+poly dbl : Church = \n : Church => #X => \s : X -> X => \z : X => n [X] s (n [X] s z)
+
+poly rec binToChurch = \b : Bin =>
+  match b [Church] {
+    | BZ => zero
+    | B0 rest => dbl (binToChurch rest)
+    | B1 rest => succ (dbl (binToChurch rest))
+  }
+
+poly main =
+  let product = mulBin 2 3 in
+  let delta = subBin 4 1 in
+  let sum = addBin product delta in
+  binToChurch sum

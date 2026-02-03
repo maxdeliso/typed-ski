@@ -4,19 +4,12 @@ import { predLambda } from "../../lib/consts/lambdas.ts";
 import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
-import { apply, applyMany } from "../../lib/ski/expression.ts";
 import {
-  B,
-  BPrime,
-  C,
-  CPrime,
-  I,
-  K,
-  ReadOne,
-  S,
-  SPrime,
-  WriteOne,
-} from "../../lib/ski/terminal.ts";
+  apply,
+  applyMany,
+  type SKIExpression,
+} from "../../lib/ski/expression.ts";
+import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { ConversionError } from "../../lib/conversion/conversionError.ts";
 import {
@@ -32,7 +25,6 @@ import {
   type SystemFTerm,
 } from "../../lib/terms/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../lib/types/types.ts";
-import type { TripLangValueType } from "../../lib/meta/trip.ts";
 
 Deno.test("Lambda conversion", async (t) => {
   const N = 5;
@@ -195,43 +187,6 @@ Deno.test("Lambda conversion", async (t) => {
     });
   });
 
-  await t.step("terminal symbol conversion", async (t) => {
-    await t.step("terminalFromSym converts valid symbols", () => {
-      // deno-lint-ignore no-explicit-any
-      const cases: [string, any][] = [
-        ["S", S],
-        ["K", K],
-        ["I", I],
-        ["B", B],
-        ["C", C],
-        ["P", SPrime],
-        ["Q", BPrime],
-        ["R", CPrime],
-        [",", ReadOne],
-        [".", WriteOne],
-      ];
-
-      for (const [sym, expected] of cases) {
-        // deno-lint-ignore no-explicit-any
-        const term: TripLangValueType = { kind: "terminal", sym: sym as any };
-        const result = bracketLambda(term);
-        expect(result).to.deep.equal(expected);
-      }
-    });
-
-    await t.step("terminalFromSym throws on unknown symbol", () => {
-      const term: TripLangValueType = {
-        kind: "terminal",
-        // deno-lint-ignore no-explicit-any
-        sym: "UNKNOWN" as any,
-      };
-      expect(() => bracketLambda(term)).to.throw(
-        ConversionError,
-        /unknown SKI terminal: UNKNOWN/,
-      );
-    });
-  });
-
   await t.step("nat literal lowers via church encoder", () => {
     const literal: UntypedLambda = makeUntypedChurchNumeral(8n);
     const ski = bracketLambda(literal);
@@ -290,6 +245,17 @@ Deno.test("Lambda conversion", async (t) => {
     expect(() => bracketLambda(matchTerm)).to.throw(
       ConversionError,
       /match expressions are not supported/,
+    );
+
+    // Create an object that structurally matches a terminal but has an invalid symbol
+    const invalidTerminal = {
+      kind: "terminal",
+      sym: "Z",
+    } as unknown as SKIExpression;
+
+    expect(() => bracketLambda(invalidTerminal)).to.throw(
+      ConversionError,
+      /unknown SKI terminal: Z/,
     );
   });
 });

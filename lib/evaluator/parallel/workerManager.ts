@@ -45,8 +45,9 @@ export class WorkerManager {
     workerCount: number,
     workerUrl: string,
     sharedMemory: WebAssembly.Memory,
+    verbose = false,
   ): Promise<Worker[]> {
-    console.error(`[DEBUG] Spawning ${workerCount} workers`);
+    if (verbose) console.error(`[DEBUG] Spawning ${workerCount} workers`);
     const workers: Worker[] = [];
     const initPromises: Promise<void>[] = [];
 

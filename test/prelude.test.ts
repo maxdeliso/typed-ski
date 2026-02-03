@@ -5,27 +5,28 @@ import { arenaEvaluator } from "../lib/evaluator/skiEvaluator.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
+import { getNatObject } from "../lib/nat.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
 
 const PRELUDE_TEST = `module TestPrelude
 
-import Prelude zero
-import Prelude succ
-import Prelude add
+import Nat zero
+import Nat succ
+import Nat add
 import Prelude not
 import Prelude and
 import Prelude or
 import Prelude pair
 import Prelude fst
 import Prelude snd
-import Prelude pred
-import Prelude sub
-import Prelude isZero
-import Prelude lte
-import Prelude gte
+import Nat pred
+import Nat sub
+import Nat isZero
+import Nat lte
+import Nat gte
 import Prelude true
 import Prelude false
-import Prelude Nat
+import Nat Nat
 
 export main
 
@@ -41,11 +42,13 @@ poly main =
 
 Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
   const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
   const serialized = compileToObjectFileString(PRELUDE_TEST);
   const testObject = deserializeTripCObject(serialized);
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObject },
+    { name: "Nat", object: natObject },
     { name: "TestPrelude", object: testObject },
   ], true);
 

@@ -1,0 +1,128 @@
+module Bin
+
+import Nat Nat
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Nat zero
+import Nat succ
+import Nat add
+import Nat mul
+
+export Bin
+export BZ
+export B0
+export B1
+export incBin
+export toBin
+export fromBin
+export addBin
+export mulBin
+export subBin
+export predBin
+export isZeroBin
+export eqBin
+export lteBin
+
+data Bin =
+  | BZ
+  | B0 Bin
+  | B1 Bin
+
+poly rec isZeroBin = \b : Bin =>
+  match b [Bool] {
+    | BZ => true
+    | B0 rest => isZeroBin rest
+    | B1 _ => false
+  }
+
+poly rec incBin = \b : Bin =>
+  match b [Bin] {
+    | BZ => B1 BZ
+    | B0 rest => B1 rest
+    | B1 rest => B0 (incBin rest)
+  }
+
+poly toBin = \n : Nat => n [Bin] incBin BZ
+
+poly rec fromBin = \b : Bin =>
+  match b [Nat] {
+    | BZ => zero
+    | B0 rest =>
+        let r = fromBin rest in
+        add r r
+    | B1 rest =>
+        let r = fromBin rest in
+        succ (add r r)
+  }
+
+poly rec addBin = \a : Bin => \b : Bin =>
+  match a [Bin] {
+    | BZ => b
+    | B0 pa =>
+        match b [Bin] {
+          | BZ => a
+          | B0 pb => B0 (addBin pa pb)
+          | B1 pb => B1 (addBin pa pb)
+        }
+    | B1 pa =>
+        match b [Bin] {
+          | BZ => a
+          | B0 pb => B1 (addBin pa pb)
+          | B1 pb => B0 (incBin (addBin pa pb))
+        }
+  }
+
+poly rec mulBin = \a : Bin => \b : Bin =>
+  match b [Bin] {
+    | BZ => BZ
+    | B0 pb => B0 (mulBin a pb)
+    | B1 pb => addBin a (B0 (mulBin a pb))
+  }
+
+poly rec predBin = \b : Bin =>
+  match b [Bin] {
+    | BZ => BZ
+    | B0 rest => B1 (predBin rest)
+    | B1 rest => B0 rest
+  }
+
+poly rec subBin = \a : Bin => \b : Bin =>
+  match b [Bin] {
+    | BZ => a
+    | B0 pb =>
+        match a [Bin] {
+          | BZ => BZ
+          | B0 pa => B0 (subBin pa pb)
+          | B1 pa => B1 (subBin pa pb)
+        }
+    | B1 pb =>
+        match a [Bin] {
+          | BZ => BZ
+          | B0 pa => B1 (subBin (predBin pa) pb)
+          | B1 pa => B0 (subBin pa pb)
+        }
+  }
+
+poly rec eqBin = \a : Bin => \b : Bin =>
+  match a [Bool] {
+    | BZ => isZeroBin b
+    | B0 pa =>
+        match b [Bool] {
+          | BZ => false
+          | B0 pb => eqBin pa pb
+          | B1 _ => false
+        }
+    | B1 pa =>
+        match b [Bool] {
+          | BZ => false
+          | B0 _ => false
+          | B1 pb => eqBin pa pb
+        }
+  }
+
+poly lteBin = \a : Bin => \b : Bin =>
+  isZeroBin (subBin a b)
+
+poly gteBin = \a : Bin => \b : Bin =>
+  lteBin b a

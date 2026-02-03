@@ -1,0 +1,9 @@
+module Rec
+
+export loop
+export main
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly rec loop = \n:Nat => loop n
+poly main = loop

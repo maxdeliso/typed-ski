@@ -35,9 +35,6 @@ export enum ArenaSym {
   ReadOne = 4,
   /** writeOne terminal */
   WriteOne = 5,
-  /** Internal-only primitives for Church decoding */
-  Inc = 6,
-  Num = 7,
   /** B combinator: `B x y z -> x (y z) */
   B = 8,
   /** C combinator: `C x y z -> x z y` */

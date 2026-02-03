@@ -11,7 +11,7 @@ import {
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
-import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
+import { BinN, UnBinNumber } from "../../lib/ski/bin.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 
@@ -26,9 +26,28 @@ function makeUniqueExpr(i: number, bits = 16): SKIExpression {
 
 Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
   await t.step("creates evaluator with shared memory", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-    assert(evaluator !== null);
-    evaluator.terminate();
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((arg) => String(arg)).join(" "));
+    };
+
+    try {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(2, true);
+      assert(evaluator !== null);
+      evaluator.terminate();
+    } finally {
+      console.error = originalError;
+    }
+
+    assert(
+      errors.some((line) =>
+        line.includes(
+          "[DEBUG]",
+        )
+      ),
+      "expected debug output",
+    );
   });
 
   await t.step("memory buffer is SharedArrayBuffer", async () => {
@@ -83,7 +102,8 @@ Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) 
   await t.step(
     "async evaluation works and arena is in SAB mode",
     async () => {
-      const evaluator = await ParallelArenaEvaluatorWasm.create(2);
+      const verbose = false;
+      const evaluator = await ParallelArenaEvaluatorWasm.create(2, verbose);
       const { $: exports } = evaluator;
 
       assert(
@@ -95,14 +115,18 @@ Deno.test("ParallelArenaEvaluator - async evaluation and arena mode", async (t) 
         "debugLockState helper function must be present",
       );
       const mode = exports.getArenaMode();
-      console.log(
-        `[DEBUG] Arena mode before reduce: ${mode} (1=SAB, 0=heap)`,
-      );
+      if (verbose) {
+        console.log(
+          `[DEBUG] Arena mode before reduce: ${mode} (1=SAB, 0=heap)`,
+        );
+      }
       assertEquals(mode, 1, "Arena should be in SAB mode");
       const lockState = exports.debugLockState();
-      console.log(
-        `[DEBUG] Lock state before reduce: ${lockState} (0=unlocked, 1=locked, 0xffffffff=uninit)`,
-      );
+      if (verbose) {
+        console.log(
+          `[DEBUG] Lock state before reduce: ${lockState} (0=unlocked, 1=locked, 0xffffffff=uninit)`,
+        );
+      }
 
       if (lockState === 0xffffffff) {
         throw new Error("Arena not initialized (lock state = 0xffffffff)");
@@ -263,15 +287,15 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     assertEquals(firstAfterWrite, "write");
     await writePromise;
     const result = await resultPromise;
-    assertEquals(UnChurchNumber(result), 65n);
+    assertEquals(UnBinNumber(result), 65n);
     evaluator.terminate();
   });
 
   await t.step("writeOne enqueues bytes to stdout", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    const expr = apply(WriteOne, ChurchN(66));
+    const expr = apply(WriteOne, BinN(66));
     const result = await evaluator.reduceAsync(expr);
-    assertEquals(UnChurchNumber(result), 66n);
+    assertEquals(UnBinNumber(result), 66n);
     const stdout = evaluator.readStdout(1);
     assertEquals(stdout.length, 1);
     assertEquals(stdout[0], 66);
@@ -284,7 +308,7 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     const message = "hello\n";
     const bytes = encoder.encode(message);
     for (const byte of bytes) {
-      const expr = apply(WriteOne, ChurchN(byte));
+      const expr = apply(WriteOne, BinN(byte));
       await evaluator.reduceAsync(expr);
     }
     const stdout = evaluator.readStdout(bytes.length);
@@ -301,7 +325,7 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
       const promise = evaluator.reduceAsync(expr);
       await evaluator.writeStdin(new Uint8Array([byte]));
       const result = await promise;
-      assertEquals(UnChurchNumber(result), BigInt(byte));
+      assertEquals(UnBinNumber(result), BigInt(byte));
     }
     const stdout = evaluator.readStdout(payload.length);
     assertEquals(stdout, payload);
@@ -319,7 +343,7 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
       );
       await evaluator.writeStdin(payload);
       const results = await Promise.all(pending);
-      const decoded = results.map((res) => Number(UnChurchNumber(res)));
+      const decoded = results.map((res) => Number(UnBinNumber(res)));
       assertEquals(
         decoded.slice().sort((a, b) => a - b),
         Array.from(payload).sort((a, b) => a - b),
@@ -351,7 +375,7 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
       assertEquals(writeResolved, false);
 
       const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
-      assertEquals(UnChurchNumber(readResult), 0n);
+      assertEquals(UnBinNumber(readResult), 0n);
       await extraWrite;
       assertEquals(writeResolved, true);
     } finally {
@@ -379,7 +403,7 @@ Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
       assertEquals(written, bytes.length);
       for (const byte of bytes) {
         const result = await evaluator.reduceAsync(apply(ReadOne, I));
-        assertEquals(UnChurchNumber(result), BigInt(byte));
+        assertEquals(UnBinNumber(result), BigInt(byte));
       }
     } finally {
       evaluator.terminate();
@@ -399,7 +423,7 @@ Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
         assert(snapshot.pending > 0);
         await evaluator.writeStdin(new Uint8Array([7]));
         const result = await pendingWork;
-        assertEquals(UnChurchNumber(result), 7n);
+        assertEquals(UnBinNumber(result), 7n);
         // After completion, pending should be zero
         assertEquals(evaluator.getTotalPending(), 0);
       } finally {

@@ -4,13 +4,15 @@
  * This module provides a native evaluator for SKI expressions that includes
  * optimized handling of numeric operations and Church numeral evaluation.
  *
+ * NOTE: Legacy Church-numeral support only. New code should use Bin instead.
+ *
  * @module
  */
 import type { SKITerminalSymbol } from "./terminal.ts";
 import type { SKIExpression } from "./expression.ts";
 
 /**
- * A terminal symbol (S, K, I) in the native representation
+ * A terminal symbol (S, K, I, ...) in the native representation
  */
 export interface NativeTerminal {
   kind: "terminal";
@@ -44,7 +46,7 @@ export interface NativeApplication {
 /**
  * The legal terms of the native representation.
  * This includes:
- * - Terminal symbols (S, K, I)
+ * - Terminal symbols (S, K, I, ...)
  * - Numeric literals
  * - The increment operation
  * - Applications

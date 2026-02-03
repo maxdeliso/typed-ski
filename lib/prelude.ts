@@ -8,17 +8,10 @@ import type { TripCObject } from "./compiler/objectFile.ts";
 
 export const PRELUDE_SOURCE = `module Prelude
 
-export Nat
 export Bool
 export id
-export zero
-export succ
 export true
 export false
-export add
-export mul
-export isZero
-export eq
 export pair
 export fst
 export snd
@@ -26,10 +19,6 @@ export if
 export not
 export and
 export or
-export pred
-export sub
-export lte
-export gte
 export readOne
 export writeOne
 export List
@@ -56,41 +45,33 @@ export foldl
 export takeWhile
 export dropWhile
 export span
-
-type Nat = #X -> (X -> X) -> X -> X
+export Bin
+export BZ
+export B0
+export B1
+export incBin
+export addBin
+export mulBin
+export subBin
+export predBin
+export isZeroBin
+export eqBin
+export lteBin
+export gteBin
 type Bool = #B -> B -> B -> B
 type List = #A -> #R -> R -> (A -> R -> R) -> R
 data Pair A B = MkPair A B
 data Result E T = Err E | Ok T
-data ParseError = MkParseError Nat (List Nat)
+data Bin = BZ | B0 Bin | B1 Bin
+data ParseError = MkParseError Bin (List Bin)
 data Maybe A = None | Some A
-type Parser = #A -> List Nat -> Result ParseError (Pair A (List Nat))
+type Parser = #A -> List Bin -> Result ParseError (Pair A (List Bin))
 
 poly id : #a->a->a = #a => \\x:a => x
-
-poly zero = #X => \\s : X -> X => \\z : X => z
-
-poly succ = \\n : Nat =>
-  #a => \\s : a -> a => \\z : a =>
-    s (n [a] s z)
 
 poly true = #B => \\t : B => \\f : B => t
 poly false = #B => \\t : B => \\f : B => f
 
-poly add = \\m : Nat => \\n : Nat =>
-  #a => \\s : a -> a => \\z : a =>
-    m [a] s (n [a] s z)
-
-poly mul = \\m : Nat => \\n : Nat =>
-  #a => \\s : a -> a => \\z : a =>
-    m [a] (n [a] s) z
-
-poly isZero = \\n : Nat =>
-  n [Bool] (\\x : Bool => false) true
-
-poly eq = \\m : Nat => \\n : Nat =>
-  #X => \\s : X -> X => \\z : X =>
-    m [X] (\\x : X => n [X] (\\y : X => x) z) (n [X] (\\x : X => z) z)
 
 poly pair = #A => #B => \\a : A => \\b : B => #Y => \\k : A -> B -> Y => k a b
 
@@ -109,24 +90,7 @@ poly and = \\a : Bool => \\b : Bool =>
 poly or = \\a : Bool => \\b : Bool =>
   a [Bool] true b
 
-poly if = #A => \\b : Bool => \\t : Nat -> A => \\f : Nat -> A => b [Nat -> A] t f 0
-
-poly pred = \\n : Nat =>
-  fst [Nat] [Nat]
-    ( n [#Y -> (Nat -> Nat -> Y) -> Y]
-        ( \\p : #Y -> (Nat -> Nat -> Y) -> Y =>
-            pair [Nat] [Nat]
-              (snd [Nat] [Nat] p)
-              (succ (snd [Nat] [Nat] p))
-        )
-        (pair [Nat] [Nat] zero zero)
-    )
-
-poly sub = \\a : Nat => \\b : Nat => b [Nat] pred a
-
-poly lte = \\a : Nat => \\b : Nat => isZero (sub a b)
-
-poly gte = \\a : Nat => \\b : Nat => lte b a
+poly if = #A => \\b : Bool => \\t : Bin -> A => \\f : Bin -> A => b [Bin -> A] t f 0
 
 poly nil = #A => #R => \\n : R => \\c : (A -> List -> R) => n
 
@@ -159,25 +123,111 @@ poly rec takeWhile = #A => \\p : A -> Bool => \\l : List A =>
   matchList [A] [List A] l (nil [A])
     (\\h : A => \\t : List A =>
       if [List A] (p h)
-        (\\u : Nat => cons [A] h (takeWhile [A] p t))
-        (\\u : Nat => nil [A]))
+        (\\u : Bin => cons [A] h (takeWhile [A] p t))
+        (\\u : Bin => nil [A]))
 
 poly rec dropWhile = #A => \\p : A -> Bool => \\l : List A =>
   matchList [A] [List A] l (nil [A])
     (\\h : A => \\t : List A =>
       if [List A] (p h)
-        (\\u : Nat => dropWhile [A] p t)
-        (\\u : Nat => cons [A] h t))
+        (\\u : Bin => dropWhile [A] p t)
+        (\\u : Bin => cons [A] h t))
 
 poly rec span = #A => \\p : A -> Bool => \\l : List A =>
   matchList [A] [Pair (List A) (List A)] l
     (MkPair [List A] [List A] (nil [A]) (nil [A]))
     (\\h : A => \\t : List A =>
       if [Pair (List A) (List A)] (p h)
-        (\\u : Nat =>
+        (\\u : Bin =>
            let res = span [A] p t in
            MkPair [List A] [List A] (cons [A] h (fst [List A] [List A] res)) (snd [List A] [List A] res))
-        (\\u : Nat => MkPair [List A] [List A] (nil [A]) l))
+        (\\u : Bin => MkPair [List A] [List A] (nil [A]) l))
+
+
+poly rec isZeroBin = \\b : Bin =>
+  match b [Bool] {
+    | BZ => true
+    | B0 rest => isZeroBin rest
+    | B1 _ => false
+  }
+
+poly rec incBin = \\b : Bin =>
+  match b [Bin] {
+    | BZ => B1 BZ
+    | B0 rest => B1 rest
+    | B1 rest => B0 (incBin rest)
+  }
+
+poly rec addBin = \\a : Bin => \\b : Bin =>
+  match a [Bin] {
+    | BZ => b
+    | B0 pa =>
+        match b [Bin] {
+          | BZ => a
+          | B0 pb => B0 (addBin pa pb)
+          | B1 pb => B1 (addBin pa pb)
+        }
+    | B1 pa =>
+        match b [Bin] {
+          | BZ => a
+          | B0 pb => B1 (addBin pa pb)
+          | B1 pb => B0 (incBin (addBin pa pb))
+        }
+  }
+
+poly rec mulBin = \\a : Bin => \\b : Bin =>
+  match b [Bin] {
+    | BZ => BZ
+    | B0 pb => B0 (mulBin a pb)
+    | B1 pb => addBin a (B0 (mulBin a pb))
+  }
+
+poly rec predBin = \\b : Bin =>
+  match b [Bin] {
+    | BZ => BZ
+    | B0 rest => B1 (predBin rest)
+    | B1 rest => B0 rest
+  }
+
+poly rec subBin = \\a : Bin => \\b : Bin =>
+  match b [Bin] {
+    | BZ => a
+    | B0 pb =>
+        match a [Bin] {
+          | BZ => BZ
+          | B0 pa => B0 (subBin pa pb)
+          | B1 pa => B1 (subBin pa pb)
+        }
+    | B1 pb =>
+        match a [Bin] {
+          | BZ => BZ
+          | B0 pa => B1 (subBin (predBin pa) pb)
+          | B1 pa => B0 (subBin pa pb)
+        }
+  }
+
+poly rec eqBin = \\a : Bin => \\b : Bin =>
+  match a [Bool] {
+    | BZ => isZeroBin b
+    | B0 pa =>
+        match b [Bool] {
+          | BZ => false
+          | B0 pb => eqBin pa pb
+          | B1 _ => false
+        }
+    | B1 pa =>
+        match b [Bool] {
+          | BZ => false
+          | B0 _ => false
+          | B1 pb => eqBin pa pb
+        }
+  }
+
+poly lteBin = \\a : Bin => \\b : Bin =>
+  isZeroBin (subBin a b)
+
+poly gteBin = \\a : Bin => \\b : Bin =>
+  lteBin b a
 
 poly error = #A =>
   (\\x : A => x) (\\x : A => x)

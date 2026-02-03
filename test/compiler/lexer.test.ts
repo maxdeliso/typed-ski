@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
+import { getNatObject } from "../../lib/nat.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { type SKIExpression, toSKIKey } from "../../lib/ski/expression.ts";
@@ -39,35 +40,46 @@ const lexerSourcePath = join(
 // Cache compiled objects
 let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;
 let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
+let natObject: Awaited<ReturnType<typeof getNatObject>> | null = null;
 
 async function getLexerObject() {
   if (!lexerObject) {
-    // Load the pre-compiled lexer object file, or generate it if missing (CI).
-    // The repo may not include build artifacts like `lexer.tripc`.
+    // Load the pre-compiled lexer object file, or generate it if missing/outdated (CI).
+    let needsCompile = false;
     try {
-      await Deno.stat(lexerObjectPath);
+      const [srcStat, objStat] = await Promise.all([
+        Deno.stat(lexerSourcePath),
+        Deno.stat(lexerObjectPath),
+      ]);
+      if (!srcStat.mtime || !objStat.mtime || objStat.mtime < srcStat.mtime) {
+        needsCompile = true;
+      }
     } catch (e) {
       if (e instanceof Deno.errors.NotFound) {
-        const compileCommand = new Deno.Command(Deno.execPath(), {
-          args: [
-            "run",
-            "--allow-read",
-            "--allow-write",
-            join(__dirname, "..", "..", "bin", "tripc.ts"),
-            lexerSourcePath,
-            lexerObjectPath,
-          ],
-        });
-
-        const { code, stderr } = await compileCommand.output();
-        if (code !== 0) {
-          const errorMsg = new TextDecoder().decode(stderr);
-          throw new Error(
-            `Failed to compile lexer module (${lexerSourcePath}) into (${lexerObjectPath}): exit code ${code}\n${errorMsg}`,
-          );
-        }
+        needsCompile = true;
       } else {
         throw e;
+      }
+    }
+
+    if (needsCompile) {
+      const compileCommand = new Deno.Command(Deno.execPath(), {
+        args: [
+          "run",
+          "--allow-read",
+          "--allow-write",
+          join(__dirname, "..", "..", "bin", "tripc.ts"),
+          lexerSourcePath,
+          lexerObjectPath,
+        ],
+      });
+
+      const { code, stderr } = await compileCommand.output();
+      if (code !== 0) {
+        const errorMsg = new TextDecoder().decode(stderr);
+        throw new Error(
+          `Failed to compile lexer module (${lexerSourcePath}) into (${lexerObjectPath}): exit code ${code}\n${errorMsg}`,
+        );
       }
     }
 
@@ -82,6 +94,13 @@ async function getPreludeObjectCached() {
     preludeObject = await getPreludeObject();
   }
   return preludeObject;
+}
+
+async function getNatObjectCached() {
+  if (!natObject) {
+    natObject = await getNatObject();
+  }
+  return natObject;
 }
 
 // Helper to compile a test program from an input file using CLI compiler
@@ -132,12 +151,14 @@ async function compileAndValidateTestProgram(
   // Step 2: Link modules
   const lexerObj = await getLexerObject();
   const preludeObj = await getPreludeObjectCached();
+  const natObj = await getNatObjectCached();
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObj },
+    { name: "Nat", object: natObj },
     { name: "Lexer", object: lexerObj },
     { name: "Test", object: testObj },
-  ], true);
+  ]);
 
   expect(skiExpression).to.be.a("string");
   expect(skiExpression.length).to.be.greaterThan(0);
@@ -183,17 +204,11 @@ Deno.test("Lexer unit tests - bottom up", async (t) => {
         // Create test source for this character code
         const testSource = `module Test
 
-import Lexer isSpace
-import Prelude eq
-import Prelude or
-import Prelude true
-import Prelude false
-import Prelude Nat
-import Prelude Bool
+import Lexer isSpaceBin
 
 export main
 
-poly main = isSpace ${charCode}
+poly main = isSpaceBin ${charCode}
 `;
 
         try {
@@ -230,12 +245,14 @@ poly main = isSpace ${charCode}
 
             const testContent = await Deno.readTextFile(testObjectFilePath);
             const testObj = deserializeTripCObject(testContent);
+            const natObj = await getNatObjectCached();
 
             const skiExpression = linkModules([
               { name: "Prelude", object: preludeObj },
+              { name: "Nat", object: natObj },
               { name: "Lexer", object: lexerObj },
               { name: "Test", object: testObj },
-            ], true); // Enable verbose mode to debug type resolution
+            ]);
 
             // Parse and evaluate
             const skiExpr = parseSKI(skiExpression);
@@ -278,22 +295,21 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
     const testObj = await compileTestProgram(testFileName);
     const lexerObj = await getLexerObject();
     const preludeObj = await getPreludeObjectCached();
+    const natObj = await getNatObjectCached();
 
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObj },
+      { name: "Nat", object: natObj },
       { name: "Lexer", object: lexerObj },
       { name: "Test", object: testObj },
-    ], true);
+    ]);
 
     const skiExpr = parseSKI(skiExpression);
     const key = toSKIKey(skiExpr);
-
-    console.log("Evaluating program with ", key.length, " terminals");
+    assert.isAtLeast(key.length, 1, "expected non-empty SKI key");
 
     const nf = arenaEvaluator.reduce(skiExpr);
     const tokenCount = UnChurchNumber(nf);
-
-    console.log(`Token count: ${tokenCount}`);
 
     assert.equal(tokenCount, 2n);
   } finally {

@@ -8,7 +8,6 @@ import Prelude cons
 import Prelude matchList
 import Prelude head
 import Prelude tail
-import Prelude dropWhile
 import Prelude if
 import Prelude isZero
 import Prelude and
@@ -319,12 +318,14 @@ poly rec consumeDigits = \acc : List Nat => \input : List Nat =>
     )
 
 poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
-  let clean = dropWhile [Nat] isSpace input in
-
-  matchList [Nat] [Result ParseError (List Token)] clean
+  matchList [Nat] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
     (\c_church : Nat => \cs : List Nat =>
       let c = toSNat c_church in
+
+      if [Result ParseError (List Token)] (isSpaceSNat c)
+        (\u : Nat => tokenizeAcc cs accRev)
+        (\u : Nat =>
 
       if [Result ParseError (List Token)]
         (and (snatEqChar c '-') (matchList [Nat] [Bool] cs false (\h : Nat => \t : List Nat => snatEqChar (toSNat '>') h)))
@@ -347,7 +348,7 @@ poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
         | None =>
             if [Result ParseError (List Token)] (isAlphaSNat c)
               (\u : Nat =>
-                match (consumeIdent (nil [Nat]) clean) [Result ParseError (List Token)] {
+                match (consumeIdent (cons [Nat] c_church (nil [Nat])) cs) [Result ParseError (List Token)] {
                   | MkPair taken remaining =>
                       let tok =
                         if [Token] (isKeywordPoly taken)
@@ -360,7 +361,7 @@ poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
               (\u : Nat =>
                 if [Result ParseError (List Token)] (isDigitSNat c)
                   (\u : Nat =>
-                    match (consumeDigits (nil [Nat]) clean) [Result ParseError (List Token)] {
+                    match (consumeDigits (cons [Nat] c_church (nil [Nat])) cs) [Result ParseError (List Token)] {
                       | MkPair taken remaining =>
                           let n = fromSNat (snatFromDigitList taken) in
                           tokenizeAcc remaining (cons [Token] (T_Nat n) accRev)
@@ -373,7 +374,7 @@ poly rec tokenizeAcc = \input : List Nat => \accRev : List Token =>
                   ))
       }
 
-      )))
+      ))))
 
 poly tokenize = \input : List Nat =>
   match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {
@@ -383,3 +384,4 @@ poly tokenize = \input : List Nat =>
         Ok [ParseError] [List Token]
           (append [Token] toks (cons [Token] T_EOF (nil [Token])))
   }
+

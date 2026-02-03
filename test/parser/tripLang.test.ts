@@ -299,7 +299,6 @@ data Token =
       { name: "Prelude", ref: "matchList" },
       { name: "Prelude", ref: "head" },
       { name: "Prelude", ref: "tail" },
-      { name: "Prelude", ref: "dropWhile" },
       { name: "Prelude", ref: "if" },
       { name: "Prelude", ref: "isZero" },
       { name: "Prelude", ref: "and" },

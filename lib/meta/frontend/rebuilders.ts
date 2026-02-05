@@ -19,7 +19,7 @@ import { createTypedApplication } from "../../types/typedLambda.ts";
 import type { UntypedLambda } from "../../terms/lambda.ts";
 import { createApplication } from "../../terms/lambda.ts";
 import { isNonTerminalNode } from "./predicates.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 
 export function rebuildNonTerminal<T extends { kind: string }>(
   n: T & { kind: "non-terminal"; lft: T; rgt: T },

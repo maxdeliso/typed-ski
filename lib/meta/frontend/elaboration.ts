@@ -16,7 +16,7 @@ import {
   type SystemFTerm,
 } from "../../terms/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 
 export function elaborateTerms(
   parsed: TripLangProgram,

@@ -26,50 +26,7 @@ import { expandDataDefinitions } from "./data.ts";
 import { emptySystemFContext, typecheckSystemF } from "../../types/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
 import { typecheckTypedLambda } from "../../types/typedLambda.ts";
-import { unparseTerm } from "./unparse.ts";
-
-export class CompilationError extends Error {
-  constructor(
-    message: string,
-    public readonly stage:
-      | "parse"
-      | "index"
-      | "elaborate"
-      | "resolve"
-      | "typecheck",
-    public override readonly cause?: unknown,
-  ) {
-    let causeStr = "";
-    if (cause && typeof cause === "object") {
-      const causeObj = cause as Record<string, unknown>;
-      if (
-        "term" in causeObj && causeObj.term && typeof causeObj.term === "object"
-      ) {
-        causeStr = `\nTerm: ${unparseTerm(causeObj.term as TripLangTerm)}`;
-      }
-      if ("error" in causeObj) {
-        causeStr += `\nError: ${String(causeObj.error)}`;
-      }
-      if ("unresolvedTerms" in causeObj || "unresolvedTypes" in causeObj) {
-        causeStr += "\nUnresolved references:";
-        if ("unresolvedTerms" in causeObj) {
-          causeStr += `\nTerms: ${
-            JSON.stringify(causeObj.unresolvedTerms, null, 2)
-          }`;
-        }
-        if ("unresolvedTypes" in causeObj) {
-          causeStr += `\nTypes: ${
-            JSON.stringify(causeObj.unresolvedTypes, null, 2)
-          }`;
-        }
-      }
-    } else if (cause !== undefined) {
-      causeStr = `\nCause: ${JSON.stringify(cause)}`;
-    }
-    super(message + causeStr);
-    this.name = "CompilationError";
-  }
-}
+import { CompilationError } from "./errors.ts";
 
 export type ParsedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;

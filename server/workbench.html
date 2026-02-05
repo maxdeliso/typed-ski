@@ -72,7 +72,7 @@
                   max="1000000"
                 >
               </label>
-              <label id="batchSizeLabel" style="align-items: center">
+              <label id="batchSizeLabel">
                 Parallelism (max in-flight):
                 <input
                   type="number"
@@ -80,7 +80,6 @@
                   value="1024"
                   min="1"
                   max="65536"
-                  style="width: 90px; margin-left: 5px; padding: 10px 15px"
                 >
               </label>
             </div>
@@ -143,7 +142,6 @@
                 id="webglMaxNodesInput"
                 min="100"
                 max="5000000"
-                style="width: 110px"
               >
             </label>
             <label>
@@ -154,7 +152,6 @@
                 value="16"
                 min="2"
                 max="128"
-                style="width: 90px"
               >
             </label>
           </div>
@@ -193,7 +190,7 @@
     </div>
 
     <div class="loading-overlay hidden" id="loadingOverlay">
-      <div style="text-align: center">
+      <div class="loading-overlay-content">
         <div class="spinner"></div>
         <div class="loading-text">Processing...</div>
       </div>

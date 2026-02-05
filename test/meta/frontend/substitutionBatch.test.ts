@@ -17,7 +17,7 @@ import {
   substituteTermHygienicBatch,
   substituteTripLangTermDirectBatch,
 } from "../../../lib/meta/frontend/substitution.ts";
-import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
+import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import {
   mkSystemFAbs,
   mkSystemFTAbs,

@@ -16,7 +16,7 @@ import {
 } from "../../terms/lambda.ts";
 import { eraseTypedLambda } from "../../types/typedLambda.ts";
 import type { TripLangTerm } from "../trip.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 import { freeTermVars, fresh } from "./substitution.ts";
 
 function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {

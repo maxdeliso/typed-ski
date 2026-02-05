@@ -13,7 +13,7 @@ import type {
   TripLangTerm,
   TypeDefinition,
 } from "../trip.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 import {
   arrow,
   arrows,

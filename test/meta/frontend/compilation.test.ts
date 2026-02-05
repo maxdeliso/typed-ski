@@ -1,8 +1,6 @@
 import { assertEquals, assertThrows } from "std/assert";
-import {
-  CompilationError,
-  compile,
-} from "../../../lib/meta/frontend/compilation.ts";
+import { compile } from "../../../lib/meta/frontend/compilation.ts";
+import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 
 Deno.test("Module validation", async (t) => {
   await t.step(

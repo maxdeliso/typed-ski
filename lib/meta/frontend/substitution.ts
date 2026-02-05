@@ -22,7 +22,7 @@ import type {
 import { lower, termLevel } from "./termLevel.ts";
 import { extractDefinitionValue } from "./symbolTable.ts";
 import { externalReferences } from "./externalReferences.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 import { isNatLiteralIdentifier, NAT_TYPE_NAME } from "../../consts/nat.ts";
 
 /**

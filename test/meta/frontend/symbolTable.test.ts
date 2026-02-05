@@ -7,7 +7,7 @@ import {
   type TypedDefinition,
   type TypeDefinition,
 } from "../../../lib/index.ts";
-import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
+import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 
 Deno.test("Symbol Table", async (t) => {

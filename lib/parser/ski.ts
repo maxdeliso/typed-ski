@@ -36,8 +36,8 @@ const TERMINAL_ALIASES: Record<string, SKITerminalSymbol> = {
 function normalizeSymbol(tok: string | null): SKITerminalSymbol | null {
   if (tok === null) return null;
   const upper = tok.toUpperCase();
-  if (upper in TERMINAL_ALIASES) return TERMINAL_ALIASES[upper];
-  if (tok in TERMINAL_ALIASES) return TERMINAL_ALIASES[tok];
+  if (upper in TERMINAL_ALIASES) return TERMINAL_ALIASES[upper]!;
+  if (tok in TERMINAL_ALIASES) return TERMINAL_ALIASES[tok]!;
   return null;
 }
 

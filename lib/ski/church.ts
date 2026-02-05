@@ -10,13 +10,51 @@
 import { B, False, One, Succ, True, Zero } from "../consts/combinators.ts";
 import { apply, applyMany, type SKIExpression } from "./expression.ts";
 import { arenaEvaluator } from "../evaluator/skiEvaluator.ts";
-import { unChurchNumber as unChurchNumberNative } from "./native.ts";
+import { SKITerminalSymbol } from "./terminal.ts";
 
 // Memoization cache for optimized Church numerals
 const churchCache = new Map<bigint, SKIExpression>();
 
 // Pre-compute Church numeral 2 for efficiency
 let ChurchTwo: SKIExpression | null = null;
+
+type RuntimeValue = bigint | RuntimeFn;
+type RuntimeFn = (arg: RuntimeValue) => RuntimeValue;
+
+const asRuntimeFn = (value: RuntimeValue): RuntimeFn => {
+  if (typeof value !== "function") {
+    throw new Error("Expected function-valued SKI term");
+  }
+  return value;
+};
+
+const unsupportedIo: RuntimeFn = () => {
+  throw new Error("Cannot decode Church numerals for IO expressions");
+};
+
+const runtimeCombinators: Record<SKITerminalSymbol, RuntimeValue> = {
+  [SKITerminalSymbol.S]: (f) => (g) => (x) =>
+    asRuntimeFn(asRuntimeFn(f)(x))(asRuntimeFn(g)(x)),
+  [SKITerminalSymbol.K]: (x) => (_) => x,
+  [SKITerminalSymbol.I]: (x) => x,
+  [SKITerminalSymbol.B]: (f) => (g) => (x) => asRuntimeFn(f)(asRuntimeFn(g)(x)),
+  [SKITerminalSymbol.C]: (f) => (g) => (x) => asRuntimeFn(asRuntimeFn(f)(x))(g),
+  [SKITerminalSymbol.SPrime]: (w) => (x) => (y) => (z) =>
+    asRuntimeFn(asRuntimeFn(w)(asRuntimeFn(x)(z)))(asRuntimeFn(y)(z)),
+  [SKITerminalSymbol.BPrime]: (w) => (x) => (y) => (z) =>
+    asRuntimeFn(asRuntimeFn(w)(x))(asRuntimeFn(y)(z)),
+  [SKITerminalSymbol.CPrime]: (w) => (x) => (y) => (z) =>
+    asRuntimeFn(asRuntimeFn(w)(asRuntimeFn(x)(z)))(y),
+  [SKITerminalSymbol.ReadOne]: unsupportedIo,
+  [SKITerminalSymbol.WriteOne]: unsupportedIo,
+};
+
+const evalRuntime = (expr: SKIExpression): RuntimeValue => {
+  if (expr.kind === "terminal") {
+    return runtimeCombinators[expr.sym];
+  }
+  return asRuntimeFn(evalRuntime(expr.lft))(evalRuntime(expr.rgt));
+};
 
 const toBigInt = (value: number | bigint): bigint => {
   if (typeof value === "bigint") return value;
@@ -273,13 +311,27 @@ export const ChurchN = (value: number | bigint): SKIExpression => {
 };
 
 /**
- * Evaluates a Church numeral SKI expression to a JavaScript bigint using the optimized native path.
+ * Evaluates a Church numeral SKI expression to a JavaScript bigint.
  *
  * Useful for testing numeric results of SKI computations via Church encoding.
  * Returns bigint to support unbounded natural numbers.
  */
 export const UnChurchNumber = (exp: SKIExpression): bigint => {
-  return unChurchNumberNative(exp);
+  const normalized = arenaEvaluator.reduce(exp) as SKIExpression;
+  try {
+    const church = asRuntimeFn(evalRuntime(normalized));
+    const inc: RuntimeFn = (value) => {
+      if (typeof value !== "bigint") {
+        throw new Error("Expected bigint while decoding Church numeral");
+      }
+      return value + 1n;
+    };
+    const appliedInc = asRuntimeFn(church(inc));
+    const result = appliedInc(0n);
+    return typeof result === "bigint" ? result : 0n;
+  } catch {
+    return 0n;
+  }
 };
 
 /**

@@ -63,14 +63,14 @@ export interface TypedDefinition {
 }
 
 /** An untyped lambda term definition. */
-export interface UntypedDefinition {
+interface UntypedDefinition {
   kind: "untyped";
   name: string;
   term: UntypedLambda;
 }
 
 /** An SKI combinator term definition. */
-export interface CombinatorDefinition {
+interface CombinatorDefinition {
   kind: "combinator";
   name: string;
   term: SKIExpression;
@@ -83,7 +83,7 @@ export interface TypeDefinition {
   type: BaseType;
 }
 
-export interface DataConstructor {
+interface DataConstructor {
   name: string;
   fields: BaseType[];
 }

@@ -15,11 +15,11 @@ import {
 import { B, I, S } from "./terminal.ts";
 
 // Scott-encoded constructors (type erasure applied), in SKI form.
-export const BZ = parseSKI("((B((BI)K))K)");
-export const B0 = parseSKI(
+const BZ = parseSKI("((B((BI)K))K)");
+const B0 = parseSKI(
   "(((P(P(PS)))(K(K((BI)K))))((B((B((BI)K))K))K))",
 );
-export const B1 = parseSKI("(((P(P(PS)))(K(K(KI))))((B((B((BI)K))K))K))");
+const B1 = parseSKI("(((P(P(PS)))(K(K(KI))))((B((B((BI)K))K))K))");
 
 /**
  * Construct a Bin value as an SKI expression (little-endian bits).

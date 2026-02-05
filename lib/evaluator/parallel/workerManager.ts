@@ -6,29 +6,29 @@
  * @module
  */
 
-export type WorkerConnectCompleteMessage = {
+type WorkerConnectCompleteMessage = {
   type: "connectArenaComplete";
   error?: string;
 };
 
-export type WorkerReadyMessage = {
+type WorkerReadyMessage = {
   type: "ready";
 };
 
-export type WorkerResultMessage = {
+type WorkerResultMessage = {
   type: "result";
   id: number;
   arenaNodeId: number;
 };
 
-export type WorkerErrorMessage = {
+type WorkerErrorMessage = {
   type: "error";
   id?: number;
   workId?: number;
   error?: string;
 };
 
-export type WorkerToMainMessage =
+type WorkerToMainMessage =
   | WorkerReadyMessage
   | WorkerConnectCompleteMessage
   | WorkerResultMessage

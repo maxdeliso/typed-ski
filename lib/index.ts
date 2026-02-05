@@ -22,10 +22,7 @@ export { arenaEvaluator } from "./evaluator/skiEvaluator.ts";
 
 // WebAssembly arena evaluator exports
 /** Creates a WebAssembly-based arena evaluator (release build). */
-export {
-  createArenaEvaluator,
-  createArenaEvaluatorRelease,
-} from "./evaluator/arenaEvaluator.ts";
+export { createArenaEvaluator } from "./evaluator/arenaEvaluator.ts";
 
 // SKI expression exports
 export {

@@ -60,7 +60,7 @@ function parseArgs(): CLIArgs {
   let maxSteps: number | undefined = undefined;
   if (maxStepsIndex >= 0 && maxStepsIndex < args.length - 1) {
     const maxStepsValue = args[maxStepsIndex + 1];
-    const parsed = Number.parseInt(maxStepsValue, 10);
+    const parsed = Number.parseInt(maxStepsValue!, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       console.error(
         `Error: --max-steps must be a positive integer; received '${maxStepsValue}'`,
@@ -82,7 +82,7 @@ function parseArgs(): CLIArgs {
   let workers: number | undefined = undefined;
   if (workersIndex >= 0 && workersIndex < args.length - 1) {
     const workersValue = args[workersIndex + 1];
-    const parsed = Number.parseInt(workersValue, 10);
+    const parsed = Number.parseInt(workersValue!, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       console.error(
         `Error: --workers must be a positive integer; received '${workersValue}'`,
@@ -108,13 +108,13 @@ function parseArgs(): CLIArgs {
     Deno.exit(1);
   }
 
-  const symbolCount = Number.parseInt(nonFlagArgs[0], 10);
+  const symbolCount = Number.parseInt(nonFlagArgs[0]!, 10);
 
   if (!Number.isFinite(symbolCount) || symbolCount <= 0) {
     console.error(
-      `Error: symbolCount must be a positive integer; received '${
-        nonFlagArgs[0]
-      }'`,
+      `Error: symbolCount must be a positive integer; received '${nonFlagArgs[
+        0
+      ]!}'`,
     );
     Deno.exit(1);
   }
@@ -409,7 +409,7 @@ export async function* generateEvaluationForest(
     const allArenaIds: number[] = [];
     logProgress(`converting expressions to arena IDs...`);
     for (let i = 0; i < total; i++) {
-      allArenaIds.push(evaluator.toArena(allExprs[i]));
+      allArenaIds.push(evaluator.toArena(allExprs[i]!));
     }
     logProgress(
       `converted ${total} expressions to arena IDs (elapsed ${elapsedSec()}s)`,
@@ -453,7 +453,7 @@ export async function* generateEvaluationForest(
 
         const base = evaluateBatchParallel(
           evaluator,
-          allArenaIds[exprIndex],
+          allArenaIds[exprIndex]!,
           maxSteps,
           (stepsTaken) => {
             const s = slots[slot];
@@ -466,7 +466,7 @@ export async function* generateEvaluationForest(
         const promise = base.then((result) => ({
           slot,
           exprIndex,
-          result: { ...result, expr: unparseSKI(allExprs[exprIndex]) },
+          result: { ...result, expr: unparseSKI(allExprs[exprIndex]!) },
         }));
         inFlights.push({ slot, exprIndex, promise });
       };

@@ -8,7 +8,7 @@ import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 import { createParserState } from "../../lib/parser/parserState.ts";
 
 import { mkTypedAbs, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
-import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
+import { makeTypedBinNumeral } from "../../lib/types/binLiteral.ts";
 import {
   arrow,
   arrows,
@@ -318,7 +318,7 @@ Deno.test("Parser Tests", async (t) => {
         const src = "42";
         const [lit, term] = parseTypedLambda(src);
         expect(lit).to.equal("42");
-        expect(typedTermsLitEq(term, makeTypedChurchNumeral(42n))).to.equal(
+        expect(typedTermsLitEq(term, makeTypedBinNumeral(42n))).to.equal(
           true,
         );
       });

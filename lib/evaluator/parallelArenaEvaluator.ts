@@ -12,6 +12,7 @@ import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
+import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";
 import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
 import { type ArenaRingStatsSnapshot, RingStats } from "./io/ringStats.ts";
@@ -25,23 +26,6 @@ import { WorkerManager } from "./parallel/workerManager.ts";
 // Re-export for external use
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
 export type { ArenaRingStatsSnapshot } from "./io/ringStats.ts";
-
-/**
- * Cancellable sleep function that returns both the promise and a cleanup function.
- */
-function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  const promise = new Promise<void>((r) => {
-    timeoutId = setTimeout(r, ms);
-  });
-  const cancel = () => {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-  };
-  return { promise, cancel };
-}
 
 export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   implements Evaluator {

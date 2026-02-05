@@ -57,6 +57,7 @@ Deno.test("RequestTracker - pending and completed tracking", async () => {
 
   assertEquals(tracker.isPending(reqId), true);
   assertEquals(tracker.getTotalPending(), 1);
+  assertEquals(tracker.getTotalCompleted(), 0);
 
   tracker.markCompleted(reqId, 42);
 
@@ -64,6 +65,7 @@ Deno.test("RequestTracker - pending and completed tracking", async () => {
   assertEquals(resolvedValue, 42);
   assertEquals(tracker.isPending(reqId), false);
   assertEquals(tracker.getTotalPending(), 0);
+  assertEquals(tracker.getTotalCompleted(), 1);
 });
 
 Deno.test("RequestTracker - stashed completions", () => {
@@ -73,6 +75,7 @@ Deno.test("RequestTracker - stashed completions", () => {
 
   // Complete before pending (race condition)
   tracker.markCompleted(reqId, 99);
+  assertEquals(tracker.getTotalCompleted(), 1);
 
   // Should be stashed
   const stashed = tracker.getStashedCompletion(reqId);
@@ -85,6 +88,8 @@ Deno.test("RequestTracker - stashed completions", () => {
   }, () => {});
 
   assertEquals(resolvedValue, 99);
+  // Completion count tracks completion events, not stash-map size.
+  assertEquals(tracker.getTotalCompleted(), 1);
 });
 
 Deno.test("RequestTracker - resubmission counting", () => {
@@ -128,6 +133,23 @@ Deno.test("RequestTracker - abort all", () => {
   assertEquals(rejected1, true);
   assertEquals(rejected2, true);
   assertEquals(tracker.getTotalPending(), 0);
+});
+
+Deno.test("RequestTracker - completed counter tracks successful completions only", () => {
+  const tracker = new RequestTracker();
+
+  const reqId1 = tracker.createRequest(1);
+  const reqId2 = tracker.createRequest(1);
+
+  tracker.markPending(reqId1, () => {}, () => {});
+  tracker.markPending(reqId2, () => {}, () => {});
+
+  tracker.markCompleted(reqId1, 1);
+  assertEquals(tracker.getTotalCompleted(), 1);
+
+  tracker.markError(reqId2, new Error("boom"));
+  // Errors should not increase the completion counter.
+  assertEquals(tracker.getTotalCompleted(), 1);
 });
 
 Deno.test("RequestTracker - pending counts per worker", () => {

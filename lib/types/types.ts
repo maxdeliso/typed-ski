@@ -19,13 +19,13 @@ export interface ForallType {
   body: BaseType;
 }
 
-export interface ArrowType {
+interface ArrowType {
   kind: "non-terminal";
   lft: BaseType;
   rgt: BaseType;
 }
 
-export interface TypeApplication {
+interface TypeApplication {
   kind: "type-app";
   fn: BaseType;
   arg: BaseType;

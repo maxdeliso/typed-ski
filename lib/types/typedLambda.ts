@@ -30,7 +30,7 @@ import {
  * The type is a.
  * The body of the expression is y.
  */
-export interface TypedLambdaAbs {
+interface TypedLambdaAbs {
   kind: "typed-lambda-abstraction";
   varName: string;
   ty: BaseType;
@@ -57,7 +57,7 @@ export type TypedLambda =
 /**
  * An application in the typed lambda calculus
  */
-export interface TypedLambdaApplication {
+interface TypedLambdaApplication {
   kind: "non-terminal";
   lft: TypedLambda;
   rgt: TypedLambda;
@@ -131,7 +131,7 @@ export const typecheckTypedLambda = (typedTerm: TypedLambda): BaseType => {
  * @param typedTerm a lambda term annotated with an input type
  * @returns the type of the entire term
  */
-export const typecheckGiven = (
+const typecheckGiven = (
   ctx: Context,
   typedTerm: TypedLambda,
 ): BaseType => {

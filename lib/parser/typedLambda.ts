@@ -36,7 +36,7 @@ import { parseChain } from "./chain.ts";
 import { parseArrowType, unparseType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
 import { ParseError } from "./parseError.ts";
-import { makeTypedChurchNumeral } from "../types/natLiteral.ts";
+import { makeTypedBinNumeral } from "../types/binLiteral.ts";
 import {
   BACKSLASH,
   COLON,
@@ -93,7 +93,7 @@ export function parseAtomicTypedLambda(
     return [`${LEFT_PAREN}${innerLit}${RIGHT_PAREN}`, innerTerm, stateAfterRP];
   } else if (isDigit(peeked)) {
     const [literal, value, nextState] = parseNumericLiteral(s);
-    return [literal, makeTypedChurchNumeral(value), nextState];
+    return [literal, makeTypedBinNumeral(value), nextState];
   } else {
     const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkVar(varLit), stateAfterVar];

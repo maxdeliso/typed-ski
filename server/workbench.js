@@ -13,30 +13,38 @@ class SimpleRandomSource {
   }
 }
 
+function mustGetElement(id) {
+  const element = document.getElementById(id);
+  if (!element) {
+    throw new Error(`Missing required DOM element: #${id}`);
+  }
+  return element;
+}
+
 // UI Elements
-const randomSizeInput = document.getElementById("randomSizeInput");
-const runBtn = document.getElementById("runBtn");
-const resetBtn = document.getElementById("resetBtn");
-const workerCountInput = document.getElementById("workerCountInput");
-const maxStepsInput = document.getElementById("maxStepsInput");
-const batchSizeInput = document.getElementById("batchSizeInput");
-const wasmStatus = document.getElementById("wasmStatus");
-const totalPending = document.getElementById("totalPending");
-const totalCompleted = document.getElementById("totalCompleted");
-const totalErrors = document.getElementById("totalErrors");
-const logOutput = document.getElementById("logOutput");
-const loadingOverlay = document.getElementById("loadingOverlay");
-const avgTime = document.getElementById("avgTime");
-const totalTime = document.getElementById("totalTime");
-const throughput = document.getElementById("throughput");
-const gearButton = document.getElementById("gearButton");
-const controlsContainer = document.getElementById("controlsContainer");
+const randomSizeInput = mustGetElement("randomSizeInput");
+const runBtn = mustGetElement("runBtn");
+const resetBtn = mustGetElement("resetBtn");
+const workerCountInput = mustGetElement("workerCountInput");
+const maxStepsInput = mustGetElement("maxStepsInput");
+const batchSizeInput = mustGetElement("batchSizeInput");
+const wasmStatus = mustGetElement("wasmStatus");
+const totalPending = mustGetElement("totalPending");
+const totalCompleted = mustGetElement("totalCompleted");
+const totalErrors = mustGetElement("totalErrors");
+const logOutput = mustGetElement("logOutput");
+const loadingOverlay = mustGetElement("loadingOverlay");
+const avgTime = mustGetElement("avgTime");
+const totalTime = mustGetElement("totalTime");
+const throughput = mustGetElement("throughput");
+const gearButton = mustGetElement("gearButton");
+const controlsContainer = mustGetElement("controlsContainer");
 
 // Tabs (Performance vs WebGL)
-const tabPerfBtn = document.getElementById("tabPerfBtn");
-const tabWebglBtn = document.getElementById("tabWebglBtn");
-const panelPerf = document.getElementById("panelPerf");
-const panelWebgl = document.getElementById("panelWebgl");
+const tabPerfBtn = mustGetElement("tabPerfBtn");
+const tabWebglBtn = mustGetElement("tabWebglBtn");
+const panelPerf = mustGetElement("panelPerf");
+const panelWebgl = mustGetElement("panelWebgl");
 
 // WebGL UI
 const forestCanvas = document.getElementById("forestCanvas");
@@ -64,6 +72,8 @@ let stats = {
 let webglActive = false;
 let webglDirty = false;
 let webglRebuildTimer = null;
+let panelResizeObserver = null;
+let workbenchTornDown = false;
 
 const webglViewer = forestCanvas
   ? initWebglForestViewer({
@@ -75,7 +85,7 @@ const webglViewer = forestCanvas
 
 // When the WebGL panel becomes visible, ensure the canvas has non-zero size before rendering.
 if (webglViewer && panelWebgl && typeof ResizeObserver !== "undefined") {
-  const observer = new ResizeObserver((entries) => {
+  panelResizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       if (!webglActive) continue;
       if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
@@ -88,7 +98,14 @@ if (webglViewer && panelWebgl && typeof ResizeObserver !== "undefined") {
       }
     }
   });
-  observer.observe(panelWebgl);
+  panelResizeObserver.observe(panelWebgl);
+}
+
+function clearWebglRebuildTimer() {
+  if (webglRebuildTimer) {
+    clearTimeout(webglRebuildTimer);
+    webglRebuildTimer = null;
+  }
 }
 
 function scheduleWebglRebuild() {
@@ -105,6 +122,38 @@ function scheduleWebglRebuild() {
       console.error(e);
     }
   }, 500);
+}
+
+function teardownWorkbench() {
+  if (workbenchTornDown) return;
+  workbenchTornDown = true;
+
+  continuousMode = false;
+  continuousRunning = false;
+  stopMemoryLogging();
+  clearWebglRebuildTimer();
+
+  if (panelResizeObserver) {
+    panelResizeObserver.disconnect();
+    panelResizeObserver = null;
+  }
+
+  if (evaluator) {
+    evaluator.onRequestQueued = undefined;
+    evaluator.onRequestCompleted = undefined;
+    evaluator.onRequestError = undefined;
+    evaluator.onRequestYield = undefined;
+    evaluator.terminate();
+    evaluator = null;
+  }
+
+  if (webglViewer) {
+    try {
+      webglViewer.destroy();
+    } catch (e) {
+      console.error(e);
+    }
+  }
 }
 
 function getPendingCountsSafe() {
@@ -417,53 +466,38 @@ async function loadWasm() {
       throw new Error("Worker count must be between 1 and 256");
     }
 
-    const originalConcurrency = navigator.hardwareConcurrency;
-    Object.defineProperty(navigator, "hardwareConcurrency", {
-      value: workerCount,
-      writable: false,
-      configurable: true,
-    });
-
-    try {
-      evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
-      evaluator.onRequestQueued = (
-        _reqId,
-        _workerIndex,
-        _expr,
-      ) => {
-        markUiDirty({ pending: true });
-      };
-      evaluator.onRequestYield = (
-        reqId,
-        _workerIndex,
-        _expr,
-        suspensionNodeId,
-        resubmitCount,
-      ) => {
-        addLog(
-          `[RESUBMIT] Requeued req ${reqId} suspension ${suspensionNodeId} (resubmit #${resubmitCount})`,
-        );
-        markUiDirty({ pending: true });
-      };
-      evaluator.onRequestError = (
-        reqId,
-        _workerIndex,
-        _expr,
-        errorMessage,
-      ) => {
-        // Log errors immediately when they occur (before promise rejection)
-        // Force logging even in continuous mode for critical errors
-        addLog(`[ERROR] Request ${reqId}: ${errorMessage}`, true);
-        markUiDirty({ pending: true });
-      };
-      startMemoryLogging(evaluator);
-    } finally {
-      Object.defineProperty(navigator, "hardwareConcurrency", {
-        value: originalConcurrency,
-        writable: false,
-        configurable: true,
-      });
-    }
+    evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
+    evaluator.onRequestQueued = (
+      _reqId,
+      _workerIndex,
+      _expr,
+    ) => {
+      markUiDirty({ pending: true });
+    };
+    evaluator.onRequestYield = (
+      reqId,
+      _workerIndex,
+      _expr,
+      suspensionNodeId,
+      resubmitCount,
+    ) => {
+      addLog(
+        `[RESUBMIT] Requeued req ${reqId} suspension ${suspensionNodeId} (resubmit #${resubmitCount})`,
+      );
+      markUiDirty({ pending: true });
+    };
+    evaluator.onRequestError = (
+      reqId,
+      _workerIndex,
+      _expr,
+      errorMessage,
+    ) => {
+      // Log errors immediately when they occur (before promise rejection)
+      // Force logging even in continuous mode for critical errors
+      addLog(`[ERROR] Request ${reqId}: ${errorMessage}`, true);
+      markUiDirty({ pending: true });
+    };
+    startMemoryLogging(evaluator);
 
     markUiDirty({ pending: true });
     wasmStatus.textContent = "Ready";
@@ -718,3 +752,6 @@ setActiveTab("perf");
 
 // Load on startup
 loadWasm();
+
+globalThis.addEventListener("pagehide", teardownWorkbench);
+globalThis.addEventListener("beforeunload", teardownWorkbench);

@@ -35,7 +35,7 @@ export const forall = (typeVar: string, body: BaseType): ForallType => ({
 /**
  * Substitute in the type "original" the sub–type lft with rgt.
  */
-export const substituteSystemFType = (
+const substituteSystemFType = (
   original: BaseType,
   targetVarName: string,
   replacement: BaseType,
@@ -66,31 +66,13 @@ export const substituteSystemFType = (
   }
 };
 
-export const referencesVar = (
-  original: BaseType,
-  varName: string,
-): boolean => {
-  switch (original.kind) {
-    case "type-var":
-      return original.typeName === varName;
-    case "type-app":
-      return referencesVar(original.fn, varName) ||
-        referencesVar(original.arg, varName);
-    case "non-terminal":
-      return referencesVar(original.lft, varName) ||
-        referencesVar(original.rgt, varName);
-    case "forall":
-      return referencesVar(original.body, varName);
-  }
-};
-
 /**
  * The type checking context for System F.
  * - termCtx maps term variables (strings) to their types (SystemFType) using a Map.
  * - typeVars is the set of bound type variables using a Set.
  * - typeAliases maps type alias names to their definitions (optional, for resolving type variables).
  */
-export interface SystemFContext {
+interface SystemFContext {
   termCtx: Map<string, BaseType>;
   typeVars: Set<string>;
   typeAliases?: Map<string, BaseType>;
@@ -127,7 +109,7 @@ function resolveTypeAlias(
  * @param right the argument term
  * @returns a new application node
  */
-export const createSystemFApplication = (
+const createSystemFApplication = (
   left: SystemFTerm,
   right: SystemFTerm,
 ): SystemFTerm => ({

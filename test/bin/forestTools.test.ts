@@ -9,6 +9,7 @@
 import { expect } from "chai";
 import { dirname, fromFileUrl, join } from "std/path";
 import { existsSync } from "std/fs";
+import { requiredAt } from "../util/required.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const projectRoot = join(__dirname, "../..");
@@ -25,12 +26,15 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
   stderr: string;
   code: number;
 }> {
-  const process = new Deno.Command(command[0], {
-    args: command.slice(1),
-    cwd,
-    stdout: "piped",
-    stderr: "piped",
-  });
+  const process = new Deno.Command(
+    requiredAt(command, 0, "expected command executable"),
+    {
+      args: command.slice(1),
+      cwd,
+      stdout: "piped",
+      stderr: "piped",
+    },
+  );
 
   try {
     const { code, stdout, stderr } = await process.output();
@@ -127,7 +131,9 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
 
       // Check that lines are evaluation paths (skip nodeLabel objects)
       for (let i = 0; i < lines.length; i++) {
-        const obj = JSON.parse(lines[i]);
+        const obj = JSON.parse(
+          requiredAt(lines, i, "expected output line for evaluation path"),
+        );
         // Skip nodeLabel objects
         if (obj.type === "nodeLabel") {
           continue;
@@ -236,7 +242,9 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
 
       // Check that results are evaluation paths (skip nodeLabel objects)
       for (let i = 0; i < results.length; i++) {
-        const obj = JSON.parse(results[i]);
+        const obj = JSON.parse(
+          requiredAt(results, i, "expected output line for evaluation path"),
+        );
         // Skip nodeLabel objects
         if (obj.type === "nodeLabel") {
           continue;

@@ -61,7 +61,7 @@ const terminalCache = new WeakMap<
  * 2. Deduplicate shared nodes (DAGs) to prevent unnecessary allocations
  * 3. Cache terminal symbols to avoid repeated WASM calls
  */
-export function toArenaWithExports(
+function toArenaWithExports(
   root: SKIExpression,
   exports: Pick<
     ArenaWasmExports,
@@ -97,7 +97,7 @@ export function toArenaWithExports(
 
   while (stack.length > 0) {
     // Peek at the top node
-    const expr = stack[stack.length - 1];
+    const expr = stack[stack.length - 1]!;
 
     if (exprCache.has(expr)) {
       stack.pop();
@@ -178,7 +178,7 @@ export function toArenaWithExports(
  * 2. Preserve DAG structure (hash consing) to prevent memory explosion
  * 3. Uses direct memory views instead of WASM function calls for performance
  */
-export function fromArenaWithExports(
+function fromArenaWithExports(
   rootId: ArenaNodeId,
   exports: Pick<
     ArenaWasmExports,
@@ -195,15 +195,15 @@ export function fromArenaWithExports(
 
   // Helper functions to get node data from views or WASM calls
   const getKind = (id: number): number => {
-    return views && id < views.capacity ? views.kind[id] : exports.kindOf(id);
+    return views && id < views.capacity ? views.kind[id]! : exports.kindOf(id);
   };
   const getSym = (id: number): number => {
-    return views && id < views.capacity ? views.sym[id] : exports.symOf(id);
+    return views && id < views.capacity ? views.sym[id]! : exports.symOf(id);
   };
 
   while (stack.length > 0) {
     // Peek at the current node (don't pop yet, we might need to push children)
-    const id = stack[stack.length - 1];
+    const id = stack[stack.length - 1]!;
 
     // If we've already built this node, just pop and move on
     if (cache.has(id)) {
@@ -279,10 +279,10 @@ export function fromArenaWithExports(
       const leftIdArray = views?.leftId;
       const rightIdArray = views?.rightId;
       const leftId = capacity !== undefined && id < capacity
-        ? leftIdArray![id]
+        ? leftIdArray![id]!
         : exports.leftOf(id);
       const rightId = capacity !== undefined && id < capacity
-        ? rightIdArray![id]
+        ? rightIdArray![id]!
         : exports.rightOf(id);
 
       const leftDone = cache.has(leftId);
@@ -497,7 +497,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
       baseAddr,
       SABHEADER_HEADER_SIZE_U32,
     );
-    return headerView[SabHeaderField.TOP];
+    return headerView[SabHeaderField.TOP]!;
   }
 
   /**
@@ -511,7 +511,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     // 1. Determine Kind (Optimization: Use View if possible)
     let k: number;
     if (views && id < views.capacity) {
-      if ((k = views.kind[id]) === 0) return null; // Hole/uninitialized
+      if ((k = views.kind[id]!) === 0) return null; // Hole/uninitialized
     } else {
       if ((k = this.$.kindOf(id)) === 0) return null; // Hole/uninitialized
     }
@@ -519,7 +519,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     // 2. Build Terminal
     if (k === 1) { // ArenaKind.Terminal
       const symValue = views && id < views.capacity
-        ? views.sym[id]
+        ? views.sym[id]!
         : this.$.symOf(id);
 
       let sym: string;
@@ -564,8 +564,8 @@ export class ArenaEvaluatorWasm implements Evaluator {
     let left: number;
     let right: number;
     if (views && id < views.capacity) {
-      left = views.leftId[id];
-      right = views.rightId[id];
+      left = views.leftId[id]!;
+      right = views.rightId[id]!;
     } else {
       left = this.$.leftOf(id);
       right = this.$.rightOf(id);
@@ -634,8 +634,6 @@ export function createArenaEvaluatorReleaseSync(): ArenaEvaluatorWasm {
 export function createArenaEvaluator(): ArenaEvaluatorWasm {
   return createArenaEvaluatorReleaseSync();
 }
-
-export const createArenaEvaluatorRelease = createArenaEvaluatorReleaseSync;
 
 function bufferSourceToUint8Array(bytes: BufferSource): Uint8Array {
   if (bytes instanceof Uint8Array) return bytes;

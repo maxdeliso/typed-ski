@@ -55,6 +55,10 @@ function parseArgs(): CLIArgs {
   }
   if (maxStepsIndex >= 0 && maxStepsIndex < args.length - 1) {
     const maxStepsValue = args[maxStepsIndex + 1];
+    if (maxStepsValue === undefined) {
+      console.error("Error: --max-steps requires a value");
+      Deno.exit(1);
+    }
     const parsed = Number.parseInt(maxStepsValue, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       console.error(
@@ -73,9 +77,27 @@ function parseArgs(): CLIArgs {
       typeof navigator.hardwareConcurrency === "number"
     ? navigator.hardwareConcurrency
     : 64;
-  const concurrency = concurrencyIndex !== -1
-    ? Number.parseInt(args[concurrencyIndex].split("=")[1], 10)
-    : defaultConcurrency;
+  let concurrency = defaultConcurrency;
+  if (concurrencyIndex !== -1) {
+    const concurrencyArg = args[concurrencyIndex];
+    if (concurrencyArg === undefined) {
+      console.error("Error: Invalid --concurrency option");
+      Deno.exit(1);
+    }
+    const [_flag, concurrencyValue] = concurrencyArg.split("=", 2);
+    if (concurrencyValue === undefined || concurrencyValue.length === 0) {
+      console.error("Error: --concurrency requires a value");
+      Deno.exit(1);
+    }
+    const parsedConcurrency = Number.parseInt(concurrencyValue, 10);
+    if (!Number.isFinite(parsedConcurrency) || parsedConcurrency <= 0) {
+      console.error(
+        `Error: --concurrency must be a positive integer; received '${concurrencyValue}'`,
+      );
+      Deno.exit(1);
+    }
+    concurrency = parsedConcurrency;
+  }
 
   const nonFlagArgs = args.filter((arg, index) => {
     if (arg.startsWith("--")) return false;
@@ -89,13 +111,17 @@ function parseArgs(): CLIArgs {
     Deno.exit(1);
   }
 
-  const symbolCount = Number.parseInt(nonFlagArgs[0], 10);
+  const symbolCountArg = nonFlagArgs[0];
+  if (symbolCountArg === undefined) {
+    console.error("Error: symbolCount is required");
+    printHelp();
+    Deno.exit(1);
+  }
+  const symbolCount = Number.parseInt(symbolCountArg, 10);
 
   if (!Number.isFinite(symbolCount) || symbolCount <= 0) {
     console.error(
-      `Error: symbolCount must be a positive integer; received '${
-        nonFlagArgs[0]
-      }'`,
+      `Error: symbolCount must be a positive integer; received '${symbolCountArg}'`,
     );
     Deno.exit(1);
   }
@@ -422,7 +448,11 @@ async function generateSvgFiles(
   // Start initial batch
   while (nextIndex < dotFiles.length && inFlights.length < concurrency) {
     const index = nextIndex++;
-    const promise = runSfdp(dotFiles[index]);
+    const dotPath = dotFiles[index];
+    if (dotPath === undefined) {
+      throw new Error(`Internal error: missing DOT path at index ${index}`);
+    }
+    const promise = runSfdp(dotPath);
     inFlights.push({ index, promise });
   }
 
@@ -447,7 +477,11 @@ async function generateSvgFiles(
     // Start next job if available
     if (nextIndex < dotFiles.length) {
       const index = nextIndex++;
-      const promise = runSfdp(dotFiles[index]);
+      const dotPath = dotFiles[index];
+      if (dotPath === undefined) {
+        throw new Error(`Internal error: missing DOT path at index ${index}`);
+      }
+      const promise = runSfdp(dotPath);
       inFlights.push({ index, promise });
     }
   }

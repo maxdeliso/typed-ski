@@ -21,6 +21,7 @@ import {
 } from "../../lib/types/systemF.ts";
 
 import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
+import { requiredAt } from "../util/required.ts";
 
 const binSystemFContext = () => {
   const ctx = emptySystemFContext();
@@ -475,9 +476,13 @@ Deno.test("System F type-checker and helpers", async (t) => {
         expect(reduced.kind).to.equal("systemF-match");
         expect((reduced as { scrutinee: { name: string } }).scrutinee.name).to
           .equal("m");
-        const arm = (reduced as {
-          arms: Array<{ constructorName: string; body: { name: string } }>;
-        }).arms[0];
+        const arm = requiredAt(
+          (reduced as {
+            arms: Array<{ constructorName: string; body: { name: string } }>;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
         expect(arm.constructorName).to.equal("A");
         expect(arm.body.name).to.equal("y");
       },

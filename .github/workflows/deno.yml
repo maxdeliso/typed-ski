@@ -2,8 +2,7 @@ name: Nix CI
 
 on:
   pull_request:
-  push:
-    branches-ignore:
+    branches:
       - main
 
 permissions:

@@ -25,6 +25,7 @@ import {
 } from "../meta/frontend/substitution.ts";
 import { unparseSKI } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
+import { sccDependencyOrder } from "./graph.ts";
 
 export function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
   if (typeDef.kind !== "type") {
@@ -450,107 +451,6 @@ function buildDependencyGraph(
   }
 
   return graph;
-}
-
-/**
- * Tarjan's algorithm for finding strongly connected components (iterative version)
- * Avoids recursion stack overflow and is more efficient
- */
-function tarjanSCC(
-  graph: Map<QualifiedName, Set<QualifiedName>>,
-): QualifiedName[][] {
-  const index = new Map<QualifiedName, number>();
-  const lowlink = new Map<QualifiedName, number>();
-  const onStack = new Set<QualifiedName>();
-  const stack: QualifiedName[] = [];
-  const sccs: QualifiedName[][] = [];
-  let currentIndex = 0;
-
-  // Iterative stack-based implementation
-  const workStack: Array<{
-    node: QualifiedName;
-    phase: "enter" | "process";
-    deps?: QualifiedName[];
-    depIndex?: number;
-  }> = [];
-
-  for (const node of graph.keys()) {
-    if (index.has(node)) continue;
-
-    workStack.push({ node, phase: "enter" });
-
-    while (workStack.length > 0) {
-      const work = workStack.pop()!;
-
-      if (work.phase === "enter") {
-        // First visit to this node
-        index.set(work.node, currentIndex);
-        lowlink.set(work.node, currentIndex);
-        currentIndex++;
-        stack.push(work.node);
-        onStack.add(work.node);
-
-        const deps = Array.from(graph.get(work.node) || []);
-        workStack.push({
-          node: work.node,
-          phase: "process",
-          deps,
-          depIndex: 0,
-        });
-      } else {
-        // Processing dependencies
-        const deps = work.deps!;
-        let depIndex = work.depIndex!;
-
-        while (depIndex < deps.length) {
-          const dep = deps[depIndex]!;
-          if (!index.has(dep)) {
-            // Recurse into dependency
-            workStack.push({
-              node: work.node,
-              phase: "process",
-              deps,
-              depIndex: depIndex + 1,
-            });
-            workStack.push({ node: dep, phase: "enter" });
-            break;
-          } else if (onStack.has(dep)) {
-            lowlink.set(
-              work.node,
-              Math.min(lowlink.get(work.node)!, index.get(dep)!),
-            );
-          }
-          depIndex++;
-        }
-
-        if (depIndex >= deps.length) {
-          // Finished processing all dependencies
-          if (lowlink.get(work.node) === index.get(work.node)) {
-            const scc: QualifiedName[] = [];
-            let w: QualifiedName;
-            do {
-              w = stack.pop()!;
-              onStack.delete(w);
-              scc.push(w);
-            } while (w !== work.node);
-            sccs.push(scc);
-          }
-          // Update parent's lowlink if we have a parent
-          if (workStack.length > 0) {
-            const parent = workStack[workStack.length - 1]!;
-            if (parent.phase === "process") {
-              lowlink.set(
-                parent.node,
-                Math.min(lowlink.get(parent.node)!, lowlink.get(work.node)!),
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return sccs;
 }
 
 /**
@@ -1064,7 +964,7 @@ export function resolveCrossModuleDependencies(
     }
   }
   const dependencyGraph = buildDependencyGraph(resolvedPS);
-  const sccs = tarjanSCC(dependencyGraph).reverse(); // Topological sort
+  const sccs = sccDependencyOrder(dependencyGraph);
 
   if (verbose) {
     console.error(`Built dependency graph with ${dependencyGraph.size} nodes`);

@@ -50,20 +50,22 @@ export isZeroBin
 export eqBin
 export lteBin
 export gteBin
+
 type Bool = #B -> B -> B -> B
 type List = #A -> #R -> R -> (A -> R -> R) -> R
+type Parser = #A -> List Bin -> Result ParseError (Pair A (List Bin))
+
 data Pair A B = MkPair A B
 data Result E T = Err E | Ok T
 data Bin = BZ | B0 Bin | B1 Bin
 data ParseError = MkParseError Bin (List Bin)
 data Maybe A = None | Some A
-type Parser = #A -> List Bin -> Result ParseError (Pair A (List Bin))
 
 poly id : #a->a->a = #a => \x:a => x
 
 poly true = #B => \t : B => \f : B => t
-poly false = #B => \t : B => \f : B => f
 
+poly false = #B => \t : B => \f : B => f
 
 poly pair = #A => #B => \a : A => \b : B => #Y => \k : A -> B -> Y => k a b
 

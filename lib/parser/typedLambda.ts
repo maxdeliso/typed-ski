@@ -36,7 +36,7 @@ import { parseChain } from "./chain.ts";
 import { parseArrowType, unparseType } from "./type.ts";
 import { parseWithEOF } from "./eof.ts";
 import { ParseError } from "./parseError.ts";
-import { makeTypedBinNumeral } from "../types/natLiteral.ts";
+import { makeTypedBinNumeral } from "../types/binLiteral.ts";
 import {
   BACKSLASH,
   COLON,

@@ -8,8 +8,7 @@ import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 import { createParserState } from "../../lib/parser/parserState.ts";
 
 import { mkTypedAbs, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
-import { makeTypedBinNumeral } from "../../lib/types/natLiteral.ts";
-import {
+import { makeTypedBinNumeral } from "../../../lib/types/binLiteral.tsimport {
   arrow,
   arrows,
   mkTypeVariable,

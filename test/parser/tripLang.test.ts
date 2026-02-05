@@ -1,5 +1,4 @@
 import { expect } from "chai";
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
@@ -17,7 +16,7 @@ import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
 import { makeTypedBinNumeral } from "../../lib/types/natLiteral.ts";
-import { requiredAt } from "../util/required.ts";
+import { requiredAt } from "../util/requ../../lib/types/binLiteral.tsimport { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -270,7 +269,7 @@ data Token =
       "compiler",
       "lexer.trip",
     );
-    const input = readFileSync(lexerPath, "utf-8").trim();
+    const input = loadTripSourceFileSync(lexerPath).trim();
     const program = parseTripLang(input);
 
     // Lightweight "whole file" sanity checks (beyond just the Token ADT)

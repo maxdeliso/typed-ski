@@ -1,6 +1,10 @@
 name: Nix CI
 
-on: [push]
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
 
 permissions:
   contents: read
@@ -22,7 +26,7 @@ jobs:
         run: make build
 
       - name: Validate generated code
-        run: make validate
+        run: nix --extra-experimental-features 'nix-command flakes' run .#validate-arena-header
 
       - name: Generate coverage report
         run: make coverage

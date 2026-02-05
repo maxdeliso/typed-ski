@@ -15,8 +15,9 @@ import { arrow, mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
-import { makeTypedBinNumeral } from "../../lib/types/natLiteral.ts";
-import { requiredAt } from "../util/requ../../lib/types/binLiteral.tsimport { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
+import { makeTypedBinNumeral } from "../../lib/types/binLiteral.ts";
+import { requiredAt } from "../util/required.ts";
+import { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

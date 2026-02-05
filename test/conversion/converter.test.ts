@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { predLambda } from "../../lib/consts/lambdas.ts";
+import { parseLambda } from "../../lib/parser/untyped.ts";
 import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
@@ -175,6 +175,9 @@ Deno.test("Lambda conversion", async (t) => {
     });
 
     await t.step("converts predecessor function to equivalent SKI term", () => {
+      const [, predLambda] = parseLambda(
+        "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
+      );
       for (let n = 0; n < N; n++) {
         const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
         const result = UnChurchNumber(

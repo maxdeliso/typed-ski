@@ -5,7 +5,6 @@ import { unparseUntypedLambda } from "../../lib/parser/untyped.ts";
 import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
-import { predLambda } from "../../lib/consts/lambdas.ts";
 
 Deno.test("Parser - untyped λ-calculus", async (t) => {
   await t.step("parseLambda → application parsing", async (t) => {
@@ -111,9 +110,6 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
       const pretty = unparseUntypedLambda(term);
       const [, reparsed] = parseLambda(pretty);
       expect(reparsed).to.deep.equal(expected);
-
-      // extra sanity check against pre-defined constant
-      expect(reparsed).to.deep.equal(predLambda);
     });
   });
 });

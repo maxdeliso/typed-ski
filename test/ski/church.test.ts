@@ -25,7 +25,7 @@ import {
 } from "../../lib/ski/church.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
-import { predLambda } from "../../lib/consts/lambdas.ts";
+import { parseLambda } from "../../lib/parser/untyped.ts";
 import {
   apply,
   applyMany,
@@ -410,6 +410,9 @@ Deno.test("Church encodings", async (t) => {
   });
 
   await t.step("predecessor", () => {
+    const [, predLambda] = parseLambda(
+      "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
+    );
     const pred = bracketLambda(predLambda);
 
     for (let m = 0n; m < N; m++) {

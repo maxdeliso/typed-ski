@@ -40,7 +40,7 @@ export interface EvaluationPath {
 /**
  * Represents a node label mapping
  */
-export interface NodeLabel {
+interface NodeLabel {
   /** Type identifier */
   type: "nodeLabel";
   /** Node ID */

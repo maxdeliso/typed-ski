@@ -67,7 +67,7 @@ export function consume(state: ParserState): ParserState {
   return { buf: state.buf, idx: state.idx + 1 };
 }
 
-export function formatParserState(state: ParserState): string {
+function formatParserState(state: ParserState): string {
   const contextLength = 20;
   const start = Math.max(0, state.idx - contextLength);
   const end = Math.min(state.buf.length, state.idx + contextLength + 1);

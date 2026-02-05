@@ -4,7 +4,7 @@
  * @module
  */
 
-export type CancellableSleep = {
+type CancellableSleep = {
   promise: Promise<void>;
   cancel: () => void;
 };

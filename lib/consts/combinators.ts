@@ -125,7 +125,7 @@ export const Plus = applyMany(B, S, apply(B, B));
  *
  * λxyz.xzy ≡ S(BBS)(KK)
  */
-export const C = applyMany(S, applyMany(B, B, S), apply(K, K));
+const C = applyMany(S, applyMany(B, B, S), apply(K, K));
 
 /*
  * Thrush
@@ -140,7 +140,7 @@ export const C = applyMany(S, applyMany(B, B, S), apply(K, K));
  *
  * λxy.yx ≡ CI ≡ flip
  */
-export const T = apply(C, I);
+const T = apply(C, I);
 
 /*
  * Vireo
@@ -174,7 +174,6 @@ export const V = applyMany(B, C, T);
  *
  * λa.aa ≡ M
  */
-export const M = parseSKI("SII");
 
 /*
  * Retrieve the first element in a Cons cell.
@@ -217,13 +216,9 @@ export const Cdr = apply(T, Snd);
  *
  * λxy.xyy ≡ W
  */
-export const W = parseSKI("SS(SK)");
-
-// λabcd.a(bcd)
-export const Blk = applyMany(B, B, B);
 
 // λabcde.ab(cde)
-export const E = apply(B, applyMany(B, B, B));
+const E = apply(B, applyMany(B, B, B));
 
 // λabc.cba
 export const F = applyMany(E, T, T, E, T);

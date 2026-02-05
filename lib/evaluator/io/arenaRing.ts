@@ -19,7 +19,7 @@ import {
   SabHeaderField,
 } from "../arenaHeader.generated.ts";
 
-export type ArenaRingPayloadKind = "u8" | "u32";
+type ArenaRingPayloadKind = "u8" | "u32";
 
 const toInt32 = (value: number): number => value | 0;
 
@@ -29,7 +29,7 @@ const toInt32 = (value: number): number => value | 0;
  * Implements a lock-free SPSC (Single Producer Single Consumer) ring buffer
  * using atomic operations for thread-safe access from multiple workers.
  */
-export class ArenaRingView {
+class ArenaRingView {
   private readonly headerI32: Int32Array;
   private readonly slotsI32: Int32Array;
   private readonly payloadU8: Uint8Array;

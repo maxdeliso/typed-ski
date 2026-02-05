@@ -4,7 +4,7 @@
  * @module
  */
 
-export type CompilationStage =
+type CompilationStage =
   | "parse"
   | "index"
   | "elaborate"

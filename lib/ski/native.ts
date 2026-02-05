@@ -14,7 +14,7 @@ import type { SKIExpression } from "./expression.ts";
 /**
  * A terminal symbol (S, K, I, ...) in the native representation
  */
-export interface NativeTerminal {
+interface NativeTerminal {
   kind: "terminal";
   sym: SKITerminalSymbol;
 }
@@ -22,7 +22,7 @@ export interface NativeTerminal {
 /**
  * A numeric literal in the native representation
  */
-export interface NativeNum {
+interface NativeNum {
   kind: "num";
   value: bigint;
 }
@@ -30,14 +30,14 @@ export interface NativeNum {
 /**
  * The increment operation in the native representation
  */
-export interface NativeInc {
+interface NativeInc {
   kind: "inc";
 }
 
 /**
  * An application in the native representation
  */
-export interface NativeApplication {
+interface NativeApplication {
   kind: "non-terminal";
   lft: NativeExpr;
   rgt: NativeExpr;

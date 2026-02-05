@@ -28,41 +28,35 @@ import type { BaseType } from "../../types/types.ts";
 import { typecheckTypedLambda } from "../../types/typedLambda.ts";
 import { CompilationError } from "./errors.ts";
 
-export type ParsedProgram = TripLangProgram & {
+type ParsedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
 };
-export type IndexedProgram = TripLangProgram & {
+type IndexedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
 };
-export type ElaboratedProgram = TripLangProgram & {
+type ElaboratedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
 };
-export type ResolvedProgram = TripLangProgram & {
+type ResolvedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
 };
-export type TypecheckedProgram = TripLangProgram & {
+type TypecheckedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
 };
 
-export interface ParsedProgramWithSymbols {
-  program: ParsedProgram;
-  symbols: SymbolTable;
-  readonly __moniker: unique symbol;
-}
-
-export interface IndexedProgramWithSymbols {
+interface IndexedProgramWithSymbols {
   program: IndexedProgram;
   symbols: SymbolTable;
   readonly __moniker: unique symbol;
 }
 
-export interface ElaboratedProgramWithSymbols {
+interface ElaboratedProgramWithSymbols {
   program: ElaboratedProgram;
   symbols: SymbolTable;
   readonly __moniker: unique symbol;
 }
 
-export interface TypecheckedProgramWithTypes {
+interface TypecheckedProgramWithTypes {
   program: TypecheckedProgram;
   types: Map<string, BaseType>;
   readonly __moniker: unique symbol;
@@ -72,7 +66,7 @@ export interface TypecheckedProgramWithTypes {
  * Parses TripLang source into a `ParsedProgram`, validating that exactly one module is declared.
  * @throws CompilationError if zero or multiple module definitions are present
  */
-export function parse(input: string): ParsedProgram {
+function parse(input: string): ParsedProgram {
   const program = parseTripLang(input);
 
   // Validate module constraints
@@ -102,7 +96,7 @@ export function parse(input: string): ParsedProgram {
 /**
  * Runs symbol indexing for a parsed program using a provided indexing function.
  */
-export function indexSymbols(
+function indexSymbols(
   program: ParsedProgram,
   indexFn: (program: ParsedProgram) => SymbolTable,
 ): IndexedProgramWithSymbols {
@@ -117,7 +111,7 @@ export function indexSymbols(
 /**
  * Elaborates a program (e.g., desugaring, annotation propagation) and re-indexes symbols.
  */
-export function elaborate(
+function elaborate(
   programWithSymbols: IndexedProgramWithSymbols,
   elaborateFn: (
     programWithSymbols: IndexedProgramWithSymbols,
@@ -136,7 +130,7 @@ export function elaborate(
  * Resolves external references within a program, ensuring unimported references are bound.
  * @throws CompilationError when unresolved references remain after resolution
  */
-export function resolve(
+function resolve(
   programWithSymbols: ElaboratedProgramWithSymbols,
 ): ResolvedProgram {
   // Collect imported symbol names
@@ -220,7 +214,7 @@ export function resolve(
  * Skips terms that reference imported symbols which remain unresolved by design.
  * @throws CompilationError wrapping type errors with term context
  */
-export function typecheck(
+function typecheck(
   program: ResolvedProgram,
 ): TypecheckedProgramWithTypes {
   // Collect imported symbol names
@@ -375,29 +369,11 @@ export function resolvePoly(
   return term;
 }
 
-export function resolveTyped(
-  prog: TypecheckedProgramWithTypes,
-  id: string,
-) {
-  const term = findTerm(prog.program, id);
-  assertKind(term, "typed");
-  return term;
-}
-
 export function resolveUntyped(
   prog: TypecheckedProgramWithTypes,
   id: string,
 ) {
   const term = findTerm(prog.program, id);
   assertKind(term, "untyped");
-  return term;
-}
-
-export function resolveCombinator(
-  prog: TypecheckedProgramWithTypes,
-  id: string,
-) {
-  const term = findTerm(prog.program, id);
-  assertKind(term, "combinator");
   return term;
 }

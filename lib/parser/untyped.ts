@@ -43,7 +43,7 @@ export function parseUntypedLambdaInternal(
 /**
  * Parses an atomic untyped lambda term, tracking the literal substring precisely.
  */
-export function parseAtomicUntypedLambda(
+function parseAtomicUntypedLambda(
   state: ParserState,
 ): [string, UntypedLambda, ParserState] {
   const [peeked, s] = peek(state);

@@ -1448,7 +1448,7 @@ export function resolveExternalTermReferences(
  * Substitutes a referenced top-level term into another definition, using hygienic
  * substitution to avoid variable capture. Lowers the term to match levels if necessary.
  */
-export function substituteTripLangTerm(
+function substituteTripLangTerm(
   current: TripLangTerm,
   term: TripLangTerm,
 ): TripLangTerm {
@@ -1513,7 +1513,7 @@ export function substituteTripLangTerm(
  * Substitutes a referenced type definition into a term definition, using hygienic
  * substitution to avoid variable capture.
  */
-export function substituteTripLangType(
+function substituteTripLangType(
   current: TripLangTerm,
   type: TypeDefinition,
 ): TripLangTerm {
@@ -1622,69 +1622,6 @@ export function substitute<T extends TripLangValueType>(
     );
   }
   return result;
-}
-
-/**
- * Direct substitution without lowering - preserves term levels with hygienic binding
- */
-export function substituteTripLangTermDirect(
-  current: TripLangTerm,
-  term: TripLangTerm,
-  symbolName?: string,
-): TripLangTerm {
-  const currentDefinitionValue = extractDefinitionValue(current);
-  if (!currentDefinitionValue) {
-    return current;
-  }
-
-  const termDefinitionValue = extractDefinitionValue(term);
-  if (!termDefinitionValue) {
-    return current;
-  }
-
-  // Use the provided symbol name, or fall back to the term's name
-  const substitutionName = symbolName ?? term.name;
-
-  switch (current.kind) {
-    case "poly": {
-      return {
-        ...current,
-        term: substituteHygienic(
-          current.term,
-          substitutionName,
-          termDefinitionValue,
-        ),
-      };
-    }
-    case "typed": {
-      return {
-        kind: "typed",
-        name: current.name,
-        term: substituteHygienic(
-          current.term,
-          substitutionName,
-          termDefinitionValue,
-        ),
-      };
-    }
-    case "untyped": {
-      return {
-        ...current,
-        term: substituteHygienic(
-          current.term,
-          substitutionName,
-          termDefinitionValue,
-        ),
-      };
-    }
-    case "combinator":
-    case "type":
-    case "data":
-    case "module":
-    case "import":
-    case "export":
-      return current;
-  }
 }
 
 /**

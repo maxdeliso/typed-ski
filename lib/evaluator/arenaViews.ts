@@ -16,7 +16,7 @@ import {
  * Typed array views of the arena memory for direct access.
  * These views provide O(1) access to arena node data without WASM function calls.
  */
-export interface ArenaViews {
+interface ArenaViews {
   kind: Uint8Array;
   sym: Uint8Array;
   leftId: Uint32Array;
@@ -28,7 +28,7 @@ export interface ArenaViews {
  * Interface for objects that provide the necessary exports to build arena views.
  * This abstracts the dependency on ArenaWasmExports.
  */
-export interface ArenaViewsProvider {
+interface ArenaViewsProvider {
   debugGetArenaBaseAddr?(): number;
 }
 
@@ -165,20 +165,8 @@ export function getOrBuildArenaViews(
   return views;
 }
 
-export function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
-  return new Uint32Array(
-    memory.buffer,
-    baseAddr,
-    SABHEADER_HEADER_SIZE_U32,
-  )[SabHeaderField.TOP]! >>> 0;
-}
-
 export function getKind(id: number, views: ArenaViews): number {
   return id < views.capacity ? views.kind[id]! : -1;
-}
-
-export function getSym(id: number, views: ArenaViews): number {
-  return id < views.capacity ? views.sym[id]! : -1;
 }
 
 export function getLeft(id: number, views: ArenaViews): number {

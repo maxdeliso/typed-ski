@@ -45,20 +45,12 @@ export function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
  *
  * Format: "moduleName.symbolName"
  */
-export type QualifiedName = string;
-
-/**
- * Symbol identity combining module and local name
- */
-export interface SymbolId {
-  module: string;
-  name: string;
-}
+type QualifiedName = string;
 
 /**
  * Import specification with optional alias
  */
-export interface ImportSpec {
+interface ImportSpec {
   from: string;
   name: string;
   as?: string;
@@ -68,7 +60,7 @@ export interface ImportSpec {
 /**
  * Represents a loaded module in the program space
  */
-export interface LoadedModule {
+interface LoadedModule {
   /** The module name */
   name: string;
   /** The TripCObject data */

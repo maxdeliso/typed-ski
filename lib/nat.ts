@@ -6,7 +6,7 @@
  */
 import type { TripCObject } from "./compiler/objectFile.ts";
 
-export const NAT_SOURCE = `module Nat
+const NAT_SOURCE = `module Nat
 
 import Prelude Bool
 import Prelude true
@@ -92,13 +92,13 @@ poly rec fromBin = \\b : Bin =>
  * Compiled Nat object - generated at build time
  * This gets populated by the build process
  */
-export let NAT_OBJECT: TripCObject | null = null;
+let NAT_OBJECT: TripCObject | null = null;
 
 /**
  * Initialize the Nat object by compiling the source
  * This should be called once at startup
  */
-export async function initializeNat(): Promise<void> {
+async function initializeNat(): Promise<void> {
   if (NAT_OBJECT === null) {
     const { compileToObjectFileString } = await import("./compiler/index.ts");
     const { deserializeTripCObject } = await import("./compiler/objectFile.ts");

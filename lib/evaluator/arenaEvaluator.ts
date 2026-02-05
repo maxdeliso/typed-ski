@@ -61,7 +61,7 @@ const terminalCache = new WeakMap<
  * 2. Deduplicate shared nodes (DAGs) to prevent unnecessary allocations
  * 3. Cache terminal symbols to avoid repeated WASM calls
  */
-export function toArenaWithExports(
+function toArenaWithExports(
   root: SKIExpression,
   exports: Pick<
     ArenaWasmExports,
@@ -178,7 +178,7 @@ export function toArenaWithExports(
  * 2. Preserve DAG structure (hash consing) to prevent memory explosion
  * 3. Uses direct memory views instead of WASM function calls for performance
  */
-export function fromArenaWithExports(
+function fromArenaWithExports(
   rootId: ArenaNodeId,
   exports: Pick<
     ArenaWasmExports,
@@ -634,8 +634,6 @@ export function createArenaEvaluatorReleaseSync(): ArenaEvaluatorWasm {
 export function createArenaEvaluator(): ArenaEvaluatorWasm {
   return createArenaEvaluatorReleaseSync();
 }
-
-export const createArenaEvaluatorRelease = createArenaEvaluatorReleaseSync;
 
 function bufferSourceToUint8Array(bytes: BufferSource): Uint8Array {
   if (bytes instanceof Uint8Array) return bytes;

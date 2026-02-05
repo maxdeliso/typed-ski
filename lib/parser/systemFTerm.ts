@@ -493,7 +493,7 @@ const parseStringLiteralTerm = (
  * Note: term-level type application `t [T]` is parsed by `parseSystemFTerm` while
  * building an application chain, not as an atom here.
  */
-export function parseAtomicSystemFTerm(
+function parseAtomicSystemFTerm(
   state: ParserState,
 ): [string, SystemFTerm, ParserState] {
   const [ch, currentState] = peek(state);

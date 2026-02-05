@@ -6,7 +6,7 @@
  */
 import type { TripCObject } from "./compiler/objectFile.ts";
 
-export const PRELUDE_SOURCE = `module Prelude
+const PRELUDE_SOURCE = `module Prelude
 
 export Bool
 export id
@@ -239,13 +239,13 @@ combinator writeOne = .`;
  * Compiled prelude object - generated at build time
  * This gets populated by the build process
  */
-export let PRELUDE_OBJECT: TripCObject | null = null;
+let PRELUDE_OBJECT: TripCObject | null = null;
 
 /**
  * Initialize the prelude object by compiling the source
  * This should be called once at startup
  */
-export async function initializePrelude(): Promise<void> {
+async function initializePrelude(): Promise<void> {
   if (PRELUDE_OBJECT === null) {
     const { compileToObjectFileString } = await import("./compiler/index.ts");
     const { deserializeTripCObject } = await import("./compiler/objectFile.ts");

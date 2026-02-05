@@ -7,24 +7,24 @@ import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 
-export interface TripHarnessOptions {
+interface TripHarnessOptions {
   includePrelude?: boolean;
   includeNat?: boolean;
 }
 
-export interface TripIoOptions extends TripHarnessOptions {
+interface TripIoOptions extends TripHarnessOptions {
   stdin?: Uint8Array;
   stdoutMaxBytes?: number;
   stepLimit?: number;
   verbose?: boolean;
 }
 
-export interface TripIoResult {
+interface TripIoResult {
   result: SKIExpression;
   stdout: Uint8Array;
 }
 
-export async function compileAndLink(
+async function compileAndLink(
   source: string,
   options: TripHarnessOptions = {},
   verbose = false,

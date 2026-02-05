@@ -9,9 +9,6 @@
 
 export {
   generateArenaHeaderConstants,
-  generateFromRustSource,
-  generateRingHeaderConstants,
-  validateArenaHeader,
   type ValidationResult,
 } from "./arenaHeader.ts";
 

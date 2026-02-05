@@ -1,4 +1,4 @@
-export type GLProgramBundle = {
+type GLProgramBundle = {
   gl: WebGLRenderingContext;
   program: WebGLProgram;
   aPos: number;

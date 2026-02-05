@@ -28,7 +28,7 @@ export function elaborateTerms(
   };
 }
 
-export function elaborateTerm(
+function elaborateTerm(
   term: TripLangTerm,
   syms: SymbolTable,
 ): TripLangTerm {

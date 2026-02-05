@@ -13,6 +13,7 @@ import {
   typeApp,
   typesLitEq,
 } from "../../lib/types/types.ts";
+import { requiredAt } from "../util/required.ts";
 
 const decodeBinTerm = (term: SystemFTerm): number => {
   if (term.kind === "systemF-var") {
@@ -785,10 +786,10 @@ Deno.test("parses let inside match arm", () => {
   assert.equal(matchExpr.arms.length, 2);
 
   // First arm: | Err e => Err [ParseError] [List Token] e
-  const errArm = matchExpr.arms[0];
+  const errArm = requiredAt(matchExpr.arms, 0, "expected first match arm");
   assert.equal(errArm.constructorName, "Err");
   assert.equal(errArm.params.length, 1);
-  assert.equal(errArm.params[0], "e");
+  assert.equal(requiredAt(errArm.params, 0, "expected Err arm parameter"), "e");
   // Body: Err [ParseError] [List Token] e
   // Structure: ((Err [ParseError]) [List Token]) e
   assert.equal(errArm.body.kind, "non-terminal");
@@ -813,10 +814,10 @@ Deno.test("parses let inside match arm", () => {
   assert.equal(errBody.rgt.name, "e");
 
   // Second arm: | Ok rev => let toks = reverse [Token] rev in ...
-  const okArm = matchExpr.arms[1];
+  const okArm = requiredAt(matchExpr.arms, 1, "expected second match arm");
   assert.equal(okArm.constructorName, "Ok");
   assert.equal(okArm.params.length, 1);
-  assert.equal(okArm.params[0], "rev");
+  assert.equal(requiredAt(okArm.params, 0, "expected Ok arm parameter"), "rev");
   // Body should be a let expression
   assert.equal(okArm.body.kind, "systemF-let");
   assert.equal(okArm.body.name, "toks");
@@ -1064,8 +1065,11 @@ Deno.test("parses nested let bindings", () => {
     appParts.length >= 4,
     "expected matchList application with multiple args",
   );
-  assert.equal(appParts[0].kind, "systemF-type-app");
-  const head0 = appParts[0];
+  const head0 = requiredAt(appParts, 0, "expected application head");
+  assert.equal(head0.kind, "systemF-type-app");
+  if (head0.kind !== "systemF-type-app") {
+    throw new Error("expected type application at head");
+  }
   assert.equal(head0.term.kind, "systemF-type-app");
   assert.equal(head0.term.term.kind, "systemF-var");
   assert.equal(head0.term.term.name, "matchList");
@@ -1091,10 +1095,22 @@ Deno.test("parses nested let bindings", () => {
     "expected to find a nested match expression",
   );
   assert.equal(matchNode!.kind, "systemF-match");
-  assert.equal(matchNode!.arms.length, 2);
-  assert.equal(matchNode!.arms[0].constructorName, "Some");
-  assert.deepEqual(matchNode!.arms[0].params, ["tok"]);
-  assert.equal(matchNode!.arms[1].constructorName, "None");
+  if (matchNode!.kind !== "systemF-match") {
+    throw new Error("expected nested systemF-match");
+  }
+  assert.equal(matchNode.arms.length, 2);
+  assert.equal(
+    requiredAt(matchNode.arms, 0, "expected Some arm").constructorName,
+    "Some",
+  );
+  assert.deepEqual(
+    requiredAt(matchNode.arms, 0, "expected Some arm").params,
+    ["tok"],
+  );
+  assert.equal(
+    requiredAt(matchNode.arms, 1, "expected None arm").constructorName,
+    "None",
+  );
 });
 
 Deno.test("System F type parser", async (t) => {

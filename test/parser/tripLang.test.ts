@@ -17,6 +17,7 @@ import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
 import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
+import { requiredAt } from "../util/required.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -620,7 +621,7 @@ Deno.test("parse single poly", async (t) => {
 
     expect(result.kind).to.equal("program");
     expect(result.terms).to.have.length(1);
-    const [term] = result.terms;
+    const term = requiredAt(result.terms, 0, "expected poly term");
 
     if (term.kind !== "poly") {
       throw new Error(`expected 'poly' term, got '${term.kind}'`);

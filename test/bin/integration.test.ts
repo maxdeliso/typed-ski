@@ -11,6 +11,7 @@
 import { expect } from "chai";
 import { dirname, fromFileUrl, join } from "std/path";
 import { existsSync } from "std/fs";
+import { requiredAt } from "../util/required.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const projectRoot = join(__dirname, "../..");
@@ -30,12 +31,15 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
   stderr: string;
   code: number;
 }> {
-  const process = new Deno.Command(command[0], {
-    args: command.slice(1),
-    cwd,
-    stdout: "piped",
-    stderr: "piped",
-  });
+  const process = new Deno.Command(
+    requiredAt(command, 0, "expected command executable"),
+    {
+      args: command.slice(1),
+      cwd,
+      stdout: "piped",
+      stderr: "piped",
+    },
+  );
 
   try {
     const { code, stdout, stderr } = await process.output();
@@ -159,7 +163,9 @@ combinator S = S`,
 
   await t.step("Object file format validation", async (t) => {
     await t.step("CLI produces valid object files", async () => {
-      const testFile = await createTestFile(testCases[0].content);
+      const testFile = await createTestFile(
+        requiredAt(testCases, 0, "expected first test case").content,
+      );
 
       try {
         const result = await runCommand([
@@ -306,7 +312,9 @@ poly id = #a => \\x:a => x`;
 
   await t.step("Cross-format compatibility", async (t) => {
     await t.step("different CLI formats produce identical output", async () => {
-      const testFile = await createTestFile(testCases[0].content);
+      const testFile = await createTestFile(
+        requiredAt(testCases, 0, "expected first test case").content,
+      );
 
       try {
         // Test TypeScript CLI

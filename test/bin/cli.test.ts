@@ -24,6 +24,7 @@ import {
   SingleFileCompilerError,
   type TripCObject as _TripCObject,
 } from "../../lib/compiler/index.ts";
+import { required, requiredAt } from "../util/required.ts";
 
 // Test utilities
 async function runCommand(command: string[], cwd = projectRoot): Promise<{
@@ -33,8 +34,9 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
   code: number;
 }> {
   // Use Deno.execPath() if command is "deno" to ensure we use the same Deno instance
-  const executable = command[0] === "deno" ? Deno.execPath() : command[0];
-  const args = command[0] === "deno" ? command.slice(1) : command.slice(1);
+  const command0 = requiredAt(command, 0, "expected command executable");
+  const executable = command0 === "deno" ? Deno.execPath() : command0;
+  const args = command.slice(1);
 
   const process = new Deno.Command(executable, {
     args,
@@ -155,7 +157,10 @@ poly id = invalid syntax here`;
       expect(result.module).to.equal("Test");
       expect(result.definitions).to.have.property("id");
 
-      const idDef = result.definitions.id;
+      const idDef = required(
+        result.definitions.id,
+        "expected definition 'id'",
+      );
       if (idDef.kind === "poly") {
         expect(idDef.term).to.have.property("kind", "non-terminal");
       }
@@ -196,7 +201,9 @@ typed double = \\x:Int => add x x`;
 
       // Check imports
       expect(result.imports).to.have.length(1);
-      expect(result.imports[0]).to.deep.equal({ name: "add", from: "Math" });
+      expect(
+        requiredAt(result.imports, 0, "expected first import"),
+      ).to.deep.equal({ name: "add", from: "Math" });
 
       // Check exports
       expect(result.exports).to.have.length(2);
@@ -209,14 +216,20 @@ typed double = \\x:Int => add x x`;
       expect(result.definitions).to.have.property("double");
 
       // Check definition structure
-      const idDef = result.definitions.id;
+      const idDef = required(
+        result.definitions.id,
+        "expected definition 'id'",
+      );
       expect(idDef).to.have.property("kind", "poly");
       expect(idDef).to.have.property("name", "id");
       if (idDef.kind === "poly") {
         expect(idDef).to.have.property("term");
       }
 
-      const doubleDef = result.definitions.double;
+      const doubleDef = required(
+        result.definitions.double,
+        "expected definition 'double'",
+      );
       expect(doubleDef).to.have.property("kind", "typed");
       expect(doubleDef).to.have.property("name", "double");
       if (doubleDef.kind === "typed") {
@@ -248,7 +261,10 @@ export id
 poly id = #a => \\x:a => x`;
 
       const result = compileToObjectFile(source);
-      const idDef = result.definitions.id;
+      const idDef = required(
+        result.definitions.id,
+        "expected definition 'id'",
+      );
 
       // Term should be elaborated System F
       if (idDef.kind === "poly") {

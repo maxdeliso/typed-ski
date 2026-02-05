@@ -163,19 +163,6 @@ const T = apply(C, I);
 export const V = applyMany(B, C, T);
 
 /*
- * Mockingbird
- *
- * λa.aa
- *
- * SIIx
- * Ix(Ix)
- * x(Ix)
- * xx
- *
- * λa.aa ≡ M
- */
-
-/*
  * Retrieve the first element in a Cons cell.
  *
  * Car p

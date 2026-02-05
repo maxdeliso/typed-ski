@@ -857,7 +857,7 @@ export function substituteTermHygienicBatch(
         const avoid = new Set([...replacementFVs, ...bound, ...params]);
         let renamed = false;
         for (let i = 0; i < params.length; i++) {
-          const param = params[i];
+          const param = params[i]!;
           if (replacementFVs.has(param)) {
             let suffix = 1;
             let newName = `${param}_${suffix}`;
@@ -1118,7 +1118,7 @@ export function substituteHygienic<T extends TripLangValueType>(
         const avoid = new Set([...fv, ...bound, ...params]);
 
         for (let i = 0; i < params.length; i++) {
-          const param = params[i];
+          const param = params[i]!;
           if (!fv.has(param)) continue;
           const newName = fresh(param, avoid);
           body = alphaRenameTermBinder(body, param, newName);

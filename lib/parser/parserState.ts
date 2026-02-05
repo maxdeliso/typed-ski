@@ -49,7 +49,7 @@ export function createParserState(buf: string): ParserState {
 
 export function skipWhitespace(state: ParserState): ParserState {
   let idx = state.idx;
-  while (idx < state.buf.length && WHITESPACE_REGEX.test(state.buf[idx])) {
+  while (idx < state.buf.length && WHITESPACE_REGEX.test(state.buf[idx]!)) {
     idx++;
   }
   return { buf: state.buf, idx };
@@ -58,7 +58,7 @@ export function skipWhitespace(state: ParserState): ParserState {
 export function peek(state: ParserState): [string | null, ParserState] {
   const newState = skipWhitespace(state);
   if (newState.idx < newState.buf.length) {
-    return [newState.buf[newState.idx], newState];
+    return [newState.buf[newState.idx]!, newState];
   }
   return [null, newState];
 }
@@ -76,7 +76,7 @@ export function formatParserState(state: ParserState): string {
   const caret = " ".repeat(relativePos) + "^";
   const lines = state.buf.slice(0, state.idx).split("\n");
   const lineNum = lines.length;
-  const colNum = lines[lines.length - 1].length + 1;
+  const colNum = lines[lines.length - 1]!.length + 1;
   return `at position ${state.idx} (line ${lineNum}, column ${colNum}):\n${snippet}\n${caret}`;
 }
 
@@ -152,7 +152,7 @@ export function parseIdentifier(state: ParserState): [string, ParserState] {
   let id = "";
   let currentState = skipWhitespace(state);
   while (currentState.idx < currentState.buf.length) {
-    const ch = currentState.buf[currentState.idx];
+    const ch = currentState.buf[currentState.idx]!;
     if (!IDENTIFIER_CHAR_REGEX.test(ch)) break;
     id += ch;
     currentState = consume(currentState);
@@ -217,7 +217,7 @@ export function parseNumericLiteral(
   let currentState = skipWhitespace(state);
 
   while (currentState.idx < currentState.buf.length) {
-    const ch = currentState.buf[currentState.idx];
+    const ch = currentState.buf[currentState.idx]!;
     if (!DIGIT_REGEX.test(ch)) break;
     literal += ch;
     currentState = consume(currentState);
@@ -239,7 +239,7 @@ export function isAtDefinitionKeywordLine(state: ParserState): boolean {
   const sliceLength = maxKeywordLength + 1;
   const nextChars = state.buf.slice(state.idx, state.idx + sliceLength);
   const lines = nextChars.split("\n");
-  const firstLine = lines[0].trim();
+  const firstLine = lines[0]!.trim();
   return DEFINITION_KEYWORDS.some((keyword: string) =>
     firstLine.startsWith(keyword)
   );

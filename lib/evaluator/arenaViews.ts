@@ -69,11 +69,11 @@ function buildArenaViews(
   );
 
   // Read offsets from header (these are computed at runtime by Rust code)
-  const capacity = headerView[SabHeaderField.CAPACITY];
-  const offsetKind = headerView[SabHeaderField.OFFSET_KIND];
-  const offsetSym = headerView[SabHeaderField.OFFSET_SYM];
-  const offsetLeftId = headerView[SabHeaderField.OFFSET_LEFT_ID];
-  const offsetRightId = headerView[SabHeaderField.OFFSET_RIGHT_ID];
+  const capacity = headerView[SabHeaderField.CAPACITY]!;
+  const offsetKind = headerView[SabHeaderField.OFFSET_KIND]!;
+  const offsetSym = headerView[SabHeaderField.OFFSET_SYM]!;
+  const offsetLeftId = headerView[SabHeaderField.OFFSET_LEFT_ID]!;
+  const offsetRightId = headerView[SabHeaderField.OFFSET_RIGHT_ID]!;
 
   // Create typed array views of the arena data arrays
   const kind = new Uint8Array(buffer, baseAddr + offsetKind, capacity);
@@ -170,21 +170,21 @@ export function arenaTop(memory: WebAssembly.Memory, baseAddr: number): number {
     memory.buffer,
     baseAddr,
     SABHEADER_HEADER_SIZE_U32,
-  )[SabHeaderField.TOP] >>> 0;
+  )[SabHeaderField.TOP]! >>> 0;
 }
 
 export function getKind(id: number, views: ArenaViews): number {
-  return id < views.capacity ? views.kind[id] : -1;
+  return id < views.capacity ? views.kind[id]! : -1;
 }
 
 export function getSym(id: number, views: ArenaViews): number {
-  return id < views.capacity ? views.sym[id] : -1;
+  return id < views.capacity ? views.sym[id]! : -1;
 }
 
 export function getLeft(id: number, views: ArenaViews): number {
-  return id < views.capacity ? views.leftId[id] : -1;
+  return id < views.capacity ? views.leftId[id]! : -1;
 }
 
 export function getRight(id: number, views: ArenaViews): number {
-  return id < views.capacity ? views.rightId[id] : -1;
+  return id < views.capacity ? views.rightId[id]! : -1;
 }

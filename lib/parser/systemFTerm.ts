@@ -349,7 +349,7 @@ const parseLiteralChar = (
       withParserState(state, `unterminated ${context} literal`),
     );
   }
-  const ch = state.buf[state.idx];
+  const ch = state.buf[state.idx]!;
   if (ch === "\n" || ch === "\r") {
     throw new ParseError(
       withParserState(state, `unterminated ${context} literal`),
@@ -392,7 +392,7 @@ const buildBinList = (codes: number[]): SystemFTerm => {
   let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), binType);
   for (let i = codes.length - 1; i >= 0; i--) {
     const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), binType);
-    const head = buildBinTerm(BigInt(codes[i]));
+    const head = buildBinTerm(BigInt(codes[i]!));
     term = createSystemFApplication(
       createSystemFApplication(consTerm, head),
       term,

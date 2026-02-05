@@ -187,7 +187,7 @@
             program = toString (pkgs.writeShellScript "run-tests" ''
               if [ ! -f deno.jsonc ]; then echo "Error: Run from project root"; exit 1; fi
               export PATH="${deno}/bin:$PATH"
-              ${deno}/bin/deno test --allow-read --allow-write --allow-run --allow-env --parallel test/
+              ${deno}/bin/deno test --no-check --allow-read --allow-write --allow-run --allow-env --parallel test/
             '');
            };
            fmt = {

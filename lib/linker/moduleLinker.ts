@@ -511,7 +511,7 @@ function tarjanSCC(
         let depIndex = work.depIndex!;
 
         while (depIndex < deps.length) {
-          const dep = deps[depIndex];
+          const dep = deps[depIndex]!;
           if (!index.has(dep)) {
             // Recurse into dependency
             workStack.push({
@@ -545,7 +545,7 @@ function tarjanSCC(
           }
           // Update parent's lowlink if we have a parent
           if (workStack.length > 0) {
-            const parent = workStack[workStack.length - 1];
+            const parent = workStack[workStack.length - 1]!;
             if (parent.phase === "process") {
               lowlink.set(
                 parent.node,
@@ -650,7 +650,7 @@ function substituteDependencies(
             );
           } else if (candidateModules.length === 1) {
             // Unambiguous: resolve it
-            const modName = candidateModules[0];
+            const modName = candidateModules[0]!;
             const qualified = qualifiedName(modName, termRef);
             const targetTerm = ps.terms.get(qualified);
             if (targetTerm) {
@@ -940,7 +940,7 @@ function resolveSCC(
 
   // Simple case: no cycle
   if (scc.length === 1) {
-    const qualified = scc[0];
+    const qualified = scc[0]!;
     const { moduleName, localName, module } = getModuleInfo(ps, qualified);
     const resolvedDef = substituteDependencies(
       module.defs.get(localName)!,
@@ -1197,7 +1197,7 @@ export function findMainFunction(
     );
   }
 
-  const main = mainCandidates[0];
+  const main = mainCandidates[0]!;
   if (main.kind === "type") {
     throw new Error("Exported 'main' is a type; expected a term/function.");
   }

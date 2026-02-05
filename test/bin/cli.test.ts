@@ -281,8 +281,7 @@ poly id = #a => \\x:a => x`;
     await t.step("version is consistent across files", async () => {
       const configPath = join(projectRoot, "deno.jsonc");
       const configContent = await Deno.readTextFile(configPath);
-      const config = JSON.parse(configContent);
-      const _packageVersion = config.version;
+      JSON.parse(configContent);
 
       const tripcTs = await Deno.readTextFile(
         join(projectRoot, "bin/tripc.ts"),

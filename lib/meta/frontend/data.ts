@@ -74,12 +74,12 @@ function mkScottType(
 
   let body: BaseType = resultType;
   for (let i = caseTypes.length - 1; i >= 0; i--) {
-    body = arrow(caseTypes[i], body);
+    body = arrow(caseTypes[i]!, body);
   }
 
   let type = forall(resultTypeName, body);
   for (let i = data.typeParams.length - 1; i >= 0; i--) {
-    type = forall(data.typeParams[i], type);
+    type = forall(data.typeParams[i]!, type);
   }
   return type;
 }
@@ -94,29 +94,29 @@ function mkConstructorTerm(
     mkCaseType(ctor.fields, resultType)
   );
 
-  const ctor = data.constructors[ctorIndex];
+  const ctor = data.constructors[ctorIndex]!;
   const fieldNames = ctor.fields.map((_, i) =>
     `__${ctor.name.toLowerCase()}_${i}`
   );
   const caseNames = data.constructors.map((_, i) => `__case${i}`);
 
-  let body: SystemFTerm = mkSystemFVar(caseNames[ctorIndex]);
+  let body: SystemFTerm = mkSystemFVar(caseNames[ctorIndex]!);
   for (const fieldName of fieldNames) {
     body = createSystemFApplication(body, mkSystemFVar(fieldName));
   }
 
   for (let i = caseNames.length - 1; i >= 0; i--) {
-    body = mkSystemFAbs(caseNames[i], caseTypes[i], body);
+    body = mkSystemFAbs(caseNames[i]!, caseTypes[i]!, body);
   }
 
   body = mkSystemFTAbs(resultTypeName, body);
 
   for (let i = fieldNames.length - 1; i >= 0; i--) {
-    body = mkSystemFAbs(fieldNames[i], ctor.fields[i], body);
+    body = mkSystemFAbs(fieldNames[i]!, ctor.fields[i]!, body);
   }
 
   for (let i = data.typeParams.length - 1; i >= 0; i--) {
-    body = mkSystemFTAbs(data.typeParams[i], body);
+    body = mkSystemFTAbs(data.typeParams[i]!, body);
   }
 
   return body;

@@ -18,7 +18,7 @@ import {
   type ParserState,
   peek,
 } from "./parserState.ts";
-import { makeUntypedChurchNumeral } from "../consts/nat.ts";
+import { makeUntypedBinNumeral } from "../consts/nat.ts";
 import { parseChain } from "./chain.ts";
 import { createApplication } from "../terms/lambda.ts";
 import { parseWithEOF } from "./eof.ts";
@@ -71,7 +71,7 @@ export function parseAtomicUntypedLambda(
     return [fullLiteral, innerTerm, currentState];
   } else if (isDigit(peeked)) {
     const [literal, value, nextState] = parseNumericLiteral(s);
-    return [literal, makeUntypedChurchNumeral(value), nextState];
+    return [literal, makeUntypedBinNumeral(value), nextState];
   } else {
     const [varLit, stateAfterVar] = parseIdentifier(s);
     const fullLiteral = s.buf.slice(s.idx, stateAfterVar.idx);

@@ -2,7 +2,7 @@ import { expect } from "chai";
 
 import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
 import { unparseUntypedLambda } from "../../lib/parser/untyped.ts";
-import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
+import { makeUntypedBinNumeral } from "../../lib/consts/nat.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
 
@@ -35,7 +35,7 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
       const src = "7";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
-      expect(term).to.deep.equal(makeUntypedChurchNumeral(7n));
+      expect(term).to.deep.equal(makeUntypedBinNumeral(7n));
     });
   });
 

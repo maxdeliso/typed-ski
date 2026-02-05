@@ -63,3 +63,24 @@ export const makeUntypedChurchNumeral = (value: bigint): UntypedLambda => {
   const skiExpr = ChurchN(value);
   return skiToUntyped(skiExpr);
 };
+
+export const makeUntypedBinNumeral = (value: bigint): UntypedLambda => {
+  if (value < 0n) {
+    throw new RangeError("Nat literals must be non-negative");
+  }
+  if (value === 0n) {
+    return mkVar("BZ");
+  }
+  const bits: number[] = [];
+  let n = value;
+  while (n > 0n) {
+    bits.push(Number(n & 1n));
+    n = n / 2n;
+  }
+  let term: UntypedLambda = mkVar("BZ");
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const ctor = bits[i] === 0 ? "B0" : "B1";
+    term = createApplication(mkVar(ctor), term);
+  }
+  return term;
+};

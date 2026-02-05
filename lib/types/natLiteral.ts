@@ -7,20 +7,20 @@
  * type inference to attach the necessary annotations for each abstraction.
  */
 import type { TypedLambda } from "./typedLambda.ts";
-import { makeUntypedChurchNumeral } from "../consts/nat.ts";
+import { makeUntypedBinNumeral } from "../consts/nat.ts";
 import { inferType } from "./inference.ts";
 
 /**
- * Builds the typed lambda encoding of a Church numeral.
+ * Builds the typed lambda encoding of a Bin numeral.
  * @param value the non–negative integer to encode
  * @returns a simply typed lambda expression equivalent to the numeral
  */
-export const makeTypedChurchNumeral = (value: bigint): TypedLambda => {
+export const makeTypedBinNumeral = (value: bigint): TypedLambda => {
   if (value < 0n) {
     throw new RangeError("Nat literals must be non-negative");
   }
 
-  const untyped = makeUntypedChurchNumeral(value);
+  const untyped = makeUntypedBinNumeral(value);
   const [typed] = inferType(untyped);
   return typed;
 };

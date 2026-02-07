@@ -346,7 +346,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
   public readonly $: ArenaWasmExports;
   public readonly memory: WebAssembly.Memory;
 
-  protected constructor(exports: ArenaWasmExports, memory: WebAssembly.Memory) {
+  public constructor(exports: ArenaWasmExports, memory: WebAssembly.Memory) {
     this.$ = exports;
     this.memory = memory;
   }
@@ -375,7 +375,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     return ArenaEvaluatorWasm.fromInstance(normalized, wasmMemory);
   }
 
-  private static normalizeExports(raw: WebAssembly.Exports): ArenaWasmExports {
+  public static normalizeExports(raw: WebAssembly.Exports): ArenaWasmExports {
     const e = raw as Record<string, unknown>;
     return {
       ...(raw as Record<string, unknown>),
@@ -391,7 +391,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     } as ArenaWasmExports;
   }
 
-  private static fromInstance(
+  public static fromInstance(
     instance: ArenaWasmExports,
     memory: WebAssembly.Memory,
   ): ArenaEvaluatorWasm {
@@ -488,7 +488,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
   /**
    * Helper: Reads the arena header to find the number of allocated nodes.
    */
-  private getArenaTop(): number {
+  protected getArenaTop(): number {
     const baseAddr = this.$.debugGetArenaBaseAddr?.();
     if (!baseAddr) return 0;
 
@@ -504,7 +504,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
    * Helper: Decodes a single node ID into an ArenaNode object.
    * Returns null if the slot is uninitialized (a "hole").
    */
-  private getArenaNode(
+  protected getArenaNode(
     id: number,
     views: ReturnType<typeof getOrBuildArenaViews>,
   ): ArenaNode | null {
@@ -608,13 +608,13 @@ export class ArenaEvaluatorWasm implements Evaluator {
       chunk.push(node);
 
       if (chunk.length >= chunkSize) {
-        yield chunk;
+        yield [...chunk];
         chunk.length = 0;
       }
     }
 
     if (chunk.length > 0) {
-      yield chunk;
+      yield [...chunk];
     }
   }
 }

@@ -627,4 +627,139 @@ poly id = #a => \\x:a => x`;
       });
     });
   });
+
+  await t.step("tripc Extra CLI Coverage", async (t) => {
+    await t.step("error on unknown option", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        "--unknown",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include("Unknown option: --unknown");
+    });
+
+    await t.step("error on too many arguments", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        "a.trip",
+        "b.tripc",
+        "extra",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include("Too many arguments");
+    });
+
+    await t.step("error on no input file", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include("Error: No input file specified");
+    });
+
+    await t.step("error on non-trip extension for compilation", async () => {
+      const tempFile = await Deno.makeTempFile({ suffix: ".txt" });
+      try {
+        const result = await runCommand([
+          "deno",
+          "run",
+          "--allow-read",
+          "--allow-write",
+          "bin/tripc.ts",
+          tempFile,
+        ]);
+        expect(result.success).to.be.false;
+        expect(result.stderr).to.include("must have .trip extension");
+      } finally {
+        await Deno.remove(tempFile);
+      }
+    });
+
+    await t.step("error on linking with no files", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        "--link",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: No input files specified for linking",
+      );
+    });
+
+    await t.step("short flags coverage (-h, -v, -V, -c)", async () => {
+      // -h
+      let result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        "-h",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stdout).to.include("USAGE:");
+
+      // -v
+      result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        "-v",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stdout).to.include("tripc v");
+
+      // -V (verbose)
+      const testFile = join(projectRoot, "test/linker/A.trip");
+      result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        testFile,
+        "-V",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stdout).to.include("Compiling TripLang program");
+      // Cleanup generated .tripc if it was created in the same dir
+      const tripcFile = testFile.replace(/\.trip$/, ".tripc");
+      try {
+        await Deno.remove(tripcFile);
+      } catch {
+        // Ignore if file doesn't exist
+      }
+    });
+
+    await t.step("error when input path is a directory", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "bin/tripc.ts",
+        "bin/",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include("Input path is not a file");
+    });
+  });
 });

@@ -16,7 +16,7 @@ import {
  * Typed array views of the arena memory for direct access.
  * These views provide O(1) access to arena node data without WASM function calls.
  */
-interface ArenaViews {
+export interface ArenaViews {
   kind: Uint8Array;
   sym: Uint8Array;
   leftId: Uint32Array;

@@ -46,7 +46,7 @@ const terminalToLambda = (sym: SKITerminalSymbol): UntypedLambda => {
   }
 };
 
-const skiToUntyped = (expr: SKIExpression): UntypedLambda => {
+export const skiToUntyped = (expr: SKIExpression): UntypedLambda => {
   if (expr.kind === "terminal") {
     return terminalToLambda(expr.sym);
   }

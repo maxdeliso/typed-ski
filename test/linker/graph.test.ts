@@ -131,4 +131,36 @@ Deno.test("linker graph algorithms", async (t) => {
     const canonical = canonicalizeSccs(sccs);
     expect(canonical).to.deep.equal([["N1"], ["N2"], ["N3"], ["N4"]]);
   });
+
+  await t.step("tarjanSCC handles graph with undefined dependencies", () => {
+    // We use a bit of casting to force undefined into the graph if the type allows it,
+    // or just test how it handles missing nodes in the graph map.
+    const graph: DirectedGraph<string> = new Map([
+      ["A", new Set([undefined as unknown as string])],
+    ]);
+
+    const sccs = tarjanSCC(graph);
+    expect(sccs).to.have.lengthOf(1);
+    expect(sccs[0]).to.deep.equal(["A"]);
+  });
+
+  await t.step("tarjanSCC handles nodes not present in the graph map", () => {
+    const graph: DirectedGraph<string> = new Map([
+      ["A", new Set(["B"])],
+      // "B" is not a key in the map
+    ]);
+
+    const sccs = tarjanSCC(graph);
+    // B should be treated as a node with no dependencies
+    expect(sccs).to.have.lengthOf(2);
+    // Reverse topological order: B then A
+    expect(sccs[0]).to.deep.equal(["B"]);
+    expect(sccs[1]).to.deep.equal(["A"]);
+  });
+
+  await t.step("tarjanSCC handles empty graph", () => {
+    const graph: DirectedGraph<string> = new Map();
+    const sccs = tarjanSCC(graph);
+    expect(sccs).to.be.empty;
+  });
 });

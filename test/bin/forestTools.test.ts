@@ -319,4 +319,100 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       expect(result.stdout).to.include("SKI Evaluation Forest SVG Generator");
     });
   });
+
+  await t.step("genForest Extra CLI Coverage", async (t) => {
+    await t.step("handles --progress flag", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--progress",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stderr).to.include("[genForest] start");
+    });
+
+    await t.step("handles --no-labels flag", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--no-labels",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stdout).to.not.include("nodeLabel");
+    });
+
+    await t.step("handles --workers and --max-steps flags", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--workers",
+        "2",
+        "--max-steps",
+        "10",
+      ]);
+      expect(result.success).to.be.true;
+    });
+
+    await t.step("error on invalid --max-steps", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--max-steps",
+        "0",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: --max-steps must be a positive integer",
+      );
+    });
+
+    await t.step("error on invalid --workers", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--workers",
+        "abc",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: --workers must be a positive integer",
+      );
+    });
+
+    await t.step("error on extra arguments", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "extra",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: genForest writes to stdout; unexpected extra argument 'extra'",
+      );
+    });
+  });
 });

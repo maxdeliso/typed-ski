@@ -56,7 +56,7 @@ export const mkUntypedAbs = (
 /**
  * An application in the untyped lambda calculus
  */
-export interface UntypedApplication {
+interface UntypedApplication {
   kind: "non-terminal";
   lft: UntypedLambda;
   rgt: UntypedLambda;

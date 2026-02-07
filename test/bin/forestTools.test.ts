@@ -9,6 +9,7 @@
 import { expect } from "chai";
 import { dirname, fromFileUrl, join } from "std/path";
 import { existsSync } from "std/fs";
+import { requiredAt } from "../util/required.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const projectRoot = join(__dirname, "../..");
@@ -25,12 +26,15 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
   stderr: string;
   code: number;
 }> {
-  const process = new Deno.Command(command[0], {
-    args: command.slice(1),
-    cwd,
-    stdout: "piped",
-    stderr: "piped",
-  });
+  const process = new Deno.Command(
+    requiredAt(command, 0, "expected command executable"),
+    {
+      args: command.slice(1),
+      cwd,
+      stdout: "piped",
+      stderr: "piped",
+    },
+  );
 
   try {
     const { code, stdout, stderr } = await process.output();
@@ -127,7 +131,9 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
 
       // Check that lines are evaluation paths (skip nodeLabel objects)
       for (let i = 0; i < lines.length; i++) {
-        const obj = JSON.parse(lines[i]);
+        const obj = JSON.parse(
+          requiredAt(lines, i, "expected output line for evaluation path"),
+        );
         // Skip nodeLabel objects
         if (obj.type === "nodeLabel") {
           continue;
@@ -236,7 +242,9 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
 
       // Check that results are evaluation paths (skip nodeLabel objects)
       for (let i = 0; i < results.length; i++) {
-        const obj = JSON.parse(results[i]);
+        const obj = JSON.parse(
+          requiredAt(results, i, "expected output line for evaluation path"),
+        );
         // Skip nodeLabel objects
         if (obj.type === "nodeLabel") {
           continue;
@@ -309,6 +317,102 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
 
       expect(result.success).to.be.true;
       expect(result.stdout).to.include("SKI Evaluation Forest SVG Generator");
+    });
+  });
+
+  await t.step("genForest Extra CLI Coverage", async (t) => {
+    await t.step("handles --progress flag", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--progress",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stderr).to.include("[genForest] start");
+    });
+
+    await t.step("handles --no-labels flag", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--no-labels",
+      ]);
+      expect(result.success).to.be.true;
+      expect(result.stdout).to.not.include("nodeLabel");
+    });
+
+    await t.step("handles --workers and --max-steps flags", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--workers",
+        "2",
+        "--max-steps",
+        "10",
+      ]);
+      expect(result.success).to.be.true;
+    });
+
+    await t.step("error on invalid --max-steps", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--max-steps",
+        "0",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: --max-steps must be a positive integer",
+      );
+    });
+
+    await t.step("error on invalid --workers", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "--workers",
+        "abc",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: --workers must be a positive integer",
+      );
+    });
+
+    await t.step("error on extra arguments", async () => {
+      const result = await runCommand([
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-run",
+        "bin/genForest.ts",
+        "1",
+        "extra",
+      ]);
+      expect(result.success).to.be.false;
+      expect(result.stderr).to.include(
+        "Error: genForest writes to stdout; unexpected extra argument 'extra'",
+      );
     });
   });
 });

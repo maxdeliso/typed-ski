@@ -5,6 +5,7 @@ import {
   assertStrictEquals,
   assertThrows,
 } from "std/assert";
+import { requiredAt } from "../../util/required.ts";
 
 import type {
   SymbolTable,
@@ -17,7 +18,7 @@ import {
   substituteTermHygienicBatch,
   substituteTripLangTermDirectBatch,
 } from "../../../lib/meta/frontend/substitution.ts";
-import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
+import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import {
   mkSystemFAbs,
   mkSystemFTAbs,
@@ -129,7 +130,7 @@ Deno.test("substitution (batch + resolution) dedicated coverage", async (t) => {
       assertEquals(term.scrutinee.name, "x");
       assertEquals(term.arms.length, 1);
 
-      const arm0 = term.arms[0];
+      const arm0 = requiredAt(term.arms, 0, "expected first match arm");
       assertEquals(arm0.params.length, 1);
       assertNotEquals(
         arm0.params[0],

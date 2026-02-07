@@ -15,7 +15,7 @@ import type { TripLangValueType } from "../trip.ts";
  * A bound variable reference using a De Bruijn index.
  * The index represents the number of binders to traverse upward to reach the binding site.
  */
-export interface DeBruijnVar {
+interface DeBruijnVar {
   kind: "DbVar";
   index: number;
 }
@@ -23,7 +23,7 @@ export interface DeBruijnVar {
 /**
  * A free term variable identified by its original name.
  */
-export interface DeBruijnFreeVar {
+interface DeBruijnFreeVar {
   kind: "DbFreeVar";
   name: string;
 }
@@ -31,7 +31,7 @@ export interface DeBruijnFreeVar {
 /**
  * A free type variable identified by its original name.
  */
-export interface DeBruijnFreeTypeVar {
+interface DeBruijnFreeTypeVar {
   kind: "DbFreeTypeVar";
   name: string;
 }
@@ -39,7 +39,7 @@ export interface DeBruijnFreeTypeVar {
 /**
  * An untyped lambda abstraction: λ body
  */
-export interface DeBruijnAbs {
+interface DeBruijnAbs {
   kind: "DbAbs";
   body: DeBruijnTerm;
 }
@@ -47,7 +47,7 @@ export interface DeBruijnAbs {
 /**
  * A System F term abstraction: λx: T. body
  */
-export interface DeBruijnSysFAbs {
+interface DeBruijnSysFAbs {
   kind: "DbSysFAbs";
   typeAnnotation: DeBruijnTerm;
   body: DeBruijnTerm;
@@ -56,7 +56,7 @@ export interface DeBruijnSysFAbs {
 /**
  * A typed lambda abstraction: λx: T. body
  */
-export interface DeBruijnTypedAbs {
+interface DeBruijnTypedAbs {
   kind: "DbTypedAbs";
   type: DeBruijnTerm;
   body: DeBruijnTerm;
@@ -65,7 +65,7 @@ export interface DeBruijnTypedAbs {
 /**
  * A System F type abstraction: ΛX. body
  */
-export interface DeBruijnTyAbs {
+interface DeBruijnTyAbs {
   kind: "DbTyAbs";
   body: DeBruijnTerm;
 }
@@ -73,7 +73,7 @@ export interface DeBruijnTyAbs {
 /**
  * A universal type: ∀X. body
  */
-export interface DeBruijnForall {
+interface DeBruijnForall {
   kind: "DbForall";
   body: DeBruijnTerm;
 }
@@ -81,7 +81,7 @@ export interface DeBruijnForall {
 /**
  * A term application: left right
  */
-export interface DeBruijnApp {
+interface DeBruijnApp {
   kind: "DbApp";
   left: DeBruijnTerm;
   right: DeBruijnTerm;
@@ -90,7 +90,7 @@ export interface DeBruijnApp {
 /**
  * A type application: term [typeArg]
  */
-export interface DeBruijnTyApp {
+interface DeBruijnTyApp {
   kind: "DbTyApp";
   term: DeBruijnTerm;
   typeArg: DeBruijnTerm;
@@ -99,7 +99,7 @@ export interface DeBruijnTyApp {
 /**
  * A type application: TypeFn TypeArg
  */
-export interface DeBruijnTypeApp {
+interface DeBruijnTypeApp {
   kind: "DbTypeApp";
   fn: DeBruijnTerm;
   arg: DeBruijnTerm;
@@ -108,7 +108,7 @@ export interface DeBruijnTypeApp {
 /**
  * A match arm in De Bruijn form.
  */
-export interface DeBruijnMatchArm {
+interface DeBruijnMatchArm {
   constructorName: string;
   paramsCount: number;
   body: DeBruijnTerm;
@@ -117,7 +117,7 @@ export interface DeBruijnMatchArm {
 /**
  * A match expression: match scrutinee [returnType] { ... }
  */
-export interface DeBruijnMatch {
+interface DeBruijnMatch {
   kind: "DbMatch";
   scrutinee: DeBruijnTerm;
   returnType: DeBruijnTerm;
@@ -127,7 +127,7 @@ export interface DeBruijnMatch {
 /**
  * A let binding: let x = value in body (body has x at index 0 in termCtx).
  */
-export interface DeBruijnLet {
+interface DeBruijnLet {
   kind: "DbLet";
   value: DeBruijnTerm;
   body: DeBruijnTerm;
@@ -136,7 +136,7 @@ export interface DeBruijnLet {
 /**
  * A terminal symbol (S, K, I).
  */
-export interface DeBruijnTerminal {
+interface DeBruijnTerminal {
   kind: "DbTerminal";
   sym: string;
 }

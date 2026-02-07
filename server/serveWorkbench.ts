@@ -14,6 +14,14 @@ const PORT = parseInt(Deno.args[0] || "8080", 10);
 const serverFileUrl = import.meta.url;
 const serverDirUrl = new URL(".", serverFileUrl);
 const projectRootUrl = new URL("..", serverDirUrl);
+const projectRootPath = Deno.realPathSync(projectRootUrl.pathname);
+const projectRootPrefix = projectRootPath.endsWith("/")
+  ? projectRootPath
+  : `${projectRootPath}/`;
+
+function isWithinProjectRoot(path: string): boolean {
+  return path === projectRootPath || path.startsWith(projectRootPrefix);
+}
 
 async function transpileTypeScript(filePath: string): Promise<string> {
   try {
@@ -98,19 +106,30 @@ async function handler(req: Request): Promise<Response> {
   const fullPathString = fullPath.pathname;
 
   try {
+    // Block path traversal attempts before touching the filesystem.
+    if (!isWithinProjectRoot(fullPathString)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    // Resolve symlinks and ensure the final target is still inside the project root.
+    const resolvedPath = await Deno.realPath(fullPathString);
+    if (!isWithinProjectRoot(resolvedPath)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
     // Check if file exists
-    const stat = await Deno.stat(fullPathString);
+    const stat = await Deno.stat(resolvedPath);
 
     // Handle TypeScript files - transpile to JavaScript
     if (localPath.endsWith(".ts") || localPath.endsWith(".tsx")) {
       try {
-        const jsContent = await transpileTypeScript(fullPathString);
+        const jsContent = await transpileTypeScript(resolvedPath);
 
         const headers = createHeaders("application/javascript");
         return new Response(jsContent, { headers });
       } catch (transpileError) {
         console.error(
-          `Transpilation error for ${fullPathString}:`,
+          `Transpilation error for ${resolvedPath}:`,
           transpileError,
         );
         const errorMessage = transpileError instanceof Error
@@ -132,7 +151,7 @@ async function handler(req: Request): Promise<Response> {
     }
 
     // For other files, serve as-is
-    const file = await Deno.open(fullPathString, { read: true });
+    const file = await Deno.open(resolvedPath, { read: true });
     const content = file.readable;
 
     // Determine content type

@@ -17,7 +17,7 @@ import type {
   TripLangValueType,
   TypeDefinition,
 } from "../trip.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 
 /**
  * Builds a symbol table for a TripLang program, ensuring all term and type names are unique.

@@ -6,6 +6,7 @@
  * @module
  */
 
+import { sleep } from "../async.ts";
 import type { ArenaWasmExports } from "../arenaEvaluator.ts";
 import { SABHEADER_HEADER_SIZE_U32 } from "../arenaHeader.generated.ts";
 import { ArenaIoRings } from "./arenaRing.ts";
@@ -32,23 +33,6 @@ const DEFAULT_STDOUT_READ_SIZE = 4096;
  * - Low enough to prevent blocking the event loop and maintain responsiveness
  */
 const BUSY_WAIT_THRESHOLD = 512;
-
-/**
- * Cancellable sleep function that returns both the promise and a cleanup function.
- */
-function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  const promise = new Promise<void>((r) => {
-    timeoutId = setTimeout(r, ms);
-  });
-  const cancel = () => {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-  };
-  return { promise, cancel };
-}
 
 /**
  * Manages IO operations (stdin/stdout) and suspension wake-ups.

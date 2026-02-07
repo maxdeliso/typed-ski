@@ -6,6 +6,7 @@
  */
 
 import { assertEquals } from "std/assert";
+import { requiredAt } from "../../util/required.ts";
 import {
   alphaRenameTermBinder,
   alphaRenameTypeBinder,
@@ -474,10 +475,17 @@ Deno.test("hygienic substitution functions", async (t) => {
         (renamed as { scrutinee: { name: string } }).scrutinee.name,
         "y",
       );
-      const arm = (renamed as {
-        arms: Array<{ params: string[]; body: { name: string } }>;
-      }).arms[0];
-      assertEquals(arm.params[0], "y");
+      const arm = requiredAt(
+        (renamed as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms,
+        0,
+        "expected first match arm",
+      );
+      assertEquals(
+        requiredAt(arm.params, 0, "expected first arm parameter"),
+        "y",
+      );
       assertEquals(arm.body.name, "y");
     });
 
@@ -507,11 +515,21 @@ Deno.test("hygienic substitution functions", async (t) => {
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
         assertEquals(renamed.kind, "systemF-match");
-        const arm = (renamed as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms[0];
-        assertEquals(arm.params[0], "a");
-        assertEquals(arm.params[1], "y");
+        const arm = requiredAt(
+          (renamed as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
+        assertEquals(
+          requiredAt(arm.params, 0, "expected first arm parameter"),
+          "a",
+        );
+        assertEquals(
+          requiredAt(arm.params, 1, "expected second arm parameter"),
+          "y",
+        );
         assertEquals(arm.body.name, "y");
       },
     );
@@ -542,12 +560,22 @@ Deno.test("hygienic substitution functions", async (t) => {
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
         assertEquals(renamed.kind, "systemF-match");
-        const arm = (renamed as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms[0];
+        const arm = requiredAt(
+          (renamed as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
         // Should not rename because "y" already exists in params
-        assertEquals(arm.params[0], "x");
-        assertEquals(arm.params[1], "y");
+        assertEquals(
+          requiredAt(arm.params, 0, "expected first arm parameter"),
+          "x",
+        );
+        assertEquals(
+          requiredAt(arm.params, 1, "expected second arm parameter"),
+          "y",
+        );
         assertEquals(arm.body.name, "x");
       },
     );
@@ -578,10 +606,17 @@ Deno.test("hygienic substitution functions", async (t) => {
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
         assertEquals(renamed.kind, "systemF-match");
-        const arm = (renamed as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms[0];
-        assertEquals(arm.params[0], "a");
+        const arm = requiredAt(
+          (renamed as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
+        assertEquals(
+          requiredAt(arm.params, 0, "expected first arm parameter"),
+          "a",
+        );
         assertEquals(arm.body.name, "y");
       },
     );
@@ -747,10 +782,17 @@ Deno.test("hygienic substitution functions", async (t) => {
         (renamed as { scrutinee: { name: string } }).scrutinee.name,
         "x",
       );
-      const arm = (renamed as {
-        arms: Array<{ params: string[]; body: { name: string } }>;
-      }).arms[0];
-      assertEquals(arm.params[0], "a");
+      const arm = requiredAt(
+        (renamed as {
+          arms: Array<{ params: string[]; body: { name: string } }>;
+        }).arms,
+        0,
+        "expected first match arm",
+      );
+      assertEquals(
+        requiredAt(arm.params, 0, "expected first arm parameter"),
+        "a",
+      );
       assertEquals(arm.body.name, "a");
     });
 
@@ -1302,8 +1344,11 @@ Deno.test("hygienic substitution functions", async (t) => {
       );
       // The x in the match arm body should be substituted
       assertEquals(
-        (result as { arms: Array<{ body: { name: string } }> }).arms[0].body
-          .name,
+        requiredAt(
+          (result as { arms: Array<{ body: { name: string } }> }).arms,
+          0,
+          "expected first match arm",
+        ).body.name,
         "y",
       );
     });
@@ -1343,11 +1388,20 @@ Deno.test("hygienic substitution functions", async (t) => {
           "x",
         );
         // The match arm parameter 'x' should be renamed to avoid capture
-        const arm = (result as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms[0];
-        assertEquals(arm.params[0] !== "x", true); // Should be renamed
-        assertEquals(arm.body.name, arm.params[0]); // Body should reference renamed param
+        const arm = requiredAt(
+          (result as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
+        const param0 = requiredAt(
+          arm.params,
+          0,
+          "expected first arm parameter",
+        );
+        assertEquals(param0 !== "x", true); // Should be renamed
+        assertEquals(arm.body.name, param0); // Body should reference renamed param
       },
     );
 
@@ -1434,8 +1488,14 @@ Deno.test("hygienic substitution functions", async (t) => {
         const arms = (result as {
           arms: Array<{ params: string[]; body: { name: string } }>;
         }).arms;
-        assertEquals(arms[0].body.name, "x"); // Should remain unchanged
-        assertEquals(arms[1].body.name, "z"); // Should be substituted
+        assertEquals(
+          requiredAt(arms, 0, "expected first match arm").body.name,
+          "x",
+        ); // Should remain unchanged
+        assertEquals(
+          requiredAt(arms, 1, "expected second match arm").body.name,
+          "z",
+        ); // Should be substituted
       },
     );
 
@@ -1483,19 +1543,33 @@ Deno.test("hygienic substitution functions", async (t) => {
         };
         const result = substituteHygienic(term, "m", replacement);
         assertEquals(result.kind, "systemF-match");
-        const arm = (result as {
-          arms: Array<
-            {
-              params: string[];
-              body: { lft: { name: string }; rgt: { name: string } };
-            }
-          >;
-        }).arms[0];
+        const arm = requiredAt(
+          (result as {
+            arms: Array<
+              {
+                params: string[];
+                body: { lft: { name: string }; rgt: { name: string } };
+              }
+            >;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
         // Both parameters should be renamed
-        assertEquals(arm.params[0] !== "x", true);
-        assertEquals(arm.params[1] !== "y", true);
-        assertEquals(arm.body.lft.name, arm.params[0]);
-        assertEquals(arm.body.rgt.name, arm.params[1]);
+        const param0 = requiredAt(
+          arm.params,
+          0,
+          "expected first arm parameter",
+        );
+        const param1 = requiredAt(
+          arm.params,
+          1,
+          "expected second arm parameter",
+        );
+        assertEquals(param0 !== "x", true);
+        assertEquals(param1 !== "y", true);
+        assertEquals(arm.body.lft.name, param0);
+        assertEquals(arm.body.rgt.name, param1);
       },
     );
   });
@@ -1590,14 +1664,18 @@ Deno.test("hygienic substitution functions", async (t) => {
           (result as { returnType: { typeName: string } }).returnType.typeName,
           "B",
         );
-        const arm = (result as {
-          arms: Array<{
-            body: {
-              kind: string;
-              typeArg: { typeName: string };
-            };
-          }>;
-        }).arms[0];
+        const arm = requiredAt(
+          (result as {
+            arms: Array<{
+              body: {
+                kind: string;
+                typeArg: { typeName: string };
+              };
+            }>;
+          }).arms,
+          0,
+          "expected first match arm",
+        );
         assertEquals(arm.body.typeArg.typeName, "B");
       },
     );

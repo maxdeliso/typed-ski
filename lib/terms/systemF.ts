@@ -13,7 +13,7 @@ import type { BaseType } from "../types/types.ts";
  * A term variable in System F.
  * Represents a reference to a bound or free variable by name.
  */
-export interface SystemFVar {
+interface SystemFVar {
   kind: "systemF-var";
   name: string;
 }
@@ -32,7 +32,7 @@ export const mkSystemFVar = (name: string): SystemFVar => ({
  * A term abstraction in System F: λx: T. t
  * Represents a function that binds a variable with a type annotation.
  */
-export interface SystemFAbs {
+interface SystemFAbs {
   kind: "systemF-abs";
   name: string;
   typeAnnotation: BaseType;
@@ -61,7 +61,7 @@ export const mkSystemFAbs = (
  * A type abstraction in System F: ΛX. t
  * Represents a polymorphic function that abstracts over a type variable.
  */
-export interface SystemFTAbs {
+interface SystemFTAbs {
   kind: "systemF-type-abs";
   typeVar: string;
   body: SystemFTerm;
@@ -86,7 +86,7 @@ export const mkSystemFTAbs = (
  * A type application node in System F: t [T]
  * Represents applying a polymorphic term to a type argument.
  */
-export interface SystemFTypeApp {
+interface SystemFTypeApp {
   kind: "systemF-type-app";
   term: SystemFTerm;
   typeArg: BaseType;
@@ -98,7 +98,7 @@ export interface SystemFMatchArm {
   body: SystemFTerm;
 }
 
-export interface SystemFMatch {
+interface SystemFMatch {
   kind: "systemF-match";
   scrutinee: SystemFTerm;
   returnType: BaseType;
@@ -109,7 +109,7 @@ export interface SystemFMatch {
  * A let binding: let x = v in b (or let x : T = v in b).
  * Desugars to (λx. b) v. Unannotated form infers the type from v at typecheck.
  */
-export interface SystemFLet {
+interface SystemFLet {
   kind: "systemF-let";
   name: string;
   value: SystemFTerm;
@@ -149,7 +149,7 @@ export const mkSystemFApp = (
  * Applications are binary operations where the left term is applied to the right term.
  * This is the fundamental operation for function application in System F.
  */
-export interface SystemFApplication {
+interface SystemFApplication {
   kind: "non-terminal";
   lft: SystemFTerm;
   rgt: SystemFTerm;

@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { elaborateSystemF } from "../../../lib/meta/frontend/elaboration.ts";
-import { CompilationError } from "../../../lib/meta/frontend/compilation.ts";
+import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import type { DataDefinition, SymbolTable } from "../../../lib/meta/trip.ts";
 import {
   mkSystemFAbs,

@@ -151,7 +151,7 @@ function parseDataDefinition(
   }, currentState];
 }
 
-export function parseTripLangDefinition(
+function parseTripLangDefinition(
   state: ParserState,
 ): [TripLangTerm, ParserState] {
   let currentState: ParserState;

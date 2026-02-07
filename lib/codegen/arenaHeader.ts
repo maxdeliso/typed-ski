@@ -28,24 +28,9 @@ import { type ParsedStruct, parseRustStruct } from "../parser/rustStruct.ts";
  */
 export function generateRingHeaderConstants(): string {
   // Cache line size: 64 bytes = 16 u32 words
-  const _CACHE_LINE_BYTES = 64;
-  const _CACHE_LINE_U32 = _CACHE_LINE_BYTES / 4;
-
-  // First cache line: head and not_full
-  const _RING_HEAD_INDEX = 0;
-  const _RING_NOT_FULL_INDEX = 1;
-
-  // Second cache line: tail and not_empty
-  const _RING_TAIL_INDEX = _CACHE_LINE_U32;
-  const _RING_NOT_EMPTY_INDEX = _CACHE_LINE_U32 + 1;
-
-  // Third cache line: mask and entries
-  const _RING_MASK_INDEX = _CACHE_LINE_U32 * 2;
-  const _RING_ENTRIES_INDEX = _RING_MASK_INDEX + 1;
-
-  // Total header size: 3 cache lines
-  const _RING_HEADER_BYTES = _CACHE_LINE_BYTES * 3;
-  const _RING_HEADER_U32 = _RING_HEADER_BYTES / 4;
+  const CACHE_LINE_BYTES = 64;
+  const RING_HEAD_INDEX = 0;
+  const RING_NOT_FULL_INDEX = 1;
 
   return `/**
  * Ring buffer header constants
@@ -67,13 +52,13 @@ export function generateRingHeaderConstants(): string {
  *
  * @see rust/src/arena.rs for the Rust struct definition
  */
-const CACHE_LINE_BYTES = ${_CACHE_LINE_BYTES};
+const CACHE_LINE_BYTES = ${CACHE_LINE_BYTES};
 const CACHE_LINE_U32 = CACHE_LINE_BYTES / 4;
 
 export const RING_HEADER_BYTES = CACHE_LINE_BYTES * 3;
 export const RING_HEADER_U32 = RING_HEADER_BYTES / 4;
-export const RING_HEAD_INDEX = ${_RING_HEAD_INDEX};
-export const RING_NOT_FULL_INDEX = ${_RING_NOT_FULL_INDEX};
+export const RING_HEAD_INDEX = ${RING_HEAD_INDEX};
+export const RING_NOT_FULL_INDEX = ${RING_NOT_FULL_INDEX};
 export const RING_TAIL_INDEX = CACHE_LINE_U32;
 export const RING_NOT_EMPTY_INDEX = RING_TAIL_INDEX + 1;
 export const RING_MASK_INDEX = RING_TAIL_INDEX + CACHE_LINE_U32;

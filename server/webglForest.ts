@@ -406,6 +406,10 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     clearWorldTransform: rebuild,
     destroy: () => {
       active = false;
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
       globalThis.removeEventListener("keydown", onKey);
       deps.canvas.removeEventListener("pointerdown", onPointerDown);
       deps.canvas.removeEventListener("pointermove", onPointerMove);
@@ -413,6 +417,9 @@ export function initWebglForestViewer(deps: ViewerDeps) {
       deps.canvas.removeEventListener("pointerleave", onPointerLeave);
       deps.canvas.removeEventListener("wheel", onWheel);
       deps.canvas.removeEventListener("contextmenu", onContextMenu);
+      gl.deleteBuffer(lineBuf);
+      gl.deleteBuffer(colorBuf);
+      gl.deleteBuffer(sphereBuf);
       gl.deleteProgram(progBundle.program);
     },
   };

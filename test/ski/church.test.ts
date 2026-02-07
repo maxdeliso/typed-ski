@@ -23,9 +23,9 @@ import {
   UnChurchBoolean,
   UnChurchNumber,
 } from "../../lib/ski/church.ts";
-import { I, K, S } from "../../lib/ski/terminal.ts";
+import { I, K, S, SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
-import { predLambda } from "../../lib/consts/lambdas.ts";
+import { parseLambda } from "../../lib/parser/untyped.ts";
 import {
   apply,
   applyMany,
@@ -273,6 +273,80 @@ Deno.test("Church numeral optimization functions", async (t) => {
     const decoded64 = UnChurchNumber(arenaEvaluator.reduce(church64));
     expect(decoded64).to.equal(64n);
   });
+
+  await t.step("toBigInt should throw for non-integers", () => {
+    expect(() => ChurchN(1.5)).to.throw(
+      "Only integer values can be converted to Church numerals",
+    );
+  });
+
+  await t.step("ChurchN should throw for negative integers", () => {
+    expect(() => ChurchN(-1)).to.throw(
+      "only non-negative integers are supported",
+    );
+  });
+
+  await t.step(
+    "UnChurchNumber should handle non-function-valued SKI terms",
+    () => {
+      // K is a function, but when applied to one arg it returns another function.
+      // If we just pass K as a Church numeral, UnChurchNumber might fail gracefully.
+      const result = UnChurchNumber(K);
+      expect(result).to.equal(0n);
+    },
+  );
+
+  await t.step(
+    "UnChurchNumber should handle IO terminals by returning 0",
+    () => {
+      const readOneExpr = {
+        kind: "terminal" as const,
+        sym: SKITerminalSymbol.ReadOne,
+      };
+      const result = UnChurchNumber(readOneExpr);
+      expect(result).to.equal(0n);
+    },
+  );
+
+  await t.step("UnChurchNumber should handle Turner primes", () => {
+    // S' w x y z = w (x z) (y z)
+    // S' I I I 0 should be I(I 0)(I 0) = 0(0) which might fail as 0 is not a function
+    // But let's just see if it doesn't crash
+    const SPrime = { kind: "terminal" as const, sym: SKITerminalSymbol.SPrime };
+    const BPrime = { kind: "terminal" as const, sym: SKITerminalSymbol.BPrime };
+    const CPrime = { kind: "terminal" as const, sym: SKITerminalSymbol.CPrime };
+
+    expect(UnChurchNumber(applyMany(SPrime, I, I, I))).to.be.a("bigint");
+    expect(UnChurchNumber(applyMany(BPrime, I, I, I))).to.be.a("bigint");
+    expect(UnChurchNumber(applyMany(CPrime, I, I, I))).to.be.a("bigint");
+  });
+
+  await t.step("findPerfectPower edge cases", () => {
+    expect(findPerfectPower(0)).to.be.null;
+    expect(findPerfectPower(1)).to.be.null;
+    expect(findPerfectPower(2)).to.be.null;
+    expect(findPerfectPower(3)).to.be.null;
+    expect(findPerfectPower(4)).to.deep.equal([2n, 2n]);
+  });
+
+  await t.step("findFactors edge cases", () => {
+    expect(findFactors(0)).to.be.null;
+    expect(findFactors(1)).to.be.null;
+    expect(findFactors(2)).to.be.null;
+    expect(findFactors(3)).to.be.null;
+    expect(findFactors(4)).to.deep.equal([2n, 2n]);
+    expect(findFactors(5)).to.be.null; // prime
+  });
+
+  await t.step(
+    "UnChurchNumber with invalid church numeral (not returning bigint)",
+    () => {
+      // A "church numeral" that returns something else
+      // λf.λx.K
+      const invalidChurch = apply(K, K);
+      expect(UnChurchNumber(invalidChurch)).to.equal(0n);
+    },
+  );
 });
 
 Deno.test("Church encodings", async (t) => {
@@ -410,6 +484,9 @@ Deno.test("Church encodings", async (t) => {
   });
 
   await t.step("predecessor", () => {
+    const [, predLambda] = parseLambda(
+      "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
+    );
     const pred = bracketLambda(predLambda);
 
     for (let m = 0n; m < N; m++) {

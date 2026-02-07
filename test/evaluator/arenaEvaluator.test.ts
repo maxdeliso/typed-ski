@@ -1,16 +1,41 @@
 import { assert, assertEquals } from "std/assert";
+import { expect } from "chai";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 
 import {
-  type ArenaEvaluatorWasm,
+  ArenaEvaluatorWasm,
   createArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
 import { getOrBuildArenaViews } from "../../lib/evaluator/arenaViews.ts";
+import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
+import type { ArenaNode } from "../../lib/shared/types.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+
+class TestArenaEvaluator extends ArenaEvaluatorWasm {
+  public override getArenaTop(): number {
+    return super.getArenaTop();
+  }
+  public override getArenaNode(
+    id: number,
+    views: ArenaViews | null,
+  ): ArenaNode | null {
+    return super.getArenaNode(id, views);
+  }
+
+  // We need to set these for mocking in tests
+  public setArenaTop(fn: () => number) {
+    this.getArenaTop = fn;
+  }
+  public setArenaNode(
+    fn: (id: number, views: ArenaViews | null) => ArenaNode | null,
+  ) {
+    this.getArenaNode = fn;
+  }
+}
 
 let arenaEval: ArenaEvaluatorWasm;
 
@@ -260,5 +285,78 @@ Deno.test("dumpArena", async (t) => {
     assert(!nodes.some((n) => n.id === 0), "Holed-out node should be skipped");
 
     evaluator.reset();
+  });
+});
+
+Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
+  await t.step("hostSubmit and hostPull throw if missing from WASM", () => {
+    // We need a real instance but with missing optional exports.
+    // The createArenaEvaluator() returns a real one.
+    const evaluator = ArenaEvaluatorWasm.fromInstance({
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    }, new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }));
+
+    expect(() => evaluator.hostSubmit(0, 0, 0)).to.throw(
+      "hostSubmit export missing",
+    );
+    expect(() => evaluator.hostPull()).to.throw("hostPull export missing");
+  });
+
+  await t.step("getArenaTop handles missing debugGetArenaBaseAddr", () => {
+    const evaluator = new TestArenaEvaluator(
+      {
+        reset: () => {},
+        allocTerminal: () => 0,
+        allocCons: () => 0,
+        arenaKernelStep: () => 0,
+        reduce: () => 0,
+        kindOf: () => 0,
+        symOf: () => 0,
+        leftOf: () => 0,
+        rightOf: () => 0,
+      },
+      new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
+    );
+
+    expect(evaluator.getArenaTop()).to.equal(0);
+  });
+
+  await t.step("dumpArenaStreaming coverage", () => {
+    const evaluator = new TestArenaEvaluator(
+      {
+        reset: () => {},
+        allocTerminal: () => 0,
+        allocCons: () => 0,
+        arenaKernelStep: () => 0,
+        reduce: () => 0,
+        kindOf: () => 0,
+        symOf: () => 0,
+        leftOf: () => 0,
+        rightOf: () => 0,
+        debugGetArenaBaseAddr: () => 0,
+      },
+      new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
+    );
+
+    // Mock getArenaTop to return 5
+    evaluator.setArenaTop(() => 5);
+    // Mock getArenaNode to return some nodes and some nulls
+    evaluator.setArenaNode((id: number) => {
+      if (id % 2 === 0) return { id, kind: "terminal", sym: "I" };
+      return null;
+    });
+
+    const chunks = Array.from(evaluator.dumpArenaStreaming(2));
+    expect(chunks).to.have.lengthOf(2);
+    expect(chunks[0]).to.have.lengthOf(2); // ids 0, 2
+    expect(chunks[1]).to.have.lengthOf(1); // id 4
   });
 });

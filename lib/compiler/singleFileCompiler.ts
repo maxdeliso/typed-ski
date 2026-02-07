@@ -55,7 +55,7 @@ function extractModuleInfo(program: TripLangProgram): {
     );
   }
 
-  const moduleName = moduleDefs[0].name;
+  const moduleName = moduleDefs[0]!.name;
 
   // Extract imports
   // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")

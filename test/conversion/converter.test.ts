@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
-import { predLambda } from "../../lib/consts/lambdas.ts";
-import { makeUntypedChurchNumeral } from "../../lib/consts/nat.ts";
+import { parseLambda } from "../../lib/parser/untyped.ts";
+import { makeUntypedBinNumeral } from "../../lib/consts/nat.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import {
@@ -175,6 +175,9 @@ Deno.test("Lambda conversion", async (t) => {
     });
 
     await t.step("converts predecessor function to equivalent SKI term", () => {
+      const [, predLambda] = parseLambda(
+        "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
+      );
       for (let n = 0; n < N; n++) {
         const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
         const result = UnChurchNumber(
@@ -188,8 +191,43 @@ Deno.test("Lambda conversion", async (t) => {
   });
 
   await t.step("nat literal lowers via church encoder", () => {
-    const literal: UntypedLambda = makeUntypedChurchNumeral(8n);
-    const ski = bracketLambda(literal);
+    // 1. Define Bin constructors as Church arithmetic operators
+    // BZ = 0
+    const [, BZ] = parseLambda("\\f=>\\x=>x");
+    // B0 = \n => 2 * n
+    // mul = \m \n \f \x => m (n f) x
+    // two = \f \x => f (f x)
+    // mul two n = \f \x => (n f) ((n f) x)
+    const [, B0] = parseLambda("\\n=>\\f=>\\x=> (n f) ((n f) x)");
+    // B1 = \n => 2 * n + 1
+    // succ (mul two n) = \f \x => f (mul two n f x)
+    const [, B1] = parseLambda("\\n=>\\f=>\\x=> f ((n f) ((n f) x))");
+
+    // 2. Parse the literal "8" -> produces Bin term with free vars B0, B1, BZ
+    // 8 = 1000 base 2 = B0 (B0 (B0 B1)) ?? No
+    // 8 = B0 (B0 (B0 (B1 BZ))) -> 2 * (2 * (2 * (1*0+1))) = 8.
+    const literal: UntypedLambda = makeUntypedBinNumeral(8n);
+
+    // 3. Helper to substitute free vars with our definitions
+    const substituteBin = (term: UntypedLambda): UntypedLambda => {
+      switch (term.kind) {
+        case "lambda-var":
+          if (term.name === "BZ") return BZ;
+          if (term.name === "B0") return B0;
+          if (term.name === "B1") return B1;
+          return term;
+        case "lambda-abs":
+          return mkUntypedAbs(term.name, substituteBin(term.body));
+        case "non-terminal":
+          return createApplication(
+            substituteBin(term.lft),
+            substituteBin(term.rgt),
+          );
+      }
+    };
+
+    const churchTerm = substituteBin(literal);
+    const ski = bracketLambda(churchTerm);
     const result = UnChurchNumber(arenaEvaluator.reduce(ski));
     expect(result).to.equal(8n);
   });

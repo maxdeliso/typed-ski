@@ -8,7 +8,7 @@ import type { BaseType } from "../types/types.ts";
 import { mkTypeVariable } from "../types/types.ts";
 
 export const NAT_TYPE_NAME = "Nat";
-export const NAT_LITERAL_PREFIX = "__trip_nat_literal__";
+const NAT_LITERAL_PREFIX = "__trip_nat_literal__";
 
 export const makeNatType = (): BaseType => mkTypeVariable(NAT_TYPE_NAME);
 

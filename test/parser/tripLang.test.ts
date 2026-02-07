@@ -1,5 +1,4 @@
 import { expect } from "chai";
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
@@ -16,7 +15,9 @@ import { arrow, mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
-import { makeTypedChurchNumeral } from "../../lib/types/natLiteral.ts";
+import { makeTypedBinNumeral } from "../../lib/types/binLiteral.ts";
+import { requiredAt } from "../util/required.ts";
+import { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -101,7 +102,7 @@ Deno.test("parseTripLang", async (t) => {
         ty: { kind: "type-var", typeName: "Int" },
         body: createTypedApplication(
           createTypedApplication(mkVar("plus"), mkVar("x")),
-          makeTypedChurchNumeral(1n),
+          makeTypedBinNumeral(1n),
         ),
       },
     });
@@ -269,7 +270,7 @@ data Token =
       "compiler",
       "lexer.trip",
     );
-    const input = readFileSync(lexerPath, "utf-8").trim();
+    const input = loadTripSourceFileSync(lexerPath).trim();
     const program = parseTripLang(input);
 
     // Lightweight "whole file" sanity checks (beyond just the Token ADT)
@@ -620,7 +621,7 @@ Deno.test("parse single poly", async (t) => {
 
     expect(result.kind).to.equal("program");
     expect(result.terms).to.have.length(1);
-    const [term] = result.terms;
+    const term = requiredAt(result.terms, 0, "expected poly term");
 
     if (term.kind !== "poly") {
       throw new Error(`expected 'poly' term, got '${term.kind}'`);

@@ -16,7 +16,7 @@ import {
   type SystemFTerm,
 } from "../../terms/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
-import { CompilationError } from "./compilation.ts";
+import { CompilationError } from "./errors.ts";
 
 export function elaborateTerms(
   parsed: TripLangProgram,
@@ -28,7 +28,7 @@ export function elaborateTerms(
   };
 }
 
-export function elaborateTerm(
+function elaborateTerm(
   term: TripLangTerm,
   syms: SymbolTable,
 ): TripLangTerm {
@@ -160,7 +160,7 @@ function elaborateMatch(
       // We'll use a placeholder type - the linker will fix this
       for (let i = arm.params.length - 1; i >= 0; i--) {
         body = mkSystemFAbs(
-          arm.params[i],
+          arm.params[i]!,
           { kind: "type-var", typeName: "A" },
           body,
         );
@@ -179,7 +179,7 @@ function elaborateMatch(
   }
 
   // Original validation logic for local constructors
-  const dataName = constructorInfos[0].info!.dataName;
+  const dataName = constructorInfos[0]!.info!.dataName;
   for (const { info } of constructorInfos) {
     if (info!.dataName !== dataName) {
       throw new CompilationError(
@@ -239,7 +239,7 @@ function elaborateMatch(
       }
       let body = elaborateSystemF(arm.body, syms);
       for (let i = arm.params.length - 1; i >= 0; i--) {
-        body = mkSystemFAbs(arm.params[i], fields[i], body);
+        body = mkSystemFAbs(arm.params[i]!, fields[i]!, body);
       }
       return body;
     });

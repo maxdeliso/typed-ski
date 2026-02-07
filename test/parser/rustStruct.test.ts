@@ -14,6 +14,12 @@ import {
   type StructField,
 } from "../../lib/parser/rustStruct.ts";
 
+function requiredField(fields: StructField[], index: number): StructField {
+  const field = fields[index];
+  assertExists(field, `Missing field at index ${index}`);
+  return field;
+}
+
 Deno.test("parseRustStruct", async (t) => {
   await t.step("should parse basic struct with simple fields", () => {
     const source = `
@@ -27,10 +33,10 @@ struct TestStruct {
 
     assertEquals(result.name, "TestStruct");
     assertEquals(result.fields.length, 2);
-    assertEquals(result.fields[0].name, "field1");
-    assertEquals(result.fields[0].type, "u32");
-    assertEquals(result.fields[1].name, "field2");
-    assertEquals(result.fields[1].type, "String");
+    assertEquals(requiredField(result.fields, 0).name, "field1");
+    assertEquals(requiredField(result.fields, 0).type, "u32");
+    assertEquals(requiredField(result.fields, 1).name, "field2");
+    assertEquals(requiredField(result.fields, 1).type, "String");
     assertEquals(result.hasReprC, false); // No #[repr(C)] attribute
   });
 
@@ -48,8 +54,8 @@ struct TestStruct {
     const result = parseRustStruct(source, "TestStruct");
 
     assertEquals(result.fields.length, 2);
-    assertEquals(result.fields[0].name, "field1");
-    assertEquals(result.fields[1].name, "field2");
+    assertEquals(requiredField(result.fields, 0).name, "field1");
+    assertEquals(requiredField(result.fields, 1).name, "field2");
     assertEquals(result.hasReprC, true);
   });
 
@@ -65,12 +71,15 @@ struct TestStruct {
     const result = parseRustStruct(source, "TestStruct");
 
     assertEquals(result.fields.length, 3);
-    assertEquals(result.fields[0].name, "field1");
-    assertEquals(result.fields[0].type, "AtomicU32");
-    assertEquals(result.fields[1].name, "field2");
-    assertEquals(result.fields[1].type, "Vec<String>");
-    assertEquals(result.fields[2].name, "field3");
-    assertEquals(result.fields[2].type, "Option<Result<u32, Error>>");
+    assertEquals(requiredField(result.fields, 0).name, "field1");
+    assertEquals(requiredField(result.fields, 0).type, "AtomicU32");
+    assertEquals(requiredField(result.fields, 1).name, "field2");
+    assertEquals(requiredField(result.fields, 1).type, "Vec<String>");
+    assertEquals(requiredField(result.fields, 2).name, "field3");
+    assertEquals(
+      requiredField(result.fields, 2).type,
+      "Option<Result<u32, Error>>",
+    );
   });
 
   await t.step("should parse struct with field attributes", () => {
@@ -86,8 +95,8 @@ struct TestStruct {
     const result = parseRustStruct(source, "TestStruct");
 
     assertEquals(result.fields.length, 2);
-    assertEquals(result.fields[0].name, "field1");
-    assertEquals(result.fields[1].name, "field2");
+    assertEquals(requiredField(result.fields, 0).name, "field1");
+    assertEquals(requiredField(result.fields, 1).name, "field2");
   });
 
   await t.step(
@@ -101,10 +110,16 @@ struct TestStruct {
       assertEquals(result.hasReprC, true); // SabHeader has #[repr(C, align(64))]
 
       // Verify first and last fields
-      assertEquals(result.fields[0].name, "magic");
-      assertEquals(result.fields[0].type, "u32");
-      assertEquals(result.fields[result.fields.length - 1].name, "top");
-      assertEquals(result.fields[result.fields.length - 1].type, "AtomicU32");
+      assertEquals(requiredField(result.fields, 0).name, "magic");
+      assertEquals(requiredField(result.fields, 0).type, "u32");
+      assertEquals(
+        requiredField(result.fields, result.fields.length - 1).name,
+        "top",
+      );
+      assertEquals(
+        requiredField(result.fields, result.fields.length - 1).type,
+        "AtomicU32",
+      );
 
       // Verify expected critical fields exist
       const fieldNames = result.fields.map((f: StructField) => f.name);
@@ -182,11 +197,11 @@ struct TestStruct {
 
     assertEquals(result.fields.length, 2);
     assertEquals(
-      result.fields[0].type,
+      requiredField(result.fields, 0).type,
       "HashMap<String, Vec<Option<u32>>>",
     );
     assertEquals(
-      result.fields[1].type,
+      requiredField(result.fields, 1).type,
       "Result<Vec<u8>, Box<dyn Error>>",
     );
   });
@@ -202,8 +217,8 @@ struct TestStruct {
     const result = parseRustStruct(source, "TestStruct");
 
     assertEquals(result.fields.length, 2);
-    assertEquals(result.fields[0].type, "(u32, String)");
-    assertEquals(result.fields[1].type, "(i32, f64, bool)");
+    assertEquals(requiredField(result.fields, 0).type, "(u32, String)");
+    assertEquals(requiredField(result.fields, 1).type, "(i32, f64, bool)");
   });
 
   await t.step("should handle mixed comments and attributes", () => {
@@ -222,8 +237,8 @@ struct TestStruct {
     const result = parseRustStruct(source, "TestStruct");
 
     assertEquals(result.fields.length, 2);
-    assertEquals(result.fields[0].name, "field1");
-    assertEquals(result.fields[1].name, "field2");
+    assertEquals(requiredField(result.fields, 0).name, "field1");
+    assertEquals(requiredField(result.fields, 1).name, "field2");
     assertEquals(result.hasReprC, true);
   });
 

@@ -11,7 +11,7 @@ import type { SystemFTerm } from "../../terms/systemF.ts";
 import type { TypedLambda } from "../../types/typedLambda.ts";
 import { createTypedApplication } from "../../types/typedLambda.ts";
 import { parseNatLiteralIdentifier } from "../../consts/nat.ts";
-import { makeTypedChurchNumeral } from "../../types/natLiteral.ts";
+import { makeTypedChurchNumeral } from "../../types/binLiteral.ts";
 import { typecheck } from "../../types/systemF.ts";
 
 /**

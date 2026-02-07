@@ -1,7 +1,7 @@
 export type Vec3 = [number, number, number];
 export type Quat = [number, number, number, number]; // x,y,z,w
 
-export function v3Add(a: Vec3, b: Vec3): Vec3 {
+function v3Add(a: Vec3, b: Vec3): Vec3 {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 }
 
@@ -13,7 +13,7 @@ export function v3Dot(a: Vec3, b: Vec3): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-export function v3Len(a: Vec3): number {
+function v3Len(a: Vec3): number {
   return Math.hypot(a[0], a[1], a[2]);
 }
 
@@ -37,7 +37,7 @@ export function quatMul(a: Quat, b: Quat): Quat {
   ];
 }
 
-export function quatFromAxisAngle(axis: Vec3, angleRad: number): Quat {
+function quatFromAxisAngle(axis: Vec3, angleRad: number): Quat {
   const a = v3Norm(axis);
   const s = Math.sin(angleRad / 2);
   return [a[0] * s, a[1] * s, a[2] * s, Math.cos(angleRad / 2)];

@@ -39,7 +39,7 @@ import {
  *
  * Returns a triple: [literal, BaseType, updatedState]
  */
-export function parseSimpleType(
+function parseSimpleType(
   state: ParserState,
 ): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
@@ -71,7 +71,7 @@ function isTypeAtomStart(ch: string | null): boolean {
  *
  * Returns a triple: [literal, BaseType, updatedState]
  */
-export function parseTypeApplication(
+function parseTypeApplication(
   state: ParserState,
 ): [string, BaseType, ParserState] {
   const [leftLit, leftType, stateAfterLeft] = parseSimpleType(state);

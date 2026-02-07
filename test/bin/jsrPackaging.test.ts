@@ -142,8 +142,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     await t.step("version numbers match across files", async () => {
       const configPath = join(projectRoot, "deno.jsonc");
       const configContent = await Deno.readTextFile(configPath);
-      const config = JSON.parse(configContent);
-      const _packageVersion = config.version;
+      JSON.parse(configContent);
 
       // Check CLI version import
       const tripcTs = await Deno.readTextFile(

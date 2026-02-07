@@ -9,7 +9,6 @@
 
 import type { ArenaWasmExports } from "../arenaEvaluator.ts";
 import {
-  RING_HEADER_U32,
   SABHEADER_HEADER_SIZE_U32,
   SabHeaderField,
 } from "../arenaHeader.generated.ts";
@@ -76,37 +75,14 @@ export function validateIoRingsConfiguration(
 
   // Try to construct the ring views - this will catch alignment and construction issues
   try {
-    const _rings = new ArenaIoRings(
+    new ArenaIoRings(
       buffer,
       baseAddr,
       SABHEADER_HEADER_SIZE_U32,
     );
-
-    // Verify we can access the ring buffers (they should be constructible)
-    // If construction succeeded, the internal state should be valid
-    // We'll do a simple smoke test: try to read the ring header
-    const stdinHeader = new Int32Array(
-      buffer,
-      baseAddr + offsetStdin,
-      RING_HEADER_U32,
-    );
-    const stdoutHeader = new Int32Array(
-      buffer,
-      baseAddr + offsetStdout,
-      RING_HEADER_U32,
-    );
-
-    // Verify headers are accessible (basic sanity check)
-    if (stdinHeader.length === 0 || stdoutHeader.length === 0) {
-      throw new Error("Ring headers have zero length");
-    }
-  } catch (err) {
+  } catch (_e) {
     throw new Error(
-      `Failed to construct IO ring buffers: ${
-        err instanceof Error ? err.message : String(err)
-      }. ` +
-        `This may indicate the header file is out of sync with the Rust struct. ` +
-        `Run 'deno run -A scripts/generate-arena-header.ts' and rebuild.`,
+      `failed to construct ring views: ${(_e as Error).message}`,
     );
   }
 }

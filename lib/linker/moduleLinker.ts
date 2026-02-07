@@ -25,6 +25,7 @@ import {
 } from "../meta/frontend/substitution.ts";
 import { unparseSKI } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
+import { sccDependencyOrder } from "./graph.ts";
 
 export function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
   if (typeDef.kind !== "type") {
@@ -45,20 +46,12 @@ export function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
  *
  * Format: "moduleName.symbolName"
  */
-export type QualifiedName = string;
-
-/**
- * Symbol identity combining module and local name
- */
-export interface SymbolId {
-  module: string;
-  name: string;
-}
+type QualifiedName = string;
 
 /**
  * Import specification with optional alias
  */
-export interface ImportSpec {
+interface ImportSpec {
   from: string;
   name: string;
   as?: string;
@@ -68,7 +61,7 @@ export interface ImportSpec {
 /**
  * Represents a loaded module in the program space
  */
-export interface LoadedModule {
+interface LoadedModule {
   /** The module name */
   name: string;
   /** The TripCObject data */
@@ -461,107 +454,6 @@ function buildDependencyGraph(
 }
 
 /**
- * Tarjan's algorithm for finding strongly connected components (iterative version)
- * Avoids recursion stack overflow and is more efficient
- */
-function tarjanSCC(
-  graph: Map<QualifiedName, Set<QualifiedName>>,
-): QualifiedName[][] {
-  const index = new Map<QualifiedName, number>();
-  const lowlink = new Map<QualifiedName, number>();
-  const onStack = new Set<QualifiedName>();
-  const stack: QualifiedName[] = [];
-  const sccs: QualifiedName[][] = [];
-  let currentIndex = 0;
-
-  // Iterative stack-based implementation
-  const workStack: Array<{
-    node: QualifiedName;
-    phase: "enter" | "process";
-    deps?: QualifiedName[];
-    depIndex?: number;
-  }> = [];
-
-  for (const node of graph.keys()) {
-    if (index.has(node)) continue;
-
-    workStack.push({ node, phase: "enter" });
-
-    while (workStack.length > 0) {
-      const work = workStack.pop()!;
-
-      if (work.phase === "enter") {
-        // First visit to this node
-        index.set(work.node, currentIndex);
-        lowlink.set(work.node, currentIndex);
-        currentIndex++;
-        stack.push(work.node);
-        onStack.add(work.node);
-
-        const deps = Array.from(graph.get(work.node) || []);
-        workStack.push({
-          node: work.node,
-          phase: "process",
-          deps,
-          depIndex: 0,
-        });
-      } else {
-        // Processing dependencies
-        const deps = work.deps!;
-        let depIndex = work.depIndex!;
-
-        while (depIndex < deps.length) {
-          const dep = deps[depIndex];
-          if (!index.has(dep)) {
-            // Recurse into dependency
-            workStack.push({
-              node: work.node,
-              phase: "process",
-              deps,
-              depIndex: depIndex + 1,
-            });
-            workStack.push({ node: dep, phase: "enter" });
-            break;
-          } else if (onStack.has(dep)) {
-            lowlink.set(
-              work.node,
-              Math.min(lowlink.get(work.node)!, index.get(dep)!),
-            );
-          }
-          depIndex++;
-        }
-
-        if (depIndex >= deps.length) {
-          // Finished processing all dependencies
-          if (lowlink.get(work.node) === index.get(work.node)) {
-            const scc: QualifiedName[] = [];
-            let w: QualifiedName;
-            do {
-              w = stack.pop()!;
-              onStack.delete(w);
-              scc.push(w);
-            } while (w !== work.node);
-            sccs.push(scc);
-          }
-          // Update parent's lowlink if we have a parent
-          if (workStack.length > 0) {
-            const parent = workStack[workStack.length - 1];
-            if (parent.phase === "process") {
-              lowlink.set(
-                parent.node,
-                Math.min(lowlink.get(parent.node)!, lowlink.get(work.node)!),
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return sccs;
-}
-
-/**
  * Performs iterative substitution on a single definition until no new external references appear.
  * Uses export index for fast candidate module lookup.
  */
@@ -650,7 +542,7 @@ function substituteDependencies(
             );
           } else if (candidateModules.length === 1) {
             // Unambiguous: resolve it
-            const modName = candidateModules[0];
+            const modName = candidateModules[0]!;
             const qualified = qualifiedName(modName, termRef);
             const targetTerm = ps.terms.get(qualified);
             if (targetTerm) {
@@ -940,7 +832,7 @@ function resolveSCC(
 
   // Simple case: no cycle
   if (scc.length === 1) {
-    const qualified = scc[0];
+    const qualified = scc[0]!;
     const { moduleName, localName, module } = getModuleInfo(ps, qualified);
     const resolvedDef = substituteDependencies(
       module.defs.get(localName)!,
@@ -1072,7 +964,7 @@ export function resolveCrossModuleDependencies(
     }
   }
   const dependencyGraph = buildDependencyGraph(resolvedPS);
-  const sccs = tarjanSCC(dependencyGraph).reverse(); // Topological sort
+  const sccs = sccDependencyOrder(dependencyGraph);
 
   if (verbose) {
     console.error(`Built dependency graph with ${dependencyGraph.size} nodes`);
@@ -1197,7 +1089,7 @@ export function findMainFunction(
     );
   }
 
-  const main = mainCandidates[0];
+  const main = mainCandidates[0]!;
   if (main.kind === "type") {
     throw new Error("Exported 'main' is a type; expected a term/function.");
   }

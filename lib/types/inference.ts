@@ -104,7 +104,7 @@ export const substituteType = (
 /**
  * The heart of Algorithm W.
  */
-export const algorithmW = (
+const algorithmW = (
   term: UntypedLambda,
   nextVar: () => TypeVariable,
   state: InferenceState,

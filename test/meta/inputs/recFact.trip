@@ -11,6 +11,12 @@ poly zero = #X => \s: X -> X => \z : X => z
 
 poly one = succ zero
 
+poly two = succ one
+
+poly BZ = zero
+poly B0 = \n:Nat => mul two n
+poly B1 = \n:Nat => succ (mul two n)
+
 type Bool = #B -> B -> B -> B
 
 poly true = #B => \t:B => \f:B => t

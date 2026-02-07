@@ -30,6 +30,14 @@
     ]
   },
   "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": true,
     "lib": [
       "deno.ns",
       "dom"
@@ -83,5 +91,5 @@
     "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/"
   },
-  "version": "0.14.6"
+  "version": "0.14.7"
 }

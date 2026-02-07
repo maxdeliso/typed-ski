@@ -8,6 +8,7 @@
  */
 
 import { ArenaKind } from "../../shared/arena.ts";
+import { sleep } from "../async.ts";
 import type { ArenaWasmExports } from "../arenaEvaluator.ts";
 import type { IoManager } from "../io/ioManager.ts";
 import type { RingStats } from "../io/ringStats.ts";
@@ -97,23 +98,6 @@ const RESUBMIT_SLEEP_MS = 1;
  * to the event loop. Same threshold as empty streak for consistency in yielding behavior.
  */
 const SUBMIT_BUSY_WAIT_THRESHOLD = 512;
-
-/**
- * Cancellable sleep function that returns both the promise and a cleanup function.
- */
-function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  const promise = new Promise<void>((r) => {
-    timeoutId = setTimeout(r, ms);
-  });
-  const cancel = () => {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-  };
-  return { promise, cancel };
-}
 
 /**
  * Polls the completion queue and handles results/suspensions.

@@ -14,6 +14,7 @@ import {
 import { BinN, UnBinNumber } from "../../lib/ski/bin.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
+import { requiredAt } from "../util/required.ts";
 
 function makeUniqueExpr(i: number, bits = 16): SKIExpression {
   // Deterministic, bounded-size expression that is unique for i < 2^bits.
@@ -460,7 +461,10 @@ Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
           exprs.map((e) => evaluator.reduceAsync(e, 0)),
         );
         for (let i = 0; i < N; i++) {
-          assertEquals(unparseSKI(results[i]), unparseSKI(exprs[i]));
+          assertEquals(
+            unparseSKI(requiredAt(results, i, "expected result expression")),
+            unparseSKI(requiredAt(exprs, i, "expected input expression")),
+          );
         }
       } finally {
         evaluator.terminate();
@@ -493,7 +497,10 @@ Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
           exprs.map((e) => evaluator.reduceAsync(e, 0)),
         );
         for (let i = 0; i < N; i++) {
-          assertEquals(unparseSKI(results[i]), unparseSKI(exprs[i]));
+          assertEquals(
+            unparseSKI(requiredAt(results, i, "expected result expression")),
+            unparseSKI(requiredAt(exprs, i, "expected input expression")),
+          );
         }
       } finally {
         evaluator.terminate();
@@ -636,7 +643,11 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
           baseAddr,
           SABHEADER_HEADER_SIZE_U32,
         );
-        const initialCapacity = headerView[SabHeaderField.CAPACITY];
+        const initialCapacity = requiredAt(
+          headerView,
+          SabHeaderField.CAPACITY,
+          "expected initial arena capacity",
+        );
 
         // Allocate many unique expressions to trigger arena growth
         // Each unique expression creates new nodes, so we need enough to exceed initial capacity
@@ -655,7 +666,11 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
 
         // Allocate expressions until we trigger growth or hit a reasonable limit
         // Use random expressions with varying sizes to ensure uniqueness
-        let lastTop = headerView[SabHeaderField.TOP];
+        let lastTop = requiredAt(
+          headerView,
+          SabHeaderField.TOP,
+          "expected initial arena top",
+        );
         const targetTop = initialCapacity - 100; // Stop before hitting capacity to avoid issues
 
         for (let i = 0; i < 100000 && lastTop < targetTop; i++) {
@@ -673,15 +688,31 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
 
           // Check if capacity has grown (check every 5000 allocations for efficiency)
           if (i % 5000 === 0 || i === 99999) {
-            const currentCapacity = headerView[SabHeaderField.CAPACITY];
-            const currentTop = headerView[SabHeaderField.TOP];
+            const currentCapacity = requiredAt(
+              headerView,
+              SabHeaderField.CAPACITY,
+              "expected arena capacity while growing",
+            );
+            const currentTop = requiredAt(
+              headerView,
+              SabHeaderField.TOP,
+              "expected arena top while growing",
+            );
             lastTop = currentTop;
 
             if (currentCapacity > initialCapacity) {
               // Arena has grown! Now test that fromArena still works correctly
               // with the new capacity
-              const lastExpr = testExpressions[testExpressions.length - 1];
-              const lastId = testIds[testIds.length - 1];
+              const lastExpr = requiredAt(
+                testExpressions,
+                testExpressions.length - 1,
+                "expected last stored expression",
+              );
+              const lastId = requiredAt(
+                testIds,
+                testIds.length - 1,
+                "expected last stored arena id",
+              );
               const reconstructed = evaluator.fromArena(lastId);
               assertEquals(
                 unparseSKI(reconstructed),
@@ -706,10 +737,18 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
                 k < testExpressions.length;
                 k++
               ) {
-                const testReconstructed = evaluator.fromArena(testIds[k]);
+                const testReconstructed = evaluator.fromArena(
+                  requiredAt(testIds, k, "expected stored arena id"),
+                );
                 assertEquals(
                   unparseSKI(testReconstructed),
-                  unparseSKI(testExpressions[k]),
+                  unparseSKI(
+                    requiredAt(
+                      testExpressions,
+                      k,
+                      "expected stored expression",
+                    ),
+                  ),
                   `Expression at index ${k} should be reconstructable after growth`,
                 );
               }
@@ -722,10 +761,14 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
 
         // Still verify that stored expressions can be reconstructed
         for (let i = 0; i < testExpressions.length; i++) {
-          const reconstructed = evaluator.fromArena(testIds[i]);
+          const reconstructed = evaluator.fromArena(
+            requiredAt(testIds, i, "expected stored arena id"),
+          );
           assertEquals(
             unparseSKI(reconstructed),
-            unparseSKI(testExpressions[i]),
+            unparseSKI(
+              requiredAt(testExpressions, i, "expected stored expression"),
+            ),
             `Expression at index ${i} should be reconstructable`,
           );
         }

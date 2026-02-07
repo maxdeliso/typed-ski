@@ -71,7 +71,10 @@ export interface RequestTrackerHooks {
 export class RequestTracker {
   private nextRequestId = 1;
   private readonly pending = new Map<number, RequestResolver>();
-  private readonly completed = new Map<number, number>();
+  // Completions that arrive before their Promise resolver is registered.
+  private readonly stashedCompletions = new Map<number, number>();
+  // Monotonic count of completion events observed by this tracker.
+  private completedCount = 0;
   private nextWorkerIndex = 0;
   private readonly reqToWorkerIndex = new Map<number, number>();
   private readonly reqToExpr = new Map<number, SKIExpression>();
@@ -135,9 +138,9 @@ export class RequestTracker {
     reject: (err: Error) => void,
   ): void {
     // Check if already completed (race condition handling)
-    const existing = this.completed.get(reqId);
+    const existing = this.stashedCompletions.get(reqId);
     if (existing !== undefined) {
-      this.completed.delete(reqId);
+      this.stashedCompletions.delete(reqId);
       resolve(existing);
       return;
     }
@@ -152,6 +155,7 @@ export class RequestTracker {
    * Marks a request as completed with the result node ID.
    */
   markCompleted(reqId: number, nodeId: number): void {
+    this.completedCount++;
     const resolver = this.pending.get(reqId);
     if (resolver) {
       this.pending.delete(reqId);
@@ -164,7 +168,7 @@ export class RequestTracker {
     } else {
       // Completion can race with registration, or belong to a caller that already
       // gave up. Stash it so a future awaiter can still observe it.
-      this.completed.set(reqId, nodeId);
+      this.stashedCompletions.set(reqId, nodeId);
     }
   }
 
@@ -200,7 +204,7 @@ export class RequestTracker {
    * Gets a stashed completion if available.
    */
   getStashedCompletion(reqId: number): number | undefined {
-    return this.completed.get(reqId);
+    return this.stashedCompletions.get(reqId);
   }
 
   /**
@@ -256,7 +260,7 @@ export class RequestTracker {
       reject(error);
     }
     this.pending.clear();
-    this.completed.clear();
+    this.stashedCompletions.clear();
     this.reqToWorkerIndex.clear();
     this.reqToExpr.clear();
     this.reqToResubmitCount.clear();
@@ -278,10 +282,10 @@ export class RequestTracker {
   }
 
   /**
-   * Returns the total number of completed requests.
+   * Returns the total number of completion events observed by this tracker.
    */
   getTotalCompleted(): number {
-    return this.completed.size;
+    return this.completedCount;
   }
 
   private decrementWorkerPending(workerIndex: number): void {

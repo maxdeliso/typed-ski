@@ -35,6 +35,7 @@ import {
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { VERSION } from "../lib/shared/version.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
+import { loadTripSourceFile } from "../lib/tripSourceLoader.ts";
 
 type Mode = "compile" | "link";
 
@@ -66,6 +67,8 @@ function parseArgs(
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+
+    if (!arg) continue;
 
     switch (arg) {
       case "--help":
@@ -195,16 +198,16 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
   // Load all .tripc files
   const modules: Array<{ name: string; object: TripCObject }> = [];
 
-  // Always include prelude first (mandatory) - embedded constant
+  // Always include prelude first (mandatory).
   try {
     if (verbose) {
-      console.log("Loading embedded prelude...");
+      console.log("Loading prelude module...");
     }
     const preludeObject = await getPreludeObject();
     modules.push({ name: "Prelude", object: preludeObject });
   } catch (error) {
     if (error instanceof SingleFileCompilerError) {
-      console.error(`Error compiling embedded prelude: ${error.message}`);
+      console.error(`Error compiling prelude module: ${error.message}`);
       Deno.exit(1);
     }
     throw error;
@@ -242,7 +245,7 @@ async function compileFile(
       console.log(`Reading ${inputPath}...`);
     }
 
-    const inputContent = await Deno.readTextFile(inputPath);
+    const inputContent = await loadTripSourceFile(inputPath);
 
     if (verbose) {
       console.log("Compiling TripLang program...");

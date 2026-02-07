@@ -30,7 +30,7 @@ import type { SKITerminal, SKITerminalSymbol } from "./terminal.ts";
  * right expression, forming the fundamental building block of functional composition
  * in the SKI combinator calculus.
  */
-export interface SKIApplication {
+interface SKIApplication {
   kind: "non-terminal";
   lft: SKIExpression;
   rgt: SKIExpression;
@@ -44,8 +44,8 @@ export interface SKIApplication {
  * application of two expressions.
  */
 export type SKIExpression = SKITerminal | SKIApplication;
-export type SKIChar = SKITerminalSymbol | "(" | ")";
-export type SKIKey = SKIChar[];
+type SKIChar = SKITerminalSymbol | "(" | ")";
+type SKIKey = SKIChar[];
 
 /**
  * Converts a SKI expression to its canonical key,

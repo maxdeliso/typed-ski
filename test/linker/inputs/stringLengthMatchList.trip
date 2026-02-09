@@ -1,0 +1,34 @@
+module TestStringLength
+
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Prelude incBin
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude List
+
+export main
+
+type Church = #X -> (X -> X) -> X -> X
+
+poly zero : Church = #X => \s : X -> X => \z : X => z
+poly succ : Church = \n : Church => #X => \s : X -> X => \z : X => s (n [X] s z)
+poly dbl : Church = \n : Church => #X => \s : X -> X => \z : X => n [X] s (n [X] s z)
+
+poly rec binToChurch = \b : Bin =>
+  match b [Church] {
+    | BZ => zero
+    | B0 rest => dbl (binToChurch rest)
+    | B1 rest => succ (dbl (binToChurch rest))
+  }
+
+poly length2 = \xs : List =>
+  matchList [Bin] [Bin] xs 0
+    (\h : Bin => \t : List =>
+      incBin (matchList [Bin] [Bin] t 0
+        (\h2 : Bin => \t2 : List => incBin 0)))
+
+poly main = binToChurch (length2 "hi")

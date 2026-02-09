@@ -1,0 +1,6 @@
+module Main
+import Nat succ
+import Nat zero
+export main
+
+poly main = succ (succ zero)

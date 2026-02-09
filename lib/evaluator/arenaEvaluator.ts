@@ -8,22 +8,14 @@
  */
 
 import type { SKIExpression } from "../ski/expression.ts";
-import { apply } from "../ski/expression.ts";
-import {
-  B,
-  BPrime,
-  C,
-  CPrime,
-  I,
-  K,
-  ReadOne,
-  S,
-  SKITerminalSymbol,
-  SPrime,
-  WriteOne,
-} from "../ski/terminal.ts";
+import { apply, unparseSKI } from "../ski/expression.ts";
+import { SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
-import { type ArenaNodeId, ArenaSym } from "../shared/arena.ts";
+import {
+  ARENA_SYM_TO_SKI,
+  type ArenaNodeId,
+  ArenaSym,
+} from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
 import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
@@ -225,42 +217,7 @@ function fromArenaWithExports(
     if (kind === 1) { // ArenaKind.Terminal
       // TERMINAL: Construct immediately and cache
       const sym = getSym(id);
-      let expr: SKIExpression;
-      switch (sym) {
-        case ArenaSym.S:
-          expr = S;
-          break;
-        case ArenaSym.K:
-          expr = K;
-          break;
-        case ArenaSym.I:
-          expr = I;
-          break;
-        case ArenaSym.B:
-          expr = B;
-          break;
-        case ArenaSym.C:
-          expr = C;
-          break;
-        case ArenaSym.SPrime:
-          expr = SPrime;
-          break;
-        case ArenaSym.BPrime:
-          expr = BPrime;
-          break;
-        case ArenaSym.CPrime:
-          expr = CPrime;
-          break;
-        case ArenaSym.ReadOne:
-          expr = ReadOne;
-          break;
-        case ArenaSym.WriteOne:
-          expr = WriteOne;
-          break;
-        default:
-          throw new Error(`Unknown symbol tag: ${sym}`);
-      }
-      cache.set(id, expr);
+      cache.set(id, ARENA_SYM_TO_SKI[sym as ArenaSym]!);
       stack.pop();
     } else if (kind === 3 || kind === 4) { // ArenaKind.Continuation || ArenaKind.Suspension
       // CONTINUATION/SUSPENSION: These are internal WASM-only nodes used for iterative reduction.
@@ -522,42 +479,8 @@ export class ArenaEvaluatorWasm implements Evaluator {
         ? views.sym[id]!
         : this.$.symOf(id);
 
-      let sym: string;
-      switch (symValue as ArenaSym) {
-        case ArenaSym.S:
-          sym = "S";
-          break;
-        case ArenaSym.K:
-          sym = "K";
-          break;
-        case ArenaSym.I:
-          sym = "I";
-          break;
-        case ArenaSym.B:
-          sym = "B";
-          break;
-        case ArenaSym.C:
-          sym = "C";
-          break;
-        case ArenaSym.SPrime:
-          sym = "P";
-          break;
-        case ArenaSym.BPrime:
-          sym = "Q";
-          break;
-        case ArenaSym.CPrime:
-          sym = "R";
-          break;
-        case ArenaSym.ReadOne:
-          sym = "readOne";
-          break;
-        case ArenaSym.WriteOne:
-          sym = "writeOne";
-          break;
-        default:
-          sym = "?";
-      }
-      return { id, kind: "terminal", sym };
+      const expr = ARENA_SYM_TO_SKI[symValue as ArenaSym]!;
+      return { id, kind: "terminal", sym: unparseSKI(expr) };
     }
 
     // 3. Build Non-Terminal

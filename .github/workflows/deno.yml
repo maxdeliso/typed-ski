@@ -35,10 +35,9 @@ jobs:
         with:
           files: coverage.lcov
           fail_ci_if_error: false
-          verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Print WASM files (for inspection)
+      - name: Print WASM files
         run: |
           ls -lh result/wasm/
           make print-wasm

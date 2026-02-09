@@ -39,7 +39,6 @@ build: ## Compile the artifacts
 	fi
 	rm -rf wasm
 	ln -s result/wasm wasm
-	nix $(NIX_FLAGS) develop --command deno run -A scripts/embed-wasm.ts
 	nix $(NIX_FLAGS) develop --command bash -c "deno task dist"
 	@if [ ! -f dist/tripc.js ] || [ ! -f dist/tripc.min.js ] || [ ! -f dist/tripc ]; then \
 		echo "Error: Required dist files not found"; \

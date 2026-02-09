@@ -4,7 +4,7 @@
  * @module
  */
 
-import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
+import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import type { ArenaWasmExports } from "./arenaEvaluator.ts";
 
 interface InitMessage {
@@ -21,7 +21,7 @@ interface ConnectArenaMessage {
 let wasmExports: ArenaWasmExports | null = null;
 
 async function init(msg: InitMessage) {
-  const wasmBytes = getEmbeddedReleaseWasm().slice();
+  const wasmBytes = await getReleaseWasmBytes();
   const module = await WebAssembly.compile(wasmBytes);
   const instance = await WebAssembly.instantiate(module, {
     env: {

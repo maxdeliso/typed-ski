@@ -8,15 +8,28 @@ import {
   type ArenaEvaluatorWasm,
   createArenaEvaluatorReleaseSync,
 } from "./arenaEvaluator.ts";
+import type { Evaluator } from "./evaluator.ts";
 
 /**
- * Initialise the release-mode arena evaluator synchronously using the embedded
- * WASM binary so that bundled environments (e.g. Deno compile / bundle) do not
- * require filesystem or network access at startup.
+ * Lazily initialise the release-mode arena evaluator so CLI commands that do
+ * not evaluate expressions (e.g. --help, --version) can run without loading WASM.
  */
-const wasmEvaluator: ArenaEvaluatorWasm = createArenaEvaluatorReleaseSync();
+let wasmEvaluator: ArenaEvaluatorWasm | null = null;
+
+function getWasmEvaluator(): ArenaEvaluatorWasm {
+  if (wasmEvaluator) return wasmEvaluator;
+  wasmEvaluator = createArenaEvaluatorReleaseSync();
+  return wasmEvaluator;
+}
 
 /**
  * Primary hash-consing arena evaluator used throughout the project.
  */
-export const arenaEvaluator = wasmEvaluator;
+export const arenaEvaluator: Evaluator = {
+  stepOnce(expr) {
+    return getWasmEvaluator().stepOnce(expr);
+  },
+  reduce(expr, maxIterations) {
+    return getWasmEvaluator().reduce(expr, maxIterations);
+  },
+};

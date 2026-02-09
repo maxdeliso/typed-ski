@@ -17,7 +17,10 @@ import {
   ArenaSym,
 } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
-import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
+import {
+  getReleaseWasmBytes,
+  getReleaseWasmBytesSync,
+} from "./arenaWasmLoader.ts";
 import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
 import {
   SABHEADER_HEADER_SIZE_U32,
@@ -543,19 +546,24 @@ export class ArenaEvaluatorWasm implements Evaluator {
 }
 
 /**
- * Synchronously creates an arena evaluator using the embedded release WASM
- * bytes. This is primarily used by the CLI bundle and other environments where
- * asynchronous initialisation is undesirable.
+ * Synchronously creates an arena evaluator using `wasm/release.wasm` from the
+ * package layout.
+ *
+ * Note: this requires a sync-readable file URL (Deno runtime). In other
+ * environments, use `createArenaEvaluator()` instead.
  */
 export function createArenaEvaluatorReleaseSync(): ArenaEvaluatorWasm {
   const evaluator = ArenaEvaluatorWasm.instantiateFromBytes(
-    getEmbeddedReleaseWasm().slice(),
+    getReleaseWasmBytesSync(),
   );
   return evaluator;
 }
 
-export function createArenaEvaluator(): ArenaEvaluatorWasm {
-  return createArenaEvaluatorReleaseSync();
+export async function createArenaEvaluator(): Promise<ArenaEvaluatorWasm> {
+  const evaluator = ArenaEvaluatorWasm.instantiateFromBytes(
+    await getReleaseWasmBytes(),
+  );
+  return evaluator;
 }
 
 function bufferSourceToUint8Array(bytes: BufferSource): Uint8Array {

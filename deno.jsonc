@@ -23,7 +23,6 @@
     "exclude": [
       "!wasm/debug.wasm",
       "!wasm/release.wasm",
-      "!lib/evaluator/arenaWasm.embedded.ts",
       "codecov",
       "codecov.SHA256SUM",
       "codecov.SHA256SUM.sig"
@@ -91,5 +90,5 @@
     "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/"
   },
-  "version": "0.14.9"
+  "version": "0.14.10"
 }

@@ -11,7 +11,7 @@
 import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
-import { getEmbeddedReleaseWasm } from "./arenaWasm.embedded.ts";
+import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";
 import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
@@ -357,7 +357,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       );
     }
 
-    const bytes = getEmbeddedReleaseWasm().slice();
+    const bytes = await getReleaseWasmBytes();
     const wasmModule = await WebAssembly.compile(bytes);
     const sharedInstance = await WebAssembly.instantiate(wasmModule, {
       env: {

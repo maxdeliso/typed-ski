@@ -114,7 +114,9 @@
             generate-arena-header
             validate-arena-header
 
-            cd rust
+            ROOT_DIR="$PWD"
+            RUST_DIR="$ROOT_DIR/rust"
+            WASM_DIR="$ROOT_DIR/wasm"
 
             # RUSTFLAGS:
             # 1. Enable atomics features so our code can use them.
@@ -124,27 +126,32 @@
 
             echo "Building WASM (debug)..."
             # Standard build (no build-std needed)
-            cargo build --target wasm32-unknown-unknown --lib
+            cargo build \
+              --manifest-path "$RUST_DIR/Cargo.toml" \
+              --target-dir "$RUST_DIR/target" \
+              --target wasm32-unknown-unknown \
+              --lib
 
             echo "Building WASM (release)..."
-            cargo build --release --target wasm32-unknown-unknown --lib
+            cargo build \
+              --manifest-path "$RUST_DIR/Cargo.toml" \
+              --target-dir "$RUST_DIR/target" \
+              --release \
+              --target wasm32-unknown-unknown \
+              --lib
 
             echo "Copying WASM files..."
-            mkdir -p ../wasm
-            cp target/wasm32-unknown-unknown/debug/typed_ski.wasm ../wasm/debug.wasm
-            cp target/wasm32-unknown-unknown/release/typed_ski.wasm ../wasm/release.wasm
+            mkdir -p "$WASM_DIR"
+            cp "$RUST_DIR/target/wasm32-unknown-unknown/debug/typed_ski.wasm" "$WASM_DIR/debug.wasm"
+            cp "$RUST_DIR/target/wasm32-unknown-unknown/release/typed_ski.wasm" "$WASM_DIR/release.wasm"
 
             echo ""
             echo "=== WASM Module Structure (debug) ==="
-            ${pkgs.wabt}/bin/wasm-objdump -h ../wasm/debug.wasm
+            ${pkgs.wabt}/bin/wasm-objdump -h "$WASM_DIR/debug.wasm"
             echo ""
             echo "=== WASM Module Structure (release) ==="
-            ${pkgs.wabt}/bin/wasm-objdump -h ../wasm/release.wasm
+            ${pkgs.wabt}/bin/wasm-objdump -h "$WASM_DIR/release.wasm"
             echo ""
-
-            cd ..
-            echo "Embedding WASM..."
-            ${deno}/bin/deno run -A scripts/embed-wasm.ts
           '';
 
           installPhase = ''

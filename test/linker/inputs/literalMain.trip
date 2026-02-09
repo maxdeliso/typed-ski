@@ -1,0 +1,23 @@
+module LiteralMain
+
+export main
+
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+
+type Church = #X -> (X -> X) -> X -> X
+
+poly zero : Church = #X => \s : X -> X => \z : X => z
+poly succ : Church = \n : Church => #X => \s : X -> X => \z : X => s (n [X] s z)
+poly dbl : Church = \n : Church => #X => \s : X -> X => \z : X => n [X] s (n [X] s z)
+
+poly rec binToChurch = \b : Bin =>
+  match b [Church] {
+    | BZ => zero
+    | B0 rest => dbl (binToChurch rest)
+    | B1 rest => succ (dbl (binToChurch rest))
+  }
+
+poly main = binToChurch 13

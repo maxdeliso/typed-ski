@@ -2,6 +2,11 @@ import { assertEquals, assertRejects, assertThrows } from "std/assert";
 
 type LoaderModule = typeof import("../../lib/evaluator/arenaWasmLoader.ts");
 
+const moduleWasmUrl = new URL(
+  "../../wasm/release.wasm",
+  new URL("../../lib/evaluator/arenaWasmLoader.ts", import.meta.url),
+).href;
+
 async function importFreshLoaderModule(): Promise<LoaderModule> {
   return await import(
     `../../lib/evaluator/arenaWasmLoader.ts?case=${crypto.randomUUID()}`
@@ -111,13 +116,8 @@ Deno.test("arenaWasmLoader - relative env path is resolved and deduped against m
   try {
     const loader = await importFreshLoaderModule();
     await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts, [
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
-    ]);
-    assertEquals(
-      remoteAttempts[0],
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
-    );
+    assertEquals(localAttempts, [moduleWasmUrl]);
+    assertEquals(remoteAttempts[0], moduleWasmUrl);
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -146,9 +146,7 @@ Deno.test("arenaWasmLoader - invalid env path and exec path are ignored", async 
   try {
     const loader = await importFreshLoaderModule();
     await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts, [
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
-    ]);
+    assertEquals(localAttempts, [moduleWasmUrl]);
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -178,7 +176,7 @@ Deno.test("arenaWasmLoader - compiled exec path candidate is attempted before mo
     await assertRejects(() => loader.getReleaseWasmBytes());
     assertEquals(localAttempts.slice(0, 2), [
       "file:///tmp/wasm/release.wasm",
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
+      moduleWasmUrl,
     ]);
   } finally {
     restoreDeno();
@@ -212,11 +210,9 @@ Deno.test("arenaWasmLoader - deno runtime exec path and file env URL are ignored
   try {
     const loader = await importFreshLoaderModule();
     await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts, [
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
-    ]);
+    assertEquals(localAttempts, [moduleWasmUrl]);
     assertEquals(remoteAttempts, [
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
+      moduleWasmUrl,
       "https://jsr.io/@maxdeliso/typed-ski/0.14.10/wasm/release.wasm",
     ]);
   } finally {
@@ -288,7 +284,7 @@ Deno.test("arenaWasmLoader - http env URL fallback is attempted before version f
     const loaded = await loader.getReleaseWasmBytes();
     assertEquals(Array.from(new Uint8Array(loaded)), [4, 4, 4]);
     assertEquals(remoteAttempts.slice(0, 2), [
-      "file:///home/max/src/typed-ski/wasm/release.wasm",
+      moduleWasmUrl,
       "https://cdn.example.com/typed-ski/release.wasm",
     ]);
   } finally {

@@ -1,4 +1,9 @@
-import { assertEquals, assertMatch, assertRejects, assertThrows } from "std/assert";
+import {
+  assertEquals,
+  assertMatch,
+  assertRejects,
+  assertThrows,
+} from "std/assert";
 
 type LoaderModule = typeof import("../../lib/evaluator/arenaWasmLoader.ts");
 const jsrVersionedWasmUrlPattern =

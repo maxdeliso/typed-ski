@@ -95,12 +95,6 @@ function buildReleaseWasmCandidates(inputs: ReleaseWasmCandidateInputs): URL[] {
   return [...localCandidates, ...remoteCandidates];
 }
 
-export function getReleaseWasmCandidateUrlsForTest(
-  inputs: ReleaseWasmCandidateInputs,
-): string[] {
-  return buildReleaseWasmCandidates(inputs).map((url) => url.href);
-}
-
 function getWasmUrlFromEnv(
   env: string | undefined,
   importMetaUrl: string,

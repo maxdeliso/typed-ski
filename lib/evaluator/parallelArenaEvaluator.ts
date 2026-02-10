@@ -202,17 +202,17 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     }
     const ex = this.$ as unknown as {
       hostSubmit?: (nodeId: number, reqId: number, maxSteps: number) => number;
-      hostPull?: () => bigint;
+      hostPullV2?: () => bigint;
     };
-    if (!ex.hostPull || !ex.hostSubmit) {
-      throw new Error("hostSubmit/hostPull exports are required");
+    if (!ex.hostPullV2 || !ex.hostSubmit) {
+      throw new Error("hostSubmit/hostPullV2 exports are required");
     }
 
     const nWorkers = Math.max(1, this.workers.length);
     const reqId = this.requestTracker.createRequest(nWorkers, expr);
 
     // Ensure poller is started
-    this.completionPoller.start(ex.hostPull);
+    this.completionPoller.start(ex.hostPullV2);
 
     // Check for stashed completion (race condition handling)
     const stashed = this.requestTracker.getStashedCompletion(reqId);
@@ -416,10 +416,14 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
    *
    * Contract:
    * - **Submit (SQ)**: host enqueues `{ nodeId, reqId, maxSteps }` using `hostSubmit`.
-   * - **Complete (CQ)**: workers dequeue, reduce for the request-specific `maxSteps`, then enqueue `{ resultNodeId, reqId }`.
-   *   Workers may also enqueue a **Suspension** node when they run out of traversal gas mid-step; the host must resubmit it.
-   * - **Polling**: host drains CQ via `hostPull()`, which returns a packed bigint:
-   *   `-1n` if empty, otherwise `(reqId << 32) | resultNodeId`.
+   * - **Complete (CQ)**: workers dequeue, reduce for the request-specific `maxSteps`, then enqueue
+   *   `{ nodeId, reqId, eventKind }` where `eventKind` is one of:
+   *   `0=Done`, `1=Yield`, `2=IoWait`, `3=Error`.
+   * - **Polling**: host drains CQ via `hostPullV2()`, which returns a packed bigint:
+   *   `-1n` if empty, otherwise:
+   *   - bits `63..32`: `reqId`
+   *   - bits `31..30`: `eventKind`
+   *   - bits `29..0`: `nodeId`
    *   Results may arrive out-of-order; `reqId` is used to match completions to callers.
    */
   async reduceAsync(

@@ -1,0 +1,46 @@
+module AvlDeleteTraversalTest
+
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Nat mul
+import Nat lte
+import Nat fromBin
+import Prelude List
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude matchList
+import Avl empty
+import Avl insert
+import Avl delete
+import Avl lookup
+import Avl size
+import Avl toListKeys
+
+export main
+
+poly natOrZero = \m : Maybe Nat =>
+  match m [Nat] {
+    | None => zero
+    | Some x => x
+  }
+
+poly rec encode = \keys : List Nat =>
+  matchList [Nat] [Nat] keys zero
+    (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin 10)))
+
+poly main =
+  let one = succ zero in
+  let two = succ one in
+  let three = succ two in
+  let t0 = empty [Nat] [Nat] in
+  let t1 = insert [Nat] [Nat] lte two two t0 in
+  let t2 = insert [Nat] [Nat] lte one one t1 in
+  let t3 = insert [Nat] [Nat] lte three three t2 in
+  let td = delete [Nat] [Nat] lte two t3 in
+  let sizeBefore = size [Nat] [Nat] t3 in
+  let persisted = natOrZero (lookup [Nat] [Nat] lte two t3) in
+  let order = encode (toListKeys [Nat] [Nat] td) in
+  add sizeBefore (add persisted order)

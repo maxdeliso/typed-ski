@@ -1,0 +1,7 @@
+module ConflictingNat
+
+export Nat
+
+type Nat = #X -> (X -> X) -> X -> X
+
+poly main = 3

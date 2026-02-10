@@ -208,26 +208,24 @@ export class RequestTracker {
   }
 
   /**
+   * Gets the current resubmission count for a request.
+   */
+  getResubmitCount(reqId: number): number {
+    return this.reqToResubmitCount.get(reqId) ?? 0;
+  }
+
+  /**
    * Increments the resubmission count for a request and checks if limit exceeded.
    * Returns the new resubmit count, or throws if limit exceeded.
    */
   incrementResubmit(reqId: number): number {
     const resubmitCount = (this.reqToResubmitCount.get(reqId) ?? 0) + 1;
     if (resubmitCount > this.maxResubmits) {
-      const workerIndex = this.getWorkerIndex(reqId);
-      const expr = this.getExpression(reqId);
-      const error = new ResubmissionLimitExceededError(
+      throw new ResubmissionLimitExceededError(
         reqId,
         resubmitCount,
         this.maxResubmits,
       );
-      this.hooks.onRequestError?.(
-        reqId,
-        workerIndex,
-        expr,
-        error.message,
-      );
-      throw error;
     }
     this.reqToResubmitCount.set(reqId, resubmitCount);
     return resubmitCount;

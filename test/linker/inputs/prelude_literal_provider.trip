@@ -1,0 +1,8 @@
+module LiteralProvider
+
+import Nat Nat
+import Nat fromBin
+
+export lit
+
+poly lit = fromBin 3

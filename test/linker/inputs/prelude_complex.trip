@@ -1,0 +1,17 @@
+module TestComplexArithmetic
+
+import Nat zero
+import Nat succ
+import Nat add
+import Nat mul
+import Nat Nat
+
+export main
+
+poly one = succ zero
+poly two = succ one
+poly three = succ two
+poly four = succ three
+poly five = succ four
+
+poly main = add (mul two three) (mul one four)

@@ -1,0 +1,238 @@
+module Avl
+
+import Prelude Bool
+import Prelude Bin
+import Prelude true
+import Prelude false
+import Prelude and
+import Prelude not
+import Prelude if
+import Prelude List
+import Prelude Pair
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude fst
+import Prelude snd
+import Prelude MkPair
+import Prelude matchList
+import Prelude nil
+import Prelude cons
+import Prelude append
+import Prelude error
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Nat lte
+
+export Avl
+export Empty
+export Node
+export empty
+export height
+export size
+export lookup
+export insert
+export delete
+export toListKeys
+export fromList
+export maxNat
+export gtNat
+export mkNode
+export rotateLeft
+export rotateRight
+export balance
+export extractMin
+export deleteRoot
+
+data Avl K V = Empty | Node (Avl K V) K V Nat (Avl K V)
+
+poly empty = #K => #V => Empty [K] [V]
+
+poly height = #K => #V => \t : Avl K V =>
+  match t [Nat] {
+    | Empty => zero
+    | Node _ _ _ h _ => h
+  }
+
+poly rec size = #K => #V => \t : Avl K V =>
+  match t [Nat] {
+    | Empty => zero
+    | Node l _ _ _ r =>
+        succ (add (size [K] [V] l) (size [K] [V] r))
+  }
+
+poly maxNat = \a : Nat => \b : Nat =>
+  (lte a b) [Nat] b a
+
+poly gtNat = \a : Nat => \b : Nat =>
+  and (lte b a) (not (lte a b))
+
+poly mkNode = #K => #V => \l : Avl K V => \k : K => \v : V => \r : Avl K V =>
+  Node [K] [V] l k v
+    (succ (maxNat (height [K] [V] l) (height [K] [V] r)))
+    r
+
+poly rotateLeft = #K => #V => \t : Avl K V =>
+  match t [Avl K V] {
+    | Empty => Empty [K] [V]
+    | Node l k v _ r =>
+        match r [Avl K V] {
+          | Empty => mkNode [K] [V] l k v r
+          | Node rl rk rv _ rr =>
+              mkNode [K] [V]
+                (mkNode [K] [V] l k v rl)
+                rk
+                rv
+                rr
+        }
+  }
+
+poly rotateRight = #K => #V => \t : Avl K V =>
+  match t [Avl K V] {
+    | Empty => Empty [K] [V]
+    | Node l k v _ r =>
+        match l [Avl K V] {
+          | Empty => mkNode [K] [V] l k v r
+          | Node ll lk lv _ lr =>
+              mkNode [K] [V]
+                ll
+                lk
+                lv
+                (mkNode [K] [V] lr k v r)
+        }
+  }
+
+poly balance = #K => #V => \t : Avl K V =>
+  match t [Avl K V] {
+    | Empty => Empty [K] [V]
+    | Node l k v _ r =>
+        let hl = height [K] [V] l in
+        let hr = height [K] [V] r in
+        if [Avl K V] (gtNat hl (succ hr))
+          (\u : Bin =>
+            match l [Avl K V] {
+              | Empty => mkNode [K] [V] l k v r
+              | Node ll _ _ _ lr =>
+                  if [Avl K V] (lte (height [K] [V] lr) (height [K] [V] ll))
+                    (\u : Bin => rotateRight [K] [V] (mkNode [K] [V] l k v r))
+                    (\u : Bin =>
+                      rotateRight [K] [V]
+                        (mkNode [K] [V] (rotateLeft [K] [V] l) k v r))
+            })
+          (\u : Bin =>
+            if [Avl K V] (gtNat hr (succ hl))
+              (\u : Bin =>
+                match r [Avl K V] {
+                  | Empty => mkNode [K] [V] l k v r
+                  | Node rl _ _ _ rr =>
+                      if [Avl K V] (lte (height [K] [V] rl) (height [K] [V] rr))
+                        (\u : Bin => rotateLeft [K] [V] (mkNode [K] [V] l k v r))
+                        (\u : Bin =>
+                          rotateLeft [K] [V]
+                            (mkNode [K] [V] l k v (rotateRight [K] [V] r)))
+                })
+              (\u : Bin => mkNode [K] [V] l k v r))
+  }
+
+poly rec lookup = #K => #V => \lteKey : K -> K -> Bool => \key : K => \t : Avl K V =>
+  match t [Maybe V] {
+    | Empty => None [V]
+    | Node l nk nv _ r =>
+        let le = lteKey key nk in
+        let ge = lteKey nk key in
+        if [Maybe V] (and le ge)
+          (\u : Bin => Some [V] nv)
+          (\u : Bin =>
+            if [Maybe V] le
+              (\u : Bin => lookup [K] [V] lteKey key l)
+              (\u : Bin => lookup [K] [V] lteKey key r))
+  }
+
+poly rec insert = #K => #V => \lteKey : K -> K -> Bool => \key : K => \value : V => \t : Avl K V =>
+  match t [Avl K V] {
+    | Empty =>
+        mkNode [K] [V]
+          (Empty [K] [V])
+          key
+          value
+          (Empty [K] [V])
+    | Node l nk nv _ r =>
+        let le = lteKey key nk in
+        let ge = lteKey nk key in
+        if [Avl K V] (and le ge)
+          (\u : Bin => mkNode [K] [V] l nk value r)
+          (\u : Bin =>
+            if [Avl K V] le
+              (\u : Bin =>
+                balance [K] [V]
+                  (mkNode [K] [V] (insert [K] [V] lteKey key value l) nk nv r))
+              (\u : Bin =>
+                balance [K] [V]
+                  (mkNode [K] [V] l nk nv (insert [K] [V] lteKey key value r))))
+  }
+
+poly rec extractMin = #K => #V => \t : Avl K V =>
+  match t [Pair K (Pair V (Avl K V))] {
+    | Empty => error [Pair K (Pair V (Avl K V))]
+    | Node l k v _ r =>
+        match l [Pair K (Pair V (Avl K V))] {
+          | Empty =>
+              MkPair [K] [Pair V (Avl K V)]
+                k
+                (MkPair [V] [Avl K V] v r)
+          | Node _ _ _ _ _ =>
+              match (extractMin [K] [V] l) [Pair K (Pair V (Avl K V))] {
+                | MkPair minK minRest =>
+                    match minRest [Pair V (Avl K V)] {
+                      | MkPair minV newLeft =>
+                          MkPair [K] [Pair V (Avl K V)]
+                            minK
+                            (MkPair [V] [Avl K V] minV (balance [K] [V] (mkNode [K] [V] newLeft k v r)))
+                    }
+              }
+        }
+  }
+
+poly deleteRoot = #K => #V => \l : Avl K V => \r : Avl K V =>
+  match r [Avl K V] {
+    | Empty => l
+    | Node _ _ _ _ _ =>
+        match (extractMin [K] [V] r) [Pair K (Pair V (Avl K V))] {
+          | MkPair minK minRest =>
+              match minRest [Pair V (Avl K V)] {
+                | MkPair minV newRight =>
+                    balance [K] [V] (mkNode [K] [V] l minK minV newRight)
+              }
+        }
+  }
+
+poly rec delete = #K => #V => \lteKey : K -> K -> Bool => \key : K => \t : Avl K V =>
+  match t [Avl K V] {
+    | Empty => Empty [K] [V]
+    | Node l nk nv _ r =>
+        let le = lteKey key nk in
+        let ge = lteKey nk key in
+        if [Avl K V] (and le ge)
+          (\u : Bin => deleteRoot [K] [V] l r)
+          (\u : Bin =>
+            if [Avl K V] le
+              (\u : Bin => balance [K] [V] (mkNode [K] [V] (delete [K] [V] lteKey key l) nk nv r))
+              (\u : Bin => balance [K] [V] (mkNode [K] [V] l nk nv (delete [K] [V] lteKey key r))))
+  }
+
+poly rec toListKeys = #K => #V => \t : Avl K V =>
+  match t [List K] {
+    | Empty => nil [K]
+    | Node l k _ _ r =>
+        append [K]
+          (toListKeys [K] [V] l)
+          (cons [K] k (toListKeys [K] [V] r))
+  }
+
+poly rec fromList = #K => #V => \lteKey : K -> K -> Bool => \entries : List (Pair K V) =>
+  matchList [Pair K V] [Avl K V] entries (empty [K] [V])
+    (\entry : Pair K V => \rest : List (Pair K V) =>
+      let acc = fromList [K] [V] lteKey rest in
+      insert [K] [V] lteKey (fst [K] [V] entry) (snd [K] [V] entry) acc)

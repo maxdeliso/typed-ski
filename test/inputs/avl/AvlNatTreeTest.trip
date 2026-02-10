@@ -1,0 +1,41 @@
+module AvlNatTreeTest
+
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Nat lte
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Avl Avl
+import Avl empty
+import Avl insert
+import Avl lookup
+import Avl size
+
+export main
+
+poly natOrZero = \m : Maybe Nat =>
+  match m [Nat] {
+    | None => zero
+    | Some x => x
+  }
+
+poly main =
+  let one = succ zero in
+  let two = succ one in
+  let three = succ two in
+  let five = add two three in
+  let seven = add two five in
+  let t0 = empty [Nat] [Nat] in
+  let t1 = insert [Nat] [Nat] lte two five t0 in
+  let t2 = insert [Nat] [Nat] lte one three t1 in
+  let t3 = insert [Nat] [Nat] lte three seven t2 in
+  let oldSize = size [Nat] [Nat] t1 in
+  let newSize = size [Nat] [Nat] t3 in
+  let gotOne = natOrZero (lookup [Nat] [Nat] lte one t3) in
+  let gotTwo = natOrZero (lookup [Nat] [Nat] lte two t3) in
+  let missing = natOrZero (lookup [Nat] [Nat] lte zero t3) in
+  let persisted = natOrZero (lookup [Nat] [Nat] lte three t1) in
+  add oldSize (add newSize (add gotOne (add gotTwo (add missing persisted))))

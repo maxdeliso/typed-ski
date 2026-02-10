@@ -1,0 +1,49 @@
+module AvlBinBoolTreeTest
+
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat add
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude lteBin
+import Avl Avl
+import Avl empty
+import Avl insert
+import Avl lookup
+import Avl size
+
+export main
+
+poly boolToNat = \b : Bool => b [Nat] (succ zero) zero
+
+poly maybeBoolToNat = \m : Maybe Bool =>
+  match m [Nat] {
+    | None => zero
+    | Some b => boolToNat b
+  }
+
+poly main =
+  let k1 = B1 BZ in
+  let k2 = B0 (B1 BZ) in
+  let k3 = B1 (B1 BZ) in
+  let t0 = empty [Bin] [Bool] in
+  let t1 = insert [Bin] [Bool] lteBin k2 false t0 in
+  let t2 = insert [Bin] [Bool] lteBin k1 true t1 in
+  let t3 = insert [Bin] [Bool] lteBin k3 true t2 in
+  let t4 = insert [Bin] [Bool] lteBin k2 true t3 in
+  let beforeReplace = maybeBoolToNat (lookup [Bin] [Bool] lteBin k2 t3) in
+  let afterReplace = maybeBoolToNat (lookup [Bin] [Bool] lteBin k2 t4) in
+  let gotK1 = maybeBoolToNat (lookup [Bin] [Bool] lteBin k1 t4) in
+  let missing = maybeBoolToNat (lookup [Bin] [Bool] lteBin BZ t4) in
+  let sizeBefore = size [Bin] [Bool] t3 in
+  let sizeAfter = size [Bin] [Bool] t4 in
+  add beforeReplace (add afterReplace (add gotK1 (add missing (add sizeBefore sizeAfter))))

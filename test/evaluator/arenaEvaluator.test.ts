@@ -289,7 +289,7 @@ Deno.test("dumpArena", async (t) => {
 });
 
 Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
-  await t.step("hostSubmit and hostPull throw if missing from WASM", () => {
+  await t.step("hostSubmit and hostPullV2 throw if missing from WASM", () => {
     // We need a real instance but with missing optional exports.
     // The createArenaEvaluator() returns a real one.
     const evaluator = ArenaEvaluatorWasm.fromInstance({
@@ -307,7 +307,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(() => evaluator.hostSubmit(0, 0, 0)).to.throw(
       "hostSubmit export missing",
     );
-    expect(() => evaluator.hostPull()).to.throw("hostPull export missing");
+    expect(() => evaluator.hostPullV2()).to.throw("hostPullV2 export missing");
   });
 
   await t.step("getArenaTop handles missing debugGetArenaBaseAddr", () => {

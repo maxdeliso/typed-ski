@@ -1,0 +1,116 @@
+module Parser
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude if
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude ParseError
+import Prelude MkParseError
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude Bin
+import Prelude eqBin
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Lexer Token
+import Lexer tokenTag
+import Lexer tokenText
+import Lexer tokenNatValue
+import Lexer T_LParen
+import Lexer T_RParen
+import Lexer T_Ident
+import Lexer T_Nat
+import Lexer T_EOF
+
+export Expr
+export E_Var
+export E_App
+export E_Lam
+export E_Let
+export E_Nat
+export isAtomStart
+export parseAtom
+export parseApp
+export parseAppAcc
+export expectIdent
+
+data Expr =
+  | E_Var (List Bin)
+  | E_App Expr Expr
+  | E_Lam (List Bin) Expr
+  | E_Let (List Bin) Expr Expr
+  | E_Nat Bin
+
+poly isAtomStart = \tok : Token =>
+  if [Bool]
+    (eqBin (tokenTag tok) (tokenTag (T_Ident (nil [Bin]))))
+    (\u : Bin => true)
+    (\u : Bin => eqBin (tokenTag tok) (tokenTag (T_Nat 0)))
+
+poly expectIdent = \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair (List Bin) (List Token))] toks
+    (Err [ParseError] [Pair (List Bin) (List Token)] (MkParseError 0 (nil [Bin])))
+    (\h : Token => \t : List Token =>
+       if [Result ParseError (Pair (List Bin) (List Token))]
+         (eqBin (tokenTag h) (tokenTag (T_Ident (nil [Bin]))))
+         (\u : Bin =>
+           Ok [ParseError] [Pair (List Bin) (List Token)]
+             (MkPair [List Bin] [List Token] (tokenText h) t))
+         (\u : Bin =>
+           Err [ParseError] [Pair (List Bin) (List Token)] (MkParseError 0 (nil [Bin])))
+    )
+
+poly parseAtom = \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair Expr (List Token))] toks
+    (Err [ParseError] [Pair Expr (List Token)] (MkParseError 0 (nil [Bin])))
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair Expr (List Token))]
+        (eqBin (tokenTag h) (tokenTag (T_Ident (nil [Bin]))))
+        (\u : Bin =>
+          Ok [ParseError] [Pair Expr (List Token)]
+            (MkPair [Expr] [List Token] (E_Var (tokenText h)) t))
+        (\u : Bin =>
+          if [Result ParseError (Pair Expr (List Token))]
+            (eqBin (tokenTag h) (tokenTag (T_Nat 0)))
+            (\u : Bin =>
+              Ok [ParseError] [Pair Expr (List Token)]
+                (MkPair [Expr] [List Token] (E_Nat (tokenNatValue h)) t))
+            (\u : Bin =>
+              Err [ParseError] [Pair Expr (List Token)] (MkParseError 0 (nil [Bin]))))
+    )
+
+poly rec parseAppAcc = \fn : Expr => \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair Expr (List Token))] toks
+    (Ok [ParseError] [Pair Expr (List Token)]
+      (MkPair [Expr] [List Token] fn toks))
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair Expr (List Token))]
+        (isAtomStart h)
+        (\u : Bin =>
+          match (parseAtom toks) [Result ParseError (Pair Expr (List Token))] {
+            | Err e => Err [ParseError] [Pair Expr (List Token)] e
+            | Ok res =>
+                let arg = fst [Expr] [List Token] res in
+                let rest = snd [Expr] [List Token] res in
+                parseAppAcc (E_App fn arg) rest
+          })
+        (\u : Bin =>
+          Ok [ParseError] [Pair Expr (List Token)]
+            (MkPair [Expr] [List Token] fn toks))
+    )
+
+poly parseApp = \toks : List Token =>
+  match (parseAtom toks) [Result ParseError (Pair Expr (List Token))] {
+    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+    | Ok res =>
+        let fn = fst [Expr] [List Token] res in
+        let rest = snd [Expr] [List Token] res in
+        parseAppAcc fn rest
+  }

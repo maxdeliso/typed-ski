@@ -1,0 +1,47 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude List
+import Prelude cons
+import Prelude nil
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Pair
+import Prelude fst
+import Prelude snd
+import Prelude eqBin
+import Lexer Token
+import Lexer T_Ident
+import Lexer T_Nat
+import Lexer T_EOF
+import Lexer eqListFast
+import Parser parseAtom
+import Parser Expr
+import Parser E_Var
+import Parser E_App
+import Parser E_Lam
+import Parser E_Let
+import Parser E_Nat
+
+export main
+
+poly main =
+  let input =
+    cons [Token] (T_Ident "x")
+      (cons [Token] T_EOF (nil [Token]))
+  in
+  match (parseAtom input) [Bool] {
+    | Err e => false
+    | Ok res =>
+        let expr = fst [Expr] [List Token] res in
+        match expr [Bool] {
+          | E_Var name => eqListFast name "x"
+          | E_App f x => false
+          | E_Lam name body => false
+          | E_Let name val body => false
+          | E_Nat n => false
+        }
+  }

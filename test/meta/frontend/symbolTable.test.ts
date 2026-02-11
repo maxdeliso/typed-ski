@@ -1,5 +1,6 @@
 import { assert } from "chai";
 import {
+  type DataDefinition,
   extractDefinitionValue,
   indexSymbols,
   type PolyDefinition,
@@ -332,6 +333,83 @@ Deno.test("Symbol Table", async (t) => {
           "Duplicate constructor definition: Some",
         );
       });
+    },
+  );
+
+  await t.step(
+    "should index imported constructors with canonical declaration order",
+    () => {
+      const program: TripLangProgram = {
+        kind: "program",
+        terms: [
+          { kind: "module", name: "M" },
+          { kind: "import", name: "Prelude", ref: "Result" },
+          { kind: "import", name: "Prelude", ref: "Err" },
+          { kind: "import", name: "Prelude", ref: "Ok" },
+          { kind: "import", name: "Prelude", ref: "Maybe" },
+          { kind: "import", name: "Prelude", ref: "Some" },
+          { kind: "import", name: "Prelude", ref: "None" },
+        ],
+      };
+
+      const preludeDataDefinitions: DataDefinition[] = [
+        {
+          kind: "data",
+          name: "Result",
+          typeParams: ["E", "T"],
+          constructors: [
+            { name: "Err", fields: [{ kind: "type-var", typeName: "E" }] },
+            { name: "Ok", fields: [{ kind: "type-var", typeName: "T" }] },
+          ],
+        },
+        {
+          kind: "data",
+          name: "Maybe",
+          typeParams: ["A"],
+          constructors: [
+            { name: "None", fields: [] },
+            { name: "Some", fields: [{ kind: "type-var", typeName: "A" }] },
+          ],
+        },
+      ];
+
+      const symbols = indexSymbols(program, {
+        importedDataDefinitionsByModule: new Map([
+          ["Prelude", preludeDataDefinitions],
+        ]),
+      });
+
+      const errInfo = symbols.constructors.get("Err");
+      const okInfo = symbols.constructors.get("Ok");
+      const noneInfo = symbols.constructors.get("None");
+      const someInfo = symbols.constructors.get("Some");
+      assert.isDefined(errInfo);
+      assert.isDefined(okInfo);
+      assert.isDefined(noneInfo);
+      assert.isDefined(someInfo);
+
+      assert.strictEqual(errInfo!.dataName, "Result");
+      assert.strictEqual(errInfo!.index, 0);
+      assert.strictEqual(okInfo!.dataName, "Result");
+      assert.strictEqual(okInfo!.index, 1);
+
+      assert.strictEqual(noneInfo!.dataName, "Maybe");
+      assert.strictEqual(noneInfo!.index, 0);
+      assert.strictEqual(someInfo!.dataName, "Maybe");
+      assert.strictEqual(someInfo!.index, 1);
+
+      const resultData = symbols.data.get("Result");
+      const maybeData = symbols.data.get("Maybe");
+      assert.isDefined(resultData);
+      assert.isDefined(maybeData);
+      assert.deepStrictEqual(
+        resultData!.constructors.map((ctor) => ctor.name),
+        ["Err", "Ok"],
+      );
+      assert.deepStrictEqual(
+        maybeData!.constructors.map((ctor) => ctor.name),
+        ["None", "Some"],
+      );
     },
   );
 

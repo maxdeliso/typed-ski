@@ -320,8 +320,6 @@ data Token =
       { name: "Prelude", ref: "append" },
       { name: "Prelude", ref: "Bin" },
       { name: "Prelude", ref: "addBin" },
-      { name: "Prelude", ref: "mulBin" },
-      { name: "Prelude", ref: "subBin" },
       { name: "Prelude", ref: "eqBin" },
       { name: "Prelude", ref: "lteBin" },
     ] as const;

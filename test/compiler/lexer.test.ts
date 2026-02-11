@@ -165,6 +165,29 @@ async function compileAndValidateTestProgram(
   return parseSKI(skiExpression);
 }
 
+async function runTriplangPredicateTest(
+  inputFileName: string,
+): Promise<boolean> {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1, false, {
+    maxResubmits: 0,
+  });
+  const testFilePath = join(__dirname, "inputs", inputFileName);
+  const testObjectPath = testFilePath.replace(/\.trip$/, ".tripc");
+
+  try {
+    const program = await compileAndValidateTestProgram(inputFileName);
+    const nf = await evaluator.reduceAsync(program);
+    return UnChurchBoolean(nf);
+  } finally {
+    evaluator.terminate();
+    try {
+      await Deno.remove(testObjectPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}
+
 Deno.test("Lexer unit tests - bottom up", async (t) => {
   await t.step(
     "isSpace - structure validation",
@@ -311,7 +334,7 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
     const nf = arenaEvaluator.reduce(skiExpr);
     const tokenCount = UnChurchNumber(nf);
 
-    assert.equal(tokenCount, 2n);
+    assert.equal(tokenCount, 3n);
   } finally {
     evaluator.terminate();
 
@@ -322,4 +345,27 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
       // Ignore cleanup errors
     }
   }
+});
+
+Deno.test("tokenize - structural lexer validations", async (t) => {
+  await t.step("differentiates identifiers from keywords", async () => {
+    const result = await runTriplangPredicateTest("testLexIdentVsKw.trip");
+    assert.isTrue(
+      result,
+      "Expected `abc` => T_Ident and `poly` => T_Keyword",
+    );
+  });
+
+  await t.step("parses numeric literals into T_Nat", async () => {
+    const result = await runTriplangPredicateTest("testLexNat.trip");
+    assert.isTrue(result, "Expected `123` => T_Nat 123 followed by T_EOF");
+  });
+
+  await t.step("parses arrows and fallback equality token", async () => {
+    const result = await runTriplangPredicateTest("testLexArrows.trip");
+    assert.isTrue(
+      result,
+      "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
+    );
+  });
 });

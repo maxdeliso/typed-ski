@@ -11,6 +11,7 @@ import { expandDataDefinitions } from "../meta/frontend/data.ts";
 import { indexSymbols as indexSymbolsImpl } from "../meta/frontend/symbolTable.ts";
 import { elaborateTerms } from "../meta/frontend/elaboration.ts";
 import type {
+  DataDefinition,
   ExportDefinition,
   ImportDefinition,
   ModuleDefinition,
@@ -28,6 +29,15 @@ export class SingleFileCompilerError extends Error {
     super(message);
     this.name = "SingleFileCompilerError";
   }
+}
+
+/**
+ * Optional inputs that enrich single-file compilation with imported-module
+ * metadata (for ADT constructor ordering and exhaustive match checks).
+ */
+export interface CompileToObjectFileOptions {
+  /** Imported module objects available during compilation. */
+  importedModules?: ReadonlyArray<TripCObject>;
 }
 
 /**
@@ -112,6 +122,25 @@ function extractDefinitions(
 }
 
 /**
+ * Extracts structural ADT metadata from a parsed TripLang program.
+ */
+function extractDataDefinitions(program: TripLangProgram): DataDefinition[] {
+  return program.terms.filter((term): term is DataDefinition =>
+    term.kind === "data"
+  );
+}
+
+function buildImportedDataDefinitionsByModule(
+  options: CompileToObjectFileOptions,
+): Map<string, ReadonlyArray<DataDefinition>> {
+  const byModule = new Map<string, ReadonlyArray<DataDefinition>>();
+  for (const moduleObject of options.importedModules ?? []) {
+    byModule.set(moduleObject.module, moduleObject.dataDefinitions ?? []);
+  }
+  return byModule;
+}
+
+/**
  * Compiles a single TripLang source string to a TripCObject.
  *
  * This function implements Phase 1 of the TripLang compilation pipeline:
@@ -121,7 +150,10 @@ function extractDefinitions(
  * @returns The compiled object file
  * @throws SingleFileCompilerError if compilation fails
  */
-export function compileToObjectFile(source: string): TripCObject {
+export function compileToObjectFile(
+  source: string,
+  options: CompileToObjectFileOptions = {},
+): TripCObject {
   try {
     // Parse the program
     const parsedProgram = expandDataDefinitions(parseTripLang(source));
@@ -130,13 +162,18 @@ export function compileToObjectFile(source: string): TripCObject {
     const { moduleName, imports, exports } = extractModuleInfo(parsedProgram);
 
     // Index symbols
-    const symbolTable = indexSymbolsImpl(parsedProgram);
+    const symbolTable = indexSymbolsImpl(parsedProgram, {
+      importedDataDefinitionsByModule: buildImportedDataDefinitionsByModule(
+        options,
+      ),
+    });
 
     // Elaborate terms (desugaring, annotation propagation)
     const elaboratedProgram = elaborateTerms(parsedProgram, symbolTable);
 
     // Extract definitions from elaborated program
     const definitions = extractDefinitions(elaboratedProgram);
+    const dataDefinitions = extractDataDefinitions(parsedProgram);
 
     // Create and return object file
     return {
@@ -144,6 +181,7 @@ export function compileToObjectFile(source: string): TripCObject {
       imports,
       exports,
       definitions,
+      dataDefinitions,
     };
   } catch (error) {
     if (error instanceof SingleFileCompilerError) {
@@ -161,7 +199,10 @@ export function compileToObjectFile(source: string): TripCObject {
  * @returns JSON string representation of the object file
  * @throws SingleFileCompilerError if compilation fails
  */
-export function compileToObjectFileString(source: string): string {
-  const objectFile = compileToObjectFile(source);
+export function compileToObjectFileString(
+  source: string,
+  options: CompileToObjectFileOptions = {},
+): string {
+  const objectFile = compileToObjectFile(source, options);
   return serializeTripCObject(objectFile);
 }

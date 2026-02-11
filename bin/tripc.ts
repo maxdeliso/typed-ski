@@ -24,18 +24,16 @@
  */
 
 import { resolve } from "std/path";
-import {
-  compileToObjectFileString,
-  SingleFileCompilerError,
-} from "../lib/compiler/index.ts";
+import { SingleFileCompilerError } from "../lib/compiler/index.ts";
 import {
   deserializeTripCObject,
+  serializeTripCObject,
   type TripCObject,
 } from "../lib/compiler/objectFile.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { VERSION } from "../lib/shared/version.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
-import { loadTripSourceFile } from "../lib/tripSourceLoader.ts";
+import { loadTripModuleObject } from "../lib/tripSourceLoader.ts";
 
 type Mode = "compile" | "link";
 
@@ -242,16 +240,15 @@ async function compileFile(
 ): Promise<void> {
   try {
     if (verbose) {
-      console.log(`Reading ${inputPath}...`);
+      console.log(`Loading ${inputPath}...`);
     }
-
-    const inputContent = await loadTripSourceFile(inputPath);
 
     if (verbose) {
       console.log("Compiling TripLang program...");
     }
 
-    const serialized = compileToObjectFileString(inputContent);
+    const objectFile = await loadTripModuleObject(inputPath);
+    const serialized = serializeTripCObject(objectFile);
 
     const finalOutputPath = outputPath ||
       inputPath.replace(/\.trip$/, ".tripc");
@@ -261,9 +258,6 @@ async function compileFile(
     }
 
     await Deno.writeTextFile(finalOutputPath, serialized);
-
-    // Parse the serialized output to get stats for display
-    const objectFile = JSON.parse(serialized);
 
     if (verbose) {
       console.log(`   Module: ${objectFile.module}`);
@@ -285,7 +279,8 @@ async function compileFile(
       console.error(`Permission denied: ${error.message}`);
       Deno.exit(1);
     } else {
-      console.error(`Unexpected error: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Compilation error: ${message}`);
       Deno.exit(1);
     }
   }

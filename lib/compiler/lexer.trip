@@ -27,8 +27,6 @@ import Prelude foldl
 import Prelude append
 import Prelude Bin
 import Prelude addBin
-import Prelude mulBin
-import Prelude subBin
 import Prelude eqBin
 import Prelude lteBin
 import Nat Nat
@@ -54,6 +52,9 @@ export T_Keyword
 export T_Ident
 export T_Nat
 export T_EOF
+export tokenTag
+export tokenText
+export tokenNatValue
 export tokenize
 export tokenizeBin
 export tokenizeAcc
@@ -91,6 +92,8 @@ export isAlphaBin
 export isIdentCharBin
 export consumeIdent
 export consumeDigits
+export digitValueBin
+export timesTen
 
 data Token =
   | T_LParen
@@ -112,6 +115,75 @@ data Token =
   | T_Ident (List Bin)
   | T_Nat Bin
   | T_EOF
+
+poly tokenTag = \tok : Token =>
+  match tok [Bin] {
+    | T_LParen => 1
+    | T_RParen => 2
+    | T_LBrace => 3
+    | T_RBrace => 4
+    | T_LBracket => 5
+    | T_RBracket => 6
+    | T_Backslash => 7
+    | T_Arrow => 8
+    | T_FatArrow => 9
+    | T_Eq => 10
+    | T_Colon => 11
+    | T_Hash => 12
+    | T_Pipe => 13
+    | T_Dot => 14
+    | T_Comma => 15
+    | T_Keyword str => 16
+    | T_Ident str => 17
+    | T_Nat n => 18
+    | T_EOF => 19
+  }
+
+poly tokenText = \tok : Token =>
+  match tok [List Bin] {
+    | T_LParen => nil [Bin]
+    | T_RParen => nil [Bin]
+    | T_LBrace => nil [Bin]
+    | T_RBrace => nil [Bin]
+    | T_LBracket => nil [Bin]
+    | T_RBracket => nil [Bin]
+    | T_Backslash => nil [Bin]
+    | T_Arrow => nil [Bin]
+    | T_FatArrow => nil [Bin]
+    | T_Eq => nil [Bin]
+    | T_Colon => nil [Bin]
+    | T_Hash => nil [Bin]
+    | T_Pipe => nil [Bin]
+    | T_Dot => nil [Bin]
+    | T_Comma => nil [Bin]
+    | T_Keyword str => str
+    | T_Ident str => str
+    | T_Nat n => nil [Bin]
+    | T_EOF => nil [Bin]
+  }
+
+poly tokenNatValue = \tok : Token =>
+  match tok [Bin] {
+    | T_LParen => 0
+    | T_RParen => 0
+    | T_LBrace => 0
+    | T_RBrace => 0
+    | T_LBracket => 0
+    | T_RBracket => 0
+    | T_Backslash => 0
+    | T_Arrow => 0
+    | T_FatArrow => 0
+    | T_Eq => 0
+    | T_Colon => 0
+    | T_Hash => 0
+    | T_Pipe => 0
+    | T_Dot => 0
+    | T_Comma => 0
+    | T_Keyword str => 0
+    | T_Ident str => 0
+    | T_Nat n => n
+    | T_EOF => 0
+  }
 
 poly bin_space = 32
 poly bin_newline = 10
@@ -141,13 +213,72 @@ poly bin_A = 65
 poly bin_Z = 90
 
 poly isDigitBin = \c : Bin =>
-  and (lteBin bin_0 c) (lteBin c bin_9)
+  if [Bool] (eqBin c 48) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 49) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 50) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 51) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 52) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 53) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 54) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 55) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 56) (\u : Bin => true)
+  (\u : Bin => eqBin c 57)))))))))
 
 poly isLowerBin = \c : Bin =>
-  and (lteBin bin_a c) (lteBin c bin_z)
+  if [Bool] (eqBin c 97) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 98) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 99) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 100) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 101) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 102) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 103) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 104) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 105) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 106) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 107) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 108) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 109) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 110) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 111) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 112) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 113) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 114) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 115) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 116) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 117) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 118) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 119) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 120) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 121) (\u : Bin => true)
+  (\u : Bin => eqBin c 122)))))))))))))))))))))))))
 
 poly isUpperBin = \c : Bin =>
-  and (lteBin bin_A c) (lteBin c bin_Z)
+  if [Bool] (eqBin c 65) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 66) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 67) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 68) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 69) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 70) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 71) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 72) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 73) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 74) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 75) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 76) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 77) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 78) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 79) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 80) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 81) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 82) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 83) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 84) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 85) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 86) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 87) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 88) (\u : Bin => true)
+  (\u : Bin => if [Bool] (eqBin c 89) (\u : Bin => true)
+  (\u : Bin => eqBin c 90)))))))))))))))))))))))))
 
 poly isAlphaBin = \c : Bin =>
   if [Bool] (isLowerBin c) (\u : Bin => true) (\u : Bin => isUpperBin c)
@@ -170,13 +301,29 @@ poly rec eqListFast = \a : List Bin => \b : List Bin =>
 poly kwPoly = "poly"
 poly isKeywordPoly = \word : List Bin => eqListFast word kwPoly
 
+poly digitValueBin = \d : Bin =>
+  if [Bin] (eqBin d 48) (\u : Bin => 0)
+  (\u : Bin => if [Bin] (eqBin d 49) (\u : Bin => 1)
+  (\u : Bin => if [Bin] (eqBin d 50) (\u : Bin => 2)
+  (\u : Bin => if [Bin] (eqBin d 51) (\u : Bin => 3)
+  (\u : Bin => if [Bin] (eqBin d 52) (\u : Bin => 4)
+  (\u : Bin => if [Bin] (eqBin d 53) (\u : Bin => 5)
+  (\u : Bin => if [Bin] (eqBin d 54) (\u : Bin => 6)
+  (\u : Bin => if [Bin] (eqBin d 55) (\u : Bin => 7)
+  (\u : Bin => if [Bin] (eqBin d 56) (\u : Bin => 8)
+  (\u : Bin => if [Bin] (eqBin d 57) (\u : Bin => 9)
+  (\u : Bin => 0))))))))))
+
+poly timesTen = \x : Bin =>
+  let x2 = addBin x x in
+  let x4 = addBin x2 x2 in
+  let x8 = addBin x4 x4 in
+  addBin x8 x2
+
 poly binFromDigitList = \digits : List Bin =>
-  let ten = 10 in
-  let zeroChar = bin_0 in
   foldl [Bin] [Bin]
     (\acc : Bin => \d : Bin =>
-      let digit = subBin d zeroChar in
-      addBin (mulBin acc ten) digit)
+      addBin (timesTen acc) (digitValueBin d))
     0
     digits
 
@@ -242,7 +389,6 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
       if [Result ParseError (List Token)] (isSpaceBin c)
         (\u : Bin => tokenizeAcc cs accRev)
         (\u : Bin =>
-
       if [Result ParseError (List Token)]
         (and (eqBin c bin_dash) (matchList [Bin] [Bool] cs false (\h : Bin => \t : List Bin => eqBin bin_3e h)))
         (\u : Bin =>
@@ -258,9 +404,6 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
         (\u : Bin =>
 
       match (lookupTokenBin c simpleTokensBin) [Result ParseError (List Token)] {
-        | Some tok =>
-            tokenizeAcc cs (cons [Token] tok accRev)
-
         | None =>
             if [Result ParseError (List Token)] (isAlphaBin c)
               (\u : Bin =>
@@ -288,6 +431,9 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
                       (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
                       (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
                   ))
+
+        | Some tok =>
+            tokenizeAcc cs (cons [Token] tok accRev)
       }
 
       ))))

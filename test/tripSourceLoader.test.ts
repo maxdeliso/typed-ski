@@ -37,6 +37,7 @@ Deno.test("tripSourceLoader - coverage", async (t) => {
     // URL support
     const obj = await loadTripModuleObject(testFileUrl);
     expect(obj).to.have.property("definitions");
+    expect(obj).to.have.property("dataDefinitions");
 
     // Caching support
     const objCached = await loadTripModuleObject(testFile);

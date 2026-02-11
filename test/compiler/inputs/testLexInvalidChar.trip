@@ -1,0 +1,18 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Lexer tokenizeBin
+import Lexer Token
+
+export main
+
+poly main =
+  match (tokenizeBin "@") [Bool] {
+    | Err e => true
+    | Ok toks => false
+  }

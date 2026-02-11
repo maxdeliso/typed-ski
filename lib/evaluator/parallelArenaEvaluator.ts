@@ -18,6 +18,7 @@ import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
 import { type ArenaRingStatsSnapshot, RingStats } from "./io/ringStats.ts";
 import { CompletionPoller } from "./parallel/completionPoller.ts";
 import {
+  DEFAULT_MAX_RESUBMITS,
   RequestTracker,
   type RequestTrackerHooks,
 } from "./parallel/requestTracker.ts";
@@ -26,6 +27,18 @@ import { WorkerManager } from "./parallel/workerManager.ts";
 // Re-export for external use
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
 export type { ArenaRingStatsSnapshot } from "./io/ringStats.ts";
+
+export interface ParallelArenaEvaluatorOptions {
+  /**
+   * Maximum number of suspension/control-node resubmissions per request.
+   *
+   * - `0`: unlimited (no resubmission cap)
+   * - `N > 0`: reject request after `N` resubmissions
+   *
+   * Defaults to `DEFAULT_MAX_RESUBMITS`.
+   */
+  maxResubmits?: number;
+}
 
 export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   implements Evaluator {
@@ -78,6 +91,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     exports: ArenaWasmExports,
     memory: WebAssembly.Memory,
     workers: Worker[],
+    options: ParallelArenaEvaluatorOptions = {},
   ) {
     super(exports, memory);
     this.workers = workers;
@@ -110,7 +124,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       },
     };
 
-    this.requestTracker = new RequestTracker(hooks);
+    const maxResubmits = options.maxResubmits ?? DEFAULT_MAX_RESUBMITS;
+    this.requestTracker = new RequestTracker(hooks, maxResubmits);
     this.ringStats = new RingStats();
     this.ioManager = new IoManager(
       exports,
@@ -329,6 +344,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   static async create(
     workerCount = navigator.hardwareConcurrency || 4,
     verbose = false,
+    options: ParallelArenaEvaluatorOptions = {},
   ): Promise<ParallelArenaEvaluatorWasm> {
     if (verbose) {
       console.error(
@@ -338,6 +354,14 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     if (workerCount < 1) {
       throw new Error(
         "ParallelArenaEvaluatorWasm requires at least one worker",
+      );
+    }
+    if (
+      options.maxResubmits !== undefined &&
+      (!Number.isInteger(options.maxResubmits) || options.maxResubmits < 0)
+    ) {
+      throw new Error(
+        `maxResubmits must be an integer >= 0, got ${options.maxResubmits}`,
       );
     }
     const INITIAL_CAP = 1 << 16; // Use a modest bootstrap cap to fit constrained shared memory in tests.
@@ -410,6 +434,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       exports,
       sharedMemory,
       workers,
+      options,
     );
 
     // Run self-test to validate IO rings configuration

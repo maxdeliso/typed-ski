@@ -12,10 +12,9 @@
  */
 
 import { resolve } from "std/path";
-import {
-  compileToObjectFileString,
-  SingleFileCompilerError,
-} from "../lib/compiler/index.ts";
+import { SingleFileCompilerError } from "../lib/compiler/index.ts";
+import { serializeTripCObject } from "../lib/compiler/objectFile.ts";
+import { loadTripModuleObject } from "../lib/tripSourceLoader.ts";
 
 /**
  * Compilation error specific to the CLI
@@ -35,13 +34,11 @@ async function compileToObjectFile(
   outputPath?: string,
 ): Promise<void> {
   try {
-    // Read input file
-    console.log(`Reading ${inputPath}...`);
-    const inputContent = await Deno.readTextFile(inputPath);
-
-    // Compile to object file string
+    // Compile source file with import metadata from discoverable sibling modules.
+    console.log(`Loading ${inputPath}...`);
     console.log("Compiling TripLang program...");
-    const serialized = compileToObjectFileString(inputContent);
+    const objectFile = await loadTripModuleObject(inputPath);
+    const serialized = serializeTripCObject(objectFile);
 
     // Determine output path
     const finalOutputPath = outputPath ||
@@ -50,9 +47,6 @@ async function compileToObjectFile(
     // Write object file
     console.log(`Writing object file to ${finalOutputPath}...`);
     await Deno.writeTextFile(finalOutputPath, serialized);
-
-    // Parse the serialized output to get stats for display
-    const objectFile = JSON.parse(serialized);
 
     console.log("Compilation successful!");
     console.log(`   Module: ${objectFile.module}`);

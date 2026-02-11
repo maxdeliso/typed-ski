@@ -120,10 +120,12 @@ poly id = #a => \\x:a => x`;
       expect(result).to.have.property("imports");
       expect(result).to.have.property("exports");
       expect(result).to.have.property("definitions");
+      expect(result).to.have.property("dataDefinitions");
 
       expect(result.imports).to.be.an("array");
       expect(result.exports).to.be.an("array");
       expect(result.definitions).to.be.an("object");
+      expect(result.dataDefinitions).to.be.an("array");
 
       expect(result.exports).to.include("id");
       expect(result.definitions).to.have.property("id");
@@ -214,6 +216,7 @@ typed double = \\x:Int => add x x`;
       expect(Object.keys(result.definitions)).to.have.length(2);
       expect(result.definitions).to.have.property("id");
       expect(result.definitions).to.have.property("double");
+      expect(result.dataDefinitions).to.deep.equal([]);
 
       // Check definition structure
       const idDef = required(
@@ -250,6 +253,9 @@ poly id = #a => \\x:a => x`;
       expect(deserialized.module).to.equal(original.module);
       expect(deserialized.imports).to.deep.equal(original.imports);
       expect(deserialized.exports).to.deep.equal(original.exports);
+      expect(deserialized.dataDefinitions).to.deep.equal(
+        original.dataDefinitions,
+      );
       expect(Object.keys(deserialized.definitions)).to.deep.equal(
         Object.keys(original.definitions),
       );
@@ -289,7 +295,7 @@ poly id = #a => \\x:a => x`;
         join(projectRoot, "bin/tripc.ts"),
       );
       expect(tripcTs).to.include("TripLang Compiler & Linker");
-      expect(tripcTs).to.include("compileToObjectFileString");
+      expect(tripcTs).to.include("loadTripModuleObject");
     });
   });
 

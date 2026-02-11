@@ -7,7 +7,7 @@
  *
  * @module
  */
-import type { TripLangTerm } from "../meta/trip.ts";
+import type { DataDefinition, TripLangTerm } from "../meta/trip.ts";
 
 /**
  * Represents an import declaration in a module.
@@ -39,6 +39,13 @@ export interface TripCObject {
 
   /** All definitions in this module, indexed by symbol name */
   definitions: Record<string, TripLangTerm>;
+
+  /**
+   * Data definitions declared by this module in canonical constructor order.
+   * This metadata allows downstream compilation passes to validate and
+   * canonicalize matches on imported ADTs without hardcoded built-ins.
+   */
+  dataDefinitions?: DataDefinition[];
 }
 
 /**
@@ -82,7 +89,7 @@ export function deserializeTripCObject(json: string): TripCObject {
       }
       return value;
     };
-    const parsed = JSON.parse(json, reviver);
+    const parsed = JSON.parse(json, reviver) as Record<string, unknown>;
 
     // Basic validation
     if (typeof parsed.module !== "string") {
@@ -101,6 +108,17 @@ export function deserializeTripCObject(json: string): TripCObject {
       throw new Error("Invalid object file: definitions must be an object");
     }
 
+    // Keep backwards compatibility with older .tripc files.
+    if (!("dataDefinitions" in parsed)) {
+      parsed.dataDefinitions = [];
+    }
+
+    if (!Array.isArray(parsed.dataDefinitions)) {
+      throw new Error(
+        "Invalid object file: dataDefinitions must be an array",
+      );
+    }
+
     // Validate imports structure
     for (const imp of parsed.imports) {
       if (typeof imp.name !== "string" || typeof imp.from !== "string") {
@@ -110,7 +128,48 @@ export function deserializeTripCObject(json: string): TripCObject {
       }
     }
 
-    return parsed as TripCObject;
+    // Validate data definition metadata structure.
+    for (const dataDef of parsed.dataDefinitions) {
+      if (
+        !dataDef ||
+        typeof dataDef !== "object" ||
+        (dataDef as { kind?: unknown }).kind !== "data" ||
+        typeof (dataDef as { name?: unknown }).name !== "string" ||
+        !Array.isArray((dataDef as { typeParams?: unknown }).typeParams) ||
+        !Array.isArray((dataDef as { constructors?: unknown }).constructors)
+      ) {
+        throw new Error(
+          "Invalid object file: each data definition must contain kind/name/typeParams/constructors",
+        );
+      }
+
+      for (
+        const typeParam of (dataDef as { typeParams: unknown[] }).typeParams
+      ) {
+        if (typeof typeParam !== "string") {
+          throw new Error(
+            "Invalid object file: data definition typeParams must be strings",
+          );
+        }
+      }
+
+      for (
+        const ctor of (dataDef as { constructors: unknown[] }).constructors
+      ) {
+        if (
+          !ctor ||
+          typeof ctor !== "object" ||
+          typeof (ctor as { name?: unknown }).name !== "string" ||
+          !Array.isArray((ctor as { fields?: unknown }).fields)
+        ) {
+          throw new Error(
+            "Invalid object file: data constructors must have name and fields",
+          );
+        }
+      }
+    }
+
+    return parsed as unknown as TripCObject;
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(`Invalid JSON in object file: ${error.message}`);

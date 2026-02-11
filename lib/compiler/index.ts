@@ -15,5 +15,6 @@ export { deserializeTripCObject, serializeTripCObject } from "./objectFile.ts";
 export { SingleFileCompilerError } from "./singleFileCompiler.ts";
 export {
   compileToObjectFile,
+  type CompileToObjectFileOptions,
   compileToObjectFileString,
 } from "./singleFileCompiler.ts";

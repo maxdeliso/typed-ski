@@ -111,6 +111,15 @@ Deno.test("RequestTracker - resubmission counting", () => {
   );
 });
 
+Deno.test("RequestTracker - resubmission cap can be disabled", () => {
+  const tracker = new RequestTracker({}, 0); // unlimited
+  const reqId = tracker.createRequest(1);
+
+  for (let i = 1; i <= 20_000; i++) {
+    assertEquals(tracker.incrementResubmit(reqId), i);
+  }
+});
+
 Deno.test("RequestTracker - resubmission limit does not emit duplicate error hook", () => {
   let errorHookCalls = 0;
   const tracker = new RequestTracker(

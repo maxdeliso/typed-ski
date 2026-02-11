@@ -150,6 +150,9 @@ combinator S = S`,
             expect(cliResultParsed.exports).to.deep.equal(
               libraryResult.exports,
             );
+            expect(cliResultParsed.dataDefinitions).to.deep.equal(
+              libraryResult.dataDefinitions,
+            );
             expect(Object.keys(cliResultParsed.definitions)).to.deep.equal(
               Object.keys(libraryResult.definitions),
             );
@@ -190,6 +193,7 @@ combinator S = S`,
         expect(parsed).to.have.property("imports");
         expect(parsed).to.have.property("exports");
         expect(parsed).to.have.property("definitions");
+        expect(parsed).to.have.property("dataDefinitions");
 
         // Should be deserializable
         const deserialized = deserializeTripCObject(objectContent);

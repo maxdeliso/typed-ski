@@ -7,10 +7,23 @@ import { RequestTracker } from "../../../lib/evaluator/parallel/requestTracker.t
 import { ArenaKind } from "../../../lib/shared/arena.ts";
 
 class RingStatsStub {
-  recordPullEmpty(): void {}
-  recordPullNonEmpty(): void {}
-  recordSubmitFull(): void {}
-  recordCompletionStashed(): void {}
+  public pullEmptyCount = 0;
+  public pullNonEmptyCount = 0;
+  public submitFullCount = 0;
+  public completionStashedCount = 0;
+
+  recordPullEmpty(): void {
+    this.pullEmptyCount++;
+  }
+  recordPullNonEmpty(): void {
+    this.pullNonEmptyCount++;
+  }
+  recordSubmitFull(): void {
+    this.submitFullCount++;
+  }
+  recordCompletionStashed(): void {
+    this.completionStashedCount++;
+  }
 }
 
 class IoManagerStub {
@@ -44,6 +57,17 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
     resolve = r;
   });
   return { promise, resolve };
+}
+
+interface CompletionPollerPrivate {
+  containsInternalControlNode(
+    rootNodeId: number,
+    ex: {
+      kindOf: (id: number) => number;
+      leftOf: (id: number) => number;
+      rightOf: (id: number) => number;
+    },
+  ): boolean;
 }
 
 Deno.test("CompletionPoller - resubmits leaked continuation descendant instead of completing", async () => {
@@ -526,4 +550,192 @@ Deno.test("CompletionPoller - resubmitSuspension busy-waits on full queue", asyn
   poller.stop();
 
   assertEquals(submits, 3);
+});
+
+Deno.test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
+  const tracker = new RequestTracker();
+  const ringStats = new RingStatsStub();
+  const fakeExports = {} as ArenaWasmExports;
+  let aborted = false;
+  const poller = new CompletionPoller(
+    tracker,
+    new IoManagerStub() as unknown as IoManager,
+    ringStats as unknown as RingStats,
+    fakeExports,
+    () => aborted,
+  );
+
+  // Keep at least one request pending so the poller does not hibernate.
+  const reqId = tracker.createRequest(1);
+  tracker.markPending(reqId, () => {}, () => {});
+
+  poller.start(() => -1n);
+
+  for (let i = 0; i < 100; i++) {
+    await new Promise((r) => setTimeout(r, 10));
+    if (ringStats.pullEmptyCount > 600) break;
+  }
+
+  aborted = true;
+  poller.stop();
+
+  assert(
+    ringStats.pullEmptyCount > 512,
+    `Expected more than 512 empty pulls, got ${ringStats.pullEmptyCount}`,
+  );
+});
+
+Deno.test("CompletionPoller - containsInternalControlNode handles cyclic graphs", () => {
+  const tracker = new RequestTracker();
+  const fakeExports = {
+    kindOf: (id: number) => (id === 1 ? ArenaKind.NonTerm : ArenaKind.Terminal),
+    leftOf: (_id: number) => 1,
+    rightOf: (_id: number) => 1,
+  } as unknown as ArenaWasmExports;
+
+  const poller = new CompletionPoller(
+    tracker,
+    new IoManagerStub() as unknown as IoManager,
+    new RingStatsStub() as unknown as RingStats,
+    fakeExports,
+    () => false,
+  );
+
+  const privatePoller = poller as unknown as CompletionPollerPrivate;
+  const result = privatePoller.containsInternalControlNode(1, fakeExports);
+  assertEquals(result, false, "Cycle traversal should not hang");
+});
+
+Deno.test("CompletionPoller - completion is stashed when resolver is not pending", async () => {
+  const tracker = new RequestTracker();
+  const ringStats = new RingStatsStub();
+  const fakeExports = {
+    kindOf: () => ArenaKind.Terminal,
+  } as unknown as ArenaWasmExports;
+
+  let aborted = false;
+  const poller = new CompletionPoller(
+    tracker,
+    new IoManagerStub() as unknown as IoManager,
+    ringStats as unknown as RingStats,
+    fakeExports,
+    () => aborted,
+  );
+
+  const reqId = tracker.createRequest(1);
+  const keepAliveReqId = tracker.createRequest(1);
+  tracker.markPending(keepAliveReqId, () => {}, () => {});
+
+  let pulled = false;
+  poller.start(() => {
+    if (!pulled) {
+      pulled = true;
+      return packV2(reqId, 0, 100);
+    }
+    return -1n;
+  });
+
+  for (let i = 0; i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 5));
+    if (ringStats.completionStashedCount > 0) break;
+  }
+
+  aborted = true;
+  poller.stop();
+
+  assertEquals(ringStats.completionStashedCount, 1);
+  assertEquals(tracker.getStashedCompletion(reqId), 100);
+});
+
+Deno.test("CompletionPoller - handles IO_WAIT via v1 symOf path", async () => {
+  const tracker = new RequestTracker();
+  const ringStats = new RingStatsStub();
+  let ioWaitNodeId = -1;
+
+  const ioManager = {
+    registerIoWait: (nodeId: number) => {
+      ioWaitNodeId = nodeId;
+    },
+    handleIoWaitSuspension: () => Promise.resolve(false),
+  } as unknown as IoManager;
+
+  const fakeExports = {
+    kindOf: (_id: number) => ArenaKind.Suspension,
+    symOf: () => 2, // SUSPEND_MODE_IO_WAIT
+  } as unknown as ArenaWasmExports;
+
+  let aborted = false;
+  const poller = new CompletionPoller(
+    tracker,
+    ioManager,
+    ringStats as unknown as RingStats,
+    fakeExports,
+    () => aborted,
+  );
+
+  const reqId = tracker.createRequest(1);
+  tracker.markPending(reqId, () => {}, () => {});
+
+  let pulled = false;
+  poller.start(() => {
+    if (!pulled) {
+      pulled = true;
+      return packV2(reqId, 0, 100);
+    }
+    return -1n;
+  });
+
+  for (let i = 0; i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 5));
+    if (ioWaitNodeId !== -1) break;
+  }
+
+  aborted = true;
+  poller.stop();
+
+  assertEquals(ioWaitNodeId, 100);
+});
+
+Deno.test("CompletionPoller - maybeYield drains long completion bursts", async () => {
+  const tracker = new RequestTracker();
+  const ringStats = new RingStatsStub();
+  const fakeExports = {
+    kindOf: () => ArenaKind.Terminal,
+  } as unknown as ArenaWasmExports;
+
+  let aborted = false;
+  const poller = new CompletionPoller(
+    tracker,
+    new IoManagerStub() as unknown as IoManager,
+    ringStats as unknown as RingStats,
+    fakeExports,
+    () => aborted,
+  );
+
+  try {
+    const totalRequests = 5000;
+    for (let i = 0; i < totalRequests; i++) {
+      const reqId = tracker.createRequest(1);
+      tracker.markPending(reqId, () => {}, () => {});
+    }
+
+    let pullCount = 0;
+    poller.start(() => {
+      if (pullCount < totalRequests) {
+        pullCount++;
+        return packV2(pullCount, 0, 100);
+      }
+      return -1n;
+    });
+
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      if (tracker.getTotalPending() === 0) break;
+    }
+
+    assertEquals(tracker.getTotalPending(), 0);
+  } finally {
+    aborted = true;
+    poller.stop();
+  }
 });

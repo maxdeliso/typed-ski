@@ -1,17 +1,19 @@
-import { assert, assertEquals } from "std/assert";
+import { assert, assertEquals, assertThrows } from "std/assert";
 import { expect } from "chai";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 
 import {
   ArenaEvaluatorWasm,
+  type ArenaWasmExports,
   createArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
 import { getOrBuildArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaNode } from "../../lib/shared/types.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { unparseSKI } from "../../lib/ski/expression.ts";
+import { ArenaKind } from "../../lib/shared/arena.ts";
+import { type SKIExpression, unparseSKI } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 
@@ -358,6 +360,153 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(chunks).to.have.lengthOf(2);
     expect(chunks[0]).to.have.lengthOf(2); // ids 0, 2
     expect(chunks[1]).to.have.lengthOf(1); // id 4
+  });
+
+  await t.step("fromArena throws on Continuation and Suspension nodes", () => {
+    const continuationExports = {
+      kindOf: (id: number) =>
+        id === 1 ? ArenaKind.Continuation : ArenaKind.Suspension,
+      debugGetArenaBaseAddr: () => 0,
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const continuationEvaluator = new ArenaEvaluatorWasm(
+      continuationExports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => continuationEvaluator.fromArena(1),
+      Error,
+      "Cannot convert Continuation node 1 to SKI expression",
+    );
+
+    const suspensionExports = {
+      kindOf: () => ArenaKind.Suspension,
+      debugGetArenaBaseAddr: () => 0,
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const suspensionEvaluator = new ArenaEvaluatorWasm(
+      suspensionExports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => suspensionEvaluator.fromArena(2),
+      Error,
+      "Cannot convert Suspension node 2 to SKI expression",
+    );
+  });
+
+  await t.step("toArena throws on unknown terminal symbols", () => {
+    const exports = {
+      allocTerminal: () => 0,
+      reset: () => {},
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+    const fakeExpr = {
+      kind: "terminal",
+      sym: "UNKNOWN",
+    } as unknown as SKIExpression;
+
+    assertThrows(
+      () => evaluator.toArena(fakeExpr),
+      Error,
+      "Unrecognised terminal symbol",
+    );
+  });
+
+  await t.step("toArena throws on cons allocation OOM", () => {
+    const exports = {
+      allocTerminal: () => 0,
+      allocCons: () => 0xffffffff,
+      reset: () => {},
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => evaluator.toArena(parseSKI("II")),
+      Error,
+      "Arena Out of Memory during marshaling",
+    );
+  });
+
+  await t.step("fromInstance throws when required exports are missing", () => {
+    const incompleteExports = {
+      reset: () => {},
+    } as unknown as ArenaWasmExports;
+
+    assertThrows(
+      () =>
+        ArenaEvaluatorWasm.fromInstance(
+          incompleteExports,
+          new WebAssembly.Memory({ initial: 1 }),
+        ),
+      Error,
+      "WASM export `allocTerminal` is missing",
+    );
+  });
+
+  await t.step("reset invalidates terminal cache", () => {
+    let allocTerminalCalls = 0;
+    const exports = {
+      reset: () => {},
+      allocTerminal: () => allocTerminalCalls++,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    evaluator.toArena(parseSKI("I"));
+    assertEquals(allocTerminalCalls, 10);
+
+    evaluator.reset();
+    evaluator.toArena(parseSKI("I"));
+    assertEquals(allocTerminalCalls, 20);
   });
 
   await t.step("structural hash-consing (consCache)", () => {

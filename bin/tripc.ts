@@ -279,8 +279,7 @@ async function compileFile(
       console.error(`Permission denied: ${error.message}`);
       Deno.exit(1);
     } else {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`Compilation error: ${message}`);
+      console.error(`Compilation error: ${String(error)}`);
       Deno.exit(1);
     }
   }

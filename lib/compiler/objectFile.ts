@@ -45,7 +45,7 @@ export interface TripCObject {
    * This metadata allows downstream compilation passes to validate and
    * canonicalize matches on imported ADTs without hardcoded built-ins.
    */
-  dataDefinitions?: DataDefinition[];
+  dataDefinitions: DataDefinition[];
 }
 
 /**
@@ -106,11 +106,6 @@ export function deserializeTripCObject(json: string): TripCObject {
 
     if (typeof parsed.definitions !== "object" || parsed.definitions === null) {
       throw new Error("Invalid object file: definitions must be an object");
-    }
-
-    // Keep backwards compatibility with older .tripc files.
-    if (!("dataDefinitions" in parsed)) {
-      parsed.dataDefinitions = [];
     }
 
     if (!Array.isArray(parsed.dataDefinitions)) {

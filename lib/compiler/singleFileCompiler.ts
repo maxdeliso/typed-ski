@@ -135,7 +135,7 @@ function buildImportedDataDefinitionsByModule(
 ): Map<string, ReadonlyArray<DataDefinition>> {
   const byModule = new Map<string, ReadonlyArray<DataDefinition>>();
   for (const moduleObject of options.importedModules ?? []) {
-    byModule.set(moduleObject.module, moduleObject.dataDefinitions ?? []);
+    byModule.set(moduleObject.module, moduleObject.dataDefinitions);
   }
   return byModule;
 }

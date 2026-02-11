@@ -32,6 +32,19 @@ Deno.test("RequestTracker - request creation and assignment", () => {
   assertEquals(tracker.getWorkerIndex(reqId4), 0);
 });
 
+Deno.test("RequestTracker - validates maxResubmits constructor option", () => {
+  assertThrows(
+    () => new RequestTracker({}, -1),
+    Error,
+    "maxResubmits must be an integer >= 0",
+  );
+  assertThrows(
+    () => new RequestTracker({}, 1.5),
+    Error,
+    "maxResubmits must be an integer >= 0",
+  );
+});
+
 Deno.test("RequestTracker - expression tracking", () => {
   const tracker = new RequestTracker();
 

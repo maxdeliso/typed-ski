@@ -413,6 +413,115 @@ Deno.test("Symbol Table", async (t) => {
     },
   );
 
+  await t.step(
+    "should index imported metadata from plain-object options and clone complex field shapes",
+    () => {
+      const complexData: DataDefinition = {
+        kind: "data",
+        name: "Complex",
+        typeParams: ["A"],
+        constructors: [{
+          name: "MkComplex",
+          fields: [
+            { kind: "type-var", typeName: "A" },
+            {
+              kind: "type-app",
+              fn: { kind: "type-var", typeName: "List" },
+              arg: { kind: "type-var", typeName: "A" },
+            },
+            {
+              kind: "forall",
+              typeVar: "T",
+              body: { kind: "type-var", typeName: "T" },
+            },
+            {
+              kind: "non-terminal",
+              lft: { kind: "type-var", typeName: "A" },
+              rgt: { kind: "type-var", typeName: "A" },
+            },
+          ],
+        }],
+      };
+
+      const program: TripLangProgram = {
+        kind: "program",
+        terms: [
+          { kind: "module", name: "M" },
+          { kind: "import", name: "Remote", ref: "Complex" },
+          { kind: "import", name: "Remote", ref: "MkComplex" },
+        ],
+      };
+
+      const symbols = indexSymbols(program, {
+        importedDataDefinitionsByModule: {
+          Remote: [complexData],
+        },
+      });
+
+      const ctorInfo = symbols.constructors.get("MkComplex");
+      assert.isDefined(ctorInfo);
+      assert.strictEqual(ctorInfo!.dataName, "Complex");
+      assert.strictEqual(ctorInfo!.index, 0);
+      assert.deepStrictEqual(
+        ctorInfo!.constructor.fields,
+        complexData
+          .constructors[0]!.fields,
+      );
+      assert.notStrictEqual(
+        ctorInfo!.constructor.fields,
+        complexData.constructors[0]!.fields,
+      );
+
+      // Importing the type name should register data metadata without creating a constructor entry.
+      assert.isDefined(symbols.data.get("Complex"));
+      assert.isUndefined(symbols.constructors.get("Complex"));
+    },
+  );
+
+  await t.step(
+    "should preserve local constructors and allow duplicate imported constructors",
+    () => {
+      const importedMaybe: DataDefinition = {
+        kind: "data",
+        name: "Maybe",
+        typeParams: ["A"],
+        constructors: [
+          { name: "None", fields: [] },
+          { name: "Some", fields: [{ kind: "type-var", typeName: "A" }] },
+        ],
+      };
+
+      const program: TripLangProgram = {
+        kind: "program",
+        terms: [
+          { kind: "module", name: "M" },
+          { kind: "import", name: "Prelude", ref: "Some" },
+          { kind: "import", name: "Prelude", ref: "Some" },
+          {
+            kind: "data",
+            name: "LocalOption",
+            typeParams: ["A"],
+            constructors: [
+              { name: "Some", fields: [{ kind: "type-var", typeName: "A" }] },
+              { name: "NoneLocal", fields: [] },
+            ],
+          },
+        ],
+      };
+
+      const symbols = indexSymbols(program, {
+        importedDataDefinitionsByModule: new Map([["Prelude", [
+          importedMaybe,
+        ]]]),
+      });
+
+      const someInfo = symbols.constructors.get("Some");
+      assert.isDefined(someInfo);
+      assert.strictEqual(someInfo!.dataName, "LocalOption");
+      assert.strictEqual(someInfo!.index, 0);
+    },
+  );
+
   await t.step("should resolve poly term definition", () => {
     const term: PolyDefinition = {
       kind: "poly",

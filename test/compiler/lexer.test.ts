@@ -28,14 +28,6 @@ const lexerObjectPath = join(
   "compiler",
   "lexer.tripc",
 );
-const lexerSourcePath = join(
-  __dirname,
-  "..",
-  "..",
-  "lib",
-  "compiler",
-  "lexer.trip",
-);
 
 // Cache compiled objects
 let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;
@@ -44,45 +36,6 @@ let natObject: Awaited<ReturnType<typeof getNatObject>> | null = null;
 
 async function getLexerObject() {
   if (!lexerObject) {
-    // Load the pre-compiled lexer object file, or generate it if missing/outdated (CI).
-    let needsCompile = false;
-    try {
-      const [srcStat, objStat] = await Promise.all([
-        Deno.stat(lexerSourcePath),
-        Deno.stat(lexerObjectPath),
-      ]);
-      if (!srcStat.mtime || !objStat.mtime || objStat.mtime < srcStat.mtime) {
-        needsCompile = true;
-      }
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        needsCompile = true;
-      } else {
-        throw e;
-      }
-    }
-
-    if (needsCompile) {
-      const compileCommand = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          join(__dirname, "..", "..", "bin", "tripc.ts"),
-          lexerSourcePath,
-          lexerObjectPath,
-        ],
-      });
-
-      const { code, stderr } = await compileCommand.output();
-      if (code !== 0) {
-        const errorMsg = new TextDecoder().decode(stderr);
-        throw new Error(
-          `Failed to compile lexer module (${lexerSourcePath}) into (${lexerObjectPath}): exit code ${code}\n${errorMsg}`,
-        );
-      }
-    }
-
     const lexerContent = await Deno.readTextFile(lexerObjectPath);
     lexerObject = deserializeTripCObject(lexerContent);
   }

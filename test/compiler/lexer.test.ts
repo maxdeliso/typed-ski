@@ -21,7 +21,10 @@ import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEva
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const LEXER_SOURCE_FILE = new URL("../../lib/compiler/lexer.trip", import.meta.url);
+const LEXER_SOURCE_FILE = new URL(
+  "../../lib/compiler/lexer.trip",
+  import.meta.url,
+);
 
 // Cache compiled objects
 let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;

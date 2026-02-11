@@ -25,6 +25,7 @@ import Parser E_App
 import Parser E_Lam
 import Parser E_Let
 import Parser E_Nat
+import Parser E_Match
 
 export main
 
@@ -43,5 +44,6 @@ poly main =
           | E_Lam name body => false
           | E_Let name val body => false
           | E_Nat n => false
+          | E_Match scrutinee arms => false
         }
   }

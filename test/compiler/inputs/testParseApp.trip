@@ -25,6 +25,7 @@ import Parser E_App
 import Parser E_Lam
 import Parser E_Let
 import Parser E_Nat
+import Parser E_Match
 
 export main
 
@@ -35,6 +36,7 @@ poly isVarNamed = \expr : Expr => \name : List Bin =>
     | E_Lam var body => false
     | E_Let var val body => false
     | E_Nat n => false
+    | E_Match scrutinee arms => false
   }
 
 poly main =
@@ -62,6 +64,7 @@ poly main =
                   | E_Lam var body => false
                   | E_Let var val body => false
                   | E_Nat n => false
+                  | E_Match scrutinee arms => false
                 }
               in
               if [Bool] lhsOk
@@ -70,5 +73,6 @@ poly main =
           | E_Lam var body => false
           | E_Let var val body => false
           | E_Nat n => false
+          | E_Match scrutinee arms => false
         }
   }

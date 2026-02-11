@@ -131,6 +131,70 @@ Deno.test("Parser stage 2 - parseApp parses left-associated application", async 
   const result = await runTriplangPredicateTest("testParseApp.trip");
   assert.isTrue(
     result,
-    'Expected parseApp([f, x, y, EOF]) to return E_App(E_App(f, x), y)',
+    "Expected parseApp([f, x, y, EOF]) to return E_App(E_App(f, x), y)",
+  );
+});
+
+Deno.test("Parser stage 3 - parseExpr parses typed lambda", async () => {
+  const result = await runTriplangPredicateTest(
+    "testParseExprLambdaTyped.trip",
+  );
+  assert.isTrue(
+    result,
+    "Expected parseExpr to skip lambda type annotation and build E_Lam",
+  );
+});
+
+Deno.test("Parser stage 3 - parseExpr parses typed let", async () => {
+  const result = await runTriplangPredicateTest("testParseExprLetTyped.trip");
+  assert.isTrue(
+    result,
+    "Expected parseExpr to skip let type annotation and build E_Let",
+  );
+});
+
+Deno.test("Parser stage 3 - parseExpr parses match with typed scrutinee", async () => {
+  const result = await runTriplangPredicateTest("testParseExprMatchTyped.trip");
+  assert.isTrue(
+    result,
+    "Expected parseExpr to parse match arms and skip scrutinee type annotation",
+  );
+});
+
+Deno.test("Parser gap close - parseExpr erases type abstraction", async () => {
+  const result = await runTriplangPredicateTest(
+    "testParseExprTypeAbstraction.trip",
+  );
+  assert.isTrue(
+    result,
+    "Expected #X => body to parse by erasing type abstraction",
+  );
+});
+
+Deno.test("Parser gap close - parseExpr skips type applications", async () => {
+  const result = await runTriplangPredicateTest(
+    "testParseExprTypeApplication.trip",
+  );
+  assert.isTrue(
+    result,
+    "Expected term [Type] applications to be skipped during parsing",
+  );
+});
+
+Deno.test("Parser gap close - parseExpr supports combinator punctuation", async () => {
+  const result = await runTriplangPredicateTest(
+    "testParseExprCombinatorTokens.trip",
+  );
+  assert.isTrue(
+    result,
+    "Expected comma/dot combinator tokens to parse as atomic terms",
+  );
+});
+
+Deno.test("Parser gap close - parseProgram handles top-level forms", async () => {
+  const result = await runTriplangPredicateTest("testParseProgramForms.trip");
+  assert.isTrue(
+    result,
+    "Expected parseProgram to parse module/import/export and definitions",
   );
 });

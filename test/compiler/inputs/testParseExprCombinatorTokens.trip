@@ -1,0 +1,63 @@
+module Test
+
+import Prelude Bool
+import Prelude false
+import Prelude if
+import Prelude Bin
+import Prelude List
+import Prelude cons
+import Prelude nil
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Pair
+import Prelude fst
+import Prelude snd
+import Lexer Token
+import Lexer T_Comma
+import Lexer T_Dot
+import Lexer T_EOF
+import Lexer eqListFast
+import Parser parseExpr
+import Parser Expr
+import Parser E_Var
+import Parser E_App
+import Parser E_Lam
+import Parser E_Let
+import Parser E_Nat
+import Parser E_Match
+
+export main
+
+poly isVarNamed = \expr : Expr => \name : List Bin =>
+  match expr [Bool] {
+    | E_Var n => eqListFast n name
+    | E_App f x => false
+    | E_Lam n body => false
+    | E_Let n v b => false
+    | E_Nat n => false
+    | E_Match scrutinee arms => false
+  }
+
+poly main =
+  let input =
+    cons [Token] T_Comma
+      (cons [Token] T_Dot
+        (cons [Token] T_EOF (nil [Token])))
+  in
+  match (parseExpr input) [Bool] {
+    | Err e => false
+    | Ok res =>
+      let expr = fst [Expr] [List Token] res in
+      match expr [Bool] {
+        | E_Var n => false
+        | E_App f x =>
+          if [Bool] (isVarNamed f ",")
+            (\u : Bin => isVarNamed x ".")
+            (\u : Bin => false)
+        | E_Lam n body => false
+        | E_Let n v b => false
+        | E_Nat n => false
+        | E_Match scrutinee arms => false
+      }
+  }

@@ -60,6 +60,9 @@ export tokenizeBin
 export tokenizeAcc
 export kwPoly
 export isKeywordPoly
+export keywordWords
+export anyEqWord
+export isKeywordWord
 export eqListFast
 export binFromDigitList
 export mapResult
@@ -92,8 +95,10 @@ export isAlphaBin
 export isIdentCharBin
 export consumeIdent
 export consumeDigits
+export consumeString
 export digitValueBin
 export timesTen
+export mapToBin
 
 data Token =
   | T_LParen
@@ -301,6 +306,32 @@ poly rec eqListFast = \a : List Bin => \b : List Bin =>
 poly kwPoly = "poly"
 poly isKeywordPoly = \word : List Bin => eqListFast word kwPoly
 
+poly keywordWords =
+  cons [List Bin] "poly"
+    (cons [List Bin] "rec"
+      (cons [List Bin] "let"
+        (cons [List Bin] "in"
+          (cons [List Bin] "match"
+            (cons [List Bin] "module"
+              (cons [List Bin] "import"
+                (cons [List Bin] "export"
+                  (cons [List Bin] "typed"
+                    (cons [List Bin] "untyped"
+                      (cons [List Bin] "combinator"
+                        (cons [List Bin] "type"
+                          (cons [List Bin] "data"
+                            (nil [List Bin])))))))))))))
+
+poly rec anyEqWord = \word : List Bin => \words : List (List Bin) =>
+  matchList [List Bin] [Bool] words false
+    (\h : List Bin => \t : List (List Bin) =>
+      if [Bool] (eqListFast word h)
+        (\u : Bin => true)
+        (\u : Bin => anyEqWord word t))
+
+poly isKeywordWord = \word : List Bin =>
+  anyEqWord word keywordWords
+
 poly digitValueBin = \d : Bin =>
   if [Bin] (eqBin d 48) (\u : Bin => 0)
   (\u : Bin => if [Bin] (eqBin d 49) (\u : Bin => 1)
@@ -382,6 +413,17 @@ poly rec consumeDigits = \acc : List Bin => \input : List Bin =>
          (\u : Bin => MkPair [List Bin] [List Bin] (reverse [Bin] acc) input)
     )
 
+poly rec consumeString = \acc : List Bin => \input : List Bin =>
+  matchList [Bin] [Result ParseError (Pair (List Bin) (List Bin))] input
+    (Err [ParseError] [Pair (List Bin) (List Bin)] (MkParseError 0 (nil [Bin])))
+    (\h : Bin => \t : List Bin =>
+      if [Result ParseError (Pair (List Bin) (List Bin))] (eqBin h 34)
+        (\u : Bin =>
+          Ok [ParseError] [Pair (List Bin) (List Bin)]
+            (MkPair [List Bin] [List Bin] (reverse [Bin] acc) t))
+        (\u : Bin => consumeString (cons [Bin] h acc) t)
+    )
+
 poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
   matchList [Bin] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
@@ -410,7 +452,7 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
                 match (consumeIdent (cons [Bin] c (nil [Bin])) cs) [Result ParseError (List Token)] {
                   | MkPair taken remaining =>
                       let tok =
-                        if [Token] (isKeywordPoly taken)
+                        if [Token] (isKeywordWord taken)
                           (\u : Bin => T_Keyword taken)
                           (\u : Bin => T_Ident taken)
                       in
@@ -427,9 +469,20 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
                     })
 
                   (\u : Bin =>
-                    if [Result ParseError (List Token)] (eqBin c bin_eq)
-                      (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
-                      (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
+                    if [Result ParseError (List Token)] (eqBin c 34)
+                      (\u : Bin =>
+                        match (consumeString (nil [Bin]) cs) [Result ParseError (List Token)] {
+                          | Err e => Err [ParseError] [List Token] e
+                          | Ok strRes =>
+                              let str = fst [List Bin] [List Bin] strRes in
+                              let remaining = snd [List Bin] [List Bin] strRes in
+                              tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)
+                        })
+                      (\u : Bin =>
+                        if [Result ParseError (List Token)] (eqBin c bin_eq)
+                          (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
+                          (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
+                      )
                   ))
 
         | Some tok =>

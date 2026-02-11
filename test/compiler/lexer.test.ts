@@ -317,4 +317,12 @@ Deno.test("tokenize - structural lexer validations", async (t) => {
       "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
     );
   });
+
+  await t.step("recognizes core parser keywords", async () => {
+    const result = await runTriplangPredicateTest("testLexCoreKeywords.trip");
+    assert.isTrue(
+      result,
+      "Expected let/match/in to tokenize as T_Keyword",
+    );
+  });
 });

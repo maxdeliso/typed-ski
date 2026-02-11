@@ -16,6 +16,10 @@ import type { RequestTracker } from "./requestTracker.ts";
 
 const EMPTY = -1n;
 const SUSPEND_MODE_IO_WAIT = 2;
+const DEFAULT_MAX_STEPS = 0xffffffff;
+const CQ_EVENT_YIELD = 1;
+const CQ_EVENT_IO_WAIT = 2;
+const CQ_EVENT_ERROR = 3;
 
 /**
  * Time budget (in milliseconds) for processing completion queue events before yielding.
@@ -128,10 +132,10 @@ export class CompletionPoller {
   /**
    * Starts the polling loop.
    */
-  start(hostPull: () => bigint): void {
+  start(hostPullV2: () => bigint): void {
     if (this.pollerStarted) return;
     this.pollerStarted = true;
-    const pull = hostPull;
+    const pull = hostPullV2;
     (async () => {
       let emptyStreak = 0;
       // Prevent main-thread saturation under load by time-slicing CQ drains.
@@ -175,6 +179,8 @@ export class CompletionPoller {
       const ex = this.exports as unknown as {
         kindOf: (id: number) => number;
         symOf: (id: number) => number;
+        leftOf: (id: number) => number;
+        rightOf: (id: number) => number;
         hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
       };
       for (;;) {
@@ -229,19 +235,36 @@ export class CompletionPoller {
         this.ringStats.recordPullNonEmpty();
         emptyStreak = 0;
         const reqId = Number((packed >> 32n) & 0xffffffffn) >>> 0;
-        const nodeId = Number(packed & 0xffffffffn) >>> 0;
+        const low = Number(packed & 0xffffffffn) >>> 0;
+        const eventKind = low >>> 30;
+        const nodeId = low & 0x3fffffff;
 
-        // If the worker yielded, the nodeId is a Suspension or Continuation node. Resubmit to continue.
+        if (eventKind === CQ_EVENT_ERROR) {
+          this.requestTracker.markError(
+            reqId,
+            new Error(`Worker reported error event for reqId ${reqId}`),
+          );
+          sliceEvents++;
+          await maybeYield();
+          continue;
+        }
+
+        // If the worker yielded, resubmit to continue.
         // (Do not resolve the promise yet; the job is still in-flight.)
-        const nodeKind = ex.kindOf(nodeId);
+        const isTypedYield = eventKind === CQ_EVENT_YIELD ||
+          eventKind === CQ_EVENT_IO_WAIT;
+        const nodeKind = isTypedYield ? 0 : ex.kindOf(nodeId);
         if (
+          isTypedYield ||
           nodeKind === (ArenaKind.Suspension as number) ||
           nodeKind === (ArenaKind.Continuation as number)
         ) {
           // If the caller already gave up / was aborted, drop the yielded work.
           if (!this.requestTracker.isPending(reqId)) continue;
 
-          if (ex.symOf(nodeId) === SUSPEND_MODE_IO_WAIT) {
+          const isIoWait = eventKind === CQ_EVENT_IO_WAIT ||
+            ex.symOf(nodeId) === SUSPEND_MODE_IO_WAIT;
+          if (isIoWait) {
             this.ioManager.registerIoWait(nodeId, reqId);
             const handled = await this.handleIoWaitSuspension(nodeId, reqId);
             if (!handled) {
@@ -281,6 +304,27 @@ export class CompletionPoller {
 
         // Regular completion
         const wasPending = this.requestTracker.isPending(reqId);
+        // Defensive validation: occasionally a non-terminal root can still contain
+        // internal continuation/suspension descendants. Treat it as a yield and
+        // resubmit instead of leaking internal nodes to host decode.
+        if (
+          wasPending &&
+          this.requestTracker.getResubmitCount(reqId) > 0 &&
+          this.containsInternalControlNode(nodeId, ex)
+        ) {
+          try {
+            const resubmitCount = this.requestTracker.incrementResubmit(reqId);
+            this.requestTracker.recordYield(reqId, nodeId, resubmitCount);
+            await this.submitNode(nodeId, reqId, DEFAULT_MAX_STEPS);
+          } catch (error) {
+            if (error instanceof Error) {
+              this.requestTracker.markError(reqId, error);
+            }
+          }
+          sliceEvents++;
+          await maybeYield();
+          continue;
+        }
         this.requestTracker.markCompleted(reqId, nodeId);
         if (!wasPending) {
           // Completion was stashed (no pending resolver)
@@ -382,5 +426,68 @@ export class CompletionPoller {
     if (rc !== 0) {
       throw new Error(`Resubmit failed for reqId ${reqId} with code ${rc}`);
     }
+  }
+
+  private async submitNode(
+    nodeId: number,
+    reqId: number,
+    maxSteps: number,
+  ): Promise<void> {
+    const ex = this.exports as unknown as {
+      hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
+    };
+    let rc = ex.hostSubmit(nodeId >>> 0, reqId, maxSteps >>> 0);
+    let fullStreak = 0;
+    while (rc === 1) {
+      this.ringStats.recordSubmitFull();
+      if (this.aborted()) return;
+      fullStreak++;
+      if (fullStreak < SUBMIT_BUSY_WAIT_THRESHOLD) {
+        await new Promise<void>((r) => queueMicrotask(r));
+      } else {
+        if (this.aborted()) return;
+        const { promise, cancel } = sleep(0);
+        this.activeTimeouts.add(cancel);
+        try {
+          await promise;
+        } finally {
+          this.activeTimeouts.delete(cancel);
+        }
+        if (this.aborted()) return;
+      }
+      rc = ex.hostSubmit(nodeId >>> 0, reqId, maxSteps >>> 0);
+    }
+    if (rc !== 0) {
+      throw new Error(`Submit failed for reqId ${reqId} with code ${rc}`);
+    }
+  }
+
+  private containsInternalControlNode(
+    rootNodeId: number,
+    ex: {
+      kindOf: (id: number) => number;
+      leftOf: (id: number) => number;
+      rightOf: (id: number) => number;
+    },
+  ): boolean {
+    const stack = [rootNodeId >>> 0];
+    const seen = new Set<number>();
+    while (stack.length > 0) {
+      const nodeId = stack.pop()!;
+      if (seen.has(nodeId)) continue;
+      seen.add(nodeId);
+      const kind = ex.kindOf(nodeId);
+      if (
+        kind === (ArenaKind.Continuation as number) ||
+        kind === (ArenaKind.Suspension as number)
+      ) {
+        return true;
+      }
+      if (kind === (ArenaKind.NonTerm as number)) {
+        stack.push(ex.leftOf(nodeId) >>> 0);
+        stack.push(ex.rightOf(nodeId) >>> 0);
+      }
+    }
+    return false;
   }
 }

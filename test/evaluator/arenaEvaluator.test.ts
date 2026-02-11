@@ -1,17 +1,19 @@
-import { assert, assertEquals } from "std/assert";
+import { assert, assertEquals, assertThrows } from "std/assert";
 import { expect } from "chai";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 
 import {
   ArenaEvaluatorWasm,
+  type ArenaWasmExports,
   createArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
 import { getOrBuildArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaNode } from "../../lib/shared/types.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { unparseSKI } from "../../lib/ski/expression.ts";
+import { ArenaKind } from "../../lib/shared/arena.ts";
+import { type SKIExpression, unparseSKI } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 
@@ -289,7 +291,7 @@ Deno.test("dumpArena", async (t) => {
 });
 
 Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
-  await t.step("hostSubmit and hostPull throw if missing from WASM", () => {
+  await t.step("hostSubmit and hostPullV2 throw if missing from WASM", () => {
     // We need a real instance but with missing optional exports.
     // The createArenaEvaluator() returns a real one.
     const evaluator = ArenaEvaluatorWasm.fromInstance({
@@ -307,7 +309,24 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(() => evaluator.hostSubmit(0, 0, 0)).to.throw(
       "hostSubmit export missing",
     );
-    expect(() => evaluator.hostPull()).to.throw("hostPull export missing");
+    expect(() => evaluator.hostPullV2()).to.throw("hostPullV2 export missing");
+  });
+
+  await t.step("hostPullV2 delegates to WASM export when present", () => {
+    const evaluator = ArenaEvaluatorWasm.fromInstance({
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+      hostPullV2: () => 123n,
+    }, new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }));
+
+    assertEquals(evaluator.hostPullV2(), 123n);
   });
 
   await t.step("getArenaTop handles missing debugGetArenaBaseAddr", () => {
@@ -358,5 +377,188 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(chunks).to.have.lengthOf(2);
     expect(chunks[0]).to.have.lengthOf(2); // ids 0, 2
     expect(chunks[1]).to.have.lengthOf(1); // id 4
+  });
+
+  await t.step("fromArena throws on Continuation and Suspension nodes", () => {
+    const continuationExports = {
+      kindOf: (id: number) =>
+        id === 1 ? ArenaKind.Continuation : ArenaKind.Suspension,
+      debugGetArenaBaseAddr: () => 0,
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const continuationEvaluator = new ArenaEvaluatorWasm(
+      continuationExports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => continuationEvaluator.fromArena(1),
+      Error,
+      "Cannot convert Continuation node 1 to SKI expression",
+    );
+
+    const suspensionExports = {
+      kindOf: () => ArenaKind.Suspension,
+      debugGetArenaBaseAddr: () => 0,
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const suspensionEvaluator = new ArenaEvaluatorWasm(
+      suspensionExports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => suspensionEvaluator.fromArena(2),
+      Error,
+      "Cannot convert Suspension node 2 to SKI expression",
+    );
+  });
+
+  await t.step("toArena throws on unknown terminal symbols", () => {
+    const exports = {
+      allocTerminal: () => 0,
+      reset: () => {},
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+    const fakeExpr = {
+      kind: "terminal",
+      sym: "UNKNOWN",
+    } as unknown as SKIExpression;
+
+    assertThrows(
+      () => evaluator.toArena(fakeExpr),
+      Error,
+      "Unrecognised terminal symbol",
+    );
+  });
+
+  await t.step("toArena throws on cons allocation OOM", () => {
+    const exports = {
+      allocTerminal: () => 0,
+      allocCons: () => 0xffffffff,
+      reset: () => {},
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => evaluator.toArena(parseSKI("II")),
+      Error,
+      "Arena Out of Memory during marshaling",
+    );
+  });
+
+  await t.step("fromInstance throws when required exports are missing", () => {
+    const incompleteExports = {
+      reset: () => {},
+    } as unknown as ArenaWasmExports;
+
+    assertThrows(
+      () =>
+        ArenaEvaluatorWasm.fromInstance(
+          incompleteExports,
+          new WebAssembly.Memory({ initial: 1 }),
+        ),
+      Error,
+      "WASM export `allocTerminal` is missing",
+    );
+  });
+
+  await t.step("reset invalidates terminal cache", () => {
+    let allocTerminalCalls = 0;
+    const exports = {
+      reset: () => {},
+      allocTerminal: () => allocTerminalCalls++,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    evaluator.toArena(parseSKI("I"));
+    assertEquals(allocTerminalCalls, 10);
+
+    evaluator.reset();
+    evaluator.toArena(parseSKI("I"));
+    assertEquals(allocTerminalCalls, 20);
+  });
+
+  await t.step("structural hash-consing (consCache)", () => {
+    arenaEval.reset();
+    // Create two distinct JS objects representing the same SKI expression (I I)
+    const e1 = parseSKI("II");
+    const e2 = parseSKI("II");
+    assert(e1 !== e2, "Expressions should be distinct JS objects");
+
+    const id1 = arenaEval.toArena(e1);
+    const id2 = arenaEval.toArena(e2);
+
+    assertEquals(
+      id1,
+      id2,
+      "Equivalent subtrees should reuse the same arena node ID",
+    );
+
+    // Even more complex structural reuse
+    const e3 = parseSKI("(II)(II)");
+    const id3 = arenaEval.toArena(e3);
+
+    const views = getOrBuildArenaViews(arenaEval.memory, arenaEval.$);
+    assert(views !== null);
+    const leftId = views.leftId[id3];
+    const rightId = views.rightId[id3];
+    assertEquals(
+      leftId,
+      id1,
+      "Structural reuse should work for internal nodes",
+    );
+    assertEquals(
+      rightId,
+      id1,
+      "Structural reuse should work for internal nodes",
+    );
   });
 });

@@ -1,5 +1,6 @@
-import { assert, assertEquals, assertThrows } from "std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "std/assert";
 import randomSeed from "random-seed";
+import type { ArenaWasmExports } from "../../lib/evaluator/arenaEvaluator.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
@@ -23,6 +24,16 @@ function makeUniqueExpr(i: number, bits = 16): SKIExpression {
     e = apply(e, (i >>> b) & 1 ? S : K);
   }
   return e;
+}
+
+function overrideEvaluatorExports(
+  evaluator: ParallelArenaEvaluatorWasm,
+  exports: ArenaWasmExports,
+): void {
+  Object.defineProperty(evaluator, "$", {
+    configurable: true,
+    value: exports,
+  });
 }
 
 Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
@@ -777,4 +788,132 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       }
     },
   );
+});
+
+Deno.test("ParallelArenaEvaluator - request hooks call the expected callbacks", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  try {
+    let queued = false;
+    let completed = false;
+    evaluator.onRequestQueued = () => {
+      queued = true;
+    };
+    evaluator.onRequestCompleted = () => {
+      completed = true;
+    };
+
+    await evaluator.reduceAsync(parseSKI("I"));
+
+    assert(queued, "onRequestQueued should have been called");
+    assert(completed, "onRequestCompleted should have been called");
+  } finally {
+    evaluator.terminate();
+  }
+});
+
+Deno.test("ParallelArenaEvaluator - onRequestYield hook fires for yielding work", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  try {
+    let yielded = false;
+    evaluator.onRequestYield = () => {
+      yielded = true;
+    };
+
+    try {
+      await evaluator.reduceAsync(parseSKI("(SII)(SII)"), 100);
+    } catch {
+      // Rejections are acceptable here; we only assert that a yield was observed.
+    }
+    assert(yielded, "onRequestYield should have been called");
+  } finally {
+    evaluator.terminate();
+  }
+});
+
+Deno.test("ParallelArenaEvaluator - onRequestError hook fires on hostSubmit failures", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  const originalExports = evaluator.$;
+  try {
+    let errorCalled = false;
+    evaluator.onRequestError = () => {
+      errorCalled = true;
+    };
+
+    const mockedExports = {
+      ...originalExports,
+      hostSubmit: () => 3,
+    } as ArenaWasmExports;
+    overrideEvaluatorExports(evaluator, mockedExports);
+
+    await assertRejects(
+      () => evaluator.reduceAsync(parseSKI("I")),
+      Error,
+      "hostSubmit failed with code 3",
+    );
+    assert(errorCalled, "onRequestError should have been called");
+  } finally {
+    overrideEvaluatorExports(evaluator, originalExports);
+    evaluator.terminate();
+  }
+});
+
+Deno.test("ParallelArenaEvaluator - worker errors abort all pending work", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  try {
+    const worker = requiredAt(evaluator.workers, 0, "worker should exist");
+    worker.dispatchEvent(
+      new ErrorEvent("error", {
+        error: new Error("memory access out of bounds"),
+      }),
+    );
+
+    let sawAbort = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      try {
+        await evaluator.reduceAsync(parseSKI("I"));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("memory access out of bounds")
+        ) {
+          sawAbort = true;
+          break;
+        }
+      }
+    }
+    assert(sawAbort, "Expected worker error to abort evaluator");
+  } finally {
+    evaluator.terminate();
+  }
+});
+
+Deno.test("ParallelArenaEvaluator - create throws when worker count is less than one", async () => {
+  await assertRejects(
+    () => ParallelArenaEvaluatorWasm.create(0),
+    Error,
+    "at least one worker",
+  );
+});
+
+Deno.test("ParallelArenaEvaluator - reduceArenaNodeIdAsync validates required host exports", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  const originalExports = evaluator.$;
+  try {
+    const mockedExports = {
+      ...originalExports,
+      hostSubmit: undefined,
+      hostPullV2: undefined,
+    } as ArenaWasmExports;
+    overrideEvaluatorExports(evaluator, mockedExports);
+
+    await assertRejects(
+      () => evaluator.reduceArenaNodeIdAsync(0),
+      Error,
+      "hostSubmit/hostPullV2 exports are required",
+    );
+  } finally {
+    overrideEvaluatorExports(evaluator, originalExports);
+    evaluator.terminate();
+  }
 });

@@ -111,6 +111,31 @@ Deno.test("RequestTracker - resubmission counting", () => {
   );
 });
 
+Deno.test("RequestTracker - resubmission limit does not emit duplicate error hook", () => {
+  let errorHookCalls = 0;
+  const tracker = new RequestTracker(
+    {
+      onRequestError: () => {
+        errorHookCalls++;
+      },
+    },
+    1,
+  );
+  const reqId = tracker.createRequest(1);
+  tracker.markPending(reqId, () => {}, () => {});
+
+  assertEquals(tracker.incrementResubmit(reqId), 1);
+  assertThrows(
+    () => tracker.incrementResubmit(reqId),
+    ResubmissionLimitExceededError,
+  );
+  // incrementResubmit should throw only; markError owns hook emission.
+  assertEquals(errorHookCalls, 0);
+
+  tracker.markError(reqId, new Error("resubmission limit exceeded"));
+  assertEquals(errorHookCalls, 1);
+});
+
 Deno.test("RequestTracker - abort all", () => {
   const tracker = new RequestTracker();
 

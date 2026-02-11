@@ -86,6 +86,9 @@ function toArenaWithExports(
   // 2. Memoization Map: SKIExpression (JS Object) -> ArenaNodeId (WASM Int)
   // This dedups shared references (DAGs) on the fly, preventing unnecessary allocations.
   const exprCache = new Map<SKIExpression, number>();
+  // Structural hash-consing: (leftId,rightId) -> ArenaNodeId.
+  // This catches equivalent subtrees even when they are distinct JS objects.
+  const consCache = new Map<string, number>();
 
   // 3. Explicit Stack for Iterative Post-Order Traversal
   const stack: SKIExpression[] = [root];
@@ -146,10 +149,16 @@ function toArenaWithExports(
       const rightId = exprCache.get(right);
 
       if (leftId !== undefined && rightId !== undefined) {
-        // Both children are ready. Allocate the cons cell.
-        const id = exports.allocCons(leftId, rightId);
-        if (id === EMPTY) {
-          throw new Error("Arena Out of Memory during marshaling");
+        // Both children are ready.
+        // First try structural reuse before allocating a fresh cons cell.
+        const consKey = `${leftId},${rightId}`;
+        let id = consCache.get(consKey);
+        if (id === undefined) {
+          id = exports.allocCons(leftId, rightId);
+          if (id === EMPTY) {
+            throw new Error("Arena Out of Memory during marshaling");
+          }
+          consCache.set(consKey, id);
         }
         exprCache.set(expr, id);
         stack.pop();
@@ -276,7 +285,7 @@ export interface ArenaWasmExports {
   arenaKernelStep(expr: number): number;
   reduce(expr: number, max: number): number;
   hostSubmit?(nodeId: number, reqId: number, maxSteps: number): number;
-  hostPull?(): bigint;
+  hostPullV2?(): bigint;
   workerLoop?(): void;
   kindOf(id: number): number;
   symOf(id: number): number;
@@ -431,10 +440,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     return $.hostSubmit(nodeId >>> 0, reqId >>> 0, maxSteps >>> 0);
   }
 
-  hostPull(): bigint {
+  hostPullV2(): bigint {
     const $ = this.$;
-    if (!$?.hostPull) throw new Error("hostPull export missing");
-    return $.hostPull();
+    if (!$?.hostPullV2) throw new Error("hostPullV2 export missing");
+    return $.hostPullV2();
   }
 
   toArena(exp: SKIExpression): ArenaNodeId {

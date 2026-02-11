@@ -202,17 +202,17 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     }
     const ex = this.$ as unknown as {
       hostSubmit?: (nodeId: number, reqId: number, maxSteps: number) => number;
-      hostPull?: () => bigint;
+      hostPullV2?: () => bigint;
     };
-    if (!ex.hostPull || !ex.hostSubmit) {
-      throw new Error("hostSubmit/hostPull exports are required");
+    if (!ex.hostPullV2 || !ex.hostSubmit) {
+      throw new Error("hostSubmit/hostPullV2 exports are required");
     }
 
     const nWorkers = Math.max(1, this.workers.length);
     const reqId = this.requestTracker.createRequest(nWorkers, expr);
 
     // Ensure poller is started
-    this.completionPoller.start(ex.hostPull);
+    this.completionPoller.start(ex.hostPullV2);
 
     // Check for stashed completion (race condition handling)
     const stashed = this.requestTracker.getStashedCompletion(reqId);
@@ -225,48 +225,56 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       this.requestTracker.markPending(reqId, resolve, reject);
     });
 
-    // Non-blocking submit: retry until queued, with a fixed cap on retries.
-    // 0 = ok, 1 = full, 2 = not connected
-    // maxSteps is strictly passed as Uint32
-    let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
-    let fullStreak = 0;
-    while (rc === 1) {
-      this.ringStats.recordSubmitFull();
-      if (this.aborted) {
-        throw (this.abortError ?? new Error("Evaluator terminated"));
-      }
-      // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
-      // Back off to a macrotask so we don't peg a CPU core.
-      fullStreak++;
-      if (fullStreak < 512) {
-        await new Promise<void>((r) => queueMicrotask(r));
-      } else {
+    try {
+      // Non-blocking submit: retry until queued, with a fixed cap on retries.
+      // 0 = ok, 1 = full, 2 = not connected
+      // maxSteps is strictly passed as Uint32
+      let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
+      let fullStreak = 0;
+      while (rc === 1) {
+        this.ringStats.recordSubmitFull();
         if (this.aborted) {
           throw (this.abortError ?? new Error("Evaluator terminated"));
         }
-        const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
-        this.activeTimeouts.add(cancel);
-        try {
-          await promise;
-        } finally {
-          this.activeTimeouts.delete(cancel);
+        // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
+        // Back off to a macrotask so we don't peg a CPU core.
+        fullStreak++;
+        if (fullStreak < 512) {
+          await new Promise<void>((r) => queueMicrotask(r));
+        } else {
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
+          const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
+          this.activeTimeouts.add(cancel);
+          try {
+            await promise;
+          } finally {
+            this.activeTimeouts.delete(cancel);
+          }
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
         }
-        if (this.aborted) {
-          throw (this.abortError ?? new Error("Evaluator terminated"));
-        }
+        // retry also includes maxSteps
+        rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
       }
-      // retry also includes maxSteps
-      rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
-    }
-    if (rc !== 0) {
-      if (rc === 2) this.ringStats.recordSubmitNotConnected();
-      const err = new Error(`hostSubmit failed with code ${rc}`);
-      this.requestTracker.markError(reqId, err);
-      throw err;
-    }
-    this.ringStats.recordSubmitOk();
+      if (rc !== 0) {
+        if (rc === 2) this.ringStats.recordSubmitNotConnected();
+        throw new Error(`hostSubmit failed with code ${rc}`);
+      }
+      this.ringStats.recordSubmitOk();
 
-    return await resultPromise;
+      return await resultPromise;
+    } catch (err) {
+      if (err instanceof Error) {
+        this.requestTracker.markError(reqId, err);
+      } else {
+        this.requestTracker.markError(reqId, new Error(String(err)));
+      }
+      // Await the now-rejected resultPromise to ensure it is handled
+      return await resultPromise;
+    }
   }
 
   private static validateSabExports(
@@ -416,10 +424,14 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
    *
    * Contract:
    * - **Submit (SQ)**: host enqueues `{ nodeId, reqId, maxSteps }` using `hostSubmit`.
-   * - **Complete (CQ)**: workers dequeue, reduce for the request-specific `maxSteps`, then enqueue `{ resultNodeId, reqId }`.
-   *   Workers may also enqueue a **Suspension** node when they run out of traversal gas mid-step; the host must resubmit it.
-   * - **Polling**: host drains CQ via `hostPull()`, which returns a packed bigint:
-   *   `-1n` if empty, otherwise `(reqId << 32) | resultNodeId`.
+   * - **Complete (CQ)**: workers dequeue, reduce for the request-specific `maxSteps`, then enqueue
+   *   `{ nodeId, reqId, eventKind }` where `eventKind` is one of:
+   *   `0=Done`, `1=Yield`, `2=IoWait`, `3=Error`.
+   * - **Polling**: host drains CQ via `hostPullV2()`, which returns a packed bigint:
+   *   `-1n` if empty, otherwise:
+   *   - bits `63..32`: `reqId`
+   *   - bits `31..30`: `eventKind`
+   *   - bits `29..0`: `nodeId`
    *   Results may arrive out-of-order; `reqId` is used to match completions to callers.
    */
   async reduceAsync(

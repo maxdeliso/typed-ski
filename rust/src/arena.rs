@@ -263,8 +263,8 @@ pub extern "C" fn hostSubmit(_id: u32) -> u32 {
 }
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn hostPull() -> u32 {
-    u32::MAX
+pub extern "C" fn hostPullV2() -> i64 {
+    -1
 }
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
@@ -414,9 +414,15 @@ mod wasm {
         /// Used by main thread to correlate completions with pending requests.
         pub req_id: u32,
 
-        /// Padding to align Slot<Cqe> to 16 bytes (power of 2) for efficient indexing.
-        pub _pad: u32,
+        /// Completion event kind (explicit transport-level state).
+        /// 0=Done, 1=Yield, 2=IoWait, 3=Error
+        pub event_kind: u32,
     }
+
+    const CQ_EVENT_DONE: u32 = 0;
+    const CQ_EVENT_YIELD: u32 = 1;
+    const CQ_EVENT_IO_WAIT: u32 = 2;
+    const CQ_EVENT_ERROR: u32 = 3;
 
     /// Ring buffer slot with sequence number for ABA prevention.
     ///
@@ -2312,14 +2318,21 @@ mod wasm {
     // Host/worker ring APIs
     // -------------------------------------------------------------------------
     #[no_mangle]
-    pub extern "C" fn hostPull() -> i64 {
+    pub extern "C" fn hostPullV2() -> i64 {
         unsafe {
             if ARENA_BASE_ADDR == 0 {
                 return -1;
             }
             if let Some(cqe) = cq_ring().try_dequeue() {
-                // Pack: high 32 bits = req_id, low 32 bits = node_id
-                let packed: u64 = ((cqe.req_id as u64) << 32) | (cqe.node_id as u64);
+                // Pack:
+                // bits 63..32 = req_id
+                // bits 31..30 = event_kind (2 bits)
+                // bits 29..0  = node_id
+                // NOTE: Arena node IDs are capped well below 2^30.
+                let event = cqe.event_kind & 0x3;
+                let node = cqe.node_id & 0x3fff_ffff;
+                let packed_low: u32 = (event << 30) | node;
+                let packed: u64 = ((cqe.req_id as u64) << 32) | (packed_low as u64);
                 packed as i64
             } else {
                 -1
@@ -2454,7 +2467,7 @@ mod wasm {
                         cq.enqueue_blocking(Cqe {
                             node_id: curr,
                             req_id: job.req_id,
-                            _pad: 0,
+                            event_kind: CQ_EVENT_DONE,
                         });
                         break;
                     }
@@ -2476,7 +2489,11 @@ mod wasm {
                             cq.enqueue_blocking(Cqe {
                                 node_id: susp_id,
                                 req_id: job.req_id,
-                                _pad: 0,
+                                event_kind: if symOf(susp_id) == MODE_IO_WAIT as u32 {
+                                    CQ_EVENT_IO_WAIT
+                                } else {
+                                    CQ_EVENT_YIELD
+                                },
                             });
                             break;
                         }
@@ -2486,7 +2503,7 @@ mod wasm {
                                 cq.enqueue_blocking(Cqe {
                                     node_id: curr,
                                     req_id: job.req_id,
-                                    _pad: 0,
+                                    event_kind: CQ_EVENT_DONE,
                                 });
                                 break;
                             }

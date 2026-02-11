@@ -225,48 +225,56 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       this.requestTracker.markPending(reqId, resolve, reject);
     });
 
-    // Non-blocking submit: retry until queued, with a fixed cap on retries.
-    // 0 = ok, 1 = full, 2 = not connected
-    // maxSteps is strictly passed as Uint32
-    let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
-    let fullStreak = 0;
-    while (rc === 1) {
-      this.ringStats.recordSubmitFull();
-      if (this.aborted) {
-        throw (this.abortError ?? new Error("Evaluator terminated"));
-      }
-      // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
-      // Back off to a macrotask so we don't peg a CPU core.
-      fullStreak++;
-      if (fullStreak < 512) {
-        await new Promise<void>((r) => queueMicrotask(r));
-      } else {
+    try {
+      // Non-blocking submit: retry until queued, with a fixed cap on retries.
+      // 0 = ok, 1 = full, 2 = not connected
+      // maxSteps is strictly passed as Uint32
+      let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
+      let fullStreak = 0;
+      while (rc === 1) {
+        this.ringStats.recordSubmitFull();
         if (this.aborted) {
           throw (this.abortError ?? new Error("Evaluator terminated"));
         }
-        const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
-        this.activeTimeouts.add(cancel);
-        try {
-          await promise;
-        } finally {
-          this.activeTimeouts.delete(cancel);
+        // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
+        // Back off to a macrotask so we don't peg a CPU core.
+        fullStreak++;
+        if (fullStreak < 512) {
+          await new Promise<void>((r) => queueMicrotask(r));
+        } else {
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
+          const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
+          this.activeTimeouts.add(cancel);
+          try {
+            await promise;
+          } finally {
+            this.activeTimeouts.delete(cancel);
+          }
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
         }
-        if (this.aborted) {
-          throw (this.abortError ?? new Error("Evaluator terminated"));
-        }
+        // retry also includes maxSteps
+        rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
       }
-      // retry also includes maxSteps
-      rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
-    }
-    if (rc !== 0) {
-      if (rc === 2) this.ringStats.recordSubmitNotConnected();
-      const err = new Error(`hostSubmit failed with code ${rc}`);
-      this.requestTracker.markError(reqId, err);
-      throw err;
-    }
-    this.ringStats.recordSubmitOk();
+      if (rc !== 0) {
+        if (rc === 2) this.ringStats.recordSubmitNotConnected();
+        throw new Error(`hostSubmit failed with code ${rc}`);
+      }
+      this.ringStats.recordSubmitOk();
 
-    return await resultPromise;
+      return await resultPromise;
+    } catch (err) {
+      if (err instanceof Error) {
+        this.requestTracker.markError(reqId, err);
+      } else {
+        this.requestTracker.markError(reqId, new Error(String(err)));
+      }
+      // Await the now-rejected resultPromise to ensure it is handled
+      return await resultPromise;
+    }
   }
 
   private static validateSabExports(

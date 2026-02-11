@@ -359,4 +359,40 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(chunks[0]).to.have.lengthOf(2); // ids 0, 2
     expect(chunks[1]).to.have.lengthOf(1); // id 4
   });
+
+  await t.step("structural hash-consing (consCache)", () => {
+    arenaEval.reset();
+    // Create two distinct JS objects representing the same SKI expression (I I)
+    const e1 = parseSKI("II");
+    const e2 = parseSKI("II");
+    assert(e1 !== e2, "Expressions should be distinct JS objects");
+
+    const id1 = arenaEval.toArena(e1);
+    const id2 = arenaEval.toArena(e2);
+
+    assertEquals(
+      id1,
+      id2,
+      "Equivalent subtrees should reuse the same arena node ID",
+    );
+
+    // Even more complex structural reuse
+    const e3 = parseSKI("(II)(II)");
+    const id3 = arenaEval.toArena(e3);
+
+    const views = getOrBuildArenaViews(arenaEval.memory, arenaEval.$);
+    assert(views !== null);
+    const leftId = views.leftId[id3];
+    const rightId = views.rightId[id3];
+    assertEquals(
+      leftId,
+      id1,
+      "Structural reuse should work for internal nodes",
+    );
+    assertEquals(
+      rightId,
+      id1,
+      "Structural reuse should work for internal nodes",
+    );
+  });
 });

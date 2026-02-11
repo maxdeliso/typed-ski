@@ -8,6 +8,7 @@
  * @module
  */
 import { unparseType } from "../../parser/type.ts";
+import type { BaseType } from "../../types/types.ts";
 import type {
   DataConstructorInfo,
   DataDefinition,
@@ -19,6 +20,138 @@ import type {
 } from "../trip.ts";
 import { CompilationError } from "./errors.ts";
 
+export interface IndexSymbolsOptions {
+  /**
+   * ADT metadata indexed by imported module name.
+   * This is typically sourced from imported `.tripc` objects.
+   */
+  importedDataDefinitionsByModule?:
+    | ReadonlyMap<string, ReadonlyArray<DataDefinition>>
+    | Readonly<Record<string, ReadonlyArray<DataDefinition>>>;
+}
+
+function cloneType(type: BaseType): BaseType {
+  switch (type.kind) {
+    case "type-var":
+      return { kind: "type-var", typeName: type.typeName };
+    case "type-app":
+      return {
+        kind: "type-app",
+        fn: cloneType(type.fn),
+        arg: cloneType(type.arg),
+      };
+    case "forall":
+      return {
+        kind: "forall",
+        typeVar: type.typeVar,
+        body: cloneType(type.body),
+      };
+    case "non-terminal":
+      return {
+        kind: "non-terminal",
+        lft: cloneType(type.lft),
+        rgt: cloneType(type.rgt),
+      };
+  }
+}
+
+function cloneDataDefinition(dataDef: DataDefinition): DataDefinition {
+  return {
+    kind: "data",
+    name: dataDef.name,
+    typeParams: [...dataDef.typeParams],
+    constructors: dataDef.constructors.map((ctor) => ({
+      name: ctor.name,
+      fields: ctor.fields.map(cloneType),
+    })),
+  };
+}
+
+function normalizeImportedDataDefinitionsByModule(
+  options: IndexSymbolsOptions,
+): ReadonlyMap<string, ReadonlyArray<DataDefinition>> {
+  const imported = options.importedDataDefinitionsByModule;
+  if (!imported) {
+    return new Map();
+  }
+  if (imported instanceof Map) {
+    return imported;
+  }
+  return new Map(Object.entries(imported));
+}
+
+function findDataDefinitionForImportedSymbol(
+  importedDataDefinitions: ReadonlyArray<DataDefinition>,
+  importedSymbol: string,
+): DataDefinition | undefined {
+  const direct = importedDataDefinitions.find((dataDef) =>
+    dataDef.name === importedSymbol
+  );
+  if (direct) {
+    return direct;
+  }
+  return importedDataDefinitions.find((dataDef) =>
+    dataDef.constructors.some((ctor) => ctor.name === importedSymbol)
+  );
+}
+
+function indexImportedConstructors(
+  program: TripLangProgram,
+  dataMap: Map<string, DataDefinition>,
+  constructorMap: Map<string, DataConstructorInfo>,
+  importedDataDefinitionsByModule: ReadonlyMap<
+    string,
+    ReadonlyArray<DataDefinition>
+  >,
+): void {
+  for (const term of program.terms) {
+    if (term.kind !== "import") {
+      continue;
+    }
+
+    const importedDataDefinitions = importedDataDefinitionsByModule.get(
+      term.name,
+    );
+    if (!importedDataDefinitions) {
+      continue;
+    }
+
+    const dataDef = findDataDefinitionForImportedSymbol(
+      importedDataDefinitions,
+      term.ref,
+    );
+    if (!dataDef) {
+      continue;
+    }
+
+    if (!dataMap.has(dataDef.name)) {
+      dataMap.set(dataDef.name, cloneDataDefinition(dataDef));
+    }
+
+    const ctorIndex = dataDef.constructors.findIndex((ctor) =>
+      ctor.name === term.ref
+    );
+    if (ctorIndex < 0) {
+      continue;
+    }
+
+    if (constructorMap.has(term.ref)) {
+      // Preserve local definitions and allow idempotent duplicate imports.
+      continue;
+    }
+
+    const ctor = dataDef.constructors[ctorIndex]!;
+    constructorMap.set(term.ref, {
+      dataName: dataDef.name,
+      index: ctorIndex,
+      constructor: {
+        name: ctor.name,
+        fields: ctor.fields.map(cloneType),
+      },
+    });
+  }
+}
+
 /**
  * Builds a symbol table for a TripLang program, ensuring all term and type names are unique.
  *
@@ -26,7 +159,10 @@ import { CompilationError } from "./errors.ts";
  * @param program the TripLang program
  * @returns a `SymbolTable` containing Maps of term and type definitions by name
  */
-export function indexSymbols(program: TripLangProgram): SymbolTable {
+export function indexSymbols(
+  program: TripLangProgram,
+  options: IndexSymbolsOptions = {},
+): SymbolTable {
   const termMap = new Map<string, TripLangTerm>();
   const tyMap = new Map<string, TypeDefinition>();
   const dataMap = new Map<string, DataDefinition>();
@@ -99,6 +235,15 @@ export function indexSymbols(program: TripLangProgram): SymbolTable {
         break;
     }
   }
+
+  // Third pass: enrich with imported constructor metadata from .tripc files.
+  indexImportedConstructors(
+    program,
+    dataMap,
+    constructorMap,
+    normalizeImportedDataDefinitionsByModule(options),
+  );
+
   return {
     terms: termMap,
     types: tyMap,

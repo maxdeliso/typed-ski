@@ -91,6 +91,19 @@ Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
     assertEquals(view[testOffset], testValue);
     evaluator.terminate();
   });
+
+  await t.step("validates maxResubmits option", async () => {
+    await assertRejects(
+      () => ParallelArenaEvaluatorWasm.create(1, false, { maxResubmits: -1 }),
+      Error,
+      "maxResubmits must be an integer >= 0",
+    );
+    await assertRejects(
+      () => ParallelArenaEvaluatorWasm.create(1, false, { maxResubmits: 1.5 }),
+      Error,
+      "maxResubmits must be an integer >= 0",
+    );
+  });
 });
 
 Deno.test("ParallelArenaEvaluator - worker initialization", async (t) => {

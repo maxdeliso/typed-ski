@@ -10,6 +10,16 @@
 import type { SKIExpression } from "../../ski/expression.ts";
 
 /**
+ * Default upper bound for per-request suspension resubmissions.
+ *
+ * Rationale:
+ * - Real workloads (especially large linked Trip programs) can legitimately yield
+ *   many times before converging.
+ * - A very low cap (for example 10) prematurely rejects valid evaluations.
+ */
+export const DEFAULT_MAX_RESUBMITS = 10_000;
+
+/**
  * Error thrown when a work unit exceeds the maximum number of resubmissions.
  * This typically indicates that the expression does not normalize (diverges).
  */
@@ -85,8 +95,13 @@ export class RequestTracker {
 
   constructor(
     hooks: RequestTrackerHooks = {},
-    maxResubmits: number = 10,
+    maxResubmits: number = DEFAULT_MAX_RESUBMITS,
   ) {
+    if (!Number.isInteger(maxResubmits) || maxResubmits < 0) {
+      throw new Error(
+        `maxResubmits must be an integer >= 0, got ${maxResubmits}`,
+      );
+    }
     this.hooks = hooks;
     this.maxResubmits = maxResubmits;
   }
@@ -220,7 +235,7 @@ export class RequestTracker {
    */
   incrementResubmit(reqId: number): number {
     const resubmitCount = (this.reqToResubmitCount.get(reqId) ?? 0) + 1;
-    if (resubmitCount > this.maxResubmits) {
+    if (this.maxResubmits > 0 && resubmitCount > this.maxResubmits) {
       throw new ResubmissionLimitExceededError(
         reqId,
         resubmitCount,

@@ -1,7 +1,9 @@
 import { expect } from "chai";
 import { elaborateSystemF } from "../../../lib/meta/frontend/elaboration.ts";
 import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
+import { indexSymbols } from "../../../lib/meta/frontend/symbolTable.ts";
 import type { DataDefinition, SymbolTable } from "../../../lib/meta/trip.ts";
+import { parseTripLang } from "../../../lib/parser/tripLang.ts";
 import {
   mkSystemFAbs,
   mkSystemFApp,
@@ -10,7 +12,11 @@ import {
   mkSystemFVar,
   type SystemFTerm,
 } from "../../../lib/terms/systemF.ts";
-import { arrow, type BaseType } from "../../../lib/types/types.ts";
+import {
+  arrow,
+  type BaseType,
+  mkTypeVariable,
+} from "../../../lib/types/types.ts";
 
 Deno.test("elaborateSystemF", async (t) => {
   function createSymbolTable(
@@ -30,6 +36,18 @@ Deno.test("elaborateSystemF", async (t) => {
 
     return table;
   }
+
+  const preludeDataDefinitions: DataDefinition[] = [
+    {
+      kind: "data",
+      name: "Result",
+      typeParams: ["E", "T"],
+      constructors: [
+        { name: "Err", fields: [{ kind: "type-var", typeName: "E" }] },
+        { name: "Ok", fields: [{ kind: "type-var", typeName: "T" }] },
+      ],
+    },
+  ];
 
   await t.step(
     "should rewrite term applications as type applications when right-hand side is a type",
@@ -235,6 +253,86 @@ Deno.test("elaborateSystemF", async (t) => {
       ),
     );
   });
+
+  await t.step(
+    "should canonicalize imported constructor match arms by declaration order",
+    () => {
+      const src = `
+module ImportedMatchOrder
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Bool
+import Prelude false
+poly pick = match x [Bool] { | Ok v => v | Err e => false }
+      `;
+
+      const program = parseTripLang(src);
+      const syms = indexSymbols(program, {
+        importedDataDefinitionsByModule: new Map([
+          ["Prelude", preludeDataDefinitions],
+        ]),
+      });
+      const pick = program.terms.find((term) =>
+        term.kind === "poly" && term.name === "pick"
+      );
+      if (!pick || pick.kind !== "poly") {
+        throw new Error("expected poly pick");
+      }
+
+      const elaborated = elaborateSystemF(pick.term, syms);
+      const expected = mkSystemFApp(
+        mkSystemFApp(
+          mkSystemFTypeApp(
+            mkSystemFVar("x"),
+            mkTypeVariable("Bool"),
+          ),
+          mkSystemFAbs(
+            "e",
+            mkTypeVariable("E"),
+            mkSystemFVar("false"),
+          ),
+        ),
+        mkSystemFAbs(
+          "v",
+          mkTypeVariable("T"),
+          mkSystemFVar("v"),
+        ),
+      );
+
+      expect(elaborated).to.deep.equal(expected);
+    },
+  );
+
+  await t.step(
+    "should reject non-exhaustive match on imported built-in constructors",
+    () => {
+      const src = `
+module ImportedMatchMissing
+import Prelude Result
+import Prelude Ok
+import Prelude Bool
+poly pick = match x [Bool] { | Ok v => v }
+      `;
+
+      const program = parseTripLang(src);
+      const syms = indexSymbols(program, {
+        importedDataDefinitionsByModule: new Map([
+          ["Prelude", preludeDataDefinitions],
+        ]),
+      });
+      const pick = program.terms.find((term) =>
+        term.kind === "poly" && term.name === "pick"
+      );
+      if (!pick || pick.kind !== "poly") {
+        throw new Error("expected poly pick");
+      }
+
+      expect(() => {
+        elaborateSystemF(pick.term, syms);
+      }).to.throw(CompilationError, "match is missing constructors: Err");
+    },
+  );
 
   await t.step("elaborateMatch error cases", async (t) => {
     function createSymbolTableWithData(

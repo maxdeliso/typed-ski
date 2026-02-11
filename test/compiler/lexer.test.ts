@@ -18,23 +18,12 @@ import { type SKIExpression, toSKIKey } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const lexerObjectPath = join(
-  __dirname,
-  "..",
-  "..",
-  "lib",
-  "compiler",
-  "lexer.tripc",
-);
-const lexerSourcePath = join(
-  __dirname,
-  "..",
-  "..",
-  "lib",
-  "compiler",
-  "lexer.trip",
+const LEXER_SOURCE_FILE = new URL(
+  "../../lib/compiler/lexer.trip",
+  import.meta.url,
 );
 
 // Cache compiled objects
@@ -44,47 +33,7 @@ let natObject: Awaited<ReturnType<typeof getNatObject>> | null = null;
 
 async function getLexerObject() {
   if (!lexerObject) {
-    // Load the pre-compiled lexer object file, or generate it if missing/outdated (CI).
-    let needsCompile = false;
-    try {
-      const [srcStat, objStat] = await Promise.all([
-        Deno.stat(lexerSourcePath),
-        Deno.stat(lexerObjectPath),
-      ]);
-      if (!srcStat.mtime || !objStat.mtime || objStat.mtime < srcStat.mtime) {
-        needsCompile = true;
-      }
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        needsCompile = true;
-      } else {
-        throw e;
-      }
-    }
-
-    if (needsCompile) {
-      const compileCommand = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          join(__dirname, "..", "..", "bin", "tripc.ts"),
-          lexerSourcePath,
-          lexerObjectPath,
-        ],
-      });
-
-      const { code, stderr } = await compileCommand.output();
-      if (code !== 0) {
-        const errorMsg = new TextDecoder().decode(stderr);
-        throw new Error(
-          `Failed to compile lexer module (${lexerSourcePath}) into (${lexerObjectPath}): exit code ${code}\n${errorMsg}`,
-        );
-      }
-    }
-
-    const lexerContent = await Deno.readTextFile(lexerObjectPath);
-    lexerObject = deserializeTripCObject(lexerContent);
+    lexerObject = await loadTripModuleObject(LEXER_SOURCE_FILE);
   }
   return lexerObject;
 }
@@ -163,6 +112,29 @@ async function compileAndValidateTestProgram(
   expect(skiExpression).to.be.a("string");
   expect(skiExpression.length).to.be.greaterThan(0);
   return parseSKI(skiExpression);
+}
+
+async function runTriplangPredicateTest(
+  inputFileName: string,
+): Promise<boolean> {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1, false, {
+    maxResubmits: 0,
+  });
+  const testFilePath = join(__dirname, "inputs", inputFileName);
+  const testObjectPath = testFilePath.replace(/\.trip$/, ".tripc");
+
+  try {
+    const program = await compileAndValidateTestProgram(inputFileName);
+    const nf = await evaluator.reduceAsync(program);
+    return UnChurchBoolean(nf);
+  } finally {
+    evaluator.terminate();
+    try {
+      await Deno.remove(testObjectPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 }
 
 Deno.test("Lexer unit tests - bottom up", async (t) => {
@@ -311,7 +283,7 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
     const nf = arenaEvaluator.reduce(skiExpr);
     const tokenCount = UnChurchNumber(nf);
 
-    assert.equal(tokenCount, 2n);
+    assert.equal(tokenCount, 3n);
   } finally {
     evaluator.terminate();
 
@@ -322,4 +294,27 @@ Deno.test("tokenize - verify token count for lexer.trip input", async () => {
       // Ignore cleanup errors
     }
   }
+});
+
+Deno.test("tokenize - structural lexer validations", async (t) => {
+  await t.step("differentiates identifiers from keywords", async () => {
+    const result = await runTriplangPredicateTest("testLexIdentVsKw.trip");
+    assert.isTrue(
+      result,
+      "Expected `abc` => T_Ident and `poly` => T_Keyword",
+    );
+  });
+
+  await t.step("parses numeric literals into T_Nat", async () => {
+    const result = await runTriplangPredicateTest("testLexNat.trip");
+    assert.isTrue(result, "Expected `123` => T_Nat 123 followed by T_EOF");
+  });
+
+  await t.step("parses arrows and fallback equality token", async () => {
+    const result = await runTriplangPredicateTest("testLexArrows.trip");
+    assert.isTrue(
+      result,
+      "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
+    );
+  });
 });

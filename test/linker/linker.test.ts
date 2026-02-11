@@ -12,16 +12,19 @@
 import { expect } from "chai";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
+import {
+  deserializeTripCObject,
+  type TripCObject,
+} from "../../lib/compiler/objectFile.ts";
 import {
   createProgramSpace,
   findMainFunction,
-  loadModule,
+  loadModule as loadModuleRaw,
   lowerToSKI,
   type ProgramSpace,
   resolveCrossModuleDependencies,
 } from "../../lib/linker/moduleLinker.ts";
-import { linkModules } from "../../lib/linker/moduleLinker.ts";
+import { linkModules as linkModulesRaw } from "../../lib/linker/moduleLinker.ts";
 import type { TripLangTerm as _TripLangTerm } from "../../lib/meta/trip.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -31,6 +34,34 @@ import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+type TestTripCObject =
+  & Omit<TripCObject, "dataDefinitions">
+  & Partial<Pick<TripCObject, "dataDefinitions">>;
+
+function withDataDefinitions(object: TestTripCObject): TripCObject {
+  return {
+    ...object,
+    dataDefinitions: object.dataDefinitions ?? [],
+  };
+}
+
+function loadModule(object: TestTripCObject, moduleName: string) {
+  return loadModuleRaw(withDataDefinitions(object), moduleName);
+}
+
+function linkModules(
+  modules: Array<{ name: string; object: TestTripCObject }>,
+  verbose = false,
+): string {
+  return linkModulesRaw(
+    modules.map((module) => ({
+      ...module,
+      object: withDataDefinitions(module.object),
+    })),
+    verbose,
+  );
+}
 
 /**
  * Helper function to compile a .trip file to .tripc format.

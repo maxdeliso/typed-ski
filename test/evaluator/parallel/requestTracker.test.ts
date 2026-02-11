@@ -32,6 +32,19 @@ Deno.test("RequestTracker - request creation and assignment", () => {
   assertEquals(tracker.getWorkerIndex(reqId4), 0);
 });
 
+Deno.test("RequestTracker - validates maxResubmits constructor option", () => {
+  assertThrows(
+    () => new RequestTracker({}, -1),
+    Error,
+    "maxResubmits must be an integer >= 0",
+  );
+  assertThrows(
+    () => new RequestTracker({}, 1.5),
+    Error,
+    "maxResubmits must be an integer >= 0",
+  );
+});
+
 Deno.test("RequestTracker - expression tracking", () => {
   const tracker = new RequestTracker();
 
@@ -109,6 +122,15 @@ Deno.test("RequestTracker - resubmission counting", () => {
     ResubmissionLimitExceededError,
     "Request 1 exceeded maximum resubmissions (5)",
   );
+});
+
+Deno.test("RequestTracker - resubmission cap can be disabled", () => {
+  const tracker = new RequestTracker({}, 0); // unlimited
+  const reqId = tracker.createRequest(1);
+
+  for (let i = 1; i <= 20_000; i++) {
+    assertEquals(tracker.incrementResubmit(reqId), i);
+  }
 });
 
 Deno.test("RequestTracker - resubmission limit does not emit duplicate error hook", () => {

@@ -312,6 +312,23 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(() => evaluator.hostPullV2()).to.throw("hostPullV2 export missing");
   });
 
+  await t.step("hostPullV2 delegates to WASM export when present", () => {
+    const evaluator = ArenaEvaluatorWasm.fromInstance({
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+      hostPullV2: () => 123n,
+    }, new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }));
+
+    assertEquals(evaluator.hostPullV2(), 123n);
+  });
+
   await t.step("getArenaTop handles missing debugGetArenaBaseAddr", () => {
     const evaluator = new TestArenaEvaluator(
       {

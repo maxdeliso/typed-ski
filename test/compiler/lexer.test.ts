@@ -18,16 +18,10 @@ import { type SKIExpression, toSKIKey } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const lexerObjectPath = join(
-  __dirname,
-  "..",
-  "..",
-  "lib",
-  "compiler",
-  "lexer.tripc",
-);
+const LEXER_SOURCE_FILE = new URL("../../lib/compiler/lexer.trip", import.meta.url);
 
 // Cache compiled objects
 let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;
@@ -36,8 +30,7 @@ let natObject: Awaited<ReturnType<typeof getNatObject>> | null = null;
 
 async function getLexerObject() {
   if (!lexerObject) {
-    const lexerContent = await Deno.readTextFile(lexerObjectPath);
-    lexerObject = deserializeTripCObject(lexerContent);
+    lexerObject = await loadTripModuleObject(LEXER_SOURCE_FILE);
   }
   return lexerObject;
 }

@@ -88,11 +88,11 @@ Deno.test("Lambda conversion", async (t) => {
 
     await t.step(
       "converts K-like function (λx.λy.x) to equivalent SKI term",
-      () => {
+      async () => {
         // The K combinator should return its first argument.
         for (let a = 0; a < N; a++) {
           for (let b = 0; b < N; b++) {
-            const result = UnChurchNumber(
+            const result = await UnChurchNumber(
               arenaEvaluator.reduce(
                 applyMany(bracketLambda(konst), ChurchN(a), ChurchN(b)),
               ),
@@ -146,7 +146,7 @@ Deno.test("Lambda conversion", async (t) => {
   });
 
   await t.step("arithmetic operations", async (t) => {
-    await t.step("computes exponentiation using flip combinator", () => {
+    await t.step("computes exponentiation using flip combinator", async () => {
       /**
        * flip is defined as:    flip ≡ λx.λy. y x
        *
@@ -164,7 +164,7 @@ Deno.test("Lambda conversion", async (t) => {
       for (let a = 0; a < N; a++) {
         for (let b = 0; b < N; b++) {
           const expected = a ** b; // exponentiation: a^b
-          const result = UnChurchNumber(
+          const result = await UnChurchNumber(
             arenaEvaluator.reduce(
               applyMany(bracketLambda(flip), ChurchN(a), ChurchN(b)),
             ),
@@ -174,23 +174,26 @@ Deno.test("Lambda conversion", async (t) => {
       }
     });
 
-    await t.step("converts predecessor function to equivalent SKI term", () => {
-      const [, predLambda] = parseLambda(
-        "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
-      );
-      for (let n = 0; n < N; n++) {
-        const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
-        const result = UnChurchNumber(
-          arenaEvaluator.reduce(
-            apply(bracketLambda(predLambda), ChurchN(n)),
-          ),
+    await t.step(
+      "converts predecessor function to equivalent SKI term",
+      async () => {
+        const [, predLambda] = parseLambda(
+          "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
         );
-        expect(result).to.equal(BigInt(expected));
-      }
-    });
+        for (let n = 0; n < N; n++) {
+          const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
+          const result = await UnChurchNumber(
+            arenaEvaluator.reduce(
+              apply(bracketLambda(predLambda), ChurchN(n)),
+            ),
+          );
+          expect(result).to.equal(BigInt(expected));
+        }
+      },
+    );
   });
 
-  await t.step("nat literal lowers via church encoder", () => {
+  await t.step("nat literal lowers via church encoder", async () => {
     // 1. Define Bin constructors as Church arithmetic operators
     // BZ = 0
     const [, BZ] = parseLambda("\\f=>\\x=>x");
@@ -228,7 +231,7 @@ Deno.test("Lambda conversion", async (t) => {
 
     const churchTerm = substituteBin(literal);
     const ski = bracketLambda(churchTerm);
-    const result = UnChurchNumber(arenaEvaluator.reduce(ski));
+    const result = await UnChurchNumber(arenaEvaluator.reduce(ski));
     expect(result).to.equal(8n);
   });
 

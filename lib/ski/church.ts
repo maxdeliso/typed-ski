@@ -10,6 +10,7 @@
 import { B, False, One, Succ, True, Zero } from "../consts/combinators.ts";
 import { apply, applyMany, type SKIExpression } from "./expression.ts";
 import { arenaEvaluator } from "../evaluator/skiEvaluator.ts";
+import type { Evaluator } from "../evaluator/evaluator.ts";
 import { SKITerminalSymbol } from "./terminal.ts";
 
 // Memoization cache for optimized Church numerals
@@ -316,8 +317,13 @@ export const ChurchN = (value: number | bigint): SKIExpression => {
  * Useful for testing numeric results of SKI computations via Church encoding.
  * Returns bigint to support unbounded natural numbers.
  */
-export const UnChurchNumber = (exp: SKIExpression): bigint => {
-  const normalized = arenaEvaluator.reduce(exp) as SKIExpression;
+export const UnChurchNumber = async (
+  exp: SKIExpression,
+  evaluator: Evaluator = arenaEvaluator,
+): Promise<bigint> => {
+  const normalized = evaluator.reduceAsync
+    ? await evaluator.reduceAsync(exp)
+    : evaluator.reduce(exp);
   try {
     const church = asRuntimeFn(evalRuntime(normalized));
     const inc: RuntimeFn = (value) => {
@@ -339,13 +345,16 @@ export const UnChurchNumber = (exp: SKIExpression): bigint => {
  * (here ChurchN(1) and ChurchN(0)) and then reduces and uses UnChurch to obtain a bigint.
  * If the result is 1, then the Church boolean was true; if 0, then it was false.
  */
-export const UnChurchBoolean = (expr: SKIExpression): boolean => {
+export const UnChurchBoolean = async (
+  expr: SKIExpression,
+  evaluator: Evaluator = arenaEvaluator,
+): Promise<boolean> => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
-  // `arenaEvaluator` is the single-threaded evaluator and returns synchronously.
-  const testExpr = arenaEvaluator.reduce(
-    applyMany(expr, ChurchN(1), ChurchN(0)),
-  ) as SKIExpression;
-  return UnChurchNumber(testExpr) === 1n;
+  const applied = applyMany(expr, ChurchN(1), ChurchN(0));
+  const testExpr = evaluator.reduceAsync
+    ? await evaluator.reduceAsync(applied)
+    : evaluator.reduce(applied);
+  return (await UnChurchNumber(testExpr, evaluator)) === 1n;
 };
 
 export const ChurchB = (b: boolean): SKIExpression => b ? True : False;

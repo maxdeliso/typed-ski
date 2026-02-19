@@ -12,7 +12,7 @@ Deno.test("TripHarness", async (t) => {
     const source = loadInput("includeNat.trip", __dirname);
 
     const result = await evaluateTrip(source, { includeNat: true });
-    const number = UnChurchNumber(result);
+    const number = await UnChurchNumber(result);
 
     expect(number).to.equal(2n);
   });

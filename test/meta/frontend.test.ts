@@ -82,7 +82,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         eraseSystemF(mainPoly.term),
       );
       const nf = await arenaEval.reduceAsync(skiMain);
-      assert.equal(UnChurchNumber(nf), 3n);
+      assert.equal(await UnChurchNumber(nf, arenaEval), 3n);
     });
 
     await t.step("Result data type with match expression", async () => {
@@ -94,7 +94,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
           (d) => d.kind === "poly" && d.name === name,
         ) as { kind: "poly"; term: SystemFTerm };
         const ski = bracketLambda(eraseSystemF(termPoly.term));
-        return UnChurchNumber(await arenaEval.reduceAsync(ski));
+        return await UnChurchNumber(
+          await arenaEval.reduceAsync(ski),
+          arenaEval,
+        );
       };
 
       // testOk should return 2 (the value from Ok two)
@@ -114,7 +117,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
           (d) => d.kind === "poly" && d.name === name,
         ) as { kind: "poly"; term: SystemFTerm };
         const ski = bracketLambda(eraseSystemF(termPoly.term));
-        return UnChurchNumber(await arenaEval.reduceAsync(ski));
+        return await UnChurchNumber(
+          await arenaEval.reduceAsync(ski),
+          arenaEval,
+        );
       };
 
       assert.equal(await num("testPred1"), 0n);
@@ -139,8 +145,14 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         eraseSystemF(twentyFourPoly.term),
       );
 
-      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(skiSix)), 6n);
-      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(ski24)), 24n);
+      assert.equal(
+        await UnChurchNumber(await arenaEval.reduceAsync(skiSix), arenaEval),
+        6n,
+      );
+      assert.equal(
+        await UnChurchNumber(await arenaEval.reduceAsync(ski24), arenaEval),
+        24n,
+      );
     });
 
     await t.step("loads factorial with fixpoint", async () => {
@@ -164,7 +176,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       const compiled = compile(src);
       const mainUntyped = resolveUntyped(compiled, "main");
       const mainSki = bracketLambda(mainUntyped.term);
-      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 120n);
+      assert.equal(
+        await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
+        120n,
+      );
     });
 
     await t.step("loads factorial with poly rec syntax", async () => {
@@ -188,7 +203,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       const compiled = compile(src);
       const mainUntyped = resolveUntyped(compiled, "main");
       const mainSki = bracketLambda(mainUntyped.term);
-      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 120n);
+      assert.equal(
+        await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
+        120n,
+      );
     });
 
     await t.step("evaluates Maybe ADT constructors", async () => {
@@ -196,7 +214,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
       const mainSki = bracketLambda(eraseSystemF(mainPoly.term));
-      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 2n);
+      assert.equal(
+        await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
+        2n,
+      );
     });
 
     await t.step("evaluates Result ADT constructors", async () => {
@@ -204,7 +225,10 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
       const mainSki = bracketLambda(eraseSystemF(mainPoly.term));
-      assert.equal(UnChurchNumber(await arenaEval.reduceAsync(mainSki)), 2n);
+      assert.equal(
+        await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
+        2n,
+      );
     });
 
     await t.step("elaborates nested type applications", () => {
@@ -274,7 +298,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         const mainRes = await arenaEval.reduceAsync(
           bracketLambda(eraseSystemF(mainPoly.term)),
         );
-        assert.equal(UnChurchNumber(mainRes), 24n);
+        assert.equal(await UnChurchNumber(mainRes, arenaEval), 24n);
       },
     );
 
@@ -334,13 +358,13 @@ poly mainFalse = match False [Nat] { | True => one | False => zero }`;
       const trueRes = await arenaEval.reduceAsync(
         bracketLambda(eraseSystemF(mainTrue.term)),
       );
-      assert.equal(UnChurchNumber(trueRes), 1n);
+      assert.equal(await UnChurchNumber(trueRes, arenaEval), 1n);
 
       const mainFalse = resolvePoly(compiled, "mainFalse");
       const falseRes = await arenaEval.reduceAsync(
         bracketLambda(eraseSystemF(mainFalse.term)),
       );
-      assert.equal(UnChurchNumber(falseRes), 0n);
+      assert.equal(await UnChurchNumber(falseRes, arenaEval), 0n);
     });
 
     await t.step("rejects non-exhaustive match", () => {

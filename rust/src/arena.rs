@@ -162,6 +162,7 @@ pub enum ArenaKind {
     /// - `right`: Evaluation stack
     /// - `hash`: Remaining reduction steps
     Suspension = 4,
+
 }
 
 /// SKI combinator symbols and evaluation state markers.
@@ -1875,7 +1876,6 @@ mod wasm {
         }
     }
 
-
     /// Unwind the continuation stack to reconstruct the full expression tree.
     ///
     /// When the step limit is exhausted, the worker may be deep in the expression tree
@@ -2192,7 +2192,9 @@ mod wasm {
                             // S' w x y z -> w (x z) (y z)
                             if sym == ArenaSym::SPrime as u32 {
                                 if *remaining_steps == 0 {
-                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                    return StepResult::Yield(alloc_suspension(
+                                        curr, stack, mode, 0,
+                                    ));
                                 }
                                 *remaining_steps = remaining_steps.saturating_sub(1);
 
@@ -2208,7 +2210,9 @@ mod wasm {
                                 mode = MODE_RETURN;
 
                                 if *remaining_steps == 0 {
-                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                    return StepResult::Yield(alloc_suspension(
+                                        curr, stack, mode, 0,
+                                    ));
                                 }
                                 continue;
                             }
@@ -2216,7 +2220,9 @@ mod wasm {
                             // B' w x y z -> w x (y z)
                             if sym == ArenaSym::BPrime as u32 {
                                 if *remaining_steps == 0 {
-                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                    return StepResult::Yield(alloc_suspension(
+                                        curr, stack, mode, 0,
+                                    ));
                                 }
                                 *remaining_steps = remaining_steps.saturating_sub(1);
 
@@ -2231,7 +2237,9 @@ mod wasm {
                                 mode = MODE_RETURN;
 
                                 if *remaining_steps == 0 {
-                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                    return StepResult::Yield(alloc_suspension(
+                                        curr, stack, mode, 0,
+                                    ));
                                 }
                                 continue;
                             }
@@ -2239,7 +2247,9 @@ mod wasm {
                             // C' w x y z -> w (x z) y
                             if sym == ArenaSym::CPrime as u32 {
                                 if *remaining_steps == 0 {
-                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                    return StepResult::Yield(alloc_suspension(
+                                        curr, stack, mode, 0,
+                                    ));
                                 }
                                 *remaining_steps = remaining_steps.saturating_sub(1);
 
@@ -2254,7 +2264,9 @@ mod wasm {
                                 mode = MODE_RETURN;
 
                                 if *remaining_steps == 0 {
-                                    return StepResult::Yield(alloc_suspension(curr, stack, mode, 0));
+                                    return StepResult::Yield(alloc_suspension(
+                                        curr, stack, mode, 0,
+                                    ));
                                 }
                                 continue;
                             }

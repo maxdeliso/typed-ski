@@ -14,4 +14,10 @@ export interface Evaluator {
 
   /** Keep stepping until fix-point or maxIterations. */
   reduce(expr: SKIExpression, maxIterations?: number): SKIExpression;
+
+  /** Full reduction using async workers (if supported). */
+  reduceAsync?(
+    expr: SKIExpression,
+    maxIterations?: number,
+  ): Promise<SKIExpression>;
 }

@@ -51,25 +51,22 @@ async function buildTestExpression(
 async function evaluateTestModulesBatch(
   modules: Array<{ name: string; fileName: string }>,
 ): Promise<Map<string, bigint>> {
-  const expressions = await Promise.all(
-    modules.map(async ({ name, fileName }) => ({
-      name,
-      expr: await buildTestExpression(await loadInput(fileName), name),
-    })),
-  );
+  const results = new Map<string, bigint>();
+  const evaluator = await ParallelArenaEvaluatorWasm.create();
 
-  const reduced = await Promise.all(
-    expressions.map(async ({ name, expr }) => {
-      const evaluator = await ParallelArenaEvaluatorWasm.create();
-      try {
-        const evaluated = await evaluator.reduceAsync(expr);
-        return [name, UnChurchNumber(evaluated)] as const;
-      } finally {
-        evaluator.terminate();
-      }
-    }),
-  );
-  return new Map<string, bigint>(reduced);
+  try {
+    for (const { name, fileName } of modules) {
+      const source = await loadInput(fileName);
+      const expr = await buildTestExpression(source, name);
+      const evaluated = await evaluator.reduceAsync(expr);
+      const val = await UnChurchNumber(evaluated, evaluator);
+      results.set(name, val);
+    }
+  } finally {
+    evaluator.terminate();
+  }
+
+  return results;
 }
 
 Deno.test("Avl module tests (batched)", async () => {

@@ -128,7 +128,8 @@ High-performance inter-thread communication:
 
 The arena supports four node types for different purposes:
 
-- **`Terminal`**: SKI combinators (S, K, I) - leaf nodes
+- **`Terminal`**: Combinator/value symbols (for example S, K, I, B, C, and prime
+  variants) - leaf nodes
 - **`NonTerm`**: Function application `(left right)` - core expressions
 - **`Continuation`**: Stack frames for iterative reduction - optimization
 - **`Suspension`**: Paused evaluation state for multitasking - optimization
@@ -227,7 +228,7 @@ The shared arena is laid out as **header + fixed rings + SoA arrays**.
 
 - Magic number, ring parameters, memory offsets
 - Capacity, bucket masks, atomic counters
-- `max_steps`, `resize_seq`, `top` for coordination
+- `resize_seq`, `top`, and layout offsets for coordination
 
 ### Rings (64-byte aligned)
 
@@ -240,11 +241,11 @@ The shared arena is laid out as **header + fixed rings + SoA arrays**.
 - `kind: u8[]` - Node type (Terminal/NonTerm/Continuation/Suspension)
 - `sym: u8[]` - Symbol/mode data
 - `left_id: u32[]` - Left child pointers
-- `right_id: u32[] - Right child pointers
+- `right_id: u32[]` - Right child pointers
 - `hash32: u32[]` - Hash values for deduplication
 - `next_idx: u32[]` - Hash table collision chains
 - `buckets: u32[]` - Hash table bucket heads
-- Terminal cache: Fast access to S/K/I nodes
+- Terminal cache: Fast access to commonly used terminal symbols
 
 The JS/TS side constructs typed array views over these arrays for fast read-only
 decoding and direct memory access.

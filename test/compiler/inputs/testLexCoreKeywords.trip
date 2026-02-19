@@ -1,0 +1,38 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Prelude Bin
+import Prelude eqBin
+import Prelude List
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Lexer tokenizeBin
+import Lexer Token
+import Lexer tokenTag
+import Lexer T_KwLet
+import Lexer T_KwIn
+import Lexer T_KwMatch
+
+export main
+
+poly firstHasTag = \src : List Bin => \expectedTag : Bin =>
+  match (tokenizeBin src) [Bool] {
+    | Err e => false
+    | Ok toks =>
+        matchList [Token] [Bool] toks false
+          (\h : Token => \t : List Token =>
+            eqBin (tokenTag h) expectedTag)
+  }
+
+poly main =
+  if [Bool] (firstHasTag "let" (tokenTag T_KwLet))
+    (\u : Bin =>
+      if [Bool] (firstHasTag "match" (tokenTag T_KwMatch))
+        (\u : Bin => firstHasTag "in" (tokenTag T_KwIn))
+        (\u : Bin => false))
+    (\u : Bin => false)

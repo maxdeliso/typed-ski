@@ -1,0 +1,68 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Prelude Bin
+import Prelude List
+import Prelude cons
+import Prelude nil
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Pair
+import Prelude fst
+import Prelude snd
+import Lexer Token
+import Lexer T_Backslash
+import Lexer T_Ident
+import Lexer T_Colon
+import Lexer T_FatArrow
+import Lexer T_EOF
+import Lexer eqListFast
+import Parser parseExpr
+import Parser Expr
+import Parser E_Var
+import Parser E_App
+import Parser E_Lam
+import Parser E_Let
+import Parser E_Nat
+import Parser E_Match
+
+export main
+
+poly main =
+  let input =
+    cons [Token] T_Backslash
+      (cons [Token] (T_Ident "x")
+        (cons [Token] T_Colon
+          (cons [Token] (T_Ident "Bin")
+            (cons [Token] T_FatArrow
+              (cons [Token] (T_Ident "x")
+                (cons [Token] T_EOF (nil [Token])))))))
+  in
+  match (parseExpr input) [Bool] {
+    | Err e => false
+    | Ok res =>
+      let expr = fst [Expr] [List Token] res in
+      match expr [Bool] {
+        | E_Var n => false
+        | E_App f x => false
+        | E_Lam name body =>
+          if [Bool] (eqListFast name "x")
+            (\u : Bin =>
+              match body [Bool] {
+                | E_Var n => eqListFast n "x"
+                | E_App f x => false
+                | E_Lam name body => false
+                | E_Let name val body => false
+                | E_Nat n => false
+                | E_Match scrutinee arms => false
+              })
+            (\u : Bin => false)
+        | E_Let name val body => false
+        | E_Nat n => false
+        | E_Match scrutinee arms => false
+      }
+  }

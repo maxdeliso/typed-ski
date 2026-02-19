@@ -1,0 +1,836 @@
+module Parser
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude ParseError
+import Prelude MkParseError
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude Bin
+import Prelude eqBin
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Lexer Token
+import Lexer tokenTag
+import Lexer tokenText
+import Lexer tokenNatValue
+import Lexer T_LParen
+import Lexer T_RParen
+import Lexer T_LBrace
+import Lexer T_RBrace
+import Lexer T_LBracket
+import Lexer T_RBracket
+import Lexer T_Backslash
+import Lexer T_Arrow
+import Lexer T_FatArrow
+import Lexer T_Eq
+import Lexer T_Colon
+import Lexer T_Hash
+import Lexer T_Pipe
+import Lexer T_Dot
+import Lexer T_Comma
+import Lexer T_KwPoly
+import Lexer T_KwRec
+import Lexer T_KwLet
+import Lexer T_KwIn
+import Lexer T_KwMatch
+import Lexer T_KwModule
+import Lexer T_KwImport
+import Lexer T_KwExport
+import Lexer T_KwTyped
+import Lexer T_KwUntyped
+import Lexer T_KwCombinator
+import Lexer T_KwType
+import Lexer T_KwData
+import Lexer T_Ident
+import Lexer T_Nat
+import Lexer T_EOF
+
+export Pattern
+export P_Ctor
+export Expr
+export E_Var
+export E_App
+export E_Lam
+export E_Let
+export E_Nat
+export E_Match
+export Decl
+export D_Module
+export D_Import
+export D_Export
+export D_Type
+export D_Data
+export D_Def
+export expect
+export expectIdent
+export skipUntil
+export skipToTopLevelDecl
+export parseError
+export identTag
+export natTag
+export lParenTag
+export rParenTag
+export lBraceTag
+export rBraceTag
+export lBracketTag
+export rBracketTag
+export backslashTag
+export hashTag
+export fatArrowTag
+export eqTag
+export pipeTag
+export colonTag
+export commaTag
+export dotTag
+export eofTag
+export kwPolyTag
+export kwRecTag
+export kwLetTag
+export kwInTag
+export kwMatchTag
+export kwModuleTag
+export kwImportTag
+export kwExportTag
+export kwTypedTag
+export kwUntypedTag
+export kwCombinatorTag
+export kwTypeTag
+export kwDataTag
+export reverseAcc
+export reverseList
+export fstNameToken
+export sndNameToken
+export fstExprToken
+export sndExprToken
+export fstArgsToken
+export sndArgsToken
+export fstPatternExprToken
+export sndPatternExprToken
+export fstArmsToken
+export sndArmsToken
+export fstDeclToken
+export sndDeclToken
+export isTopLevelStartToken
+export parsePatternArgs
+export parseMatchArm
+export parseMatchArms
+export isAtomStart
+export skipTypeArg
+export parseAtomWith
+export parseAppLoopWith
+export parseAppWith
+export parseMatchArmWith
+export parseMatchArmsWith
+export parseAtom
+export parseApp
+export parseExpr
+export parseNamedDef
+export parseDecl
+export parseProgramAcc
+export parseProgram
+
+data Pattern =
+  | P_Ctor (List Bin) (List (List Bin))
+
+data Expr =
+  | E_Var (List Bin)
+  | E_App Expr Expr
+  | E_Lam (List Bin) Expr
+  | E_Let (List Bin) Expr Expr
+  | E_Nat Bin
+  | E_Match Expr (List (Pair Pattern Expr))
+
+data Decl =
+  | D_Module (List Bin)
+  | D_Import (List Bin) (List Bin)
+  | D_Export (List Bin)
+  | D_Type (List Bin)
+  | D_Data (List Bin)
+  | D_Def (List Bin) Expr
+
+poly parseError =
+  MkParseError 0 (nil [Bin])
+
+poly identTag =
+  tokenTag (T_Ident (nil [Bin]))
+
+poly natTag =
+  tokenTag (T_Nat 0)
+
+poly lParenTag =
+  tokenTag T_LParen
+
+poly rParenTag =
+  tokenTag T_RParen
+
+poly lBraceTag =
+  tokenTag T_LBrace
+
+poly rBraceTag =
+  tokenTag T_RBrace
+
+poly lBracketTag =
+  tokenTag T_LBracket
+
+poly rBracketTag =
+  tokenTag T_RBracket
+
+poly backslashTag =
+  tokenTag T_Backslash
+
+poly hashTag =
+  tokenTag T_Hash
+
+poly fatArrowTag =
+  tokenTag T_FatArrow
+
+poly eqTag =
+  tokenTag T_Eq
+
+poly pipeTag =
+  tokenTag T_Pipe
+
+poly colonTag =
+  tokenTag T_Colon
+
+poly commaTag =
+  tokenTag T_Comma
+
+poly dotTag =
+  tokenTag T_Dot
+
+poly eofTag =
+  tokenTag T_EOF
+
+poly kwPolyTag =
+  tokenTag T_KwPoly
+
+poly kwRecTag =
+  tokenTag T_KwRec
+
+poly kwLetTag =
+  tokenTag T_KwLet
+
+poly kwInTag =
+  tokenTag T_KwIn
+
+poly kwMatchTag =
+  tokenTag T_KwMatch
+
+poly kwModuleTag =
+  tokenTag T_KwModule
+
+poly kwImportTag =
+  tokenTag T_KwImport
+
+poly kwExportTag =
+  tokenTag T_KwExport
+
+poly kwTypedTag =
+  tokenTag T_KwTyped
+
+poly kwUntypedTag =
+  tokenTag T_KwUntyped
+
+poly kwCombinatorTag =
+  tokenTag T_KwCombinator
+
+poly kwTypeTag =
+  tokenTag T_KwType
+
+poly kwDataTag =
+  tokenTag T_KwData
+
+poly rec reverseAcc = #A => \xs : List A => \acc : List A =>
+  matchList [A] [List A] xs acc
+    (\h : A => \t : List A =>
+      reverseAcc [A] t (cons [A] h acc))
+
+poly reverseList = #A => \xs : List A =>
+  reverseAcc [A] xs (nil [A])
+
+poly fstNameToken = \p : Pair (List Bin) (List Token) =>
+  fst [List Bin] [List Token] p
+
+poly sndNameToken = \p : Pair (List Bin) (List Token) =>
+  snd [List Bin] [List Token] p
+
+poly fstExprToken = \p : Pair Expr (List Token) =>
+  fst [Expr] [List Token] p
+
+poly sndExprToken = \p : Pair Expr (List Token) =>
+  snd [Expr] [List Token] p
+
+poly fstArgsToken = \p : Pair (List (List Bin)) (List Token) =>
+  fst [List (List Bin)] [List Token] p
+
+poly sndArgsToken = \p : Pair (List (List Bin)) (List Token) =>
+  snd [List (List Bin)] [List Token] p
+
+poly fstPatternExprToken = \p : Pair (Pair Pattern Expr) (List Token) =>
+  fst [Pair Pattern Expr] [List Token] p
+
+poly sndPatternExprToken = \p : Pair (Pair Pattern Expr) (List Token) =>
+  snd [Pair Pattern Expr] [List Token] p
+
+poly fstArmsToken = \p : Pair (List (Pair Pattern Expr)) (List Token) =>
+  fst [List (Pair Pattern Expr)] [List Token] p
+
+poly sndArmsToken = \p : Pair (List (Pair Pattern Expr)) (List Token) =>
+  snd [List (Pair Pattern Expr)] [List Token] p
+
+poly fstDeclToken = \p : Pair Decl (List Token) =>
+  fst [Decl] [List Token] p
+
+poly sndDeclToken = \p : Pair Decl (List Token) =>
+  snd [Decl] [List Token] p
+
+poly isTopLevelStartToken = \tok : Token =>
+  let tag = tokenTag tok in
+  if [Bool] (eqBin tag kwModuleTag)
+    (\u : Bin => true)
+    (\u : Bin =>
+      if [Bool] (eqBin tag kwImportTag)
+        (\u : Bin => true)
+        (\u : Bin =>
+          if [Bool] (eqBin tag kwExportTag)
+            (\u : Bin => true)
+            (\u : Bin =>
+              if [Bool] (eqBin tag kwPolyTag)
+                (\u : Bin => true)
+                (\u : Bin =>
+                  if [Bool] (eqBin tag kwTypedTag)
+                    (\u : Bin => true)
+                    (\u : Bin =>
+                      if [Bool] (eqBin tag kwUntypedTag)
+                        (\u : Bin => true)
+                        (\u : Bin =>
+                          if [Bool] (eqBin tag kwCombinatorTag)
+                            (\u : Bin => true)
+                            (\u : Bin =>
+                              if [Bool] (eqBin tag kwTypeTag)
+                                (\u : Bin => true)
+                                (\u : Bin => eqBin tag kwDataTag))))))))
+
+poly expect = \toks : List Token => \expectedTag : Bin =>
+  matchList [Token] [Result ParseError (List Token)] toks
+    (Err [ParseError] [List Token] parseError)
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (List Token)]
+        (eqBin (tokenTag h) expectedTag)
+        (\u : Bin => Ok [ParseError] [List Token] t)
+        (\u : Bin => Err [ParseError] [List Token] parseError)
+    )
+
+poly expectIdent = \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair (List Bin) (List Token))] toks
+    (Err [ParseError] [Pair (List Bin) (List Token)] parseError)
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair (List Bin) (List Token))]
+        (eqBin (tokenTag h) identTag)
+        (\u : Bin =>
+          Ok [ParseError] [Pair (List Bin) (List Token)]
+            (MkPair [List Bin] [List Token] (tokenText h) t))
+        (\u : Bin =>
+          Err [ParseError] [Pair (List Bin) (List Token)] parseError)
+    )
+
+poly rec skipUntil = \toks : List Token => \targetTag : Bin =>
+  matchList [Token] [Result ParseError (List Token)] toks
+    (Err [ParseError] [List Token] parseError)
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (List Token)]
+        (eqBin (tokenTag h) targetTag)
+        (\u : Bin => Ok [ParseError] [List Token] toks)
+        (\u : Bin => skipUntil t targetTag)
+    )
+
+poly rec skipToTopLevelDecl = \toks : List Token =>
+  matchList [Token] [Result ParseError (List Token)] toks
+    (Ok [ParseError] [List Token] (nil [Token]))
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (List Token)] (eqBin (tokenTag h) eofTag)
+        (\u : Bin => Ok [ParseError] [List Token] toks)
+        (\u : Bin =>
+          if [Result ParseError (List Token)] (isTopLevelStartToken h)
+            (\u : Bin => Ok [ParseError] [List Token] toks)
+            (\u : Bin => skipToTopLevelDecl t))
+    )
+
+poly rec parsePatternArgs = \toks : List Token => \acc : List (List Bin) =>
+  matchList [Token] [Result ParseError (Pair (List (List Bin)) (List Token))] toks
+    (Err [ParseError] [Pair (List (List Bin)) (List Token)] parseError)
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair (List (List Bin)) (List Token))]
+        (eqBin (tokenTag h) fatArrowTag)
+        (\u : Bin =>
+          Ok [ParseError] [Pair (List (List Bin)) (List Token)]
+            (MkPair [List (List Bin)] [List Token] (reverseList [List Bin] acc) toks))
+        (\u : Bin =>
+          if [Result ParseError (Pair (List (List Bin)) (List Token))]
+            (eqBin (tokenTag h) identTag)
+            (\u : Bin =>
+              parsePatternArgs t (cons [List Bin] (tokenText h) acc))
+            (\u : Bin =>
+              Err [ParseError] [Pair (List (List Bin)) (List Token)] parseError))
+    )
+
+poly parseMatchArmWith = \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) => \toks : List Token =>
+  match (expect toks pipeTag) [Result ParseError (Pair (Pair Pattern Expr) (List Token))] {
+    | Err e => Err [ParseError] [Pair (Pair Pattern Expr) (List Token)] e
+    | Ok afterPipe =>
+      match (expectIdent afterPipe) [Result ParseError (Pair (Pair Pattern Expr) (List Token))] {
+        | Err e => Err [ParseError] [Pair (Pair Pattern Expr) (List Token)] e
+        | Ok ctorRes =>
+          let ctorName = fstNameToken ctorRes in
+          let afterCtor = sndNameToken ctorRes in
+          match (parsePatternArgs afterCtor (nil [List Bin])) [Result ParseError (Pair (Pair Pattern Expr) (List Token))] {
+            | Err e => Err [ParseError] [Pair (Pair Pattern Expr) (List Token)] e
+            | Ok argRes =>
+              let args = fstArgsToken argRes in
+              let atArrow = sndArgsToken argRes in
+              match (expect atArrow fatArrowTag) [Result ParseError (Pair (Pair Pattern Expr) (List Token))] {
+                | Err e => Err [ParseError] [Pair (Pair Pattern Expr) (List Token)] e
+                | Ok bodyToks =>
+                  match (recurse bodyToks) [Result ParseError (Pair (Pair Pattern Expr) (List Token))] {
+                    | Err e => Err [ParseError] [Pair (Pair Pattern Expr) (List Token)] e
+                    | Ok bodyRes =>
+                      let body = fstExprToken bodyRes in
+                      let rest = sndExprToken bodyRes in
+                      Ok [ParseError] [Pair (Pair Pattern Expr) (List Token)]
+                        (MkPair [Pair Pattern Expr] [List Token]
+                          (MkPair [Pattern] [Expr] (P_Ctor ctorName args) body)
+                          rest)
+                  }
+              }
+          }
+      }
+  }
+
+poly rec parseMatchArmsWith = \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) => \toks : List Token => \acc : List (Pair Pattern Expr) =>
+  matchList [Token] [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))] toks
+    (Err [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)] parseError)
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))]
+        (eqBin (tokenTag h) rBraceTag)
+        (\u : Bin =>
+          Ok [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)]
+            (MkPair [List (Pair Pattern Expr)] [List Token] (reverseList [Pair Pattern Expr] acc) t))
+        (\u : Bin =>
+          if [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))]
+            (eqBin (tokenTag h) pipeTag)
+            (\u : Bin =>
+              match (parseMatchArmWith recurse toks) [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))] {
+                | Err e => Err [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)] e
+                | Ok armRes =>
+                  let arm = fstPatternExprToken armRes in
+                  let rest = sndPatternExprToken armRes in
+                  parseMatchArmsWith recurse rest (cons [Pair Pattern Expr] arm acc)
+              })
+            (\u : Bin =>
+              Err [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)] parseError))
+    )
+
+poly isAtomStart = \tok : Token =>
+  if [Bool]
+    (eqBin (tokenTag tok) identTag)
+    (\u : Bin => true)
+    (\u : Bin =>
+      if [Bool]
+        (eqBin (tokenTag tok) natTag)
+        (\u : Bin => true)
+        (\u : Bin =>
+          if [Bool] (eqBin (tokenTag tok) lParenTag)
+            (\u : Bin => true)
+            (\u : Bin =>
+              if [Bool] (eqBin (tokenTag tok) commaTag)
+                (\u : Bin => true)
+                (\u : Bin => eqBin (tokenTag tok) dotTag))))
+
+poly parseAtomWith = \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) => \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair Expr (List Token))] toks
+    (Err [ParseError] [Pair Expr (List Token)] parseError)
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair Expr (List Token))]
+        (eqBin (tokenTag h) identTag)
+        (\u : Bin =>
+          Ok [ParseError] [Pair Expr (List Token)]
+            (MkPair [Expr] [List Token] (E_Var (tokenText h)) t))
+        (\u : Bin =>
+          if [Result ParseError (Pair Expr (List Token))]
+            (eqBin (tokenTag h) natTag)
+            (\u : Bin =>
+              Ok [ParseError] [Pair Expr (List Token)]
+                (MkPair [Expr] [List Token] (E_Nat (tokenNatValue h)) t))
+            (\u : Bin =>
+              if [Result ParseError (Pair Expr (List Token))]
+                (eqBin (tokenTag h) lParenTag)
+                (\u : Bin =>
+                  match (recurse t) [Result ParseError (Pair Expr (List Token))] {
+                    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                    | Ok res =>
+                      let inner = fstExprToken res in
+                      let rest = sndExprToken res in
+                      match (expect rest rParenTag) [Result ParseError (Pair Expr (List Token))] {
+                        | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                        | Ok final =>
+                          Ok [ParseError] [Pair Expr (List Token)]
+                            (MkPair [Expr] [List Token] inner final)
+                      }
+                  })
+                (\u : Bin =>
+                  if [Result ParseError (Pair Expr (List Token))]
+                    (eqBin (tokenTag h) commaTag)
+                    (\u : Bin =>
+                      Ok [ParseError] [Pair Expr (List Token)]
+                        (MkPair [Expr] [List Token] (E_Var ",") t))
+                    (\u : Bin =>
+                      if [Result ParseError (Pair Expr (List Token))]
+                        (eqBin (tokenTag h) dotTag)
+                        (\u : Bin =>
+                          Ok [ParseError] [Pair Expr (List Token)]
+                            (MkPair [Expr] [List Token] (E_Var ".") t))
+                        (\u : Bin =>
+                          Err [ParseError] [Pair Expr (List Token)] parseError)
+                    )
+                )
+            )
+        )
+    )
+poly skipTypeArg = \toks : List Token =>
+  match (expect toks lBracketTag) [Result ParseError (List Token)] {
+    | Err e => Err [ParseError] [List Token] e
+    | Ok afterOpen =>
+      match (skipUntil afterOpen rBracketTag) [Result ParseError (List Token)] {
+        | Err e => Err [ParseError] [List Token] e
+        | Ok atClose =>
+          expect atClose rBracketTag
+      }
+  }
+
+poly rec parseAppLoopWith = \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) => \lhs : Expr => \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair Expr (List Token))] toks
+    (Ok [ParseError] [Pair Expr (List Token)]
+      (MkPair [Expr] [List Token] lhs toks))
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (Pair Expr (List Token))]
+        (isAtomStart h)
+        (\u : Bin =>
+          match (parseAtomWith recurse toks) [Result ParseError (Pair Expr (List Token))] {
+            | Err e => Err [ParseError] [Pair Expr (List Token)] e
+            | Ok rhsRes =>
+              let rhs = fstExprToken rhsRes in
+              let rest = sndExprToken rhsRes in
+              parseAppLoopWith recurse (E_App lhs rhs) rest
+          })
+        (\u : Bin =>
+          if [Result ParseError (Pair Expr (List Token))]
+            (eqBin (tokenTag h) lBracketTag)
+            (\u : Bin =>
+              match (skipTypeArg toks) [Result ParseError (Pair Expr (List Token))] {
+                | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                | Ok afterType => parseAppLoopWith recurse lhs afterType
+              })
+            (\u : Bin =>
+              Ok [ParseError] [Pair Expr (List Token)]
+                (MkPair [Expr] [List Token] lhs toks))
+        )
+    )
+
+poly parseAppWith = \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) => \toks : List Token =>
+  match (parseAtomWith recurse toks) [Result ParseError (Pair Expr (List Token))] {
+    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+    | Ok headRes =>
+      let head = fstExprToken headRes in
+      let rest = sndExprToken headRes in
+      parseAppLoopWith recurse head rest
+  }
+
+poly parseAtom = \toks : List Token =>
+  parseAtomWith parseExpr toks
+
+poly parseApp = \toks : List Token =>
+  parseAppWith parseExpr toks
+
+poly parseMatchArm = \toks : List Token =>
+  parseMatchArmWith parseExpr toks
+
+poly parseMatchArms = \toks : List Token =>
+  parseMatchArmsWith parseExpr toks (nil [Pair Pattern Expr])
+
+poly rec parseExpr = \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair Expr (List Token))] toks
+    (Err [ParseError] [Pair Expr (List Token)] parseError)
+    (\h : Token => \t : List Token =>
+      let tag = tokenTag h in
+      if [Result ParseError (Pair Expr (List Token))]
+        (eqBin tag hashTag)
+        (\u : Bin =>
+          match (expectIdent t) [Result ParseError (Pair Expr (List Token))] {
+            | Err e => Err [ParseError] [Pair Expr (List Token)] e
+            | Ok tvRes =>
+              match tvRes [Result ParseError (Pair Expr (List Token))] {
+                | MkPair typeVar afterTypeVar =>
+                    match (skipUntil afterTypeVar fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                      | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                      | Ok atArrow =>
+                        match (expect atArrow fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                          | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                          | Ok bodyToks =>
+                            parseExpr bodyToks
+                        }
+                    }
+              }
+          })
+        (\u : Bin =>
+          if [Result ParseError (Pair Expr (List Token))]
+        (eqBin tag backslashTag)
+        (\u : Bin =>
+          match (expectIdent t) [Result ParseError (Pair Expr (List Token))] {
+            | Err e => Err [ParseError] [Pair Expr (List Token)] e
+            | Ok idRes =>
+              let name = fstNameToken idRes in
+              let afterName = sndNameToken idRes in
+              match (skipUntil afterName fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                | Ok atArrow =>
+                  match (expect atArrow fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                    | Ok bodyToks =>
+                      match (parseExpr bodyToks) [Result ParseError (Pair Expr (List Token))] {
+                        | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                        | Ok bodyRes =>
+                          let body = fstExprToken bodyRes in
+                          let rest = sndExprToken bodyRes in
+                          Ok [ParseError] [Pair Expr (List Token)]
+                            (MkPair [Expr] [List Token] (E_Lam name body) rest)
+                      }
+                  }
+              }
+          })
+        (\u : Bin =>
+          if [Result ParseError (Pair Expr (List Token))]
+            (eqBin tag kwLetTag)
+            (\u : Bin =>
+              match (expectIdent t) [Result ParseError (Pair Expr (List Token))] {
+                | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                | Ok idRes =>
+                  let name = fstNameToken idRes in
+                  let afterName = sndNameToken idRes in
+                  match (skipUntil afterName eqTag) [Result ParseError (Pair Expr (List Token))] {
+                    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                    | Ok atEq =>
+                      match (expect atEq eqTag) [Result ParseError (Pair Expr (List Token))] {
+                        | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                        | Ok valToks =>
+                          match (parseExpr valToks) [Result ParseError (Pair Expr (List Token))] {
+                            | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                            | Ok valRes =>
+                              let valExpr = fstExprToken valRes in
+                              let afterVal = sndExprToken valRes in
+                              match (expect afterVal kwInTag) [Result ParseError (Pair Expr (List Token))] {
+                                | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                                | Ok bodyToks =>
+                                  match (parseExpr bodyToks) [Result ParseError (Pair Expr (List Token))] {
+                                    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                                    | Ok bodyRes =>
+                                      let bodyExpr = fstExprToken bodyRes in
+                                      let rest = sndExprToken bodyRes in
+                                      Ok [ParseError] [Pair Expr (List Token)]
+                                        (MkPair [Expr] [List Token] (E_Let name valExpr bodyExpr) rest)
+                                  }
+                              }
+                          }
+                      }
+                  }
+              })
+            (\u : Bin =>
+              if [Result ParseError (Pair Expr (List Token))]
+                (eqBin tag kwMatchTag)
+                (\u : Bin =>
+                  match (parseAppWith parseExpr t) [Result ParseError (Pair Expr (List Token))] {
+                    | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                    | Ok scrutRes =>
+                      let scrutinee = fstExprToken scrutRes in
+                      let afterScrut = sndExprToken scrutRes in
+                      match (skipUntil afterScrut lBraceTag) [Result ParseError (Pair Expr (List Token))] {
+                        | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                        | Ok atBrace =>
+                          match (expect atBrace lBraceTag) [Result ParseError (Pair Expr (List Token))] {
+                            | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                            | Ok inside =>
+                              match (parseMatchArmsWith parseExpr inside (nil [Pair Pattern Expr])) [Result ParseError (Pair Expr (List Token))] {
+                                | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                                | Ok armsRes =>
+                                  let arms = fstArmsToken armsRes in
+                                  let rest = sndArmsToken armsRes in
+                                  Ok [ParseError] [Pair Expr (List Token)]
+                                    (MkPair [Expr] [List Token] (E_Match scrutinee arms) rest)
+                              }
+                          }
+                      }
+                  })
+                (\u : Bin => parseAppWith parseExpr toks))))
+    )
+
+poly parseNamedDef = \toks : List Token =>
+  match (expectIdent toks) [Result ParseError (Pair Decl (List Token))] {
+    | Err e => Err [ParseError] [Pair Decl (List Token)] e
+    | Ok nameRes =>
+      let name = fstNameToken nameRes in
+      let afterName = sndNameToken nameRes in
+      match (skipUntil afterName eqTag) [Result ParseError (Pair Decl (List Token))] {
+        | Err e => Err [ParseError] [Pair Decl (List Token)] e
+        | Ok atEq =>
+          match (expect atEq eqTag) [Result ParseError (Pair Decl (List Token))] {
+            | Err e => Err [ParseError] [Pair Decl (List Token)] e
+            | Ok bodyToks =>
+              match (parseExpr bodyToks) [Result ParseError (Pair Decl (List Token))] {
+                | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                | Ok bodyRes =>
+                  let body = fstExprToken bodyRes in
+                  let rest = sndExprToken bodyRes in
+                  Ok [ParseError] [Pair Decl (List Token)]
+                    (MkPair [Decl] [List Token] (D_Def name body) rest)
+              }
+          }
+      }
+  }
+
+poly parseDecl = \toks : List Token =>
+  matchList [Token] [Result ParseError (Pair Decl (List Token))] toks
+    (Err [ParseError] [Pair Decl (List Token)] parseError)
+    (\h : Token => \t : List Token =>
+      let tag = tokenTag h in
+      if [Result ParseError (Pair Decl (List Token))]
+        (eqBin tag kwModuleTag)
+        (\u : Bin =>
+          match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
+            | Err e => Err [ParseError] [Pair Decl (List Token)] e
+            | Ok modRes =>
+              let name = fstNameToken modRes in
+              let rest = sndNameToken modRes in
+              Ok [ParseError] [Pair Decl (List Token)]
+                (MkPair [Decl] [List Token] (D_Module name) rest)
+          })
+        (\u : Bin =>
+          if [Result ParseError (Pair Decl (List Token))]
+            (eqBin tag kwImportTag)
+            (\u : Bin =>
+              match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
+                | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                | Ok modRes =>
+                  let modName = fstNameToken modRes in
+                  let afterMod = sndNameToken modRes in
+                  match (expectIdent afterMod) [Result ParseError (Pair Decl (List Token))] {
+                    | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                    | Ok symRes =>
+                      let sym = fstNameToken symRes in
+                      let rest = sndNameToken symRes in
+                      Ok [ParseError] [Pair Decl (List Token)]
+                        (MkPair [Decl] [List Token] (D_Import modName sym) rest)
+                  }
+              })
+            (\u : Bin =>
+              if [Result ParseError (Pair Decl (List Token))]
+                (eqBin tag kwExportTag)
+                (\u : Bin =>
+                  match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
+                    | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                    | Ok expRes =>
+                      let name = fstNameToken expRes in
+                      let rest = sndNameToken expRes in
+                      Ok [ParseError] [Pair Decl (List Token)]
+                        (MkPair [Decl] [List Token] (D_Export name) rest)
+                  })
+                (\u : Bin =>
+                  if [Result ParseError (Pair Decl (List Token))]
+                    (eqBin tag kwTypeTag)
+                    (\u : Bin =>
+                      match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
+                        | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                        | Ok tyRes =>
+                          let name = fstNameToken tyRes in
+                          let afterName = sndNameToken tyRes in
+                          match (skipToTopLevelDecl afterName) [Result ParseError (Pair Decl (List Token))] {
+                            | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                            | Ok rest =>
+                              Ok [ParseError] [Pair Decl (List Token)]
+                                (MkPair [Decl] [List Token] (D_Type name) rest)
+                          }
+                      })
+                    (\u : Bin =>
+                      if [Result ParseError (Pair Decl (List Token))]
+                        (eqBin tag kwDataTag)
+                        (\u : Bin =>
+                          match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
+                            | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                            | Ok datRes =>
+                              let name = fstNameToken datRes in
+                              let afterName = sndNameToken datRes in
+                              match (skipToTopLevelDecl afterName) [Result ParseError (Pair Decl (List Token))] {
+                                | Err e => Err [ParseError] [Pair Decl (List Token)] e
+                                | Ok rest =>
+                                  Ok [ParseError] [Pair Decl (List Token)]
+                                    (MkPair [Decl] [List Token] (D_Data name) rest)
+                              }
+                          })
+                        (\u : Bin =>
+                          if [Result ParseError (Pair Decl (List Token))]
+                            (eqBin tag kwPolyTag)
+                            (\u : Bin =>
+                              matchList [Token] [Result ParseError (Pair Decl (List Token))] t
+                                (Err [ParseError] [Pair Decl (List Token)] parseError)
+                                (\h2 : Token => \t2 : List Token =>
+                                  if [Result ParseError (Pair Decl (List Token))]
+                                    (eqBin (tokenTag h2) kwRecTag)
+                                    (\u : Bin => parseNamedDef t2)
+                                    (\u : Bin => parseNamedDef t)
+                                ))
+                            (\u : Bin =>
+                              if [Result ParseError (Pair Decl (List Token))]
+                                (eqBin tag kwTypedTag)
+                                (\u : Bin => parseNamedDef t)
+                                (\u : Bin =>
+                                  if [Result ParseError (Pair Decl (List Token))]
+                                    (eqBin tag kwUntypedTag)
+                                    (\u : Bin => parseNamedDef t)
+                                    (\u : Bin =>
+                                      if [Result ParseError (Pair Decl (List Token))]
+                                        (eqBin tag kwCombinatorTag)
+                                        (\u : Bin => parseNamedDef t)
+                                        (\u : Bin => Err [ParseError] [Pair Decl (List Token)] parseError)
+                                    ))
+                            ))
+                    ))
+            ))
+    )
+
+poly rec parseProgramAcc = \toks : List Token => \acc : List Decl =>
+  matchList [Token] [Result ParseError (List Decl)] toks
+    (Ok [ParseError] [List Decl] (reverseList [Decl] acc))
+    (\h : Token => \t : List Token =>
+      if [Result ParseError (List Decl)] (eqBin (tokenTag h) eofTag)
+        (\u : Bin => Ok [ParseError] [List Decl] (reverseList [Decl] acc))
+        (\u : Bin =>
+          match (parseDecl toks) [Result ParseError (List Decl)] {
+            | Err e => Err [ParseError] [List Decl] e
+            | Ok declRes =>
+              let decl = fstDeclToken declRes in
+              let rest = sndDeclToken declRes in
+              parseProgramAcc rest (cons [Decl] decl acc)
+          })
+    )
+
+poly parseProgram = \toks : List Token =>
+  parseProgramAcc toks (nil [Decl])

@@ -48,7 +48,19 @@ export T_Hash
 export T_Pipe
 export T_Dot
 export T_Comma
-export T_Keyword
+export T_KwPoly
+export T_KwRec
+export T_KwLet
+export T_KwIn
+export T_KwMatch
+export T_KwModule
+export T_KwImport
+export T_KwExport
+export T_KwTyped
+export T_KwUntyped
+export T_KwCombinator
+export T_KwType
+export T_KwData
 export T_Ident
 export T_Nat
 export T_EOF
@@ -60,6 +72,22 @@ export tokenizeBin
 export tokenizeAcc
 export kwPoly
 export isKeywordPoly
+export keywordWords
+export anyEqWord
+export isKeywordWord
+export keywordTokenFromWordData
+export keywordTokenFromWordType
+export keywordTokenFromWordCombinator
+export keywordTokenFromWordUntyped
+export keywordTokenFromWordTyped
+export keywordTokenFromWordExport
+export keywordTokenFromWordImport
+export keywordTokenFromWordModule
+export keywordTokenFromWordMatch
+export keywordTokenFromWordIn
+export keywordTokenFromWordLet
+export keywordTokenFromWordRec
+export keywordTokenFromWord
 export eqListFast
 export binFromDigitList
 export mapResult
@@ -92,8 +120,10 @@ export isAlphaBin
 export isIdentCharBin
 export consumeIdent
 export consumeDigits
+export consumeString
 export digitValueBin
 export timesTen
+export mapToBin
 
 data Token =
   | T_LParen
@@ -111,7 +141,19 @@ data Token =
   | T_Pipe
   | T_Dot
   | T_Comma
-  | T_Keyword (List Bin)
+  | T_KwPoly
+  | T_KwRec
+  | T_KwLet
+  | T_KwIn
+  | T_KwMatch
+  | T_KwModule
+  | T_KwImport
+  | T_KwExport
+  | T_KwTyped
+  | T_KwUntyped
+  | T_KwCombinator
+  | T_KwType
+  | T_KwData
   | T_Ident (List Bin)
   | T_Nat Bin
   | T_EOF
@@ -133,10 +175,22 @@ poly tokenTag = \tok : Token =>
     | T_Pipe => 13
     | T_Dot => 14
     | T_Comma => 15
-    | T_Keyword str => 16
-    | T_Ident str => 17
-    | T_Nat n => 18
-    | T_EOF => 19
+    | T_KwPoly => 16
+    | T_KwRec => 17
+    | T_KwLet => 18
+    | T_KwIn => 19
+    | T_KwMatch => 20
+    | T_KwModule => 21
+    | T_KwImport => 22
+    | T_KwExport => 23
+    | T_KwTyped => 24
+    | T_KwUntyped => 25
+    | T_KwCombinator => 26
+    | T_KwType => 27
+    | T_KwData => 28
+    | T_Ident str => 29
+    | T_Nat n => 30
+    | T_EOF => 31
   }
 
 poly tokenText = \tok : Token =>
@@ -156,7 +210,19 @@ poly tokenText = \tok : Token =>
     | T_Pipe => nil [Bin]
     | T_Dot => nil [Bin]
     | T_Comma => nil [Bin]
-    | T_Keyword str => str
+    | T_KwPoly => "poly"
+    | T_KwRec => "rec"
+    | T_KwLet => "let"
+    | T_KwIn => "in"
+    | T_KwMatch => "match"
+    | T_KwModule => "module"
+    | T_KwImport => "import"
+    | T_KwExport => "export"
+    | T_KwTyped => "typed"
+    | T_KwUntyped => "untyped"
+    | T_KwCombinator => "combinator"
+    | T_KwType => "type"
+    | T_KwData => "data"
     | T_Ident str => str
     | T_Nat n => nil [Bin]
     | T_EOF => nil [Bin]
@@ -179,7 +245,19 @@ poly tokenNatValue = \tok : Token =>
     | T_Pipe => 0
     | T_Dot => 0
     | T_Comma => 0
-    | T_Keyword str => 0
+    | T_KwPoly => 0
+    | T_KwRec => 0
+    | T_KwLet => 0
+    | T_KwIn => 0
+    | T_KwMatch => 0
+    | T_KwModule => 0
+    | T_KwImport => 0
+    | T_KwExport => 0
+    | T_KwTyped => 0
+    | T_KwUntyped => 0
+    | T_KwCombinator => 0
+    | T_KwType => 0
+    | T_KwData => 0
     | T_Ident str => 0
     | T_Nat n => n
     | T_EOF => 0
@@ -301,6 +379,97 @@ poly rec eqListFast = \a : List Bin => \b : List Bin =>
 poly kwPoly = "poly"
 poly isKeywordPoly = \word : List Bin => eqListFast word kwPoly
 
+poly keywordWords =
+  cons [List Bin] "poly"
+    (cons [List Bin] "rec"
+      (cons [List Bin] "let"
+        (cons [List Bin] "in"
+          (cons [List Bin] "match"
+            (cons [List Bin] "module"
+              (cons [List Bin] "import"
+                (cons [List Bin] "export"
+                  (cons [List Bin] "typed"
+                    (cons [List Bin] "untyped"
+                      (cons [List Bin] "combinator"
+                        (cons [List Bin] "type"
+                          (cons [List Bin] "data"
+                            (nil [List Bin])))))))))))))
+
+poly rec anyEqWord = \word : List Bin => \words : List (List Bin) =>
+  matchList [List Bin] [Bool] words false
+    (\h : List Bin => \t : List (List Bin) =>
+      if [Bool] (eqListFast word h)
+        (\u : Bin => true)
+        (\u : Bin => anyEqWord word t))
+
+poly isKeywordWord = \word : List Bin =>
+  anyEqWord word keywordWords
+
+poly keywordTokenFromWordData = \word : List Bin =>
+  if [Token] (eqListFast word "data")
+    (\u : Bin => T_KwData)
+    (\u : Bin => T_Ident word)
+
+poly keywordTokenFromWordType = \word : List Bin =>
+  if [Token] (eqListFast word "type")
+    (\u : Bin => T_KwType)
+    (\u : Bin => keywordTokenFromWordData word)
+
+poly keywordTokenFromWordCombinator = \word : List Bin =>
+  if [Token] (eqListFast word "combinator")
+    (\u : Bin => T_KwCombinator)
+    (\u : Bin => keywordTokenFromWordType word)
+
+poly keywordTokenFromWordUntyped = \word : List Bin =>
+  if [Token] (eqListFast word "untyped")
+    (\u : Bin => T_KwUntyped)
+    (\u : Bin => keywordTokenFromWordCombinator word)
+
+poly keywordTokenFromWordTyped = \word : List Bin =>
+  if [Token] (eqListFast word "typed")
+    (\u : Bin => T_KwTyped)
+    (\u : Bin => keywordTokenFromWordUntyped word)
+
+poly keywordTokenFromWordExport = \word : List Bin =>
+  if [Token] (eqListFast word "export")
+    (\u : Bin => T_KwExport)
+    (\u : Bin => keywordTokenFromWordTyped word)
+
+poly keywordTokenFromWordImport = \word : List Bin =>
+  if [Token] (eqListFast word "import")
+    (\u : Bin => T_KwImport)
+    (\u : Bin => keywordTokenFromWordExport word)
+
+poly keywordTokenFromWordModule = \word : List Bin =>
+  if [Token] (eqListFast word "module")
+    (\u : Bin => T_KwModule)
+    (\u : Bin => keywordTokenFromWordImport word)
+
+poly keywordTokenFromWordMatch = \word : List Bin =>
+  if [Token] (eqListFast word "match")
+    (\u : Bin => T_KwMatch)
+    (\u : Bin => keywordTokenFromWordModule word)
+
+poly keywordTokenFromWordIn = \word : List Bin =>
+  if [Token] (eqListFast word "in")
+    (\u : Bin => T_KwIn)
+    (\u : Bin => keywordTokenFromWordMatch word)
+
+poly keywordTokenFromWordLet = \word : List Bin =>
+  if [Token] (eqListFast word "let")
+    (\u : Bin => T_KwLet)
+    (\u : Bin => keywordTokenFromWordIn word)
+
+poly keywordTokenFromWordRec = \word : List Bin =>
+  if [Token] (eqListFast word "rec")
+    (\u : Bin => T_KwRec)
+    (\u : Bin => keywordTokenFromWordLet word)
+
+poly keywordTokenFromWord = \word : List Bin =>
+  if [Token] (eqListFast word "poly")
+    (\u : Bin => T_KwPoly)
+    (\u : Bin => keywordTokenFromWordRec word)
+
 poly digitValueBin = \d : Bin =>
   if [Bin] (eqBin d 48) (\u : Bin => 0)
   (\u : Bin => if [Bin] (eqBin d 49) (\u : Bin => 1)
@@ -382,6 +551,17 @@ poly rec consumeDigits = \acc : List Bin => \input : List Bin =>
          (\u : Bin => MkPair [List Bin] [List Bin] (reverse [Bin] acc) input)
     )
 
+poly rec consumeString = \acc : List Bin => \input : List Bin =>
+  matchList [Bin] [Result ParseError (Pair (List Bin) (List Bin))] input
+    (Err [ParseError] [Pair (List Bin) (List Bin)] (MkParseError 0 (nil [Bin])))
+    (\h : Bin => \t : List Bin =>
+      if [Result ParseError (Pair (List Bin) (List Bin))] (eqBin h 34)
+        (\u : Bin =>
+          Ok [ParseError] [Pair (List Bin) (List Bin)]
+            (MkPair [List Bin] [List Bin] (reverse [Bin] acc) t))
+        (\u : Bin => consumeString (cons [Bin] h acc) t)
+    )
+
 poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
   matchList [Bin] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
@@ -409,11 +589,7 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
               (\u : Bin =>
                 match (consumeIdent (cons [Bin] c (nil [Bin])) cs) [Result ParseError (List Token)] {
                   | MkPair taken remaining =>
-                      let tok =
-                        if [Token] (isKeywordPoly taken)
-                          (\u : Bin => T_Keyword taken)
-                          (\u : Bin => T_Ident taken)
-                      in
+                      let tok = keywordTokenFromWord taken in
                       tokenizeAcc remaining (cons [Token] tok accRev)
                 })
 
@@ -427,9 +603,20 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
                     })
 
                   (\u : Bin =>
-                    if [Result ParseError (List Token)] (eqBin c bin_eq)
-                      (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
-                      (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
+                    if [Result ParseError (List Token)] (eqBin c 34)
+                      (\u : Bin =>
+                        match (consumeString (nil [Bin]) cs) [Result ParseError (List Token)] {
+                          | Err e => Err [ParseError] [List Token] e
+                          | Ok strRes =>
+                              let str = fst [List Bin] [List Bin] strRes in
+                              let remaining = snd [List Bin] [List Bin] strRes in
+                              tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)
+                        })
+                      (\u : Bin =>
+                        if [Result ParseError (List Token)] (eqBin c bin_eq)
+                          (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
+                          (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
+                      )
                   ))
 
         | Some tok =>

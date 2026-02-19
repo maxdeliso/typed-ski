@@ -27,7 +27,19 @@ import Lexer T_Hash
 import Lexer T_Pipe
 import Lexer T_Dot
 import Lexer T_Comma
-import Lexer T_Keyword
+import Lexer T_KwPoly
+import Lexer T_KwRec
+import Lexer T_KwLet
+import Lexer T_KwIn
+import Lexer T_KwMatch
+import Lexer T_KwModule
+import Lexer T_KwImport
+import Lexer T_KwExport
+import Lexer T_KwTyped
+import Lexer T_KwUntyped
+import Lexer T_KwCombinator
+import Lexer T_KwType
+import Lexer T_KwData
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
@@ -51,7 +63,19 @@ poly isNat123Token = \tok : Token =>
     | T_Pipe => false
     | T_Dot => false
     | T_Comma => false
-    | T_Keyword str => false
+    | T_KwPoly => false
+    | T_KwRec => false
+    | T_KwLet => false
+    | T_KwIn => false
+    | T_KwMatch => false
+    | T_KwModule => false
+    | T_KwImport => false
+    | T_KwExport => false
+    | T_KwTyped => false
+    | T_KwUntyped => false
+    | T_KwCombinator => false
+    | T_KwType => false
+    | T_KwData => false
     | T_Ident str => false
     | T_Nat n => eqBin n 123
     | T_EOF => false

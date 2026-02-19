@@ -301,7 +301,7 @@ Deno.test("tokenize - structural lexer validations", async (t) => {
     const result = await runTriplangPredicateTest("testLexIdentVsKw.trip");
     assert.isTrue(
       result,
-      "Expected `abc` => T_Ident and `poly` => T_Keyword",
+      "Expected `abc` => T_Ident and `poly` => T_KwPoly",
     );
   });
 
@@ -315,6 +315,14 @@ Deno.test("tokenize - structural lexer validations", async (t) => {
     assert.isTrue(
       result,
       "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
+    );
+  });
+
+  await t.step("recognizes core parser keywords", async () => {
+    const result = await runTriplangPredicateTest("testLexCoreKeywords.trip");
+    assert.isTrue(
+      result,
+      "Expected let/match/in to tokenize as dedicated keyword tokens",
     );
   });
 });

@@ -16,7 +16,7 @@ import Prelude Pair
 import Prelude fst
 import Prelude snd
 import Lexer Token
-import Lexer T_Keyword
+import Lexer T_KwMatch
 import Lexer T_Ident
 import Lexer T_LBracket
 import Lexer T_RBracket
@@ -82,7 +82,7 @@ poly main =
     let t15 = cons [Token] (T_Ident "List") t14 in
     let t16 = cons [Token] T_LBracket t15 in
     let t17 = cons [Token] (T_Ident "res") t16 in
-    cons [Token] (T_Keyword "match") t17
+    cons [Token] T_KwMatch t17
   in
   match (parseExpr input) [Bool] {
     | Err e => false

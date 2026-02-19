@@ -16,7 +16,8 @@ import Prelude Pair
 import Prelude fst
 import Prelude snd
 import Lexer Token
-import Lexer T_Keyword
+import Lexer T_KwLet
+import Lexer T_KwIn
 import Lexer T_Ident
 import Lexer T_Colon
 import Lexer T_Eq
@@ -46,13 +47,13 @@ poly isVarNamed = \expr : Expr => \name : List Bin =>
 
 poly main =
   let input =
-    cons [Token] (T_Keyword "let")
+    cons [Token] T_KwLet
       (cons [Token] (T_Ident "x")
         (cons [Token] T_Colon
           (cons [Token] (T_Ident "Bin")
             (cons [Token] T_Eq
               (cons [Token] (T_Nat 1)
-                (cons [Token] (T_Keyword "in")
+                (cons [Token] T_KwIn
                   (cons [Token] (T_Ident "x")
                     (cons [Token] T_EOF (nil [Token])))))))))
   in

@@ -5,6 +5,7 @@ import Prelude true
 import Prelude false
 import Prelude if
 import Prelude Bin
+import Prelude eqBin
 import Prelude List
 import Prelude matchList
 import Prelude Result
@@ -12,74 +13,21 @@ import Prelude Ok
 import Prelude Err
 import Lexer tokenizeBin
 import Lexer Token
-import Lexer T_LParen
-import Lexer T_RParen
-import Lexer T_LBrace
-import Lexer T_RBrace
-import Lexer T_LBracket
-import Lexer T_RBracket
-import Lexer T_Backslash
-import Lexer T_Arrow
-import Lexer T_FatArrow
-import Lexer T_Eq
-import Lexer T_Colon
-import Lexer T_Hash
-import Lexer T_Pipe
-import Lexer T_Dot
-import Lexer T_Comma
-import Lexer T_Keyword
+import Lexer tokenTag
+import Lexer tokenText
+import Lexer T_KwPoly
 import Lexer T_Ident
-import Lexer T_Nat
-import Lexer T_EOF
 import Lexer eqListFast
 
 export main
 
 poly isIdentAbcToken = \tok : Token =>
-  match tok [Bool] {
-    | T_LParen => false
-    | T_RParen => false
-    | T_LBrace => false
-    | T_RBrace => false
-    | T_LBracket => false
-    | T_RBracket => false
-    | T_Backslash => false
-    | T_Arrow => false
-    | T_FatArrow => false
-    | T_Eq => false
-    | T_Colon => false
-    | T_Hash => false
-    | T_Pipe => false
-    | T_Dot => false
-    | T_Comma => false
-    | T_Keyword str => false
-    | T_Ident str => eqListFast str "abc"
-    | T_Nat n => false
-    | T_EOF => false
-  }
+  if [Bool] (eqBin (tokenTag tok) (tokenTag (T_Ident "x")))
+    (\u : Bin => eqListFast (tokenText tok) "abc")
+    (\u : Bin => false)
 
 poly isKeywordPolyToken = \tok : Token =>
-  match tok [Bool] {
-    | T_LParen => false
-    | T_RParen => false
-    | T_LBrace => false
-    | T_RBrace => false
-    | T_LBracket => false
-    | T_RBracket => false
-    | T_Backslash => false
-    | T_Arrow => false
-    | T_FatArrow => false
-    | T_Eq => false
-    | T_Colon => false
-    | T_Hash => false
-    | T_Pipe => false
-    | T_Dot => false
-    | T_Comma => false
-    | T_Keyword str => eqListFast str "poly"
-    | T_Ident str => false
-    | T_Nat n => false
-    | T_EOF => false
-  }
+  eqBin (tokenTag tok) (tokenTag T_KwPoly)
 
 poly main =
   let testIdent =

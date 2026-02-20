@@ -1,0 +1,5 @@
+# Keep TypeScript entrypoints in source control, ignore compiled artifacts.
+thanatos
+thanatos-test
+thanatos-debug
+tripc

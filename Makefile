@@ -1,118 +1,133 @@
-.PHONY: setup build test coverage format format-check validate print-wasm start help
+.PHONY: build test coverage build-wasm build-native print-wasm format format-check lint dist format-c-internal format-nix-internal format-check-nix-internal thanatos-check
 .DEFAULT_GOAL := help
 
+# Configuration
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
 PORT ?= 8080
+C_WARN_FLAGS := -Wall -Wextra -Wpedantic -Wstrict-prototypes -Werror
+C_COMMON_FLAGS := $(C_WARN_FLAGS) -pthread -std=c11
+C_RELEASE_FLAGS := -O3
+C_DEBUG_FLAGS := -g -O1 -fsanitize=address -fno-omit-frame-pointer
+
+# Nix development shell wrapper
+NIX_RUN := nix $(NIX_FLAGS) develop --command $(MAKE)
 
 help:
-	@echo "Available targets:"
-	@echo "  setup        - Prepare this machine by installing necessary tools"
-	@echo "  build        - Compile the artifacts"
+	@echo "Available targets (automatically wrapped in nix develop):"
+	@echo "  build        - Compile all artifacts"
 	@echo "  test         - Run the test suite"
-	@echo "  coverage     - Run tests with coverage and generate reports"
+	@echo "  coverage     - Generate coverage.lcov"
+	@echo "  build-wasm   - Build the WASM module from C"
+	@echo "  build-native - Build the optimized parallel binary from C"
+	@echo "  thanatos-check - Run native thanatos-test smoke check"
+	@echo "  print-wasm   - Print WASM artifact details"
 	@echo "  format       - Format code"
-	@echo "  format-check - Check code formatting"
-	@echo "  validate     - Validate generated code matches source (arena header, version, etc.)"
-	@echo "  print-wasm   - Print the generated WASM as WAT (WebAssembly Text format)"
-	@echo "  start        - Start the profiling demo server (PORT=8080)"
+	@echo "  start        - Start the profiling demo server (PORT=$(PORT))"
 
-setup: ## Prepare this machine by installing necessary tools
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed or not in PATH."; \
-		echo "Install Nix from: https://nixos.org/download.html"; \
-		exit 1; \
-	fi
+# Public entry points
+build:
+	$(NIX_RUN) build-internal
 
-build: ## Compile the artifacts
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
-	fi
+test:
+	$(NIX_RUN) test-internal
+
+coverage:
+	$(NIX_RUN) coverage-internal
+
+build-wasm:
+	$(NIX_RUN) build-wasm-internal
+
+build-native:
+	$(NIX_RUN) build-native-internal
+
+thanatos-check:
+	$(NIX_RUN) thanatos-check-internal
+
+print-wasm:
+	$(NIX_RUN) print-wasm-internal
+
+format:
+	$(NIX_RUN) format-internal
+
+format-check:
+	$(NIX_RUN) format-check-internal
+
+start:
+	$(NIX_RUN) start-internal
+
+# Internal targets (assume they are running inside nix develop)
+build-internal: build-wasm-internal build-native-internal
 	nix $(NIX_FLAGS) run .#verify-version
-	nix $(NIX_FLAGS) run .#generate-cargo
 	nix $(NIX_FLAGS) run .#generate-version-ts
-	nix $(NIX_FLAGS) run .#generate-arena-header
-	nix $(NIX_FLAGS) build
-	@if [ ! -d result/wasm ] || [ ! -f result/wasm/debug.wasm ] || [ ! -f result/wasm/release.wasm ]; then \
-		echo "Error: WASM files not found in result/wasm/. Build may have failed."; \
-		exit 1; \
-	fi
-	rm -rf wasm
-	ln -s result/wasm wasm
-	nix $(NIX_FLAGS) develop --command bash -c "deno task dist"
-	@if [ ! -f dist/tripc.js ] || [ ! -f dist/tripc.min.js ] || [ ! -f dist/tripc ]; then \
-		echo "Error: Required dist files not found"; \
-		exit 1; \
-	fi
+	deno run -A scripts/generate-arena-header-c.ts
+	deno task dist
 
-print-wasm: ## Print the generated WASM as WAT (WebAssembly Text format)
-	@if [ ! -f result/wasm/release.wasm ]; then \
-		echo "Error: result/wasm/release.wasm not found. Run 'make build' first."; \
-		exit 1; \
-	fi
-	nix $(NIX_FLAGS) develop --command bash -c "wasm2wat --enable-threads result/wasm/release.wasm"
-
-test: ## Run the test suite
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@if [ ! -f lib/evaluator/arenaHeader.generated.ts ]; then \
-		echo "Generating arena header before tests..."; \
-		nix $(NIX_FLAGS) run .#generate-arena-header; \
-	fi
-	@if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then \
-		echo "Error: WASM files not found. Run 'make build' first."; \
-		exit 1; \
-	fi
-	nix $(NIX_FLAGS) run .#test-rust
-	$(MAKE) format-check
+test-internal: build-wasm-internal
+	deno run -A scripts/generate-arena-header-c.ts
+	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
 	nix $(NIX_FLAGS) run .#test
 
-coverage: ## Run tests with coverage and generate reports
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@if [ ! -f wasm/debug.wasm ] || [ ! -f wasm/release.wasm ]; then \
-		echo "Error: WASM files not found. Run 'make build' first."; \
-		exit 1; \
-	fi
-	rm -rf coverage coverage.lcov
-	nix $(NIX_FLAGS) develop --command deno task test:coverage
-	nix $(NIX_FLAGS) develop --command deno task coverage:lcov
-	nix $(NIX_FLAGS) develop --command deno task coverage:report
+coverage-internal: build-wasm-internal
+	deno run -A scripts/generate-arena-header-c.ts
+	deno task test:coverage
+	deno task coverage:lcov
 
-format:
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
-	fi
+build-wasm-internal:
+	mkdir -p wasm
+	rm -f wasm/debug.wasm
+	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 -O3 -nostdlib \
+		-Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
+		-Wl,--max-memory=4294967296 \
+		-matomics -mbulk-memory -mmutable-globals \
+		-isystem $$WASM_RESOURCE_DIR/include \
+		-o wasm/release.wasm c/arena.c
+
+build-native-internal:
+	mkdir -p bin
+	$$CC $(C_RELEASE_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos c/arena.c c/main.c
+	$$CC $(C_RELEASE_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-test c/arena.c c/thanatos.c c/performance_test.c
+
+debug-native-internal:
+	mkdir -p bin
+	$$CC $(C_DEBUG_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-debug c/arena.c c/thanatos.c c/performance_test.c
+
+thanatos-check-internal: build-native-internal
+	TSKI_PERF_KI_ONLY=1 timeout 30s ./bin/thanatos-test 2 65536 16 4 512
+
+debug-native:
+	$(NIX_RUN) debug-native-internal
+
+format-internal:
 	nix $(NIX_FLAGS) run .#fmt
+	$(MAKE) format-c-internal
+	$(MAKE) format-nix-internal
 
-format-check:
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
-	fi
+format-c-internal:
+	clang-format -i c/*.c c/*.h
+
+format-nix-internal:
+	nixpkgs-fmt flake.nix
+
+format-check-internal:
 	nix $(NIX_FLAGS) run .#fmt -- --check
+	$(MAKE) format-check-nix-internal
 
-validate: ## Validate generated code matches source (arena header, version, etc.)
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	nix $(NIX_FLAGS) run .#verify-version
-	nix $(NIX_FLAGS) run .#validate-arena-header
+format-check-nix-internal:
+	nixpkgs-fmt --check flake.nix
 
-start: ## Start the profiling demo server
-	@if ! command -v nix >/dev/null 2>&1; then \
-		echo "Error: Nix is not installed. Run 'make setup' first."; \
-		exit 1; \
+start-internal:
+	deno run --allow-net --allow-read --allow-env --allow-run server/serveWorkbench.ts $(PORT)
+
+print-wasm-internal: build-wasm-internal
+	@echo "=== Local WASM artifacts ==="
+	@ls -lh wasm/release.wasm
+	@echo ""
+	@echo "=== release.wasm section headers ==="
+	@if command -v wasm-objdump >/dev/null 2>&1; then \
+		wasm-objdump -h wasm/release.wasm; \
+	elif command -v llvm-objdump >/dev/null 2>&1; then \
+		llvm-objdump -h wasm/release.wasm; \
+	else \
+		echo "No wasm objdump tool found in PATH"; \
 	fi
-	@if [ ! -f lib/shared/version.generated.ts ]; then \
-		echo "Error: Generated source files not found. Run 'make build' first."; \
-		exit 1; \
-	fi
-	nix $(NIX_FLAGS) develop --command deno run --allow-net --allow-read --allow-env --allow-run server/serveWorkbench.ts $(PORT)

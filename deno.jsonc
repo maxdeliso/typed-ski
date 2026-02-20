@@ -21,7 +21,6 @@
       "lib/evaluator/arenaHeader.generated.ts"
     ],
     "exclude": [
-      "!wasm/debug.wasm",
       "!wasm/release.wasm",
       "codecov",
       "codecov.SHA256SUM",

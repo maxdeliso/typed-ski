@@ -1,7 +1,7 @@
 import { assertEquals } from "std/assert";
 import { compileToObjectFileString } from "../lib/compiler/index.ts";
 import { deserializeTripCObject } from "../lib/compiler/objectFile.ts";
-import { arenaEvaluator } from "../lib/evaluator/skiEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
@@ -53,11 +53,16 @@ Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
   ], true);
 
   const skiExpr = parseSKI(skiExpression);
-  const evaluated = arenaEvaluator.reduce(skiExpr);
-  const decoded = UnChurchNumber(evaluated);
-  assertEquals(
-    decoded,
-    8n,
-    "not/and/or/pred/sub/lte/gte expressions should sum to 8",
-  );
+  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  try {
+    const evaluated = await evaluator.reduceAsync(skiExpr);
+    const decoded = await UnChurchNumber(evaluated, evaluator);
+    assertEquals(
+      decoded,
+      8n,
+      "not/and/or/pred/sub/lte/gte expressions should sum to 8",
+    );
+  } finally {
+    evaluator.terminate();
+  }
 });

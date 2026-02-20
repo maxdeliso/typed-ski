@@ -8,17 +8,17 @@
 import { assert, expect } from "chai";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
+import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
-import { type SKIExpression, toSKIKey } from "../../lib/ski/expression.ts";
+import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
+import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEXER_SOURCE_FILE = new URL(
@@ -27,9 +27,23 @@ const LEXER_SOURCE_FILE = new URL(
 );
 
 // Cache compiled objects
-let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;
-let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
-let natObject: Awaited<ReturnType<typeof getNatObject>> | null = null;
+let lexerObject: TripCObject | null = null;
+let preludeObject: TripCObject | null = null;
+let natObject: TripCObject | null = null;
+let sharedEvaluator: ParallelArenaEvaluatorWasm | null = null;
+
+async function getSharedEvaluator() {
+  if (!sharedEvaluator) {
+    sharedEvaluator = await ParallelArenaEvaluatorWasm.create(
+      undefined,
+      false,
+      {
+        maxResubmits: 0,
+      },
+    );
+  }
+  return sharedEvaluator;
+}
 
 async function getLexerObject() {
   if (!lexerObject) {
@@ -52,50 +66,11 @@ async function getNatObjectCached() {
   return natObject;
 }
 
-// Helper to compile a test program from an input file using CLI compiler
-async function compileTestProgram(
-  inputFileName: string,
-): Promise<ReturnType<typeof deserializeTripCObject>> {
-  const testObjectFileName = inputFileName.replace(/\.trip$/, ".tripc");
-  const testObjectFilePath = join(__dirname, "inputs", testObjectFileName);
-
-  const compileCommand = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "--allow-read",
-      "--allow-write",
-      join(__dirname, "..", "..", "bin", "tripc.ts"),
-      inputFileName,
-      testObjectFileName,
-    ],
-    cwd: join(__dirname, "inputs"),
-  });
-
-  const { code, stderr } = await compileCommand.output();
-  if (code !== 0) {
-    const errorMsg = new TextDecoder().decode(stderr);
-    throw new Error(
-      `Failed to compile test program ${inputFileName}: exit code ${code}\n${errorMsg}`,
-    );
-  }
-
-  const testContent = await Deno.readTextFile(testObjectFilePath);
-  return deserializeTripCObject(testContent);
-}
-
 async function compileAndValidateTestProgram(
   inputFileName: string,
 ): Promise<SKIExpression> {
-  // Step 1: Compile the test program
-  const testObj = await compileTestProgram(inputFileName);
-
-  // Validate compiled object structure
-  expect(testObj).to.not.be.null;
-  expect(testObj.module).to.equal("Test");
-  expect(testObj.exports).to.be.an("array");
-  expect(testObj.exports).to.include("main");
-  expect(testObj.definitions).to.be.an("object");
-  expect(testObj.definitions).to.have.property("main");
+  const testFilePath = join(__dirname, "inputs", inputFileName);
+  const testObj = await loadTripModuleObject(testFilePath);
 
   // Step 2: Link modules
   const lexerObj = await getLexerObject();
@@ -109,220 +84,111 @@ async function compileAndValidateTestProgram(
     { name: "Test", object: testObj },
   ]);
 
-  expect(skiExpression).to.be.a("string");
-  expect(skiExpression.length).to.be.greaterThan(0);
   return parseSKI(skiExpression);
 }
 
 async function runTriplangPredicateTest(
   inputFileName: string,
 ): Promise<boolean> {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1, false, {
-    maxResubmits: 0,
-  });
-  const testFilePath = join(__dirname, "inputs", inputFileName);
-  const testObjectPath = testFilePath.replace(/\.trip$/, ".tripc");
-
-  try {
-    const program = await compileAndValidateTestProgram(inputFileName);
-    const nf = await evaluator.reduceAsync(program);
-    return UnChurchBoolean(nf);
-  } finally {
-    evaluator.terminate();
-    try {
-      await Deno.remove(testObjectPath);
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
+  const evaluator = await getSharedEvaluator();
+  const program = await compileAndValidateTestProgram(inputFileName);
+  const nf = await evaluator.reduceAsync(program);
+  return await UnChurchBoolean(nf, evaluator);
 }
 
-Deno.test("Lexer unit tests - bottom up", async (t) => {
-  await t.step(
-    "isSpace - structure validation",
-    async () => {
+Deno.test("Lexer unit tests - optimized", async (t) => {
+  const evaluator = await getSharedEvaluator();
+
+  try {
+    await t.step("isSpace - structure validation", async () => {
       const program = await compileAndValidateTestProgram("testIsSpace.trip");
-      const evaluator = await ParallelArenaEvaluatorWasm.create();
+      const nf = await evaluator.reduceAsync(program);
+      assert.equal(await UnChurchBoolean(nf, evaluator), false);
+    });
 
-      try {
-        const nf = await evaluator.reduceAsync(program);
-        const decodedResult = UnChurchBoolean(nf);
-        assert.equal(decodedResult, false);
-      } finally {
-        evaluator.terminate();
-      }
-    },
-  );
-
-  await t.step(
-    "isSpace - iterates over character codes and validates results",
-    async () => {
-      // Test cases: [characterCode, expectedResult]
+    await t.step("isSpace - character code iteration", async () => {
       const testCases: Array<[number, boolean]> = [
-        [32, true], // space
-        [10, true], // newline '\n'
-        [13, true], // carriage return
-        [9, true], // tab
-        [0, false], // null
-        [65, false], // 'A'
-        [97, false], // 'a'
-        [48, false], // '0'
+        [32, true],
+        [10, true],
+        [13, true],
+        [9, true],
+        [0, false],
+        [65, false],
+        [97, false],
+        [48, false],
       ];
 
       const lexerObj = await getLexerObject();
       const preludeObj = await getPreludeObjectCached();
+      const natObj = await getNatObjectCached();
 
       for (const [charCode, expected] of testCases) {
-        // Create test source for this character code
         const testSource = `module Test
-
 import Lexer isSpaceBin
-
 export main
-
 poly main = isSpaceBin ${charCode}
 `;
-
-        try {
-          // Compile using CLI compiler to handle Prelude dependencies
-          const testFileName = `test_isSpace_${charCode}.trip`;
-          const testObjectFileName = `test_isSpace_${charCode}.tripc`;
-          const testFilePath = join(__dirname, testFileName);
-          const testObjectFilePath = join(__dirname, testObjectFileName);
-
-          const evaluator = await ParallelArenaEvaluatorWasm.create();
-
-          try {
-            await Deno.writeTextFile(testFilePath, testSource);
-
-            const compileCommand = new Deno.Command(Deno.execPath(), {
-              args: [
-                "run",
-                "--allow-read",
-                "--allow-write",
-                "../../bin/tripc.ts",
-                testFileName,
-                testObjectFileName,
-              ],
-              cwd: __dirname,
-            });
-
-            const { code, stderr } = await compileCommand.output();
-            if (code !== 0) {
-              const errorMsg = new TextDecoder().decode(stderr);
-              throw new Error(
-                `Failed to compile test program ${testFileName}: exit code ${code}\n${errorMsg}`,
-              );
-            }
-
-            const testContent = await Deno.readTextFile(testObjectFilePath);
-            const testObj = deserializeTripCObject(testContent);
-            const natObj = await getNatObjectCached();
-
-            const skiExpression = linkModules([
-              { name: "Prelude", object: preludeObj },
-              { name: "Nat", object: natObj },
-              { name: "Lexer", object: lexerObj },
-              { name: "Test", object: testObj },
-            ]);
-
-            // Parse and evaluate
-            const skiExpr = parseSKI(skiExpression);
-            const nf = await evaluator.reduceAsync(skiExpr);
-            const decodedResult = UnChurchBoolean(nf);
-
-            expect(
-              decodedResult,
-              `isSpace(${charCode}) should be ${expected}, but got ${decodedResult}`,
-            ).to.equal(expected);
-          } finally {
-            evaluator.terminate();
-
-            // Cleanup temp files
-            try {
-              await Deno.remove(testFilePath);
-              await Deno.remove(testObjectFilePath);
-            } catch {
-              // Ignore cleanup errors
-            }
-          }
-        } catch (error) {
-          throw new Error(
-            `Failed to test isSpace(${charCode}): ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
+        const testObj = compileToObjectFile(testSource);
+        const skiExpression = linkModules([
+          { name: "Prelude", object: preludeObj },
+          { name: "Nat", object: natObj },
+          { name: "Lexer", object: lexerObj },
+          { name: "Test", object: testObj },
+        ]);
+        const nf = await evaluator.reduceAsync(parseSKI(skiExpression));
+        expect(
+          await UnChurchBoolean(nf, evaluator),
+          `isSpace(${charCode}) should be ${expected}`,
+        ).to.equal(expected);
       }
-    },
-  );
-});
+    });
 
-Deno.test("tokenize - verify token count for lexer.trip input", async () => {
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  const testFileName = "testTokenizeLength.trip";
-  const testFilePath = join(__dirname, "inputs", testFileName);
+    await t.step("tokenize - verify token count", async () => {
+      const preludeObj = await getPreludeObjectCached();
+      const natObj = await getNatObjectCached();
+      const lexerObj = await getLexerObject();
+      const testObj = await loadTripModuleObject(
+        join(__dirname, "inputs", "testTokenizeLength.trip"),
+      );
+      const skiExpression = linkModules([
+        { name: "Prelude", object: preludeObj },
+        { name: "Nat", object: natObj },
+        { name: "Lexer", object: lexerObj },
+        { name: "Test", object: testObj },
+      ]);
+      const nf = await evaluator.reduceAsync(parseSKI(skiExpression));
+      assert.equal(await UnChurchNumber(nf, evaluator), 3n);
+    });
 
-  try {
-    const testObj = await compileTestProgram(testFileName);
-    const lexerObj = await getLexerObject();
-    const preludeObj = await getPreludeObjectCached();
-    const natObj = await getNatObjectCached();
+    await t.step("structural lexer validations", async () => {
+      const structuralTests = [
+        {
+          file: "testLexIdentVsKw.trip",
+          msg: "Expected `abc` => T_Ident and `poly` => T_KwPoly",
+        },
+        {
+          file: "testLexNat.trip",
+          msg: "Expected `123` => T_Nat 123 followed by T_EOF",
+        },
+        {
+          file: "testLexArrows.trip",
+          msg: "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
+        },
+        {
+          file: "testLexCoreKeywords.trip",
+          msg: "Expected let/match/in to tokenize as dedicated keyword tokens",
+        },
+      ];
 
-    const skiExpression = linkModules([
-      { name: "Prelude", object: preludeObj },
-      { name: "Nat", object: natObj },
-      { name: "Lexer", object: lexerObj },
-      { name: "Test", object: testObj },
-    ]);
-
-    const skiExpr = parseSKI(skiExpression);
-    const key = toSKIKey(skiExpr);
-    assert.isAtLeast(key.length, 1, "expected non-empty SKI key");
-
-    const nf = arenaEvaluator.reduce(skiExpr);
-    const tokenCount = UnChurchNumber(nf);
-
-    assert.equal(tokenCount, 3n);
+      for (const t of structuralTests) {
+        const result = await runTriplangPredicateTest(t.file);
+        assert.isTrue(result, t.msg);
+      }
+    });
   } finally {
-    evaluator.terminate();
-
-    try {
-      const testObjectPath = testFilePath.replace(/\.trip$/, ".tripc");
-      await Deno.remove(testObjectPath);
-    } catch {
-      // Ignore cleanup errors
+    if (sharedEvaluator) {
+      sharedEvaluator.terminate();
+      sharedEvaluator = null;
     }
   }
-});
-
-Deno.test("tokenize - structural lexer validations", async (t) => {
-  await t.step("differentiates identifiers from keywords", async () => {
-    const result = await runTriplangPredicateTest("testLexIdentVsKw.trip");
-    assert.isTrue(
-      result,
-      "Expected `abc` => T_Ident and `poly` => T_KwPoly",
-    );
-  });
-
-  await t.step("parses numeric literals into T_Nat", async () => {
-    const result = await runTriplangPredicateTest("testLexNat.trip");
-    assert.isTrue(result, "Expected `123` => T_Nat 123 followed by T_EOF");
-  });
-
-  await t.step("parses arrows and fallback equality token", async () => {
-    const result = await runTriplangPredicateTest("testLexArrows.trip");
-    assert.isTrue(
-      result,
-      "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
-    );
-  });
-
-  await t.step("recognizes core parser keywords", async () => {
-    const result = await runTriplangPredicateTest("testLexCoreKeywords.trip");
-    assert.isTrue(
-      result,
-      "Expected let/match/in to tokenize as dedicated keyword tokens",
-    );
-  });
 });

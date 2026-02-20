@@ -6,10 +6,12 @@ import { getNatObject } from "../../lib/nat.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import type { Evaluator } from "../../lib/evaluator/evaluator.ts";
 
 interface TripHarnessOptions {
   includePrelude?: boolean;
   includeNat?: boolean;
+  evaluator?: Evaluator;
 }
 
 interface TripIoOptions extends TripHarnessOptions {
@@ -22,6 +24,7 @@ interface TripIoOptions extends TripHarnessOptions {
 interface TripIoResult {
   result: SKIExpression;
   stdout: Uint8Array;
+  evaluator: Evaluator;
 }
 
 async function compileAndLink(
@@ -50,7 +53,11 @@ export async function evaluateTrip(
 ): Promise<SKIExpression> {
   const skiExpression = await compileAndLink(source, options);
   const skiExpr = parseSKI(skiExpression);
-  return arenaEvaluator.reduce(skiExpr);
+  const evalToUse = options.evaluator ?? arenaEvaluator;
+  if (evalToUse.reduceAsync) {
+    return await evalToUse.reduceAsync(skiExpr);
+  }
+  return evalToUse.reduce(skiExpr);
 }
 
 export async function evaluateTripWithIo(
@@ -63,14 +70,16 @@ export async function evaluateTripWithIo(
   const evaluator = await ParallelArenaEvaluatorWasm.create(1, verbose);
 
   try {
-    const resultPromise = evaluator.reduceAsync(skiExpr, options.stepLimit);
+    const resultPromise = evaluator.reduceAsync!(skiExpr, options.stepLimit);
     if (options.stdin && options.stdin.length > 0) {
       await evaluator.writeStdin(options.stdin);
     }
     const result = await resultPromise;
     const stdout = evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
-    return { result, stdout };
-  } finally {
+    return { result, stdout, evaluator };
+  } catch (err) {
     evaluator.terminate();
+    throw err;
   }
+  // Note: Caller is responsible for terminating evaluator in TripIoResult
 }

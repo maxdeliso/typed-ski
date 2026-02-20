@@ -25,6 +25,7 @@ import {
 } from "../ski/terminal.ts";
 import { ConversionError } from "./conversionError.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
+import { ChurchN } from "../ski/church.ts";
 
 type CoreTerm =
   | { kind: "idx"; index: number }
@@ -38,8 +39,10 @@ interface Res {
 }
 
 const PSI = SPrime;
-const BETA = BPrime;
 const GAMMA = CPrime;
+
+// sbi = S B I
+const SBI = applyMany(S, B, I);
 
 const terminalFromSym = (sym: string): SKIExpression => {
   switch (sym) {
@@ -128,20 +131,57 @@ const selectOuter = (arity: number): SKIExpression => {
 
 const bulkCache = new Map<string, SKIExpression>();
 
+const getBitsLog = (n: number): number[] => {
+  const bits: number[] = [];
+  let q = n;
+  while (q > 0) {
+    bits.push(q % 2);
+    q = Math.floor(q / 2);
+  }
+  return bits;
+};
+
 const emitBulk = (kind: "S" | "B" | "C", depth: number): SKIExpression => {
   if (depth < 1) {
     throw new ConversionError("bulk combinator depth must be >= 1");
   }
+  if (depth === 1) {
+    return terminalFromSym(kind);
+  }
   const cacheKey = `${kind}:${depth}`;
   const cached = bulkCache.get(cacheKey);
   if (cached) return cached;
-  let expr: SKIExpression = kind === "S" ? S : kind === "B" ? B : C;
-  for (let i = 2; i <= depth; i++) {
-    expr = apply(
-      kind === "S" ? PSI : kind === "B" ? BETA : GAMMA,
-      expr,
-    );
+
+  // bits n = [LSB, ..., MSB]. Drop the MSB.
+  const bits = getBitsLog(depth).slice(0, -1);
+
+  if (kind === "B") {
+    const bbSbi = applyMany(B, apply(B, B), SBI);
+    const branches = [SBI, bbSbi] as const;
+
+    let expr: SKIExpression = B;
+    for (let i = bits.length - 1; i >= 0; i--) {
+      const bit = bits[i]!;
+      expr = apply(branches[bit]!, expr);
+    }
+
+    bulkCache.set(cacheKey, expr);
+    return expr;
   }
+
+  // Use native Turner primes for S/C.
+  const prime = kind === "S" ? PSI : GAMMA;
+  const bbPrimeSbi = applyMany(B, apply(B, prime), SBI);
+  const branches = [SBI, bbPrimeSbi] as const;
+
+  let expr: SKIExpression = prime;
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const bit = bits[i]!;
+    expr = apply(branches[bit]!, expr);
+  }
+
+  // S/C bulk emitters require the final application to I.
+  expr = apply(expr, I);
   bulkCache.set(cacheKey, expr);
   return expr;
 };
@@ -154,11 +194,13 @@ const liftArity = (
   if (to < from) {
     throw new ConversionError("cannot lower arity during lift");
   }
-  let lifted = expr;
-  for (let i = 0; i < to - from; i++) {
-    lifted = apply(K, lifted);
+  if (to === from) {
+    return expr;
   }
-  return lifted;
+
+  const dropsNeeded = to - from;
+  // ChurchN(d) K expr extentionally equals K applied d times to expr.
+  return applyMany(ChurchN(dropsNeeded), K, expr);
 };
 
 const zip = (l: Res, r: Res): Res => {

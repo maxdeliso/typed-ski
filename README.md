@@ -57,9 +57,19 @@ This project uses **Nix** for reproducible builds and version management. The
 build system orchestrates Rust → WASM → TypeScript builds with a single source
 of truth for versioning.
 
-**Note:** The `nixpkgs` input tracks `nixos-unstable` branch, with the exact
-commit pinned in `flake.lock` for reproducibility. To update to a newer nixpkgs
-revision, run `nix flake update`.
+## Performance and Parallelism
+
+This project implements a high-performance, multi-threaded SKI reducer:
+
+- **Parallel Request Execution**: Multiple Web Workers reduce independent
+  requests against a shared arena.
+- **Preemptive Yielding**: Workers yield suspended computations so long-running
+  jobs do not monopolize execution.
+- **Lock-Free Communication**: io_uring-style submission and completion rings
+  enable low-latency communication between the main thread and workers.
+- **Structural Sharing**: Global hash-consing ensures that identical
+  sub-expressions share the same memory, significantly reducing the memory
+  footprint of large reductions.
 
 ## Works Referenced
 

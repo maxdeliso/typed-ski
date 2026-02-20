@@ -364,9 +364,9 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         `maxResubmits must be an integer >= 0, got ${options.maxResubmits}`,
       );
     }
-    const INITIAL_CAP = 1 << 16; // Use a modest bootstrap cap to fit constrained shared memory in tests.
+    const INITIAL_CAP = 1 << 20; // 1M nodes
     const MAX_PAGES = 65536; // 4GB maximum
-    const INITIAL_ARENA_PAGES = 128; // ~8MB, should be enough for initial arena + headroom
+    const INITIAL_ARENA_PAGES = 1024; // ~64MB
     const sharedMemory = new WebAssembly.Memory({
       initial: INITIAL_ARENA_PAGES,
       maximum: MAX_PAGES,

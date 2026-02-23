@@ -3,13 +3,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-static int ki_only_terminals = 0;
-
 static uint32_t rand_expression(int depth) {
   if (depth <= 0 || (rand() % 10) == 0) {
-    if (ki_only_terminals) {
-      return allocTerminal((rand() & 1) ? ARENA_SYM_K : ARENA_SYM_I);
-    }
     int r = rand() % 3;
     if (r == 0)
       return allocTerminal(ARENA_SYM_S);
@@ -32,6 +27,7 @@ int main(int argc, char **argv) {
   int reductions = 2048;
   int depth = 5;
   uint32_t max_steps = 0xffffffffu;
+  unsigned int seed = 0; /* 0 means use time(NULL) */
 
   if (argc > 1)
     num_threads = atoi(argv[1]);
@@ -59,22 +55,21 @@ int main(int argc, char **argv) {
   if (argc > 5) {
     max_steps = (uint32_t)strtoul(argv[5], NULL, 0);
   }
-
-  const char *ki_only_env = getenv("TSKI_PERF_KI_ONLY");
-  if (ki_only_env != NULL && ki_only_env[0] != '\0' && ki_only_env[0] != '0') {
-    ki_only_terminals = 1;
+  if (argc > 6) {
+    seed = (unsigned int)strtoul(argv[6], NULL, 0);
   }
 
+  if (seed == 0)
+    seed = (unsigned int)time(NULL);
+  srand(seed);
+
   printf("Starting Thanatos Performance Test with %d threads (arena=%u, N=%d, "
-         "depth=%d, max_steps=%u, terminals=%s)...\n",
-         num_threads, arena_capacity, reductions, depth, max_steps,
-         ki_only_terminals ? "KI" : "SKI");
+         "depth=%d, max_steps=%u, seed=%u)...\n",
+         num_threads, arena_capacity, reductions, depth, max_steps, seed);
 
   ThanatosConfig config = {.num_workers = num_threads,
                            .arena_capacity = arena_capacity};
   thanatos_init(config);
-
-  srand(time(NULL));
 
   printf("Pre-generating %d random expressions...\n", reductions);
   uint32_t *exprs = malloc(sizeof(uint32_t) * (size_t)reductions);
@@ -87,6 +82,8 @@ int main(int argc, char **argv) {
       printf("Generating %d/%d...\n", i, reductions);
     exprs[i] = rand_expression(depth);
   }
+
+  thanatos_start_threads();
 
   printf("Measuring reduction performance...\n");
   long long start = get_time_ns();

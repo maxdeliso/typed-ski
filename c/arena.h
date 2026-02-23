@@ -118,10 +118,20 @@ uint32_t allocTerminal(uint32_t sym);
 uint32_t allocCons(uint32_t l, uint32_t r);
 uint32_t arenaKernelStep(uint32_t expr);
 int64_t hostPullV2(void);
+/** Block until a completion is available; write it to *cqe. */
+void hostCqDequeueBlocking(Cqe *cqe);
+/** Enqueue a sentinel CQE (req_id=0) to wake the dispatcher (e.g. for
+ * shutdown). */
+void arena_cq_enqueue_shutdown_sentinel(void);
 uint32_t hostSubmit(uint32_t node_id, uint32_t req_id, uint32_t max_steps);
 void workerLoop(void);
 
 uint32_t alloc_bin_byte(uint8_t value);
 uint8_t decode_bin_u8(uint32_t expr);
+
+/* Host I/O: push byte to arena stdin (for ',' combinator), try pop from stdout
+ * (for '.'). */
+void arena_stdin_push(uint8_t byte);
+bool arena_stdout_try_pop(uint8_t *byte_out);
 
 #endif

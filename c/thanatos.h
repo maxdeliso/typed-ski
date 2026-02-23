@@ -10,6 +10,9 @@ typedef struct {
 
 void thanatos_init(ThanatosConfig config);
 
+/** Start worker/dispatcher/stdout threads. Call after parsing stdin. */
+void thanatos_start_threads(void);
+
 uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps);
 
 void thanatos_shutdown(void);

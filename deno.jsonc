@@ -21,7 +21,6 @@
       "lib/evaluator/arenaHeader.generated.ts"
     ],
     "exclude": [
-      "!wasm/debug.wasm",
       "!wasm/release.wasm",
       "codecov",
       "codecov.SHA256SUM",
@@ -90,5 +89,5 @@
     "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/"
   },
-  "version": "0.14.16"
+  "version": "0.15.1"
 }

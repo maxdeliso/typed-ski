@@ -1,33 +1,30 @@
 {
-  description = "typed-ski: SKI calculus implementation with Rust WASM core";
+  description = "typed-ski: SKI calculus implementation with C11 WASM core";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-deno.url = "github:NixOS/nixpkgs/nixos-unstable-small";
     flake-utils.url = "github:numtide/flake-utils";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    { nixpkgs
+    , nixpkgs-deno
+    , flake-utils
+    , ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
-        overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs { inherit system overlays; };
+        pkgs = import nixpkgs { inherit system; };
+        denoPkgs = import nixpkgs-deno { inherit system; };
 
-        # Read version from deno.jsonc
+        deno = denoPkgs.deno;
+        llvm = pkgs.llvmPackages_18;
+        wasmIncludeDir = "${llvm.clang-unwrapped.lib}/lib/clang/18/include";
+
         denoJson = builtins.fromJSON (builtins.readFile ./deno.jsonc);
         version = denoJson.version;
-
-        # Use nightly toolchain to enable unstable WASM atomic wait features.
-        rustToolchain = pkgs.rust-bin.nightly.latest.default.override {
-          targets = [ "wasm32-unknown-unknown" ];
-        };
-
-        deno = pkgs.deno;
-
-        # --- Helper Scripts ---
 
         verifyVersion = pkgs.writeShellScriptBin "verify-version" ''
           if ! ${pkgs.jq}/bin/jq -e '.version' deno.jsonc >/dev/null 2>&1; then
@@ -37,58 +34,18 @@
           echo "Version in deno.jsonc: $(${pkgs.jq}/bin/jq -r '.version' deno.jsonc)"
         '';
 
-        generateCargoToml = pkgs.writeShellScriptBin "generate-cargo-toml" ''
-          mkdir -p rust
-          cat > rust/Cargo.toml << EOF
-          [package]
-          name = "typed-ski"
-          version = "${version}"
-          edition = "2021"
-          authors = ["Max DeLiso <me@maxdeliso.name>"]
-          license = "MIT"
-          description = "SKI calculus evaluator in Rust compiled to WASM"
-          repository = "https://github.com/maxdeliso/typed-ski"
-          homepage = "https://github.com/maxdeliso/typed-ski"
-          readme = "README.md"
-          keywords = ["ski", "calculus", "wasm", "combinator"]
-          categories = ["wasm", "no-std"]
-
-          [lib]
-          crate-type = ["cdylib", "rlib"]
-
-          [profile.release]
-          opt-level = "z"
-          lto = true
-          strip = true
-          panic = "abort"
-
-          [profile.dev]
-          panic = "abort"
-
-          [dependencies]
-          # No dependencies!
-          EOF
-          echo "Generated rust/Cargo.toml with version ${version}"
-        '';
-
         generateVersionTs = pkgs.writeShellScriptBin "generate-version-ts" ''
           mkdir -p lib/shared
-          cat > lib/shared/version.generated.ts << EOF
+          cat > lib/shared/version.generated.ts << EOF_VERSION
           export const VERSION = "${version}";
-          EOF
+          EOF_VERSION
           echo "Generated lib/shared/version.generated.ts"
         '';
 
-        generateArenaHeader = pkgs.writeShellScriptBin "generate-arena-header" ''
-          ${deno}/bin/deno run -A scripts/generate-arena-header.ts
+        generateArenaHeaderC = pkgs.writeShellScriptBin "generate-arena-header-c" ''
+          ${deno}/bin/deno run -A scripts/generate-arena-header-c.ts
         '';
 
-        validateArenaHeader = pkgs.writeShellScriptBin "validate-arena-header" ''
-          ${deno}/bin/deno run -A scripts/validate-arena-header.ts
-        '';
-
-
-        # --- Main Build Derivation ---
         typedSki = pkgs.stdenv.mkDerivation {
           name = "typed-ski";
           inherit version;
@@ -96,61 +53,39 @@
           src = ./.;
 
           nativeBuildInputs = [
-            rustToolchain
+            llvm.clang
+            llvm.clang-unwrapped
+            llvm.lld
+            llvm.llvm
             deno
             pkgs.jq
             pkgs.wabt
             verifyVersion
-            generateCargoToml
             generateVersionTs
-            generateArenaHeader
-            validateArenaHeader
+            generateArenaHeaderC
           ];
 
           buildPhase = ''
+            export HOME="$PWD/.nix-home"
+            export DENO_DIR="$PWD/.deno-cache"
+            mkdir -p "$HOME" "$DENO_DIR"
+
             verify-version
-            generate-cargo-toml
             generate-version-ts
-            generate-arena-header
-            validate-arena-header
+            generate-arena-header-c
 
-            ROOT_DIR="$PWD"
-            RUST_DIR="$ROOT_DIR/rust"
-            WASM_DIR="$ROOT_DIR/wasm"
+            mkdir -p wasm
+            ${llvm.clang-unwrapped}/bin/clang -fuse-ld=${llvm.lld}/bin/wasm-ld --target=wasm32 \
+                  -O3 -flto -ffunction-sections -fdata-sections -msimd128 -nostdlib \
+                  -Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
+                  -Wl,--max-memory=4294967296 -Wl,--gc-sections \
+                  -matomics -mbulk-memory -mmutable-globals \
+                  -isystem "${wasmIncludeDir}" \
+                  -o wasm/release.wasm c/arena.c
 
-            # RUSTFLAGS:
-            # 1. Enable atomics features so our code can use them.
-            # 2. Pass --no-check-features to linker so it accepts the pre-compiled libcore
-            #    (which lacks 'atomics' feature) without error.
-            export RUSTFLAGS="-C link-arg=--import-memory -C link-arg=--shared-memory -C link-arg=--max-memory=4294967296 -C target-feature=+atomics,+bulk-memory,+mutable-globals -C link-arg=--no-check-features"
-
-            echo "Building WASM (debug)..."
-            # Standard build (no build-std needed)
-            cargo build \
-              --manifest-path "$RUST_DIR/Cargo.toml" \
-              --target-dir "$RUST_DIR/target" \
-              --target wasm32-unknown-unknown \
-              --lib
-
-            echo "Building WASM (release)..."
-            cargo build \
-              --manifest-path "$RUST_DIR/Cargo.toml" \
-              --target-dir "$RUST_DIR/target" \
-              --release \
-              --target wasm32-unknown-unknown \
-              --lib
-
-            echo "Copying WASM files..."
-            mkdir -p "$WASM_DIR"
-            cp "$RUST_DIR/target/wasm32-unknown-unknown/debug/typed_ski.wasm" "$WASM_DIR/debug.wasm"
-            cp "$RUST_DIR/target/wasm32-unknown-unknown/release/typed_ski.wasm" "$WASM_DIR/release.wasm"
-
-            echo ""
-            echo "=== WASM Module Structure (debug) ==="
-            ${pkgs.wabt}/bin/wasm-objdump -h "$WASM_DIR/debug.wasm"
             echo ""
             echo "=== WASM Module Structure (release) ==="
-            ${pkgs.wabt}/bin/wasm-objdump -h "$WASM_DIR/release.wasm"
+            ${pkgs.wabt}/bin/wasm-objdump -h wasm/release.wasm
             echo ""
           '';
 
@@ -162,69 +97,73 @@
           doCheck = false;
         };
 
-        # Development Shell
         devShell = pkgs.mkShell {
           buildInputs = [
-            rustToolchain
-            deno
-            pkgs.jq
+            llvm.clang
+            llvm.clang-unwrapped
+            llvm.lld
+            llvm.llvm
+            pkgs.nixpkgs-fmt
             pkgs.wabt
-            verifyVersion
-            generateCargoToml
-            generateVersionTs
-            generateArenaHeader
-            validateArenaHeader
+            deno
+            generateArenaHeaderC
           ];
 
+          shellHook = ''
+            export CC="${llvm.clang}/bin/clang"
+            export CXX="${llvm.clang}/bin/clang++"
+            export WASM_CC="${llvm.clang-unwrapped}/bin/clang"
+            export WASM_LD="${llvm.lld}/bin/wasm-ld"
+            export WASM_RESOURCE_DIR="${llvm.clang-unwrapped.lib}/lib/clang/18"
+            export LLVM_OBJDUMP="${llvm.llvm}/bin/llvm-objdump"
+            export WASM2WAT="${pkgs.wabt}/bin/wasm2wat"
+            unset NIX_ENFORCE_NO_NATIVE
+          '';
         };
-
       in
       {
         packages.default = typedSki;
         devShells.default = devShell;
 
         apps = {
-           verify-version = { type = "app"; program = "${verifyVersion}/bin/verify-version"; };
-           generate-cargo = { type = "app"; program = "${generateCargoToml}/bin/generate-cargo-toml"; };
-           generate-version-ts = { type = "app"; program = "${generateVersionTs}/bin/generate-version-ts"; };
-           generate-arena-header = { type = "app"; program = "${generateArenaHeader}/bin/generate-arena-header"; };
-           validate-arena-header = { type = "app"; program = "${validateArenaHeader}/bin/validate-arena-header"; };
-           test = {
+          verify-version = {
+            type = "app";
+            program = "${verifyVersion}/bin/verify-version";
+          };
+          generate-version-ts = {
+            type = "app";
+            program = "${generateVersionTs}/bin/generate-version-ts";
+          };
+          generate-arena-header = {
+            type = "app";
+            program = "${generateArenaHeaderC}/bin/generate-arena-header-c";
+          };
+          test = {
             type = "app";
             program = toString (pkgs.writeShellScript "run-tests" ''
               if [ ! -f deno.jsonc ]; then echo "Error: Run from project root"; exit 1; fi
               export PATH="${deno}/bin:$PATH"
               ${deno}/bin/deno test --allow-read --allow-write --allow-run --allow-env --parallel test/
             '');
-           };
-           fmt = {
+          };
+          fmt = {
             type = "app";
             program = toString (pkgs.writeShellScript "deno-fmt" ''
               ${deno}/bin/deno fmt "$@"
             '');
-           };
-           lint = {
+          };
+          lint = {
             type = "app";
             program = toString (pkgs.writeShellScript "deno-lint" ''
               ${deno}/bin/deno lint "$@"
             '');
-           };
-           publish = {
+          };
+          publish = {
             type = "app";
             program = toString (pkgs.writeShellScript "deno-publish" ''
               ${deno}/bin/deno publish "$@"
             '');
-           };
-           test-rust = {
-            type = "app";
-            program = toString (pkgs.writeShellScript "test-rust" ''
-              cd rust
-              export PATH="${rustToolchain}/bin:$PATH"
-              export CARGO="${rustToolchain}/bin/cargo"
-              export RUSTC="${rustToolchain}/bin/rustc"
-              ${rustToolchain}/bin/cargo test --lib -- --test-threads=1 "$@"
-            '');
-           };
+          };
         };
       }
     );

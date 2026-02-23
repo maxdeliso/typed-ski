@@ -8,7 +8,13 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
+import { unparseSKI } from "../../lib/ski/expression.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
+import {
+  passthroughEvaluator,
+  runThanatosBatch,
+  thanatosAvailable,
+} from "../thanatosHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -86,19 +92,81 @@ async function runArithmeticBatch(): Promise<Map<string, bigint>> {
   return await evaluateExpressionsBatch(expressions);
 }
 
-Deno.test("links prelude arithmetic cases (batched)", async () => {
-  const results = await runArithmeticBatch();
+/** Same four arithmetic cases, reduced by baremetal thanatos (one batch, shared process). */
+async function runArithmeticBatchThanatos(): Promise<Map<string, bigint>> {
+  const preludeObject = await getPreludeObject();
+  const natObject = await getNatObject();
+  const results = new Map<string, bigint>();
 
-  const basic = results.get("basic");
-  const simple = results.get("simple");
-  const multiplication = results.get("multiplication");
-  const complex = results.get("complex");
+  const inputs: string[] = [];
+  const keys: string[] = [];
+  for (const testCase of ARITHMETIC_CASES) {
+    const testObject = await loadTripModuleObject(
+      join(__dirname, testCase.testFileName),
+    );
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObject },
+      { name: "Nat", object: natObject },
+      { name: testCase.moduleName, object: testObject },
+    ], false);
+    inputs.push(unparseSKI(parseSKI(skiExpression)));
+    keys.push(testCase.key);
+  }
 
-  assertEquals(basic, 6n, "mul two three should equal 6");
-  assertEquals(simple, 2n, "add one one should equal 2");
-  assertEquals(multiplication, 6n, "mul two three should equal 6");
-  // (2 * 3) + (1 * 4) = 6 + 4 = 10
-  assertEquals(complex, 10n, "Complex arithmetic should equal 10");
+  const lines = await runThanatosBatch(inputs);
+  for (let i = 0; i < keys.length; i++) {
+    const line = lines[i] ?? "";
+    if (line === "") {
+      results.set(keys[i]!, 0n);
+      continue;
+    }
+    try {
+      const parsed = parseSKI(line);
+      results.set(keys[i]!, await UnChurchNumber(parsed, passthroughEvaluator));
+    } catch {
+      results.set(keys[i]!, 0n);
+    }
+  }
+  return results;
+}
+
+Deno.test({
+  name: "links prelude arithmetic cases (batched)",
+  ignore: thanatosAvailable(),
+  fn: async () => {
+    const results = await runArithmeticBatch();
+
+    const basic = results.get("basic");
+    const simple = results.get("simple");
+    const multiplication = results.get("multiplication");
+    const complex = results.get("complex");
+
+    assertEquals(basic, 6n, "mul two three should equal 6");
+    assertEquals(simple, 2n, "add one one should equal 2");
+    assertEquals(multiplication, 6n, "mul two three should equal 6");
+    // (2 * 3) + (1 * 4) = 6 + 4 = 10
+    assertEquals(complex, 10n, "Complex arithmetic should equal 10");
+  },
+});
+
+Deno.test({
+  name: "links prelude arithmetic cases (thanatos)",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const results = await runArithmeticBatchThanatos();
+    assertEquals(results.get("basic"), 6n, "mul two three should equal 6");
+    assertEquals(results.get("simple"), 2n, "add one one should equal 2");
+    assertEquals(
+      results.get("multiplication"),
+      6n,
+      "mul two three should equal 6",
+    );
+    assertEquals(
+      results.get("complex"),
+      10n,
+      "Complex arithmetic should equal 10",
+    );
+  },
 });
 
 Deno.test("links numeric literals across modules without leaking Nat", async () => {

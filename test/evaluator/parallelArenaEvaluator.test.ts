@@ -14,17 +14,8 @@ import {
 } from "../../lib/ski/expression.ts";
 import { BinN, UnBinNumber } from "../../lib/ski/bin.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
-import { I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
+import { I, K, ReadOne, WriteOne } from "../../lib/ski/terminal.ts";
 import { requiredAt } from "../util/required.ts";
-
-function makeUniqueExpr(i: number, bits = 16): SKIExpression {
-  // Deterministic, bounded-size expression that is unique for i < 2^bits.
-  let e: SKIExpression = I;
-  for (let b = 0; b < bits; b++) {
-    e = apply(e, (i >>> b) & 1 ? S : K);
-  }
-  return e;
-}
 
 function overrideEvaluatorExports(
   evaluator: ParallelArenaEvaluatorWasm,
@@ -469,68 +460,6 @@ Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
       evaluator.terminate();
     }
   });
-});
-
-Deno.test("ParallelArenaEvaluator - ring stress", async (t) => {
-  await t.step(
-    "request correlation: results match inputs with maxSteps=0",
-    async () => {
-      const evaluator = await ParallelArenaEvaluatorWasm.create(4);
-      try {
-        const N = 400;
-        const exprs = Array.from({ length: N }, (_, i) => makeUniqueExpr(i));
-
-        // maxSteps=0 => result should equal input; mismatch implies bad correlation.
-        const results = await Promise.all(
-          exprs.map((e) => evaluator.reduceAsync(e, 0)),
-        );
-        for (let i = 0; i < N; i++) {
-          assertEquals(
-            unparseSKI(requiredAt(results, i, "expected result expression")),
-            unparseSKI(requiredAt(exprs, i, "expected input expression")),
-          );
-        }
-      } finally {
-        evaluator.terminate();
-      }
-    },
-  );
-
-  await t.step(
-    "ring buffer wrap-around when exceeding RING_ENTRIES capacity",
-    async () => {
-      const evaluator = await ParallelArenaEvaluatorWasm.create(8);
-      try {
-        // Exceed the WASM ring capacity to force wrap-around in the SQ/CQ indices.
-        const ringEntries = evaluator.$.debugGetRingEntries?.() ??
-          (() => {
-            throw new Error("WASM export `debugGetRingEntries` is missing");
-          })();
-        // Ensure we wrap at least once even for large rings, and exercise
-        // multiple cycles for small ones.
-        const extraEntries = Math.max(4096, ringEntries);
-        const N = ringEntries + extraEntries;
-        const exprBits = Math.ceil(Math.log2(N + 1));
-        const exprs = Array.from(
-          { length: N },
-          // Use enough bits so each expression is unique for this N.
-          (_, i) => makeUniqueExpr(i, exprBits),
-        );
-
-        const results = await Promise.all(
-          exprs.map((e) => evaluator.reduceAsync(e, 0)),
-        );
-        for (let i = 0; i < N; i++) {
-          assertEquals(
-            unparseSKI(requiredAt(results, i, "expected result expression")),
-            unparseSKI(requiredAt(exprs, i, "expected input expression")),
-          );
-        }
-      } finally {
-        evaluator.terminate();
-      }
-    },
-  );
 });
 
 Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {

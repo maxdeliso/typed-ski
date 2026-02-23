@@ -276,14 +276,11 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     await t.step("WASM files exist for genForest and genSvg", () => {
       const wasmDir = join(projectRoot, "wasm");
       expect(existsSync(wasmDir)).to.be.true;
-      expect(existsSync(join(wasmDir, "debug.wasm"))).to.be.true;
       expect(existsSync(join(wasmDir, "release.wasm"))).to.be.true;
     });
 
     await t.step("WASM files exist", () => {
-      const debugWasm = join(projectRoot, "wasm/debug.wasm");
       const releaseWasm = join(projectRoot, "wasm/release.wasm");
-      expect(existsSync(debugWasm)).to.be.true;
       expect(existsSync(releaseWasm)).to.be.true;
     });
   });

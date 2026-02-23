@@ -1,4 +1,4 @@
-name: Publish to JSR and Crates.io
+name: Publish to JSR
 
 on:
   push:
@@ -24,22 +24,11 @@ jobs:
       - name: Build artifacts
         run: make build
 
-      - name: Validate generated code
-        run: nix --extra-experimental-features 'nix-command flakes' run .#validate-arena-header
+      - name: Thanatos smoke test (exit code 0)
+        run: make thanatos-check
 
       - name: Run test suite
         run: make test
 
       - name: Publish to JSR (Deno Registry)
         run: nix run .#publish
-
-      - name: Authenticate with crates.io (Trusted Publishing)
-        id: auth
-        uses: rust-lang/crates-io-auth-action@v1
-
-      - name: Publish to crates.io
-        run: |
-          echo "Using Cargo from: $(nix --extra-experimental-features 'nix-command flakes' develop --command which cargo)"
-          nix --extra-experimental-features 'nix-command flakes' develop --command bash -c "cd rust && cargo publish"
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

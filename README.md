@@ -74,9 +74,12 @@ This project implements a high-performance, multi-threaded SKI reducer:
 ### Thanatos (Native Orchestrator)
 
 Thanatos is the native C11/pthreads orchestrator for compute-heavy reductions.
-It keeps the SKI evaluator on-metal by managing worker dispatch and completion
-queues directly, which avoids Deno/WASM bridge overhead and improves throughput
-and runtime stability for long-running workloads.
+The same C core (arena and reduction logic) is compiled in two ways: as the
+native `thanatos` binary for CLI/batch use, and to WebAssembly
+(`wasm/release.wasm`) for use by the parallel arena evaluator in Deno. The
+native binary keeps the SKI evaluator on-metal by managing worker dispatch and
+completion queues directly, which avoids Deno/WASM bridge overhead and improves
+throughput and runtime stability for long-running workloads.
 
 ## Works Referenced
 

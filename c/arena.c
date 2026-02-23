@@ -849,8 +849,8 @@ static inline StepOutcome budget_outcome(uint8_t mode, uint32_t curr,
                                          uint32_t remaining_steps) {
   StepOutcome o;
   o.type = RESULT_YIELD;
-  o.val = alloc_generic(ARENA_KIND_SUSPENSION, mode, curr, stack,
-                        remaining_steps);
+  o.val =
+      alloc_generic(ARENA_KIND_SUSPENSION, mode, curr, stack, remaining_steps);
   return o;
 }
 
@@ -859,8 +859,7 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
                                   uint32_t free_node) {
   while (true) {
     if (*gas == 0) {
-      return budget_outcome(mode, curr, stack,
-                            *remaining_steps);
+      return budget_outcome(mode, curr, stack, *remaining_steps);
     }
     (*gas)--;
 
@@ -1221,11 +1220,12 @@ uint32_t arenaKernelStep(uint32_t expr) {
   }
 
   /* Semantic step: one rewrite, or normal form, or real IO wait. Internally
-   * chunk with gas; on gas exhaustion resume immediately instead of returning. */
+   * chunk with gas; on gas exhaustion resume immediately instead of returning.
+   */
   while (remaining_steps > 0) {
     uint32_t gas = ARENA_STEP_GAS;
-    StepOutcome o = step_iterative(curr, stack, mode, &gas, &remaining_steps,
-                                   free_node);
+    StepOutcome o =
+        step_iterative(curr, stack, mode, &gas, &remaining_steps, free_node);
 
     if (o.type == RESULT_YIELD) {
       if (symOf(o.val) == MODE_IO_WAIT)
@@ -1236,8 +1236,7 @@ uint32_t arenaKernelStep(uint32_t expr) {
       stack = rightOf(susp);
       mode = (uint8_t)symOf(susp);
       SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-      atomic_uint *hashes =
-          (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
+      atomic_uint *hashes = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
       remaining_steps =
           atomic_load_explicit(&hashes[susp], memory_order_acquire);
       free_node = susp;
@@ -1364,8 +1363,8 @@ void workerLoop(void) {
         break;
       }
       uint32_t gas = batch_gas;
-      StepOutcome o = step_iterative(curr, stack, mode, &gas, &remaining_steps,
-                                     free_node);
+      StepOutcome o =
+          step_iterative(curr, stack, mode, &gas, &remaining_steps, free_node);
       if (o.type == RESULT_YIELD) {
         Cqe res = {o.val, job.req_id,
                    (symOf(o.val) == MODE_IO_WAIT) ? CQ_EVENT_IO_WAIT

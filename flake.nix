@@ -75,9 +75,10 @@
             generate-arena-header-c
 
             mkdir -p wasm
-            ${llvm.clang-unwrapped}/bin/clang --target=wasm32 -O3 -nostdlib \
+            ${llvm.clang-unwrapped}/bin/clang -fuse-ld=${llvm.lld}/bin/wasm-ld --target=wasm32 \
+                  -O3 -flto -ffunction-sections -fdata-sections -msimd128 -nostdlib \
                   -Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
-                  -Wl,--max-memory=4294967296 \
+                  -Wl,--max-memory=4294967296 -Wl,--gc-sections \
                   -matomics -mbulk-memory -mmutable-globals \
                   -isystem "${wasmIncludeDir}" \
                   -o wasm/release.wasm c/arena.c
@@ -103,6 +104,7 @@
             llvm.lld
             llvm.llvm
             pkgs.nixpkgs-fmt
+            pkgs.wabt
             deno
             generateArenaHeaderC
           ];
@@ -113,6 +115,9 @@
             export WASM_CC="${llvm.clang-unwrapped}/bin/clang"
             export WASM_LD="${llvm.lld}/bin/wasm-ld"
             export WASM_RESOURCE_DIR="${llvm.clang-unwrapped.lib}/lib/clang/18"
+            export LLVM_OBJDUMP="${llvm.llvm}/bin/llvm-objdump"
+            export WASM2WAT="${pkgs.wabt}/bin/wasm2wat"
+            unset NIX_ENFORCE_NO_NATIVE
           '';
         };
       in

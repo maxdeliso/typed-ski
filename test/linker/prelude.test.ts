@@ -130,19 +130,23 @@ async function runArithmeticBatchThanatos(): Promise<Map<string, bigint>> {
   return results;
 }
 
-Deno.test("links prelude arithmetic cases (batched)", async () => {
-  const results = await runArithmeticBatch();
+Deno.test({
+  name: "links prelude arithmetic cases (batched)",
+  ignore: thanatosAvailable(),
+  fn: async () => {
+    const results = await runArithmeticBatch();
 
-  const basic = results.get("basic");
-  const simple = results.get("simple");
-  const multiplication = results.get("multiplication");
-  const complex = results.get("complex");
+    const basic = results.get("basic");
+    const simple = results.get("simple");
+    const multiplication = results.get("multiplication");
+    const complex = results.get("complex");
 
-  assertEquals(basic, 6n, "mul two three should equal 6");
-  assertEquals(simple, 2n, "add one one should equal 2");
-  assertEquals(multiplication, 6n, "mul two three should equal 6");
-  // (2 * 3) + (1 * 4) = 6 + 4 = 10
-  assertEquals(complex, 10n, "Complex arithmetic should equal 10");
+    assertEquals(basic, 6n, "mul two three should equal 6");
+    assertEquals(simple, 2n, "add one one should equal 2");
+    assertEquals(multiplication, 6n, "mul two three should equal 6");
+    // (2 * 3) + (1 * 4) = 6 + 4 = 10
+    assertEquals(complex, 10n, "Complex arithmetic should equal 10");
+  },
 });
 
 Deno.test({

@@ -19,6 +19,12 @@ C_DEBUG_FLAGS := -g -O1
 C_TSAN_FLAGS := -g -O1 -fsanitize=thread
 C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined
 
+WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -msimd128
+WASM_OPT_LDFLAGS := -Wl,--gc-sections
+
+NATIVE_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -march=native
+NATIVE_OPT_LDFLAGS := -Wl,--gc-sections
+
 # Nix development shell wrapper
 NIX_RUN := nix $(NIX_FLAGS) develop --command $(MAKE)
 
@@ -87,17 +93,17 @@ coverage-internal: build-wasm-internal
 
 build-wasm-internal:
 	mkdir -p wasm
-	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 -O3 -nostdlib \
+	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
 		-Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
-		-Wl,--max-memory=4294967296 \
+		-Wl,--max-memory=4294967296 $(WASM_OPT_LDFLAGS) \
 		-matomics -mbulk-memory -mmutable-globals \
 		-isystem $$WASM_RESOURCE_DIR/include \
 		-o wasm/release.wasm c/arena.c
 
 build-native-internal:
 	mkdir -p bin
-	$$CC $(C_RELEASE_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos c/arena.c c/thanatos.c c/ski_io.c c/main.c
-	$$CC $(C_RELEASE_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-test c/arena.c c/thanatos.c c/performance_test.c
+	$$CC $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) $(NATIVE_OPT_LDFLAGS) -o bin/thanatos c/arena.c c/thanatos.c c/ski_io.c c/main.c
+	$$CC $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) $(NATIVE_OPT_LDFLAGS) -o bin/thanatos-test c/arena.c c/thanatos.c c/performance_test.c
 	$$CC $(C_LSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-test-lsan c/arena.c c/thanatos.c c/performance_test.c
 	$$CC $(C_UBSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-test-ubsan c/arena.c c/thanatos.c c/performance_test.c
 	$$CC $(C_ASAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-asan c/arena.c c/thanatos.c c/ski_io.c c/main.c
@@ -145,11 +151,8 @@ print-wasm-internal: build-wasm-internal
 	@echo "=== Local WASM artifacts ==="
 	@ls -lh wasm/release.wasm
 	@echo ""
-	@echo "=== release.wasm section headers ==="
-	@if command -v wasm-objdump >/dev/null 2>&1; then \
-		wasm-objdump -h wasm/release.wasm; \
-	elif command -v llvm-objdump >/dev/null 2>&1; then \
-		llvm-objdump -h wasm/release.wasm; \
-	else \
-		echo "No wasm objdump tool found in PATH"; \
-	fi
+	@echo "=== release.wasm section headers (llvm-objdump from nix) ==="
+	@$$LLVM_OBJDUMP -h wasm/release.wasm
+	@echo ""
+	@echo "=== release.wasm as WAT (wasm2wat from nix) ==="
+	@$$WASM2WAT --enable-threads wasm/release.wasm

@@ -36,8 +36,11 @@ poly rec binToChurch = \b : Bin =>
   }
 
 poly isLeadingZero = \n : Bin => isZeroBin n
-poly sample = cons [Bin] 0 (cons [Bin] 0 (cons [Bin] 1 (nil [Bin])))
+poly zeroBin : Bin = BZ
+poly one : Bin = B1 BZ
+
+poly sample = cons [Bin] zeroBin (cons [Bin] zeroBin (cons [Bin] one (nil [Bin])))
 poly taken = takeWhile [Bin] isLeadingZero sample
 poly dropped = dropWhile [Bin] isLeadingZero sample
-poly count = foldl [Bin] [Bin] (\acc : Bin => \_ : Bin => incBin acc) 0 taken
+poly count = foldl [Bin] [Bin] (\acc : Bin => \_ : Bin => incBin acc) zeroBin taken
 poly main = binToChurch (addBin count (head [Bin] dropped))

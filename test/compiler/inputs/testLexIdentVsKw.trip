@@ -4,34 +4,40 @@ import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
-import Prelude Bin
-import Prelude eqBin
 import Prelude List
+import Prelude nil
+import Prelude cons
 import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
-import Lexer tokenizeBin
+import Prelude U8
+import Prelude eqU8
+import Lexer tokenize
 import Lexer Token
 import Lexer tokenTag
 import Lexer tokenText
 import Lexer T_KwPoly
 import Lexer T_Ident
-import Lexer eqListFast
+import Lexer eqListU8
 
 export main
 
+poly listAbc : List U8 = "abc"
+poly listPoly : List U8 = "poly"
+poly listX : List U8 = "x"
+
 poly isIdentAbcToken = \tok : Token =>
-  if [Bool] (eqBin (tokenTag tok) (tokenTag (T_Ident "x")))
-    (\u : Bin => eqListFast (tokenText tok) "abc")
-    (\u : Bin => false)
+  if [Bool] (eqU8 (tokenTag tok) (tokenTag (T_Ident listX)))
+    (\u : U8 => eqListU8 (tokenText tok) listAbc)
+    (\u : U8 => false)
 
 poly isKeywordPolyToken = \tok : Token =>
-  eqBin (tokenTag tok) (tokenTag T_KwPoly)
+  eqU8 (tokenTag tok) (tokenTag T_KwPoly)
 
 poly main =
   let testIdent =
-    match (tokenizeBin "abc") [Bool] {
+    match (tokenize listAbc) [Bool] {
       | Err e => false
       | Ok toks =>
           matchList [Token] [Bool] toks false
@@ -39,7 +45,7 @@ poly main =
     }
   in
   let testKeyword =
-    match (tokenizeBin "poly") [Bool] {
+    match (tokenize listPoly) [Bool] {
       | Err e => false
       | Ok toks =>
           matchList [Token] [Bool] toks false
@@ -47,5 +53,5 @@ poly main =
     }
   in
   if [Bool] testIdent
-    (\u : Bin => testKeyword)
-    (\u : Bin => false)
+    (\u : U8 => testKeyword)
+    (\u : U8 => false)

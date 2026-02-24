@@ -48,8 +48,13 @@ export subBin
 export predBin
 export isZeroBin
 export eqBin
+export eqU8
 export lteBin
 export gteBin
+export U8
+
+opaque type U8
+native eqU8 : U8 -> U8 -> Bool
 
 type Bool = #B -> B -> B -> B
 type List = #A -> #R -> R -> (A -> R -> R) -> R
@@ -227,3 +232,4 @@ poly error = #A =>
 
 combinator readOne = ,
 combinator writeOne = .
+

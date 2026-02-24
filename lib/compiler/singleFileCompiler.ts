@@ -108,6 +108,8 @@ function extractDefinitions(
       case "untyped":
       case "combinator":
       case "type":
+      case "native":
+      case "data":
         name = term.name;
         break;
       default:

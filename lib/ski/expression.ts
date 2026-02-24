@@ -37,15 +37,19 @@ interface SKIApplication {
 }
 
 /**
- * An SKI expression is either a terminal symbol (S, K, I) or an application node.
- *
- * This recursive type represents all valid expressions in the SKI combinator calculus,
- * where every expression is either one of the three fundamental combinators or an
- * application of two expressions.
+ * A U8 literal node (byte value 0..255).
  */
-export type SKIExpression = SKITerminal | SKIApplication;
+export interface SKIU8 {
+  kind: "u8";
+  value: number;
+}
+
+/**
+ * An SKI expression is either a terminal symbol (S, K, I, ...), a U8 literal, or an application node.
+ */
+export type SKIExpression = SKITerminal | SKIU8 | SKIApplication;
 type SKIChar = SKITerminalSymbol | "(" | ")";
-type SKIKey = SKIChar[];
+type SKIKey = (SKIChar | string)[];
 
 /**
  * Converts a SKI expression to its canonical key,
@@ -70,6 +74,8 @@ export const toSKIKey = (expr: SKIExpression): SKIKey => {
     } else if (item.kind === "terminal") {
       // For terminal nodes, simply push the symbol.
       key.push(item.sym);
+    } else if (item.kind === "u8") {
+      key.push(`#u8(${item.value})`);
     } else {
       // For non-terminal nodes, we want to output:
       // "(" + [key for left subtree] + [key for right subtree] + ")"
@@ -107,6 +113,12 @@ export const equivalent = (
         return false;
       }
     } else if (
+      firstItem.kind === "u8" && secondItem.kind === "u8"
+    ) {
+      if (firstItem.value !== secondItem.value) {
+        return false;
+      }
+    } else if (
       firstItem.kind === "non-terminal" && secondItem.kind === "non-terminal"
     ) {
       firstStack.push(firstItem.rgt);
@@ -136,7 +148,7 @@ export const unparseSKI = (expr: SKIExpression): string => {
  * @returns how many terminals are present in the expression.
  */
 export const terminals = (exp: SKIExpression): number => {
-  if (exp.kind === "terminal") return 1;
+  if (exp.kind === "terminal" || exp.kind === "u8") return 1;
   else return terminals(exp.lft) + terminals(exp.rgt);
 };
 

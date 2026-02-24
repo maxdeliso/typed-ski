@@ -48,11 +48,17 @@ const runtimeCombinators: Record<SKITerminalSymbol, RuntimeValue> = {
     asRuntimeFn(asRuntimeFn(w)(asRuntimeFn(x)(z)))(y),
   [SKITerminalSymbol.ReadOne]: unsupportedIo,
   [SKITerminalSymbol.WriteOne]: unsupportedIo,
+  [SKITerminalSymbol.EqU8]: () => {
+    throw new Error("Cannot decode Church numerals for eqU8 intrinsic");
+  },
 };
 
 const evalRuntime = (expr: SKIExpression): RuntimeValue => {
   if (expr.kind === "terminal") {
     return runtimeCombinators[expr.sym];
+  }
+  if (expr.kind === "u8") {
+    throw new Error("Cannot decode Church numerals for U8 literals");
   }
   return asRuntimeFn(evalRuntime(expr.lft))(evalRuntime(expr.rgt));
 };
@@ -324,6 +330,11 @@ export const UnChurchNumber = async (
   const normalized = evaluator.reduceAsync
     ? await evaluator.reduceAsync(exp)
     : evaluator.reduce(exp);
+
+  if (normalized.kind === "u8") {
+    return BigInt(normalized.value);
+  }
+
   try {
     const church = asRuntimeFn(evalRuntime(normalized));
     const inc: RuntimeFn = (value) => {

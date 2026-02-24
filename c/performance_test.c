@@ -70,6 +70,29 @@ int main(int argc, char **argv) {
   ThanatosConfig config = {.num_workers = num_threads,
                            .arena_capacity = arena_capacity};
   thanatos_init(config);
+  thanatos_start_threads();
+
+  /* Smoke test: EQ_U8 5 5 -> True (K), EQ_U8 5 6 -> False (K I) */
+  {
+    uint32_t eq = allocTerminal(ARENA_SYM_EQ_U8);
+    uint32_t u8_5 = allocU8(5);
+    uint32_t u8_6 = allocU8(6);
+    uint32_t expr_eq_5_5 = allocCons(allocCons(eq, u8_5), u8_5);
+    uint32_t expr_eq_5_6 = allocCons(allocCons(eq, u8_5), u8_6);
+    uint32_t r1 = thanatos_reduce(expr_eq_5_5, 10000u);
+    uint32_t r2 = thanatos_reduce(expr_eq_5_6, 10000u);
+    int ok1 = (kindOf(r1) == ARENA_KIND_TERMINAL && symOf(r1) == ARENA_SYM_K);
+    uint32_t k = allocTerminal(ARENA_SYM_K);
+    uint32_t i = allocTerminal(ARENA_SYM_I);
+    uint32_t false_form = allocCons(k, i);
+    int ok2 = (r2 == false_form) || (kindOf(r2) == ARENA_KIND_NON_TERM &&
+                                     leftOf(r2) == k && rightOf(r2) == i);
+    if (!ok1 || !ok2) {
+      fprintf(stderr, "EQ_U8 smoke test failed: eq 5 5 -> %s, eq 5 6 -> %s\n",
+              ok1 ? "OK" : "FAIL", ok2 ? "OK" : "FAIL");
+      return 1;
+    }
+  }
 
   printf("Pre-generating %d random expressions...\n", reductions);
   uint32_t *exprs = malloc(sizeof(uint32_t) * (size_t)reductions);
@@ -82,8 +105,6 @@ int main(int argc, char **argv) {
       printf("Generating %d/%d...\n", i, reductions);
     exprs[i] = rand_expression(depth);
   }
-
-  thanatos_start_threads();
 
   printf("Measuring reduction performance...\n");
   long long start = get_time_ns();

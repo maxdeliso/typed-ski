@@ -5,6 +5,7 @@ import Prelude false
 import Prelude List
 import Prelude cons
 import Prelude nil
+import Prelude U8
 import Prelude Result
 import Prelude Ok
 import Prelude Err
@@ -16,7 +17,7 @@ import Lexer T_Hash
 import Lexer T_Ident
 import Lexer T_FatArrow
 import Lexer T_EOF
-import Lexer eqListFast
+import Lexer eqListU8
 import Parser parseExpr
 import Parser Expr
 import Parser E_Var
@@ -31,9 +32,9 @@ export main
 poly main =
   let input =
     cons [Token] T_Hash
-      (cons [Token] (T_Ident "X")
+      (cons [Token] (T_Ident (cons [U8] (#u8(88)) (nil [U8])))
         (cons [Token] T_FatArrow
-          (cons [Token] (T_Ident "x")
+          (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
             (cons [Token] T_EOF (nil [Token])))))
   in
   match (parseExpr input) [Bool] {
@@ -41,7 +42,7 @@ poly main =
     | Ok res =>
       let expr = fst [Expr] [List Token] res in
       match expr [Bool] {
-        | E_Var n => eqListFast n "x"
+        | E_Var n => eqListU8 n (cons [U8] (#u8(120)) (nil [U8]))
         | E_App f x => false
         | E_Lam n body => false
         | E_Let n v b => false

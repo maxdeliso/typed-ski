@@ -4,13 +4,15 @@ import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
-import Prelude Bin
+import Prelude U8
 import Prelude List
+import Prelude nil
+import Prelude cons
 import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
-import Lexer tokenizeBin
+import Lexer tokenize
 import Lexer Token
 import Lexer T_LParen
 import Lexer T_RParen
@@ -151,9 +153,13 @@ poly isEqToken = \tok : Token =>
     | T_EOF => false
   }
 
+poly listArrow : List U8 = "->"
+poly listFatArrow : List U8 = "=>"
+poly listEq : List U8 = "="
+
 poly main =
   let testArrow =
-    match (tokenizeBin "->") [Bool] {
+    match (tokenize listArrow) [Bool] {
       | Err e => false
       | Ok toks =>
           matchList [Token] [Bool] toks false
@@ -161,7 +167,7 @@ poly main =
     }
   in
   let testFatArrow =
-    match (tokenizeBin "=>") [Bool] {
+    match (tokenize listFatArrow) [Bool] {
       | Err e => false
       | Ok toks =>
           matchList [Token] [Bool] toks false
@@ -169,7 +175,7 @@ poly main =
     }
   in
   let testEq =
-    match (tokenizeBin "=") [Bool] {
+    match (tokenize listEq) [Bool] {
       | Err e => false
       | Ok toks =>
           matchList [Token] [Bool] toks false
@@ -177,8 +183,8 @@ poly main =
     }
   in
   if [Bool] testArrow
-    (\u : Bin =>
+    (\u : U8 =>
       if [Bool] testFatArrow
-        (\u : Bin => testEq)
-        (\u : Bin => false))
-    (\u : Bin => false)
+        (\u : U8 => testEq)
+        (\u : U8 => false))
+    (\u : U8 => false)

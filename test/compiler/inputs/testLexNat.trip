@@ -4,13 +4,15 @@ import Prelude Bool
 import Prelude false
 import Prelude if
 import Prelude Bin
+import Lexer eqListU8
 import Prelude List
+import Prelude nil
+import Prelude cons
 import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
-import Prelude eqBin
-import Lexer tokenizeBin
+import Lexer tokenize
 import Lexer Token
 import Lexer T_LParen
 import Lexer T_RParen
@@ -77,12 +79,14 @@ poly isNat123Token = \tok : Token =>
     | T_KwType => false
     | T_KwData => false
     | T_Ident str => false
-    | T_Nat n => eqBin n 123
+    | T_Nat n => eqListU8 n 123
     | T_EOF => false
   }
 
+poly list123 : List U8 = "123"
+
 poly main =
-  match (tokenizeBin "123") [Bool] {
+  match (tokenize list123) [Bool] {
     | Err e => false
     | Ok toks =>
         matchList [Token] [Bool] toks false

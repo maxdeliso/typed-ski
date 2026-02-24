@@ -1,6 +1,6 @@
 module Test
 
-import Lexer tokenizeBin
+import Lexer tokenize
 import Lexer tokenizeAcc
 import Lexer Token
 import Lexer reverse
@@ -8,6 +8,7 @@ import Prelude Bin
 import Prelude incBin
 import Prelude nil
 import Prelude cons
+import Prelude U8
 import Prelude foldl
 import Prelude Result
 import Prelude Err
@@ -22,11 +23,13 @@ export main
 poly rec length = \xs : List Token =>
   foldl [Token] [Bin]
     (\acc : Bin => \_ : Token => incBin acc)
-    0
+    BZ
     xs
 
+poly list1Space2 : List U8 = "1 2"
+
 poly main =
-  match (tokenizeBin "1 2") [Nat] {
-    | Err _ => 0
+  match (tokenize list1Space2) [Nat] {
+    | Err _ => zero
     | Ok tokens => fromBin (length tokens)
   }

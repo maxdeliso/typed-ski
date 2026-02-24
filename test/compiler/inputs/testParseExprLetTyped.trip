@@ -9,6 +9,7 @@ import Prelude eqBin
 import Prelude List
 import Prelude cons
 import Prelude nil
+import Prelude U8
 import Prelude Result
 import Prelude Ok
 import Prelude Err
@@ -23,7 +24,7 @@ import Lexer T_Colon
 import Lexer T_Eq
 import Lexer T_Nat
 import Lexer T_EOF
-import Lexer eqListFast
+import Lexer eqListU8
 import Parser parseExpr
 import Parser Expr
 import Parser E_Var
@@ -35,9 +36,9 @@ import Parser E_Match
 
 export main
 
-poly isVarNamed = \expr : Expr => \name : List Bin =>
+poly isVarNamed = \expr : Expr => \name : List U8 =>
   match expr [Bool] {
-    | E_Var n => eqListFast n name
+    | E_Var n => eqListU8 n name
     | E_App f x => false
     | E_Lam name body => false
     | E_Let name val body => false
@@ -48,13 +49,13 @@ poly isVarNamed = \expr : Expr => \name : List Bin =>
 poly main =
   let input =
     cons [Token] T_KwLet
-      (cons [Token] (T_Ident "x")
+      (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
         (cons [Token] T_Colon
-          (cons [Token] (T_Ident "Bin")
+          (cons [Token] (T_Ident (cons [U8] (#u8(66)) (cons [U8] (#u8(105)) (cons [U8] (#u8(110)) (nil [U8])))))
             (cons [Token] T_Eq
               (cons [Token] (T_Nat 1)
                 (cons [Token] T_KwIn
-                  (cons [Token] (T_Ident "x")
+                  (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
                     (cons [Token] T_EOF (nil [Token])))))))))
   in
   match (parseExpr input) [Bool] {
@@ -66,7 +67,7 @@ poly main =
         | E_App f x => false
         | E_Lam name body => false
         | E_Let name val body =>
-          if [Bool] (eqListFast name "x")
+          if [Bool] (eqListU8 name (cons [U8] (#u8(120)) (nil [U8])))
             (\u : Bin =>
               match val [Bool] {
                 | E_Var n => false
@@ -75,7 +76,7 @@ poly main =
                 | E_Let name val body => false
                 | E_Nat n =>
                   if [Bool] (eqBin n 1)
-                    (\u : Bin => isVarNamed body "x")
+                    (\u : Bin => isVarNamed body (cons [U8] (#u8(120)) (nil [U8])))
                     (\u : Bin => false)
                 | E_Match scrutinee arms => false
               })

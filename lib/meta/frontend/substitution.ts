@@ -992,6 +992,7 @@ export function substituteTermHygienicBatch(
 
     case "type-var":
     case "terminal":
+    case "u8":
       return term;
   }
 }
@@ -1183,6 +1184,7 @@ export function substituteHygienic<T extends TripLangValueType>(
       return term;
     case "type-var":
     case "terminal":
+    case "u8":
       return term;
   }
 }
@@ -1500,6 +1502,7 @@ function substituteTripLangTerm(
       };
     }
     case "combinator":
+    case "native":
     case "type":
     case "data":
     case "module":
@@ -1569,6 +1572,7 @@ function substituteTripLangType(
     case "data":
     case "untyped":
     case "combinator":
+    case "native":
     case "module":
     case "import":
     case "export":
@@ -1697,6 +1701,7 @@ export function substituteTripLangTermDirectBatch(
       };
     }
     case "combinator":
+    case "native":
     case "type":
     case "data":
     case "module":
@@ -1779,6 +1784,7 @@ export function substituteTripLangTypeDirect(
     case "data":
     case "untyped":
     case "combinator":
+    case "native":
     case "module":
     case "import":
     case "export":

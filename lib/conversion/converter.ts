@@ -16,6 +16,7 @@ import {
   BPrime,
   C,
   CPrime,
+  EqU8,
   I,
   K,
   ReadOne,
@@ -31,7 +32,8 @@ type CoreTerm =
   | { kind: "idx"; index: number }
   | { kind: "app"; lft: CoreTerm; rgt: CoreTerm }
   | { kind: "lam"; body: CoreTerm }
-  | { kind: "terminal"; expr: SKIExpression };
+  | { kind: "terminal"; expr: SKIExpression }
+  | { kind: "u8"; value: number };
 
 interface Res {
   n: number;
@@ -66,6 +68,8 @@ const terminalFromSym = (sym: string): SKIExpression => {
       return ReadOne;
     case ".":
       return WriteOne;
+    case "E":
+      return EqU8;
     default:
       throw new ConversionError(`unknown SKI terminal: ${sym}`);
   }
@@ -95,7 +99,12 @@ const toCore = (term: DeBruijnTerm): CoreTerm => {
       };
     case "DbTerminal":
       return { kind: "terminal", expr: terminalFromSym(term.sym) };
+    case "DbU8Literal":
+      return { kind: "u8", value: term.value };
     case "DbFreeVar":
+      if (term.name === "eqU8") {
+        return { kind: "terminal", expr: EqU8 };
+      }
       throw new ConversionError(`free variable detected: ${term.name}`);
     case "DbFreeTypeVar":
       throw new ConversionError(`free type variable detected: ${term.name}`);
@@ -247,6 +256,8 @@ const compile = (term: CoreTerm): Res => {
     }
     case "terminal":
       return { n: 0, expr: term.expr };
+    case "u8":
+      return { n: 0, expr: { kind: "u8", value: term.value } };
   }
 };
 

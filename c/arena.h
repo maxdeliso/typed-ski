@@ -20,7 +20,8 @@ typedef enum {
   ARENA_KIND_TERMINAL = 1,
   ARENA_KIND_NON_TERM = 2,
   ARENA_KIND_CONTINUATION = 3,
-  ARENA_KIND_SUSPENSION = 4
+  ARENA_KIND_SUSPENSION = 4,
+  ARENA_KIND_U8 = 5
 } ArenaKind;
 
 typedef enum {
@@ -33,7 +34,8 @@ typedef enum {
   ARENA_SYM_C = 9,
   ARENA_SYM_SPRIME = 10,
   ARENA_SYM_BPRIME = 11,
-  ARENA_SYM_CPRIME = 12
+  ARENA_SYM_CPRIME = 12,
+  ARENA_SYM_EQ_U8 = 13
 } ArenaSym;
 
 #define EMPTY 0xffffffff
@@ -116,6 +118,7 @@ uint32_t leftOf(uint32_t n);
 uint32_t rightOf(uint32_t n);
 uint32_t allocTerminal(uint32_t sym);
 uint32_t allocCons(uint32_t l, uint32_t r);
+uint32_t allocU8(uint8_t value);
 uint32_t arenaKernelStep(uint32_t expr);
 int64_t hostPullV2(void);
 /** Block until a completion is available; write it to *cqe. */

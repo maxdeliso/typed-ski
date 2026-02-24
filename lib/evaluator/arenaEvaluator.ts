@@ -13,6 +13,7 @@ import { SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import {
   ARENA_SYM_TO_SKI,
+  ArenaKind,
   type ArenaNodeId,
   ArenaSym,
 } from "../shared/arena.ts";
@@ -44,6 +45,7 @@ const terminalCache = new WeakMap<
     cPrime: number;
     readOne: number;
     writeOne: number;
+    eqU8: number;
   }
 >();
 
@@ -60,7 +62,7 @@ function toArenaWithExports(
   root: SKIExpression,
   exports: Pick<
     ArenaWasmExports,
-    "allocTerminal" | "allocCons"
+    "allocTerminal" | "allocCons" | "allocU8"
   >,
 ): ArenaNodeId {
   const EMPTY = 0xffffffff;
@@ -79,6 +81,7 @@ function toArenaWithExports(
       cPrime: exports.allocTerminal(ArenaSym.CPrime),
       readOne: exports.allocTerminal(ArenaSym.ReadOne),
       writeOne: exports.allocTerminal(ArenaSym.WriteOne),
+      eqU8: exports.allocTerminal(ArenaSym.EqU8),
     };
     terminalCache.set(exports, cache);
   }
@@ -135,8 +138,18 @@ function toArenaWithExports(
         case SKITerminalSymbol.WriteOne:
           id = cache.writeOne;
           break;
+        case SKITerminalSymbol.EqU8:
+          id = cache.eqU8;
+          break;
         default:
           throw new Error("Unrecognised terminal symbol");
+      }
+      exprCache.set(expr, id);
+      stack.pop();
+    } else if (expr.kind === "u8") {
+      const id = exports.allocU8(expr.value);
+      if (id === EMPTY) {
+        throw new Error("Arena Out of Memory during U8 marshaling");
       }
       exprCache.set(expr, id);
       stack.pop();
@@ -231,6 +244,10 @@ function fromArenaWithExports(
       const sym = getSym(id);
       cache.set(id, ARENA_SYM_TO_SKI[sym as ArenaSym]!);
       stack.pop();
+    } else if (kind === ArenaKind.U8) {
+      const value = getSym(id);
+      cache.set(id, { kind: "u8", value });
+      stack.pop();
     } else if (kind === 3 || kind === 4) { // ArenaKind.Continuation || ArenaKind.Suspension
       // CONTINUATION/SUSPENSION: These are internal WASM-only nodes used for iterative reduction.
       // They should never appear in the final result, but if they do (e.g., due to a bug or
@@ -282,6 +299,7 @@ export interface ArenaWasmExports {
   reset(): void;
   allocTerminal(sym: number): number;
   allocCons(l: number, r: number): number;
+  allocU8(value: number): number;
   arenaKernelStep(expr: number): number;
   reduce(expr: number, max: number): number;
   hostSubmit?(nodeId: number, reqId: number, maxSteps: number): number;
@@ -370,6 +388,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
       "reset",
       "allocTerminal",
       "allocCons",
+      "allocU8",
       "arenaKernelStep",
       "reduce",
       "kindOf",
@@ -385,6 +404,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     assertFn(ex.reset, "reset");
     assertFn(ex.allocTerminal, "allocTerminal");
     assertFn(ex.allocCons, "allocCons");
+    assertFn(ex.allocU8, "allocU8");
     assertFn(ex.arenaKernelStep, "arenaKernelStep");
     assertFn(ex.reduce, "reduce");
     assertFn(ex.kindOf, "kindOf");
@@ -432,6 +452,23 @@ export class ArenaEvaluatorWasm implements Evaluator {
     terminalCache.delete(
       this.$ as unknown as Pick<ArenaWasmExports, "allocTerminal">,
     );
+  }
+
+  /**
+   * Connect this evaluator to an existing arena at the specified memory address.
+   * Invalidates the terminal cache to ensure consistency with the new arena.
+   */
+  connectArena(arenaPointer: number): number {
+    if (!this.$.connectArena) {
+      throw new Error("connectArena export is missing");
+    }
+    const rc = this.$.connectArena(arenaPointer);
+    if (rc === 1) {
+      terminalCache.delete(
+        this.$ as unknown as Pick<ArenaWasmExports, "allocTerminal">,
+      );
+    }
+    return rc;
   }
 
   hostSubmit(nodeId: number, reqId: number, maxSteps: number): number {
@@ -493,6 +530,14 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
       const expr = ARENA_SYM_TO_SKI[symValue as ArenaSym]!;
       return { id, kind: "terminal", sym: unparseSKI(expr) };
+    }
+
+    // 2b. Build U8 literal (display as #u8(n))
+    if (k === ArenaKind.U8) {
+      const symValue = views && id < views.capacity
+        ? views.sym[id]!
+        : this.$.symOf(id);
+      return { id, kind: "terminal", sym: `#u8(${symValue})` };
     }
 
     // 3. Build Non-Terminal

@@ -13,9 +13,17 @@ import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaNode } from "../../lib/shared/types.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { ArenaKind } from "../../lib/shared/arena.ts";
-import { type SKIExpression, unparseSKI } from "../../lib/ski/expression.ts";
+import {
+  apply,
+  equivalent,
+  type SKIExpression,
+  unparseSKI,
+} from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
+import { EqU8 } from "../../lib/ski/terminal.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { bracketLambda } from "../../lib/conversion/converter.ts";
+import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
 
 class TestArenaEvaluator extends ArenaEvaluatorWasm {
   public override getArenaTop(): number {
@@ -117,6 +125,96 @@ Deno.test("singleton and fresh arena reduction equivalence", async (t) => {
       );
     }
   });
+});
+
+Deno.test("eqU8 intrinsic - reduce to True/False", async (t) => {
+  await t.step("eqU8 65 65 reduces to True (K)", () => {
+    const u8_65 = { kind: "u8" as const, value: 65 };
+    const expr = apply(apply(EqU8, u8_65), u8_65);
+    const result = arenaEval.reduce(expr, 10000);
+    assertEquals(result.kind, "terminal");
+    assertEquals((result as { kind: "terminal"; sym: string }).sym, "K");
+    assertEquals(unparseSKI(result), "K");
+  });
+
+  await t.step("eqU8 65 66 reduces to False (K I)", () => {
+    const u8_65 = { kind: "u8" as const, value: 65 };
+    const u8_66 = { kind: "u8" as const, value: 66 };
+    const expr = apply(apply(EqU8, u8_65), u8_66);
+    const result = arenaEval.reduce(expr, 10000);
+    const falseForm = parseSKI("(K I)");
+    assert(
+      equivalent(result, falseForm),
+      `expected (K I), got ${unparseSKI(result)}`,
+    );
+  });
+
+  await t.step(
+    "bracketLambda(eqU8 __trip_u8_65 __trip_u8_65) reduces to K",
+    () => {
+      const term = createApplication(
+        createApplication(mkVar("eqU8"), mkVar("__trip_u8_65")),
+        mkVar("__trip_u8_65"),
+      );
+      const ski = bracketLambda(term);
+      const result = arenaEval.reduce(ski, 10000);
+      assertEquals(unparseSKI(result), "K");
+    },
+  );
+});
+
+Deno.test("Intrinsic Cache Safety", async (t) => {
+  const K = parseSKI("K");
+  const I = parseSKI("I");
+  const FalseForm = apply(K, I);
+
+  const testReductions = () => {
+    // eqU8 'a' 'a' -> True (K)
+    const u8_97 = { kind: "u8" as const, value: 97 };
+    const eqAA = apply(apply(EqU8, u8_97), u8_97);
+    const resTrue = arenaEval.reduce(eqAA, 100);
+    assert(equivalent(resTrue, K), `Expected K, got ${unparseSKI(resTrue)}`);
+
+    // Verify K behavior: K x y -> x
+    const x = { kind: "u8" as const, value: 1 };
+    const y = { kind: "u8" as const, value: 2 };
+    const kTest = apply(apply(resTrue, x), y);
+    const kRes = arenaEval.reduce(kTest, 100);
+    assert(
+      equivalent(kRes, x),
+      `K test failed: expected 1, got ${unparseSKI(kRes)}`,
+    );
+
+    // eqU8 'a' 'b' -> False (K I)
+    const u8_98 = { kind: "u8" as const, value: 98 };
+    const eqAB = apply(apply(EqU8, u8_97), u8_98);
+    const resFalse = arenaEval.reduce(eqAB, 100);
+    assert(
+      equivalent(resFalse, FalseForm),
+      `Expected (K I), got ${unparseSKI(resFalse)}`,
+    );
+
+    // Verify False behavior: (K I) x y -> y
+    const falseTest = apply(apply(resFalse, x), y);
+    const falseRes = arenaEval.reduce(falseTest, 100);
+    assert(
+      equivalent(falseRes, y),
+      `False test failed: expected 2, got ${unparseSKI(falseRes)}`,
+    );
+  };
+
+  await t.step("works after first reset", () => {
+    arenaEval.reset();
+    testReductions();
+  });
+
+  await t.step(
+    "works after second reset (verifies cache invalidation)",
+    () => {
+      arenaEval.reset();
+      testReductions();
+    },
+  );
 });
 
 Deno.test("dumpArena", async (t) => {
@@ -245,9 +343,22 @@ Deno.test("dumpArena", async (t) => {
         const sym = node.sym;
         assert(
           sym !== undefined &&
-            ["S", "K", "I", "B", "C", "P", "Q", "R", ",", ".", "?"]
-              .includes(sym),
-          "Terminal symbol should be S, K, I, B, C, P, Q, R, `,`, `.`, or `?` " +
+            ([
+              "S",
+              "K",
+              "I",
+              "B",
+              "C",
+              "P",
+              "Q",
+              "R",
+              ",",
+              ".",
+              "E",
+              "?",
+            ]
+              .includes(sym) || /^#u8\(\d+\)$/.test(sym)),
+          "Terminal symbol should be S, K, I, B, C, P, Q, R, `,`, `.`, E, #u8(n), or `?` " +
             `(got ${sym})`,
         );
       } else {
@@ -298,6 +409,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       reset: () => {},
       allocTerminal: () => 0,
       allocCons: () => 0,
+      allocU8: () => 0,
       arenaKernelStep: () => 0,
       reduce: () => 0,
       kindOf: () => 0,
@@ -317,6 +429,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       reset: () => {},
       allocTerminal: () => 0,
       allocCons: () => 0,
+      allocU8: () => 0,
       arenaKernelStep: () => 0,
       reduce: () => 0,
       kindOf: () => 0,
@@ -335,6 +448,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
         reset: () => {},
         allocTerminal: () => 0,
         allocCons: () => 0,
+        allocU8: () => 0,
         arenaKernelStep: () => 0,
         reduce: () => 0,
         kindOf: () => 0,
@@ -354,6 +468,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
         reset: () => {},
         allocTerminal: () => 0,
         allocCons: () => 0,
+        allocU8: () => 0,
         arenaKernelStep: () => 0,
         reduce: () => 0,
         kindOf: () => 0,
@@ -387,6 +502,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       reset: () => {},
       allocTerminal: () => 0,
       allocCons: () => 0,
+      allocU8: () => 0,
       arenaKernelStep: () => 0,
       reduce: () => 0,
       symOf: () => 0,
@@ -411,6 +527,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       reset: () => {},
       allocTerminal: () => 0,
       allocCons: () => 0,
+      allocU8: () => 0,
       arenaKernelStep: () => 0,
       reduce: () => 0,
       symOf: () => 0,
@@ -435,6 +552,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       allocTerminal: () => 0,
       reset: () => {},
       allocCons: () => 0,
+      allocU8: () => 0,
       arenaKernelStep: () => 0,
       reduce: () => 0,
       kindOf: () => 0,
@@ -463,6 +581,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     const exports = {
       allocTerminal: () => 0,
       allocCons: () => 0xffffffff,
+      allocU8: () => 0,
       reset: () => {},
       arenaKernelStep: () => 0,
       reduce: () => 0,
@@ -506,6 +625,7 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       reset: () => {},
       allocTerminal: () => allocTerminalCalls++,
       allocCons: () => 0,
+      allocU8: () => 0,
       arenaKernelStep: () => 0,
       reduce: () => 0,
       kindOf: () => 0,
@@ -519,11 +639,11 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
 
     evaluator.toArena(parseSKI("I"));
-    assertEquals(allocTerminalCalls, 10);
+    assertEquals(allocTerminalCalls, 11);
 
     evaluator.reset();
     evaluator.toArena(parseSKI("I"));
-    assertEquals(allocTerminalCalls, 20);
+    assertEquals(allocTerminalCalls, 22);
   });
 
   await t.step("structural hash-consing (consCache)", () => {

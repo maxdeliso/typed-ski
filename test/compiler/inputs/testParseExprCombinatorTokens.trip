@@ -17,7 +17,7 @@ import Lexer Token
 import Lexer T_Comma
 import Lexer T_Dot
 import Lexer T_EOF
-import Lexer eqListFast
+import Lexer eqListU8
 import Parser parseExpr
 import Parser Expr
 import Parser E_Var
@@ -31,7 +31,7 @@ export main
 
 poly isVarNamed = \expr : Expr => \name : List Bin =>
   match expr [Bool] {
-    | E_Var n => eqListFast n name
+    | E_Var n => eqListU8 n name
     | E_App f x => false
     | E_Lam n body => false
     | E_Let n v b => false

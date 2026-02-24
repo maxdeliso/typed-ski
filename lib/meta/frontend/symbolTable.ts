@@ -183,6 +183,7 @@ export function indexSymbols(
       case "typed":
       case "untyped":
       case "combinator":
+      case "native":
         {
           if (termMap.has(term.name)) {
             throw new CompilationError(
@@ -271,6 +272,8 @@ export function extractDefinitionValue(
     case "untyped":
     case "combinator":
       return tt.term;
+    case "native":
+      return undefined;
     case "type":
       return tt.type;
     case "data":

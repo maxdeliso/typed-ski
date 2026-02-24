@@ -75,22 +75,26 @@ Deno.test("prelude Result/Pair/ParseError data types", async () => {
   }
 });
 
-Deno.test("trip harness evaluates IO programs", async () => {
-  const source = loadInput("echoOne.trip", __dirname);
+Deno.test({
+  name: "trip harness evaluates IO programs",
+  ignore: false, // TODO: later
+  fn: async () => {
+    const source = loadInput("echoOne.trip", __dirname);
 
-  const input = new Uint8Array([65]);
-  const { result, stdout, evaluator } = await evaluateTripWithIo(source, {
-    stdin: input,
-    stdoutMaxBytes: 1,
-  });
+    const input = new Uint8Array([65]);
+    const { result, stdout, evaluator } = await evaluateTripWithIo(source, {
+      stdin: input,
+      stdoutMaxBytes: 1,
+    });
 
-  try {
-    assertEquals(stdout.length, 1);
-    assertEquals(stdout[0], 65);
-    assertEquals(UnBinNumber(result), 65n);
-  } finally {
-    (evaluator as ParallelArenaEvaluatorWasm).terminate();
-  }
+    try {
+      assertEquals(stdout.length, 1);
+      assertEquals(stdout[0], 65);
+      assertEquals(UnBinNumber(result), 65n);
+    } finally {
+      (evaluator as ParallelArenaEvaluatorWasm).terminate();
+    }
+  },
 });
 
 Deno.test("trip harness evaluates numeric literal main", async () => {

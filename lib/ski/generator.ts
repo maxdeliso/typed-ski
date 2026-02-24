@@ -47,11 +47,18 @@ const randomInsert = (
     } else {
       return apply(term, expr);
     }
-  } else if (direction) {
-    return apply(randomInsert(randomSeed, expr.lft, term), expr.rgt);
-  } else {
-    return apply(expr.lft, randomInsert(randomSeed, expr.rgt, term));
   }
+  if (expr.kind === "u8") {
+    if (direction) {
+      return apply(expr, term);
+    } else {
+      return apply(term, expr);
+    }
+  }
+  return apply(
+    direction ? randomInsert(randomSeed, expr.lft, term) : expr.lft,
+    direction ? expr.rgt : randomInsert(randomSeed, expr.rgt, term),
+  );
 };
 
 /**

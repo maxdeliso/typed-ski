@@ -1,43 +1,26 @@
 import { assertEquals } from "std/assert";
 
-import { compile } from "../../lib/meta/frontend.ts";
-import { resolvePoly } from "../../lib/meta/frontend/compilation.ts";
-import type { SystemFTerm } from "../../lib/terms/systemF.ts";
+import { parseTripLang } from "../../lib/parser/tripLang.ts";
+import type { TripLangTerm } from "../../lib/meta/trip.ts";
 
-const NO_NAT_SOURCE = `module LiteralNoNat
-
-import Prelude BZ
-import Prelude B0
-import Prelude B1
-
+const SOURCE_WITH_NAT_LITERAL = `module M
+export main
 poly main = 3
 `;
 
-const decodeBinTerm = (term: SystemFTerm): number => {
-  if (term.kind === "systemF-var") {
-    if (term.name !== "BZ") {
-      throw new Error(`expected BZ, got ${term.name}`);
+Deno.test("numeric literals desugar to nat literal vars", async (t) => {
+  await t.step("parsed main = 3 is nat literal var", () => {
+    const program = parseTripLang(SOURCE_WITH_NAT_LITERAL);
+    const mainDef = program.terms.find(
+      (t): t is TripLangTerm => t.kind === "poly" && t.name === "main",
+    );
+    assertEquals(mainDef !== undefined, true);
+    if (mainDef?.kind === "poly") {
+      assertEquals(mainDef.term.kind, "systemF-var");
+      if (mainDef.term.kind === "systemF-var") {
+        assertEquals(mainDef.term.name, "__trip_u8_3");
+      }
     }
-    return 0;
-  }
-  if (term.kind !== "non-terminal") {
-    throw new Error(`expected bin term, got ${term.kind}`);
-  }
-  const ctor = term.lft;
-  if (ctor.kind !== "systemF-var") {
-    throw new Error(`expected constructor, got ${ctor.kind}`);
-  }
-  const rest = decodeBinTerm(term.rgt);
-  if (ctor.name === "B0") return rest * 2;
-  if (ctor.name === "B1") return rest * 2 + 1;
-  throw new Error(`expected B0/B1 constructor, got ${ctor.name}`);
-};
-
-Deno.test("numeric literals desugar to Bin terms", async (t) => {
-  await t.step("compiles without Nat in scope", () => {
-    const compiled = compile(NO_NAT_SOURCE);
-    const mainPoly = resolvePoly(compiled, "main");
-    assertEquals(decodeBinTerm(mainPoly.term), 3);
   });
 
   await t.step("no Nat requirement for literals", () => {

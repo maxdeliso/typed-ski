@@ -56,7 +56,10 @@ import {
   RIGHT_BRACE,
   RIGHT_PAREN,
 } from "./consts.ts";
-import { parseNatLiteralIdentifier } from "../consts/natNames.ts";
+import {
+  makeNatLiteralIdentifier,
+  parseNatLiteralIdentifier,
+} from "../consts/natNames.ts";
 import { unparseSystemFType } from "./systemFType.ts";
 
 /**
@@ -320,6 +323,12 @@ const parseEscape = (
     case "n":
       code = 10;
       break;
+    case "r":
+      code = 13;
+      break;
+    case "t":
+      code = 9;
+      break;
     case "\\":
       code = 92;
       break;
@@ -367,32 +376,15 @@ const parseLiteralChar = (
   return [ch, code, { buf: state.buf, idx: state.idx + 1 }];
 };
 
-const makeBinType = (): BaseType => mkTypeVariable("Bin");
+const makeU8Type = (): BaseType => mkTypeVariable("U8");
 
-const buildBinTerm = (code: bigint): SystemFTerm => {
-  if (code <= 0n) {
-    return mkSystemFVar("BZ");
-  }
-  const bits: number[] = [];
-  let n = code;
-  while (n > 0n) {
-    bits.push(n & 1n ? 1 : 0);
-    n = n / 2n;
-  }
-  let term: SystemFTerm = mkSystemFVar("BZ");
-  for (let i = bits.length - 1; i >= 0; i--) {
-    const ctor = bits[i] === 0 ? "B0" : "B1";
-    term = createSystemFApplication(mkSystemFVar(ctor), term);
-  }
-  return term;
-};
-
-const buildBinList = (codes: number[]): SystemFTerm => {
-  const binType = makeBinType();
-  let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), binType);
+/** Builds List U8: cons [U8] (#u8(c)) … (nil [U8]). Each code becomes __trip_u8_<code>. */
+const buildU8List = (codes: number[]): SystemFTerm => {
+  const u8Type = makeU8Type();
+  let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), u8Type);
   for (let i = codes.length - 1; i >= 0; i--) {
-    const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), binType);
-    const head = buildBinTerm(BigInt(codes[i]!));
+    const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), u8Type);
+    const head = mkSystemFVar(`__trip_u8_${codes[i]!}`);
     term = createSystemFApplication(
       createSystemFApplication(consTerm, head),
       term,
@@ -430,7 +422,7 @@ const parseCharLiteralTerm = (
     );
   }
   currentState = consumeRaw(currentState, "'");
-  return [`'${literalPart}'`, buildBinList([code]), currentState];
+  return [`'${literalPart}'`, mkSystemFVar(`__trip_u8_${code}`), currentState];
 };
 
 const parseStringLiteralTerm = (
@@ -473,7 +465,7 @@ const parseStringLiteralTerm = (
     codes.push(code);
   }
 
-  return [`"${literalParts.join("")}"`, buildBinList(codes), currentState];
+  return [`"${literalParts.join("")}"`, buildU8List(codes), currentState];
 };
 
 /**
@@ -524,10 +516,34 @@ function parseAtomicSystemFTerm(
       mkSystemFAbs(varLit, typeAnnotation, bodyTerm),
       stateAfterBody,
     ];
-  } // 2. Type Abstraction: #X => body
+  } // 2. Type Abstraction or U8 literal: #X => body OR #u8(n)
   else if (ch === HASH) {
-    const stateAfterLambdaT = matchCh(state, HASH);
-    const stateBeforeVar = skipWhitespace(stateAfterLambdaT);
+    const stateAfterHash = matchCh(state, HASH);
+    const [nextCh, _stateAfterPeek] = peek(stateAfterHash);
+
+    // Try parsing as #u8(n)
+    if (nextCh === "u") {
+      try {
+        const [id, stateAfterId] = parseIdentifier(stateAfterHash);
+        if (id === "u8") {
+          const [afterIdCh, stateAfterAfterId] = peek(stateAfterId);
+          if (afterIdCh === "(") {
+            const stateAfterLP = matchLP(stateAfterAfterId);
+            const [lit, val, stateAfterLit] = parseNumericLiteral(stateAfterLP);
+            const stateAfterRP = matchRP(stateAfterLit);
+            return [
+              `#u8(${lit})`,
+              mkSystemFVar(`__trip_u8_${val}`),
+              stateAfterRP,
+            ];
+          }
+        }
+      } catch {
+        // Fall through to type abstraction
+      }
+    }
+
+    const stateBeforeVar = skipWhitespace(stateAfterHash);
     const [typeVar, stateAfterVar] = parseIdentifier(stateBeforeVar);
 
     const stateBeforeArrow = skipWhitespace(stateAfterVar);
@@ -556,7 +572,19 @@ function parseAtomicSystemFTerm(
     return parseStringLiteralTerm(currentState);
   } else if (isDigit(ch)) {
     const [literal, value, stateAfterLiteral] = parseNumericLiteral(state);
-    return [literal, buildBinTerm(value), stateAfterLiteral];
+    // Values < 256 default to U8 literals; others to Nat
+    if (value >= 0n && value <= 255n) {
+      return [
+        literal,
+        mkSystemFVar(`__trip_u8_${value}`),
+        stateAfterLiteral,
+      ];
+    }
+    return [
+      literal,
+      mkSystemFVar(makeNatLiteralIdentifier(value)),
+      stateAfterLiteral,
+    ];
   } // 5. Identifiers and Keywords
   else if (ch !== null && /[a-zA-Z]/.test(ch)) {
     const [varLit, stateAfterVar] = parseIdentifier(state);
@@ -657,8 +685,11 @@ export function unparseSystemF(term: SystemFTerm): string {
         parts.map(unparseSystemF).join(" ")
       }${RIGHT_PAREN}`;
     }
-    case "systemF-var":
+    case "systemF-var": {
+      const u8Match = /^__trip_u8_(\d+)$/.exec(term.name);
+      if (u8Match) return `#u8(${u8Match[1]})`;
       return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
+    }
     case "systemF-abs":
       return `${BACKSLASH}${term.name}${COLON}${
         unparseSystemFType(term.typeAnnotation)

@@ -6,6 +6,7 @@ import Prelude false
 import Prelude List
 import Prelude cons
 import Prelude nil
+import Prelude U8
 import Prelude Result
 import Prelude Ok
 import Prelude Err
@@ -17,7 +18,7 @@ import Lexer Token
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
-import Lexer eqListFast
+import Lexer eqListU8
 import Parser parseAtom
 import Parser Expr
 import Parser E_Var
@@ -31,7 +32,7 @@ export main
 
 poly main =
   let input =
-    cons [Token] (T_Ident "x")
+    cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
       (cons [Token] T_EOF (nil [Token]))
   in
   match (parseAtom input) [Bool] {
@@ -39,7 +40,7 @@ poly main =
     | Ok res =>
         let expr = fst [Expr] [List Token] res in
         match expr [Bool] {
-          | E_Var name => eqListFast name "x"
+          | E_Var name => eqListU8 name (cons [U8] (#u8(120)) (nil [U8]))
           | E_App f x => false
           | E_Lam name body => false
           | E_Let name val body => false

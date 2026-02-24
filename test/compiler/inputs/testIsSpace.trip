@@ -1,13 +1,8 @@
 module Test
 
-import Lexer isSpaceBin
-import Prelude eqBin
-import Prelude or
-import Prelude true
-import Prelude false
-import Prelude Bin
+import Lexer isSpaceU8
 import Prelude Bool
 
 export main
 
-poly main = isSpaceBin 0
+poly main = isSpaceU8 (#u8(0))

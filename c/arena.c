@@ -41,6 +41,13 @@ static atomic_uint BIN_CTOR_B0 = EMPTY;
 static atomic_uint BIN_CTOR_B1 = EMPTY;
 static atomic_uint GROW_COUNT = 0;
 
+/** Cached node IDs for True (K) and False (K I); invalidated by reset(). */
+static uint32_t TRUE_ID = EMPTY;
+static uint32_t FALSE_ID = EMPTY;
+
+/** Canonical U8 node id per byte value; deduplicated across allocU8 calls. */
+static atomic_uint U8_CACHE[256];
+
 static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63; }
 
 static inline void sys_wait32(atomic_uint *ptr, uint32_t expected) {
@@ -260,6 +267,9 @@ static void *allocate_raw_arena(uint32_t capacity) {
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_init(&cache[i], EMPTY);
 
+  for (uint32_t u = 0; u < 256; u++)
+    atomic_init(&U8_CACHE[u], EMPTY);
+
   return ARENA_BASE_ADDR;
 }
 
@@ -298,6 +308,16 @@ uint32_t connectArena(uint32_t ptr_addr) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (h->magic != ARENA_MAGIC)
     return 5;
+
+  TRUE_ID = EMPTY;
+  FALSE_ID = EMPTY;
+  atomic_store_explicit(&BIN_CTOR_BZ, EMPTY, memory_order_relaxed);
+  atomic_store_explicit(&BIN_CTOR_B0, EMPTY, memory_order_relaxed);
+  atomic_store_explicit(&BIN_CTOR_B1, EMPTY, memory_order_relaxed);
+  atomic_store_explicit(&GROW_COUNT, 0, memory_order_relaxed);
+
+  for (uint32_t u = 0; u < 256; u++)
+    atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_relaxed);
   return 1;
 }
 
@@ -315,6 +335,10 @@ void reset(void) {
   atomic_store_explicit(&BIN_CTOR_B0, EMPTY, memory_order_release);
   atomic_store_explicit(&BIN_CTOR_B1, EMPTY, memory_order_release);
   atomic_store_explicit(&GROW_COUNT, 0, memory_order_release);
+  TRUE_ID = EMPTY;
+  FALSE_ID = EMPTY;
+  for (uint32_t u = 0; u < 256; u++)
+    atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_release);
   atomic_store_explicit(
       &h->resize_seq,
       atomic_load_explicit(&h->resize_seq, memory_order_relaxed) & ~1,
@@ -487,6 +511,50 @@ uint32_t allocTerminal(uint32_t sym) {
       continue;
 
     return id;
+  }
+}
+
+uint32_t allocU8(uint8_t value) {
+  ensure_arena();
+
+  uint32_t cached =
+      atomic_load_explicit(&U8_CACHE[value], memory_order_acquire);
+  if (cached != EMPTY)
+    return cached;
+
+  while (true) {
+    SabHeader *h;
+    uint32_t seq = enter_stable(&h);
+
+    uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
+    if (id >= h->capacity) {
+      grow();
+      continue;
+    }
+
+    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
+    atomic_uchar *sym_arr = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
+    atomic_uint *hash_arr = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
+    atomic_uint *left_arr =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
+    atomic_uint *right_arr =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
+
+    atomic_store_explicit(&sym_arr[id], value, memory_order_relaxed);
+    atomic_store_explicit(&hash_arr[id], (uint32_t)value, memory_order_relaxed);
+    atomic_store_explicit(&left_arr[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&right_arr[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&kind[id], ARENA_KIND_U8, memory_order_release);
+
+    if (!check_stable(seq))
+      continue;
+
+    uint32_t expected = EMPTY;
+    if (atomic_compare_exchange_strong_explicit(&U8_CACHE[value], &expected, id,
+                                                memory_order_release,
+                                                memory_order_relaxed))
+      return id;
+    return atomic_load_explicit(&U8_CACHE[value], memory_order_acquire);
   }
 }
 
@@ -854,6 +922,24 @@ static inline StepOutcome budget_outcome(uint8_t mode, uint32_t curr,
   return o;
 }
 
+/** Prelude true = K */
+static uint32_t arenaTrue(void) {
+  if (TRUE_ID == EMPTY) {
+    TRUE_ID = allocTerminal(ARENA_SYM_K);
+  }
+  return TRUE_ID;
+}
+
+/** Prelude false = (K I) */
+static uint32_t arenaFalse(void) {
+  if (FALSE_ID == EMPTY) {
+    uint32_t k = allocTerminal(ARENA_SYM_K);
+    uint32_t i = allocTerminal(ARENA_SYM_I);
+    FALSE_ID = allocCons(k, i);
+  }
+  return FALSE_ID;
+}
+
 static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
                                   uint32_t *gas, uint32_t *remaining_steps,
                                   uint32_t free_node) {
@@ -956,6 +1042,22 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
       }
     } else if (kindOf(left) == ARENA_KIND_NON_TERM) {
       uint32_t ll = leftOf(left);
+      /* ((EQ_U8 a) b) -> True if a==b else False, when a,b are U8 */
+      if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_EQ_U8) {
+        uint32_t a = rightOf(left);
+        uint32_t b = right;
+        if (kindOf(a) == ARENA_KIND_U8 && kindOf(b) == ARENA_KIND_U8) {
+          if (*remaining_steps == 0) {
+            return budget_outcome(mode, curr, stack, 0);
+          }
+          (*remaining_steps)--;
+          uint8_t va = (uint8_t)symOf(a);
+          uint8_t vb = (uint8_t)symOf(b);
+          curr = (va == vb) ? arenaTrue() : arenaFalse();
+          mode = MODE_DESCEND;
+          continue;
+        }
+      }
       if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_K) {
         if (*remaining_steps == 0) {
           return budget_outcome(mode, curr, stack, 0);
@@ -1151,6 +1253,9 @@ static bool expr_equiv(uint32_t a, uint32_t b) {
     uint32_t kx = kindOf(x), ky = kindOf(y);
     if (kx != ky)
       return false;
+    if (kx == ARENA_KIND_U8) {
+      return symOf(x) == symOf(y);
+    }
     if (kx == ARENA_KIND_TERMINAL) {
       if (symOf(x) != symOf(y))
         return false;

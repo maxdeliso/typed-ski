@@ -29,3 +29,18 @@ export const parseNatLiteralIdentifier = (name: string): bigint | null => {
     return null;
   }
 };
+
+const U8_LITERAL_PREFIX = "__trip_u8_";
+
+export const isU8LiteralIdentifier = (name: string): boolean =>
+  name.startsWith(U8_LITERAL_PREFIX);
+
+export const parseU8LiteralIdentifier = (name: string): number | null => {
+  if (!isU8LiteralIdentifier(name)) {
+    return null;
+  }
+  const suffix = name.slice(U8_LITERAL_PREFIX.length);
+  const val = parseInt(suffix, 10);
+  if (isNaN(val)) return null;
+  return val;
+};

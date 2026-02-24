@@ -470,7 +470,9 @@ function substituteDependencies(
 
   // Cache external references computation
   const [termRefs, typeRefs] = externalReferences(defValue);
-  const externalTermRefs = Array.from(termRefs.keys());
+  const externalTermRefs = Array.from(termRefs.keys()).filter((ref) =>
+    !/^__trip_u8_\d+$/.test(ref) && !ref.startsWith("__trip_nat_literal__")
+  );
   const externalTypeRefs = Array.from(typeRefs.keys());
 
   if (externalTermRefs.length === 0 && externalTypeRefs.length === 0) {
@@ -628,14 +630,16 @@ function substituteDependencies(
         extractDefinitionValue(resolvedDefinition)!,
       );
 
-      // Update for next iteration
+      const isIntrinsicRef = (ref: string) =>
+        /^__trip_u8_\d+$/.test(ref) || ref.startsWith("__trip_nat_literal__");
+
+      // Update for next iteration (exclude intrinsics so we don't keep retrying)
       const nextExternalTermRefs = new Set<string>();
       for (const ref of newTermRefs.keys()) {
-        nextExternalTermRefs.add(ref);
+        if (!isIntrinsicRef(ref)) nextExternalTermRefs.add(ref);
       }
-      // Add back pending refs that we couldn't resolve
       for (const ref of pendingRefs) {
-        nextExternalTermRefs.add(ref);
+        if (!isIntrinsicRef(ref)) nextExternalTermRefs.add(ref);
       }
 
       if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
@@ -953,10 +957,12 @@ export function resolveCrossModuleDependencies(
   clearModuleInfoCache();
   const resolvedPS = shallowCopyProgramSpace(programSpace);
   const exportIndex = buildExportIndex(resolvedPS);
-  // Pre-lower poly/typed terms to untyped to avoid recursive inlining loops.
+  // Pre-lower poly/typed/native terms to avoid recursive inlining loops and resolve intrinsics.
   for (const module of resolvedPS.modules.values()) {
     for (const [name, def] of module.defs) {
-      if (def.kind === "poly" || def.kind === "typed") {
+      if (
+        def.kind === "poly" || def.kind === "typed" || def.kind === "native"
+      ) {
         const lowered = lower(def);
         module.defs.set(name, lowered);
         setGlobal(resolvedPS, qualifiedName(module.name, name), lowered);

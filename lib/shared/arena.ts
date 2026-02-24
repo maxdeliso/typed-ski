@@ -13,6 +13,7 @@ import {
   BPrime,
   C,
   CPrime,
+  EqU8,
   I,
   K,
   ReadOne,
@@ -33,6 +34,8 @@ export enum ArenaKind {
   Continuation = 3,
   /** Paused reducer state (WASM only): host should resubmit */
   Suspension = 4,
+  /** U8 literal (byte 0..255) */
+  U8 = 5,
 }
 
 /**
@@ -59,6 +62,8 @@ export enum ArenaSym {
   BPrime = 11,
   /** C' combinator (Turner GAMMA) */
   CPrime = 12,
+  /** eqU8 intrinsic */
+  EqU8 = 13,
 }
 
 /**
@@ -75,6 +80,7 @@ export const ARENA_SYM_TO_SKI: Record<ArenaSym, SKIExpression> = {
   [ArenaSym.CPrime]: CPrime,
   [ArenaSym.ReadOne]: ReadOne,
   [ArenaSym.WriteOne]: WriteOne,
+  [ArenaSym.EqU8]: EqU8,
 };
 
 /**

@@ -159,7 +159,7 @@ Deno.test("Parser Error Coverage", async (t) => {
     });
 
     await t.step("unsupported escape sequence in character literal", () => {
-      expect(() => parseSystemF("'\\t'")).to.throw(
+      expect(() => parseSystemF("'\\z'")).to.throw(
         ParseError,
         /unsupported escape sequence.*character literal/,
       );
@@ -176,13 +176,6 @@ Deno.test("Parser Error Coverage", async (t) => {
       expect(() => parseSystemF('"hello')).to.throw(
         ParseError,
         /unterminated string literal/,
-      );
-    });
-
-    await t.step("unsupported escape sequence in string literal", () => {
-      expect(() => parseSystemF('"\\t"')).to.throw(
-        ParseError,
-        /unsupported escape sequence.*string literal/,
       );
     });
 

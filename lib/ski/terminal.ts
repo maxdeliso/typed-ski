@@ -27,6 +27,8 @@ export enum SKITerminalSymbol {
   ReadOne = ",",
   /** Write a single byte (brainf***-style "."). */
   WriteOne = ".",
+  /** eqU8 : U8 -> U8 -> Bool (native intrinsic). */
+  EqU8 = "E",
 }
 
 /**
@@ -115,3 +117,8 @@ export const ReadOne: SKITerminal = term(SKITerminalSymbol.ReadOne);
  * The writeOne terminal node (output).
  */
 export const WriteOne: SKITerminal = term(SKITerminalSymbol.WriteOne);
+
+/**
+ * The eqU8 intrinsic terminal (native byte equality).
+ */
+export const EqU8: SKITerminal = term(SKITerminalSymbol.EqU8);

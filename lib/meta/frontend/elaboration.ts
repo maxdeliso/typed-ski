@@ -44,6 +44,8 @@ function elaborateTerm(
       return term;
     case "combinator":
       return term;
+    case "native":
+      return term;
     case "type":
       return term;
     case "data":

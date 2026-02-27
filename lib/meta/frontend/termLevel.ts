@@ -23,6 +23,8 @@ import { SKITerminalSymbol, term } from "../../ski/terminal.ts";
 
 const INTRINSIC_TERMS: Readonly<Record<string, SKIExpression>> = {
   eqU8: term(SKITerminalSymbol.EqU8),
+  readOne: term(SKITerminalSymbol.ReadOne),
+  writeOne: term(SKITerminalSymbol.WriteOne),
 };
 
 function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {

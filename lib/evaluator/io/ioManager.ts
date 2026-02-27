@@ -47,7 +47,8 @@ export class IoManager {
     | null = null;
   private readonly ioWait = new Map<number, number>();
   private readonly pendingWaiters = new Set<number>();
-  private pendingWakeBudget = 0;
+  private pendingWakeBudgetStdin = 0;
+  private pendingWakeBudgetStdout = 0;
   private readonly activeTimeouts = new Set<() => void>();
   private readonly aborted: () => boolean;
 
@@ -84,13 +85,16 @@ export class IoManager {
   /**
    * Reads bytes from stdout ring buffer.
    */
-  readStdout(maxBytes = DEFAULT_STDOUT_READ_SIZE): Uint8Array {
+  async readStdout(maxBytes = DEFAULT_STDOUT_READ_SIZE): Promise<Uint8Array> {
     const rings = this.getIoRings();
     const bytes: number[] = [];
     for (let i = 0; i < maxBytes; i++) {
       const value = rings.stdout.tryDequeue();
       if (value === null) break;
       bytes.push(value);
+    }
+    if (bytes.length > 0) {
+      await this.wakeStdoutWaiters(bytes.length);
     }
     return new Uint8Array(bytes);
   }
@@ -141,9 +145,34 @@ export class IoManager {
    * Wakes up suspended stdin waiters.
    */
   async wakeStdinWaiters(limit: number): Promise<number> {
-    const rings = this.getIoRings();
-    let budget = limit + this.pendingWakeBudget;
-    this.pendingWakeBudget = 0;
+    const { woken, remainingBudget } = await this.wakeWaiters(
+      limit,
+      this.pendingWakeBudgetStdin,
+      this.getIoRings().stdinWait,
+    );
+    this.pendingWakeBudgetStdin = remainingBudget;
+    return woken;
+  }
+
+  /**
+   * Wakes up suspended stdout waiters.
+   */
+  async wakeStdoutWaiters(limit: number): Promise<number> {
+    const { woken, remainingBudget } = await this.wakeWaiters(
+      limit,
+      this.pendingWakeBudgetStdout,
+      this.getIoRings().stdoutWait,
+    );
+    this.pendingWakeBudgetStdout = remainingBudget;
+    return woken;
+  }
+
+  private async wakeWaiters(
+    limit: number,
+    pendingBudget: number,
+    waitRing: { tryDequeue: () => number | null },
+  ): Promise<{ woken: number; remainingBudget: number }> {
+    let budget = limit + pendingBudget;
     let woken = 0;
 
     for (const nodeId of Array.from(this.pendingWaiters)) {
@@ -158,7 +187,7 @@ export class IoManager {
     }
 
     while (budget > 0) {
-      const nodeId = rings.stdinWait.tryDequeue();
+      const nodeId = waitRing.tryDequeue();
       if (nodeId === null) break;
       const reqId = this.ioWait.get(nodeId);
       if (reqId === undefined) {
@@ -171,8 +200,7 @@ export class IoManager {
       budget--;
       woken++;
     }
-    this.pendingWakeBudget = budget;
-    return woken;
+    return { woken, remainingBudget: budget };
   }
 
   /**
@@ -202,8 +230,13 @@ export class IoManager {
       this.ioWait.delete(nodeId);
       await submitSuspension(nodeId, reqId);
       return true;
-    } else if (this.pendingWakeBudget > 0) {
-      this.pendingWakeBudget--;
+    } else if (this.pendingWakeBudgetStdin > 0) {
+      this.pendingWakeBudgetStdin--;
+      this.ioWait.delete(nodeId);
+      await submitSuspension(nodeId, reqId);
+      return true;
+    } else if (this.pendingWakeBudgetStdout > 0) {
+      this.pendingWakeBudgetStdout--;
       this.ioWait.delete(nodeId);
       await submitSuspension(nodeId, reqId);
       return true;
@@ -221,7 +254,8 @@ export class IoManager {
     this.activeTimeouts.clear();
     this.ioWait.clear();
     this.pendingWaiters.clear();
-    this.pendingWakeBudget = 0;
+    this.pendingWakeBudgetStdin = 0;
+    this.pendingWakeBudgetStdout = 0;
     this.ioRingsCache = null;
   }
 

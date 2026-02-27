@@ -154,6 +154,7 @@ export class ArenaIoRings {
   readonly stdin: ArenaRingView;
   readonly stdout: ArenaRingView;
   readonly stdinWait: ArenaRingView;
+  readonly stdoutWait: ArenaRingView;
 
   constructor(
     buffer: ArrayBuffer | SharedArrayBuffer,
@@ -169,12 +170,19 @@ export class ArenaIoRings {
     const offsetStdin = headerView[SabHeaderField.OFFSET_STDIN]!;
     const offsetStdout = headerView[SabHeaderField.OFFSET_STDOUT]!;
     const offsetStdinWait = headerView[SabHeaderField.OFFSET_STDIN_WAIT]!;
+    const offsetStdoutWait = headerView[SabHeaderField.OFFSET_STDOUT_WAIT]!;
     this.stdin = new ArenaRingView(buffer, baseAddr, offsetStdin, "u8");
     this.stdout = new ArenaRingView(buffer, baseAddr, offsetStdout, "u8");
     this.stdinWait = new ArenaRingView(
       buffer,
       baseAddr,
       offsetStdinWait,
+      "u32",
+    );
+    this.stdoutWait = new ArenaRingView(
+      buffer,
+      baseAddr,
+      offsetStdoutWait,
       "u32",
     );
   }

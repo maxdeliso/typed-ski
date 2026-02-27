@@ -192,8 +192,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     validateIoRingsConfiguration(this.$, this.memory);
   }
 
-  readStdout(maxBytes = 4096): Uint8Array {
-    return this.ioManager.readStdout(maxBytes);
+  async readStdout(maxBytes = 4096): Promise<Uint8Array> {
+    return await this.ioManager.readStdout(maxBytes);
   }
 
   async writeStdin(bytes: Uint8Array): Promise<number> {

@@ -10,7 +10,10 @@
  */
 import type { BaseType } from "../../types/types.ts";
 import type { TripLangValueType } from "../trip.ts";
-import { parseNatLiteralIdentifier } from "../../consts/nat.ts";
+import {
+  parseNatLiteralIdentifier,
+  parseU8LiteralIdentifier,
+} from "../../consts/nat.ts";
 
 /**
  * Memoization cache for external references computation.
@@ -86,8 +89,10 @@ function collectIterative(
     while (true) {
       switch (term.kind) {
         case "systemF-var": {
-          const literalValue = parseNatLiteralIdentifier(term.name);
-          if (literalValue !== null) {
+          if (
+            parseNatLiteralIdentifier(term.name) !== null ||
+            parseU8LiteralIdentifier(term.name) !== null
+          ) {
             break;
           }
           const external = !bound.has(term.name);

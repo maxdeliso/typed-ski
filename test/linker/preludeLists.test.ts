@@ -2,7 +2,6 @@ import { assertEquals } from "std/assert";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
-import { UnBinNumber } from "../../lib/ski/bin.ts";
 import { evaluateTrip, evaluateTripWithIo } from "../util/tripHarness.ts";
 import { loadInput } from "../util/fileLoader.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
@@ -90,7 +89,7 @@ Deno.test({
     try {
       assertEquals(stdout.length, 1);
       assertEquals(stdout[0], 65);
-      assertEquals(UnBinNumber(result), 65n);
+      assertEquals((result as { value: number }).value, 65);
     } finally {
       (evaluator as ParallelArenaEvaluatorWasm).terminate();
     }

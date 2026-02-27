@@ -39,7 +39,7 @@ typedef enum {
 } ArenaSym;
 
 #define EMPTY 0xffffffff
-#define TERM_CACHE_LEN 10
+#define TERM_CACHE_LEN (ARENA_SYM_EQ_U8 + 1)
 
 typedef struct {
   atomic_uint head;
@@ -86,6 +86,7 @@ typedef struct {
   uint32_t offset_stdin;
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
+  uint32_t offset_stdout_wait;
   uint32_t offset_kind;
   uint32_t offset_sym;
   uint32_t offset_left_id;
@@ -128,9 +129,6 @@ void hostCqDequeueBlocking(Cqe *cqe);
 void arena_cq_enqueue_shutdown_sentinel(void);
 uint32_t hostSubmit(uint32_t node_id, uint32_t req_id, uint32_t max_steps);
 void workerLoop(void);
-
-uint32_t alloc_bin_byte(uint8_t value);
-uint8_t decode_bin_u8(uint32_t expr);
 
 /* Host I/O: push byte to arena stdin (for ',' combinator), try pop from stdout
  * (for '.'). */

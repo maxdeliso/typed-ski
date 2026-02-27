@@ -23,7 +23,11 @@ import { lower, termLevel } from "./termLevel.ts";
 import { extractDefinitionValue } from "./symbolTable.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { CompilationError } from "./errors.ts";
-import { isNatLiteralIdentifier, NAT_TYPE_NAME } from "../../consts/nat.ts";
+import {
+  isNatLiteralIdentifier,
+  isU8LiteralIdentifier,
+  NAT_TYPE_NAME,
+} from "../../consts/nat.ts";
 
 /**
  * Hygienic substitution functions for TripLang terms and types.
@@ -62,7 +66,11 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
     while (true) {
       switch (term.kind) {
         case "systemF-var":
-          if (!isNatLiteralIdentifier(term.name) && !bound.has(term.name)) {
+          if (
+            !isNatLiteralIdentifier(term.name) &&
+            !isU8LiteralIdentifier(term.name) &&
+            !bound.has(term.name)
+          ) {
             result.add(term.name);
           }
           break;
@@ -592,8 +600,12 @@ export function substituteTermHygienicBatch(
   switch (term.kind) {
     case "systemF-var":
     case "lambda-var": {
-      // Don't substitute nat literal identifiers - they're special placeholders
-      if (!isNatLiteralIdentifier(term.name) && !bound.has(term.name)) {
+      // Don't substitute internal literal identifiers - they're special placeholders
+      if (
+        !isNatLiteralIdentifier(term.name) &&
+        !isU8LiteralIdentifier(term.name) &&
+        !bound.has(term.name)
+      ) {
         const sub = substitutions.get(term.name);
         if (sub) return sub;
       }

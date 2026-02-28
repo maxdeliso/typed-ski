@@ -23,7 +23,7 @@ WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -msimd128
 WASM_OPT_LDFLAGS := -Wl,--gc-sections
 
 NATIVE_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -march=native
-NATIVE_OPT_LDFLAGS := -Wl,--gc-sections
+NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
 
 # Nix development shell wrapper
 NIX_RUN := nix $(NIX_FLAGS) develop --command $(MAKE)

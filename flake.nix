@@ -60,6 +60,7 @@
             deno
             pkgs.jq
             pkgs.wabt
+            pkgs.glibc.static
             verifyVersion
             generateVersionTs
             generateArenaHeaderC
@@ -83,10 +84,20 @@
                   -isystem "${wasmIncludeDir}" \
                   -o wasm/release.wasm c/arena.c
 
+            mkdir -p bin
+            # Build statically linked thanatos binary
+            $CC -O3 -flto -ffunction-sections -fdata-sections -march=native \
+                -Wall -Wextra -Wpedantic -Wstrict-prototypes -Werror -pthread -std=c11 \
+                -static -Wl,--gc-sections \
+                -o bin/thanatos c/arena.c c/thanatos.c c/ski_io.c c/main.c
+
             echo ""
             echo "=== WASM Module Structure (release) ==="
             ${pkgs.wabt}/bin/wasm-objdump -h wasm/release.wasm
             echo ""
+            echo "=== Native Binary (thanatos) ==="
+            ls -lh bin/thanatos
+            file bin/thanatos
           '';
 
           installPhase = ''

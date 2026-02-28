@@ -1,4 +1,3 @@
-#define _DEFAULT_SOURCE
 #include "arena.h"
 #include "ski_io.h"
 #include "thanatos.h"

@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "arena.h"
 
 #ifdef __wasm__
@@ -34,7 +33,7 @@ static const uint32_t MAX_CAP = 1 << 27;
 static const uint32_t RING_ENTRIES = 1 << 16;
 static const uint32_t POISON_SEQ = 0xffffffff;
 
-uint8_t *volatile ARENA_BASE_ADDR = NULL;
+uint8_t *ARENA_BASE_ADDR = NULL;
 static uint32_t ARENA_MODE = 0;
 static atomic_uint GROW_COUNT = 0;
 

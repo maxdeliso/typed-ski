@@ -38,6 +38,9 @@ type_svg/
 coverage/
 coverage.lcov
 
+# Build artifacts
+obj/
+
 # Codecov artifacts (downloaded by CI)
 codecov
 codecov.SHA256SUM

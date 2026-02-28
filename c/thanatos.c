@@ -1,4 +1,3 @@
-#define _DEFAULT_SOURCE
 #include "thanatos.h"
 #include <pthread.h>
 #include <stdatomic.h>

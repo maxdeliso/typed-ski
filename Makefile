@@ -125,7 +125,7 @@ build-internal: build-wasm-internal build-native-internal
 	deno run -A scripts/generate-arena-header-c.ts
 	deno task dist
 
-test-internal: build-wasm-internal
+test-internal: build-wasm-internal build-native-internal
 	deno run -A scripts/generate-arena-header-c.ts
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
@@ -136,17 +136,50 @@ coverage-internal: build-wasm-internal
 	deno task test:coverage
 	deno task coverage:lcov
 
-clean-internal:
-	rm -rf bin/ obj/ wasm/ dist/ coverage/
+CLEAN_ARTIFACTS := \
+	bin/thanatos \
+	bin/thanatos-test \
+	bin/thanatos-test-lsan \
+	bin/thanatos-test-ubsan \
+	bin/thanatos-asan \
+	bin/thanatos-lsan \
+	bin/thanatos-debug \
+	bin/thanatos-tsan-repl \
+	bin/thanatos-ubsan-repl \
+	bin/thanatos-full \
+	bin/thanatos-huge \
+	bin/thanatos-mixed \
+	bin/thanatos-clang-musl \
+	obj/arena.o \
+	obj/thanatos.o \
+	obj/ski_io.o \
+	obj/main.o \
+	obj/performance_test.o \
+	wasm/release.wasm \
+	dist/tripc.js \
+	dist/tripc.min.js \
+	dist/tripc.node.js \
+	dist/tripc \
+	coverage.lcov \
+	lib/shared/version.generated.ts \
+	lib/evaluator/arenaHeader.generated.ts
 
-build-wasm-internal:
+clean-internal:
+	rm -f $(CLEAN_ARTIFACTS)
+	-find coverage -type f -delete 2>/dev/null || true
+	-rmdir obj wasm dist coverage 2>/dev/null || true
+	-rmdir bin 2>/dev/null || true
+
+build-wasm-internal: wasm/release.wasm
+
+wasm/release.wasm: c/arena.c
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
 		-Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
 		-Wl,--max-memory=4294967296 $(WASM_OPT_LDFLAGS) \
 		-matomics -mbulk-memory -mmutable-globals \
 		-isystem $$WASM_RESOURCE_DIR/include \
-		-o wasm/release.wasm c/arena.c
+		-o $@ $<
 
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug
@@ -166,6 +199,7 @@ format-internal:
 	nix $(NIX_FLAGS) run .#fmt
 	$(MAKE) format-c-internal
 	$(MAKE) format-nix-internal
+	mbake format Makefile
 
 format-c-internal:
 	clang-format -i c/*.c c/*.h
@@ -176,6 +210,7 @@ format-nix-internal:
 format-check-internal:
 	nix $(NIX_FLAGS) run .#fmt -- --check
 	$(MAKE) format-check-nix-internal
+	mbake validate Makefile
 
 format-check-nix-internal:
 	nixpkgs-fmt --check flake.nix

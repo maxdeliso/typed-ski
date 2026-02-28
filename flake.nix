@@ -131,6 +131,7 @@
             export LLVM_OBJDUMP="${llvm.llvm}/bin/llvm-objdump"
             export WASM2WAT="${pkgs.wabt}/bin/wasm2wat"
             export MUSL_GCC="${pkgs.musl.dev}/bin/musl-gcc"
+            export MUSL_INC="${pkgs.musl.dev}/include"
             unset NIX_ENFORCE_NO_NATIVE
           '';
         };

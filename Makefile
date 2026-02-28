@@ -8,6 +8,7 @@
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
 PORT ?= 8080
 MUSL_GCC ?= musl-gcc
+MUSL_INC ?= /usr/include
 C_WARN_FLAGS := -Wall -Wextra -Wpedantic -Wstrict-prototypes -Werror
 C_FEATURE_FLAGS := -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=199309L
 C_COMMON_FLAGS := $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS)
@@ -29,8 +30,6 @@ MUSL_OBJS := $(addprefix obj/,$(MUSL_SOURCES:.c=.o))
 
 THANATOS_OBJS := obj/arena.o obj/thanatos.o obj/ski_io.o obj/main.o
 THANATOS_TEST_OBJS := obj/arena.o obj/thanatos.o obj/performance_test.o
-
-MUSL_INC := $(shell echo $(MUSL_GCC) | sed "s|/bin/musl-gcc|/include|")
 
 obj/%.o: c/%.c
 	mkdir -p obj

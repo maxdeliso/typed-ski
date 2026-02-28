@@ -89,5 +89,5 @@
     "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/"
   },
-  "version": "0.15.3"
+  "version": "0.15.4"
 }

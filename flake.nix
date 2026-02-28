@@ -79,12 +79,22 @@
 
             mkdir -p wasm
             ${llvm.clang-unwrapped}/bin/clang -fuse-ld=${llvm.lld}/bin/wasm-ld --target=wasm32 \
-                  -O3 -flto -ffunction-sections -fdata-sections -msimd128 -nostdlib \
-                  -Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
+                  -O3 -flto -ffunction-sections -fdata-sections -nostdlib \
+                  -Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
                   -Wl,--max-memory=4294967296 -Wl,--gc-sections \
+                  -Wl,--export=initArena -Wl,--export=connectArena -Wl,--export=reset \
+                  -Wl,--export=kindOf -Wl,--export=symOf -Wl,--export=leftOf \
+                  -Wl,--export=rightOf -Wl,--export=allocTerminal -Wl,--export=allocU8 \
+                  -Wl,--export=allocCons -Wl,--export=arenaKernelStep -Wl,--export=reduce \
+                  -Wl,--export=hostPullV2 -Wl,--export=hostSubmit -Wl,--export=workerLoop \
+                  -Wl,--export=debugGetArenaBaseAddr -Wl,--export=getArenaMode \
+                  -Wl,--export=debugCalculateArenaSize -Wl,--export=debugLockState \
+                  -Wl,--export=debugGetRingEntries \
                   -matomics -mbulk-memory -mmutable-globals \
                   -isystem "${wasmIncludeDir}" \
                   -o wasm/release.wasm c/arena.c
+            ${pkgs.binaryen}/bin/wasm-opt -Oz --strip-producers --strip-target-features \
+              wasm/release.wasm -o wasm/release.wasm
 
             mkdir -p bin
             # Build statically linked thanatos binary

@@ -25,8 +25,30 @@ C_TSAN_FLAGS := -g -O1 -fsanitize=thread
 C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined
 
 WASM_OPT ?= wasm-opt
-WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -msimd128
+WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections
 WASM_OPT_LDFLAGS := -Wl,--gc-sections
+WASM_EXPORT_FLAGS := \
+	-Wl,--export=initArena \
+	-Wl,--export=connectArena \
+	-Wl,--export=reset \
+	-Wl,--export=kindOf \
+	-Wl,--export=symOf \
+	-Wl,--export=leftOf \
+	-Wl,--export=rightOf \
+	-Wl,--export=allocTerminal \
+	-Wl,--export=allocU8 \
+	-Wl,--export=allocCons \
+	-Wl,--export=arenaKernelStep \
+	-Wl,--export=reduce \
+	-Wl,--export=hostPullV2 \
+	-Wl,--export=hostSubmit \
+	-Wl,--export=workerLoop \
+	-Wl,--export=debugGetArenaBaseAddr \
+	-Wl,--export=getArenaMode \
+	-Wl,--export=debugCalculateArenaSize \
+	-Wl,--export=debugLockState \
+	-Wl,--export=debugGetRingEntries
+WASM_OPT_POST_FLAGS := -Oz --strip-producers --strip-target-features
 
 NATIVE_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -march=native
 NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
@@ -159,15 +181,16 @@ clean-internal:
 
 build-wasm-internal: wasm/release.wasm
 
-wasm/release.wasm: c/arena.c
+wasm/release.wasm: c/arena.c Makefile
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
-		-Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
+		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
 		-Wl,--max-memory=4294967296 $(WASM_OPT_LDFLAGS) \
+		$(WASM_EXPORT_FLAGS) \
 		-matomics -mbulk-memory -mmutable-globals \
 		-isystem $$WASM_RESOURCE_DIR/include \
 		-o $@ $<
-	$(WASM_OPT) -Oz $@ -o $@
+	$(WASM_OPT) $(WASM_OPT_POST_FLAGS) $@ -o $@
 
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug

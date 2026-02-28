@@ -16,7 +16,6 @@ C_WARN_FLAGS := -Wall -Wextra -Wpedantic -Wstrict-prototypes -Werror
 CLANG_RESOURCE_DIR ?= /usr/lib/clang/21
 C_FEATURE_FLAGS := -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=199309L
 C_COMMON_FLAGS := $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) \
-                   -target x86_64-unknown-linux-musl \
                    -isystem $(CLANG_RESOURCE_DIR)/include
 C_RELEASE_FLAGS := -O3
 C_ASAN_FLAGS := -g -O1 -fsanitize=address -fno-omit-frame-pointer
@@ -25,6 +24,7 @@ C_DEBUG_FLAGS := -g -O1
 C_TSAN_FLAGS := -g -O1 -fsanitize=thread
 C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined
 
+WASM_OPT ?= wasm-opt
 WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -msimd128
 WASM_OPT_LDFLAGS := -Wl,--gc-sections
 
@@ -167,6 +167,7 @@ wasm/release.wasm: c/arena.c
 		-matomics -mbulk-memory -mmutable-globals \
 		-isystem $$WASM_RESOURCE_DIR/include \
 		-o $@ $<
+	$(WASM_OPT) -Oz $@ -o $@
 
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug

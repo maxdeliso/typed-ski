@@ -60,6 +60,7 @@
             deno
             pkgs.jq
             pkgs.wabt
+            pkgs.binaryen
             pkgs.glibc.static
             pkgs.mbake
             verifyVersion
@@ -117,6 +118,7 @@
             llvm.llvm
             pkgs.nixpkgs-fmt
             pkgs.wabt
+            pkgs.binaryen
             pkgs.mbake
             pkgs.nix
             deno
@@ -132,6 +134,7 @@
             export WASM_RESOURCE_DIR="$CLANG_RESOURCE_DIR"
             export LLVM_OBJDUMP="${llvm.llvm}/bin/llvm-objdump"
             export WASM2WAT="${pkgs.wabt}/bin/wasm2wat"
+            export WASM_OPT="${pkgs.binaryen}/bin/wasm-opt"
             export MUSL_GCC="${pkgs.musl.dev}/bin/musl-gcc"
             export MUSL_INC="${pkgs.musl.dev}/include"
             unset NIX_ENFORCE_NO_NATIVE

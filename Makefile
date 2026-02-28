@@ -5,7 +5,6 @@
 	format-c-internal format-nix-internal format-check-nix-internal \
 	thanatos-check thanatos-tsan-repl thanatos-ubsan-repl
 
-# Configuration
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
 PORT ?= 8080
 MUSL_GCC ?= musl-gcc
@@ -31,12 +30,12 @@ MUSL_OBJS := $(addprefix obj/,$(MUSL_SOURCES:.c=.o))
 THANATOS_OBJS := obj/arena.o obj/thanatos.o obj/ski_io.o obj/main.o
 THANATOS_TEST_OBJS := obj/arena.o obj/thanatos.o obj/performance_test.o
 
-# Helper to resolve MUSL include path
 MUSL_INC := $(shell echo $(MUSL_GCC) | sed "s|/bin/musl-gcc|/include|")
 
 obj/%.o: c/%.c
 	mkdir -p obj
-	$(CC) $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) -fno-lto -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -isystem $(MUSL_INC) -c $< -o $@
+	$(CC) $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) -fno-lto -fno-stack-protector \
+		-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -isystem $(MUSL_INC) -c $< -o $@
 
 bin/thanatos: $(THANATOS_OBJS)
 	mkdir -p bin
@@ -68,21 +67,6 @@ bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c
 
 # Nix development shell wrapper
 NIX_RUN := nix $(NIX_FLAGS) develop --command $(MAKE)
-
-help:
-	@echo "Available targets (automatically wrapped in nix develop):"
-	@echo "  build        - Compile all artifacts"
-	@echo "  test         - Run the test suite"
-	@echo "  coverage     - Generate coverage.lcov"
-	@echo "  clean        - Remove build artifacts"
-	@echo "  build-wasm   - Build the WASM module from C"
-	@echo "  build-native - Build all native binaries (release, asan, lsan, debug)"
-	@echo "  thanatos-check - Run native thanatos-test smoke check"
-	@echo "  thanatos-tsan-repl - Build REPL with ThreadSanitizer (data races)"
-	@echo "  thanatos-ubsan-repl - Build REPL with UBSan (undefined behaviour)"
-	@echo "  print-wasm   - Print WASM artifact details"
-	@echo "  format       - Format code"
-	@echo "  start        - Start the profiling demo server (PORT=$(PORT))"
 
 # Public entry points
 build:
@@ -189,17 +173,19 @@ thanatos-check-internal: build-native-internal
 
 thanatos-tsan-repl: build-native-internal
 	mkdir -p bin
-	$$CC $(C_TSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-tsan-repl c/arena.c c/thanatos.c c/ski_io.c c/main.c
+	$$CC $(C_TSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-tsan-repl \
+		c/arena.c c/thanatos.c c/ski_io.c c/main.c
 
 thanatos-ubsan-repl: build-native-internal
 	mkdir -p bin
-	$$CC $(C_UBSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-ubsan-repl c/arena.c c/thanatos.c c/ski_io.c c/main.c
+	$$CC $(C_UBSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-ubsan-repl \
+		c/arena.c c/thanatos.c c/ski_io.c c/main.c
 
 format-internal:
 	nix $(NIX_FLAGS) run .#fmt
 	$(MAKE) format-c-internal
 	$(MAKE) format-nix-internal
-	mbake format Makefile
+	mbake format --config .mbake.toml Makefile
 
 format-c-internal:
 	clang-format -i c/*.c c/*.h
@@ -210,7 +196,7 @@ format-nix-internal:
 format-check-internal:
 	nix $(NIX_FLAGS) run .#fmt -- --check
 	$(MAKE) format-check-nix-internal
-	mbake validate Makefile
+	mbake validate --config .mbake.toml Makefile
 
 format-check-nix-internal:
 	nixpkgs-fmt --check flake.nix

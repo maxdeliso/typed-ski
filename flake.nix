@@ -20,8 +20,8 @@
         denoPkgs = import nixpkgs-deno { inherit system; };
 
         deno = denoPkgs.deno;
-        llvm = pkgs.llvmPackages_18;
-        wasmIncludeDir = "${llvm.clang-unwrapped.lib}/lib/clang/18/include";
+        llvm = pkgs.llvmPackages_21;
+        wasmIncludeDir = "${llvm.clang-unwrapped.lib}/lib/clang/21/include";
 
         denoJson = builtins.fromJSON (builtins.readFile ./deno.jsonc);
         version = denoJson.version;
@@ -60,6 +60,7 @@
             deno
             pkgs.jq
             pkgs.wabt
+            pkgs.binaryen
             pkgs.glibc.static
             pkgs.mbake
             verifyVersion
@@ -78,12 +79,22 @@
 
             mkdir -p wasm
             ${llvm.clang-unwrapped}/bin/clang -fuse-ld=${llvm.lld}/bin/wasm-ld --target=wasm32 \
-                  -O3 -flto -ffunction-sections -fdata-sections -msimd128 -nostdlib \
-                  -Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
+                  -O3 -flto -ffunction-sections -fdata-sections -nostdlib \
+                  -Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
                   -Wl,--max-memory=4294967296 -Wl,--gc-sections \
+                  -Wl,--export=initArena -Wl,--export=connectArena -Wl,--export=reset \
+                  -Wl,--export=kindOf -Wl,--export=symOf -Wl,--export=leftOf \
+                  -Wl,--export=rightOf -Wl,--export=allocTerminal -Wl,--export=allocU8 \
+                  -Wl,--export=allocCons -Wl,--export=arenaKernelStep -Wl,--export=reduce \
+                  -Wl,--export=hostPullV2 -Wl,--export=hostSubmit -Wl,--export=workerLoop \
+                  -Wl,--export=debugGetArenaBaseAddr -Wl,--export=getArenaMode \
+                  -Wl,--export=debugCalculateArenaSize -Wl,--export=debugLockState \
+                  -Wl,--export=debugGetRingEntries \
                   -matomics -mbulk-memory -mmutable-globals \
                   -isystem "${wasmIncludeDir}" \
                   -o wasm/release.wasm c/arena.c
+            ${pkgs.binaryen}/bin/wasm-opt -Oz --strip-producers --strip-target-features \
+              wasm/release.wasm -o wasm/release.wasm
 
             mkdir -p bin
             # Build statically linked thanatos binary
@@ -117,19 +128,23 @@
             llvm.llvm
             pkgs.nixpkgs-fmt
             pkgs.wabt
+            pkgs.binaryen
             pkgs.mbake
+            pkgs.nix
             deno
             generateArenaHeaderC
           ];
 
           shellHook = ''
-            export CC="${llvm.clang}/bin/clang"
-            export CXX="${llvm.clang}/bin/clang++"
+            export CC="${llvm.clang-unwrapped}/bin/clang"
+            export CXX="${llvm.clang-unwrapped}/bin/clang++"
             export WASM_CC="${llvm.clang-unwrapped}/bin/clang"
             export WASM_LD="${llvm.lld}/bin/wasm-ld"
-            export WASM_RESOURCE_DIR="${llvm.clang-unwrapped.lib}/lib/clang/18"
+            export CLANG_RESOURCE_DIR="${llvm.clang-unwrapped.lib}/lib/clang/21"
+            export WASM_RESOURCE_DIR="$CLANG_RESOURCE_DIR"
             export LLVM_OBJDUMP="${llvm.llvm}/bin/llvm-objdump"
             export WASM2WAT="${pkgs.wabt}/bin/wasm2wat"
+            export WASM_OPT="${pkgs.binaryen}/bin/wasm-opt"
             export MUSL_GCC="${pkgs.musl.dev}/bin/musl-gcc"
             export MUSL_INC="${pkgs.musl.dev}/include"
             unset NIX_ENFORCE_NO_NATIVE

@@ -1,17 +1,22 @@
-.PHONY: build test coverage \
+.PHONY: all build test coverage \
 	build-wasm build-native print-wasm \
 	format format-check lint \
 	dist clean \
 	format-c-internal format-nix-internal format-check-nix-internal \
 	thanatos-check thanatos-tsan-repl thanatos-ubsan-repl
 
+all: build
+
 NIX_FLAGS := --extra-experimental-features 'nix-command flakes'
 PORT ?= 8080
 MUSL_GCC ?= musl-gcc
 MUSL_INC ?= /usr/include
+WRAPPED_CC ?= clang
 C_WARN_FLAGS := -Wall -Wextra -Wpedantic -Wstrict-prototypes -Werror
+CLANG_RESOURCE_DIR ?= /usr/lib/clang/21
 C_FEATURE_FLAGS := -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=199309L
-C_COMMON_FLAGS := $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS)
+C_COMMON_FLAGS := $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) \
+                   -isystem $(CLANG_RESOURCE_DIR)/include
 C_RELEASE_FLAGS := -O3
 C_ASAN_FLAGS := -g -O1 -fsanitize=address -fno-omit-frame-pointer
 C_LSAN_FLAGS := -g -O1 -fsanitize=leak -fno-omit-frame-pointer
@@ -19,8 +24,31 @@ C_DEBUG_FLAGS := -g -O1
 C_TSAN_FLAGS := -g -O1 -fsanitize=thread
 C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined
 
-WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -msimd128
+WASM_OPT ?= wasm-opt
+WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections
 WASM_OPT_LDFLAGS := -Wl,--gc-sections
+WASM_EXPORT_FLAGS := \
+	-Wl,--export=initArena \
+	-Wl,--export=connectArena \
+	-Wl,--export=reset \
+	-Wl,--export=kindOf \
+	-Wl,--export=symOf \
+	-Wl,--export=leftOf \
+	-Wl,--export=rightOf \
+	-Wl,--export=allocTerminal \
+	-Wl,--export=allocU8 \
+	-Wl,--export=allocCons \
+	-Wl,--export=arenaKernelStep \
+	-Wl,--export=reduce \
+	-Wl,--export=hostPullV2 \
+	-Wl,--export=hostSubmit \
+	-Wl,--export=workerLoop \
+	-Wl,--export=debugGetArenaBaseAddr \
+	-Wl,--export=getArenaMode \
+	-Wl,--export=debugCalculateArenaSize \
+	-Wl,--export=debugLockState \
+	-Wl,--export=debugGetRingEntries
+WASM_OPT_POST_FLAGS := -Oz --strip-producers --strip-target-features
 
 NATIVE_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -march=native
 NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
@@ -46,26 +74,30 @@ bin/thanatos-test: $(THANATOS_TEST_OBJS)
 
 bin/thanatos-test-lsan: c/arena.c c/thanatos.c c/performance_test.c
 	mkdir -p bin
-	$(CC) $(C_LSAN_FLAGS) $(C_COMMON_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
 bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c
 	mkdir -p bin
-	$(CC) $(C_UBSAN_FLAGS) $(C_COMMON_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
 bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
 	mkdir -p bin
-	$(CC) $(C_ASAN_FLAGS) $(C_COMMON_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
 bin/thanatos-lsan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
 	mkdir -p bin
-	$(CC) $(C_LSAN_FLAGS) $(C_COMMON_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
 bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c
 	mkdir -p bin
-	$(CC) $(C_DEBUG_FLAGS) $(C_COMMON_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
 # Nix development shell wrapper
-NIX_RUN := nix $(NIX_FLAGS) develop --command $(MAKE)
+# We keep essential Nix and system variables while ignoring the rest to ensure hermeticity
+NIX_RUN := nix $(NIX_FLAGS) develop --ignore-environment \
+	--keep NIX_PATH --keep NIX_DAEMON_SOCKET --keep NIX_CONF_DIR \
+	--keep TERM --keep HOME --keep USER --keep LANG --keep SSL_CERT_FILE \
+	--command $(MAKE)
 
 # Public entry points
 build:
@@ -149,14 +181,16 @@ clean-internal:
 
 build-wasm-internal: wasm/release.wasm
 
-wasm/release.wasm: c/arena.c
+wasm/release.wasm: c/arena.c Makefile
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
-		-Wl,--no-entry -Wl,--export-all -Wl,--import-memory -Wl,--shared-memory \
+		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
 		-Wl,--max-memory=4294967296 $(WASM_OPT_LDFLAGS) \
+		$(WASM_EXPORT_FLAGS) \
 		-matomics -mbulk-memory -mmutable-globals \
 		-isystem $$WASM_RESOURCE_DIR/include \
 		-o $@ $<
+	$(WASM_OPT) $(WASM_OPT_POST_FLAGS) $@ -o $@
 
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug
@@ -166,12 +200,12 @@ thanatos-check-internal: build-native-internal
 
 thanatos-tsan-repl: build-native-internal
 	mkdir -p bin
-	$$CC $(C_TSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-tsan-repl \
+	$(WRAPPED_CC) $(C_TSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -o bin/thanatos-tsan-repl \
 		c/arena.c c/thanatos.c c/ski_io.c c/main.c
 
 thanatos-ubsan-repl: build-native-internal
 	mkdir -p bin
-	$$CC $(C_UBSAN_FLAGS) $(C_COMMON_FLAGS) -o bin/thanatos-ubsan-repl \
+	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -o bin/thanatos-ubsan-repl \
 		c/arena.c c/thanatos.c c/ski_io.c c/main.c
 
 format-internal:

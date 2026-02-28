@@ -15,20 +15,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y make
-
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
       - name: Build artifacts
-        run: make build
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make build-internal
 
       - name: Thanatos smoke test (exit code 0)
-        run: make thanatos-check
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-internal
 
       - name: Generate coverage report
-        run: make coverage
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -40,7 +37,7 @@ jobs:
       - name: Print WASM files
         run: |
           ls -lh wasm/
-          make print-wasm
+          nix --extra-experimental-features 'nix-command flakes' develop --command make print-wasm-internal
 
       - name: JSR dry run publish
         if: github.ref != 'refs/heads/main'

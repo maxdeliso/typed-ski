@@ -1,7 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
   "license": "MIT",
-  "deno": "2.6.6",
   "exports": {
     ".": "./lib/index.ts",
     "./bin/tripc": "./bin/tripc.ts",
@@ -89,5 +88,5 @@
     "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/"
   },
-  "version": "0.15.4"
+  "version": "0.15.5"
 }

@@ -127,12 +127,6 @@ CLEAN_ARTIFACTS := \
 	bin/thanatos-asan \
 	bin/thanatos-lsan \
 	bin/thanatos-debug \
-	bin/thanatos-tsan-repl \
-	bin/thanatos-ubsan-repl \
-	bin/thanatos-full \
-	bin/thanatos-huge \
-	bin/thanatos-mixed \
-	bin/thanatos-clang-musl \
 	obj/arena.o \
 	obj/thanatos.o \
 	obj/ski_io.o \

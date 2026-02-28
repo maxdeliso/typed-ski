@@ -26,11 +26,12 @@ import Prelude snd
 import Prelude foldl
 import Prelude append
 import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
 import Prelude addBin
-import Prelude eqBin
-import Prelude lteBin
-import Nat Nat
-import Nat toBin
+import Prelude U8
+import Prelude eqU8
 
 export Token
 export T_LParen
@@ -68,7 +69,6 @@ export tokenTag
 export tokenText
 export tokenNatValue
 export tokenize
-export tokenizeBin
 export tokenizeAcc
 export kwPoly
 export isKeywordPoly
@@ -88,42 +88,21 @@ export keywordTokenFromWordIn
 export keywordTokenFromWordLet
 export keywordTokenFromWordRec
 export keywordTokenFromWord
-export eqListFast
-export binFromDigitList
+export eqListU8
+export digitsU8ToBin
 export mapResult
-export anyEqBin
-export isSpaceBin
-export isDigitBin
-export isAlphaBin
-export isIdentCharBin
-export bin_space
-export bin_newline
-export bin_cr
-export bin_tab
-export bin_underscore
-export bin_3e
-export bin_dash
-export bin_eq
+export isSpaceU8
+export isDigitU8
+export isAlphaU8
+export isIdentCharU8
 export reverse
-export simpleTokensBin
-export lookupTokenBin
-export bin_0
-export bin_9
-export bin_a
-export bin_z
-export bin_A
-export bin_Z
-export isDigitBin
-export isLowerBin
-export isUpperBin
-export isAlphaBin
-export isIdentCharBin
+export simpleTokensU8
+export lookupTokenU8
+export digitValueU8
+export timesTen
 export consumeIdent
 export consumeDigits
 export consumeString
-export digitValueBin
-export timesTen
-export mapToBin
 
 data Token =
   | T_LParen
@@ -154,12 +133,12 @@ data Token =
   | T_KwCombinator
   | T_KwType
   | T_KwData
-  | T_Ident (List Bin)
+  | T_Ident (List U8)
   | T_Nat Bin
   | T_EOF
 
 poly tokenTag = \tok : Token =>
-  match tok [Bin] {
+  match tok [U8] {
     | T_LParen => 1
     | T_RParen => 2
     | T_LBrace => 3
@@ -193,23 +172,24 @@ poly tokenTag = \tok : Token =>
     | T_EOF => 31
   }
 
+
 poly tokenText = \tok : Token =>
-  match tok [List Bin] {
-    | T_LParen => nil [Bin]
-    | T_RParen => nil [Bin]
-    | T_LBrace => nil [Bin]
-    | T_RBrace => nil [Bin]
-    | T_LBracket => nil [Bin]
-    | T_RBracket => nil [Bin]
-    | T_Backslash => nil [Bin]
-    | T_Arrow => nil [Bin]
-    | T_FatArrow => nil [Bin]
-    | T_Eq => nil [Bin]
-    | T_Colon => nil [Bin]
-    | T_Hash => nil [Bin]
-    | T_Pipe => nil [Bin]
-    | T_Dot => nil [Bin]
-    | T_Comma => nil [Bin]
+  match tok [List U8] {
+    | T_LParen => nil [U8]
+    | T_RParen => nil [U8]
+    | T_LBrace => nil [U8]
+    | T_RBrace => nil [U8]
+    | T_LBracket => nil [U8]
+    | T_RBracket => nil [U8]
+    | T_Backslash => nil [U8]
+    | T_Arrow => nil [U8]
+    | T_FatArrow => nil [U8]
+    | T_Eq => nil [U8]
+    | T_Colon => nil [U8]
+    | T_Hash => nil [U8]
+    | T_Pipe => nil [U8]
+    | T_Dot => nil [U8]
+    | T_Comma => nil [U8]
     | T_KwPoly => "poly"
     | T_KwRec => "rec"
     | T_KwLet => "let"
@@ -224,12 +204,12 @@ poly tokenText = \tok : Token =>
     | T_KwType => "type"
     | T_KwData => "data"
     | T_Ident str => str
-    | T_Nat n => nil [Bin]
-    | T_EOF => nil [Bin]
+    | T_Nat n => nil [U8]
+    | T_EOF => nil [U8]
   }
 
 poly tokenNatValue = \tok : Token =>
-  match tok [Bin] {
+  match tok [U8] {
     | T_LParen => 0
     | T_RParen => 0
     | T_LBrace => 0
@@ -263,225 +243,280 @@ poly tokenNatValue = \tok : Token =>
     | T_EOF => 0
   }
 
-poly bin_space = 32
-poly bin_newline = 10
-poly bin_cr = 13
-poly bin_tab = 9
-poly bin_underscore = 95
-poly bin_3e = 62
-poly bin_dash = 45
-poly bin_eq = 61
+poly u8_space    : U8 = ' '
+poly u8_newline  : U8 = '\n'
+poly u8_cr       : U8 = '\r'
+poly u8_tab      : U8 = '\t'
+poly u8_underscore : U8 = '_'
 
-poly isSpaceBin = \c : Bin =>
-  if [Bool] (eqBin c bin_space) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c bin_newline) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c bin_cr) (\u : Bin => true)
-  (\u : Bin => eqBin c bin_tab)))
+poly u8_0 : U8 = '0'
+poly u8_1 : U8 = '1'
+poly u8_2 : U8 = '2'
+poly u8_3 : U8 = '3'
+poly u8_4 : U8 = '4'
+poly u8_5 : U8 = '5'
+poly u8_6 : U8 = '6'
+poly u8_7 : U8 = '7'
+poly u8_8 : U8 = '8'
+poly u8_9 : U8 = '9'
 
-poly rec anyEqBin = \c : Bin => \xs : List Bin =>
-  matchList [Bin] [Bool] xs false
-    (\h : Bin => \t : List Bin =>
-      if [Bool] (eqBin c h) (\u : Bin => true) (\u : Bin => anyEqBin c t))
+poly u8_a : U8 = 'a'
+poly u8_b : U8 = 'b'
+poly u8_c : U8 = 'c'
+poly u8_d : U8 = 'd'
+poly u8_e : U8 = 'e'
+poly u8_f : U8 = 'f'
+poly u8_g : U8 = 'g'
+poly u8_h : U8 = 'h'
+poly u8_i : U8 = 'i'
+poly u8_j : U8 = 'j'
+poly u8_k : U8 = 'k'
+poly u8_l : U8 = 'l'
+poly u8_m : U8 = 'm'
+poly u8_n : U8 = 'n'
+poly u8_o : U8 = 'o'
+poly u8_p : U8 = 'p'
+poly u8_q : U8 = 'q'
+poly u8_r : U8 = 'r'
+poly u8_s : U8 = 's'
+poly u8_t : U8 = 't'
+poly u8_u : U8 = 'u'
+poly u8_v : U8 = 'v'
+poly u8_w : U8 = 'w'
+poly u8_x : U8 = 'x'
+poly u8_y : U8 = 'y'
+poly u8_z : U8 = 'z'
 
-poly bin_0 = 48
-poly bin_9 = 57
-poly bin_a = 97
-poly bin_z = 122
-poly bin_A = 65
-poly bin_Z = 90
+poly u8_A : U8 = 'A'
+poly u8_B : U8 = 'B'
+poly u8_C : U8 = 'C'
+poly u8_D : U8 = 'D'
+poly u8_E : U8 = 'E'
+poly u8_F : U8 = 'F'
+poly u8_G : U8 = 'G'
+poly u8_H : U8 = 'H'
+poly u8_I : U8 = 'I'
+poly u8_J : U8 = 'J'
+poly u8_K : U8 = 'K'
+poly u8_L : U8 = 'L'
+poly u8_M : U8 = 'M'
+poly u8_N : U8 = 'N'
+poly u8_O : U8 = 'O'
+poly u8_P : U8 = 'P'
+poly u8_Q : U8 = 'Q'
+poly u8_R : U8 = 'R'
+poly u8_S : U8 = 'S'
+poly u8_T : U8 = 'T'
+poly u8_U : U8 = 'U'
+poly u8_V : U8 = 'V'
+poly u8_W : U8 = 'W'
+poly u8_X : U8 = 'X'
+poly u8_Y : U8 = 'Y'
+poly u8_Z : U8 = 'Z'
 
-poly isDigitBin = \c : Bin =>
-  if [Bool] (eqBin c 48) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 49) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 50) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 51) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 52) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 53) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 54) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 55) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 56) (\u : Bin => true)
-  (\u : Bin => eqBin c 57)))))))))
+poly u8_quote : U8 = '\"'
+poly u8_gt : U8 = '>'
+poly u8_dash : U8 = '-'
+poly u8_eq : U8 = '='
 
-poly isLowerBin = \c : Bin =>
-  if [Bool] (eqBin c 97) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 98) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 99) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 100) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 101) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 102) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 103) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 104) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 105) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 106) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 107) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 108) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 109) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 110) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 111) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 112) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 113) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 114) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 115) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 116) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 117) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 118) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 119) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 120) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 121) (\u : Bin => true)
-  (\u : Bin => eqBin c 122)))))))))))))))))))))))))
+poly isSpaceU8 = \c : U8 =>
+  if [Bool] (eqU8 c u8_space)   (\u : U8 => true)
+  (\u : U8 => if [Bool] (eqU8 c u8_newline) (\u : U8 => true)
+  (\u : U8 => if [Bool] (eqU8 c u8_cr)      (\u : U8 => true)
+  (\u : U8 => if [Bool] (eqU8 c u8_tab)     (\u : U8 => true)
+  (\u : U8 => false))))
 
-poly isUpperBin = \c : Bin =>
-  if [Bool] (eqBin c 65) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 66) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 67) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 68) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 69) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 70) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 71) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 72) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 73) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 74) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 75) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 76) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 77) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 78) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 79) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 80) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 81) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 82) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 83) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 84) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 85) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 86) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 87) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 88) (\u : Bin => true)
-  (\u : Bin => if [Bool] (eqBin c 89) (\u : Bin => true)
-  (\u : Bin => eqBin c 90)))))))))))))))))))))))))
+poly isDigitU8 = \c : U8 =>
+  if [Bool] (eqU8 c u8_0) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_1) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_2) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_3) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_4) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_5) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_6) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_7) (\u:U8 => true)
+  (\u:U8 => if [Bool] (eqU8 c u8_8) (\u:U8 => true)
+             (\u:U8 => eqU8 c u8_9)))))))))
 
-poly isAlphaBin = \c : Bin =>
-  if [Bool] (isLowerBin c) (\u : Bin => true) (\u : Bin => isUpperBin c)
+poly isAlphaU8 = \c : U8 =>
+  if [Bool] (eqU8 c u8_a) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_b) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_c) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_d) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_e) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_f) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_g) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_h) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_i) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_j) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_k) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_l) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_m) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_n) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_o) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_p) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_q) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_r) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_s) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_t) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_u) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_v) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_w) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_x) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_y) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_z) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_A) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_B) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_C) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_D) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_E) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_F) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_G) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_H) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_I) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_J) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_K) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_L) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_M) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_N) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_O) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_P) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_Q) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_R) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_S) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_T) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_U) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_V) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_W) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_X) (\u:U8=>true) (\u:U8 =>
+  if [Bool] (eqU8 c u8_Y) (\u:U8=>true)
+             (\u:U8 => eqU8 c u8_Z)))))))))))))))))))))))))))))))))))))))))))))))))))
 
-poly isIdentCharBin = \c : Bin =>
-  if [Bool] (isAlphaBin c) (\u : Bin => true)
-  (\u : Bin => if [Bool] (isDigitBin c) (\u : Bin => true) (\u : Bin => eqBin c bin_underscore))
+poly isIdentCharU8 = \c : U8 =>
+  or (isAlphaU8 c) (or (isDigitU8 c) (eqU8 c u8_underscore))
 
-
-poly rec eqListFast = \a : List Bin => \b : List Bin =>
-  matchList [Bin] [Bool] a
-    (matchList [Bin] [Bool] b true (\hb : Bin => \tb : List Bin => false))
-    (\ha : Bin => \ta : List Bin =>
-      matchList [Bin] [Bool] b false
-        (\hb : Bin => \tb : List Bin =>
-          if [Bool] (eqBin ha hb)
-            (\u : Bin => eqListFast ta tb)
-            (\u : Bin => false)))
+poly rec eqListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => eqListU8 ta tb)
+            (\u : U8 => false)))
 
 poly kwPoly = "poly"
-poly isKeywordPoly = \word : List Bin => eqListFast word kwPoly
+poly isKeywordPoly = \word : List U8 => eqListU8 word kwPoly
 
 poly keywordWords =
-  cons [List Bin] "poly"
-    (cons [List Bin] "rec"
-      (cons [List Bin] "let"
-        (cons [List Bin] "in"
-          (cons [List Bin] "match"
-            (cons [List Bin] "module"
-              (cons [List Bin] "import"
-                (cons [List Bin] "export"
-                  (cons [List Bin] "typed"
-                    (cons [List Bin] "untyped"
-                      (cons [List Bin] "combinator"
-                        (cons [List Bin] "type"
-                          (cons [List Bin] "data"
-                            (nil [List Bin])))))))))))))
+  cons [List U8] "poly"
+    (cons [List U8] "rec"
+      (cons [List U8] "let"
+        (cons [List U8] "in"
+          (cons [List U8] "match"
+            (cons [List U8] "module"
+              (cons [List U8] "import"
+                (cons [List U8] "export"
+                  (cons [List U8] "typed"
+                    (cons [List U8] "untyped"
+                      (cons [List U8] "combinator"
+                        (cons [List U8] "type"
+                          (cons [List U8] "data"
+                            (nil [List U8])))))))))))))
 
-poly rec anyEqWord = \word : List Bin => \words : List (List Bin) =>
-  matchList [List Bin] [Bool] words false
-    (\h : List Bin => \t : List (List Bin) =>
-      if [Bool] (eqListFast word h)
-        (\u : Bin => true)
-        (\u : Bin => anyEqWord word t))
+poly rec anyEqWord = \word : List U8 => \words : List (List U8) =>
+  matchList [List U8] [Bool] words false
+    (\h : List U8 => \t : List (List U8) =>
+      if [Bool] (eqListU8 word h)
+        (\u : U8 => true)
+        (\u : U8 => anyEqWord word t))
 
-poly isKeywordWord = \word : List Bin =>
+poly isKeywordWord = \word : List U8 =>
   anyEqWord word keywordWords
 
-poly keywordTokenFromWordData = \word : List Bin =>
-  if [Token] (eqListFast word "data")
-    (\u : Bin => T_KwData)
-    (\u : Bin => T_Ident word)
+poly keywordTokenFromWordData = \word : List U8 =>
+  if [Token] (eqListU8 word "data")
+    (\u : U8 => T_KwData)
+    (\u : U8 => T_Ident word)
 
-poly keywordTokenFromWordType = \word : List Bin =>
-  if [Token] (eqListFast word "type")
-    (\u : Bin => T_KwType)
-    (\u : Bin => keywordTokenFromWordData word)
+poly keywordTokenFromWordType = \word : List U8 =>
+  if [Token] (eqListU8 word "type")
+    (\u : U8 => T_KwType)
+    (\u : U8 => keywordTokenFromWordData word)
 
-poly keywordTokenFromWordCombinator = \word : List Bin =>
-  if [Token] (eqListFast word "combinator")
-    (\u : Bin => T_KwCombinator)
-    (\u : Bin => keywordTokenFromWordType word)
+poly keywordTokenFromWordCombinator = \word : List U8 =>
+  if [Token] (eqListU8 word "combinator")
+    (\u : U8 => T_KwCombinator)
+    (\u : U8 => keywordTokenFromWordType word)
 
-poly keywordTokenFromWordUntyped = \word : List Bin =>
-  if [Token] (eqListFast word "untyped")
-    (\u : Bin => T_KwUntyped)
-    (\u : Bin => keywordTokenFromWordCombinator word)
+poly keywordTokenFromWordUntyped = \word : List U8 =>
+  if [Token] (eqListU8 word "untyped")
+    (\u : U8 => T_KwUntyped)
+    (\u : U8 => keywordTokenFromWordCombinator word)
 
-poly keywordTokenFromWordTyped = \word : List Bin =>
-  if [Token] (eqListFast word "typed")
-    (\u : Bin => T_KwTyped)
-    (\u : Bin => keywordTokenFromWordUntyped word)
+poly keywordTokenFromWordTyped = \word : List U8 =>
+  if [Token] (eqListU8 word "typed")
+    (\u : U8 => T_KwTyped)
+    (\u : U8 => keywordTokenFromWordUntyped word)
 
-poly keywordTokenFromWordExport = \word : List Bin =>
-  if [Token] (eqListFast word "export")
-    (\u : Bin => T_KwExport)
-    (\u : Bin => keywordTokenFromWordTyped word)
+poly keywordTokenFromWordExport = \word : List U8 =>
+  if [Token] (eqListU8 word "export")
+    (\u : U8 => T_KwExport)
+    (\u : U8 => keywordTokenFromWordTyped word)
 
-poly keywordTokenFromWordImport = \word : List Bin =>
-  if [Token] (eqListFast word "import")
-    (\u : Bin => T_KwImport)
-    (\u : Bin => keywordTokenFromWordExport word)
+poly keywordTokenFromWordImport = \word : List U8 =>
+  if [Token] (eqListU8 word "import")
+    (\u : U8 => T_KwImport)
+    (\u : U8 => keywordTokenFromWordExport word)
 
-poly keywordTokenFromWordModule = \word : List Bin =>
-  if [Token] (eqListFast word "module")
-    (\u : Bin => T_KwModule)
-    (\u : Bin => keywordTokenFromWordImport word)
+poly keywordTokenFromWordModule = \word : List U8 =>
+  if [Token] (eqListU8 word "module")
+    (\u : U8 => T_KwModule)
+    (\u : U8 => keywordTokenFromWordImport word)
 
-poly keywordTokenFromWordMatch = \word : List Bin =>
-  if [Token] (eqListFast word "match")
-    (\u : Bin => T_KwMatch)
-    (\u : Bin => keywordTokenFromWordModule word)
+poly keywordTokenFromWordMatch = \word : List U8 =>
+  if [Token] (eqListU8 word "match")
+    (\u : U8 => T_KwMatch)
+    (\u : U8 => keywordTokenFromWordModule word)
 
-poly keywordTokenFromWordIn = \word : List Bin =>
-  if [Token] (eqListFast word "in")
-    (\u : Bin => T_KwIn)
-    (\u : Bin => keywordTokenFromWordMatch word)
+poly keywordTokenFromWordIn = \word : List U8 =>
+  if [Token] (eqListU8 word "in")
+    (\u : U8 => T_KwIn)
+    (\u : U8 => keywordTokenFromWordMatch word)
 
-poly keywordTokenFromWordLet = \word : List Bin =>
-  if [Token] (eqListFast word "let")
-    (\u : Bin => T_KwLet)
-    (\u : Bin => keywordTokenFromWordIn word)
+poly keywordTokenFromWordLet = \word : List U8 =>
+  if [Token] (eqListU8 word "let")
+    (\u : U8 => T_KwLet)
+    (\u : U8 => keywordTokenFromWordIn word)
 
-poly keywordTokenFromWordRec = \word : List Bin =>
-  if [Token] (eqListFast word "rec")
-    (\u : Bin => T_KwRec)
-    (\u : Bin => keywordTokenFromWordLet word)
+poly keywordTokenFromWordRec = \word : List U8 =>
+  if [Token] (eqListU8 word "rec")
+    (\u : U8 => T_KwRec)
+    (\u : U8 => keywordTokenFromWordLet word)
 
-poly keywordTokenFromWord = \word : List Bin =>
-  if [Token] (eqListFast word "poly")
-    (\u : Bin => T_KwPoly)
-    (\u : Bin => keywordTokenFromWordRec word)
+poly keywordTokenFromWord = \word : List U8 =>
+  if [Token] (eqListU8 word "poly")
+    (\u : U8 => T_KwPoly)
+    (\u : U8 => keywordTokenFromWordRec word)
 
-poly digitValueBin = \d : Bin =>
-  if [Bin] (eqBin d 48) (\u : Bin => 0)
-  (\u : Bin => if [Bin] (eqBin d 49) (\u : Bin => 1)
-  (\u : Bin => if [Bin] (eqBin d 50) (\u : Bin => 2)
-  (\u : Bin => if [Bin] (eqBin d 51) (\u : Bin => 3)
-  (\u : Bin => if [Bin] (eqBin d 52) (\u : Bin => 4)
-  (\u : Bin => if [Bin] (eqBin d 53) (\u : Bin => 5)
-  (\u : Bin => if [Bin] (eqBin d 54) (\u : Bin => 6)
-  (\u : Bin => if [Bin] (eqBin d 55) (\u : Bin => 7)
-  (\u : Bin => if [Bin] (eqBin d 56) (\u : Bin => 8)
-  (\u : Bin => if [Bin] (eqBin d 57) (\u : Bin => 9)
-  (\u : Bin => 0))))))))))
+poly digitValueU8 = \d : U8 =>
+  if [Bin] (eqU8 d u8_0) (\u : U8 => BZ)
+  (\u : U8 => if [Bin] (eqU8 d u8_1) (\u : U8 => B1 BZ)
+  (\u : U8 => if [Bin] (eqU8 d u8_2) (\u : U8 => B0 (B1 BZ))
+  (\u : U8 => if [Bin] (eqU8 d u8_3) (\u : U8 => B1 (B1 BZ))
+  (\u : U8 => if [Bin] (eqU8 d u8_4) (\u : U8 => B0 (B0 (B1 BZ)))
+  (\u : U8 => if [Bin] (eqU8 d u8_5) (\u : U8 => B1 (B0 (B1 BZ)))
+  (\u : U8 => if [Bin] (eqU8 d u8_6) (\u : U8 => B0 (B1 (B1 BZ)))
+  (\u : U8 => if [Bin] (eqU8 d u8_7) (\u : U8 => B1 (B1 (B1 BZ)))
+  (\u : U8 => if [Bin] (eqU8 d u8_8) (\u : U8 => B0 (B0 (B0 (B1 BZ))))
+  (\u : U8 => if [Bin] (eqU8 d u8_9) (\u : U8 => B1 (B0 (B0 (B1 BZ))))
+  (\u : U8 => BZ))))))))))
+
+poly digitsU8ToBin = \digits : List U8 =>
+  foldl [U8] [Bin]
+    (\acc : Bin => \d : U8 => addBin (timesTen acc) (digitValueU8 d))
+    BZ
+    digits
 
 poly timesTen = \x : Bin =>
   let x2 = addBin x x in
@@ -489,42 +524,35 @@ poly timesTen = \x : Bin =>
   let x8 = addBin x4 x4 in
   addBin x8 x2
 
-poly binFromDigitList = \digits : List Bin =>
-  foldl [Bin] [Bin]
-    (\acc : Bin => \d : Bin =>
-      addBin (timesTen acc) (digitValueBin d))
-    0
-    digits
-
 poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
   match res [Result ParseError B] {
     | Err e => Err [ParseError] [B] e
     | Ok val => Ok [ParseError] [B] (f val)
   }
 
-poly simpleTokensBin =
-  cons [Pair Bin Token] (MkPair [Bin] [Token] 40 T_LParen)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 41 T_RParen)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 123 T_LBrace)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 125 T_RBrace)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 91 T_LBracket)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 93 T_RBracket)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 92 T_Backslash)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 58 T_Colon)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 35 T_Hash)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 124 T_Pipe)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 46 T_Dot)
-  (cons [Pair Bin Token] (MkPair [Bin] [Token] 44 T_Comma)
-  (nil [Pair Bin Token]))))))))))))
+poly simpleTokensU8 =
+  cons [Pair U8 Token] (MkPair [U8] [Token] '(' T_LParen)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] ')' T_RParen)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '{' T_LBrace)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '}' T_RBrace)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '[' T_LBracket)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] ']' T_RBracket)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '\\' T_Backslash)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] ':' T_Colon)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '#' T_Hash)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '|' T_Pipe)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] '.' T_Dot)
+  (cons [Pair U8 Token] (MkPair [U8] [Token] ',' T_Comma)
+  (nil [Pair U8 Token]))))))))))))
 
-poly rec lookupTokenBin = \c : Bin => \list : List (Pair Bin Token) =>
-  matchList [Pair Bin Token] [Maybe Token] list
+poly rec lookupTokenU8 = \c : U8 => \list : List (Pair U8 Token) =>
+  matchList [Pair U8 Token] [Maybe Token] list
     (None [Token])
-    (\h : Pair Bin Token => \t : List (Pair Bin Token) =>
+    (\h : Pair U8 Token => \t : List (Pair U8 Token) =>
        if [Maybe Token]
-         (eqBin c (fst [Bin] [Token] h))
-         (\u : Bin => Some [Token] (snd [Bin] [Token] h))
-         (\u : Bin => lookupTokenBin c t)
+         (eqU8 c (fst [U8] [Token] h))
+         (\u : U8 => Some [Token] (snd [U8] [Token] h))
+         (\u : U8 => lookupTokenU8 c t)
     )
 
 poly reverse = #A => \xs : List A =>
@@ -533,89 +561,89 @@ poly reverse = #A => \xs : List A =>
     (nil [A])
     xs
 
-poly rec consumeIdent = \acc : List Bin => \input : List Bin =>
-  matchList [Bin] [Pair (List Bin) (List Bin)] input
-    (MkPair [List Bin] [List Bin] (reverse [Bin] acc) (nil [Bin]))
-    (\h : Bin => \t : List Bin =>
-       if [Pair (List Bin) (List Bin)] (isIdentCharBin h)
-         (\u : Bin => consumeIdent (cons [Bin] h acc) t)
-         (\u : Bin => MkPair [List Bin] [List Bin] (reverse [Bin] acc) input)
+poly rec consumeIdent = \acc : List U8 => \input : List U8 =>
+  matchList [U8] [Pair (List U8) (List U8)] input
+    (MkPair [List U8] [List U8] (reverse [U8] acc) (nil [U8]))
+    (\h : U8 => \t : List U8 =>
+       if [Pair (List U8) (List U8)] (isIdentCharU8 h)
+         (\u : U8 => consumeIdent (cons [U8] h acc) t)
+         (\u : U8 => MkPair [List U8] [List U8] (reverse [U8] acc) input)
     )
 
-poly rec consumeDigits = \acc : List Bin => \input : List Bin =>
-  matchList [Bin] [Pair (List Bin) (List Bin)] input
-    (MkPair [List Bin] [List Bin] (reverse [Bin] acc) (nil [Bin]))
-    (\h : Bin => \t : List Bin =>
-       if [Pair (List Bin) (List Bin)] (isDigitBin h)
-         (\u : Bin => consumeDigits (cons [Bin] h acc) t)
-         (\u : Bin => MkPair [List Bin] [List Bin] (reverse [Bin] acc) input)
+poly rec consumeDigits = \acc : List U8 => \input : List U8 =>
+  matchList [U8] [Pair (List U8) (List U8)] input
+    (MkPair [List U8] [List U8] (reverse [U8] acc) (nil [U8]))
+    (\h : U8 => \t : List U8 =>
+       if [Pair (List U8) (List U8)] (isDigitU8 h)
+         (\u : U8 => consumeDigits (cons [U8] h acc) t)
+         (\u : U8 => MkPair [List U8] [List U8] (reverse [U8] acc) input)
     )
 
-poly rec consumeString = \acc : List Bin => \input : List Bin =>
-  matchList [Bin] [Result ParseError (Pair (List Bin) (List Bin))] input
-    (Err [ParseError] [Pair (List Bin) (List Bin)] (MkParseError 0 (nil [Bin])))
-    (\h : Bin => \t : List Bin =>
-      if [Result ParseError (Pair (List Bin) (List Bin))] (eqBin h 34)
-        (\u : Bin =>
-          Ok [ParseError] [Pair (List Bin) (List Bin)]
-            (MkPair [List Bin] [List Bin] (reverse [Bin] acc) t))
-        (\u : Bin => consumeString (cons [Bin] h acc) t)
+poly rec consumeString = \acc : List U8 => \input : List U8 =>
+  matchList [U8] [Result ParseError (Pair (List U8) (List U8))] input
+    (Err [ParseError] [Pair (List U8) (List U8)] (MkParseError BZ (nil [Bin])))
+    (\h : U8 => \t : List U8 =>
+      if [Result ParseError (Pair (List U8) (List U8))] (eqU8 h u8_quote)
+        (\u : U8 =>
+          Ok [ParseError] [Pair (List U8) (List U8)]
+            (MkPair [List U8] [List U8] (reverse [U8] acc) t))
+        (\u : U8 => consumeString (cons [U8] h acc) t)
     )
 
-poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
-  matchList [Bin] [Result ParseError (List Token)] input
+poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
+  matchList [U8] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
-    (\c : Bin => \cs : List Bin =>
-      if [Result ParseError (List Token)] (isSpaceBin c)
-        (\u : Bin => tokenizeAcc cs accRev)
-        (\u : Bin =>
+    (\c : U8 => \cs : List U8 =>
+      if [Result ParseError (List Token)] (isSpaceU8 c)
+        (\u : U8 => tokenizeAcc cs accRev)
+        (\u : U8 =>
       if [Result ParseError (List Token)]
-        (and (eqBin c bin_dash) (matchList [Bin] [Bool] cs false (\h : Bin => \t : List Bin => eqBin bin_3e h)))
-        (\u : Bin =>
-          let rest = tail [Bin] cs in
+        (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h)))
+        (\u : U8 =>
+          let rest = tail [U8] cs in
           tokenizeAcc rest (cons [Token] T_Arrow accRev))
-        (\u : Bin =>
+        (\u : U8 =>
 
       if [Result ParseError (List Token)]
-        (and (eqBin c bin_eq) (matchList [Bin] [Bool] cs false (\h : Bin => \t : List Bin => eqBin bin_3e h)))
-        (\u : Bin =>
-          let rest = tail [Bin] cs in
+        (and (eqU8 c u8_eq) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h)))
+        (\u : U8 =>
+          let rest = tail [U8] cs in
           tokenizeAcc rest (cons [Token] T_FatArrow accRev))
-        (\u : Bin =>
+        (\u : U8 =>
 
-      match (lookupTokenBin c simpleTokensBin) [Result ParseError (List Token)] {
+      match (lookupTokenU8 c simpleTokensU8) [Result ParseError (List Token)] {
         | None =>
-            if [Result ParseError (List Token)] (isAlphaBin c)
-              (\u : Bin =>
-                match (consumeIdent (cons [Bin] c (nil [Bin])) cs) [Result ParseError (List Token)] {
+            if [Result ParseError (List Token)] (isAlphaU8 c)
+              (\u : U8 =>
+                match (consumeIdent (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
                   | MkPair taken remaining =>
                       let tok = keywordTokenFromWord taken in
                       tokenizeAcc remaining (cons [Token] tok accRev)
                 })
 
-              (\u : Bin =>
-                if [Result ParseError (List Token)] (isDigitBin c)
-                  (\u : Bin =>
-                    match (consumeDigits (cons [Bin] c (nil [Bin])) cs) [Result ParseError (List Token)] {
+              (\u : U8 =>
+                if [Result ParseError (List Token)] (isDigitU8 c)
+                  (\u : U8 =>
+                    match (consumeDigits (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
                       | MkPair taken remaining =>
-                          let n = binFromDigitList taken in
+                          let n = digitsU8ToBin taken in
                           tokenizeAcc remaining (cons [Token] (T_Nat n) accRev)
                     })
 
-                  (\u : Bin =>
-                    if [Result ParseError (List Token)] (eqBin c 34)
-                      (\u : Bin =>
-                        match (consumeString (nil [Bin]) cs) [Result ParseError (List Token)] {
+                  (\u : U8 =>
+                    if [Result ParseError (List Token)] (eqU8 c u8_quote)
+                      (\u : U8 =>
+                        match (consumeString (nil [U8]) cs) [Result ParseError (List Token)] {
                           | Err e => Err [ParseError] [List Token] e
                           | Ok strRes =>
-                              let str = fst [List Bin] [List Bin] strRes in
-                              let remaining = snd [List Bin] [List Bin] strRes in
+                              let str = fst [List U8] [List U8] strRes in
+                              let remaining = snd [List U8] [List U8] strRes in
                               tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)
                         })
-                      (\u : Bin =>
-                        if [Result ParseError (List Token)] (eqBin c bin_eq)
-                          (\u : Bin => tokenizeAcc cs (cons [Token] T_Eq accRev))
-                          (\u : Bin => Err [ParseError] [List Token] (MkParseError 0 (nil [Bin])))
+                      (\u : U8 =>
+                        if [Result ParseError (List Token)] (eqU8 c u8_eq)
+                          (\u : U8 => tokenizeAcc cs (cons [Token] T_Eq accRev))
+                          (\u : U8 => Err [ParseError] [List Token] (MkParseError BZ (nil [Bin])))
                       )
                   ))
 
@@ -625,12 +653,7 @@ poly rec tokenizeAcc = \input : List Bin => \accRev : List Token =>
 
       ))))
 
-poly rec mapToBin = \xs : List Nat =>
-  matchList [Nat] [List Bin] xs
-    (nil [Bin])
-    (\h : Nat => \t : List Nat => cons [Bin] (toBin h) (mapToBin t))
-
-poly tokenizeBin = \input : List Bin =>
+poly tokenize = \input : List U8 =>
   match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {
     | Err e => Err [ParseError] [List Token] e
     | Ok rev =>
@@ -639,5 +662,3 @@ poly tokenizeBin = \input : List Bin =>
           (append [Token] toks (cons [Token] T_EOF (nil [Token])))
   }
 
-poly tokenize = \input : List Nat =>
-  tokenizeBin (mapToBin input)

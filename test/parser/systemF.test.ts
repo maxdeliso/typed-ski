@@ -15,44 +15,59 @@ import {
 } from "../../lib/types/types.ts";
 import { requiredAt } from "../util/required.ts";
 
-const decodeBinTerm = (term: SystemFTerm): number => {
-  if (term.kind === "systemF-var") {
-    assert.equal(term.name, "BZ");
-    return 0;
-  }
-  assert.equal(term.kind, "non-terminal");
-  const ctor = term.lft;
-  assert.equal(ctor.kind, "systemF-var");
-  const rest = decodeBinTerm(term.rgt);
-  if (ctor.name === "B0") {
-    return rest * 2;
-  }
-  if (ctor.name === "B1") {
-    return rest * 2 + 1;
-  }
-  throw new Error(`expected B0/B1 constructor, got ${ctor.name}`);
+const assertU8Literal = (term: SystemFTerm, expected: number) => {
+  assert.equal(term.kind, "systemF-var");
+  const u8Match = /^__trip_u8_(\d+)$/.exec(term.name);
+  assert(u8Match !== null, `expected u8 literal var, got ${term.name}`);
+  assert.equal(parseInt(u8Match[1]!, 10), expected);
 };
 
-const assertBinList = (term: SystemFTerm, expected: number[]) => {
-  let current = term;
-  for (const value of expected) {
-    assert.equal(current.kind, "non-terminal");
+const U8_VAR_PREFIX = "__trip_u8_";
+function parseU8CodeFromVar(name: string): number | null {
+  if (!name.startsWith(U8_VAR_PREFIX)) return null;
+  const code = Number(name.slice(U8_VAR_PREFIX.length));
+  if (Number.isNaN(code) || code < 0 || code > 255) return null;
+  return code;
+}
+function extractListU8Bytes(term: SystemFTerm): number[] | null {
+  const result: number[] = [];
+  let current: SystemFTerm = term;
+  for (;;) {
+    if (current.kind === "systemF-type-app") {
+      if (current.term.kind !== "systemF-var" || current.term.name !== "nil") {
+        return null;
+      }
+      if (
+        current.typeArg.kind !== "type-var" || current.typeArg.typeName !== "U8"
+      ) return null;
+      return result;
+    }
+    if (current.kind !== "non-terminal") return null;
     const consApp = current.lft;
-    assert.equal(consApp.kind, "non-terminal");
+    const tail = current.rgt;
+    if (consApp.kind !== "non-terminal") return null;
     const consTypeApp = consApp.lft;
-    assert.equal(consTypeApp.kind, "systemF-type-app");
-    assert.equal(consTypeApp.term.kind, "systemF-var");
-    assert.equal(consTypeApp.term.name, "cons");
-    assert.equal(consTypeApp.typeArg.kind, "type-var");
-    assert.equal(consTypeApp.typeArg.typeName, "Bin");
-    assert.equal(decodeBinTerm(consApp.rgt), value);
-    current = current.rgt;
+    const head = consApp.rgt;
+    if (consTypeApp.kind !== "systemF-type-app") return null;
+    if (
+      consTypeApp.term.kind !== "systemF-var" ||
+      consTypeApp.term.name !== "cons"
+    ) return null;
+    if (
+      consTypeApp.typeArg.kind !== "type-var" ||
+      consTypeApp.typeArg.typeName !== "U8"
+    ) return null;
+    if (head.kind !== "systemF-var") return null;
+    const code = parseU8CodeFromVar(head.name);
+    if (code === null) return null;
+    result.push(code);
+    current = tail;
   }
-  assert.equal(current.kind, "systemF-type-app");
-  assert.equal(current.term.kind, "systemF-var");
-  assert.equal(current.term.name, "nil");
-  assert.equal(current.typeArg.kind, "type-var");
-  assert.equal(current.typeArg.typeName, "Bin");
+}
+const assertListU8 = (term: SystemFTerm, expected: number[]) => {
+  const actual = extractListU8Bytes(term);
+  assert(actual !== null, "expected List U8 (cons [U8] … nil [U8])");
+  assert.deepEqual(actual, expected);
 };
 
 Deno.test("System F Parser", async (t) => {
@@ -69,13 +84,13 @@ Deno.test("System F Parser", async (t) => {
   await t.step("parses a natural number literal", () => {
     const [lit, ast] = parseSystemF("123");
     assert.equal(lit, "123");
-    assert.equal(decodeBinTerm(ast), 123);
+    assertU8Literal(ast, 123);
   });
 
   await t.step("parses a character literal", () => {
     const [lit, ast] = parseSystemF("'a'");
     assert.equal(lit, "'a'");
-    assertBinList(ast, [97]);
+    assertU8Literal(ast, 97);
   });
 
   await t.step("parses escaped character literals", () => {
@@ -85,10 +100,10 @@ Deno.test("System F Parser", async (t) => {
       ["'\\''", 39],
       ["'\\\"'", 34],
     ];
-    for (const [input, expected] of cases) {
+    for (const [input, expectedCode] of cases) {
       const [lit, ast] = parseSystemF(input);
       assert.equal(lit, input);
-      assertBinList(ast, [expected]);
+      assertU8Literal(ast, expectedCode);
     }
   });
 
@@ -98,7 +113,6 @@ Deno.test("System F Parser", async (t) => {
       "'a",
       "'ab'",
       "'\n'",
-      "'\\t'",
       "'\\x'",
       "'\\u'",
       "'\\0'",
@@ -113,22 +127,22 @@ Deno.test("System F Parser", async (t) => {
     assert.throws(() => parseSystemF("'\u001F'"), Error);
   });
 
-  await t.step("parses a string literal into a Bin list", () => {
+  await t.step("parses a string literal into a List U8", () => {
     const [lit, ast] = parseSystemF('"ab"');
     assert.equal(lit, '"ab"');
-    assertBinList(ast, [97, 98]);
+    assertListU8(ast, [97, 98]);
   });
 
   await t.step("parses string literal escapes", () => {
     const [lit, ast] = parseSystemF('"a\\n\\"\\\\"');
     assert.equal(lit, '"a\\n\\"\\\\"');
-    assertBinList(ast, [97, 10, 34, 92]);
+    assertListU8(ast, [97, 10, 34, 92]);
   });
 
   await t.step("parses empty string literal", () => {
     const [lit, ast] = parseSystemF('""');
     assert.equal(lit, '""');
-    assertBinList(ast, []);
+    assertListU8(ast, []);
   });
 
   await t.step("parses string literals in applications", () => {
@@ -137,13 +151,12 @@ Deno.test("System F Parser", async (t) => {
     assert.equal(ast.kind, "non-terminal");
     assert.equal(ast.lft.kind, "systemF-var");
     assert.equal(ast.lft.name, "f");
-    assertBinList(ast.rgt, [97]);
+    assertListU8(ast.rgt, [97]);
   });
 
   await t.step("rejects malformed string literals", () => {
     const badInputs = [
       '"unterminated',
-      '"\\t"',
       '"\\x"',
       '"\\u"',
       '"\\0"',
@@ -323,7 +336,7 @@ Deno.test("System F Parser", async (t) => {
       assert.equal(lit, "let x = 1 in x");
       assert.equal(ast.kind, "systemF-let");
       assert.equal(ast.name, "x");
-      assert.equal(decodeBinTerm(ast.value), 1);
+      assertU8Literal(ast.value, 1);
       assert.equal(ast.body.kind, "systemF-var");
       assert.equal(ast.body.name, "x");
     });
@@ -340,7 +353,7 @@ Deno.test("System F Parser", async (t) => {
         assert.equal(ast.lft.typeAnnotation.typeName, "Nat");
         assert.equal(ast.lft.body.kind, "systemF-var");
         assert.equal(ast.lft.body.name, "x");
-        assert.equal(decodeBinTerm(ast.rgt), 1);
+        assertU8Literal(ast.rgt, 1);
       },
     );
 
@@ -349,8 +362,10 @@ Deno.test("System F Parser", async (t) => {
       assert.equal(lit, "let x = 1 in let y = 2 in x");
       assert.equal(ast.kind, "systemF-let");
       assert.equal(ast.name, "x");
+      assertU8Literal(ast.value, 1);
       assert.equal(ast.body.kind, "systemF-let");
       assert.equal(ast.body.name, "y");
+      assertU8Literal(ast.body.value, 2);
       assert.equal(ast.body.body.kind, "systemF-var");
       assert.equal(ast.body.body.name, "x");
     });
@@ -369,8 +384,10 @@ Deno.test("System F Parser", async (t) => {
       const [_, ast] = parseSystemF("let x = 1 in let x = 2 in x");
       assert.equal(ast.kind, "systemF-let");
       assert.equal(ast.name, "x");
+      assertU8Literal(ast.value, 1);
       assert.equal(ast.body.kind, "systemF-let");
       assert.equal(ast.body.name, "x");
+      assertU8Literal(ast.body.value, 2);
       assert.equal(ast.body.body.kind, "systemF-var");
       assert.equal(ast.body.body.name, "x"); // inner x refers to inner binding
     });
@@ -575,24 +592,21 @@ Deno.test("System F Parser", async (t) => {
         const input = "match 123 [T] { | None => y }";
         const [_lit, ast] = parseSystemF(input);
         assert.equal(ast.kind, "systemF-match");
-
-        // The scrutinee should be a Bin literal term
-        const scrutinee = ast.scrutinee;
-        assert.equal(decodeBinTerm(scrutinee), 123);
+        assertU8Literal(ast.scrutinee, 123);
       });
 
       await t.step("parses character literal as match scrutinee", () => {
         const input = "match 'a' [T] { | None => y }";
         const [_lit, ast] = parseSystemF(input);
         assert.equal(ast.kind, "systemF-match");
-        assertBinList(ast.scrutinee, [97]);
+        assertU8Literal(ast.scrutinee, 97);
       });
 
       await t.step("parses string literal as match scrutinee", () => {
         const input = 'match "hi" [T] { | None => y }';
         const [_lit, ast] = parseSystemF(input);
         assert.equal(ast.kind, "systemF-match");
-        assertBinList(ast.scrutinee, [104, 105]);
+        assertListU8(ast.scrutinee, [104, 105]);
       });
 
       await t.step(
@@ -720,9 +734,7 @@ Deno.test("parsed a naked atomic", () => {
   const [lit, result] = parseSystemF(input);
   assert.equal(lit, input);
   assert.equal(result.kind, "non-terminal");
-  // Verify that each character in "poly" is parsed as a natural number
-  // 'p'=112, 'o'=111, 'l'=108, 'y'=121
-  assertBinList(result, [112, 111, 108, 121]);
+  assertListU8(result, [112, 111, 108, 121]);
 });
 
 Deno.test("parses let inside match arm", () => {

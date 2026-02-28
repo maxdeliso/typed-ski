@@ -24,8 +24,11 @@ poly rec binToChurch = \b : Bin =>
     | B1 rest => succ (dbl (binToChurch rest))
   }
 
-poly emptyResult = matchList [Bin] [Bin] (nil [Bin]) 0 (\h : Bin => \t : List => h)
-poly consResult = matchList [Bin] [Bin] (cons [Bin] 42 (nil [Bin])) 0
+poly zeroBin : Bin = BZ
+poly fortyTwo : Bin = B0 (B1 (B0 (B1 (B0 (B1 BZ)))))
+
+poly emptyResult = matchList [Bin] [Bin] (nil [Bin]) zeroBin (\h : Bin => \t : List => h)
+poly consResult = matchList [Bin] [Bin] (cons [Bin] fortyTwo (nil [Bin])) zeroBin
   (\h : Bin => \t : List => h)
 
 poly main = binToChurch consResult

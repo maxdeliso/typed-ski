@@ -203,6 +203,11 @@ export const typecheckSystemF = (
 ): [BaseType, SystemFContext] => {
   switch (term.kind) {
     case "systemF-var": {
+      const u8Match = /^__trip_u8_(\d+)$/.exec(term.name);
+      if (u8Match) {
+        const u8Type = { kind: "type-var" as const, typeName: "U8" };
+        return [resolveTypeAlias(u8Type, ctx.typeAliases), ctx];
+      }
       const literalValue = parseNatLiteralIdentifier(term.name);
       if (literalValue !== null) {
         const natType = makeNatType();
@@ -243,7 +248,16 @@ export const typecheckSystemF = (
       const resolvedLft = resolveTypeAlias(funTy.lft, ctxAfterLeft.typeAliases);
       const resolvedArg = resolveTypeAlias(argTy, ctxAfterRight.typeAliases);
 
-      if (!typesLitEq(resolvedLft, resolvedArg)) {
+      const argTerm = term.rgt;
+      const natLiteralAsU8 = resolvedLft.kind === "type-var" &&
+        resolvedLft.typeName === "U8" &&
+        argTerm.kind === "systemF-var" &&
+        (() => {
+          const v = parseNatLiteralIdentifier(argTerm.name);
+          return v !== null && v >= 0n && v <= 255n;
+        })();
+
+      if (!natLiteralAsU8 && !typesLitEq(resolvedLft, resolvedArg)) {
         // Only use normalization for forall types (alpha-equivalence)
         if (resolvedLft.kind === "forall" && resolvedArg.kind === "forall") {
           const normLft = normalize(resolvedLft);

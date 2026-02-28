@@ -4,14 +4,16 @@ import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
-import Prelude Bin
-import Prelude eqBin
+import Prelude U8
 import Prelude List
+import Prelude nil
+import Prelude cons
 import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
-import Lexer tokenizeBin
+import Prelude eqU8
+import Lexer tokenize
 import Lexer Token
 import Lexer tokenTag
 import Lexer T_KwLet
@@ -20,19 +22,23 @@ import Lexer T_KwMatch
 
 export main
 
-poly firstHasTag = \src : List Bin => \expectedTag : Bin =>
-  match (tokenizeBin src) [Bool] {
+poly listLet : List U8 = "let"
+poly listMatch : List U8 = "match"
+poly listIn : List U8 = "in"
+
+poly firstHasTag = \src : List U8 => \expectedTag : U8 =>
+  match (tokenize src) [Bool] {
     | Err e => false
     | Ok toks =>
         matchList [Token] [Bool] toks false
           (\h : Token => \t : List Token =>
-            eqBin (tokenTag h) expectedTag)
+            eqU8 (tokenTag h) expectedTag)
   }
 
 poly main =
-  if [Bool] (firstHasTag "let" (tokenTag T_KwLet))
-    (\u : Bin =>
-      if [Bool] (firstHasTag "match" (tokenTag T_KwMatch))
-        (\u : Bin => firstHasTag "in" (tokenTag T_KwIn))
-        (\u : Bin => false))
-    (\u : Bin => false)
+  if [Bool] (firstHasTag listLet (tokenTag T_KwLet))
+    (\u : U8 =>
+      if [Bool] (firstHasTag listMatch (tokenTag T_KwMatch))
+        (\u : U8 => firstHasTag listIn (tokenTag T_KwIn))
+        (\u : U8 => false))
+    (\u : U8 => false)

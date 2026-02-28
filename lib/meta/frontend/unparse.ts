@@ -27,6 +27,8 @@ export function unparseTerm(dt: TripLangTerm): string {
       return dt.name + def + unparseUntypedLambda(dt.term);
     case "combinator":
       return dt.name + def + unparseSKI(dt.term);
+    case "native":
+      return `native ${dt.name} : ${unparseType(dt.type)}`;
     case "type":
       return dt.name + def + unparseType(dt.type);
     case "data": {

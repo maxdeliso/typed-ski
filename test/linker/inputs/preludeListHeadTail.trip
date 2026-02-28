@@ -26,6 +26,9 @@ poly rec binToChurch = \b : Bin =>
     | B1 rest => succ (dbl (binToChurch rest))
   }
 
-poly list = cons [Bin] 1 (cons [Bin] 2 (nil [Bin]))
+poly one : Bin = B1 BZ
+poly two : Bin = B0 (B1 BZ)
+
+poly list = cons [Bin] one (cons [Bin] two (nil [Bin]))
 
 poly main = binToChurch (head [Bin] (tail [Bin] list))

@@ -7,6 +7,8 @@ export const DATA = "data" as const;
 export const MODULE = "module" as const;
 export const IMPORT = "import" as const;
 export const EXPORT = "export" as const;
+export const OPAQUE = "opaque" as const;
+export const NATIVE = "native" as const;
 
 export const DEFINITION_KEYWORDS = [
   POLY,
@@ -18,6 +20,8 @@ export const DEFINITION_KEYWORDS = [
   MODULE,
   IMPORT,
   EXPORT,
+  OPAQUE,
+  NATIVE,
 ] as const;
 
 export type DefinitionKind = typeof DEFINITION_KEYWORDS[number];

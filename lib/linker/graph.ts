@@ -123,5 +123,5 @@ export function tarjanSCC<Node>(graph: DirectedGraph<Node>): Node[][] {
  * Returns SCCs in dependency order (topological order of SCC DAG).
  */
 export function sccDependencyOrder<Node>(graph: DirectedGraph<Node>): Node[][] {
-  return tarjanSCC(graph).reverse();
+  return tarjanSCC(graph);
 }

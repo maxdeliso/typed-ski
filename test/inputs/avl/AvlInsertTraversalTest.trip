@@ -7,6 +7,10 @@ import Nat add
 import Nat mul
 import Nat lte
 import Nat fromBin
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
 import Prelude List
 import Prelude matchList
 import Avl empty
@@ -15,9 +19,11 @@ import Avl toListKeys
 
 export main
 
+poly tenBin : Bin = B0 (B1 (B0 (B1 BZ)))
+
 poly rec encode = \keys : List Nat =>
   matchList [Nat] [Nat] keys zero
-    (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin 10)))
+    (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin tenBin)))
 
 poly main =
   let one = succ zero in

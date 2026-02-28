@@ -109,8 +109,8 @@ Deno.test("linker graph algorithms", async (t) => {
         }
         if (fromIndex !== toIndex) {
           expect(
-            fromIndex < toIndex,
-            `expected dependency order ${from} -> ${to}`,
+            toIndex < fromIndex,
+            `expected dependency order ${to} comes before ${from}`,
           ).to.equal(true);
         }
       }

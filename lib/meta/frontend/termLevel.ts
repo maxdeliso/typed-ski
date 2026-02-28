@@ -18,6 +18,14 @@ import { eraseTypedLambda } from "../../types/typedLambda.ts";
 import type { TripLangTerm } from "../trip.ts";
 import { CompilationError } from "./errors.ts";
 import { freeTermVars, fresh } from "./substitution.ts";
+import type { SKIExpression } from "../../ski/expression.ts";
+import { SKITerminalSymbol, term } from "../../ski/terminal.ts";
+
+const INTRINSIC_TERMS: Readonly<Record<string, SKIExpression>> = {
+  eqU8: term(SKITerminalSymbol.EqU8),
+  readOne: term(SKITerminalSymbol.ReadOne),
+  writeOne: term(SKITerminalSymbol.WriteOne),
+};
 
 function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {
   const free = freeTermVars(body);
@@ -56,6 +64,7 @@ export function termLevel(dt: TripLangTerm): number {
     case "untyped":
       return 2;
     case "combinator":
+    case "native":
       return 1;
     case "type":
       return -1;
@@ -102,6 +111,22 @@ export function lower(dt: TripLangTerm): TripLangTerm {
 
     case "combinator": {
       return dt; // fixed point
+    }
+
+    case "native": {
+      const intrinsic = INTRINSIC_TERMS[dt.name];
+      if (!intrinsic) {
+        throw new CompilationError(
+          `Unknown native intrinsic: ${dt.name}`,
+          "resolve",
+          { term: dt },
+        );
+      }
+      return {
+        kind: "combinator",
+        name: dt.name,
+        term: intrinsic,
+      };
     }
 
     case "type":

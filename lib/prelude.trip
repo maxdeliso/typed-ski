@@ -50,6 +50,13 @@ export isZeroBin
 export eqBin
 export lteBin
 export gteBin
+export eqU8
+export U8
+
+opaque type U8
+native eqU8 : U8 -> U8 -> Bool
+native readOne : #R -> (U8 -> R) -> R
+native writeOne : U8 -> #R -> (U8 -> R) -> R
 
 type Bool = #B -> B -> B -> B
 type List = #A -> #R -> R -> (A -> R -> R) -> R
@@ -84,7 +91,8 @@ poly and = \a : Bool => \b : Bool =>
 poly or = \a : Bool => \b : Bool =>
   a [Bool] true b
 
-poly if = #A => \b : Bool => \t : Bin -> A => \f : Bin -> A => b [Bin -> A] t f 0
+poly if = #A => \b : Bool => \t : U8 -> A => \f : U8 -> A =>
+  b [U8 -> A] t f #u8(0)
 
 poly nil = #A => #R => \n : R => \c : (A -> List -> R) => n
 
@@ -117,25 +125,27 @@ poly rec takeWhile = #A => \p : A -> Bool => \l : List A =>
   matchList [A] [List A] l (nil [A])
     (\h : A => \t : List A =>
       if [List A] (p h)
-        (\u : Bin => cons [A] h (takeWhile [A] p t))
-        (\u : Bin => nil [A]))
+        (\u : U8 => cons [A] h (takeWhile [A] p t))
+        (\u : U8 => nil [A]))
 
 poly rec dropWhile = #A => \p : A -> Bool => \l : List A =>
   matchList [A] [List A] l (nil [A])
     (\h : A => \t : List A =>
       if [List A] (p h)
-        (\u : Bin => dropWhile [A] p t)
-        (\u : Bin => cons [A] h t))
+        (\u : U8 => dropWhile [A] p t)
+        (\u : U8 => cons [A] h t))
 
 poly rec span = #A => \p : A -> Bool => \l : List A =>
   matchList [A] [Pair (List A) (List A)] l
     (MkPair [List A] [List A] (nil [A]) (nil [A]))
     (\h : A => \t : List A =>
       if [Pair (List A) (List A)] (p h)
-        (\u : Bin =>
-           let res = span [A] p t in
-           MkPair [List A] [List A] (cons [A] h (fst [List A] [List A] res)) (snd [List A] [List A] res))
-        (\u : Bin => MkPair [List A] [List A] (nil [A]) l))
+        (\u : U8 =>
+          let res = span [A] p t in
+          MkPair [List A] [List A]
+            (cons [A] h (fst [List A] [List A] res))
+            (snd [List A] [List A] res))
+        (\u : U8 => MkPair [List A] [List A] (nil [A]) l))
 
 poly rec isZeroBin = \b : Bin =>
   match b [Bool] {
@@ -224,6 +234,3 @@ poly gteBin = \a : Bin => \b : Bin =>
 
 poly error = #A =>
   (\x : A => x) (\x : A => x)
-
-combinator readOne = ,
-combinator writeOne = .

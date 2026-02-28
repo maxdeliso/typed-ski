@@ -50,6 +50,9 @@ export const skiToUntyped = (expr: SKIExpression): UntypedLambda => {
   if (expr.kind === "terminal") {
     return terminalToLambda(expr.sym);
   }
+  if (expr.kind === "u8") {
+    throw new Error("U8 literals cannot be converted to untyped lambda");
+  }
   return createApplication(
     skiToUntyped(expr.lft),
     skiToUntyped(expr.rgt),

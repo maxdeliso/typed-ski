@@ -10,8 +10,10 @@ import type { SKIExpression } from "../ski/expression.ts";
 import { apply } from "../ski/expression.ts";
 import {
   consume,
+  matchCh,
   matchLP,
   matchRP,
+  parseNumericLiteral,
   type ParserState,
   peek,
   withParserState,
@@ -31,6 +33,7 @@ const TERMINAL_ALIASES: Record<string, SKITerminalSymbol> = {
   R: SKITerminalSymbol.CPrime,
   ",": SKITerminalSymbol.ReadOne,
   ".": SKITerminalSymbol.WriteOne,
+  E: SKITerminalSymbol.EqU8,
 };
 
 function normalizeSymbol(tok: string | null): SKITerminalSymbol | null {
@@ -46,7 +49,27 @@ function isSymbol(tok: string | null): tok is SKITerminalSymbol {
 }
 
 function isAtomStart(tok: string | null): boolean {
-  return tok === "(" || isSymbol(tok);
+  return tok === "(" || tok === "#" || isSymbol(tok);
+}
+
+/** Parses #u8(<decimal 0..255>) and returns [literal string, SKI u8 expr, state]. */
+function parseU8Literal(
+  state: ParserState,
+): [string, SKIExpression, ParserState] {
+  const s1 = matchCh(state, "#");
+  const s2 = matchCh(s1, "u");
+  const s3 = matchCh(s2, "8");
+  const s4 = matchLP(s3);
+  const [lit, num, s5] = parseNumericLiteral(s4);
+  const value = Number(num);
+  if (value < 0 || value > 255) {
+    throw new ParseError(
+      withParserState(s5, `#u8 value must be 0..255, got ${value}`),
+    );
+  }
+  const s6 = matchRP(s5);
+  const literal = `#u8(${lit})`;
+  return [literal, { kind: "u8", value }, s6];
 }
 
 function parseSeq(rdb: ParserState): [string, SKIExpression, ParserState] {
@@ -71,6 +94,8 @@ function parseAtomicOrParens(
 
   if (peeked === "(") {
     return parseParens(state);
+  } else if (peeked === "#") {
+    return parseU8Literal(state);
   } else if (isSymbol(peeked)) {
     const token = normalizeSymbol(peeked)!;
     const stateAfterConsume = consume(state);

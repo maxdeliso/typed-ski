@@ -36,10 +36,14 @@ static const uint32_t POISON_SEQ = 0xffffffff;
 
 uint8_t *volatile ARENA_BASE_ADDR = NULL;
 static uint32_t ARENA_MODE = 0;
-static atomic_uint BIN_CTOR_BZ = EMPTY;
-static atomic_uint BIN_CTOR_B0 = EMPTY;
-static atomic_uint BIN_CTOR_B1 = EMPTY;
 static atomic_uint GROW_COUNT = 0;
+
+/** Cached node IDs for True (K) and False (K I); invalidated by reset(). */
+static uint32_t TRUE_ID = EMPTY;
+static uint32_t FALSE_ID = EMPTY;
+
+/** Canonical U8 node id per byte value; deduplicated across allocU8 calls. */
+static atomic_uint U8_CACHE[256];
 
 static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63; }
 
@@ -168,6 +172,7 @@ typedef struct {
   uint32_t offset_stdin;
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
+  uint32_t offset_stdout_wait;
   uint32_t offset_kind;
   uint32_t offset_sym;
   uint32_t offset_left_id;
@@ -186,7 +191,9 @@ static SabLayout calculate_layout(uint32_t capacity) {
   l.offset_stdin = align64(l.offset_cq + ring_bytes(RING_ENTRIES, sizeof(Cqe)));
   l.offset_stdout = align64(l.offset_stdin + ring_bytes(RING_ENTRIES, 1));
   l.offset_stdin_wait = align64(l.offset_stdout + ring_bytes(RING_ENTRIES, 1));
-  l.offset_kind = align64(l.offset_stdin_wait + ring_bytes(RING_ENTRIES, 4));
+  l.offset_stdout_wait =
+      align64(l.offset_stdin_wait + ring_bytes(RING_ENTRIES, 4));
+  l.offset_kind = align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
   l.offset_sym = l.offset_kind + capacity;
   l.offset_left_id = align64(l.offset_sym + capacity);
   l.offset_right_id = l.offset_left_id + 4 * capacity;
@@ -233,6 +240,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
   h->offset_stdin = layout.offset_stdin;
   h->offset_stdout = layout.offset_stdout;
   h->offset_stdin_wait = layout.offset_stdin_wait;
+  h->offset_stdout_wait = layout.offset_stdout_wait;
   h->offset_kind = layout.offset_kind;
   h->offset_sym = layout.offset_sym;
   h->offset_left_id = layout.offset_left_id;
@@ -251,6 +259,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdin, RING_ENTRIES, 1);
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdout, RING_ENTRIES, 1);
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdin_wait, RING_ENTRIES, 4);
+  ring_init_at(ARENA_BASE_ADDR + h->offset_stdout_wait, RING_ENTRIES, 4);
 
   atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
   for (uint32_t i = 0; i < capacity; i++)
@@ -259,6 +268,9 @@ static void *allocate_raw_arena(uint32_t capacity) {
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_init(&cache[i], EMPTY);
+
+  for (uint32_t u = 0; u < 256; u++)
+    atomic_init(&U8_CACHE[u], EMPTY);
 
   return ARENA_BASE_ADDR;
 }
@@ -298,6 +310,13 @@ uint32_t connectArena(uint32_t ptr_addr) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (h->magic != ARENA_MAGIC)
     return 5;
+
+  TRUE_ID = EMPTY;
+  FALSE_ID = EMPTY;
+  atomic_store_explicit(&GROW_COUNT, 0, memory_order_relaxed);
+
+  for (uint32_t u = 0; u < 256; u++)
+    atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_relaxed);
   return 1;
 }
 
@@ -311,10 +330,11 @@ void reset(void) {
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_store_explicit(&cache[i], EMPTY, memory_order_release);
-  atomic_store_explicit(&BIN_CTOR_BZ, EMPTY, memory_order_release);
-  atomic_store_explicit(&BIN_CTOR_B0, EMPTY, memory_order_release);
-  atomic_store_explicit(&BIN_CTOR_B1, EMPTY, memory_order_release);
   atomic_store_explicit(&GROW_COUNT, 0, memory_order_release);
+  TRUE_ID = EMPTY;
+  FALSE_ID = EMPTY;
+  for (uint32_t u = 0; u < 256; u++)
+    atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_release);
   atomic_store_explicit(
       &h->resize_seq,
       atomic_load_explicit(&h->resize_seq, memory_order_relaxed) & ~1,
@@ -487,6 +507,50 @@ uint32_t allocTerminal(uint32_t sym) {
       continue;
 
     return id;
+  }
+}
+
+uint32_t allocU8(uint8_t value) {
+  ensure_arena();
+
+  uint32_t cached =
+      atomic_load_explicit(&U8_CACHE[value], memory_order_acquire);
+  if (cached != EMPTY)
+    return cached;
+
+  while (true) {
+    SabHeader *h;
+    uint32_t seq = enter_stable(&h);
+
+    uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
+    if (id >= h->capacity) {
+      grow();
+      continue;
+    }
+
+    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
+    atomic_uchar *sym_arr = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
+    atomic_uint *hash_arr = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
+    atomic_uint *left_arr =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
+    atomic_uint *right_arr =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
+
+    atomic_store_explicit(&sym_arr[id], value, memory_order_relaxed);
+    atomic_store_explicit(&hash_arr[id], (uint32_t)value, memory_order_relaxed);
+    atomic_store_explicit(&left_arr[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&right_arr[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&kind[id], ARENA_KIND_U8, memory_order_release);
+
+    if (!check_stable(seq))
+      continue;
+
+    uint32_t expected = EMPTY;
+    if (atomic_compare_exchange_strong_explicit(&U8_CACHE[value], &expected, id,
+                                                memory_order_release,
+                                                memory_order_relaxed))
+      return id;
+    return atomic_load_explicit(&U8_CACHE[value], memory_order_acquire);
   }
 }
 
@@ -735,6 +799,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   h->offset_stdin = layout.offset_stdin;
   h->offset_stdout = layout.offset_stdout;
   h->offset_stdin_wait = layout.offset_stdin_wait;
+  h->offset_stdout_wait = layout.offset_stdout_wait;
   h->offset_kind = layout.offset_kind;
   h->offset_sym = layout.offset_sym;
   h->offset_left_id = layout.offset_left_id;
@@ -854,6 +919,24 @@ static inline StepOutcome budget_outcome(uint8_t mode, uint32_t curr,
   return o;
 }
 
+/** Prelude true = K */
+static uint32_t arenaTrue(void) {
+  if (TRUE_ID == EMPTY) {
+    TRUE_ID = allocTerminal(ARENA_SYM_K);
+  }
+  return TRUE_ID;
+}
+
+/** Prelude false = (K I) */
+static uint32_t arenaFalse(void) {
+  if (FALSE_ID == EMPTY) {
+    uint32_t k = allocTerminal(ARENA_SYM_K);
+    uint32_t i = allocTerminal(ARENA_SYM_I);
+    FALSE_ID = allocCons(k, i);
+  }
+  return FALSE_ID;
+}
+
 static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
                                   uint32_t *gas, uint32_t *remaining_steps,
                                   uint32_t free_node) {
@@ -927,7 +1010,7 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
             return budget_outcome(mode, curr, stack, 0);
           }
           (*remaining_steps)--;
-          curr = allocCons(right, alloc_bin_byte(byte));
+          curr = allocCons(right, allocU8(byte));
           mode = MODE_DESCEND;
           continue;
         }
@@ -942,20 +1025,82 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         return o;
       }
       if (sym == ARENA_SYM_WRITE_ONE) {
-        if (*remaining_steps == 0) {
-          return budget_outcome(mode, curr, stack, 0);
+        if (kindOf(right) != ARENA_KIND_U8) {
+          curr = right;
+          mode = MODE_DESCEND;
+          continue;
         }
-        (*remaining_steps)--;
-        uint8_t byte = decode_bin_u8(right);
+        uint8_t byte = (uint8_t)symOf(right);
         SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-        enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
-                         1);
-        curr = right;
-        mode = MODE_DESCEND;
-        continue;
+        if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
+                        1)) {
+          if (*remaining_steps == 0) {
+            return budget_outcome(mode, curr, stack, 0);
+          }
+          (*remaining_steps)--;
+          curr = right;
+          mode = MODE_DESCEND;
+          continue;
+        }
+        /* Blocked on stdout: suspend. */
+        uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
+                                         curr, stack, *remaining_steps);
+        enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
+                         &susp_id, 4);
+        StepOutcome o;
+        o.type = RESULT_YIELD;
+        o.val = susp_id;
+        return o;
       }
     } else if (kindOf(left) == ARENA_KIND_NON_TERM) {
       uint32_t ll = leftOf(left);
+      /* ((EQ_U8 a) b) -> True if a==b else False, when a,b are U8 */
+      if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_EQ_U8) {
+        uint32_t a = rightOf(left);
+        uint32_t b = right;
+        if (kindOf(a) == ARENA_KIND_U8 && kindOf(b) == ARENA_KIND_U8) {
+          if (*remaining_steps == 0) {
+            return budget_outcome(mode, curr, stack, 0);
+          }
+          (*remaining_steps)--;
+          uint8_t va = (uint8_t)symOf(a);
+          uint8_t vb = (uint8_t)symOf(b);
+          curr = (va == vb) ? arenaTrue() : arenaFalse();
+          mode = MODE_DESCEND;
+          continue;
+        }
+      }
+      if (kindOf(ll) == ARENA_KIND_TERMINAL &&
+          symOf(ll) == ARENA_SYM_WRITE_ONE) {
+        uint32_t a = rightOf(left);
+        uint32_t b = right;
+        if (kindOf(a) != ARENA_KIND_U8) {
+          curr = a;
+          mode = MODE_DESCEND;
+          continue;
+        }
+        uint8_t byte = (uint8_t)symOf(a);
+        SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+        if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
+                        1)) {
+          if (*remaining_steps == 0) {
+            return budget_outcome(mode, curr, stack, 0);
+          }
+          (*remaining_steps)--;
+          curr = allocCons(b, a);
+          mode = MODE_DESCEND;
+          continue;
+        }
+        /* Blocked on stdout: suspend. */
+        uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
+                                         curr, stack, *remaining_steps);
+        enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
+                         &susp_id, 4);
+        StepOutcome o;
+        o.type = RESULT_YIELD;
+        o.val = susp_id;
+        return o;
+      }
       if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_K) {
         if (*remaining_steps == 0) {
           return budget_outcome(mode, curr, stack, 0);
@@ -1046,155 +1191,6 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
     curr = left;
     mode = MODE_DESCEND;
   }
-}
-
-static uint32_t alloc_bin_ctor_bz(void) {
-  uint32_t b = allocTerminal(ARENA_SYM_B);
-  uint32_t i = allocTerminal(ARENA_SYM_I);
-  uint32_t k = allocTerminal(ARENA_SYM_K);
-  uint32_t bi = allocCons(b, i);
-  uint32_t bik = allocCons(bi, k);
-  uint32_t b_bik = allocCons(b, bik);
-  return allocCons(b_bik, k);
-}
-
-static uint32_t alloc_bin_ctor_b0(void) {
-  uint32_t p = allocTerminal(ARENA_SYM_SPRIME);
-  uint32_t s = allocTerminal(ARENA_SYM_S);
-  uint32_t k = allocTerminal(ARENA_SYM_K);
-  uint32_t b = allocTerminal(ARENA_SYM_B);
-  uint32_t i = allocTerminal(ARENA_SYM_I);
-  uint32_t ps = allocCons(p, s);
-  uint32_t pps = allocCons(p, ps);
-  uint32_t ppps = allocCons(p, pps);
-  uint32_t bi = allocCons(b, i);
-  uint32_t bik = allocCons(bi, k);
-  uint32_t k_bik = allocCons(k, bik);
-  uint32_t k_k_bik = allocCons(k, k_bik);
-  uint32_t left = allocCons(ppps, k_k_bik);
-  uint32_t b_bi_k = allocCons(b, bik);
-  uint32_t b_bi_k_k = allocCons(b_bi_k, k);
-  uint32_t b_b_bi_k_k = allocCons(b, b_bi_k_k);
-  uint32_t right = allocCons(b_b_bi_k_k, k);
-  return allocCons(left, right);
-}
-
-static uint32_t alloc_bin_ctor_b1(void) {
-  uint32_t p = allocTerminal(ARENA_SYM_SPRIME);
-  uint32_t s = allocTerminal(ARENA_SYM_S);
-  uint32_t k = allocTerminal(ARENA_SYM_K);
-  uint32_t b = allocTerminal(ARENA_SYM_B);
-  uint32_t i = allocTerminal(ARENA_SYM_I);
-  uint32_t ps = allocCons(p, s);
-  uint32_t pps = allocCons(p, ps);
-  uint32_t ppps = allocCons(p, pps);
-  uint32_t ki = allocCons(k, i);
-  uint32_t k_ki = allocCons(k, ki);
-  uint32_t k_k_ki = allocCons(k, k_ki);
-  uint32_t left = allocCons(ppps, k_k_ki);
-  uint32_t bi = allocCons(b, i);
-  uint32_t bik = allocCons(bi, k);
-  uint32_t b_bi_k = allocCons(b, bik);
-  uint32_t b_bi_k_k = allocCons(b_bi_k, k);
-  uint32_t b_b_bi_k_k = allocCons(b, b_bi_k_k);
-  uint32_t right = allocCons(b_b_bi_k_k, k);
-  return allocCons(left, right);
-}
-
-static void ensure_bin_ctors(uint32_t *bz, uint32_t *b0, uint32_t *b1) {
-  *bz = atomic_load_explicit(&BIN_CTOR_BZ, memory_order_acquire);
-  if (*bz != EMPTY) {
-    *b0 = atomic_load_explicit(&BIN_CTOR_B0, memory_order_acquire);
-    *b1 = atomic_load_explicit(&BIN_CTOR_B1, memory_order_acquire);
-    return;
-  }
-  *b0 = alloc_bin_ctor_b0();
-  *b1 = alloc_bin_ctor_b1();
-  *bz = alloc_bin_ctor_bz();
-  atomic_store_explicit(&BIN_CTOR_B0, *b0, memory_order_release);
-  atomic_store_explicit(&BIN_CTOR_B1, *b1, memory_order_release);
-  atomic_store_explicit(&BIN_CTOR_BZ, *bz, memory_order_release);
-}
-
-uint32_t alloc_bin_byte(uint8_t value) {
-  uint32_t bz, b0, b1;
-  ensure_bin_ctors(&bz, &b0, &b1);
-  if (value == 0)
-    return bz;
-  uint32_t cur = bz;
-  uint8_t n = value;
-  uint8_t bits[8];
-  int len = 0;
-  while (n > 0) {
-    bits[len++] = n & 1;
-    n >>= 1;
-  }
-  for (int i = len - 1; i >= 0; i--) {
-    cur = allocCons(bits[i] == 0 ? b0 : b1, cur);
-  }
-  return cur;
-}
-
-static bool expr_equiv(uint32_t a, uint32_t b) {
-  if (a == b)
-    return true;
-  uint32_t stack_a[1024], stack_b[1024];
-  int sp = 0;
-  stack_a[sp] = a;
-  stack_b[sp] = b;
-  sp++;
-  while (sp > 0) {
-    sp--;
-    uint32_t x = stack_a[sp], y = stack_b[sp];
-    if (x == y)
-      continue;
-    uint32_t kx = kindOf(x), ky = kindOf(y);
-    if (kx != ky)
-      return false;
-    if (kx == ARENA_KIND_TERMINAL) {
-      if (symOf(x) != symOf(y))
-        return false;
-      continue;
-    }
-    if (kx == ARENA_KIND_NON_TERM) {
-      if (sp + 2 > 1024)
-        return false;
-      stack_a[sp] = leftOf(x);
-      stack_b[sp] = leftOf(y);
-      sp++;
-      stack_a[sp] = rightOf(x);
-      stack_b[sp] = rightOf(y);
-      sp++;
-      continue;
-    }
-    if (symOf(x) != symOf(y) || leftOf(x) != leftOf(y) ||
-        rightOf(x) != rightOf(y))
-      return false;
-  }
-  return true;
-}
-
-uint8_t decode_bin_u8(uint32_t expr) {
-  uint32_t bz, b0, b1;
-  ensure_bin_ctors(&bz, &b0, &b1);
-  uint32_t cur = expr;
-  uint8_t result = 0, bit = 1;
-  for (int i = 0; i < 8; i++) {
-    if (expr_equiv(cur, bz))
-      break;
-    if (kindOf(cur) != ARENA_KIND_NON_TERM)
-      break;
-    uint32_t l = leftOf(cur), r = rightOf(cur);
-    if (expr_equiv(l, b0))
-      cur = r;
-    else if (expr_equiv(l, b1)) {
-      result |= bit;
-      cur = r;
-    } else
-      break;
-    bit <<= 1;
-  }
-  return result;
 }
 
 uint32_t arenaKernelStep(uint32_t expr) {

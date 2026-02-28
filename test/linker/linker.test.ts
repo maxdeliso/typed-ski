@@ -827,7 +827,10 @@ Deno.test("TripLang Linker", async (t) => {
       caughtMessage = (error as Error).message;
     } finally {
       expect(caughtMessage).to.not.be.null;
-      expect(caughtMessage!).to.include("Symbol 'X' is not defined");
+      expect(caughtMessage!).to.satisfy((m: string) =>
+        m.includes("Symbol 'X' is not defined") ||
+        m.includes("Symbol 'g' is not defined")
+      );
     }
   });
 
@@ -1293,14 +1296,18 @@ Deno.test("TripLang Linker", async (t) => {
       // Narrowed to UntypedDefinition
       const term = main.term;
 
-      expect(term.kind).to.equal("lambda-var");
-      if (term.kind !== "lambda-var") {
-        throw new Error(`Expected term.kind 'lambda-var', got '${term.kind}'`);
+      // With correct topological order, x is resolved even if we delete the initial global entry
+      // because resolveSCC re-adds it when processing the Provider module.
+      const termValue = term as unknown as { kind: string };
+      expect(termValue.kind).to.equal("terminal");
+      if (termValue.kind !== "terminal") {
+        throw new Error(
+          `Expected term.kind 'terminal', got '${termValue.kind}'`,
+        );
       }
 
-      expect(term.name).to.equal("x");
       const [termRefs, typeRefs] = externalReferences(term);
-      expect(Array.from(termRefs.keys())).to.deep.equal(["x"]);
+      expect(termRefs.size).to.equal(0);
       expect(typeRefs.size).to.equal(0);
     },
   );

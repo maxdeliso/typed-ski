@@ -20,7 +20,8 @@ typedef enum {
   ARENA_KIND_TERMINAL = 1,
   ARENA_KIND_NON_TERM = 2,
   ARENA_KIND_CONTINUATION = 3,
-  ARENA_KIND_SUSPENSION = 4
+  ARENA_KIND_SUSPENSION = 4,
+  ARENA_KIND_U8 = 5
 } ArenaKind;
 
 typedef enum {
@@ -33,11 +34,12 @@ typedef enum {
   ARENA_SYM_C = 9,
   ARENA_SYM_SPRIME = 10,
   ARENA_SYM_BPRIME = 11,
-  ARENA_SYM_CPRIME = 12
+  ARENA_SYM_CPRIME = 12,
+  ARENA_SYM_EQ_U8 = 13
 } ArenaSym;
 
 #define EMPTY 0xffffffff
-#define TERM_CACHE_LEN 10
+#define TERM_CACHE_LEN (ARENA_SYM_EQ_U8 + 1)
 
 typedef struct {
   atomic_uint head;
@@ -84,6 +86,7 @@ typedef struct {
   uint32_t offset_stdin;
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
+  uint32_t offset_stdout_wait;
   uint32_t offset_kind;
   uint32_t offset_sym;
   uint32_t offset_left_id;
@@ -116,6 +119,7 @@ uint32_t leftOf(uint32_t n);
 uint32_t rightOf(uint32_t n);
 uint32_t allocTerminal(uint32_t sym);
 uint32_t allocCons(uint32_t l, uint32_t r);
+uint32_t allocU8(uint8_t value);
 uint32_t arenaKernelStep(uint32_t expr);
 int64_t hostPullV2(void);
 /** Block until a completion is available; write it to *cqe. */
@@ -125,9 +129,6 @@ void hostCqDequeueBlocking(Cqe *cqe);
 void arena_cq_enqueue_shutdown_sentinel(void);
 uint32_t hostSubmit(uint32_t node_id, uint32_t req_id, uint32_t max_steps);
 void workerLoop(void);
-
-uint32_t alloc_bin_byte(uint8_t value);
-uint8_t decode_bin_u8(uint32_t expr);
 
 /* Host I/O: push byte to arena stdin (for ',' combinator), try pop from stdout
  * (for '.'). */

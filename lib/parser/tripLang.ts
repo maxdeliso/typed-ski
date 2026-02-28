@@ -36,6 +36,8 @@ import {
   EXPORT,
   IMPORT,
   MODULE,
+  NATIVE,
+  OPAQUE,
   POLY,
   TYPE,
   TYPED,
@@ -56,6 +58,7 @@ import type {
 } from "../meta/trip.ts";
 import { parseSystemFType } from "./systemFType.ts";
 import type { BaseType } from "../types/types.ts";
+import { mkTypeVariable } from "../types/types.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
 import type { TypedLambda } from "../types/typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
@@ -172,6 +175,47 @@ function parseTripLangDefinition(
   if (kind === DATA) {
     const [dataDefinition, finalState] = parseDataDefinition(stateAfterKind);
     return [dataDefinition, skipWhitespace(finalState)];
+  }
+
+  if (kind === OPAQUE) {
+    const [typeKw, stateAfterTypeKw] = parseIdentifier(stateAfterKind);
+    if (typeKw !== "type") {
+      throw new ParseError(
+        withParserState(
+          stateAfterKind,
+          "opaque must be followed by type and a type name",
+        ),
+      );
+    }
+    const [typeName, opaqueFinalState] = parseIdentifier(
+      skipWhitespace(stateAfterTypeKw),
+    );
+    return [
+      {
+        kind: TYPE,
+        name: typeName,
+        type: mkTypeVariable(typeName),
+      },
+      skipWhitespace(opaqueFinalState),
+    ];
+  }
+
+  if (kind === NATIVE) {
+    [name, stateAfterName] = parseIdentifier(stateAfterKind);
+    currentState = skipWhitespace(stateAfterName);
+    [type, currentState] = parseOptionalTypeAnnotation(
+      currentState,
+      parseSystemFType,
+    );
+    if (type === undefined) {
+      throw new ParseError(
+        withParserState(currentState, "native requires a type annotation"),
+      );
+    }
+    return [
+      { kind: NATIVE, name, type },
+      skipWhitespace(currentState),
+    ];
   }
 
   if (kind === POLY) {

@@ -23,8 +23,13 @@ poly rec binToChurch = \b : Bin =>
     | B1 rest => succ (dbl (binToChurch rest))
   }
 
+poly one : Bin = B1 BZ
+poly two : Bin = B0 (B1 BZ)
+poly three : Bin = B1 (B1 BZ)
+poly four : Bin = B0 (B0 (B1 BZ))
+
 poly main =
-  let product = mulBin 2 3 in
-  let delta = subBin 4 1 in
+  let product = mulBin two three in
+  let delta = subBin four one in
   let sum = addBin product delta in
   binToChurch sum

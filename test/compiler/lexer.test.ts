@@ -6,7 +6,7 @@
  * process to avoid long-running single batches.
  */
 
-import { assert, expect } from "chai";
+import { assert } from "chai";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
@@ -115,9 +115,10 @@ Deno.test({
     const inputs: string[] = [];
     for (const [charCode] of testCases) {
       const testSource = `module Test
-import Lexer isSpaceBin
+import Lexer isSpaceU8
+import Prelude Bool
 export main
-poly main = isSpaceBin ${charCode}
+poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 `;
       const testObj = compileToObjectFile(testSource);
       const skiExpression = linkModules([
@@ -140,10 +141,15 @@ poly main = isSpaceBin ${charCode}
         line,
         `thanatos should return result for isSpace(${charCode})`,
       );
-      expect(
-        await UnChurchBoolean(parseSKI(line), passthroughEvaluator),
-        `isSpace(${charCode}) should be ${expected}`,
-      ).to.equal(expected);
+      const decoded = await UnChurchNumber(
+        parseSKI(line),
+        passthroughEvaluator,
+      );
+      assert.equal(
+        decoded,
+        expected ? 1n : 0n,
+        `isSpace(${charCode}) should be ${expected} (got ${decoded}n)`,
+      );
     }
   },
 });
@@ -179,7 +185,7 @@ Deno.test({
 
 Deno.test({
   name: "Lexer - structural validations",
-  ignore: true, // TODO: still too slow
+  ignore: true, //!thanatosAvailable(), // TODO: only the first one passes so far
   fn: async () => {
     const inputs: string[] = [];
     for (

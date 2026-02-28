@@ -18,6 +18,7 @@ import { loadInput } from "../util/fileLoader.ts";
 import { makeTypedBinNumeral } from "../../lib/types/binLiteral.ts";
 import { requiredAt } from "../util/required.ts";
 import { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
+import { unparseSystemFType } from "../../lib/parser/systemFType.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -291,8 +292,6 @@ data Token =
     // NOTE: This list is intentionally hardcoded (no regex parsing) so that
     // changes to lexer.trip require an explicit update here.
     const expectedImports = [
-      { name: "Nat", ref: "Nat" },
-      { name: "Nat", ref: "toBin" },
       { name: "Prelude", ref: "Bool" },
       { name: "Prelude", ref: "List" },
       { name: "Prelude", ref: "nil" },
@@ -320,8 +319,8 @@ data Token =
       { name: "Prelude", ref: "append" },
       { name: "Prelude", ref: "Bin" },
       { name: "Prelude", ref: "addBin" },
-      { name: "Prelude", ref: "eqBin" },
-      { name: "Prelude", ref: "lteBin" },
+      { name: "Prelude", ref: "U8" },
+      { name: "Prelude", ref: "eqU8" },
     ] as const;
 
     const expectedExports = [
@@ -358,11 +357,11 @@ data Token =
       "T_Nat",
       "T_EOF",
       "tokenize",
-      "tokenizeBin",
       "kwPoly",
       "isKeywordPoly",
       "keywordTokenFromWord",
-      "binFromDigitList",
+      "eqListU8",
+      "digitsU8ToBin",
       "mapResult",
     ] as const;
 
@@ -443,7 +442,7 @@ data Token =
       { name: "T_KwData", fields: [] },
       {
         name: "T_Ident",
-        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Bin"))],
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("U8"))],
       },
       {
         name: "T_Nat",
@@ -632,6 +631,20 @@ data Token =
       "expected an identifier",
     );
   });
+
+  await t.step("rejects opaque without type keyword", () => {
+    const input = "opaque something somethingElse";
+    expect(() => parseTripLang(input)).to.throw(
+      "opaque must be followed by type and a type name",
+    );
+  });
+
+  await t.step("rejects native without type annotation", () => {
+    const input = "native myNative = something";
+    expect(() => parseTripLang(input)).to.throw(
+      "native requires a type annotation",
+    );
+  });
 });
 
 Deno.test("parse single poly", async (t) => {
@@ -649,48 +662,42 @@ Deno.test("parse single poly", async (t) => {
     expect(term.name).to.equal("foo");
     expect(term.type).to.equal(undefined);
 
-    // The string literal "foo" is desugared into a Bin list term:
-    // cons (bin 102) (cons (bin 111) (cons (bin 111) (nil Bin)))
+    // The string literal "foo" is desugared into a List U8 term:
+    // cons [U8] (#u8(102)) (cons [U8] (#u8(111)) (cons [U8] (#u8(111)) (nil [U8])))
     const expectedCodes = [102, 111, 111];
-    const decodeBinTerm = (t: SystemFTerm): number => {
-      if (t.kind === "systemF-var") {
-        if (t.name !== "BZ") {
-          throw new Error(`expected 'BZ', got '${t.name}'`);
-        }
-        return 0;
+    const decodeU8Term = (t: SystemFTerm): number => {
+      if (t.kind !== "systemF-var") {
+        throw new Error(`expected systemF-var for u8 literal, got ${t.kind}`);
       }
-      const app = expectSystemFApp(t);
-      const ctor = expectSystemFVar(app.lft);
-      const rest = decodeBinTerm(app.rgt);
-      if (ctor.name === "B0") {
-        return rest * 2;
+      const u8Match = /^__trip_u8_(\d+)$/.exec(t.name);
+      if (!u8Match) {
+        throw new Error(`expected __trip_u8_ literal, got ${t.name}`);
       }
-      if (ctor.name === "B1") {
-        return rest * 2 + 1;
-      }
-      throw new Error(`expected 'B0' or 'B1', got '${ctor.name}'`);
+      return parseInt(u8Match[1]!, 10);
     };
     let current: SystemFTerm = term.term;
     for (const code of expectedCodes) {
       const outerApp = expectSystemFApp(current);
 
-      // left is (cons [Bin] <head>)
+      // left is (cons [U8] <head>)
       const consApp = expectSystemFApp(outerApp.lft);
       const consTypeApp = expectSystemFTypeApp(consApp.lft);
       const consVar = expectSystemFVar(consTypeApp.term);
       expect(consVar.name).to.equal("cons");
+      expect(unparseSystemFType(consTypeApp.typeArg)).to.equal("U8");
 
-      // head is a Bin constructor chain whose decoded value matches
-      const decoded = decodeBinTerm(consApp.rgt);
+      // head is a u8 literal whose decoded value matches
+      const decoded = decodeU8Term(consApp.rgt);
       expect(decoded).to.equal(code);
 
       // tail
       current = outerApp.rgt;
     }
 
-    // tail is (nil [Bin])
+    // tail is (nil [U8])
     const nilApp = expectSystemFTypeApp(current);
     const nilVar = expectSystemFVar(nilApp.term);
     expect(nilVar.name).to.equal("nil");
+    expect(unparseSystemFType(nilApp.typeArg)).to.equal("U8");
   });
 });

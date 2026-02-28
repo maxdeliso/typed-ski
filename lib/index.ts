@@ -24,6 +24,11 @@ export { arenaEvaluator } from "./evaluator/skiEvaluator.ts";
 /** Creates a WebAssembly-based arena evaluator (release build). Returns a Promise. */
 export { createArenaEvaluator } from "./evaluator/arenaEvaluator.ts";
 
+// Module provider exports
+export { getBinObject } from "./bin.ts";
+export { getNatObject } from "./nat.ts";
+export { getPreludeObject } from "./prelude.ts";
+
 // SKI expression exports
 export {
   type SKIExpression,

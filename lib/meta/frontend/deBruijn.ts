@@ -142,8 +142,15 @@ interface DeBruijnTerminal {
 }
 
 /**
+ * A U8 literal (byte 0..255).
+ */
+interface DeBruijnU8Literal {
+  kind: "DbU8Literal";
+  value: number;
+}
+
+/**
  * A De Bruijn term represents a TripLang value in name-independent form.
- * Bound variables are represented by indices, while free variables retain their names.
  */
 export type DeBruijnTerm =
   | DeBruijnVar
@@ -159,7 +166,8 @@ export type DeBruijnTerm =
   | DeBruijnTypeApp
   | DeBruijnMatch
   | DeBruijnLet
-  | DeBruijnTerminal;
+  | DeBruijnTerminal
+  | DeBruijnU8Literal;
 
 /**
  * Recursively converts a TripLangValueType AST into a De Bruijn representation.
@@ -179,12 +187,20 @@ function toDeBruijnInternal(
   typeCtx: string[],
 ): DeBruijnTerm {
   switch (term.kind) {
-    case "lambda-var":
-    case "systemF-var": {
+    case "systemF-var":
+    case "lambda-var": {
       const idx = termCtx.indexOf(term.name);
-      return (idx === -1)
-        ? { kind: "DbFreeVar", name: term.name }
-        : { kind: "DbVar", index: idx };
+      if (idx === -1) {
+        const u8Match = /^__trip_u8_(\d+)$/.exec(term.name);
+        if (u8Match) {
+          const value = parseInt(u8Match[1]!, 10);
+          if (value >= 0 && value <= 255) {
+            return { kind: "DbU8Literal", value };
+          }
+        }
+        return { kind: "DbFreeVar", name: term.name };
+      }
+      return { kind: "DbVar", index: idx };
     }
     case "type-var": {
       const idx = typeCtx.indexOf(term.typeName);
@@ -284,6 +300,8 @@ function toDeBruijnInternal(
       };
     case "terminal":
       return { kind: "DbTerminal", sym: term.sym };
+    case "u8":
+      return { kind: "DbU8Literal", value: term.value };
   }
 }
 

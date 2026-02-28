@@ -3,6 +3,7 @@ import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
+import { getBinObject } from "../../lib/bin.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
@@ -11,6 +12,7 @@ import type { Evaluator } from "../../lib/evaluator/evaluator.ts";
 interface TripHarnessOptions {
   includePrelude?: boolean;
   includeNat?: boolean;
+  includeBin?: boolean;
   evaluator?: Evaluator;
 }
 
@@ -34,10 +36,15 @@ async function compileAndLink(
 ): Promise<string> {
   const includePrelude = options.includePrelude ?? true;
   const includeNat = options.includeNat ?? false;
+  const includeBin = options.includeBin ?? false;
   const moduleObject = compileToObjectFile(source);
   const modules = includePrelude
     ? [{ name: "Prelude", object: await getPreludeObject() }]
     : [];
+
+  if (includeBin) {
+    modules.push({ name: "Bin", object: await getBinObject() });
+  }
 
   if (includeNat) {
     modules.push({ name: "Nat", object: await getNatObject() });
@@ -75,7 +82,7 @@ export async function evaluateTripWithIo(
       await evaluator.writeStdin(options.stdin);
     }
     const result = await resultPromise;
-    const stdout = evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
+    const stdout = await evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
     return { result, stdout, evaluator };
   } catch (err) {
     evaluator.terminate();

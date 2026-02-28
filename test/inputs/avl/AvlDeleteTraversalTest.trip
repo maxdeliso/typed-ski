@@ -21,6 +21,8 @@ import Avl toListKeys
 
 export main
 
+poly tenBin : Bin = B0 (B1 (B0 (B1 BZ)))
+
 poly natOrZero = \m : Maybe Nat =>
   match m [Nat] {
     | None => zero
@@ -29,7 +31,7 @@ poly natOrZero = \m : Maybe Nat =>
 
 poly rec encode = \keys : List Nat =>
   matchList [Nat] [Nat] keys zero
-    (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin 10)))
+    (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin tenBin)))
 
 poly main =
   let one = succ zero in

@@ -26,9 +26,15 @@ import { requiredAt } from "../util/required.ts";
 const binSystemFContext = () => {
   const ctx = emptySystemFContext();
   const binTy = mkTypeVariable("Bin");
+  const natTy = mkTypeVariable("Nat");
+  const u8Ty = mkTypeVariable("U8");
+  const boolTy = mkTypeVariable("Bool");
   ctx.termCtx.set("BZ", binTy);
   ctx.termCtx.set("B0", arrow(binTy, binTy));
   ctx.termCtx.set("B1", arrow(binTy, binTy));
+  ctx.termCtx.set("Nat", natTy); // for nat literal vars
+  ctx.termCtx.set("U8", u8Ty);
+  ctx.termCtx.set("Bool", boolTy);
   return ctx;
 };
 
@@ -313,18 +319,21 @@ Deno.test("System F type-checker and helpers", async (t) => {
   });
 
   await t.step("let bindings", async (t) => {
-    await t.step("unannotated let typechecks (infers Bin)", () => {
-      const [_, term] = parseSystemF("let x = 1 in x");
-      expect(term.kind).to.equal("systemF-let");
-      const [ty] = typecheckSystemF(binSystemFContext(), term);
-      expect(unparseType(ty)).to.match(/Bin/);
-    });
+    await t.step(
+      "unannotated let typechecks (infers U8 for nat literal < 256)",
+      () => {
+        const [_, term] = parseSystemF("let x = 1 in x");
+        expect(term.kind).to.equal("systemF-let");
+        const [ty] = typecheckSystemF(binSystemFContext(), term);
+        expect(unparseType(ty)).to.match(/U8/);
+      },
+    );
 
     await t.step("annotated let with correct type typechecks", () => {
-      const [_, term] = parseSystemF("let x : Bin = 1 in x");
+      const [_, term] = parseSystemF("let x : U8 = 1 in x");
       expect(term.kind).to.equal("non-terminal");
       const [ty] = typecheckSystemF(binSystemFContext(), term);
-      expect(unparseType(ty)).to.match(/Bin/);
+      expect(unparseType(ty)).to.match(/U8/);
     });
 
     await t.step("annotated let with incorrect type fails typecheck", () => {
@@ -379,7 +388,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       }
 
       const [ty] = typecheckSystemF(binSystemFContext(), reduced);
-      expect(unparseType(ty)).to.match(/Bin/);
+      expect(unparseType(ty)).to.match(/U8/);
     });
 
     await t.step("expands nested lets and preserves type", () => {
@@ -392,7 +401,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       const [tyOriginal] = typecheckSystemF(binSystemFContext(), term);
       const [tyReduced] = typecheckSystemF(binSystemFContext(), reduced);
       expect(unparseType(tyReduced)).to.equal(unparseType(tyOriginal));
-      expect(unparseType(tyReduced)).to.match(/Bin/);
+      expect(unparseType(tyReduced)).to.match(/U8/);
     });
 
     await t.step("preserves type through reduceLets (let x = 1 in x)", () => {

@@ -1,5 +1,6 @@
 #define _DEFAULT_SOURCE
 #include "ski_io.h"
+#include <stdio.h>
 
 /* Parser state: buf, len, and current index. */
 typedef struct {
@@ -57,20 +58,51 @@ static uint32_t char_to_sym(int c) {
     return ARENA_SYM_READ_ONE;
   case '.':
     return ARENA_SYM_WRITE_ONE;
+  case 'E':
+  case 'e':
+    return ARENA_SYM_EQ_U8;
   default:
     return 0;
   }
 }
+static uint32_t parse_u8_literal(ParseState *s) {
+  if (s->idx + 4 > s->len || s->buf[s->idx] != '#' ||
+      s->buf[s->idx + 1] != 'u' || s->buf[s->idx + 2] != '8' ||
+      s->buf[s->idx + 3] != '(')
+    return EMPTY;
+  s->idx += 4;
+  skip_ws(s);
+  unsigned val = 0;
+  int digits = 0;
+  while (s->idx < s->len && s->buf[s->idx] >= '0' && s->buf[s->idx] <= '9') {
+    val = val * 10 + (unsigned)(s->buf[s->idx] - '0');
+    if (val > 255)
+      return EMPTY;
+    s->idx++;
+    digits++;
+  }
+  if (digits == 0 || s->idx >= s->len || s->buf[s->idx] != ')')
+    return EMPTY;
+  s->idx++;
+  return allocU8((uint8_t)val);
+}
 
-static int is_atom_start(int c) { return c == '(' || char_to_sym(c) != 0; }
+/* is_atom_start: allow # for #u8(n) */
+static int is_atom_start(int c) {
+  return c == '(' || c == '#' || char_to_sym(c) != 0;
+}
 
 static uint32_t parse_seq(ParseState *s);
 
-/* Parse one atomic expression: terminal or ( seq ). Returns EMPTY on error. */
+/* Parse one atomic expression: terminal, #u8(n), or ( seq ). Returns EMPTY on
+ * error. */
 static uint32_t parse_atomic(ParseState *s) {
   int c = peek(s);
   if (c == -1)
     return EMPTY;
+  if (c == '#') {
+    return parse_u8_literal(s);
+  }
   if (c == '(') {
     consume(s);
     uint32_t inner = parse_seq(s);
@@ -136,6 +168,8 @@ static char sym_to_char(uint32_t sym) {
     return 'Q';
   case ARENA_SYM_CPRIME:
     return 'R';
+  case ARENA_SYM_EQ_U8:
+    return 'E';
   default:
     return '?';
   }
@@ -152,6 +186,13 @@ static size_t unparse_ski_rec(uint32_t node_id, char *buf, size_t capacity,
       return written;
     buf[written++] = sym_to_char(symOf(node_id));
     return written;
+  }
+  if (kind == ARENA_KIND_U8) {
+    int n = snprintf(buf + written, (int)(capacity - written), "#u8(%u)",
+                     (unsigned)symOf(node_id));
+    if (n < 0 || (size_t)n >= capacity - written)
+      return written;
+    return written + (size_t)n;
   }
   if (kind == ARENA_KIND_NON_TERM) {
     uint32_t l = leftOf(node_id), r = rightOf(node_id);

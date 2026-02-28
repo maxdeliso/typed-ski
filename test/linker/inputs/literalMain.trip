@@ -20,4 +20,6 @@ poly rec binToChurch = \b : Bin =>
     | B1 rest => succ (dbl (binToChurch rest))
   }
 
-poly main = binToChurch 13
+poly thirteen : Bin = B1 (B0 (B1 (B1 BZ)))
+
+poly main = binToChurch thirteen

@@ -25,10 +25,12 @@ poly rec binToChurch = \b : Bin =>
     | B1 rest => succ (dbl (binToChurch rest))
   }
 
+poly zeroBin : Bin = BZ
+
 poly length2 = \xs : List =>
-  matchList [Bin] [Bin] xs 0
+  matchList [Bin] [Bin] xs zeroBin
     (\h : Bin => \t : List =>
-      incBin (matchList [Bin] [Bin] t 0
-        (\h2 : Bin => \t2 : List => incBin 0)))
+      incBin (matchList [Bin] [Bin] t zeroBin
+        (\h2 : Bin => \t2 : List => incBin zeroBin)))
 
 poly main = binToChurch (length2 "hi")

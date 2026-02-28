@@ -32,7 +32,8 @@ export type TripLangTerm =
   | DataDefinition
   | ModuleDefinition
   | ImportDefinition
-  | ExportDefinition;
+  | ExportDefinition
+  | NativeDefinition;
 
 /**
  * Union of possible values contained by TripLang definitions.
@@ -74,6 +75,13 @@ interface CombinatorDefinition {
   kind: "combinator";
   name: string;
   term: SKIExpression;
+}
+
+/** A native/intrinsic term with a type signature; compiled to a fixed combinator. */
+export interface NativeDefinition {
+  kind: "native";
+  name: string;
+  type: BaseType;
 }
 
 /** A named base or arrow/forall type definition. */

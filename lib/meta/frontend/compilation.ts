@@ -284,6 +284,9 @@ function typecheck(
         case "typed":
           types.set(term.name, typecheckTypedLambda(term.term));
           break;
+        case "native":
+          types.set(term.name, term.type);
+          break;
         default:
           break;
       }

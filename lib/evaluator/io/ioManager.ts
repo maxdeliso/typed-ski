@@ -46,8 +46,9 @@ export class IoManager {
     }
     | null = null;
   private readonly ioWait = new Map<number, number>();
-  private readonly pendingWaiters = new Set<number>();
-  private pendingWakeBudget = 0;
+  private readonly pendingWaiters: number[] = [];
+  private pendingWakeBudgetStdin = 0;
+  private pendingWakeBudgetStdout = 0;
   private readonly activeTimeouts = new Set<() => void>();
   private readonly aborted: () => boolean;
 
@@ -84,13 +85,16 @@ export class IoManager {
   /**
    * Reads bytes from stdout ring buffer.
    */
-  readStdout(maxBytes = DEFAULT_STDOUT_READ_SIZE): Uint8Array {
+  async readStdout(maxBytes = DEFAULT_STDOUT_READ_SIZE): Promise<Uint8Array> {
     const rings = this.getIoRings();
     const bytes: number[] = [];
     for (let i = 0; i < maxBytes; i++) {
       const value = rings.stdout.tryDequeue();
       if (value === null) break;
       bytes.push(value);
+    }
+    if (bytes.length > 0) {
+      await this.wakeStdoutWaiters(bytes.length);
     }
     return new Uint8Array(bytes);
   }
@@ -141,28 +145,54 @@ export class IoManager {
    * Wakes up suspended stdin waiters.
    */
   async wakeStdinWaiters(limit: number): Promise<number> {
-    const rings = this.getIoRings();
-    let budget = limit + this.pendingWakeBudget;
-    this.pendingWakeBudget = 0;
+    const { woken, remainingBudget } = await this.wakeWaiters(
+      limit,
+      this.pendingWakeBudgetStdin,
+      this.getIoRings().stdinWait,
+    );
+    this.pendingWakeBudgetStdin = remainingBudget;
+    return woken;
+  }
+
+  /**
+   * Wakes up suspended stdout waiters.
+   */
+  async wakeStdoutWaiters(limit: number): Promise<number> {
+    const { woken, remainingBudget } = await this.wakeWaiters(
+      limit,
+      this.pendingWakeBudgetStdout,
+      this.getIoRings().stdoutWait,
+    );
+    this.pendingWakeBudgetStdout = remainingBudget;
+    return woken;
+  }
+
+  private async wakeWaiters(
+    limit: number,
+    pendingBudget: number,
+    waitRing: { tryDequeue: () => number | null },
+  ): Promise<{ woken: number; remainingBudget: number }> {
+    let budget = limit + pendingBudget;
     let woken = 0;
 
-    for (const nodeId of Array.from(this.pendingWaiters)) {
-      if (budget <= 0) break;
+    // 1. Process pending waiters (from completion queue) in FIFO order.
+    while (this.pendingWaiters.length > 0 && budget > 0) {
+      const nodeId = this.pendingWaiters.shift()!;
       const reqId = this.ioWait.get(nodeId);
       if (reqId === undefined) continue;
-      this.pendingWaiters.delete(nodeId);
       this.ioWait.delete(nodeId);
       await this.submitSuspension(nodeId, reqId);
       budget--;
       woken++;
     }
 
+    // 2. Process waiters from the arena ring buffer.
     while (budget > 0) {
-      const nodeId = rings.stdinWait.tryDequeue();
+      const nodeId = waitRing.tryDequeue();
       if (nodeId === null) break;
       const reqId = this.ioWait.get(nodeId);
       if (reqId === undefined) {
-        this.pendingWaiters.add(nodeId);
+        this.pendingWaiters.push(nodeId);
         budget--;
         continue;
       }
@@ -171,8 +201,7 @@ export class IoManager {
       budget--;
       woken++;
     }
-    this.pendingWakeBudget = budget;
-    return woken;
+    return { woken, remainingBudget: budget };
   }
 
   /**
@@ -186,7 +215,7 @@ export class IoManager {
    * Checks if a node is waiting for IO.
    */
   isIoWaiting(nodeId: number): boolean {
-    return this.ioWait.has(nodeId) || this.pendingWaiters.has(nodeId);
+    return this.ioWait.has(nodeId) || this.pendingWaiters.includes(nodeId);
   }
 
   /**
@@ -198,12 +227,19 @@ export class IoManager {
     reqId: number,
     submitSuspension: (nodeId: number, reqId: number) => Promise<void>,
   ): Promise<boolean> {
-    if (this.pendingWaiters.delete(nodeId)) {
+    const idx = this.pendingWaiters.indexOf(nodeId);
+    if (idx !== -1) {
+      this.pendingWaiters.splice(idx, 1);
       this.ioWait.delete(nodeId);
       await submitSuspension(nodeId, reqId);
       return true;
-    } else if (this.pendingWakeBudget > 0) {
-      this.pendingWakeBudget--;
+    } else if (this.pendingWakeBudgetStdin > 0) {
+      this.pendingWakeBudgetStdin--;
+      this.ioWait.delete(nodeId);
+      await submitSuspension(nodeId, reqId);
+      return true;
+    } else if (this.pendingWakeBudgetStdout > 0) {
+      this.pendingWakeBudgetStdout--;
       this.ioWait.delete(nodeId);
       await submitSuspension(nodeId, reqId);
       return true;
@@ -220,8 +256,9 @@ export class IoManager {
     }
     this.activeTimeouts.clear();
     this.ioWait.clear();
-    this.pendingWaiters.clear();
-    this.pendingWakeBudget = 0;
+    this.pendingWaiters.length = 0;
+    this.pendingWakeBudgetStdin = 0;
+    this.pendingWakeBudgetStdout = 0;
     this.ioRingsCache = null;
   }
 

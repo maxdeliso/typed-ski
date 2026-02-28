@@ -8,6 +8,8 @@ import Prelude Bin
 import Prelude List
 import Prelude nil
 import Prelude cons
+import Prelude nil
+import Prelude U8
 import Prelude matchList
 import Prelude Result
 import Prelude Ok
@@ -25,7 +27,7 @@ import Lexer T_RBrace
 import Lexer T_Pipe
 import Lexer T_FatArrow
 import Lexer T_EOF
-import Lexer eqListFast
+import Lexer eqListU8
 import Parser parseExpr
 import Parser Pattern
 import Parser P_Ctor
@@ -39,9 +41,9 @@ import Parser E_Match
 
 export main
 
-poly isVarNamed = \expr : Expr => \name : List Bin =>
+poly isVarNamed = \expr : Expr => \name : List U8 =>
   match expr [Bool] {
-    | E_Var n => eqListFast n name
+    | E_Var n => eqListU8 n name
     | E_App f x => false
     | E_Lam name body => false
     | E_Let name val body => false
@@ -52,7 +54,7 @@ poly isVarNamed = \expr : Expr => \name : List Bin =>
 poly isSingleArg = \args : List (List Bin) => \name : List Bin =>
   matchList [List Bin] [Bool] args false
     (\h : List Bin => \t : List (List Bin) =>
-      if [Bool] (eqListFast h name)
+      if [Bool] (eqListU8 h name)
         (\u : Bin =>
           matchList [List Bin] [Bool] t true
             (\x : List Bin => \xs : List (List Bin) => false))
@@ -104,7 +106,7 @@ poly main =
                   let arm1Ok =
                     match pat1 [Bool] {
                       | P_Ctor ctor args =>
-                        if [Bool] (eqListFast ctor "Some")
+                        if [Bool] (eqListU8 ctor (cons [U8] (#u8(83)) (cons [U8] (#u8(111)) (cons [U8] (#u8(109)) (cons [U8] (#u8(101)) (nil [U8])))))
                           (\u : Bin =>
                             if [Bool] (isSingleArg args "x")
                               (\u : Bin => isVarNamed body1 "x")
@@ -121,7 +123,7 @@ poly main =
                           let arm2Ok =
                             match pat2 [Bool] {
                               | P_Ctor ctor args =>
-                                if [Bool] (eqListFast ctor "None")
+                                if [Bool] (eqListU8 ctor (cons [U8] (#u8(78)) (cons [U8] (#u8(111)) (cons [U8] (#u8(110)) (cons [U8] (#u8(101)) (nil [U8])))))
                                   (\u : Bin =>
                                     if [Bool] (isNoArgs args)
                                       (\u : Bin => isVarNamed body2 "res")

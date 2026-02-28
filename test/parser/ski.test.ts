@@ -170,4 +170,11 @@ Deno.test("parseSKI", async (t) => {
     expect(() => parseSKI("sX")).to.throw(ParseError, /unexpected extra/);
     expect(() => parseSKI("Xsi")).to.throw(ParseError, /unexpected token/);
   });
+
+  await t.step("should fail on #u8 literals out of range", () => {
+    expect(() => parseSKI("#u8(256)")).to.throw(
+      ParseError,
+      /#u8 value must be 0..255/,
+    );
+  });
 });

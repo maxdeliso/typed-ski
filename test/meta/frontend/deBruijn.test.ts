@@ -213,6 +213,26 @@ Deno.test("De Bruijn Conversion", async (t) => {
     assert.deepStrictEqual(result, { kind: "DbTerminal", sym: "S" });
   });
 
+  await t.step("should convert u8 literals", () => {
+    const result = toDeBruijn({ kind: "u8", value: 123 });
+    assert.deepStrictEqual(result, { kind: "DbU8Literal", value: 123 });
+  });
+
+  await t.step("should convert __trip_u8_ literals to DbU8Literal", () => {
+    const term: SystemFTerm = { kind: "systemF-var", name: "__trip_u8_123" };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, { kind: "DbU8Literal", value: 123 });
+  });
+
+  await t.step("should treat out-of-range __trip_u8_ as free variables", () => {
+    const term: SystemFTerm = { kind: "systemF-var", name: "__trip_u8_256" };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, {
+      kind: "DbFreeVar",
+      name: "__trip_u8_256",
+    });
+  });
+
   await t.step("should convert type variables", () => {
     const type: BaseType = { kind: "type-var", typeName: "X" };
     const result = toDeBruijn(type);

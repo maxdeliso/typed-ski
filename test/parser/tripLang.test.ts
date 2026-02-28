@@ -631,6 +631,20 @@ data Token =
       "expected an identifier",
     );
   });
+
+  await t.step("rejects opaque without type keyword", () => {
+    const input = "opaque something somethingElse";
+    expect(() => parseTripLang(input)).to.throw(
+      "opaque must be followed by type and a type name",
+    );
+  });
+
+  await t.step("rejects native without type annotation", () => {
+    const input = "native myNative = something";
+    expect(() => parseTripLang(input)).to.throw(
+      "native requires a type annotation",
+    );
+  });
 });
 
 Deno.test("parse single poly", async (t) => {

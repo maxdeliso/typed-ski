@@ -36,8 +36,6 @@ static void *worker_thread_main(void *arg) {
   return NULL;
 }
 
-extern uint8_t *ARENA_BASE_ADDR;
-
 __attribute__((no_sanitize("address"))) static void *
 dispatcher_thread_main(void *arg) {
   (void)arg;

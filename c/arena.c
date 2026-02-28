@@ -26,15 +26,7 @@ void *memmove(void *dest, const void *src, size_t n) {
 #endif
 #endif
 
-static const uint32_t ARENA_MAGIC = 0x534B4941;
-static const uint32_t INITIAL_CAP = 1 << 24;
-/** Gas per kernel step / worker batch; bounds time per step. */
-static const uint32_t ARENA_STEP_GAS = 20000;
-static const uint32_t MAX_CAP = 1 << 27;
-static const uint32_t RING_ENTRIES = 1 << 16;
-static const uint32_t POISON_SEQ = 0xffffffff;
-
-uint8_t *volatile ARENA_BASE_ADDR = NULL;
+uint8_t *ARENA_BASE_ADDR = NULL;
 static uint32_t ARENA_MODE = 0;
 static atomic_uint GROW_COUNT = 0;
 
@@ -157,7 +149,7 @@ static void ring_init_at(void *ptr, uint32_t entries, uint32_t slot_size) {
   atomic_init(&ring->head, 0);
   atomic_init(&ring->tail, 0);
   atomic_init(&ring->not_empty, 0);
-  atomic_init(&ring->not_full, 0);
+  atomic_init(&ring->not_full, entries);
   ring->entries = entries;
   ring->mask = entries - 1;
   for (uint32_t i = 0; i < entries; i++) {
@@ -275,7 +267,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
   return ARENA_BASE_ADDR;
 }
 
-static inline void ensure_arena(void) {
+void ensure_arena(void) {
   if (ARENA_BASE_ADDR != NULL)
     return;
   if (ARENA_MODE == 1) {
@@ -341,125 +333,16 @@ void reset(void) {
       memory_order_release);
 }
 
-static inline uint32_t enter_stable(SabHeader **h_out) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  *h_out = h;
-  while (true) {
-    uint32_t seq = atomic_load_explicit(&h->resize_seq, memory_order_acquire);
-    if (seq == POISON_SEQ) {
-#ifdef __wasm__
-      __builtin_trap();
-#else
-      abort();
-#endif
-    }
-    if (seq & 1) {
-      continue;
-    }
-    return seq;
-  }
-}
-
-static inline void wait_resize_stable(void) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  while (true) {
-    uint32_t seq = atomic_load_explicit(&h->resize_seq, memory_order_acquire);
-    if (seq == POISON_SEQ) {
-#ifdef __wasm__
-      __builtin_trap();
-#else
-      abort();
-#endif
-    }
-    if (!(seq & 1))
-      return;
-  }
-}
-
-static inline bool check_stable(uint32_t seq) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->resize_seq, memory_order_acquire) == seq;
-}
-
-uint32_t kindOf(uint32_t n) {
-  ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-    uint32_t val = atomic_load_explicit(&kind[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
-}
-
-uint32_t symOf(uint32_t n) {
-  ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uchar *sym = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-    uint32_t val = atomic_load_explicit(&sym[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
-}
-
-uint32_t hashOf(uint32_t n) {
-  ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uint *hash = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-    uint32_t val = atomic_load_explicit(&hash[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
-}
-
-uint32_t leftOf(uint32_t n) {
-  ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-    uint32_t val = atomic_load_explicit(&left[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
-}
-
-uint32_t rightOf(uint32_t n) {
-  ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-    uint32_t val = atomic_load_explicit(&right[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
-}
+#undef kindOf
+uint32_t kindOf(uint32_t n) { return kindOf_inline(n); }
+#undef symOf
+uint32_t symOf(uint32_t n) { return symOf_inline(n); }
+#undef hashOf
+uint32_t hashOf(uint32_t n) { return hashOf_inline(n); }
+#undef leftOf
+uint32_t leftOf(uint32_t n) { return leftOf_inline(n); }
+#undef rightOf
+uint32_t rightOf(uint32_t n) { return rightOf_inline(n); }
 
 static void grow(void);
 
@@ -867,19 +750,23 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   atomic_fetch_add_explicit(&h->resize_seq, 1, memory_order_release);
 }
 
-static inline void update_continuation(uint32_t id, uint32_t parent,
-                                       uint32_t target, uint8_t stage) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-  atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-  atomic_uchar *sym = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-  atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
+static inline void update_continuation(uint32_t id, uint32_t stack,
+                                       uint32_t parent, uint8_t stage) {
+  while (true) {
+    SabHeader *h;
+    uint32_t seq = enter_stable(&h);
 
-  atomic_store_explicit(&left[id], parent, memory_order_relaxed);
-  atomic_store_explicit(&right[id], target, memory_order_relaxed);
-  atomic_store_explicit(&sym[id], stage, memory_order_relaxed);
-  atomic_store_explicit(&kind[id], ARENA_KIND_CONTINUATION,
-                        memory_order_release);
+    atomic_uchar *sym = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
+    atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
+    atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
+
+    atomic_store_explicit(&sym[id], stage, memory_order_relaxed);
+    atomic_store_explicit(&left[id], stack, memory_order_relaxed);
+    atomic_store_explicit(&right[id], parent, memory_order_relaxed);
+
+    if (check_stable(seq))
+      return;
+  }
 }
 
 __attribute__((unused)) static uint32_t unwind_to_root(uint32_t curr,
@@ -907,8 +794,6 @@ __attribute__((unused)) static uint32_t unwind_to_root(uint32_t curr,
   return curr;
 }
 
-/** On budget (gas or step limit): always suspend (curr, stack, mode). Never
- * unwind_to_root here — that would be O(depth) and can allocate. */
 static inline StepOutcome budget_outcome(uint8_t mode, uint32_t curr,
                                          uint32_t stack,
                                          uint32_t remaining_steps) {
@@ -940,6 +825,7 @@ static uint32_t arenaFalse(void) {
 static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
                                   uint32_t *gas, uint32_t *remaining_steps,
                                   uint32_t free_node) {
+  (void)free_node;
   while (true) {
     if (*gas == 0) {
       return budget_outcome(mode, curr, stack, *remaining_steps);
@@ -961,7 +847,6 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
       if (stage == STAGE_LEFT) {
         if (curr != leftOf(parent_node)) {
           curr = allocCons(curr, rightOf(parent_node));
-          free_node = recycled;
           mode = MODE_RETURN;
           continue;
         }
@@ -976,7 +861,6 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         } else {
           curr = parent_node;
         }
-        free_node = recycled;
         mode = MODE_RETURN;
         continue;
       }
@@ -1014,7 +898,7 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
           mode = MODE_DESCEND;
           continue;
         }
-        /* Blocked on stdin: suspend (never unwind — would be O(depth)). */
+        /* Blocked on stdin: suspend. */
         uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
                                          curr, stack, *remaining_steps);
         enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdin_wait),
@@ -1054,7 +938,6 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
       }
     } else if (kindOf(left) == ARENA_KIND_NON_TERM) {
       uint32_t ll = leftOf(left);
-      /* ((EQ_U8 a) b) -> True if a==b else False, when a,b are U8 */
       if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_EQ_U8) {
         uint32_t a = rightOf(left);
         uint32_t b = right;
@@ -1180,14 +1063,7 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
       }
     }
 
-    if (free_node != EMPTY) {
-      update_continuation(free_node, stack, curr, STAGE_LEFT);
-      stack = free_node;
-      free_node = EMPTY;
-    } else {
-      stack =
-          alloc_generic(ARENA_KIND_CONTINUATION, STAGE_LEFT, stack, curr, 0);
-    }
+    stack = alloc_generic(ARENA_KIND_CONTINUATION, STAGE_LEFT, stack, curr, 0);
     curr = left;
     mode = MODE_DESCEND;
   }
@@ -1215,9 +1091,6 @@ uint32_t arenaKernelStep(uint32_t expr) {
     free_node = susp;
   }
 
-  /* Semantic step: one rewrite, or normal form, or real IO wait. Internally
-   * chunk with gas; on gas exhaustion resume immediately instead of returning.
-   */
   while (remaining_steps > 0) {
     uint32_t gas = ARENA_STEP_GAS;
     StepOutcome o =
@@ -1225,8 +1098,7 @@ uint32_t arenaKernelStep(uint32_t expr) {
 
     if (o.type == RESULT_YIELD) {
       if (symOf(o.val) == MODE_IO_WAIT)
-        return o.val; /* Real IO wait: return suspension to caller. */
-      /* Gas exhausted: resume immediately; do not return to caller. */
+        return o.val;
       uint32_t susp = o.val;
       curr = leftOf(susp);
       stack = rightOf(susp);
@@ -1239,7 +1111,7 @@ uint32_t arenaKernelStep(uint32_t expr) {
       continue;
     }
 
-    return o.val; /* RESULT_DONE: normal form or one semantic step done. */
+    return o.val;
   }
 
   return unwind_to_root(curr, stack);
@@ -1351,7 +1223,6 @@ void workerLoop(void) {
 
     while (true) {
       if (remaining_steps == 0) {
-
         uint32_t susp_id =
             alloc_generic(ARENA_KIND_SUSPENSION, mode, curr, stack, 0);
         Cqe result = {susp_id, job.req_id, CQ_EVENT_YIELD};

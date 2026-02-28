@@ -46,7 +46,7 @@ export class IoManager {
     }
     | null = null;
   private readonly ioWait = new Map<number, number>();
-  private readonly pendingWaiters = new Set<number>();
+  private readonly pendingWaiters: number[] = [];
   private pendingWakeBudgetStdin = 0;
   private pendingWakeBudgetStdout = 0;
   private readonly activeTimeouts = new Set<() => void>();
@@ -175,23 +175,24 @@ export class IoManager {
     let budget = limit + pendingBudget;
     let woken = 0;
 
-    for (const nodeId of Array.from(this.pendingWaiters)) {
-      if (budget <= 0) break;
+    // 1. Process pending waiters (from completion queue) in FIFO order.
+    while (this.pendingWaiters.length > 0 && budget > 0) {
+      const nodeId = this.pendingWaiters.shift()!;
       const reqId = this.ioWait.get(nodeId);
       if (reqId === undefined) continue;
-      this.pendingWaiters.delete(nodeId);
       this.ioWait.delete(nodeId);
       await this.submitSuspension(nodeId, reqId);
       budget--;
       woken++;
     }
 
+    // 2. Process waiters from the arena ring buffer.
     while (budget > 0) {
       const nodeId = waitRing.tryDequeue();
       if (nodeId === null) break;
       const reqId = this.ioWait.get(nodeId);
       if (reqId === undefined) {
-        this.pendingWaiters.add(nodeId);
+        this.pendingWaiters.push(nodeId);
         budget--;
         continue;
       }
@@ -214,7 +215,7 @@ export class IoManager {
    * Checks if a node is waiting for IO.
    */
   isIoWaiting(nodeId: number): boolean {
-    return this.ioWait.has(nodeId) || this.pendingWaiters.has(nodeId);
+    return this.ioWait.has(nodeId) || this.pendingWaiters.includes(nodeId);
   }
 
   /**
@@ -226,7 +227,9 @@ export class IoManager {
     reqId: number,
     submitSuspension: (nodeId: number, reqId: number) => Promise<void>,
   ): Promise<boolean> {
-    if (this.pendingWaiters.delete(nodeId)) {
+    const idx = this.pendingWaiters.indexOf(nodeId);
+    if (idx !== -1) {
+      this.pendingWaiters.splice(idx, 1);
       this.ioWait.delete(nodeId);
       await submitSuspension(nodeId, reqId);
       return true;
@@ -253,7 +256,7 @@ export class IoManager {
     }
     this.activeTimeouts.clear();
     this.ioWait.clear();
-    this.pendingWaiters.clear();
+    this.pendingWaiters.length = 0;
     this.pendingWakeBudgetStdin = 0;
     this.pendingWakeBudgetStdout = 0;
     this.ioRingsCache = null;

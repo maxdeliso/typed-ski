@@ -76,7 +76,11 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
           break;
 
         case "lambda-var":
-          if (!bound.has(term.name)) {
+          if (
+            !isNatLiteralIdentifier(term.name) &&
+            !isU8LiteralIdentifier(term.name) &&
+            !bound.has(term.name)
+          ) {
             result.add(term.name);
           }
           break;

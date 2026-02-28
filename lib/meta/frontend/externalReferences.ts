@@ -103,6 +103,12 @@ function collectIterative(
         }
 
         case "lambda-var": {
+          if (
+            parseNatLiteralIdentifier(term.name) !== null ||
+            parseU8LiteralIdentifier(term.name) !== null
+          ) {
+            break;
+          }
           const external = !bound.has(term.name);
           if (external) {
             externalTermRefs.set(term.name, term);

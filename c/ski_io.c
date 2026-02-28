@@ -1,4 +1,3 @@
-#define _DEFAULT_SOURCE
 #include "ski_io.h"
 #include <stdio.h>
 

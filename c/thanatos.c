@@ -1,4 +1,3 @@
-#define _DEFAULT_SOURCE
 #include "thanatos.h"
 #include <pthread.h>
 #include <stdatomic.h>
@@ -35,6 +34,8 @@ static void *worker_thread_main(void *arg) {
   workerLoop();
   return NULL;
 }
+
+extern uint8_t *ARENA_BASE_ADDR;
 
 __attribute__((no_sanitize("address"))) static void *
 dispatcher_thread_main(void *arg) {

@@ -20,8 +20,8 @@
         denoPkgs = import nixpkgs-deno { inherit system; };
 
         deno = denoPkgs.deno;
-        llvm = pkgs.llvmPackages_18;
-        wasmIncludeDir = "${llvm.clang-unwrapped.lib}/lib/clang/18/include";
+        llvm = pkgs.llvmPackages_21;
+        wasmIncludeDir = "${llvm.clang-unwrapped.lib}/lib/clang/21/include";
 
         denoJson = builtins.fromJSON (builtins.readFile ./deno.jsonc);
         version = denoJson.version;
@@ -118,16 +118,18 @@
             pkgs.nixpkgs-fmt
             pkgs.wabt
             pkgs.mbake
+            pkgs.nix
             deno
             generateArenaHeaderC
           ];
 
           shellHook = ''
-            export CC="${llvm.clang}/bin/clang"
-            export CXX="${llvm.clang}/bin/clang++"
+            export CC="${llvm.clang-unwrapped}/bin/clang"
+            export CXX="${llvm.clang-unwrapped}/bin/clang++"
             export WASM_CC="${llvm.clang-unwrapped}/bin/clang"
             export WASM_LD="${llvm.lld}/bin/wasm-ld"
-            export WASM_RESOURCE_DIR="${llvm.clang-unwrapped.lib}/lib/clang/18"
+            export CLANG_RESOURCE_DIR="${llvm.clang-unwrapped.lib}/lib/clang/21"
+            export WASM_RESOURCE_DIR="$CLANG_RESOURCE_DIR"
             export LLVM_OBJDUMP="${llvm.llvm}/bin/llvm-objdump"
             export WASM2WAT="${pkgs.wabt}/bin/wasm2wat"
             export MUSL_GCC="${pkgs.musl.dev}/bin/musl-gcc"

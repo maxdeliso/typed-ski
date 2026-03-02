@@ -306,6 +306,19 @@ Deno.test("dumpArena", async (t) => {
     );
   });
 
+  await t.step("dumpArena includes U8 nodes when using views", () => {
+    const evaluator = arenaEval;
+    const u8_5 = parseSKI("#u8(5)");
+    const u8_6 = parseSKI("#u8(6)");
+    const expr = apply(apply(EqU8, u8_5), u8_6);
+    evaluator.toArena(expr);
+    const { nodes } = evaluator.dumpArena();
+    const u8Node = nodes.find(
+      (n) => n.kind === "terminal" && /^#u8\(\d+\)$/.test(n.sym ?? ""),
+    );
+    assert(u8Node !== undefined, "dumpArena should include U8 terminal node");
+  });
+
   await t.step("includes all nodes for multiple expressions", () => {
     const evaluator = arenaEval;
     // Create different expressions to ensure we have multiple nodes

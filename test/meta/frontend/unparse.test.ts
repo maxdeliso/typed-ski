@@ -74,6 +74,18 @@ Deno.test("unparseTerm", async (t) => {
     assert.include(result, "A->B");
   });
 
+  await t.step("should unparse a native definition", () => {
+    const input = "module Test\nnative eqU8 : U8 -> U8 -> Bool";
+    const program = parseTripLang(input);
+    const nativeTerm = program.terms.find((d) => d.kind === "native");
+    assert(nativeTerm !== undefined, "expected native definition");
+    const result = unparseTerm(nativeTerm);
+    assert.include(result, "native");
+    assert.include(result, "eqU8");
+    assert.include(result, "U8");
+    assert.include(result, "Bool");
+  });
+
   await t.step("should unparse module definition", () => {
     const input = "module Test";
     const program = parseTripLang(input);

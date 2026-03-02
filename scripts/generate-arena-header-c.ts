@@ -13,7 +13,7 @@ function parseCStruct(source: string, structName: string) {
   const match = source.match(structRegex);
   if (!match) throw new Error(`Could not find struct ${structName}`);
 
-  const fields: string[] = [];
+  const fields: { name: string; u32Slots: number }[] = [];
   const fieldLines = match[1].split(";");
   for (const line of fieldLines) {
     const trimmed = line.trim();
@@ -22,9 +22,14 @@ function parseCStruct(source: string, structName: string) {
     const parts = trimmed.split(/\s+/);
     const name = parts[parts.length - 1];
     if (name && !name.startsWith("_pad")) {
-      // Remove array brackets if present
       const cleanName = name.split("[")[0];
-      if (cleanName) fields.push(cleanName);
+      if (cleanName) {
+        const type = parts[0];
+        fields.push({
+          name: cleanName,
+          u32Slots: type === "uint64_t" ? 2 : 1,
+        });
+      }
     }
   }
   return fields;
@@ -32,28 +37,38 @@ function parseCStruct(source: string, structName: string) {
 
 const fields = parseCStruct(cHeaderFile, "SabHeader");
 
+let u32Index = 0;
+const indexByField: number[] = [];
+for (const f of fields) {
+  indexByField.push(u32Index);
+  u32Index += f.u32Slots;
+}
+const totalU32 = u32Index;
+
 let enumContent = "";
 for (let i = 0; i < fields.length; i++) {
   const f = fields[i];
-  const constName = f.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase();
-  enumContent += `  ${constName} = ${i},\n`;
+  const constName = f.name.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase();
+  enumContent += `  ${constName} = ${indexByField[i]!},\n`;
 }
 
 let fieldsContent = "";
 for (let i = 0; i < fields.length; i++) {
-  fieldsContent += `  "${fields[i]}"${i === fields.length - 1 ? "" : ","}\n`;
+  fieldsContent += `  "${fields[i]!.name}"${
+    i === fields.length - 1 ? "" : ","
+  }\n`;
 }
 
 const content = `/**
  * SabHeader field indices (generated from c/arena.h)
  *
- * These constants represent the byte offsets (divided by 4) into the SabHeader
- * struct when viewed as a Uint32Array.
+ * These constants represent the index into the SabHeader when viewed as a Uint32Array.
+ * uint64_t fields (offset_nodes, offset_buckets) occupy two consecutive indices (lo, hi).
  */
 export enum SabHeaderField {
 ${enumContent}}
 
-export const SABHEADER_HEADER_SIZE_U32 = ${fields.length};
+export const SABHEADER_HEADER_SIZE_U32 = ${totalU32};
 export const SABHEADER_HEADER_FIELDS = [
 ${fieldsContent}] as const;
 

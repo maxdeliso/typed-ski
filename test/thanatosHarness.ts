@@ -11,8 +11,11 @@ import type { SKIExpression } from "../lib/ski/expression.ts";
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
 
-/** Path to the thanatos binary (built by make build-native). */
-export const THANATOS_BIN = join(PROJECT_ROOT, "bin", "thanatos");
+/** Path to the thanatos binary (built by make build-native). Override with env THANATOS_BIN for ASan etc. */
+export const THANATOS_BIN =
+  typeof Deno !== "undefined" && Deno.env.get("THANATOS_BIN")
+    ? Deno.env.get("THANATOS_BIN")!
+    : join(PROJECT_ROOT, "bin", "thanatos");
 
 export function thanatosAvailable(): boolean {
   return existsSync(THANATOS_BIN);

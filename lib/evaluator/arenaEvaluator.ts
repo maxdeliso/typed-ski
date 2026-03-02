@@ -22,7 +22,14 @@ import {
   getReleaseWasmBytes,
   getReleaseWasmBytesSync,
 } from "./arenaWasmLoader.ts";
-import { getOrBuildArenaViews, validateAndRebuildViews } from "./arenaViews.ts";
+import {
+  getKind as viewGetKind,
+  getLeft as viewGetLeft,
+  getOrBuildArenaViews,
+  getRight as viewGetRight,
+  getSym as viewGetSym,
+  validateAndRebuildViews,
+} from "./arenaViews.ts";
 import {
   SABHEADER_HEADER_SIZE_U32,
   SabHeaderField,
@@ -210,12 +217,16 @@ function fromArenaWithExports(
   const cache = new Map<number, SKIExpression>();
   const stack: number[] = [rootId];
 
-  // Helper functions to get node data from views or WASM calls
+  // Helper functions to get node data from views or WASM calls (AoS layout)
   const getKind = (id: number): number => {
-    return views && id < views.capacity ? views.kind[id]! : exports.kindOf(id);
+    return views && id < views.capacity
+      ? viewGetKind(id, views)
+      : exports.kindOf(id);
   };
   const getSym = (id: number): number => {
-    return views && id < views.capacity ? views.sym[id]! : exports.symOf(id);
+    return views && id < views.capacity
+      ? viewGetSym(id, views)
+      : exports.symOf(id);
   };
 
   while (stack.length > 0) {
@@ -259,16 +270,12 @@ function fromArenaWithExports(
         } node ${id} to SKI expression. This node type is internal to the WASM reducer and should not appear in results.`,
       );
     } else {
-      // NON-TERMINAL: Check children
-      // Cache views properties to avoid repeated dereferencing
-      const capacity = views?.capacity;
-      const leftIdArray = views?.leftId;
-      const rightIdArray = views?.rightId;
-      const leftId = capacity !== undefined && id < capacity
-        ? leftIdArray![id]!
+      // NON-TERMINAL: Check children (AoS: use view getters when available)
+      const leftId = views && id < views.capacity
+        ? viewGetLeft(id, views)
         : exports.leftOf(id);
-      const rightId = capacity !== undefined && id < capacity
-        ? rightIdArray![id]!
+      const rightId = views && id < views.capacity
+        ? viewGetRight(id, views)
         : exports.rightOf(id);
 
       const leftDone = cache.has(leftId);
@@ -304,7 +311,7 @@ export interface ArenaWasmExports {
   reduce(expr: number, max: number): number;
   hostSubmit?(nodeId: number, reqId: number, maxSteps: number): number;
   hostPullV2?(): bigint;
-  workerLoop?(): void;
+  workerLoop?(workerId: number): void;
   kindOf(id: number): number;
   symOf(id: number): number;
   leftOf(id: number): number;
@@ -514,10 +521,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     id: number,
     views: ReturnType<typeof getOrBuildArenaViews>,
   ): ArenaNode | null {
-    // 1. Determine Kind (Optimization: Use View if possible)
+    // 1. Determine Kind (AoS: use view getters when available)
     let k: number;
     if (views && id < views.capacity) {
-      if ((k = views.kind[id]!) === 0) return null; // Hole/uninitialized
+      if ((k = viewGetKind(id, views)) === 0) return null; // Hole/uninitialized
     } else {
       if ((k = this.$.kindOf(id)) === 0) return null; // Hole/uninitialized
     }
@@ -525,7 +532,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
     // 2. Build Terminal
     if (k === 1) { // ArenaKind.Terminal
       const symValue = views && id < views.capacity
-        ? views.sym[id]!
+        ? viewGetSym(id, views)
         : this.$.symOf(id);
 
       const expr = ARENA_SYM_TO_SKI[symValue as ArenaSym]!;
@@ -535,21 +542,18 @@ export class ArenaEvaluatorWasm implements Evaluator {
     // 2b. Build U8 literal (display as #u8(n))
     if (k === ArenaKind.U8) {
       const symValue = views && id < views.capacity
-        ? views.sym[id]!
+        ? viewGetSym(id, views)
         : this.$.symOf(id);
       return { id, kind: "terminal", sym: `#u8(${symValue})` };
     }
 
     // 3. Build Non-Terminal
-    let left: number;
-    let right: number;
-    if (views && id < views.capacity) {
-      left = views.leftId[id]!;
-      right = views.rightId[id]!;
-    } else {
-      left = this.$.leftOf(id);
-      right = this.$.rightOf(id);
-    }
+    const left = views && id < views.capacity
+      ? viewGetLeft(id, views)
+      : this.$.leftOf(id);
+    const right = views && id < views.capacity
+      ? viewGetRight(id, views)
+      : this.$.rightOf(id);
 
     return { id, kind: "non-terminal", left, right };
   }

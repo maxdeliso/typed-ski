@@ -3,7 +3,9 @@
 	format format-check lint \
 	dist clean \
 	format-c-internal format-nix-internal format-check-nix-internal \
-	thanatos-check thanatos-tsan-repl thanatos-ubsan-repl
+	thanatos-check thanatos-check-lsan thanatos-check-ubsan thanatos-check-asan \
+	thanatos-check-lsan-long thanatos-check-ubsan-long thanatos-check-asan-long \
+	thanatos-tsan-repl thanatos-ubsan-repl
 
 all: build
 
@@ -80,6 +82,10 @@ bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
+bin/thanatos-test-asan: c/arena.c c/thanatos.c c/performance_test.c
+	mkdir -p bin
+	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+
 bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
@@ -121,6 +127,24 @@ build-native:
 thanatos-check:
 	$(NIX_RUN) thanatos-check-internal
 
+thanatos-check-lsan:
+	$(NIX_RUN) thanatos-check-lsan-internal
+
+thanatos-check-ubsan:
+	$(NIX_RUN) thanatos-check-ubsan-internal
+
+thanatos-check-asan:
+	$(NIX_RUN) thanatos-check-asan-internal
+
+thanatos-check-lsan-long:
+	$(NIX_RUN) thanatos-check-lsan-long-internal
+
+thanatos-check-ubsan-long:
+	$(NIX_RUN) thanatos-check-ubsan-long-internal
+
+thanatos-check-asan-long:
+	$(NIX_RUN) thanatos-check-asan-long-internal
+
 print-wasm:
 	$(NIX_RUN) print-wasm-internal
 
@@ -145,6 +169,10 @@ test-internal: build-wasm-internal build-native-internal
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
 	nix $(NIX_FLAGS) run .#test
+	$(MAKE) thanatos-check-internal
+	$(MAKE) thanatos-check-lsan-internal
+	$(MAKE) thanatos-check-ubsan-internal
+	$(MAKE) thanatos-check-asan-internal
 
 coverage-internal: build-wasm-internal
 	deno run -A scripts/generate-arena-header-c.ts
@@ -156,6 +184,7 @@ CLEAN_ARTIFACTS := \
 	bin/thanatos-test \
 	bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan \
+	bin/thanatos-test-asan \
 	bin/thanatos-asan \
 	bin/thanatos-lsan \
 	bin/thanatos-debug \
@@ -192,11 +221,36 @@ wasm/release.wasm: c/arena.c Makefile
 		-o $@ $<
 	$(WASM_OPT) $(WASM_OPT_POST_FLAGS) $@ -o $@
 
+# Fixed seed for CI and long *san tests (reproducible)
+THANATOS_CI_SEED := 150376326
+# Short run: 2 threads, 64k arena, 1024 reductions, depth 4, max_steps 512
+THANATOS_SHORT_ARGS := 2 65536 1024 4 512 $(THANATOS_CI_SEED)
+# Long run: 4 threads, 128k arena, 4096 reductions, depth 5, max_steps 1024 (for *san in CI)
+THANATOS_LONG_ARGS := 4 131072 4096 5 1024 $(THANATOS_CI_SEED)
+
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
-	bin/thanatos-test-ubsan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug
+	bin/thanatos-test-ubsan bin/thanatos-test-asan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug
 
 thanatos-check-internal: build-native-internal
-	timeout 30s ./bin/thanatos-test 2 65536 1024 4 512 150376326
+	timeout 30s ./bin/thanatos-test $(THANATOS_SHORT_ARGS)
+
+thanatos-check-lsan-internal: build-native-internal
+	timeout 60s ./bin/thanatos-test-lsan $(THANATOS_SHORT_ARGS)
+
+thanatos-check-ubsan-internal: build-native-internal
+	timeout 60s ./bin/thanatos-test-ubsan $(THANATOS_SHORT_ARGS)
+
+thanatos-check-asan-internal: build-native-internal
+	timeout 60s ./bin/thanatos-test-asan $(THANATOS_SHORT_ARGS)
+
+thanatos-check-lsan-long-internal: build-native-internal
+	timeout 180s ./bin/thanatos-test-lsan $(THANATOS_LONG_ARGS)
+
+thanatos-check-ubsan-long-internal: build-native-internal
+	timeout 180s ./bin/thanatos-test-ubsan $(THANATOS_LONG_ARGS)
+
+thanatos-check-asan-long-internal: build-native-internal
+	timeout 180s ./bin/thanatos-test-asan $(THANATOS_LONG_ARGS)
 
 thanatos-tsan-repl: build-native-internal
 	mkdir -p bin

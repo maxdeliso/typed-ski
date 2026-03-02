@@ -24,6 +24,15 @@ jobs:
       - name: Thanatos smoke test (exit code 0)
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-internal
 
+      - name: Long LSAN test (fixed seed)
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-lsan-long-internal
+
+      - name: Long UBSAN test (fixed seed)
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-ubsan-long-internal
+
+      - name: Long ASAN test (fixed seed)
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-asan-long-internal
+
       - name: Generate coverage report
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
 

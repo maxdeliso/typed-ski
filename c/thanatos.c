@@ -30,8 +30,8 @@ static pthread_t stdout_thread;
 static PendingReq pending_reqs[MAX_PENDING_REQS];
 
 static void *worker_thread_main(void *arg) {
-  (void)arg;
-  workerLoop();
+  uint32_t worker_id = (uint32_t)(uintptr_t)arg;
+  workerLoop(worker_id);
   return NULL;
 }
 
@@ -147,7 +147,7 @@ void thanatos_start_threads(void) {
   atomic_store_explicit(&is_thanatos_initialized, true, memory_order_release);
 
   for (uint32_t i = 0; i < num_workers_count; i++) {
-    pthread_create(&workers[i], NULL, worker_thread_main, NULL);
+    pthread_create(&workers[i], NULL, worker_thread_main, (void *)(uintptr_t)i);
   }
 
   pthread_create(&dispatcher_thread, NULL, dispatcher_thread_main, NULL);

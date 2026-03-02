@@ -33,9 +33,24 @@ static const uint32_t MAX_CAP = 1 << 27;
 static const uint32_t RING_ENTRIES = 1 << 16;
 static const uint32_t POISON_SEQ = 0xffffffff;
 
+/** QSBR: max worker threads that can register; readers drain before grow(). */
+#define MAX_WORKERS 64
+static atomic_uint WORKER_EPOCHS[MAX_WORKERS];
+static atomic_uint GLOBAL_EPOCH;
+/** Set by worker at batch start, cleared at batch end; allocators unregister
+ * before grow(). */
+#ifdef __wasm__
+static uint32_t tls_worker_id = MAX_WORKERS;
+#else
+static _Thread_local uint32_t tls_worker_id = MAX_WORKERS;
+#endif
+
 uint8_t *ARENA_BASE_ADDR = NULL;
 static uint32_t ARENA_MODE = 0;
 static atomic_uint GROW_COUNT = 0;
+/** Native only: actual mmap size reserved at init (layout uses uint64_t so no
+ * overflow at MAX_CAP). */
+static size_t ARENA_RESERVED_BYTES = 0;
 
 /** Cached node IDs for True (K) and False (K I); invalidated by reset(). */
 static uint32_t TRUE_ID = EMPTY;
@@ -44,7 +59,10 @@ static uint32_t FALSE_ID = EMPTY;
 /** Canonical U8 node id per byte value; deduplicated across allocU8 calls. */
 static atomic_uint U8_CACHE[256];
 
-static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63; }
+static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63u; }
+static inline uint64_t align64_u64(uint64_t x) {
+  return (x + 63) & ~(uint64_t)63;
+}
 
 static inline void sys_wait32(atomic_uint *ptr, uint32_t expected) {
 #ifdef __wasm__
@@ -165,6 +183,17 @@ static void ring_init_at(void *ptr, uint32_t entries, uint32_t slot_size) {
   }
 }
 
+/** AoS node: 32 bytes (id<<5 indexing); fixed address across grow(). */
+typedef struct {
+  atomic_uint left;
+  atomic_uint right;
+  atomic_uint hash32;
+  atomic_uint next_idx;
+  atomic_uchar kind;
+  atomic_uchar sym;
+  uint8_t padding[14];
+} __attribute__((aligned(32))) ArenaNode;
+
 typedef struct {
   uint32_t offset_sq;
   uint32_t offset_cq;
@@ -172,17 +201,14 @@ typedef struct {
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
   uint32_t offset_stdout_wait;
-  uint32_t offset_kind;
-  uint32_t offset_sym;
-  uint32_t offset_left_id;
-  uint32_t offset_right_id;
-  uint32_t offset_hash32;
-  uint32_t offset_next_idx;
-  uint32_t offset_buckets;
   uint32_t offset_term_cache;
-  uint32_t total_size;
+  uint64_t offset_nodes;
+  uint64_t offset_buckets;
+  uint64_t total_size;
 } SabLayout;
 
+/** Order: term_cache -> nodes -> buckets. Nodes never move on grow(). Uses
+ * 64-bit for offset_buckets/total_size to avoid overflow at large capacity. */
 static SabLayout calculate_layout(uint32_t capacity) {
   SabLayout l;
   l.offset_sq = align64(sizeof(SabHeader));
@@ -192,15 +218,12 @@ static SabLayout calculate_layout(uint32_t capacity) {
   l.offset_stdin_wait = align64(l.offset_stdout + ring_bytes(RING_ENTRIES, 1));
   l.offset_stdout_wait =
       align64(l.offset_stdin_wait + ring_bytes(RING_ENTRIES, 4));
-  l.offset_kind = align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
-  l.offset_sym = l.offset_kind + capacity;
-  l.offset_left_id = align64(l.offset_sym + capacity);
-  l.offset_right_id = l.offset_left_id + 4 * capacity;
-  l.offset_hash32 = l.offset_right_id + 4 * capacity;
-  l.offset_next_idx = l.offset_hash32 + 4 * capacity;
-  l.offset_buckets = align64(l.offset_next_idx + 4 * capacity);
-  l.offset_term_cache = l.offset_buckets + 4 * capacity;
-  l.total_size = l.offset_term_cache + TERM_CACHE_LEN * 4;
+  l.offset_term_cache =
+      align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
+  l.offset_nodes = (uint64_t)align64(l.offset_term_cache + TERM_CACHE_LEN * 4);
+  l.offset_buckets =
+      align64_u64(l.offset_nodes + (uint64_t)capacity * sizeof(ArenaNode));
+  l.total_size = l.offset_buckets + (uint64_t)capacity * 4;
   return l;
 }
 
@@ -208,7 +231,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
   SabLayout layout = calculate_layout(capacity);
 #ifdef __wasm__
   uint32_t pages_needed =
-      (layout.total_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
+      (uint32_t)((layout.total_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE);
   int old_pages = __builtin_wasm_memory_grow(0, pages_needed);
   if (old_pages == -1)
     return NULL;
@@ -216,13 +239,14 @@ static void *allocate_raw_arena(uint32_t capacity) {
 #else
 
   SabLayout reserve_layout = calculate_layout(MAX_CAP);
+  ARENA_RESERVED_BYTES = (size_t)reserve_layout.total_size;
   fprintf(stderr,
-          "Arena: reserving %u bytes (active=%u for capacity %u), "
+          "Arena: reserving %zu bytes (active=%zu for capacity %u), "
           "sizeof(SabHeader)=%zu\n",
-          reserve_layout.total_size, layout.total_size, capacity,
+          ARENA_RESERVED_BYTES, (size_t)layout.total_size, capacity,
           sizeof(SabHeader));
   ARENA_BASE_ADDR =
-      (uint8_t *)mmap(NULL, reserve_layout.total_size, PROT_READ | PROT_WRITE,
+      (uint8_t *)mmap(NULL, ARENA_RESERVED_BYTES, PROT_READ | PROT_WRITE,
                       MAP_ANONYMOUS | MAP_SHARED, -1, 0);
   if (ARENA_BASE_ADDR == MAP_FAILED) {
     perror("Arena: mmap failed");
@@ -240,15 +264,10 @@ static void *allocate_raw_arena(uint32_t capacity) {
   h->offset_stdout = layout.offset_stdout;
   h->offset_stdin_wait = layout.offset_stdin_wait;
   h->offset_stdout_wait = layout.offset_stdout_wait;
-  h->offset_kind = layout.offset_kind;
-  h->offset_sym = layout.offset_sym;
-  h->offset_left_id = layout.offset_left_id;
-  h->offset_right_id = layout.offset_right_id;
-  h->offset_hash32 = layout.offset_hash32;
-  h->offset_next_idx = layout.offset_next_idx;
-  h->offset_buckets = layout.offset_buckets;
   h->offset_term_cache = layout.offset_term_cache;
-  h->capacity = capacity;
+  h->offset_nodes = layout.offset_nodes;
+  h->offset_buckets = layout.offset_buckets;
+  atomic_init(&h->capacity, capacity);
   h->bucket_mask = capacity - 1;
   atomic_init(&h->resize_seq, 0);
   atomic_init(&h->top, 0);
@@ -260,13 +279,16 @@ static void *allocate_raw_arena(uint32_t capacity) {
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdin_wait, RING_ENTRIES, 4);
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdout_wait, RING_ENTRIES, 4);
 
-  atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
-  for (uint32_t i = 0; i < capacity; i++)
-    atomic_init(&buckets[i], EMPTY);
-
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_init(&cache[i], EMPTY);
+
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  memset(nodes, 0, capacity * sizeof(ArenaNode));
+
+  atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
+  for (uint32_t i = 0; i < capacity; i++)
+    atomic_init(&buckets[i], EMPTY);
 
   for (uint32_t u = 0; u < 256; u++)
     atomic_init(&U8_CACHE[u], EMPTY);
@@ -295,6 +317,14 @@ uint32_t initArena(uint32_t initial_capacity) {
   }
   if (ARENA_BASE_ADDR != NULL)
     return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
+  /* One-time QSBR init */
+  static bool qsbr_inited = false;
+  if (!qsbr_inited) {
+    atomic_init(&GLOBAL_EPOCH, 1);
+    for (uint32_t i = 0; i < MAX_WORKERS; i++)
+      atomic_init(&WORKER_EPOCHS[i], 0);
+    qsbr_inited = true;
+  }
   if (!allocate_raw_arena(initial_capacity))
     return 1;
   ARENA_MODE = 1;
@@ -324,7 +354,8 @@ void reset(void) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   atomic_store_explicit(&h->top, 0, memory_order_release);
   atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
-  for (uint32_t i = 0; i < h->capacity; i++)
+  for (uint32_t i = 0;
+       i < atomic_load_explicit(&h->capacity, memory_order_relaxed); i++)
     atomic_store_explicit(&buckets[i], EMPTY, memory_order_release);
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
@@ -352,26 +383,39 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
       abort();
 #endif
     }
+
     if (seq & 1) {
+      /* DEADLOCK FIX: Drop QSBR registration while spinning on the seqlock.
+         Otherwise, the thread holding the lock (running grow) will wait
+         forever for us to reach a quiescent state. */
+      bool is_worker = (tls_worker_id < MAX_WORKERS);
+      if (is_worker) {
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                              memory_order_release);
+      }
+
+      /* Spin until the resize finishes */
+      while ((atomic_load_explicit(&h->resize_seq, memory_order_acquire) & 1)) {
+#if defined(__linux__) && !defined(__wasm__)
+        __builtin_ia32_pause();
+#elif defined(__x86_64__) || defined(_M_X64)
+        __builtin_ia32_pause();
+#else
+        (void)0;
+#endif
+      }
+
+      /* Re-register with the new global epoch before continuing */
+      if (is_worker) {
+        uint32_t cur_epoch =
+            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+                              memory_order_release);
+      }
       continue;
     }
-    return seq;
-  }
-}
 
-static inline void wait_resize_stable(void) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  while (true) {
-    uint32_t seq = atomic_load_explicit(&h->resize_seq, memory_order_acquire);
-    if (seq == POISON_SEQ) {
-#ifdef __wasm__
-      __builtin_trap();
-#else
-      abort();
-#endif
-    }
-    if (!(seq & 1))
-      return;
+    return seq;
   }
 }
 
@@ -380,84 +424,50 @@ static inline bool check_stable(uint32_t seq) {
   return atomic_load_explicit(&h->resize_seq, memory_order_acquire) == seq;
 }
 
+/** Wait-free: nodes never move in memory on grow(). */
 uint32_t kindOf(uint32_t n) {
   ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-    uint32_t val = atomic_load_explicit(&kind[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return 0;
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  return atomic_load_explicit(&nodes[n].kind, memory_order_acquire);
 }
 
 uint32_t symOf(uint32_t n) {
   ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uchar *sym = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-    uint32_t val = atomic_load_explicit(&sym[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return 0;
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  return atomic_load_explicit(&nodes[n].sym, memory_order_acquire);
 }
 
 uint32_t hashOf(uint32_t n) {
   ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uint *hash = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-    uint32_t val = atomic_load_explicit(&hash[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return 0;
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  return atomic_load_explicit(&nodes[n].hash32, memory_order_acquire);
 }
 
 uint32_t leftOf(uint32_t n) {
   ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-    uint32_t val = atomic_load_explicit(&left[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return 0;
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  return atomic_load_explicit(&nodes[n].left, memory_order_acquire);
 }
 
 uint32_t rightOf(uint32_t n) {
   ensure_arena();
-  while (true) {
-    wait_resize_stable();
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    if (n >= h->capacity)
-      return 0;
-    atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-    uint32_t val = atomic_load_explicit(&right[n], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      return val;
-  }
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return 0;
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  return atomic_load_explicit(&nodes[n].right, memory_order_acquire);
 }
 
 static void grow(void);
@@ -485,18 +495,26 @@ uint32_t allocTerminal(uint32_t sym) {
     }
 
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
-    if (id >= h->capacity) {
-      grow();
+    if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+      if (tls_worker_id < MAX_WORKERS) {
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                              memory_order_release);
+        grow();
+        uint32_t cur_epoch =
+            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+                              memory_order_release);
+      } else {
+        grow();
+      }
       continue;
     }
 
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-    atomic_uchar *sym_arr = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-    atomic_uint *hash_arr = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-
-    atomic_store_explicit(&sym_arr[id], (uint8_t)sym, memory_order_release);
-    atomic_store_explicit(&hash_arr[id], sym, memory_order_release);
-    atomic_store_explicit(&kind[id], ARENA_KIND_TERMINAL, memory_order_release);
+    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    atomic_store_explicit(&nodes[id].sym, (uint8_t)sym, memory_order_release);
+    atomic_store_explicit(&nodes[id].hash32, sym, memory_order_release);
+    atomic_store_explicit(&nodes[id].kind, ARENA_KIND_TERMINAL,
+                          memory_order_release);
 
     if (sym < TERM_CACHE_LEN) {
       atomic_store_explicit(&cache[sym], id, memory_order_release);
@@ -522,24 +540,28 @@ uint32_t allocU8(uint8_t value) {
     uint32_t seq = enter_stable(&h);
 
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
-    if (id >= h->capacity) {
-      grow();
+    if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+      if (tls_worker_id < MAX_WORKERS) {
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                              memory_order_release);
+        grow();
+        uint32_t cur_epoch =
+            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+                              memory_order_release);
+      } else {
+        grow();
+      }
       continue;
     }
 
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-    atomic_uchar *sym_arr = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-    atomic_uint *hash_arr = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-    atomic_uint *left_arr =
-        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-    atomic_uint *right_arr =
-        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-
-    atomic_store_explicit(&sym_arr[id], value, memory_order_relaxed);
-    atomic_store_explicit(&hash_arr[id], (uint32_t)value, memory_order_relaxed);
-    atomic_store_explicit(&left_arr[id], EMPTY, memory_order_relaxed);
-    atomic_store_explicit(&right_arr[id], EMPTY, memory_order_relaxed);
-    atomic_store_explicit(&kind[id], ARENA_KIND_U8, memory_order_release);
+    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    atomic_store_explicit(&nodes[id].left, EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&nodes[id].right, EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&nodes[id].sym, value, memory_order_relaxed);
+    atomic_store_explicit(&nodes[id].hash32, (uint32_t)value,
+                          memory_order_relaxed);
+    atomic_store_explicit(&nodes[id].kind, ARENA_KIND_U8, memory_order_release);
 
     if (!check_stable(seq))
       continue;
@@ -569,69 +591,37 @@ static inline uint32_t mix(uint32_t a, uint32_t b) {
 uint32_t allocCons(uint32_t l, uint32_t r) {
   ensure_arena();
 
-  uint32_t hl, hr;
-  while (true) {
-    SabHeader *head;
-    uint32_t seq = enter_stable(&head);
-    if (l >= head->capacity)
-      return EMPTY;
-    atomic_uint *hashes =
-        (atomic_uint *)(ARENA_BASE_ADDR + head->offset_hash32);
-    hl = atomic_load_explicit(&hashes[l], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      break;
-  }
-  while (true) {
-    SabHeader *head;
-    uint32_t seq = enter_stable(&head);
-    if (r >= head->capacity)
-      return EMPTY;
-    atomic_uint *hashes =
-        (atomic_uint *)(ARENA_BASE_ADDR + head->offset_hash32);
-    hr = atomic_load_explicit(&hashes[r], memory_order_acquire);
-    atomic_thread_fence(memory_order_acquire);
-    if (check_stable(seq))
-      break;
-  }
+  /* Wait-free hash reads (nodes never move). */
+  uint32_t hl = hashOf(l);
+  uint32_t hr = hashOf(r);
   uint32_t hval = mix(hl, hr);
 
-  uint32_t bucket_idx;
+  /* Search existing bucket under seqlock (buckets/capacity change on grow). */
   while (true) {
-    SabHeader *head;
-    uint32_t seq = enter_stable(&head);
-    bucket_idx = hval & head->bucket_mask;
-    if (bucket_idx >= head->capacity)
-      continue;
+    SabHeader *h;
+    uint32_t seq = enter_stable(&h);
+    if (l >= atomic_load_explicit(&h->capacity, memory_order_relaxed) ||
+        r >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+      return EMPTY;
+    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
+    uint32_t b = hval & h->bucket_mask;
 
-    atomic_uint *buckets =
-        (atomic_uint *)(ARENA_BASE_ADDR + head->offset_buckets);
-    atomic_uint *next =
-        (atomic_uint *)(ARENA_BASE_ADDR + head->offset_next_idx);
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + head->offset_kind);
-    atomic_uint *hashes =
-        (atomic_uint *)(ARENA_BASE_ADDR + head->offset_hash32);
-    atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + head->offset_left_id);
-    atomic_uint *right =
-        (atomic_uint *)(ARENA_BASE_ADDR + head->offset_right_id);
-
-    uint32_t cur =
-        atomic_load_explicit(&buckets[bucket_idx], memory_order_acquire);
+    uint32_t cur = atomic_load_explicit(&buckets[b], memory_order_acquire);
     uint32_t found = EMPTY;
 
-    while (cur != EMPTY) {
-      if (cur >= head->capacity)
+    while (cur != EMPTY &&
+           cur < atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+      if (atomic_load_explicit(&nodes[cur].kind, memory_order_acquire) ==
+              ARENA_KIND_NON_TERM &&
+          atomic_load_explicit(&nodes[cur].hash32, memory_order_acquire) ==
+              hval &&
+          atomic_load_explicit(&nodes[cur].left, memory_order_acquire) == l &&
+          atomic_load_explicit(&nodes[cur].right, memory_order_acquire) == r) {
+        found = cur;
         break;
-      if (atomic_load_explicit(&kind[cur], memory_order_acquire) ==
-          ARENA_KIND_NON_TERM) {
-        if (atomic_load_explicit(&hashes[cur], memory_order_acquire) == hval &&
-            atomic_load_explicit(&left[cur], memory_order_acquire) == l &&
-            atomic_load_explicit(&right[cur], memory_order_acquire) == r) {
-          found = cur;
-          break;
-        }
       }
-      cur = atomic_load_explicit(&next[cur], memory_order_acquire);
+      cur = atomic_load_explicit(&nodes[cur].next_idx, memory_order_acquire);
     }
 
     if (check_stable(seq)) {
@@ -641,27 +631,35 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
     }
   }
 
+  /* Allocate and link into bucket. */
   while (true) {
     SabHeader *h;
     uint32_t seq = enter_stable(&h);
     uint32_t b = hval & h->bucket_mask;
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
-    if (id >= h->capacity) {
-      grow();
+    if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+      if (tls_worker_id < MAX_WORKERS) {
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                              memory_order_release);
+        grow();
+        uint32_t cur_epoch =
+            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+                              memory_order_release);
+      } else {
+        grow();
+      }
       continue;
     }
 
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-    atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-    atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-    atomic_uint *hashes = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-    atomic_uint *next = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_next_idx);
+    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
     atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
 
-    atomic_store_explicit(&left[id], l, memory_order_release);
-    atomic_store_explicit(&right[id], r, memory_order_release);
-    atomic_store_explicit(&hashes[id], hval, memory_order_release);
-    atomic_store_explicit(&kind[id], ARENA_KIND_NON_TERM, memory_order_release);
+    atomic_store_explicit(&nodes[id].left, l, memory_order_release);
+    atomic_store_explicit(&nodes[id].right, r, memory_order_release);
+    atomic_store_explicit(&nodes[id].hash32, hval, memory_order_release);
+    atomic_store_explicit(&nodes[id].kind, ARENA_KIND_NON_TERM,
+                          memory_order_release);
 
     if (!check_stable(seq))
       continue;
@@ -671,24 +669,30 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
         return id;
 
       uint32_t head = atomic_load_explicit(&buckets[b], memory_order_acquire);
-      atomic_store_explicit(&next[id], head, memory_order_relaxed);
+      atomic_store_explicit(&nodes[id].next_idx, head, memory_order_relaxed);
       if (atomic_compare_exchange_weak_explicit(&buckets[b], &head, id,
                                                 memory_order_release,
                                                 memory_order_relaxed)) {
         return id;
       }
 
+      /* CAS failed: another thread may have inserted same (l,r); re-scan. */
       uint32_t cur2 = atomic_load_explicit(&buckets[b], memory_order_acquire);
-      while (cur2 != EMPTY) {
-        if (atomic_load_explicit(&kind[cur2], memory_order_acquire) ==
+      while (cur2 != EMPTY &&
+             cur2 < atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+        if (atomic_load_explicit(&nodes[cur2].kind, memory_order_acquire) ==
                 ARENA_KIND_NON_TERM &&
-            atomic_load_explicit(&hashes[cur2], memory_order_acquire) == hval &&
-            atomic_load_explicit(&left[cur2], memory_order_acquire) == l &&
-            atomic_load_explicit(&right[cur2], memory_order_acquire) == r) {
-          atomic_store_explicit(&kind[id], 0, memory_order_release);
+            atomic_load_explicit(&nodes[cur2].hash32, memory_order_acquire) ==
+                hval &&
+            atomic_load_explicit(&nodes[cur2].left, memory_order_acquire) ==
+                l &&
+            atomic_load_explicit(&nodes[cur2].right, memory_order_acquire) ==
+                r) {
+          atomic_store_explicit(&nodes[id].kind, 0, memory_order_release);
           return cur2;
         }
-        cur2 = atomic_load_explicit(&next[cur2], memory_order_acquire);
+        cur2 =
+            atomic_load_explicit(&nodes[cur2].next_idx, memory_order_acquire);
       }
     }
   }
@@ -702,27 +706,56 @@ static uint32_t alloc_generic(uint8_t kind_val, uint8_t sym_val,
     SabHeader *h;
     uint32_t seq = enter_stable(&h);
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
-    if (id >= h->capacity) {
-      grow();
+    if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+      if (tls_worker_id < MAX_WORKERS) {
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                              memory_order_release);
+        grow();
+        uint32_t cur_epoch =
+            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
+        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+                              memory_order_release);
+      } else {
+        grow();
+      }
       continue;
     }
-    atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-    atomic_uchar *sym_arr = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-    atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-    atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-    atomic_uint *hashes = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-
-    atomic_store_explicit(&sym_arr[id], sym_val, memory_order_release);
-    atomic_store_explicit(&left[id], left_val, memory_order_release);
-    atomic_store_explicit(&right[id], right_val, memory_order_release);
-    atomic_store_explicit(&hashes[id], hash_val, memory_order_release);
-    atomic_store_explicit(&kind[id], kind_val, memory_order_release);
+    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    atomic_store_explicit(&nodes[id].sym, sym_val, memory_order_release);
+    atomic_store_explicit(&nodes[id].left, left_val, memory_order_release);
+    atomic_store_explicit(&nodes[id].right, right_val, memory_order_release);
+    atomic_store_explicit(&nodes[id].hash32, hash_val, memory_order_release);
+    atomic_store_explicit(&nodes[id].kind, kind_val, memory_order_release);
 
     if (!check_stable(seq))
       continue;
 
     return id;
   }
+}
+
+__attribute__((noinline)) static void update_continuation(uint32_t id,
+                                                          uint32_t parent,
+                                                          uint32_t target,
+                                                          uint8_t stage) {
+  if (id >= MAX_CAP)
+    return;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  uint32_t cap = atomic_load_explicit(&h->capacity, memory_order_relaxed);
+  if (id >= cap)
+    return; /* avoid write to invalid slot (e.g. corrupt id from graph read) */
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  atomic_store_explicit(&nodes[id].left, parent, memory_order_relaxed);
+  atomic_store_explicit(&nodes[id].right, target, memory_order_relaxed);
+  atomic_store_explicit(&nodes[id].sym, stage, memory_order_relaxed);
+  atomic_store_explicit(&nodes[id].kind, ARENA_KIND_CONTINUATION,
+                        memory_order_release);
+}
+
+__attribute__((no_sanitize("address"), noinline)) static void
+zero_buckets(atomic_uint *buckets, uint32_t n) {
+  for (uint32_t i = 0; i < n; i++)
+    atomic_store_explicit(&buckets[i], EMPTY, memory_order_release);
 }
 
 __attribute__((no_sanitize("address"))) static void grow(void) {
@@ -742,9 +775,32 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
     }
   }
 
-  uint32_t old_cap = h->capacity;
+  /* QSBR: bump epoch so new readers use new epoch; then wait for all active
+   * readers to leave the old epoch (drain). */
+  uint32_t new_epoch =
+      atomic_fetch_add_explicit(&GLOBAL_EPOCH, 1, memory_order_acq_rel) + 1;
+  for (uint32_t i = 0; i < MAX_WORKERS; i++) {
+    while (true) {
+      uint32_t w_epoch =
+          atomic_load_explicit(&WORKER_EPOCHS[i], memory_order_acquire);
+      if (w_epoch == 0 || w_epoch >= new_epoch)
+        break;
+#if defined(__linux__) && !defined(__wasm__)
+      __builtin_ia32_pause();
+#elif defined(__x86_64__) || defined(_M_X64)
+      __builtin_ia32_pause();
+#else
+      /* Yield so reader can finish its batch. */
+      (void)0;
+#endif
+    }
+  }
 
-  if (old_cap >= MAX_CAP || (old_cap * 2) <= h->capacity) {
+  uint32_t old_cap = atomic_load_explicit(&h->capacity, memory_order_relaxed);
+
+  if (old_cap >= MAX_CAP ||
+      (old_cap * 2) <=
+          atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
     atomic_fetch_add_explicit(&h->resize_seq, 1, memory_order_release);
     return;
   }
@@ -753,18 +809,26 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
     return;
   }
 
-  uint32_t old_offset_kind = h->offset_kind;
-  uint32_t old_offset_sym = h->offset_sym;
-  uint32_t old_offset_left = h->offset_left_id;
-  uint32_t old_offset_right = h->offset_right_id;
-  uint32_t old_offset_hash = h->offset_hash32;
-  uint32_t old_offset_next = h->offset_next_idx;
-  uint32_t old_offset_term_cache = h->offset_term_cache;
   uint32_t old_top = atomic_load_explicit(&h->top, memory_order_acquire);
 
   uint32_t new_cap = old_cap * 2;
   if (new_cap > MAX_CAP)
     new_cap = MAX_CAP;
+#ifndef __wasm__
+  /* Cap so we never write past the actual mmap (defense-in-depth). */
+  if (ARENA_RESERVED_BYTES > 0) {
+    while (new_cap > old_cap) {
+      SabLayout probe = calculate_layout(new_cap);
+      if ((size_t)probe.total_size <= ARENA_RESERVED_BYTES)
+        break;
+      new_cap--;
+    }
+    if (new_cap <= old_cap) {
+      atomic_fetch_add_explicit(&h->resize_seq, 1, memory_order_release);
+      return; /* cannot grow within reservation */
+    }
+  }
+#endif
   uint32_t grow_num =
       atomic_fetch_add_explicit(&GROW_COUNT, 1, memory_order_relaxed) + 1;
 #ifndef __wasm__
@@ -778,7 +842,8 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
 
 #ifdef __wasm__
   uint32_t current_bytes = __builtin_wasm_memory_size(0) * WASM_PAGE_SIZE;
-  uintptr_t needed_end = (uintptr_t)ARENA_BASE_ADDR + layout.total_size;
+  uintptr_t needed_end =
+      (uintptr_t)ARENA_BASE_ADDR + (uintptr_t)layout.total_size;
   if (needed_end > current_bytes) {
     uint32_t extra = needed_end - current_bytes;
     uint32_t pages = (extra + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
@@ -791,7 +856,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
 
 #endif
 
-  h->capacity = new_cap;
+  atomic_store_explicit(&h->capacity, new_cap, memory_order_release);
   h->bucket_mask = new_cap - 1;
   h->offset_sq = layout.offset_sq;
   h->offset_cq = layout.offset_cq;
@@ -799,86 +864,36 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   h->offset_stdout = layout.offset_stdout;
   h->offset_stdin_wait = layout.offset_stdin_wait;
   h->offset_stdout_wait = layout.offset_stdout_wait;
-  h->offset_kind = layout.offset_kind;
-  h->offset_sym = layout.offset_sym;
-  h->offset_left_id = layout.offset_left_id;
-  h->offset_right_id = layout.offset_right_id;
-  h->offset_hash32 = layout.offset_hash32;
-  h->offset_next_idx = layout.offset_next_idx;
-  h->offset_buckets = layout.offset_buckets;
   h->offset_term_cache = layout.offset_term_cache;
+  h->offset_nodes = layout.offset_nodes;
+  h->offset_buckets = layout.offset_buckets;
+
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  atomic_uint *new_buckets =
+      (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
+
+  /* Zero new node slots [old_cap .. new_cap-1] (existing nodes never moved). */
+  if (new_cap > old_cap)
+    memset(&nodes[old_cap], 0, (new_cap - old_cap) * sizeof(ArenaNode));
+
+  zero_buckets(new_buckets, new_cap);
 
   uint32_t count = (old_top < old_cap) ? old_top : old_cap;
   atomic_store_explicit(&h->top, count, memory_order_release);
 
-  uint8_t *base = ARENA_BASE_ADDR;
-
-  memmove(base + h->offset_term_cache, base + old_offset_term_cache,
-          TERM_CACHE_LEN * 4);
-
-  memmove(base + h->offset_next_idx, base + old_offset_next, count * 4);
-  if (new_cap > old_cap)
-    memset(base + h->offset_next_idx + old_cap * 4, 0, (new_cap - old_cap) * 4);
-
-  memmove(base + h->offset_hash32, base + old_offset_hash, count * 4);
-  if (new_cap > old_cap)
-    memset(base + h->offset_hash32 + old_cap * 4, 0, (new_cap - old_cap) * 4);
-
-  memmove(base + h->offset_right_id, base + old_offset_right, count * 4);
-  if (new_cap > old_cap)
-    memset(base + h->offset_right_id + old_cap * 4, 0, (new_cap - old_cap) * 4);
-
-  memmove(base + h->offset_left_id, base + old_offset_left, count * 4);
-  if (new_cap > old_cap)
-    memset(base + h->offset_left_id + old_cap * 4, 0, (new_cap - old_cap) * 4);
-
-  memmove(base + h->offset_sym, base + old_offset_sym, count);
-  if (new_cap > old_cap)
-    memset(base + h->offset_sym + old_cap, 0, new_cap - old_cap);
-
-  memmove(base + h->offset_kind, base + old_offset_kind, count);
-  if (new_cap > old_cap)
-    memset(base + h->offset_kind + old_cap, 0, new_cap - old_cap);
-
-  atomic_uint *buckets = (atomic_uint *)(base + h->offset_buckets);
-  atomic_uint *next = (atomic_uint *)(base + h->offset_next_idx);
-  atomic_uchar *kind = (atomic_uchar *)(base + h->offset_kind);
-  atomic_uint *hashes = (atomic_uint *)(base + h->offset_hash32);
-
-  for (uint32_t i = 0; i < new_cap; i++)
-    atomic_store_explicit(&buckets[i], EMPTY, memory_order_release);
+  /* Rehash existing NON_TERM nodes into new buckets. */
   for (uint32_t i = 0; i < count; i++) {
-    if (atomic_load_explicit(&kind[i], memory_order_acquire) !=
+    if (atomic_load_explicit(&nodes[i].kind, memory_order_acquire) !=
         ARENA_KIND_NON_TERM)
       continue;
-    uint32_t hv = atomic_load_explicit(&hashes[i], memory_order_acquire);
+    uint32_t hv = atomic_load_explicit(&nodes[i].hash32, memory_order_relaxed);
     uint32_t b = hv & h->bucket_mask;
-    while (true) {
-      uint32_t head = atomic_load_explicit(&buckets[b], memory_order_acquire);
-      atomic_store_explicit(&next[i], head, memory_order_relaxed);
-      if (atomic_compare_exchange_weak_explicit(&buckets[b], &head, i,
-                                                memory_order_release,
-                                                memory_order_relaxed))
-        break;
-    }
+    uint32_t head = atomic_load_explicit(&new_buckets[b], memory_order_relaxed);
+    atomic_store_explicit(&nodes[i].next_idx, head, memory_order_relaxed);
+    atomic_store_explicit(&new_buckets[b], i, memory_order_relaxed);
   }
 
   atomic_fetch_add_explicit(&h->resize_seq, 1, memory_order_release);
-}
-
-static inline void update_continuation(uint32_t id, uint32_t parent,
-                                       uint32_t target, uint8_t stage) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  atomic_uint *left = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_left_id);
-  atomic_uint *right = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_right_id);
-  atomic_uchar *sym = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_sym);
-  atomic_uchar *kind = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_kind);
-
-  atomic_store_explicit(&left[id], parent, memory_order_relaxed);
-  atomic_store_explicit(&right[id], target, memory_order_relaxed);
-  atomic_store_explicit(&sym[id], stage, memory_order_relaxed);
-  atomic_store_explicit(&kind[id], ARENA_KIND_CONTINUATION,
-                        memory_order_release);
 }
 
 __attribute__((unused)) static uint32_t unwind_to_root(uint32_t curr,
@@ -936,9 +951,46 @@ static uint32_t arenaFalse(void) {
   return FALSE_ID;
 }
 
+/** Direct node loads: fast path. Must check n < capacity so we never return
+ * ids from uninitialized slots (would later write via update_continuation).
+ * Use relaxed load of capacity to avoid extra sync; may rarely reject valid
+ * post-grow node (then fall back to kindOf path). */
+/** Direct node loads: wait-free fast paths with no live capacity check.
+ * Safe because AoS nodes never move and memory is reserved up to MAX_CAP. */
+static inline uint32_t step_kind(ArenaNode *nodes, uint32_t n) {
+  if (n >= MAX_CAP)
+    return 0;
+  return nodes ? atomic_load_explicit(&nodes[n].kind, memory_order_acquire)
+               : kindOf(n);
+}
+static inline uint32_t step_sym(ArenaNode *nodes, uint32_t n) {
+  if (n >= MAX_CAP)
+    return 0;
+  return nodes ? atomic_load_explicit(&nodes[n].sym, memory_order_acquire)
+               : symOf(n);
+}
+static inline uint32_t step_hash(ArenaNode *nodes, uint32_t n) {
+  if (n >= MAX_CAP)
+    return 0;
+  return nodes ? atomic_load_explicit(&nodes[n].hash32, memory_order_acquire)
+               : hashOf(n);
+}
+static inline uint32_t step_left(ArenaNode *nodes, uint32_t n) {
+  if (n >= MAX_CAP)
+    return 0;
+  return nodes ? atomic_load_explicit(&nodes[n].left, memory_order_acquire)
+               : leftOf(n);
+}
+static inline uint32_t step_right(ArenaNode *nodes, uint32_t n) {
+  if (n >= MAX_CAP)
+    return 0;
+  return nodes ? atomic_load_explicit(&nodes[n].right, memory_order_acquire)
+               : rightOf(n);
+}
+
 static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
                                   uint32_t *gas, uint32_t *remaining_steps,
-                                  uint32_t free_node) {
+                                  uint32_t free_node, ArenaNode *nodes) {
   while (true) {
     if (*gas == 0) {
       return budget_outcome(mode, curr, stack, *remaining_steps);
@@ -953,13 +1005,13 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         return o;
       }
       uint32_t recycled = stack;
-      stack = leftOf(recycled);
-      uint32_t parent_node = rightOf(recycled);
-      uint8_t stage = (uint8_t)symOf(recycled);
+      stack = step_left(nodes, recycled);
+      uint32_t parent_node = step_right(nodes, recycled);
+      uint8_t stage = (uint8_t)step_sym(nodes, recycled);
 
       if (stage == STAGE_LEFT) {
-        if (curr != leftOf(parent_node)) {
-          curr = allocCons(curr, rightOf(parent_node));
+        if (curr != step_left(nodes, parent_node)) {
+          curr = allocCons(curr, step_right(nodes, parent_node));
           free_node = recycled;
           mode = MODE_RETURN;
           continue;
@@ -967,11 +1019,11 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         update_continuation(recycled, stack, parent_node, STAGE_RIGHT);
         stack = recycled;
         mode = MODE_DESCEND;
-        curr = rightOf(parent_node);
+        curr = step_right(nodes, parent_node);
         continue;
       } else {
-        if (curr != rightOf(parent_node)) {
-          curr = allocCons(leftOf(parent_node), curr);
+        if (curr != step_right(nodes, parent_node)) {
+          curr = allocCons(step_left(nodes, parent_node), curr);
         } else {
           curr = parent_node;
         }
@@ -981,16 +1033,16 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
       }
     }
 
-    if (kindOf(curr) != ARENA_KIND_NON_TERM) {
+    if (step_kind(nodes, curr) != ARENA_KIND_NON_TERM) {
       mode = MODE_RETURN;
       continue;
     }
 
-    uint32_t left = leftOf(curr);
-    uint32_t right = rightOf(curr);
+    uint32_t left = step_left(nodes, curr);
+    uint32_t right = step_right(nodes, curr);
 
-    if (kindOf(left) == ARENA_KIND_TERMINAL) {
-      uint32_t sym = symOf(left);
+    if (step_kind(nodes, left) == ARENA_KIND_TERMINAL) {
+      uint32_t sym = step_sym(nodes, left);
       if (sym == ARENA_SYM_I) {
         if (*remaining_steps == 0) {
           return budget_outcome(mode, curr, stack, 0);
@@ -1013,9 +1065,13 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
           mode = MODE_DESCEND;
           continue;
         }
-        /* Blocked on stdin: suspend (never unwind — would be O(depth)). */
+        /* Blocked on stdin: suspend (never unwind — would be O(depth)). Drop
+         * epoch before blocking. */
         uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
                                          curr, stack, *remaining_steps);
+        if (tls_worker_id < MAX_WORKERS)
+          atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                                memory_order_release);
         enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdin_wait),
                          &susp_id, 4);
         StepOutcome o;
@@ -1024,12 +1080,12 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         return o;
       }
       if (sym == ARENA_SYM_WRITE_ONE) {
-        if (kindOf(right) != ARENA_KIND_U8) {
+        if (step_kind(nodes, right) != ARENA_KIND_U8) {
           curr = right;
           mode = MODE_DESCEND;
           continue;
         }
-        uint8_t byte = (uint8_t)symOf(right);
+        uint8_t byte = (uint8_t)step_sym(nodes, right);
         SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
         if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
                         1)) {
@@ -1041,9 +1097,12 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
           mode = MODE_DESCEND;
           continue;
         }
-        /* Blocked on stdout: suspend. */
+        /* Blocked on stdout: suspend. Drop epoch before blocking. */
         uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
                                          curr, stack, *remaining_steps);
+        if (tls_worker_id < MAX_WORKERS)
+          atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                                memory_order_release);
         enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
                          &susp_id, 4);
         StepOutcome o;
@@ -1051,34 +1110,36 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         o.val = susp_id;
         return o;
       }
-    } else if (kindOf(left) == ARENA_KIND_NON_TERM) {
-      uint32_t ll = leftOf(left);
+    } else if (step_kind(nodes, left) == ARENA_KIND_NON_TERM) {
+      uint32_t ll = step_left(nodes, left);
       /* ((EQ_U8 a) b) -> True if a==b else False, when a,b are U8 */
-      if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_EQ_U8) {
-        uint32_t a = rightOf(left);
+      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
+          step_sym(nodes, ll) == ARENA_SYM_EQ_U8) {
+        uint32_t a = step_right(nodes, left);
         uint32_t b = right;
-        if (kindOf(a) == ARENA_KIND_U8 && kindOf(b) == ARENA_KIND_U8) {
+        if (step_kind(nodes, a) == ARENA_KIND_U8 &&
+            step_kind(nodes, b) == ARENA_KIND_U8) {
           if (*remaining_steps == 0) {
             return budget_outcome(mode, curr, stack, 0);
           }
           (*remaining_steps)--;
-          uint8_t va = (uint8_t)symOf(a);
-          uint8_t vb = (uint8_t)symOf(b);
+          uint8_t va = (uint8_t)step_sym(nodes, a);
+          uint8_t vb = (uint8_t)step_sym(nodes, b);
           curr = (va == vb) ? arenaTrue() : arenaFalse();
           mode = MODE_DESCEND;
           continue;
         }
       }
-      if (kindOf(ll) == ARENA_KIND_TERMINAL &&
-          symOf(ll) == ARENA_SYM_WRITE_ONE) {
-        uint32_t a = rightOf(left);
+      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
+          step_sym(nodes, ll) == ARENA_SYM_WRITE_ONE) {
+        uint32_t a = step_right(nodes, left);
         uint32_t b = right;
-        if (kindOf(a) != ARENA_KIND_U8) {
+        if (step_kind(nodes, a) != ARENA_KIND_U8) {
           curr = a;
           mode = MODE_DESCEND;
           continue;
         }
-        uint8_t byte = (uint8_t)symOf(a);
+        uint8_t byte = (uint8_t)step_sym(nodes, a);
         SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
         if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
                         1)) {
@@ -1090,9 +1151,12 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
           mode = MODE_DESCEND;
           continue;
         }
-        /* Blocked on stdout: suspend. */
+        /* Blocked on stdout: suspend. Drop epoch before blocking. */
         uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
                                          curr, stack, *remaining_steps);
+        if (tls_worker_id < MAX_WORKERS)
+          atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                                memory_order_release);
         enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
                          &susp_id, 4);
         StepOutcome o;
@@ -1100,24 +1164,26 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         o.val = susp_id;
         return o;
       }
-      if (kindOf(ll) == ARENA_KIND_TERMINAL && symOf(ll) == ARENA_SYM_K) {
+      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
+          step_sym(nodes, ll) == ARENA_SYM_K) {
         if (*remaining_steps == 0) {
           return budget_outcome(mode, curr, stack, 0);
         }
         (*remaining_steps)--;
-        curr = rightOf(left);
+        curr = step_right(nodes, left);
         mode = MODE_DESCEND;
         continue;
       }
-      if (kindOf(ll) == ARENA_KIND_NON_TERM) {
-        uint32_t lll = leftOf(ll);
-        if (kindOf(lll) == ARENA_KIND_TERMINAL) {
-          uint32_t sym = symOf(lll);
+      if (step_kind(nodes, ll) == ARENA_KIND_NON_TERM) {
+        uint32_t lll = step_left(nodes, ll);
+        if (step_kind(nodes, lll) == ARENA_KIND_TERMINAL) {
+          uint32_t sym = step_sym(nodes, lll);
           if (sym == ARENA_SYM_S) {
             if (*remaining_steps == 0)
               return budget_outcome(mode, curr, stack, 0);
             (*remaining_steps)--;
-            uint32_t x = rightOf(ll), y = rightOf(left), z = right;
+            uint32_t x = step_right(nodes, ll), y = step_right(nodes, left),
+                     z = right;
             curr = allocCons(allocCons(x, z), allocCons(y, z));
             mode = MODE_DESCEND;
             continue;
@@ -1126,7 +1192,8 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
             if (*remaining_steps == 0)
               return budget_outcome(mode, curr, stack, 0);
             (*remaining_steps)--;
-            uint32_t x = rightOf(ll), y = rightOf(left), z = right;
+            uint32_t x = step_right(nodes, ll), y = step_right(nodes, left),
+                     z = right;
             curr = allocCons(x, allocCons(y, z));
             mode = MODE_DESCEND;
             continue;
@@ -1135,21 +1202,22 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
             if (*remaining_steps == 0)
               return budget_outcome(mode, curr, stack, 0);
             (*remaining_steps)--;
-            uint32_t x = rightOf(ll), y = rightOf(left), z = right;
+            uint32_t x = step_right(nodes, ll), y = step_right(nodes, left),
+                     z = right;
             curr = allocCons(allocCons(x, z), y);
             mode = MODE_DESCEND;
             continue;
           }
-        } else if (kindOf(lll) == ARENA_KIND_NON_TERM) {
-          uint32_t llll = leftOf(lll);
-          if (kindOf(llll) == ARENA_KIND_TERMINAL) {
-            uint32_t sym = symOf(llll);
+        } else if (step_kind(nodes, lll) == ARENA_KIND_NON_TERM) {
+          uint32_t llll = step_left(nodes, lll);
+          if (step_kind(nodes, llll) == ARENA_KIND_TERMINAL) {
+            uint32_t sym = step_sym(nodes, llll);
             if (sym == ARENA_SYM_SPRIME) {
               if (*remaining_steps == 0)
                 return budget_outcome(mode, curr, stack, 0);
               (*remaining_steps)--;
-              uint32_t w = rightOf(lll), x = rightOf(ll), y = rightOf(left),
-                       z = right;
+              uint32_t w = step_right(nodes, lll), x = step_right(nodes, ll),
+                       y = step_right(nodes, left), z = right;
               curr = allocCons(allocCons(w, allocCons(x, z)), allocCons(y, z));
               mode = MODE_DESCEND;
               continue;
@@ -1158,8 +1226,8 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
               if (*remaining_steps == 0)
                 return budget_outcome(mode, curr, stack, 0);
               (*remaining_steps)--;
-              uint32_t w = rightOf(lll), x = rightOf(ll), y = rightOf(left),
-                       z = right;
+              uint32_t w = step_right(nodes, lll), x = step_right(nodes, ll),
+                       y = step_right(nodes, left), z = right;
               curr = allocCons(allocCons(w, x), allocCons(y, z));
               mode = MODE_DESCEND;
               continue;
@@ -1168,8 +1236,8 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
               if (*remaining_steps == 0)
                 return budget_outcome(mode, curr, stack, 0);
               (*remaining_steps)--;
-              uint32_t w = rightOf(lll), x = rightOf(ll), y = rightOf(left),
-                       z = right;
+              uint32_t w = step_right(nodes, lll), x = step_right(nodes, ll),
+                       y = step_right(nodes, left), z = right;
               curr = allocCons(allocCons(w, allocCons(x, z)), y);
               mode = MODE_DESCEND;
               continue;
@@ -1208,9 +1276,7 @@ uint32_t arenaKernelStep(uint32_t expr) {
     mode = (uint8_t)symOf(susp);
     if (mode == MODE_IO_WAIT)
       mode = MODE_DESCEND;
-    SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-    atomic_uint *hashes = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-    remaining_steps = atomic_load_explicit(&hashes[susp], memory_order_acquire);
+    remaining_steps = hashOf(susp);
     free_node = susp;
   }
 
@@ -1219,8 +1285,8 @@ uint32_t arenaKernelStep(uint32_t expr) {
    */
   while (remaining_steps > 0) {
     uint32_t gas = ARENA_STEP_GAS;
-    StepOutcome o =
-        step_iterative(curr, stack, mode, &gas, &remaining_steps, free_node);
+    StepOutcome o = step_iterative(curr, stack, mode, &gas, &remaining_steps,
+                                   free_node, NULL);
 
     if (o.type == RESULT_YIELD) {
       if (symOf(o.val) == MODE_IO_WAIT)
@@ -1230,10 +1296,7 @@ uint32_t arenaKernelStep(uint32_t expr) {
       curr = leftOf(susp);
       stack = rightOf(susp);
       mode = (uint8_t)symOf(susp);
-      SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-      atomic_uint *hashes = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-      remaining_steps =
-          atomic_load_explicit(&hashes[susp], memory_order_acquire);
+      remaining_steps = hashOf(susp);
       free_node = susp;
       continue;
     }
@@ -1317,31 +1380,44 @@ bool arena_stdout_try_pop(uint8_t *byte_out) {
   return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), byte_out, 1);
 }
 
-void workerLoop(void) {
+void workerLoop(uint32_t worker_id) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   Ring *sq = (Ring *)(ARENA_BASE_ADDR + h->offset_sq);
   Ring *cq = (Ring *)(ARENA_BASE_ADDR + h->offset_cq);
   uint32_t batch_gas = ARENA_STEP_GAS;
+  const bool use_qsbr = (worker_id < MAX_WORKERS);
+
   while (true) {
     Sqe job;
     dequeue_blocking(sq, &job, sizeof(Sqe));
+
+    /* QSBR fast path: register epoch and pass raw nodes; step_* read current
+     * capacity from header. */
+    ArenaNode *nodes = NULL;
+    if (use_qsbr) {
+      uint32_t current_epoch =
+          atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
+      atomic_store_explicit(&WORKER_EPOCHS[worker_id], current_epoch,
+                            memory_order_release);
+      tls_worker_id = worker_id;
+      nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    }
+
     uint32_t curr = job.node_id;
     uint32_t stack = EMPTY;
     uint8_t mode = MODE_DESCEND;
     uint32_t remaining_steps;
     uint32_t free_node = EMPTY;
 
-    if (kindOf(curr) == ARENA_KIND_SUSPENSION) {
+    if (step_kind(nodes, curr) == ARENA_KIND_SUSPENSION) {
       uint32_t susp = curr;
-      curr = leftOf(susp);
-      stack = rightOf(susp);
-      mode = (uint8_t)symOf(susp);
+      curr = step_left(nodes, susp);
+      stack = step_right(nodes, susp);
+      mode = (uint8_t)step_sym(nodes, susp);
       if (mode == MODE_IO_WAIT)
         mode = MODE_DESCEND;
-      atomic_uint *hashes = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_hash32);
-      remaining_steps =
-          atomic_load_explicit(&hashes[susp], memory_order_acquire);
+      remaining_steps = step_hash(nodes, susp);
       free_node = susp;
     } else {
       remaining_steps =
@@ -1354,21 +1430,30 @@ void workerLoop(void) {
         uint32_t susp_id =
             alloc_generic(ARENA_KIND_SUSPENSION, mode, curr, stack, 0);
         Cqe result = {susp_id, job.req_id, CQ_EVENT_YIELD};
+        if (use_qsbr)
+          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+                                memory_order_release);
         enqueue_blocking(cq, &result, sizeof(Cqe));
         break;
       }
       uint32_t gas = batch_gas;
-      StepOutcome o =
-          step_iterative(curr, stack, mode, &gas, &remaining_steps, free_node);
+      StepOutcome o = step_iterative(curr, stack, mode, &gas, &remaining_steps,
+                                     free_node, nodes);
       if (o.type == RESULT_YIELD) {
+        uint32_t o_sym = step_sym(nodes, o.val);
         Cqe res = {o.val, job.req_id,
-                   (symOf(o.val) == MODE_IO_WAIT) ? CQ_EVENT_IO_WAIT
-                                                  : CQ_EVENT_YIELD};
+                   (o_sym == MODE_IO_WAIT) ? CQ_EVENT_IO_WAIT : CQ_EVENT_YIELD};
+        if (use_qsbr)
+          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+                                memory_order_release);
         enqueue_blocking(cq, &res, sizeof(Cqe));
         break;
       } else {
         if (o.val == curr) {
           Cqe res = {curr, job.req_id, CQ_EVENT_DONE};
+          if (use_qsbr)
+            atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+                                  memory_order_release);
           enqueue_blocking(cq, &res, sizeof(Cqe));
           break;
         }
@@ -1378,6 +1463,12 @@ void workerLoop(void) {
         free_node = EMPTY;
       }
     }
+
+    /* Quiescent state: no longer touching the arena. */
+    if (use_qsbr) {
+      atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0, memory_order_release);
+      tls_worker_id = MAX_WORKERS;
+    }
   }
 }
 
@@ -1386,7 +1477,8 @@ uint32_t debugGetArenaBaseAddr(void) {
 }
 uint32_t getArenaMode(void) { return ARENA_MODE; }
 uint32_t debugCalculateArenaSize(uint32_t capacity) {
-  return calculate_layout(capacity).total_size;
+  uint64_t size = calculate_layout(capacity).total_size;
+  return (uint32_t)(size > (uint64_t)(uint32_t)-1 ? (uint32_t)-1 : size);
 }
 uint32_t debugLockState(void) {
   ensure_arena();

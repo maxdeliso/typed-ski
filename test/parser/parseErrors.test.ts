@@ -20,7 +20,6 @@ import { parseChain } from "../../lib/parser/chain.ts";
 import { parseAtomicTypedLambda } from "../../lib/parser/typedLambda.ts";
 import { createTypedApplication } from "../../lib/types/typedLambda.ts";
 import { parseWithEOF } from "../../lib/parser/eof.ts";
-import { parseRustStruct } from "../../lib/parser/rustStruct.ts";
 
 Deno.test("Parser Error Coverage", async (t) => {
   await t.step("parserState.ts errors", async (t) => {
@@ -282,32 +281,6 @@ Deno.test("Parser Error Coverage", async (t) => {
         ParseError,
         /unexpected extra input/,
       );
-    });
-  });
-
-  await t.step("rustStruct.ts errors", async (t) => {
-    await t.step("Unterminated block comment", () => {
-      expect(() => {
-        parseRustStruct("/* comment", "Test");
-      }).to.throw(ParseError, /Unterminated block comment/);
-    });
-
-    await t.step("Could not find struct", () => {
-      expect(() => {
-        parseRustStruct("struct Other {}", "Test");
-      }).to.throw(ParseError, /Could not find struct/);
-    });
-
-    await t.step("Expected '{' after struct name", () => {
-      expect(() => {
-        parseRustStruct("struct Test", "Test");
-      }).to.throw(ParseError, /Expected '\{' after struct name/);
-    });
-
-    await t.step("Expected ':' after field name", () => {
-      expect(() => {
-        parseRustStruct("struct Test { field }", "Test");
-      }).to.throw(ParseError, /Expected ':' after field name/);
     });
   });
 

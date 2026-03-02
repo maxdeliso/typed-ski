@@ -8,7 +8,11 @@ import {
   type ArenaWasmExports,
   createArenaEvaluator,
 } from "../../lib/evaluator/arenaEvaluator.ts";
-import { getOrBuildArenaViews } from "../../lib/evaluator/arenaViews.ts";
+import {
+  getLeft,
+  getOrBuildArenaViews,
+  getRight,
+} from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaNode } from "../../lib/shared/types.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -302,6 +306,19 @@ Deno.test("dumpArena", async (t) => {
     );
   });
 
+  await t.step("dumpArena includes U8 nodes when using views", () => {
+    const evaluator = arenaEval;
+    const u8_5 = parseSKI("#u8(5)");
+    const u8_6 = parseSKI("#u8(6)");
+    const expr = apply(apply(EqU8, u8_5), u8_6);
+    evaluator.toArena(expr);
+    const { nodes } = evaluator.dumpArena();
+    const u8Node = nodes.find(
+      (n) => n.kind === "terminal" && /^#u8\(\d+\)$/.test(n.sym ?? ""),
+    );
+    assert(u8Node !== undefined, "dumpArena should include U8 terminal node");
+  });
+
   await t.step("includes all nodes for multiple expressions", () => {
     const evaluator = arenaEval;
     // Create different expressions to ensure we have multiple nodes
@@ -388,8 +405,12 @@ Deno.test("dumpArena", async (t) => {
     const views = getOrBuildArenaViews(evaluator.memory, evaluator.$);
     assert(views !== null, "Arena views should be available");
 
-    // Create an artificial hole at id=0.
-    views.kind[0] = 0;
+    // Create an artificial hole at id=0 (AoS: kind at baseAddr + offsetNodes + 0*32 + 16).
+    const NODE_STRIDE = 32;
+    const NODE_OFFSET_KIND = 16;
+    const kindByte = views.baseAddr + views.offsetNodes + 0 * NODE_STRIDE +
+      NODE_OFFSET_KIND;
+    new Uint8Array(views.buffer)[kindByte] = 0;
 
     const { nodes } = evaluator.dumpArena();
     // We should still see later nodes; specifically id=1 should still exist.
@@ -668,8 +689,8 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
 
     const views = getOrBuildArenaViews(arenaEval.memory, arenaEval.$);
     assert(views !== null);
-    const leftId = views.leftId[id3];
-    const rightId = views.rightId[id3];
+    const leftId = getLeft(id3, views);
+    const rightId = getRight(id3, views);
     assertEquals(
       leftId,
       id1,

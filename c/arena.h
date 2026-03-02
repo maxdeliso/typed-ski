@@ -87,15 +87,10 @@ typedef struct {
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
   uint32_t offset_stdout_wait;
-  uint32_t offset_kind;
-  uint32_t offset_sym;
-  uint32_t offset_left_id;
-  uint32_t offset_right_id;
-  uint32_t offset_hash32;
-  uint32_t offset_next_idx;
-  uint32_t offset_buckets;
   uint32_t offset_term_cache;
-  uint32_t capacity;
+  uint64_t offset_nodes;
+  uint64_t offset_buckets;
+  atomic_uint capacity;
   uint32_t bucket_mask;
   atomic_uint resize_seq;
   atomic_uint top;
@@ -128,7 +123,7 @@ void hostCqDequeueBlocking(Cqe *cqe);
  * shutdown). */
 void arena_cq_enqueue_shutdown_sentinel(void);
 uint32_t hostSubmit(uint32_t node_id, uint32_t req_id, uint32_t max_steps);
-void workerLoop(void);
+void workerLoop(uint32_t worker_id);
 
 /* Host I/O: push byte to arena stdin (for ',' combinator), try pop from stdout
  * (for '.'). */

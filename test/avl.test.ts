@@ -14,6 +14,7 @@ import { unparseSKI } from "../lib/ski/expression.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
 import {
   passthroughEvaluator,
+  runThanatosBatch,
   runThanatosOne,
   thanatosAvailable,
 } from "./thanatosHarness.ts";
@@ -104,6 +105,10 @@ async function evaluateTestModulesBatchThanatos(
 
   return results;
 }
+
+Deno.test("thanatosHarness runThanatosBatch empty input", async () => {
+  assertEquals(await runThanatosBatch([]), []);
+});
 
 Deno.test(
   {

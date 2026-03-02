@@ -43,7 +43,7 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
   try {
     const rc = wasmExports.connectArena(msg.arenaPointer);
-    // Return codes from connectArena (see rust/src/arena.rs):
+    // Return codes from connectArena (see c/arena.c):
     // 1 = Success
     // 0 = Error: null pointer
     // 2 = Error: header out of bounds
@@ -54,7 +54,7 @@ function handleConnectArena(msg: ConnectArenaMessage) {
     if (rc === 1) {
       self.postMessage({ type: "connectArenaComplete" });
       // Enter the blocking worker loop; never returns.
-      wasmExports.workerLoop?.();
+      wasmExports.workerLoop?.(0);
     } else {
       self.postMessage({
         type: "connectArenaComplete",

@@ -7,7 +7,8 @@ An implementation of a parser, evaluator, printer, and visualizer for
 
 - [TypeScript](https://www.typescriptlang.org/)
 - [Deno](https://deno.com/)
-- [Rust](https://www.rust-lang.org/) (compiled to WebAssembly)
+- [C](https://en.wikipedia.org/wiki/C_(programming_language)) (compiled to
+  WebAssembly)
 - [Nix](https://nixos.org/) (build orchestration)
 
 ## Quick Start
@@ -17,7 +18,7 @@ This project uses a Makefile for common development tasks:
 ```bash
 make setup  # Install necessary tools (Nix, configure experimental features)
 make build  # Compile all artifacts (WASM, TypeScript, dist files)
-make test   # Run the complete test suite (Rust + Deno tests, linting, formatting)
+make test   # Run the complete test suite (C/WASM + Deno tests, linting, formatting)
 ```
 
 For detailed information about what each target does, see the
@@ -54,8 +55,8 @@ The `.vscode/settings.json` file configures:
 ## Build System
 
 This project uses **Nix** for reproducible builds and version management. The
-build system orchestrates Rust → WASM → TypeScript builds with a single source
-of truth for versioning.
+build system orchestrates C → WASM → TypeScript builds with a single source of
+truth for versioning.
 
 ## Performance and Parallelism
 

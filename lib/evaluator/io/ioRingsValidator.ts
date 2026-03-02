@@ -45,7 +45,7 @@ export function validateIoRingsConfiguration(
   ) {
     throw new Error(
       `Failed to read IO ring offsets from header. ` +
-        `This indicates the header layout doesn't match the Rust struct. ` +
+        `This indicates the header layout doesn't match the C SabHeader. ` +
         `Offsets: stdin=${offsetStdin}, stdout=${offsetStdout}, stdinWait=${offsetStdinWait}`,
     );
   }

@@ -32,6 +32,7 @@ import { unparseSKI } from "../../lib/ski/expression.ts";
 import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
+import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -508,6 +509,68 @@ Deno.test("TripLang Linker", async (t) => {
       console.error = originalConsoleError;
     }
   });
+
+  await t.step(
+    "verbose logs definition value when export has external refs",
+    () => {
+      // Single module with local data types Foo, Bar and type T = Foo -> Bar. Resolution does not
+      // substitute data types, so T keeps refs Foo/Bar; the post-resolution sanity check treats them
+      // as external and (when verbose) warns and logs the definition value.
+      const mod = {
+        module: "User",
+        exports: ["T", "main"],
+        imports: [] as { name: string; from: string }[],
+        definitions: {
+          Foo: {
+            kind: "data" as const,
+            name: "Foo",
+            typeParams: [] as string[],
+            constructors: [],
+          },
+          Bar: {
+            kind: "data" as const,
+            name: "Bar",
+            typeParams: [] as string[],
+            constructors: [],
+          },
+          T: {
+            kind: "type" as const,
+            name: "T",
+            type: arrow(mkTypeVariable("Foo"), mkTypeVariable("Bar")),
+          },
+          main: {
+            kind: "combinator" as const,
+            name: "main",
+            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+          },
+        },
+      };
+
+      const ps = createProgramSpace([loadModule(mod, "User")]);
+
+      const originalWarn = console.warn;
+      const originalError = console.error;
+      const warnMessages: string[] = [];
+      const errorMessages: string[] = [];
+      console.warn = (msg: string) => warnMessages.push(msg);
+      console.error = (msg: string) => errorMessages.push(msg);
+
+      try {
+        resolveCrossModuleDependencies(ps, true);
+        expect(
+          warnMessages.some((m) => m.includes("external references")),
+          "expected warn about external references",
+        ).to.be.true;
+        expect(
+          errorMessages.some((m) => m.includes("Definition value")),
+          "expected definition value to be logged",
+        ).to.be.true;
+      } finally {
+        console.warn = originalWarn;
+        console.error = originalError;
+      }
+    },
+  );
 
   await t.step("detects duplicate exports across modules", () => {
     const module1 = {

@@ -47,6 +47,9 @@ async function compileAndLink(
   }
 
   if (includeNat) {
+    if (!includeBin) {
+      modules.push({ name: "Bin", object: await getBinObject() });
+    }
     modules.push({ name: "Nat", object: await getNatObject() });
   }
 

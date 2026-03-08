@@ -4,9 +4,9 @@ import Prelude Bin
 import Prelude BZ
 import Prelude B0
 import Prelude B1
-import Prelude addBin
-import Prelude mulBin
-import Prelude subBin
+import Bin addBin
+import Bin mulBin
+import Bin subBin
 
 export main
 

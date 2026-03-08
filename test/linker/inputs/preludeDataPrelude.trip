@@ -6,7 +6,7 @@ import Prelude Bin
 import Prelude BZ
 import Prelude B0
 import Prelude B1
-import Prelude addBin
+import Bin addBin
 import Prelude Pair
 import Prelude ParseError
 import Prelude MkParseError

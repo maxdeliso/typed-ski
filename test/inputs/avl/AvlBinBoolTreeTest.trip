@@ -14,7 +14,7 @@ import Prelude B1
 import Prelude Maybe
 import Prelude Some
 import Prelude None
-import Prelude lteBin
+import Bin lteBin
 import Avl Avl
 import Avl empty
 import Avl insert

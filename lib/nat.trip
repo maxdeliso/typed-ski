@@ -11,7 +11,7 @@ import Prelude Bin
 import Prelude BZ
 import Prelude B0
 import Prelude B1
-import Prelude incBin
+import Bin incBin
 
 export Nat
 export zero

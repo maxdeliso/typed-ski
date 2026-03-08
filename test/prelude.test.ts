@@ -4,6 +4,7 @@ import { deserializeTripCObject } from "../lib/compiler/objectFile.ts";
 import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
+import { getBinObject } from "../lib/bin.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
@@ -42,12 +43,14 @@ poly main =
 
 Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
   const preludeObject = await getPreludeObject();
+  const binObject = await getBinObject();
   const natObject = await getNatObject();
   const serialized = compileToObjectFileString(PRELUDE_TEST);
   const testObject = deserializeTripCObject(serialized);
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObject },
+    { name: "Bin", object: binObject },
     { name: "Nat", object: natObject },
     { name: "TestPrelude", object: testObject },
   ], true);

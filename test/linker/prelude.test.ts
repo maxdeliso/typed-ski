@@ -5,6 +5,7 @@ import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
+import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
@@ -74,6 +75,7 @@ async function evaluateExpressionsBatch(
 
 async function runArithmeticBatch(): Promise<Map<string, bigint>> {
   const preludeObject = await getPreludeObject();
+  const binObject = await getBinObject();
   const natObject = await getNatObject();
 
   const expressions: Array<{ key: string; expr: SKIExpression }> = [];
@@ -83,6 +85,7 @@ async function runArithmeticBatch(): Promise<Map<string, bigint>> {
     );
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Bin", object: binObject },
       { name: "Nat", object: natObject },
       { name: testCase.moduleName, object: testObject },
     ], false);
@@ -95,6 +98,7 @@ async function runArithmeticBatch(): Promise<Map<string, bigint>> {
 /** Same four arithmetic cases, reduced by baremetal thanatos (one batch, shared process). */
 async function runArithmeticBatchThanatos(): Promise<Map<string, bigint>> {
   const preludeObject = await getPreludeObject();
+  const binObject = await getBinObject();
   const natObject = await getNatObject();
   const results = new Map<string, bigint>();
 
@@ -106,6 +110,7 @@ async function runArithmeticBatchThanatos(): Promise<Map<string, bigint>> {
     );
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObject },
+      { name: "Bin", object: binObject },
       { name: "Nat", object: natObject },
       { name: testCase.moduleName, object: testObject },
     ], false);
@@ -171,6 +176,7 @@ Deno.test({
 
 Deno.test("links numeric literals across modules without leaking Nat", async () => {
   const preludeObject = await getPreludeObject();
+  const binObject = await getBinObject();
   const natObject = await getNatObject();
 
   const providerFileName = "inputs/prelude_literal_provider.trip";
@@ -185,6 +191,7 @@ Deno.test("links numeric literals across modules without leaking Nat", async () 
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObject },
+    { name: "Bin", object: binObject },
     { name: "Nat", object: natObject },
     { name: "LiteralProvider", object: providerObject },
     { name: "LiteralConsumer", object: consumerObject },
@@ -211,6 +218,7 @@ Deno.test("links numeric literals across modules without leaking Nat", async () 
 
 Deno.test("fails to link when module exports Nat conflicting with Prelude", async () => {
   const preludeObject = await getPreludeObject();
+  const binObject = await getBinObject();
   const natObject = await getNatObject();
 
   const conflictingFileName = "inputs/prelude_conflicting_nat.trip";
@@ -222,6 +230,7 @@ Deno.test("fails to link when module exports Nat conflicting with Prelude", asyn
     () => {
       linkModules([
         { name: "Prelude", object: preludeObject },
+        { name: "Bin", object: binObject },
         { name: "Nat", object: natObject },
         { name: "ConflictingNat", object: conflictingObject },
       ], false);

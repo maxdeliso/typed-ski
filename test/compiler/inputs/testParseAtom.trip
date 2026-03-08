@@ -13,7 +13,7 @@ import Prelude Err
 import Prelude Pair
 import Prelude fst
 import Prelude snd
-import Prelude eqBin
+import Bin eqBin
 import Lexer Token
 import Lexer T_Ident
 import Lexer T_Nat

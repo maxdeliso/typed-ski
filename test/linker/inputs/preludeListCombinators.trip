@@ -4,8 +4,8 @@ import Prelude Bin
 import Prelude BZ
 import Prelude B0
 import Prelude B1
-import Prelude addBin
-import Prelude incBin
+import Bin addBin
+import Bin incBin
 import Prelude nil
 import Prelude cons
 import Prelude List

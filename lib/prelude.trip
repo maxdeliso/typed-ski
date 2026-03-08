@@ -37,19 +37,11 @@ export foldl
 export takeWhile
 export dropWhile
 export span
+export reverse
 export Bin
 export BZ
 export B0
 export B1
-export incBin
-export addBin
-export mulBin
-export subBin
-export predBin
-export isZeroBin
-export eqBin
-export lteBin
-export gteBin
 export eqU8
 export U8
 
@@ -146,6 +138,12 @@ poly rec span = #A => \p : A -> Bool => \l : List A =>
             (cons [A] h (fst [List A] [List A] res))
             (snd [List A] [List A] res))
         (\u : U8 => MkPair [List A] [List A] (nil [A]) l))
+
+poly reverse = #A => \xs : List A =>
+  foldl [A] [List A]
+    (\acc : List A => \x : A => cons [A] x acc)
+    (nil [A])
+    xs
 
 poly error = #A =>
   (\x : A => x) (\x : A => x)

@@ -14,13 +14,14 @@ import Prelude MkPair
 import Prelude fst
 import Prelude snd
 import Prelude Bin
-import Prelude eqBin
+import Bin eqBin
 import Prelude eqU8
 import Prelude U8
 import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
+import Prelude reverse
 import Lexer Token
 import Lexer tokenTag
 import Lexer tokenText
@@ -108,8 +109,6 @@ export kwUntypedTag
 export kwCombinatorTag
 export kwTypeTag
 export kwDataTag
-export reverseAcc
-export reverseList
 export fstNameToken
 export sndNameToken
 export fstExprToken
@@ -253,14 +252,6 @@ poly kwTypeTag =
 poly kwDataTag =
   tokenTag T_KwData
 
-poly rec reverseAcc = #A => \xs : List A => \acc : List A =>
-  matchList [A] [List A] xs acc
-    (\h : A => \t : List A =>
-      reverseAcc [A] t (cons [A] h acc))
-
-poly reverseList = #A => \xs : List A =>
-  reverseAcc [A] xs (nil [A])
-
 poly fstNameToken = \p : Pair (List U8) (List Token) =>
   fst [List U8] [List Token] p
 
@@ -377,7 +368,7 @@ poly rec parsePatternArgs = \toks : List Token => \acc : List (List U8) =>
         (eqU8 (tokenTag h) fatArrowTag)
         (\u : Bin =>
           Ok [ParseError] [Pair (List (List U8)) (List Token)]
-            (MkPair [List (List U8)] [List Token] (reverseList [List U8] acc) toks))
+            (MkPair [List (List U8)] [List Token] (reverse [List U8] acc) toks))
         (\u : Bin =>
           if [Result ParseError (Pair (List (List U8)) (List Token))]
             (eqU8 (tokenTag h) identTag)
@@ -427,7 +418,7 @@ poly rec parseMatchArmsWith = \recurse : (List Token -> Result ParseError (Pair 
         (eqU8 (tokenTag h) rBraceTag)
         (\u : Bin =>
           Ok [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)]
-            (MkPair [List (Pair Pattern Expr)] [List Token] (reverseList [Pair Pattern Expr] acc) t))
+            (MkPair [List (Pair Pattern Expr)] [List Token] (reverse [Pair Pattern Expr] acc) t))
         (\u : Bin =>
           if [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))]
             (eqU8 (tokenTag h) pipeTag)
@@ -820,10 +811,10 @@ poly parseDecl = \toks : List Token =>
 
 poly rec parseProgramAcc = \toks : List Token => \acc : List Decl =>
   matchList [Token] [Result ParseError (List Decl)] toks
-    (Ok [ParseError] [List Decl] (reverseList [Decl] acc))
+    (Ok [ParseError] [List Decl] (reverse [Decl] acc))
     (\h : Token => \t : List Token =>
       if [Result ParseError (List Decl)] (eqU8 (tokenTag h) eofTag)
-        (\u : Bin => Ok [ParseError] [List Decl] (reverseList [Decl] acc))
+        (\u : Bin => Ok [ParseError] [List Decl] (reverse [Decl] acc))
         (\u : Bin =>
           match (parseDecl toks) [Result ParseError (List Decl)] {
             | Err e => Err [ParseError] [List Decl] e

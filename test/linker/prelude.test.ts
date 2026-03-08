@@ -88,7 +88,7 @@ async function runArithmeticBatch(): Promise<Map<string, bigint>> {
       { name: "Bin", object: binObject },
       { name: "Nat", object: natObject },
       { name: testCase.moduleName, object: testObject },
-    ], false);
+    ], false).expression;
     expressions.push({ key: testCase.key, expr: parseSKI(skiExpression) });
   }
 
@@ -113,7 +113,7 @@ async function runArithmeticBatchThanatos(): Promise<Map<string, bigint>> {
       { name: "Bin", object: binObject },
       { name: "Nat", object: natObject },
       { name: testCase.moduleName, object: testObject },
-    ], false);
+    ], false).expression;
     inputs.push(unparseSKI(parseSKI(skiExpression)));
     keys.push(testCase.key);
   }
@@ -195,7 +195,7 @@ Deno.test("links numeric literals across modules without leaking Nat", async () 
     { name: "Nat", object: natObject },
     { name: "LiteralProvider", object: providerObject },
     { name: "LiteralConsumer", object: consumerObject },
-  ], false);
+  ], false).expression;
 
   const skiExpr = parseSKI(skiExpression);
   const evaluator = await ParallelArenaEvaluatorWasm.create();

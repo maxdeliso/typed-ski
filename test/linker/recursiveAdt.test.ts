@@ -116,13 +116,14 @@ poly main = getValue (makeNode (makeLeaf (fromBin 1)) (makeLeaf (fromBin 2)))
       const binObject = await getBinObject();
       const natObject = await getNatObject();
 
-      const skiExpression = linkModules([
+      const result = linkModules([
         { name: "Prelude", object: preludeObject },
         { name: "Bin", object: binObject },
         { name: "Nat", object: natObject },
         { name: "RecursiveAdt", object: adtObject },
         { name: "TestRecursive", object: testObject },
       ], false);
+      const skiExpression = result.expression;
 
       // Step 6: Verify linking succeeded (produces SKI expression)
       expect(skiExpression).to.be.a("string");
@@ -214,13 +215,14 @@ poly main = fromSNat (SS (SS SZ))
       const binObject = await getBinObject();
       const natObject = await getNatObject();
 
-      const skiExpression = linkModules([
+      const result = linkModules([
         { name: "Prelude", object: preludeObject },
         { name: "Bin", object: binObject },
         { name: "Nat", object: natObject },
         { name: "SNatLike", object: snatObject },
         { name: "TestSNat", object: testObject },
       ], false);
+      const skiExpression = result.expression;
 
       // Step 6: Verify linking succeeded
       expect(skiExpression).to.be.a("string");

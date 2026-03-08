@@ -26,6 +26,13 @@ import {
 import { unparseSKI } from "../ski/expression.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 import { sccDependencyOrder } from "./graph.ts";
+import {
+  buildModuleInventory,
+  type LinkDiagnostic,
+  type LinkOptions,
+  type LinkResult,
+  runDuplicateDetection,
+} from "./duplicateDetection.ts";
 
 export function isRecursiveTypeDefinition(typeDef: TripLangTerm): boolean {
   if (typeDef.kind !== "type") {
@@ -193,8 +200,12 @@ function initializeProgramSpace(modules: LoadedModule[]): ProgramSpace {
 
 /**
  * Validates that no symbol is exported by more than one module.
+ * Only skips the throw when options.allowDuplicateExports is true (independent of duplicateDetection).
  */
-function validateExports(ps: ProgramSpace): void {
+function validateExports(
+  ps: ProgramSpace,
+  options?: LinkOptions,
+): void {
   const globalExports = new Map<string, Set<string>>(); // name -> set of modules exporting it
 
   for (const [moduleName, module] of ps.modules) {
@@ -206,9 +217,10 @@ function validateExports(ps: ProgramSpace): void {
     }
   }
 
-  // Check for duplicate exports across modules
+  const allowDuplicates = options?.allowDuplicateExports === true;
+
   for (const [exportName, exportingModules] of globalExports) {
-    if (exportingModules.size > 1) {
+    if (exportingModules.size > 1 && !allowDuplicates) {
       const modules = Array.from(exportingModules).join(", ");
       throw new Error(
         `Ambiguous export '${exportName}' found in multiple modules: ${modules}. Use qualified imports or rename exports.`,
@@ -270,10 +282,14 @@ function buildEnvironments(ps: ProgramSpace): void {
 
 /**
  * Creates and populates a complete program space from loaded modules.
+ * When options.allowDuplicateExports is true, duplicate export names do not throw.
  */
-export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
+export function createProgramSpace(
+  modules: LoadedModule[],
+  options?: LinkOptions,
+): ProgramSpace {
   const programSpace = initializeProgramSpace(modules);
-  validateExports(programSpace);
+  validateExports(programSpace, options);
   buildEnvironments(programSpace);
   return programSpace;
 }
@@ -1154,12 +1170,28 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
 }
 
 /**
- * Main linking function that orchestrates the entire process
+ * Normalizes the second argument of linkModules to LinkOptions.
+ */
+function normalizeLinkOptions(opts?: LinkOptions | boolean): LinkOptions {
+  if (opts === undefined) return {};
+  if (typeof opts === "boolean") {
+    return { diagnostics: opts };
+  }
+  return opts;
+}
+
+/**
+ * Main linking function that orchestrates the entire process.
+ * Returns LinkResult with expression and diagnostics (when duplicate detection or diagnostics enabled).
  */
 export function linkModules(
   modules: Array<{ name: string; object: TripCObject }>,
-  verbose = false,
-): string {
+  optionsOrVerbose?: LinkOptions | boolean,
+): LinkResult {
+  const options = normalizeLinkOptions(optionsOrVerbose);
+  const verbose = options.diagnostics === true;
+  const diagnostics: LinkDiagnostic[] = [];
+
   if (verbose) {
     console.error(`Linking ${modules.length} modules...`);
   }
@@ -1168,7 +1200,7 @@ export function linkModules(
   const loadedModules = modules.map(({ name, object }) =>
     loadModule(object, name)
   );
-  let programSpace = createProgramSpace(loadedModules);
+  let programSpace = createProgramSpace(loadedModules, options);
 
   if (verbose) {
     const totalSymbols = programSpace.terms.size + programSpace.types.size;
@@ -1180,7 +1212,21 @@ export function linkModules(
   // Step 2: Resolve cross-module dependencies
   programSpace = resolveCrossModuleDependencies(programSpace, verbose);
 
-  // Step 3: Find the main function
+  // Step 3: Duplicate detection (advisory pass)
+  if (options.duplicateDetection?.enabled) {
+    const inventories = buildModuleInventory(
+      programSpace,
+      options.duplicateDetection,
+    );
+    runDuplicateDetection(
+      programSpace,
+      inventories,
+      options.duplicateDetection,
+      diagnostics,
+    );
+  }
+
+  // Step 4: Find the main function
   const mainFunction = findMainFunction(programSpace);
   if (!mainFunction) {
     throw new Error("No 'main' function found in any of the modules");
@@ -1190,12 +1236,19 @@ export function linkModules(
     console.error("Found main function, lowering to SKI...");
   }
 
-  // Step 4: Lower main function to SKI expression
+  // Step 5: Lower main function to SKI expression
   const skiExpression = lowerToSKI(mainFunction, verbose);
 
   if (verbose) {
     console.error("Linking complete!");
   }
 
-  return skiExpression;
+  return { expression: skiExpression, diagnostics };
 }
+
+/** Re-export for callers that need the result type. */
+export type {
+  LinkDiagnostic,
+  LinkOptions,
+  LinkResult,
+} from "./duplicateDetection.ts";

@@ -41,6 +41,8 @@ interface CLIOptions {
   help: boolean;
   version: boolean;
   verbose: boolean;
+  duplicateCheck: boolean;
+  allowDuplicateExports: boolean;
   mode: Mode;
 }
 
@@ -56,6 +58,8 @@ function parseArgs(
     help: false,
     version: false,
     verbose: false,
+    duplicateCheck: false,
+    allowDuplicateExports: false,
     mode: "compile", // Default to compile mode
   };
 
@@ -88,6 +92,12 @@ function parseArgs(
       case "--link":
       case "-l":
         options.mode = "link";
+        break;
+      case "--duplicate-check":
+        options.duplicateCheck = true;
+        break;
+      case "--allow-duplicate-exports":
+        options.allowDuplicateExports = true;
         break;
       default:
         if (arg.startsWith("-")) {
@@ -137,11 +147,13 @@ LINKING MODE:
     [input2.tripc]   Additional object files to link
 
 OPTIONS:
-    -h, --help       Show this help message
-    -v, --version    Show version information
-    -V, --verbose    Enable verbose output
-    -c, --compile    Compile mode (default)
-    -l, --link       Link mode
+    -h, --help           Show this help message
+    -v, --version        Show version information
+    -V, --verbose        Enable verbose output
+    -c, --compile        Compile mode (default)
+    -l, --link           Link mode
+    --duplicate-check         Run link-time duplicate advisory pass (emits warnings to stderr)
+    --allow-duplicate-exports Permit ambiguous export names when linking; use with --duplicate-check to get name-overlap warnings
 
 EXAMPLES:
     tripc mymodule.trip                           # Compile to mymodule.tripc
@@ -186,7 +198,15 @@ async function validateInputFiles(inputFiles: string[]): Promise<string[]> {
   return validatedFiles;
 }
 
-async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
+async function linkFiles(
+  inputFiles: string[],
+  options: {
+    verbose: boolean;
+    duplicateCheck: boolean;
+    allowDuplicateExports: boolean;
+  },
+): Promise<void> {
+  const { verbose, duplicateCheck, allowDuplicateExports } = options;
   if (verbose) {
     console.log(
       `Linking ${inputFiles.length} files: ${inputFiles.join(", ")}`,
@@ -229,8 +249,44 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
     console.log("Linking modules...");
   }
 
-  const result = linkModules(modules, verbose);
-  console.log(result);
+  const result = linkModules(modules, {
+    diagnostics: verbose,
+    duplicateDetection: duplicateCheck ? { enabled: true } : undefined,
+    allowDuplicateExports: allowDuplicateExports,
+  });
+  console.log(result.expression);
+  if (result.diagnostics.length > 0) {
+    const modulesLabel = (
+      d: { primaryModule?: string; relatedModules?: string[] },
+    ) => {
+      const mods = [d.primaryModule, ...(d.relatedModules ?? [])].filter(
+        Boolean,
+      );
+      return mods.length ? ` (modules: ${mods.join(", ")})` : "";
+    };
+    const symbolsLabel = (
+      d: { relatedSymbols?: Array<{ module: string; symbol: string }> },
+    ) => {
+      const syms = d.relatedSymbols?.map((r) => `${r.module}.${r.symbol}`).join(
+        ", ",
+      );
+      return syms ? `  symbols: ${syms}` : "";
+    };
+    for (const d of result.diagnostics) {
+      console.error(
+        `[${d.code}] ${d.severity}: ${d.message}${modulesLabel(d)}`,
+      );
+      const symLine = symbolsLabel(d);
+      if (symLine) console.error(symLine);
+      if (d.hint) console.error(`  hint: ${d.hint}`);
+    }
+    const n = result.diagnostics.length;
+    console.error(
+      n === 1
+        ? "1 duplicate advisory warning."
+        : `${n} duplicate advisory warnings.`,
+    );
+  }
 }
 
 async function compileFile(
@@ -308,7 +364,7 @@ async function main(): Promise<void> {
       }
 
       const validatedFiles = await validateInputFiles(inputFiles);
-      await linkFiles(validatedFiles, options.verbose);
+      await linkFiles(validatedFiles, options);
     } else {
       // Compile mode
       if (!inputPath) {

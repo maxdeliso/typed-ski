@@ -53,7 +53,7 @@ async function buildTestExpression(
     { name: "Nat", object: natObject },
     { name: "Avl", object: avlObject },
     { name: moduleName, object: testObject },
-  ], false);
+  ], false).expression;
 
   return parseSKI(skiExpression);
 }

@@ -46,7 +46,7 @@ Deno.test("Bin operations - add/mul/sub round trip", async () => {
     { name: "Prelude", object: preludeObj },
     { name: "Bin", object: binObj },
     { name: "Test", object: testObj },
-  ], false);
+  ]).expression;
 
   const evaluator = await ParallelArenaEvaluatorWasm.create();
   try {

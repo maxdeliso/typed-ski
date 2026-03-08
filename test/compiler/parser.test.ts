@@ -134,7 +134,7 @@ Deno.test({
       { name: "Lexer", object: lexerObj },
       { name: "Parser", object: parserObj },
       { name: "Test", object: testObj },
-    ]);
+    ]).expression;
     inputs.push(unparseSKI(parseSKI(skiExpression)));
   }
 

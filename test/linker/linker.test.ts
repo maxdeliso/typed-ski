@@ -54,7 +54,7 @@ function loadModule(object: TestTripCObject, moduleName: string) {
 function linkModules(
   modules: Array<{ name: string; object: TestTripCObject }>,
   verbose = false,
-): string {
+): import("../../lib/linker/moduleLinker.ts").LinkResult {
   return linkModulesRaw(
     modules.map((module) => ({
       ...module,
@@ -381,8 +381,8 @@ Deno.test("TripLang Linker", async (t) => {
     const result = linkModules(modules, false);
 
     // Should find the main function and lower it to SKI
-    expect(result).to.be.a("string");
-    expect(result.length).to.be.greaterThan(0);
+    expect(result.expression).to.be.a("string");
+    expect(result.expression.length).to.be.greaterThan(0);
   });
 
   await t.step("simple linking with complex expression", async () => {
@@ -397,9 +397,9 @@ Deno.test("TripLang Linker", async (t) => {
     const result = linkModules(modules, false);
 
     // Should produce a complex SKI expression
-    expect(result).to.be.a("string");
-    expect(result).to.include("K");
-    expect(() => parseSKI(result)).to.not.throw();
+    expect(result.expression).to.be.a("string");
+    expect(result.expression).to.include("K");
+    expect(() => parseSKI(result.expression)).to.not.throw();
   });
 
   await t.step("simple linking with multiple modules", async () => {
@@ -432,8 +432,8 @@ Deno.test("TripLang Linker", async (t) => {
     const result = linkModules(modules, false);
 
     // Should find main in one of the modules and produce SKI
-    expect(result).to.be.a("string");
-    expect(result.length).to.be.greaterThan(0);
+    expect(result.expression).to.be.a("string");
+    expect(result.expression.length).to.be.greaterThan(0);
   });
 
   await t.step("handles missing main function gracefully", () => {
@@ -477,8 +477,8 @@ Deno.test("TripLang Linker", async (t) => {
     const result = linkModules(modules, false);
 
     // Should produce a valid SKI expression
-    expect(result).to.be.a("string");
-    expect(result.length).to.be.greaterThan(0);
+    expect(result.expression).to.be.a("string");
+    expect(result.expression.length).to.be.greaterThan(0);
   });
 
   await t.step("handles verbose output correctly", async () => {
@@ -828,8 +828,8 @@ Deno.test("TripLang Linker", async (t) => {
     try {
       const result = linkModules(modules, false);
       // Should successfully link without errors
-      expect(result).to.be.a("string");
-      expect(result.length).to.be.greaterThan(0);
+      expect(result.expression).to.be.a("string");
+      expect(result.expression.length).to.be.greaterThan(0);
     } catch (error) {
       // If it fails due to unresolved type 'X', that's expected since we're testing
       // that type binders aren't renamed during term substitution
@@ -882,8 +882,8 @@ Deno.test("TripLang Linker", async (t) => {
     try {
       const result = linkModules(modules, false);
       // Should successfully link - type substitution should rename inner Y to avoid capture
-      expect(result).to.be.a("string");
-      expect(result.length).to.be.greaterThan(0);
+      expect(result.expression).to.be.a("string");
+      expect(result.expression.length).to.be.greaterThan(0);
     } catch (error) {
       // If it fails due to unresolved type 'X', that's expected since we're testing
       // that type substitution correctly handles type binders
@@ -935,7 +935,7 @@ Deno.test("TripLang Linker", async (t) => {
     try {
       const result = linkModules(modules, false);
       // Should either resolve or detect circular dependency
-      expect(result).to.be.a("string");
+      expect(result.expression).to.be.a("string");
     } catch (error) {
       // If it fails, it should be a circular dependency error or too many iterations
       caughtMessage = (error as Error).message;
@@ -1089,8 +1089,8 @@ Deno.test("TripLang Linker", async (t) => {
       const result = linkModules(modules, false);
 
       // Should resolve efficiently without hanging or crashing
-      expect(result).to.be.a("string");
-      expect(result.length).to.be.greaterThan(0);
+      expect(result.expression).to.be.a("string");
+      expect(result.expression.length).to.be.greaterThan(0);
     },
   );
 
@@ -1146,8 +1146,8 @@ Deno.test("TripLang Linker", async (t) => {
         // This should work correctly - type references should go to the type definition
         // and term references should go to the term definition
         const result = linkModules(modules, false);
-        expect(result).to.be.a("string");
-        expect(result.length).to.be.greaterThan(0);
+        expect(result.expression).to.be.a("string");
+        expect(result.expression.length).to.be.greaterThan(0);
       } catch (error) {
         // If it fails due to unresolved type 'X', that's expected since we're testing
         // that type edges correctly use programSpace.types.has()

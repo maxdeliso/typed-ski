@@ -53,7 +53,7 @@ Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
     { name: "Bin", object: binObject },
     { name: "Nat", object: natObject },
     { name: "TestPrelude", object: testObject },
-  ], true);
+  ], true).expression;
 
   const skiExpr = parseSKI(skiExpression);
   const evaluator = await ParallelArenaEvaluatorWasm.create();

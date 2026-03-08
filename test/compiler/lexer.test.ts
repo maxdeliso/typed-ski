@@ -85,7 +85,7 @@ async function compileAndValidateTestProgram(
     { name: "Nat", object: natObj },
     { name: "Lexer", object: lexerObj },
     { name: "Test", object: testObj },
-  ]);
+  ]).expression;
 
   return parseSKI(skiExpression);
 }
@@ -139,7 +139,7 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         { name: "Nat", object: natObj },
         { name: "Lexer", object: lexerObj },
         { name: "Test", object: testObj },
-      ]);
+      ]).expression;
       inputs.push(unparseSKI(parseSKI(skiExpression)));
     }
 
@@ -185,7 +185,7 @@ Deno.test({
       { name: "Nat", object: natObj },
       { name: "Lexer", object: lexerObj },
       { name: "Test", object: testObj },
-    ]);
+    ]).expression;
     const input = unparseSKI(parseSKI(skiExpression));
 
     const line = await runThanatosOne(input);

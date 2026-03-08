@@ -17,7 +17,7 @@ poly main = 'x'
   const skiStr = linkModules([
     { name: "Prelude", object: prelude },
     { name: "Test", object: obj },
-  ]);
+  ]).expression;
   assert.equal(skiStr.trim(), "#u8(120)");
 });
 
@@ -32,7 +32,7 @@ poly main = 255
   const rep255 = linkModules([
     { name: "Prelude", object: prelude },
     { name: "Test", object: obj255 },
-  ]);
+  ]).expression;
   console.log("255 rep:", rep255.trim());
 
   const source256 = `module Test
@@ -43,7 +43,7 @@ poly main = 256
   const rep256 = linkModules([
     { name: "Prelude", object: prelude },
     { name: "Test", object: obj256 },
-  ]);
+  ]).expression;
   console.log("256 rep:", rep256.trim());
 
   assert.equal(rep255.trim(), "#u8(255)", "255 should lower to U8");

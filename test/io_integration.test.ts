@@ -21,7 +21,7 @@ async function runTripWithParallelEvaluator(
     { name: "Bin", object: bin },
     { name: "Nat", object: nat },
     { name: "Main", object: moduleObject },
-  ]);
+  ]).expression;
   const skiExpr = parseSKI(skiExpression);
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
 

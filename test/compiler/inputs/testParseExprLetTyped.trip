@@ -5,7 +5,7 @@ import Prelude true
 import Prelude false
 import Prelude if
 import Prelude Bin
-import Prelude eqBin
+import Bin eqBin
 import Prelude List
 import Prelude cons
 import Prelude nil

@@ -37,19 +37,11 @@ export foldl
 export takeWhile
 export dropWhile
 export span
+export reverse
 export Bin
 export BZ
 export B0
 export B1
-export incBin
-export addBin
-export mulBin
-export subBin
-export predBin
-export isZeroBin
-export eqBin
-export lteBin
-export gteBin
 export eqU8
 export U8
 
@@ -147,90 +139,11 @@ poly rec span = #A => \p : A -> Bool => \l : List A =>
             (snd [List A] [List A] res))
         (\u : U8 => MkPair [List A] [List A] (nil [A]) l))
 
-poly rec isZeroBin = \b : Bin =>
-  match b [Bool] {
-    | BZ => true
-    | B0 rest => isZeroBin rest
-    | B1 _ => false
-  }
-
-poly rec incBin = \b : Bin =>
-  match b [Bin] {
-    | BZ => B1 BZ
-    | B0 rest => B1 rest
-    | B1 rest => B0 (incBin rest)
-  }
-
-poly rec addBin = \a : Bin => \b : Bin =>
-  match a [Bin] {
-    | BZ => b
-    | B0 pa =>
-        match b [Bin] {
-          | BZ => a
-          | B0 pb => B0 (addBin pa pb)
-          | B1 pb => B1 (addBin pa pb)
-        }
-    | B1 pa =>
-        match b [Bin] {
-          | BZ => a
-          | B0 pb => B1 (addBin pa pb)
-          | B1 pb => B0 (incBin (addBin pa pb))
-        }
-  }
-
-poly rec mulBin = \a : Bin => \b : Bin =>
-  match b [Bin] {
-    | BZ => BZ
-    | B0 pb => B0 (mulBin a pb)
-    | B1 pb => addBin a (B0 (mulBin a pb))
-  }
-
-poly rec predBin = \b : Bin =>
-  match b [Bin] {
-    | BZ => BZ
-    | B0 rest => B1 (predBin rest)
-    | B1 rest => B0 rest
-  }
-
-poly rec subBin = \a : Bin => \b : Bin =>
-  match b [Bin] {
-    | BZ => a
-    | B0 pb =>
-        match a [Bin] {
-          | BZ => BZ
-          | B0 pa => B0 (subBin pa pb)
-          | B1 pa => B1 (subBin pa pb)
-        }
-    | B1 pb =>
-        match a [Bin] {
-          | BZ => BZ
-          | B0 pa => B1 (subBin (predBin pa) pb)
-          | B1 pa => B0 (subBin pa pb)
-        }
-  }
-
-poly rec eqBin = \a : Bin => \b : Bin =>
-  match a [Bool] {
-    | BZ => isZeroBin b
-    | B0 pa =>
-        match b [Bool] {
-          | BZ => false
-          | B0 pb => eqBin pa pb
-          | B1 _ => false
-        }
-    | B1 pa =>
-        match b [Bool] {
-          | BZ => false
-          | B0 _ => false
-          | B1 pb => eqBin pa pb
-        }
-  }
-
-poly lteBin = \a : Bin => \b : Bin =>
-  isZeroBin (subBin a b)
-
-poly gteBin = \a : Bin => \b : Bin =>
-  lteBin b a
+poly reverse = #A => \xs : List A =>
+  foldl [A] [List A]
+    (\acc : List A => \x : A => cons [A] x acc)
+    (nil [A])
+    xs
 
 poly error = #A =>
   (\x : A => x) (\x : A => x)

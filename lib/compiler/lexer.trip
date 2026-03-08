@@ -25,11 +25,12 @@ import Prelude fst
 import Prelude snd
 import Prelude foldl
 import Prelude append
+import Prelude reverse
 import Prelude Bin
 import Prelude BZ
 import Prelude B0
 import Prelude B1
-import Prelude addBin
+import Bin addBin
 import Prelude U8
 import Prelude eqU8
 
@@ -95,7 +96,6 @@ export isSpaceU8
 export isDigitU8
 export isAlphaU8
 export isIdentCharU8
-export reverse
 export simpleTokensU8
 export lookupTokenU8
 export digitValueU8
@@ -554,12 +554,6 @@ poly rec lookupTokenU8 = \c : U8 => \list : List (Pair U8 Token) =>
          (\u : U8 => Some [Token] (snd [U8] [Token] h))
          (\u : U8 => lookupTokenU8 c t)
     )
-
-poly reverse = #A => \xs : List A =>
-  foldl [A] [List A]
-    (\acc : List A => \x : A => cons [A] x acc)
-    (nil [A])
-    xs
 
 poly rec consumeIdent = \acc : List U8 => \input : List U8 =>
   matchList [U8] [Pair (List U8) (List U8)] input

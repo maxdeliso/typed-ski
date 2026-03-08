@@ -3,9 +3,9 @@ module Test
 import Lexer tokenize
 import Lexer tokenizeAcc
 import Lexer Token
-import Lexer reverse
+import Prelude reverse
 import Prelude Bin
-import Prelude incBin
+import Bin incBin
 import Prelude nil
 import Prelude cons
 import Prelude U8

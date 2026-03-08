@@ -4,9 +4,9 @@ import Prelude Bin
 import Prelude BZ
 import Prelude B0
 import Prelude B1
-import Prelude addBin
-import Prelude incBin
-import Prelude isZeroBin
+import Bin addBin
+import Bin incBin
+import Bin isZeroBin
 import Prelude true
 import Prelude false
 import Prelude nil

@@ -6,6 +6,7 @@ import { deserializeTripCObject } from "../lib/compiler/objectFile.ts";
 import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { getAvlObject } from "../lib/avl.ts";
+import { getBinObject } from "../lib/bin.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
@@ -40,6 +41,7 @@ async function buildTestExpression(
   moduleName: string,
 ): Promise<SKIExpression> {
   const preludeObject = await getPreludeObject();
+  const binObject = await getBinObject();
   const natObject = await getNatObject();
   const avlObject = await getAvlObject();
   const serialized = compileToObjectFileString(source);
@@ -47,6 +49,7 @@ async function buildTestExpression(
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObject },
+    { name: "Bin", object: binObject },
     { name: "Nat", object: natObject },
     { name: "Avl", object: avlObject },
     { name: moduleName, object: testObject },

@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
+import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 
@@ -112,10 +113,12 @@ poly main = getValue (makeNode (makeLeaf (fromBin 1)) (makeLeaf (fromBin 2)))
 
       // Step 5: Link both modules together with Prelude
       const preludeObject = await getPreludeObject();
+      const binObject = await getBinObject();
       const natObject = await getNatObject();
 
       const skiExpression = linkModules([
         { name: "Prelude", object: preludeObject },
+        { name: "Bin", object: binObject },
         { name: "Nat", object: natObject },
         { name: "RecursiveAdt", object: adtObject },
         { name: "TestRecursive", object: testObject },
@@ -208,10 +211,12 @@ poly main = fromSNat (SS (SS SZ))
 
       // Step 5: Link both modules together with Prelude
       const preludeObject = await getPreludeObject();
+      const binObject = await getBinObject();
       const natObject = await getNatObject();
 
       const skiExpression = linkModules([
         { name: "Prelude", object: preludeObject },
+        { name: "Bin", object: binObject },
         { name: "Nat", object: natObject },
         { name: "SNatLike", object: snatObject },
         { name: "TestSNat", object: testObject },

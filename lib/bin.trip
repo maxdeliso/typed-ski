@@ -15,10 +15,6 @@ import Prelude Result
 import Prelude Ok
 import Prelude Err
 
-export Bin
-export BZ
-export B0
-export B1
 export incBin
 export addBin
 export mulBin
@@ -28,13 +24,8 @@ export isZeroBin
 export eqBin
 export lteBin
 export gteBin
-export ParseError
-export MkParseError
-export Parser
 
 data Bin = BZ | B0 Bin | B1 Bin
-data ParseError = MkParseError Bin (List Bin)
-type Parser = #A -> List Bin -> Result ParseError (Pair A (List Bin))
 
 poly rec isZeroBin = \b : Bin =>
   match b [Bool] {

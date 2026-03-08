@@ -317,8 +317,9 @@ data Token =
       { name: "Prelude", ref: "snd" },
       { name: "Prelude", ref: "foldl" },
       { name: "Prelude", ref: "append" },
+      { name: "Prelude", ref: "reverse" },
       { name: "Prelude", ref: "Bin" },
-      { name: "Prelude", ref: "addBin" },
+      { name: "Bin", ref: "addBin" },
       { name: "Prelude", ref: "U8" },
       { name: "Prelude", ref: "eqU8" },
     ] as const;
@@ -367,8 +368,8 @@ data Token =
 
     const expectedData = ["Token"] as const;
 
+    // Lexer imports reverse from Prelude; only locally defined polys listed
     const expectedPoly = [
-      "reverse",
       "tokenizeAcc",
       "tokenize",
     ] as const;

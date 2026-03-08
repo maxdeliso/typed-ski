@@ -1,6 +1,7 @@
 import { assertEquals } from "std/assert";
 import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import { compileToObjectFile } from "../lib/compiler/singleFileCompiler.ts";
+import { getBinObject } from "../lib/bin.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
@@ -13,9 +14,11 @@ async function runTripWithParallelEvaluator(
 ) {
   const moduleObject = compileToObjectFile(source);
   const prelude = await getPreludeObject();
+  const bin = await getBinObject();
   const nat = await getNatObject();
   const skiExpression = linkModules([
     { name: "Prelude", object: prelude },
+    { name: "Bin", object: bin },
     { name: "Nat", object: nat },
     { name: "Main", object: moduleObject },
   ]);

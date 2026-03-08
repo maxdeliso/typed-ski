@@ -11,7 +11,10 @@ Deno.test("TripHarness", async (t) => {
   await t.step("includeNat flag allows using Nat module", async () => {
     const source = loadInput("includeNat.trip", __dirname);
 
-    const result = await evaluateTrip(source, { includeNat: true });
+    const result = await evaluateTrip(source, {
+      includeNat: true,
+      includeBin: true,
+    });
     const number = await UnChurchNumber(result);
 
     expect(number).to.equal(2n);

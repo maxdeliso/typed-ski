@@ -82,13 +82,27 @@ static int test_deep_left_spine(void) {
    * term at 2*i+1 and app @2*i,2*i+1 at 2*i+2. */
   static char spine_buf[64 * 1024];
   const size_t depth = 200;
-  size_t off = (size_t)snprintf(spine_buf, sizeof(spine_buf), "S K @0,1");
+  size_t off = 0;
+  size_t remaining = sizeof(spine_buf);
+  {
+    int n0 = snprintf(spine_buf, remaining, "S K @0,1");
+    if (n0 < 0 || (size_t)n0 >= remaining) {
+      return fail("deep left spine: snprintf initial format overflow");
+    }
+    off = (size_t)n0;
+    remaining -= (size_t)n0;
+  }
   for (size_t i = 1; i < depth; i++) {
     uint32_t l = (uint32_t)(2 * i);
     uint32_t r = (uint32_t)(2 * i + 1);
     const char *term = (i % 3 == 1) ? " I " : (i % 3 == 2) ? " S " : " K ";
-    off += (size_t)snprintf(spine_buf + off, sizeof(spine_buf) - off,
-                            "%s@%u,%u", term, (unsigned)l, (unsigned)r);
+    int n = snprintf(spine_buf + off, remaining, "%s@%u,%u", term,
+                     (unsigned)l, (unsigned)r);
+    if (n < 0 || (size_t)n >= remaining) {
+      return fail("deep left spine: snprintf overflow while building spine");
+    }
+    off += (size_t)n;
+    remaining -= (size_t)n;
   }
 
   size_t end_idx = 0;

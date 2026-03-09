@@ -36,11 +36,11 @@ export main
 poly main =
   let input =
     cons [Token] T_Backslash
-      (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
+      (cons [Token] (T_Ident "x")
         (cons [Token] T_Colon
-          (cons [Token] (T_Ident (cons [U8] (#u8(66)) (cons [U8] (#u8(105)) (cons [U8] (#u8(110)) (nil [U8])))))
+          (cons [Token] (T_Ident "Bin")
             (cons [Token] T_FatArrow
-              (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
+              (cons [Token] (T_Ident "x")
                 (cons [Token] T_EOF (nil [Token])))))))
   in
   match (parseExpr input) [Bool] {
@@ -51,10 +51,10 @@ poly main =
         | E_Var n => false
         | E_App f x => false
         | E_Lam name body =>
-          if [Bool] (eqListU8 name (cons [U8] (#u8(120)) (nil [U8])))
+          if [Bool] (eqListU8 name "x")
             (\u : Bin =>
               match body [Bool] {
-                | E_Var n => eqListU8 n (cons [U8] (#u8(120)) (nil [U8]))
+                | E_Var n => eqListU8 n "x"
                 | E_App f x => false
                 | E_Lam name body => false
                 | E_Let name val body => false

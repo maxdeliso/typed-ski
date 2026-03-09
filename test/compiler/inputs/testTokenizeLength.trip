@@ -1,35 +1,31 @@
 module Test
 
 import Lexer tokenize
-import Lexer tokenizeAcc
 import Lexer Token
-import Prelude reverse
-import Prelude Bin
-import Bin incBin
-import Prelude nil
-import Prelude cons
-import Prelude U8
-import Prelude foldl
 import Prelude Result
 import Prelude Err
 import Prelude Ok
-import Prelude ParseError
 import Prelude List
-import Nat fromBin
-import Nat Nat
+import Prelude matchList
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude U8
 
 export main
-
-poly rec length = \xs : List Token =>
-  foldl [Token] [Bin]
-    (\acc : Bin => \_ : Token => incBin acc)
-    BZ
-    xs
 
 poly list1Space2 : List U8 = "1 2"
 
 poly main =
-  match (tokenize list1Space2) [Nat] {
-    | Err _ => zero
-    | Ok tokens => fromBin (length tokens)
+  match (tokenize list1Space2) [Bool] {
+    | Err _ => false
+    | Ok tokens =>
+      matchList [Token] [Bool] tokens false
+        (\_ : Token => \rest : List Token =>
+          matchList [Token] [Bool] rest false
+            (\_ : Token => \rest2 : List Token =>
+              matchList [Token] [Bool] rest2 false
+                (\_ : Token => \rest3 : List Token =>
+                  matchList [Token] [Bool] rest3 true
+                    (\_ : Token => \_ : List Token => false))))
   }

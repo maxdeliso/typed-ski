@@ -8,7 +8,6 @@ import Prelude Bin
 import Prelude List
 import Prelude nil
 import Prelude cons
-import Prelude nil
 import Prelude U8
 import Prelude matchList
 import Prelude Result
@@ -106,7 +105,7 @@ poly main =
                   let arm1Ok =
                     match pat1 [Bool] {
                       | P_Ctor ctor args =>
-                        if [Bool] (eqListU8 ctor (cons [U8] (#u8(83)) (cons [U8] (#u8(111)) (cons [U8] (#u8(109)) (cons [U8] (#u8(101)) (nil [U8])))))
+                        if [Bool] (eqListU8 ctor "Some")
                           (\u : Bin =>
                             if [Bool] (isSingleArg args "x")
                               (\u : Bin => isVarNamed body1 "x")
@@ -123,7 +122,7 @@ poly main =
                           let arm2Ok =
                             match pat2 [Bool] {
                               | P_Ctor ctor args =>
-                                if [Bool] (eqListU8 ctor (cons [U8] (#u8(78)) (cons [U8] (#u8(111)) (cons [U8] (#u8(110)) (cons [U8] (#u8(101)) (nil [U8])))))
+                                if [Bool] (eqListU8 ctor "None")
                                   (\u : Bin =>
                                     if [Bool] (isNoArgs args)
                                       (\u : Bin => isVarNamed body2 "res")

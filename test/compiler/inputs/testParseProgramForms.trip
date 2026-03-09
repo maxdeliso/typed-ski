@@ -8,7 +8,6 @@ import Prelude Bin
 import Prelude List
 import Prelude nil
 import Prelude cons
-import Prelude nil
 import Prelude U8
 import Prelude matchList
 import Prelude Result
@@ -68,7 +67,7 @@ poly main =
   let t16 = cons [Token] T_Eq t15 in
   let t17 = cons [Token] (T_Ident "u") t16 in
   let t18 = cons [Token] T_KwUntyped t17 in
-  let t19 = cons [Token] (T_Nat 1) t18 in
+  let t19 = cons [Token] (T_Nat "1") t18 in
   let t20 = cons [Token] T_Eq t19 in
   let t21 = cons [Token] (T_Ident "Nat") t20 in
   let t22 = cons [Token] T_Colon t21 in
@@ -101,7 +100,7 @@ poly main =
       matchList [Decl] [Bool] decls false
         (\h : Decl => \t : List Decl =>
           match h [Bool] {
-            | D_Module name => eqListU8 name (cons [U8] (#u8(77)) (nil [U8]))
+            | D_Module name => eqListU8 name "M"
             | D_Import m s => false
             | D_Export x => false
             | D_Type x => false

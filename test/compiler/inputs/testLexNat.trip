@@ -3,7 +3,6 @@ module Test
 import Prelude Bool
 import Prelude false
 import Prelude if
-import Prelude Bin
 import Lexer eqListU8
 import Prelude List
 import Prelude nil
@@ -79,7 +78,7 @@ poly isNat123Token = \tok : Token =>
     | T_KwType => false
     | T_KwData => false
     | T_Ident str => false
-    | T_Nat n => eqListU8 n 123
+    | T_Nat n => eqListU8 n list123
     | T_EOF => false
   }
 

@@ -7,15 +7,13 @@ import Prelude Result
 import Prelude Ok
 import Prelude Err
 import Prelude List
-import Prelude nil
-import Prelude cons
 import Prelude U8
 import Lexer tokenize
 import Lexer Token
 
 export main
 
-poly listAt : List U8 = cons [U8] (#u8(64)) (nil [U8])
+poly listAt : List U8 = "@"
 
 poly main =
   match (tokenize listAt) [Bool] {

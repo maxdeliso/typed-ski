@@ -13,8 +13,6 @@ import Prelude Pair
 import Prelude MkPair
 import Prelude fst
 import Prelude snd
-import Prelude Bin
-import Bin eqBin
 import Prelude eqU8
 import Prelude U8
 import Prelude Bool
@@ -148,7 +146,7 @@ data Expr =
   | E_App Expr Expr
   | E_Lam (List U8) Expr
   | E_Let (List U8) Expr Expr
-  | E_Nat Bin
+  | E_Nat (List U8)
   | E_Match Expr (List (Pair Pattern Expr))
 
 data Decl =
@@ -160,13 +158,13 @@ data Decl =
   | D_Def (List U8) Expr
 
 poly parseError =
-  MkParseError 0 (nil [Bin])
+  MkParseError (nil [U8])
 
 poly identTag =
   tokenTag (T_Ident (nil [U8]))
 
 poly natTag =
-  tokenTag (T_Nat 0)
+  tokenTag (T_Nat (nil [U8]))
 
 poly lParenTag =
   tokenTag T_LParen
@@ -291,29 +289,29 @@ poly sndDeclToken = \p : Pair Decl (List Token) =>
 poly isTopLevelStartToken = \tok : Token =>
   let tag = tokenTag tok in
   if [Bool] (eqU8 tag kwModuleTag)
-  (\u : Bin => true)
-  (\u : Bin =>
+  (\u : U8 => true)
+  (\u : U8 =>
       if [Bool] (eqU8 tag kwImportTag)
-      (\u : Bin => true)
-      (\u : Bin =>
+      (\u : U8 => true)
+      (\u : U8 =>
           if [Bool] (eqU8 tag kwExportTag)
-          (\u : Bin => true)
-          (\u : Bin =>
+          (\u : U8 => true)
+          (\u : U8 =>
               if [Bool] (eqU8 tag kwPolyTag)
-              (\u : Bin => true)
-              (\u : Bin =>
+              (\u : U8 => true)
+              (\u : U8 =>
                   if [Bool] (eqU8 tag kwTypedTag)
-                  (\u : Bin => true)
-                  (\u : Bin =>
+                  (\u : U8 => true)
+                  (\u : U8 =>
                       if [Bool] (eqU8 tag kwUntypedTag)
-                      (\u : Bin => true)
-                      (\u : Bin =>
+                      (\u : U8 => true)
+                      (\u : U8 =>
                           if [Bool] (eqU8 tag kwCombinatorTag)
-                          (\u : Bin => true)
-                          (\u : Bin =>
+                          (\u : U8 => true)
+                          (\u : U8 =>
                               if [Bool] (eqU8 tag kwTypeTag)
-                              (\u : Bin => true)
-                              (\u : Bin => eqU8 tag kwDataTag))))))))
+                              (\u : U8 => true)
+                              (\u : U8 => eqU8 tag kwDataTag))))))))
 
 poly expect = \toks : List Token => \expectedTag : U8 =>
   matchList [Token] [Result ParseError (List Token)] toks
@@ -321,8 +319,8 @@ poly expect = \toks : List Token => \expectedTag : U8 =>
     (\h : Token => \t : List Token =>
       if [Result ParseError (List Token)]
         (eqU8 (tokenTag h) expectedTag)
-        (\u : Bin => Ok [ParseError] [List Token] t)
-        (\u : Bin => Err [ParseError] [List Token] parseError)
+        (\u : U8 => Ok [ParseError] [List Token] t)
+        (\u : U8 => Err [ParseError] [List Token] parseError)
     )
 
 poly expectIdent = \toks : List Token =>
@@ -331,10 +329,10 @@ poly expectIdent = \toks : List Token =>
     (\h : Token => \t : List Token =>
       if [Result ParseError (Pair (List U8) (List Token))]
         (eqU8 (tokenTag h) identTag)
-        (\u : Bin =>
+        (\u : U8 =>
           Ok [ParseError] [Pair (List U8) (List Token)]
             (MkPair [List U8] [List Token] (tokenText h) t))
-        (\u : Bin =>
+        (\u : U8 =>
           Err [ParseError] [Pair (List U8) (List Token)] parseError)
     )
 
@@ -344,8 +342,8 @@ poly rec skipUntil = \toks : List Token => \targetTag : U8 =>
     (\h : Token => \t : List Token =>
       if [Result ParseError (List Token)]
         (eqU8 (tokenTag h) targetTag)
-        (\u : Bin => Ok [ParseError] [List Token] toks)
-        (\u : Bin => skipUntil t targetTag)
+        (\u : U8 => Ok [ParseError] [List Token] toks)
+        (\u : U8 => skipUntil t targetTag)
     )
 
 poly rec skipToTopLevelDecl = \toks : List Token =>
@@ -353,11 +351,11 @@ poly rec skipToTopLevelDecl = \toks : List Token =>
     (Ok [ParseError] [List Token] (nil [Token]))
     (\h : Token => \t : List Token =>
       if [Result ParseError (List Token)] (eqU8 (tokenTag h) eofTag)
-        (\u : Bin => Ok [ParseError] [List Token] toks)
-        (\u : Bin =>
+        (\u : U8 => Ok [ParseError] [List Token] toks)
+        (\u : U8 =>
           if [Result ParseError (List Token)] (isTopLevelStartToken h)
-            (\u : Bin => Ok [ParseError] [List Token] toks)
-            (\u : Bin => skipToTopLevelDecl t))
+            (\u : U8 => Ok [ParseError] [List Token] toks)
+            (\u : U8 => skipToTopLevelDecl t))
     )
 
 poly rec parsePatternArgs = \toks : List Token => \acc : List (List U8) =>
@@ -366,15 +364,15 @@ poly rec parsePatternArgs = \toks : List Token => \acc : List (List U8) =>
     (\h : Token => \t : List Token =>
       if [Result ParseError (Pair (List (List U8)) (List Token))]
         (eqU8 (tokenTag h) fatArrowTag)
-        (\u : Bin =>
+        (\u : U8 =>
           Ok [ParseError] [Pair (List (List U8)) (List Token)]
             (MkPair [List (List U8)] [List Token] (reverse [List U8] acc) toks))
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair (List (List U8)) (List Token))]
             (eqU8 (tokenTag h) identTag)
-            (\u : Bin =>
+            (\u : U8 =>
               parsePatternArgs t (cons [List U8] (tokenText h) acc))
-            (\u : Bin =>
+            (\u : U8 =>
               Err [ParseError] [Pair (List (List U8)) (List Token)] parseError))
     )
 
@@ -416,13 +414,13 @@ poly rec parseMatchArmsWith = \recurse : (List Token -> Result ParseError (Pair 
     (\h : Token => \t : List Token =>
       if [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))]
         (eqU8 (tokenTag h) rBraceTag)
-        (\u : Bin =>
+        (\u : U8 =>
           Ok [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)]
             (MkPair [List (Pair Pattern Expr)] [List Token] (reverse [Pair Pattern Expr] acc) t))
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))]
             (eqU8 (tokenTag h) pipeTag)
-            (\u : Bin =>
+            (\u : U8 =>
               match (parseMatchArmWith recurse toks) [Result ParseError (Pair (List (Pair Pattern Expr)) (List Token))] {
                 | Err e => Err [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)] e
                 | Ok armRes =>
@@ -430,25 +428,25 @@ poly rec parseMatchArmsWith = \recurse : (List Token -> Result ParseError (Pair 
                   let rest = sndPatternExprToken armRes in
                   parseMatchArmsWith recurse rest (cons [Pair Pattern Expr] arm acc)
               })
-            (\u : Bin =>
+            (\u : U8 =>
               Err [ParseError] [Pair (List (Pair Pattern Expr)) (List Token)] parseError))
     )
 
 poly isAtomStart = \tok : Token =>
   if [Bool]
     (eqU8 (tokenTag tok) identTag)
-    (\u : Bin => true)
-    (\u : Bin =>
+    (\u : U8 => true)
+    (\u : U8 =>
       if [Bool]
         (eqU8 (tokenTag tok) natTag)
-        (\u : Bin => true)
-        (\u : Bin =>
+        (\u : U8 => true)
+        (\u : U8 =>
           if [Bool] (eqU8 (tokenTag tok) lParenTag)
-            (\u : Bin => true)
-            (\u : Bin =>
+            (\u : U8 => true)
+            (\u : U8 =>
               if [Bool] (eqU8 (tokenTag tok) commaTag)
-                (\u : Bin => true)
-                (\u : Bin => eqU8 (tokenTag tok) dotTag))))
+                (\u : U8 => true)
+                (\u : U8 => eqU8 (tokenTag tok) dotTag))))
 
 poly parseAtomWith = \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) => \toks : List Token =>
   matchList [Token] [Result ParseError (Pair Expr (List Token))] toks
@@ -456,19 +454,19 @@ poly parseAtomWith = \recurse : (List Token -> Result ParseError (Pair Expr (Lis
     (\h : Token => \t : List Token =>
       if [Result ParseError (Pair Expr (List Token))]
         (eqU8 (tokenTag h) identTag)
-        (\u : Bin =>
+        (\u : U8 =>
           Ok [ParseError] [Pair Expr (List Token)]
             (MkPair [Expr] [List Token] (E_Var (tokenText h)) t))
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair Expr (List Token))]
             (eqU8 (tokenTag h) natTag)
-            (\u : Bin =>
+            (\u : U8 =>
               Ok [ParseError] [Pair Expr (List Token)]
                 (MkPair [Expr] [List Token] (E_Nat (tokenNatValue h)) t))
-            (\u : Bin =>
+            (\u : U8 =>
               if [Result ParseError (Pair Expr (List Token))]
                 (eqU8 (tokenTag h) lParenTag)
-                (\u : Bin =>
+                (\u : U8 =>
                   match (recurse t) [Result ParseError (Pair Expr (List Token))] {
                     | Err e => Err [ParseError] [Pair Expr (List Token)] e
                     | Ok res =>
@@ -481,19 +479,19 @@ poly parseAtomWith = \recurse : (List Token -> Result ParseError (Pair Expr (Lis
                             (MkPair [Expr] [List Token] inner final)
                       }
                   })
-                (\u : Bin =>
+                (\u : U8 =>
                   if [Result ParseError (Pair Expr (List Token))]
                     (eqU8 (tokenTag h) commaTag)
-                    (\u : Bin =>
+                    (\u : U8 =>
                       Ok [ParseError] [Pair Expr (List Token)]
                         (MkPair [Expr] [List Token] (E_Var ",") t))
-                    (\u : Bin =>
+                    (\u : U8 =>
                       if [Result ParseError (Pair Expr (List Token))]
                         (eqU8 (tokenTag h) dotTag)
-                        (\u : Bin =>
+                        (\u : U8 =>
                           Ok [ParseError] [Pair Expr (List Token)]
                             (MkPair [Expr] [List Token] (E_Var ".") t))
-                        (\u : Bin =>
+                        (\u : U8 =>
                           Err [ParseError] [Pair Expr (List Token)] parseError)
                     )
                 )
@@ -518,7 +516,7 @@ poly rec parseAppLoopWith = \recurse : (List Token -> Result ParseError (Pair Ex
     (\h : Token => \t : List Token =>
       if [Result ParseError (Pair Expr (List Token))]
         (isAtomStart h)
-        (\u : Bin =>
+        (\u : U8 =>
           match (parseAtomWith recurse toks) [Result ParseError (Pair Expr (List Token))] {
             | Err e => Err [ParseError] [Pair Expr (List Token)] e
             | Ok rhsRes =>
@@ -526,15 +524,15 @@ poly rec parseAppLoopWith = \recurse : (List Token -> Result ParseError (Pair Ex
               let rest = sndExprToken rhsRes in
               parseAppLoopWith recurse (E_App lhs rhs) rest
           })
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair Expr (List Token))]
             (eqU8 (tokenTag h) lBracketTag)
-            (\u : Bin =>
+            (\u : U8 =>
               match (skipTypeArg toks) [Result ParseError (Pair Expr (List Token))] {
                 | Err e => Err [ParseError] [Pair Expr (List Token)] e
                 | Ok afterType => parseAppLoopWith recurse lhs afterType
               })
-            (\u : Bin =>
+            (\u : U8 =>
               Ok [ParseError] [Pair Expr (List Token)]
                 (MkPair [Expr] [List Token] lhs toks))
         )
@@ -567,8 +565,8 @@ poly rec parseExpr = \toks : List Token =>
     (\h : Token => \t : List Token =>
       let tag = tokenTag h in
       if [Result ParseError (Pair Expr (List Token))]
-        (eqBin tag hashTag)
-        (\u : Bin =>
+        (eqU8 tag hashTag)
+        (\u : U8 =>
           match (expectIdent t) [Result ParseError (Pair Expr (List Token))] {
             | Err e => Err [ParseError] [Pair Expr (List Token)] e
             | Ok tvRes =>
@@ -585,10 +583,10 @@ poly rec parseExpr = \toks : List Token =>
                     }
               }
           })
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair Expr (List Token))]
-        (eqBin tag backslashTag)
-        (\u : Bin =>
+        (eqU8 tag backslashTag)
+        (\u : U8 =>
           match (expectIdent t) [Result ParseError (Pair Expr (List Token))] {
             | Err e => Err [ParseError] [Pair Expr (List Token)] e
             | Ok idRes =>
@@ -611,10 +609,10 @@ poly rec parseExpr = \toks : List Token =>
                   }
               }
           })
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair Expr (List Token))]
-            (eqBin tag kwLetTag)
-            (\u : Bin =>
+            (eqU8 tag kwLetTag)
+            (\u : U8 =>
               match (expectIdent t) [Result ParseError (Pair Expr (List Token))] {
                 | Err e => Err [ParseError] [Pair Expr (List Token)] e
                 | Ok idRes =>
@@ -647,10 +645,10 @@ poly rec parseExpr = \toks : List Token =>
                       }
                   }
               })
-            (\u : Bin =>
+            (\u : U8 =>
               if [Result ParseError (Pair Expr (List Token))]
-                (eqBin tag kwMatchTag)
-                (\u : Bin =>
+                (eqU8 tag kwMatchTag)
+                (\u : U8 =>
                   match (parseAppWith parseExpr t) [Result ParseError (Pair Expr (List Token))] {
                     | Err e => Err [ParseError] [Pair Expr (List Token)] e
                     | Ok scrutRes =>
@@ -673,7 +671,7 @@ poly rec parseExpr = \toks : List Token =>
                           }
                       }
                   })
-                (\u : Bin => parseAppWith parseExpr toks))))
+                (\u : U8 => parseAppWith parseExpr toks))))
     )
 
 poly parseNamedDef = \toks : List Token =>
@@ -706,8 +704,8 @@ poly parseDecl = \toks : List Token =>
     (\h : Token => \t : List Token =>
       let tag = tokenTag h in
       if [Result ParseError (Pair Decl (List Token))]
-        (eqBin tag kwModuleTag)
-        (\u : Bin =>
+        (eqU8 tag kwModuleTag)
+        (\u : U8 =>
           match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
             | Err e => Err [ParseError] [Pair Decl (List Token)] e
             | Ok modRes =>
@@ -716,10 +714,10 @@ poly parseDecl = \toks : List Token =>
               Ok [ParseError] [Pair Decl (List Token)]
                 (MkPair [Decl] [List Token] (D_Module name) rest)
           })
-        (\u : Bin =>
+        (\u : U8 =>
           if [Result ParseError (Pair Decl (List Token))]
-            (eqBin tag kwImportTag)
-            (\u : Bin =>
+            (eqU8 tag kwImportTag)
+            (\u : U8 =>
               match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
                 | Err e => Err [ParseError] [Pair Decl (List Token)] e
                 | Ok modRes =>
@@ -734,10 +732,10 @@ poly parseDecl = \toks : List Token =>
                         (MkPair [Decl] [List Token] (D_Import modName sym) rest)
                   }
               })
-            (\u : Bin =>
+            (\u : U8 =>
               if [Result ParseError (Pair Decl (List Token))]
-                (eqBin tag kwExportTag)
-                (\u : Bin =>
+                (eqU8 tag kwExportTag)
+                (\u : U8 =>
                   match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
                     | Err e => Err [ParseError] [Pair Decl (List Token)] e
                     | Ok expRes =>
@@ -746,10 +744,10 @@ poly parseDecl = \toks : List Token =>
                       Ok [ParseError] [Pair Decl (List Token)]
                         (MkPair [Decl] [List Token] (D_Export name) rest)
                   })
-                (\u : Bin =>
+                (\u : U8 =>
                   if [Result ParseError (Pair Decl (List Token))]
-                    (eqBin tag kwTypeTag)
-                    (\u : Bin =>
+                    (eqU8 tag kwTypeTag)
+                    (\u : U8 =>
                       match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
                         | Err e => Err [ParseError] [Pair Decl (List Token)] e
                         | Ok tyRes =>
@@ -762,10 +760,10 @@ poly parseDecl = \toks : List Token =>
                                 (MkPair [Decl] [List Token] (D_Type name) rest)
                           }
                       })
-                    (\u : Bin =>
+                    (\u : U8 =>
                       if [Result ParseError (Pair Decl (List Token))]
-                        (eqBin tag kwDataTag)
-                        (\u : Bin =>
+                        (eqU8 tag kwDataTag)
+                        (\u : U8 =>
                           match (expectIdent t) [Result ParseError (Pair Decl (List Token))] {
                             | Err e => Err [ParseError] [Pair Decl (List Token)] e
                             | Ok datRes =>
@@ -778,31 +776,31 @@ poly parseDecl = \toks : List Token =>
                                     (MkPair [Decl] [List Token] (D_Data name) rest)
                               }
                           })
-                        (\u : Bin =>
+                        (\u : U8 =>
                           if [Result ParseError (Pair Decl (List Token))]
-                            (eqBin tag kwPolyTag)
-                            (\u : Bin =>
+                            (eqU8 tag kwPolyTag)
+                            (\u : U8 =>
                               matchList [Token] [Result ParseError (Pair Decl (List Token))] t
                                 (Err [ParseError] [Pair Decl (List Token)] parseError)
                                 (\h2 : Token => \t2 : List Token =>
                                   if [Result ParseError (Pair Decl (List Token))]
                                     (eqU8 (tokenTag h2) kwRecTag)
-                                    (\u : Bin => parseNamedDef t2)
-                                    (\u : Bin => parseNamedDef t)
+                                    (\u : U8 => parseNamedDef t2)
+                                    (\u : U8 => parseNamedDef t)
                                 ))
-                            (\u : Bin =>
+                            (\u : U8 =>
                               if [Result ParseError (Pair Decl (List Token))]
-                                (eqBin tag kwTypedTag)
-                                (\u : Bin => parseNamedDef t)
-                                (\u : Bin =>
+                                (eqU8 tag kwTypedTag)
+                                (\u : U8 => parseNamedDef t)
+                                (\u : U8 =>
                                   if [Result ParseError (Pair Decl (List Token))]
-                                    (eqBin tag kwUntypedTag)
-                                    (\u : Bin => parseNamedDef t)
-                                    (\u : Bin =>
+                                    (eqU8 tag kwUntypedTag)
+                                    (\u : U8 => parseNamedDef t)
+                                    (\u : U8 =>
                                       if [Result ParseError (Pair Decl (List Token))]
-                                        (eqBin tag kwCombinatorTag)
-                                        (\u : Bin => parseNamedDef t)
-                                        (\u : Bin => Err [ParseError] [Pair Decl (List Token)] parseError)
+                                        (eqU8 tag kwCombinatorTag)
+                                        (\u : U8 => parseNamedDef t)
+                                        (\u : U8 => Err [ParseError] [Pair Decl (List Token)] parseError)
                                     ))
                             ))
                     ))
@@ -814,8 +812,8 @@ poly rec parseProgramAcc = \toks : List Token => \acc : List Decl =>
     (Ok [ParseError] [List Decl] (reverse [Decl] acc))
     (\h : Token => \t : List Token =>
       if [Result ParseError (List Decl)] (eqU8 (tokenTag h) eofTag)
-        (\u : Bin => Ok [ParseError] [List Decl] (reverse [Decl] acc))
-        (\u : Bin =>
+        (\u : U8 => Ok [ParseError] [List Decl] (reverse [Decl] acc))
+        (\u : U8 =>
           match (parseDecl toks) [Result ParseError (List Decl)] {
             | Err e => Err [ParseError] [List Decl] e
             | Ok declRes =>

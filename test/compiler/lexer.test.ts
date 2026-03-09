@@ -11,9 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
-import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
-import { getNatObject } from "../../lib/nat.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
@@ -35,22 +33,13 @@ const LEXER_SOURCE_FILE = new URL(
 
 // Cache compiled objects
 let lexerObject: TripCObject | null = null;
-let binObject: TripCObject | null = null;
 let preludeObject: TripCObject | null = null;
-let natObject: TripCObject | null = null;
 
 async function getLexerObject() {
   if (!lexerObject) {
     lexerObject = await loadTripModuleObject(LEXER_SOURCE_FILE);
   }
   return lexerObject;
-}
-
-async function getBinObjectCached() {
-  if (!binObject) {
-    binObject = await getBinObject();
-  }
-  return binObject;
 }
 
 async function getPreludeObjectCached() {
@@ -60,13 +49,6 @@ async function getPreludeObjectCached() {
   return preludeObject;
 }
 
-async function getNatObjectCached() {
-  if (!natObject) {
-    natObject = await getNatObject();
-  }
-  return natObject;
-}
-
 async function compileAndValidateTestProgram(
   inputFileName: string,
 ): Promise<SKIExpression> {
@@ -74,14 +56,10 @@ async function compileAndValidateTestProgram(
   const testObj = await loadTripModuleObject(testFilePath);
 
   const lexerObj = await getLexerObject();
-  const binObj = await getBinObjectCached();
   const preludeObj = await getPreludeObjectCached();
-  const natObj = await getNatObjectCached();
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObj },
-    { name: "Bin", object: binObj },
-    { name: "Nat", object: natObj },
     { name: "Lexer", object: lexerObj },
     { name: "Test", object: testObj },
   ]);
@@ -115,7 +93,6 @@ Deno.test({
   fn: async () => {
     const lexerObj = await getLexerObject();
     const preludeObj = await getPreludeObjectCached();
-    const natObj = await getNatObjectCached();
 
     const testCases: Array<[number, boolean]> = [
       [32, true],
@@ -136,11 +113,8 @@ export main
 poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 `;
       const testObj = compileToObjectFile(testSource);
-      const binObj = await getBinObjectCached();
       const skiExpression = linkModules([
         { name: "Prelude", object: preludeObj },
-        { name: "Bin", object: binObj },
-        { name: "Nat", object: natObj },
         { name: "Lexer", object: lexerObj },
         { name: "Test", object: testObj },
       ]);
@@ -178,17 +152,13 @@ Deno.test({
   sanitizeOps: false,
   fn: async () => {
     const lexerObj = await getLexerObject();
-    const binObj = await getBinObjectCached();
     const preludeObj = await getPreludeObjectCached();
-    const natObj = await getNatObjectCached();
 
     const testObj = await loadTripModuleObject(
       join(__dirname, "inputs", "testTokenizeLength.trip"),
     );
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObj },
-      { name: "Bin", object: binObj },
-      { name: "Nat", object: natObj },
       { name: "Lexer", object: lexerObj },
       { name: "Test", object: testObj },
     ]);
@@ -197,17 +167,16 @@ Deno.test({
     const lines = await runThanatosBatch([input]);
     const line = lines[0];
     assert.isNotEmpty(line, "thanatos should return a result");
-    assert.equal(
-      await UnChurchNumber(parseSKI(line!), passthroughEvaluator),
-      3n,
-      "tokenize count",
+    assert.isTrue(
+      await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
+      'tokenize count: expected tokenize "1 2" to yield exactly 3 tokens',
     );
   },
 });
 
 Deno.test({
   name: "Lexer - structural validations",
-  ignore: true, //!thanatosAvailable(), // TODO: only the first one passes so far
+  ignore: !thanatosAvailable(),
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {

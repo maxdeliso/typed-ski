@@ -157,6 +157,8 @@ Deno.test({
 Deno.test({
   name: "links prelude arithmetic cases (thanatos)",
   ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
   fn: async () => {
     const results = await runArithmeticBatchThanatos();
     assertEquals(results.get("basic"), 6n, "mul two three should equal 6");

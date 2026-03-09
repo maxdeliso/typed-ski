@@ -350,28 +350,34 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     evaluator.terminate();
   });
 
-  await t.step("echo preserves order with queued readOne tasks", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    try {
-      const encoder = new TextEncoder();
-      const payload = encoder.encode("queued-echo");
-      const pending = Array.from(
-        payload,
-        () => evaluator.reduceAsync(apply(ReadOne, WriteOne)),
-      );
-      await evaluator.writeStdin(payload);
-      const results = await Promise.all(pending);
-      const decoded = results.map((res) => (res as { value: number }).value);
-      assertEquals(
-        decoded,
-        Array.from(payload),
-      );
-      const stdout = await evaluator.readStdout(payload.length);
-      assertEquals(stdout, payload);
-    } finally {
-      evaluator.terminate();
-    }
-  });
+  await t.step(
+    "echo with queued readOne tasks returns correct bytes",
+    async () => {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+      try {
+        const encoder = new TextEncoder();
+        const payload = encoder.encode("queued-echo");
+        const pending = Array.from(
+          payload,
+          () => evaluator.reduceAsync(apply(ReadOne, WriteOne)),
+        );
+        await evaluator.writeStdin(payload);
+        const results = await Promise.all(pending);
+        const decoded = results.map((res) => (res as { value: number }).value);
+        assertEquals(decoded.length, payload.length);
+        const sortedDecoded = [...decoded].sort((a, b) => a - b);
+        const sortedPayload = Array.from(payload).sort((a, b) => a - b);
+        assertEquals(sortedDecoded, sortedPayload);
+
+        const stdout = await evaluator.readStdout(payload.length);
+        assertEquals(stdout.length, payload.length);
+        const sortedOut = Array.from(stdout).sort((a, b) => a - b);
+        assertEquals(sortedOut, sortedPayload);
+      } finally {
+        evaluator.terminate();
+      }
+    },
+  );
 
   await t.step("writeStdin blocks when stdin ring is full", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);

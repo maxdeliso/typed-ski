@@ -470,6 +470,20 @@ uint32_t rightOf(uint32_t n) {
   return atomic_load_explicit(&nodes[n].right, memory_order_acquire);
 }
 
+uint32_t arena_top(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->top, memory_order_relaxed);
+}
+
+uint32_t arena_capacity(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->capacity, memory_order_relaxed);
+}
+
 static void grow(void);
 
 /* Node publication: write all payload fields first (relaxed), then store kind

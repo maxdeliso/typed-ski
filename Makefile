@@ -98,6 +98,10 @@ bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
 
+bin/dag-codec-test: c/arena.c c/ski_io.c c/dag_codec_test.c
+	mkdir -p bin
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+
 # Nix development shell wrapper
 # We keep essential Nix and system variables while ignoring the rest to ensure hermeticity
 NIX_RUN := nix $(NIX_FLAGS) develop --ignore-environment \
@@ -169,10 +173,14 @@ test-internal: build-wasm-internal build-native-internal
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
 	nix $(NIX_FLAGS) run .#test
+	$(MAKE) dag-codec-check-internal
 	$(MAKE) thanatos-check-internal
 	$(MAKE) thanatos-check-lsan-internal
 	$(MAKE) thanatos-check-ubsan-internal
 	$(MAKE) thanatos-check-asan-internal
+
+dag-codec-check-internal: build-native-internal
+	./bin/dag-codec-test
 
 coverage-internal: build-wasm-internal
 	deno run -A scripts/generate-arena-header-c.ts
@@ -188,6 +196,7 @@ CLEAN_ARTIFACTS := \
 	bin/thanatos-asan \
 	bin/thanatos-lsan \
 	bin/thanatos-debug \
+	bin/dag-codec-test \
 	obj/arena.o \
 	obj/thanatos.o \
 	obj/ski_io.o \
@@ -229,7 +238,8 @@ THANATOS_SHORT_ARGS := 2 65536 1024 4 512 $(THANATOS_CI_SEED)
 THANATOS_LONG_ARGS := 4 131072 4096 5 1024 $(THANATOS_CI_SEED)
 
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
-	bin/thanatos-test-ubsan bin/thanatos-test-asan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug
+	bin/thanatos-test-ubsan bin/thanatos-test-asan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug \
+	bin/dag-codec-test
 
 thanatos-check-internal: build-native-internal
 	timeout 30s ./bin/thanatos-test $(THANATOS_SHORT_ARGS)

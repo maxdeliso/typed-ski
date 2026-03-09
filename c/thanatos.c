@@ -1,6 +1,7 @@
 #include "thanatos.h"
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,7 @@ static atomic_ullong dispatcher_events = 0;
 static atomic_ullong dispatcher_dropped = 0;
 static pthread_t dispatcher_thread;
 static pthread_t stdout_thread;
+static bool stdout_thread_started = false;
 
 static PendingReq pending_reqs[MAX_PENDING_REQS];
 
@@ -141,7 +143,7 @@ void thanatos_init(ThanatosConfig config) {
   workers = malloc(sizeof(pthread_t) * num_workers_count);
 }
 
-void thanatos_start_threads(void) {
+void thanatos_start_threads(bool enable_stdout_pump) {
   if (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire))
     return;
   atomic_store_explicit(&is_thanatos_initialized, true, memory_order_release);
@@ -151,7 +153,12 @@ void thanatos_start_threads(void) {
   }
 
   pthread_create(&dispatcher_thread, NULL, dispatcher_thread_main, NULL);
-  pthread_create(&stdout_thread, NULL, stdout_thread_main, NULL);
+  if (enable_stdout_pump) {
+    pthread_create(&stdout_thread, NULL, stdout_thread_main, NULL);
+    stdout_thread_started = true;
+  } else {
+    stdout_thread_started = false;
+  }
 }
 
 uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
@@ -218,12 +225,34 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
   }
 }
 
+uint32_t thanatos_reduce_to_normal_form(uint32_t node_id) {
+  return thanatos_reduce(node_id, 0xffffffffu);
+}
+
+void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
+                        unsigned long long *out_events,
+                        unsigned long long *out_dropped) {
+  if (out_top)
+    *out_top = arena_top();
+  if (out_capacity)
+    *out_capacity = arena_capacity();
+  if (out_events)
+    *out_events =
+        atomic_load_explicit(&dispatcher_events, memory_order_relaxed);
+  if (out_dropped)
+    *out_dropped =
+        atomic_load_explicit(&dispatcher_dropped, memory_order_relaxed);
+}
+
 void thanatos_shutdown(void) {
   if (!atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire))
     return;
   atomic_store_explicit(&is_thanatos_initialized, false, memory_order_release);
 
-  pthread_join(stdout_thread, NULL);
+  if (stdout_thread_started) {
+    pthread_join(stdout_thread, NULL);
+    stdout_thread_started = false;
+  }
   /* Wake dispatcher from blocking CQ dequeue so it can exit */
   arena_cq_enqueue_shutdown_sentinel();
   pthread_join(dispatcher_thread, NULL);

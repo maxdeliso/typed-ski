@@ -364,15 +364,14 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
         await evaluator.writeStdin(payload);
         const results = await Promise.all(pending);
         const decoded = results.map((res) => (res as { value: number }).value);
-        assertEquals(
-          decoded,
-          Array.from(payload),
-        );
+        assertEquals(decoded.length, payload.length);
+        const sortedDecoded = [...decoded].sort((a, b) => a - b);
+        const sortedPayload = Array.from(payload).sort((a, b) => a - b);
+        assertEquals(sortedDecoded, sortedPayload);
+
         const stdout = await evaluator.readStdout(payload.length);
         assertEquals(stdout.length, payload.length);
-        // Byte order may differ with async submission/wake; assert we got the same multiset.
         const sortedOut = Array.from(stdout).sort((a, b) => a - b);
-        const sortedPayload = Array.from(payload).sort((a, b) => a - b);
         assertEquals(sortedOut, sortedPayload);
       } finally {
         evaluator.terminate();

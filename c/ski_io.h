@@ -15,4 +15,17 @@ uint32_t parse_ski(const char *buf, size_t len, size_t *end_idx);
  * and capacity. */
 size_t unparse_ski(uint32_t node_id, char *buf, size_t capacity);
 
+/* --- DAG wire codec (for batch/daemon protocol) --- */
+
+/* Parse DAG wire format: tokens S K I B C P Q R , . E | Uxx | @L,R (whitespace-
+ * separated). Last token is root. Returns root node id or EMPTY on error.
+ * *end_idx set to offset past consumed input. */
+uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx);
+
+/* Serialize arena DAG to wire format (postorder, one token per node). Only
+ * TERMINAL, U8, NON_TERM are exportable; SUSPENSION/CONTINUATION cause error.
+ * Returns bytes written, or 0 on invalid node kind, or (size_t)-1 on buffer
+ * overflow (caller may retry with larger buffer). */
+size_t unparse_dag(uint32_t root, char *buf, size_t capacity);
+
 #endif

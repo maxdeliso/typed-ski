@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
   ThanatosConfig config = {.num_workers = num_threads,
                            .arena_capacity = arena_capacity};
   thanatos_init(config);
-  thanatos_start_threads();
+  thanatos_start_threads(true);
 
   /* Smoke test: EQ_U8 5 5 -> True (K), EQ_U8 5 6 -> False (K I) */
   {

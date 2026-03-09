@@ -64,6 +64,7 @@ async function compileTestProgram(
 Deno.test({
   name: "Parser unit tests",
   ignore: true, // TODO: still too slow
+  sanitizeResources: false,
 }, async () => {
   const tests = [
     {

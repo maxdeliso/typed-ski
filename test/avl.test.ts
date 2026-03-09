@@ -16,7 +16,6 @@ import { UnChurchNumber } from "../lib/ski/church.ts";
 import {
   passthroughEvaluator,
   runThanatosBatch,
-  runThanatosOne,
   thanatosAvailable,
 } from "./thanatosHarness.ts";
 
@@ -80,32 +79,34 @@ async function evaluateTestModulesBatch(
 }
 
 /**
- * Run the same AVL test cases via native thanatos: TypeScript builds the SKI expression
- * and serializes to skipqr; we spawn ./bin/thanatos per expression, feed one line on stdin,
- * block for one line on stdout, then parse and assert.
+ * Run the same AVL test cases via thanatos batch mode: build all expressions,
+ * run one batch (one process, all lines on stdin), then decode results.
  */
 async function evaluateTestModulesBatchThanatos(
   modules: Array<{ name: string; fileName: string }>,
 ): Promise<Map<string, bigint>> {
-  const results = new Map<string, bigint>();
-
+  const inputs: string[] = [];
   for (const { name, fileName } of modules) {
     const source = await loadInput(fileName);
     const expr = await buildTestExpression(source, name);
-    const line = await runThanatosOne(unparseSKI(expr));
+    inputs.push(unparseSKI(expr));
+  }
+  const lines = await runThanatosBatch(inputs);
+  const results = new Map<string, bigint>();
+  for (let i = 0; i < modules.length; i++) {
+    const name = modules[i]!.name;
+    const line = lines[i] ?? "";
     if (line === "") {
       results.set(name, 0n);
       continue;
     }
     try {
       const parsed = parseSKI(line);
-      const val = await UnChurchNumber(parsed, passthroughEvaluator);
-      results.set(name, val);
+      results.set(name, await UnChurchNumber(parsed, passthroughEvaluator));
     } catch {
       results.set(name, 0n);
     }
   }
-
   return results;
 }
 
@@ -131,6 +132,8 @@ Deno.test(
 Deno.test({
   name: "Avl module tests (batched, thanatos)",
   ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
   fn: async () => {
     const results = await evaluateTestModulesBatchThanatos(AVL_CASES);
 

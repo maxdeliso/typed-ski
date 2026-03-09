@@ -107,6 +107,9 @@ typedef struct {
 uint32_t initArena(uint32_t initial_capacity);
 uint32_t connectArena(uint32_t ptr_addr);
 void reset(void);
+/** Current allocation top (next node index) and capacity; for diagnostics. */
+uint32_t arena_top(void);
+uint32_t arena_capacity(void);
 uint32_t kindOf(uint32_t n);
 uint32_t symOf(uint32_t n);
 uint32_t hashOf(uint32_t n);

@@ -24,7 +24,6 @@ import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import {
   passthroughEvaluator,
   runThanatosBatch,
-  runThanatosOne,
   thanatosAvailable,
 } from "../thanatosHarness.ts";
 
@@ -93,12 +92,15 @@ async function compileAndValidateTestProgram(
 Deno.test({
   name: "Lexer - isSpace structure validation",
   ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
   fn: async () => {
     const program = await compileAndValidateTestProgram("testIsSpace.trip");
-    const line = await runThanatosOne(unparseSKI(program));
+    const lines = await runThanatosBatch([unparseSKI(program)]);
+    const line = lines[0];
     assert.isNotEmpty(line, "thanatos should return a result");
     assert.equal(
-      await UnChurchBoolean(parseSKI(line), passthroughEvaluator),
+      await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
       false,
       "isSpace structure validation",
     );
@@ -108,6 +110,8 @@ Deno.test({
 Deno.test({
   name: "Lexer - isSpace character codes",
   ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
   fn: async () => {
     const lexerObj = await getLexerObject();
     const preludeObj = await getPreludeObjectCached();
@@ -170,6 +174,8 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 Deno.test({
   name: "Lexer - tokenize count",
   ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
   fn: async () => {
     const lexerObj = await getLexerObject();
     const binObj = await getBinObjectCached();
@@ -188,10 +194,11 @@ Deno.test({
     ]);
     const input = unparseSKI(parseSKI(skiExpression));
 
-    const line = await runThanatosOne(input);
+    const lines = await runThanatosBatch([input]);
+    const line = lines[0];
     assert.isNotEmpty(line, "thanatos should return a result");
     assert.equal(
-      await UnChurchNumber(parseSKI(line), passthroughEvaluator),
+      await UnChurchNumber(parseSKI(line!), passthroughEvaluator),
       3n,
       "tokenize count",
     );
@@ -201,6 +208,8 @@ Deno.test({
 Deno.test({
   name: "Lexer - structural validations",
   ignore: true, //!thanatosAvailable(), // TODO: only the first one passes so far
+  sanitizeResources: false,
+  sanitizeOps: false,
   fn: async () => {
     const inputs: string[] = [];
     for (

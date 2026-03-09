@@ -272,6 +272,7 @@ function getSessionPromiseRef(): {
 }
 
 function onProcessSignal(): void {
+  console.error("[thanatos harness] process signal received, closing session");
   const ref = getSessionPromiseRef();
   const p = ref.current;
   if (p === null) return;
@@ -376,7 +377,5 @@ Deno.test({
     ) {
       throw new Error("STATS missing expected fields: " + statsLine);
     }
-    // close() clears the singleton; next getThanatosSession() in any test will start a new daemon. Test order can thus affect daemon lifetime.
-    await session.close();
   },
 });

@@ -96,8 +96,8 @@ static int test_deep_left_spine(void) {
     uint32_t l = (uint32_t)(2 * i);
     uint32_t r = (uint32_t)(2 * i + 1);
     const char *term = (i % 3 == 1) ? " I " : (i % 3 == 2) ? " S " : " K ";
-    int n = snprintf(spine_buf + off, remaining, "%s@%u,%u", term,
-                     (unsigned)l, (unsigned)r);
+    int n = snprintf(spine_buf + off, remaining, "%s@%u,%u", term, (unsigned)l,
+                     (unsigned)r);
     if (n < 0 || (size_t)n >= remaining) {
       return fail("deep left spine: snprintf overflow while building spine");
     }

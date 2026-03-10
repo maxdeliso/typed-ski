@@ -133,4 +133,9 @@ void workerLoop(uint32_t worker_id);
 void arena_stdin_push(uint8_t byte);
 bool arena_stdout_try_pop(uint8_t *byte_out);
 
+/** Try to dequeue one suspension id from stdin_wait or stdout_wait (slot_size
+ * 4). Used by native runtime to wake IO waiters. */
+bool arena_stdin_wait_try_dequeue(uint32_t *node_id_out);
+bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out);
+
 #endif

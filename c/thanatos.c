@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #define MAX_PENDING_REQS 1024
+#define MAX_IO_WAIT 1024
 
 typedef struct {
   uint32_t req_id;
@@ -17,6 +18,11 @@ typedef struct {
   pthread_cond_t cond;
   pthread_mutex_t mutex;
 } PendingReq;
+
+typedef struct {
+  uint32_t node_id;
+  uint32_t req_id;
+} IoWaitEntry;
 
 static pthread_t *workers = NULL;
 static uint32_t num_workers_count = 0;
@@ -29,12 +35,74 @@ static pthread_t dispatcher_thread;
 static pthread_t stdout_thread;
 static bool stdout_thread_started = false;
 
+/** Stdin source for batch mode (set from config at init). */
+static const uint8_t *stdin_src = NULL;
+static size_t stdin_src_len = 0;
+static size_t *stdin_src_pos = NULL;
+
 static PendingReq pending_reqs[MAX_PENDING_REQS];
+static IoWaitEntry io_wait_map[MAX_IO_WAIT];
+static pthread_mutex_t io_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/** Pump blocks on this when arena stdout ring is empty; dispatcher signals
+ * after each CQE so pump wakes when there may be new stdout (no fixed sleep). */
+static pthread_mutex_t pump_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t pump_cvar = PTHREAD_COND_INITIALIZER;
 
 static void *worker_thread_main(void *arg) {
   uint32_t worker_id = (uint32_t)(uintptr_t)arg;
   workerLoop(worker_id);
   return NULL;
+}
+
+/** Temporary: infer READ_ONE vs WRITE_ONE by walking the suspension's stored
+ * term (left-spine to head). Fragile if representation changes; prefer encoding
+ * IO wait reason in CQ_EVENT_IO_WAIT or suspension tag (e.g. IO_WAIT_READ /
+ * IO_WAIT_WRITE) for a durable mechanism. */
+static bool io_wait_is_stdin(uint32_t node_id) {
+  uint32_t curr = leftOf(node_id);
+  uint32_t head = curr;
+  while (kindOf(head) == ARENA_KIND_NON_TERM)
+    head = leftOf(head);
+  if (kindOf(head) != ARENA_KIND_TERMINAL)
+    return false;
+  return symOf(head) == ARENA_SYM_READ_ONE;
+}
+
+static void io_wait_register(uint32_t node_id, uint32_t req_id) {
+  pthread_mutex_lock(&io_wait_mutex);
+  for (int i = 0; i < MAX_IO_WAIT; i++) {
+    if (io_wait_map[i].node_id == EMPTY) {
+      io_wait_map[i].node_id = node_id;
+      io_wait_map[i].req_id = req_id;
+      pthread_mutex_unlock(&io_wait_mutex);
+      return;
+    }
+  }
+  pthread_mutex_unlock(&io_wait_mutex);
+  fprintf(
+      stderr,
+      "Thanatos: IO wait map full (node_id=%u req_id=%u); aborting to avoid "
+      "silent lost wakeups\n",
+      node_id, req_id);
+  abort();
+}
+
+/** Look up req_id by node_id and remove the entry. Returns req_id or 0 if not
+ * found. */
+static uint32_t io_wait_remove(uint32_t node_id) {
+  pthread_mutex_lock(&io_wait_mutex);
+  for (int i = 0; i < MAX_IO_WAIT; i++) {
+    if (io_wait_map[i].node_id == node_id) {
+      uint32_t req_id = io_wait_map[i].req_id;
+      io_wait_map[i].node_id = EMPTY;
+      io_wait_map[i].req_id = 0;
+      pthread_mutex_unlock(&io_wait_mutex);
+      return req_id;
+    }
+  }
+  pthread_mutex_unlock(&io_wait_mutex);
+  return 0;
 }
 
 extern uint8_t *ARENA_BASE_ADDR;
@@ -93,10 +161,14 @@ dispatcher_thread_main(void *arg) {
               "(dropped=%llu)\n",
               req_id, event, node, dropped);
     }
+    /* Wake stdout pump so it can drain if a worker just enqueued. */
+    pthread_cond_signal(&pump_cvar);
   }
   return NULL;
 }
 
+/* Consumes arena stdout ring; thanatos_reduce() also drains on DONE. Both
+ * consume the same ring—ordering is race-dependent. Fine for batch mode. */
 static void *stdout_thread_main(void *arg) {
   (void)arg;
   uint8_t byte;
@@ -104,10 +176,31 @@ static void *stdout_thread_main(void *arg) {
     if (arena_stdout_try_pop(&byte)) {
       putchar(byte);
       fflush(stdout);
+      /* Wake one stdout waiter so it can retry enqueue. */
+      uint32_t woke_node;
+      if (arena_stdout_wait_try_dequeue(&woke_node)) {
+        uint32_t woke_req = io_wait_remove(woke_node);
+        if (woke_req != 0) {
+          while (hostSubmit(woke_node, woke_req, 0) != 0) { /* spin */
+          }
+        }
+      }
+    } else {
+      pthread_mutex_lock(&pump_mutex);
+      pthread_cond_wait(&pump_cvar, &pump_mutex);
+      pthread_mutex_unlock(&pump_mutex);
     }
   }
   while (arena_stdout_try_pop(&byte)) {
     putchar(byte);
+    uint32_t woke_node;
+    if (arena_stdout_wait_try_dequeue(&woke_node)) {
+      uint32_t woke_req = io_wait_remove(woke_node);
+      if (woke_req != 0) {
+        while (hostSubmit(woke_node, woke_req, 0) != 0) { /* spin */
+        }
+      }
+    }
   }
   fflush(stdout);
   return NULL;
@@ -126,11 +219,19 @@ void thanatos_init(ThanatosConfig config) {
 
   initArena(config.arena_capacity);
 
+  stdin_src = config.stdin_bytes;
+  stdin_src_len = config.stdin_len;
+  stdin_src_pos = config.stdin_pos;
+
   for (int i = 0; i < MAX_PENDING_REQS; i++) {
     pending_reqs[i].req_id = 0;
     pending_reqs[i].done = false;
     pthread_mutex_init(&pending_reqs[i].mutex, NULL);
     pthread_cond_init(&pending_reqs[i].cond, NULL);
+  }
+  for (int i = 0; i < MAX_IO_WAIT; i++) {
+    io_wait_map[i].node_id = EMPTY;
+    io_wait_map[i].req_id = 0;
   }
 
   const char *trace_env = getenv("THANATOS_TRACE");
@@ -200,14 +301,41 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
     if (event == CQ_EVENT_DONE || step_budget_exhausted) {
       pending_reqs[slot].req_id = 0;
       pthread_mutex_unlock(&pending_reqs[slot].mutex);
+      /* Drain any arena stdout bytes still in the ring so program output
+       * appears before main's result line. stdout_thread_main() also consumes
+       * this ring; both are consumers of the same ring, so output ordering
+       * is partly race-dependent. For batch mode this is acceptable. */
+      uint8_t byte;
+      while (arena_stdout_try_pop(&byte)) {
+        putchar(byte);
+      }
+      fflush(stdout);
       return node;
     } else if (event == CQ_EVENT_IO_WAIT) {
-      /* TODO: support IO instructions; for now treat as error. */
-      fprintf(stderr, "Thanatos: IO instruction not supported (req_id %u)\n",
-              req_id);
-      pending_reqs[slot].req_id = 0;
-      pthread_mutex_unlock(&pending_reqs[slot].mutex);
-      return EMPTY;
+      io_wait_register(node, req_id);
+      bool is_stdin = io_wait_is_stdin(node);
+      if (is_stdin) {
+        if (stdin_src && stdin_src_pos && *stdin_src_pos < stdin_src_len) {
+          uint8_t byte = stdin_src[*stdin_src_pos];
+          (*stdin_src_pos)++;
+          arena_stdin_push(byte);
+          (void)io_wait_remove(node);
+          while (hostSubmit(node, req_id, 0) != 0) { /* spin */
+          }
+          pending_reqs[slot].done = false;
+          pthread_mutex_unlock(&pending_reqs[slot].mutex);
+        } else {
+          fprintf(stderr, "Thanatos: stdin exhausted (req_id %u)\n", req_id);
+          (void)io_wait_remove(node);
+          pending_reqs[slot].req_id = 0;
+          pthread_mutex_unlock(&pending_reqs[slot].mutex);
+          return EMPTY;
+        }
+      } else {
+        /* Stdout wait: pump will dequeue from stdout_wait and resubmit. */
+        pending_reqs[slot].done = false;
+        pthread_mutex_unlock(&pending_reqs[slot].mutex);
+      }
     } else if (event == CQ_EVENT_YIELD) {
       current_node = node;
       pending_reqs[slot].done = false;
@@ -250,7 +378,12 @@ void thanatos_shutdown(void) {
   atomic_store_explicit(&is_thanatos_initialized, false, memory_order_release);
 
   if (stdout_thread_started) {
+    pthread_mutex_lock(&pump_mutex);
+    pthread_cond_signal(&pump_cvar);
+    pthread_mutex_unlock(&pump_mutex);
     pthread_join(stdout_thread, NULL);
+    pthread_mutex_destroy(&pump_mutex);
+    pthread_cond_destroy(&pump_cvar);
     stdout_thread_started = false;
   }
   /* Wake dispatcher from blocking CQ dequeue so it can exit */

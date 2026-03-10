@@ -20,9 +20,12 @@ import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import {
+  fromDagWire,
+  getThanatosSession,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
+  toDagWire,
 } from "../thanatosHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -180,22 +183,6 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-    const inputs: string[] = [];
-    for (
-      const file of [
-        "testLexIdentVsKw.trip",
-        "testLexNat.trip",
-        "testLexArrows.trip",
-        "testLexCoreKeywords.trip",
-      ]
-    ) {
-      const program = await compileAndValidateTestProgram(file);
-      inputs.push(unparseSKI(program));
-    }
-
-    const results = await runThanatosBatch(inputs);
-    assert.equal(results.length, inputs.length);
-
     const structuralTests = [
       {
         file: "testLexIdentVsKw.trip",
@@ -214,12 +201,13 @@ Deno.test({
         msg: "Expected let/match/in to tokenize as dedicated keyword tokens",
       },
     ];
-    for (let i = 0; i < structuralTests.length; i++) {
-      const tc = structuralTests[i];
-      if (tc === undefined) continue;
-      const line = results[i] ?? "";
-      const ok = line !== "" &&
-        (await UnChurchBoolean(parseSKI(line), passthroughEvaluator));
+    const session = await getThanatosSession();
+    for (const tc of structuralTests) {
+      const program = await compileAndValidateTestProgram(tc.file);
+      const dag = toDagWire(program);
+      const resultDag = await session.reduceDag(dag);
+      const resultExpr = fromDagWire(resultDag);
+      const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
       assert.isTrue(ok, tc.msg);
     }
   },

@@ -1394,6 +1394,24 @@ bool arena_stdout_try_pop(uint8_t *byte_out) {
   return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), byte_out, 1);
 }
 
+bool arena_stdin_wait_try_dequeue(uint32_t *node_id_out) {
+  ensure_arena();
+  if (ARENA_BASE_ADDR == NULL || node_id_out == NULL)
+    return false;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdin_wait),
+                     node_id_out, 4);
+}
+
+bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out) {
+  ensure_arena();
+  if (ARENA_BASE_ADDR == NULL || node_id_out == NULL)
+    return false;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
+                     node_id_out, 4);
+}
+
 void workerLoop(uint32_t worker_id) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;

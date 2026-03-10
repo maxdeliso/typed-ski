@@ -12,10 +12,12 @@ import type { SKIExpression } from "../lib/ski/expression.ts";
 import { apply, unparseSKI } from "../lib/ski/expression.ts";
 import { term } from "../lib/ski/terminal.ts";
 import type { SKITerminalSymbol } from "../lib/ski/terminal.ts";
+import { I, ReadOne, WriteOne } from "../lib/ski/terminal.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
+const TEST_NATIVE_WORKERS = 2;
 
 /** Path to the thanatos binary (built by make build-native). Override with env THANATOS_BIN for ASan etc. */
 export const THANATOS_BIN =
@@ -243,9 +245,11 @@ export class ThanatosSession {
 }
 
 function defaultWorkerCount(): number {
-  return typeof navigator !== "undefined" && navigator.hardwareConcurrency > 0
+  const detected = typeof navigator !== "undefined" &&
+      navigator.hardwareConcurrency > 0
     ? navigator.hardwareConcurrency
     : 4;
+  return Math.max(TEST_NATIVE_WORKERS, Math.min(detected, 4));
 }
 
 /** Global key for the singleton so one process is shared across all test files. */
@@ -376,6 +380,225 @@ Deno.test({
       !statsLine.includes("dropped=")
     ) {
       throw new Error("STATS missing expected fields: " + statsLine);
+    }
+  },
+});
+
+/**
+ * Stage 8: Native IO support — same compiler binary emits same bytes as JS/WASM.
+ * Runs writeOne 65 via thanatos batch mode and via JS evaluator; asserts stdout
+ * bytes match.
+ */
+Deno.test({
+  name: "native vs JS/WASM same stdout bytes (writeOne)",
+  ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const expr = apply(WriteOne, { kind: "u8", value: 65 });
+    const dagLine = toDagWire(expr);
+
+    const { ParallelArenaEvaluatorWasm } = await import(
+      "../lib/evaluator/parallelArenaEvaluator.ts"
+    );
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    await evaluator.reduceAsync(expr);
+    const jsStdout = await evaluator.readStdout(1);
+    evaluator.terminate();
+    assertEquals(jsStdout.length, 1);
+    assertEquals(jsStdout[0], 65);
+
+    const proc = new Deno.Command(THANATOS_BIN, {
+      args: ["--dag", String(TEST_NATIVE_WORKERS)],
+      cwd: PROJECT_ROOT,
+      stdin: "piped",
+      stdout: "piped",
+      stderr: "inherit",
+    }).spawn();
+    const writer = proc.stdin.getWriter();
+    await writer.write(new TextEncoder().encode(dagLine + "\n"));
+    await writer.close();
+    const { stdout: nativeStdout } = await proc.output();
+    assertEquals(nativeStdout.length >= 1, true);
+    assertEquals(nativeStdout[0], 65, "native first byte must match JS");
+    assertEquals(
+      nativeStdout.subarray(0, jsStdout.length),
+      jsStdout,
+      "native program stdout must equal JS program stdout",
+    );
+  },
+});
+
+/** Multiple writeOne on a single continuation spine must preserve program
+ * order. Native batch mode should therefore emit ABC exactly, not merely some
+ * permutation of those bytes.
+ *
+ * Semantics: the DAG decodes to (WriteOne 65)((WriteOne 66)((WriteOne 67)I)),
+ * i.e. three causally ordered writeOne calls with continuations.
+ *
+ * Why stdout has more than 3 bytes: the thanatos binary in batch mode writes
+ * (1) the arena stdout pump output (these 3 bytes) and (2) a textual line from
+ * main.c (unparse_dag(result) + newline). We only assert on the first 3 bytes.
+ *
+ * DAG string (postorder): . U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11 */
+Deno.test({
+  name: "native IO - multiple writeOne ABC preserves sequential order",
+  ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const dagLine = ". U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11";
+    for (let i = 0; i < 32; i++) {
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "inherit",
+      }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(dagLine + "\n"));
+      await writer.close();
+      const { stdout } = await proc.output();
+      assertEquals(stdout.length >= 3, true);
+      const first3 = Array.from(stdout.subarray(0, 3));
+      assertEquals(
+        first3,
+        [65, 66, 67],
+        `run ${i + 1}: first three stdout bytes must preserve ABC order`,
+      );
+    }
+  },
+});
+
+/** readOne with runtime stdin from --stdin-file; assert result line (no reduction error). */
+Deno.test({
+  name: "native IO - readOne with --stdin-file",
+  ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const tmpStdin = await Deno.makeTempFile();
+    await Deno.writeFile(tmpStdin, new Uint8Array([65]));
+    try {
+      const expr = apply(ReadOne, I);
+      const dagLine = toDagWire(expr);
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "piped",
+      }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(dagLine + "\n"));
+      await writer.close();
+      const { stdout, stderr, code } = await proc.output();
+      const outText = new TextDecoder().decode(stdout);
+      const errText = new TextDecoder().decode(stderr);
+      assertEquals(code, 0, "exit 0");
+      assertEquals(
+        outText.includes("reduction error"),
+        false,
+        "must not report reduction error: " + errText,
+      );
+      assertEquals(
+        outText.includes("U41") || outText.includes("65"),
+        true,
+        "result should reflect byte 65 (U41): " + outText,
+      );
+    } finally {
+      await Deno.remove(tmpStdin);
+    }
+  },
+});
+
+/** readOne with empty runtime stdin file: native must block until data arrives,
+ * matching the JS/WASM host contract more closely than the old EOF error path. */
+Deno.test({
+  name: "native IO - readOne blocks until --stdin-file receives data",
+  ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const tmpStdin = await Deno.makeTempFile();
+    await Deno.writeFile(tmpStdin, new Uint8Array());
+    try {
+      const expr = apply(ReadOne, I);
+      const dagLine = toDagWire(expr);
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "piped",
+      }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(dagLine + "\n"));
+      await writer.close();
+
+      const outputPromise = proc.output();
+      const stateBeforeAppend = await Promise.race([
+        outputPromise.then(() => "finished"),
+        new Promise<"pending">((resolve) =>
+          setTimeout(() => resolve("pending"), 50)
+        ),
+      ]);
+      assertEquals(
+        stateBeforeAppend,
+        "pending",
+        "READ_ONE should stay blocked while runtime stdin is empty",
+      );
+
+      await Deno.writeFile(tmpStdin, new Uint8Array([65]), { append: true });
+
+      const { stdout, stderr, code } = await outputPromise;
+      const outText = new TextDecoder().decode(stdout);
+      const errText = new TextDecoder().decode(stderr);
+      assertEquals(code, 0, "exit 0 after input arrives");
+      assertEquals(
+        outText.includes("reduction error"),
+        false,
+        "must not report reduction error: " + errText,
+      );
+      assertEquals(
+        outText.includes("U41") || outText.includes("65"),
+        true,
+        "result should reflect byte 65 (U41): " + outText,
+      );
+    } finally {
+      await Deno.remove(tmpStdin);
+    }
+  },
+});
+
+/** Interleaved read/write: read one byte, write it (echo); runtime stdin from file. */
+Deno.test({
+  name: "native IO - interleaved read/write echo",
+  ignore: !thanatosAvailable(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const tmpStdin = await Deno.makeTempFile();
+    await Deno.writeFile(tmpStdin, new Uint8Array([88])); // 'X'
+    try {
+      const expr = apply(ReadOne, WriteOne);
+      const dagLine = toDagWire(expr);
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "inherit",
+      }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(dagLine + "\n"));
+      await writer.close();
+      const { stdout } = await proc.output();
+      assertEquals(stdout.length >= 1, true);
+      assertEquals(stdout[0], 88, "echoed byte must be 88 (X)");
+    } finally {
+      await Deno.remove(tmpStdin);
     }
   },
 });

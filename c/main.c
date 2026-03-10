@@ -1,6 +1,8 @@
 #include "arena.h"
 #include "ski_io.h"
 #include "thanatos.h"
+#include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,42 +26,48 @@ static uint32_t default_num_workers(void) {
   return 4;
 }
 
+/** Batch mode: program_input is the SKI/DAG text to parse and reduce.
+ * runtime_stdin_fd is an optional stream/file consumed lazily by READ_ONE on a
+ * separate channel. Pass -1 when no runtime stdin source is available. */
 static int run_batch_mode(uint32_t num_workers, uint32_t arena_capacity,
-                          char *input, size_t input_len, int use_dag) {
+                          char *program_input, size_t program_len,
+                          int use_dag, int runtime_stdin_fd) {
   ThanatosConfig config = {
       .num_workers = num_workers,
       .arena_capacity = arena_capacity,
+      .stdin_fd = runtime_stdin_fd,
   };
   thanatos_init(config);
 
   thanatos_start_threads(true);
 
   size_t pos = 0;
-  while (pos < input_len) {
-    while (pos < input_len && (input[pos] == ' ' || input[pos] == '\t' ||
-                               input[pos] == '\r' || input[pos] == '\n'))
+  while (pos < program_len) {
+    while (pos < program_len &&
+           (program_input[pos] == ' ' || program_input[pos] == '\t' ||
+            program_input[pos] == '\r' || program_input[pos] == '\n'))
       pos++;
-    if (pos >= input_len)
+    if (pos >= program_len)
       break;
 
     size_t line_start = pos;
-    while (pos < input_len && input[pos] != '\n')
+    while (pos < program_len && program_input[pos] != '\n')
       pos++;
     size_t line_len = pos - line_start;
     if (line_len == 0) {
-      if (pos < input_len && input[pos] == '\n')
+      if (pos < program_len && program_input[pos] == '\n')
         pos++;
       continue;
     }
-    if (pos < input_len && input[pos] == '\n')
+    if (pos < program_len && program_input[pos] == '\n')
       pos++;
 
     size_t end_idx = 0;
     uint32_t root;
     if (use_dag) {
-      root = parse_dag(input + line_start, line_len, &end_idx);
+      root = parse_dag(program_input + line_start, line_len, &end_idx);
     } else {
-      root = parse_ski(input + line_start, line_len, &end_idx);
+      root = parse_ski(program_input + line_start, line_len, &end_idx);
     }
     if (root == EMPTY) {
       printf("parse error\n");
@@ -220,6 +228,7 @@ int main(int argc, char **argv) {
   uint32_t arena_capacity = 1 << 20;
   int use_dag = 0;
   int daemon = 0;
+  const char *stdin_file = NULL; /* Optional runtime stdin stream for READ_ONE. */
   int arg_idx = 1;
 
   /* Consume flags in any order; remainder are positional (workers,
@@ -231,6 +240,13 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[arg_idx], "--dag") == 0) {
       use_dag = 1;
       arg_idx++;
+    } else if (strcmp(argv[arg_idx], "--stdin-file") == 0) {
+      arg_idx++;
+      if (arg_idx >= argc) {
+        fprintf(stderr, "--stdin-file requires a path\n");
+        return 1;
+      }
+      stdin_file = argv[arg_idx++];
     } else
       break;
   }
@@ -245,8 +261,8 @@ int main(int argc, char **argv) {
     return run_daemon_mode(num_workers, arena_capacity);
   }
 
-  /* Batch mode: legacy behavior; stdout may include program output (pump
-   * enabled). Read all stdin, then process lines. */
+  /* Batch mode: program input from process stdin (SKI/DAG lines). Runtime stdin
+   * for READ_ONE comes from --stdin-file if given and is consumed lazily. */
   size_t input_cap = INITIAL_LINE_CAP;
   char *input = malloc(input_cap);
   if (!input) {
@@ -272,8 +288,18 @@ int main(int argc, char **argv) {
       break;
   }
 
-  int ret =
-      run_batch_mode(num_workers, arena_capacity, input, input_len, use_dag);
+  int runtime_stdin_fd = -1;
+  if (stdin_file) {
+    runtime_stdin_fd = open(stdin_file, O_RDONLY | O_NONBLOCK);
+    if (runtime_stdin_fd < 0) {
+      fprintf(stderr, "cannot open --stdin-file %s\n", stdin_file);
+      free(input);
+      return 1;
+    }
+  }
+
+  int ret = run_batch_mode(num_workers, arena_capacity, input, input_len,
+                           use_dag, runtime_stdin_fd);
   free(input);
   return ret;
 }

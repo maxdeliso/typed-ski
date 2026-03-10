@@ -154,7 +154,7 @@ Deno.test({
       const ok = await UnChurchBoolean(
         resultExpr,
         passthroughEvaluator,
-      ).catch(() => false);
+      );
       assert.isTrue(ok, t.assertion);
     };
 

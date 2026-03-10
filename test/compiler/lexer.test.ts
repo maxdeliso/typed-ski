@@ -219,9 +219,7 @@ Deno.test({
       if (tc === undefined) continue;
       const line = results[i] ?? "";
       const ok = line !== "" &&
-        await UnChurchBoolean(parseSKI(line), passthroughEvaluator).catch(() =>
-          false
-        );
+        (await UnChurchBoolean(parseSKI(line), passthroughEvaluator));
       assert.isTrue(ok, tc.msg);
     }
   },

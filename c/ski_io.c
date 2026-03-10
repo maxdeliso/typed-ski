@@ -62,6 +62,18 @@ static uint32_t char_to_sym(int c) {
   case 'E':
   case 'e':
     return ARENA_SYM_EQ_U8;
+  case 'L':
+  case 'l':
+    return ARENA_SYM_LT_U8;
+  case 'D':
+  case 'd':
+    return ARENA_SYM_DIV_U8;
+  case 'M':
+  case 'm':
+    return ARENA_SYM_MOD_U8;
+  case 'A':
+  case 'a':
+    return ARENA_SYM_ADD_U8;
   default:
     return 0;
   }
@@ -171,6 +183,14 @@ static char sym_to_char(uint32_t sym) {
     return 'R';
   case ARENA_SYM_EQ_U8:
     return 'E';
+  case ARENA_SYM_LT_U8:
+    return 'L';
+  case ARENA_SYM_DIV_U8:
+    return 'D';
+  case ARENA_SYM_MOD_U8:
+    return 'M';
+  case ARENA_SYM_ADD_U8:
+    return 'A';
   default:
     return '?';
   }
@@ -274,6 +294,14 @@ static uint32_t dag_char_to_sym(int c) {
     return ARENA_SYM_WRITE_ONE;
   case 'E':
     return ARENA_SYM_EQ_U8;
+  case 'L':
+    return ARENA_SYM_LT_U8;
+  case 'D':
+    return ARENA_SYM_DIV_U8;
+  case 'M':
+    return ARENA_SYM_MOD_U8;
+  case 'A':
+    return ARENA_SYM_ADD_U8;
   default:
     return 0;
   }

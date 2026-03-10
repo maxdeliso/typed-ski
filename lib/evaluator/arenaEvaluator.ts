@@ -53,6 +53,10 @@ const terminalCache = new WeakMap<
     readOne: number;
     writeOne: number;
     eqU8: number;
+    ltU8: number;
+    divU8: number;
+    modU8: number;
+    addU8: number;
   }
 >();
 
@@ -89,6 +93,10 @@ function toArenaWithExports(
       readOne: exports.allocTerminal(ArenaSym.ReadOne),
       writeOne: exports.allocTerminal(ArenaSym.WriteOne),
       eqU8: exports.allocTerminal(ArenaSym.EqU8),
+      ltU8: exports.allocTerminal(ArenaSym.LtU8),
+      divU8: exports.allocTerminal(ArenaSym.DivU8),
+      modU8: exports.allocTerminal(ArenaSym.ModU8),
+      addU8: exports.allocTerminal(ArenaSym.AddU8),
     };
     terminalCache.set(exports, cache);
   }
@@ -147,6 +155,18 @@ function toArenaWithExports(
           break;
         case SKITerminalSymbol.EqU8:
           id = cache.eqU8;
+          break;
+        case SKITerminalSymbol.LtU8:
+          id = cache.ltU8;
+          break;
+        case SKITerminalSymbol.DivU8:
+          id = cache.divU8;
+          break;
+        case SKITerminalSymbol.ModU8:
+          id = cache.modU8;
+          break;
+        case SKITerminalSymbol.AddU8:
+          id = cache.addU8;
           break;
         default:
           throw new Error("Unrecognised terminal symbol");

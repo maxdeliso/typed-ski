@@ -14,10 +14,13 @@ import Prelude MkPair
 import Prelude fst
 import Prelude snd
 import Prelude eqU8
+import Prelude ltU8
 import Prelude U8
 import Prelude Bool
 import Prelude true
 import Prelude false
+import Prelude and
+import Prelude or
 import Prelude if
 import Prelude reverse
 import Lexer Token
@@ -299,30 +302,9 @@ poly sndDeclToken = \p : Pair Decl (List Token) =>
 
 poly isTopLevelStartToken = \tok : Token =>
   let tag = tokenTag tok in
-  if [Bool] (eqU8 tag kwModuleTag)
-  (\u : U8 => true)
-  (\u : U8 =>
-      if [Bool] (eqU8 tag kwImportTag)
-      (\u : U8 => true)
-      (\u : U8 =>
-          if [Bool] (eqU8 tag kwExportTag)
-          (\u : U8 => true)
-          (\u : U8 =>
-              if [Bool] (eqU8 tag kwPolyTag)
-              (\u : U8 => true)
-              (\u : U8 =>
-                  if [Bool] (eqU8 tag kwTypedTag)
-                  (\u : U8 => true)
-                  (\u : U8 =>
-                      if [Bool] (eqU8 tag kwUntypedTag)
-                      (\u : U8 => true)
-                      (\u : U8 =>
-                          if [Bool] (eqU8 tag kwCombinatorTag)
-                          (\u : U8 => true)
-                          (\u : U8 =>
-                              if [Bool] (eqU8 tag kwTypeTag)
-                              (\u : U8 => true)
-                              (\u : U8 => eqU8 tag kwDataTag))))))))
+  or (eqU8 tag kwPolyTag)
+     (if [Bool] (ltU8 tag #u8(21)) (\u : U8 => false) (\u : U8 =>
+      if [Bool] (ltU8 tag #u8(29)) (\u : U8 => true)  (\u : U8 => false)))
 
 poly expect = \toks : List Token => \expectedTag : U8 =>
   matchList [Token] [Result ParseError (List Token)] toks

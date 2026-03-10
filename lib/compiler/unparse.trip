@@ -1,0 +1,103 @@
+module Unparse
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude if
+import Prelude append
+import Prelude reverse
+import Prelude U8
+import Prelude eqU8
+import Prelude ltU8
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+
+export Terminal
+export T_S
+export T_K
+export T_I
+export T_B
+export T_C
+export T_SPrime
+export T_BPrime
+export T_CPrime
+export T_WriteOne
+export T_ReadOne
+export T_EqU8
+export T_LtU8
+export T_DivU8
+export T_ModU8
+export T_AddU8
+export T_Byte
+export Comb
+export C_Term
+export C_App
+export terminalBytes
+export unparseCombinator
+
+data Terminal =
+  | T_S
+  | T_K
+  | T_I
+  | T_B
+  | T_C
+  | T_SPrime
+  | T_BPrime
+  | T_CPrime
+  | T_WriteOne
+  | T_ReadOne
+  | T_EqU8
+  | T_LtU8
+  | T_DivU8
+  | T_ModU8
+  | T_AddU8
+  | T_Byte U8
+
+data Comb =
+  | C_Term Terminal
+  | C_App Comb Comb
+
+poly terminalBytes = \t : Terminal =>
+  match t [List U8] {
+    | T_S => "S"
+    | T_K => "K"
+    | T_I => "I"
+    | T_B => "B"
+    | T_C => "C"
+    | T_SPrime => "P"
+    | T_BPrime => "Q"
+    | T_CPrime => "R"
+    | T_WriteOne => "."
+    | T_ReadOne => ","
+    | T_EqU8 => "E"
+    | T_LtU8 => "L"
+    | T_DivU8 => "D"
+    | T_ModU8 => "M"
+    | T_AddU8 => "A"
+    | T_Byte b => append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
+  }
+
+poly rec unparseCombinator = \c : Comb =>
+  match c [List U8] {
+    | C_Term t => terminalBytes t
+    | C_App l r =>
+        cons [U8] '('
+          (append [U8] (unparseCombinator l)
+            (cons [U8] ' '
+              (append [U8] (unparseCombinator r)
+                (cons [U8] ')' (nil [U8])))))
+  }
+
+poly rec u8ToDigits = \n : U8 =>
+  if [List U8] (ltU8 n #u8(10))
+    (\u : U8 => cons [U8] (addU8 n #u8(48)) (nil [U8]))
+    (\u : U8 =>
+      append [U8]
+        (u8ToDigits (divU8 n #u8(10)))
+        (cons [U8] (addU8 (modU8 n #u8(10)) #u8(48)) (nil [U8]))
+    )

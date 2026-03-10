@@ -29,6 +29,14 @@ export enum SKITerminalSymbol {
   WriteOne = ".",
   /** eqU8 : U8 -> U8 -> Bool (native intrinsic). */
   EqU8 = "E",
+  /** ltU8 : U8 -> U8 -> Bool (native intrinsic). */
+  LtU8 = "L",
+  /** divU8 : U8 -> U8 -> U8 (native intrinsic). */
+  DivU8 = "D",
+  /** modU8 : U8 -> U8 -> U8 (native intrinsic). */
+  ModU8 = "M",
+  /** addU8 : U8 -> U8 -> U8 (native intrinsic). */
+  AddU8 = "A",
 }
 
 /**
@@ -122,3 +130,23 @@ export const WriteOne: SKITerminal = term(SKITerminalSymbol.WriteOne);
  * The eqU8 intrinsic terminal (native byte equality).
  */
 export const EqU8: SKITerminal = term(SKITerminalSymbol.EqU8);
+
+/**
+ * The ltU8 intrinsic terminal (native byte less-than).
+ */
+export const LtU8: SKITerminal = term(SKITerminalSymbol.LtU8);
+
+/**
+ * The divU8 intrinsic terminal (native byte division).
+ */
+export const DivU8: SKITerminal = term(SKITerminalSymbol.DivU8);
+
+/**
+ * The modU8 intrinsic terminal (native byte modulo).
+ */
+export const ModU8: SKITerminal = term(SKITerminalSymbol.ModU8);
+
+/**
+ * The addU8 intrinsic terminal (native byte addition).
+ */
+export const AddU8: SKITerminal = term(SKITerminalSymbol.AddU8);

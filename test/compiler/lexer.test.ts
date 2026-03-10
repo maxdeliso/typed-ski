@@ -149,7 +149,7 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 });
 
 Deno.test({
-  name: "Lexer - tokenize count",
+  name: 'Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF',
   ignore: !thanatosAvailable(),
   sanitizeResources: false,
   sanitizeOps: false,
@@ -158,7 +158,7 @@ Deno.test({
     const preludeObj = await getPreludeObjectCached();
 
     const testObj = await loadTripModuleObject(
-      join(__dirname, "inputs", "testTokenizeLength.trip"),
+      join(__dirname, "inputs", "testTokenize1Space2.trip"),
     );
     const skiExpression = linkModules([
       { name: "Prelude", object: preludeObj },
@@ -172,7 +172,7 @@ Deno.test({
     assert.isNotEmpty(line, "thanatos should return a result");
     assert.isTrue(
       await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
-      'tokenize count: expected tokenize "1 2" to yield exactly 3 tokens',
+      'tokenize "1 2" should yield T_Nat "1", T_Nat "2", T_EOF',
     );
   },
 });

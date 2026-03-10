@@ -318,8 +318,6 @@ data Token =
       { name: "Prelude", ref: "foldl" },
       { name: "Prelude", ref: "append" },
       { name: "Prelude", ref: "reverse" },
-      { name: "Prelude", ref: "Bin" },
-      { name: "Bin", ref: "addBin" },
       { name: "Prelude", ref: "U8" },
       { name: "Prelude", ref: "eqU8" },
     ] as const;
@@ -362,7 +360,6 @@ data Token =
       "isKeywordPoly",
       "keywordTokenFromWord",
       "eqListU8",
-      "digitsU8ToBin",
       "mapResult",
     ] as const;
 
@@ -447,7 +444,7 @@ data Token =
       },
       {
         name: "T_Nat",
-        fields: [mkTypeVariable("Bin")],
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("U8"))],
       },
       { name: "T_EOF", fields: [] },
     ]);

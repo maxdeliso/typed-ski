@@ -4,12 +4,15 @@ import { fileURLToPath } from "node:url";
 import type { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
-import { getNatObject } from "../../lib/nat.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { unparseSKI } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
-import { passthroughEvaluator, runThanatosBatch } from "../thanatosHarness.ts";
+import {
+  fromDagWire,
+  getThanatosSession,
+  passthroughEvaluator,
+  toDagWire,
+} from "../thanatosHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEXER_SOURCE_FILE = new URL(
@@ -24,7 +27,6 @@ const PARSER_SOURCE_FILE = new URL(
 let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;
 let parserObject: ReturnType<typeof deserializeTripCObject> | null = null;
 let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
-let natObject: Awaited<ReturnType<typeof getNatObject>> | null = null;
 
 async function getLexerObject() {
   if (!lexerObject) {
@@ -47,13 +49,6 @@ async function getPreludeObjectCached() {
   return preludeObject;
 }
 
-async function getNatObjectCached() {
-  if (!natObject) {
-    natObject = await getNatObject();
-  }
-  return natObject;
-}
-
 async function compileTestProgram(
   inputFileName: string,
 ): Promise<ReturnType<typeof deserializeTripCObject>> {
@@ -63,7 +58,6 @@ async function compileTestProgram(
 
 Deno.test({
   name: "Parser unit tests",
-  ignore: true, // TODO: still too slow
   sanitizeResources: false,
 }, async () => {
   const tests = [
@@ -124,28 +118,50 @@ Deno.test({
   const lexerObj = await getLexerObject();
   const parserObj = await getParserObject();
   const preludeObj = await getPreludeObjectCached();
-  const natObj = await getNatObjectCached();
 
-  const inputs: string[] = [];
-  for (const t of tests) {
-    const testObj = await compileTestProgram(t.file);
-    const skiExpression = linkModules([
-      { name: "Prelude", object: preludeObj },
-      { name: "Nat", object: natObj },
-      { name: "Lexer", object: lexerObj },
-      { name: "Parser", object: parserObj },
-      { name: "Test", object: testObj },
-    ]);
-    inputs.push(unparseSKI(parseSKI(skiExpression)));
-  }
+  const PARSER_TEST_REDUCE_TIMEOUT_MS = 20_000;
 
-  const results = await runThanatosBatch(inputs);
   for (let i = 0; i < tests.length; i++) {
-    const line = results[i] ?? "";
-    const ok = line !== "" &&
-      await UnChurchBoolean(parseSKI(line), passthroughEvaluator).catch(() =>
-        false
+    const t = tests[i]!;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `Parser test "${t.file}" timed out after ${
+                PARSER_TEST_REDUCE_TIMEOUT_MS / 1000
+              }s (possible infinite reduction in thanatos)`,
+            ),
+          ),
+        PARSER_TEST_REDUCE_TIMEOUT_MS,
       );
-    assert.isTrue(ok, tests[i]!.assertion);
+    });
+
+    const runOne = async () => {
+      const testObj = await compileTestProgram(t.file);
+      const linked = linkModules([
+        { name: "Prelude", object: preludeObj },
+        { name: "Lexer", object: lexerObj },
+        { name: "Parser", object: parserObj },
+        { name: "Test", object: testObj },
+      ]);
+      const expr = parseSKI(linked);
+      const dag = toDagWire(expr);
+      const session = await getThanatosSession();
+      const resultDag = await session.reduceDag(dag);
+      const resultExpr = fromDagWire(resultDag);
+      const ok = await UnChurchBoolean(
+        resultExpr,
+        passthroughEvaluator,
+      );
+      assert.isTrue(ok, t.assertion);
+    };
+
+    try {
+      await Promise.race([runOne(), timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
   }
 });

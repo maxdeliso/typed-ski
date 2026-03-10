@@ -57,7 +57,7 @@ type Parser = #A -> List Bin -> Result ParseError (Pair A (List Bin))
 data Pair A B = MkPair A B
 data Result E T = Err E | Ok T
 data Bin = BZ | B0 Bin | B1 Bin
-data ParseError = MkParseError Bin (List Bin)
+data ParseError = MkParseError (List U8)
 data Maybe A = None | Some A
 
 poly id : #a->a->a = #a => \x:a => x

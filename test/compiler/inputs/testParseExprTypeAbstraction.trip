@@ -32,9 +32,9 @@ export main
 poly main =
   let input =
     cons [Token] T_Hash
-      (cons [Token] (T_Ident (cons [U8] (#u8(88)) (nil [U8])))
+      (cons [Token] (T_Ident "X")
         (cons [Token] T_FatArrow
-          (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
+          (cons [Token] (T_Ident "x")
             (cons [Token] T_EOF (nil [Token])))))
   in
   match (parseExpr input) [Bool] {
@@ -42,7 +42,7 @@ poly main =
     | Ok res =>
       let expr = fst [Expr] [List Token] res in
       match expr [Bool] {
-        | E_Var n => eqListU8 n (cons [U8] (#u8(120)) (nil [U8]))
+        | E_Var n => eqListU8 n "x"
         | E_App f x => false
         | E_Lam n body => false
         | E_Let n v b => false

@@ -1,0 +1,57 @@
+module Test
+
+import Lexer tokenize
+import Lexer Token
+import Lexer tokenTag
+import Lexer tokenNatValue
+import Lexer eqListU8
+import Prelude Result
+import Prelude Err
+import Prelude Ok
+import Prelude List
+import Prelude matchList
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude and
+import Prelude eqU8
+import Prelude U8
+
+export main
+
+poly list1Space2 : List U8 = "1 2"
+
+poly natTag : U8 = (#u8(30))
+poly eofTag : U8 = (#u8(31))
+
+poly firstIsNat1 = \tok : Token =>
+  and (eqU8 (tokenTag tok) natTag) (eqListU8 (tokenNatValue tok) "1")
+
+poly secondIsNat2 = \tok : Token =>
+  and (eqU8 (tokenTag tok) natTag) (eqListU8 (tokenNatValue tok) "2")
+
+poly thirdIsEof = \tok : Token =>
+  eqU8 (tokenTag tok) eofTag
+
+poly main =
+  match (tokenize list1Space2) [Bool] {
+    | Err _ => false
+    | Ok tokens =>
+      matchList [Token] [Bool] tokens false
+        (\h1 : Token => \rest : List Token =>
+          if [Bool] (firstIsNat1 h1)
+            (\u : U8 =>
+              matchList [Token] [Bool] rest false
+                (\h2 : Token => \rest2 : List Token =>
+                  if [Bool] (secondIsNat2 h2)
+                    (\u : U8 =>
+                      matchList [Token] [Bool] rest2 false
+                        (\h3 : Token => \rest3 : List Token =>
+                          if [Bool] (thirdIsEof h3)
+                            (\u : U8 =>
+                              matchList [Token] [Bool] rest3 true
+                                (\_ : Token => \_ : List Token => false))
+                            (\u : U8 => false)))
+                    (\u : U8 => false)))
+            (\u : U8 => false))
+  }

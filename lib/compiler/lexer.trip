@@ -26,11 +26,6 @@ import Prelude snd
 import Prelude foldl
 import Prelude append
 import Prelude reverse
-import Prelude Bin
-import Prelude BZ
-import Prelude B0
-import Prelude B1
-import Bin addBin
 import Prelude U8
 import Prelude eqU8
 
@@ -90,7 +85,6 @@ export keywordTokenFromWordLet
 export keywordTokenFromWordRec
 export keywordTokenFromWord
 export eqListU8
-export digitsU8ToBin
 export mapResult
 export isSpaceU8
 export isDigitU8
@@ -134,7 +128,7 @@ data Token =
   | T_KwType
   | T_KwData
   | T_Ident (List U8)
-  | T_Nat Bin
+  | T_Nat (List U8)
   | T_EOF
 
 poly tokenTag = \tok : Token =>
@@ -209,38 +203,38 @@ poly tokenText = \tok : Token =>
   }
 
 poly tokenNatValue = \tok : Token =>
-  match tok [U8] {
-    | T_LParen => 0
-    | T_RParen => 0
-    | T_LBrace => 0
-    | T_RBrace => 0
-    | T_LBracket => 0
-    | T_RBracket => 0
-    | T_Backslash => 0
-    | T_Arrow => 0
-    | T_FatArrow => 0
-    | T_Eq => 0
-    | T_Colon => 0
-    | T_Hash => 0
-    | T_Pipe => 0
-    | T_Dot => 0
-    | T_Comma => 0
-    | T_KwPoly => 0
-    | T_KwRec => 0
-    | T_KwLet => 0
-    | T_KwIn => 0
-    | T_KwMatch => 0
-    | T_KwModule => 0
-    | T_KwImport => 0
-    | T_KwExport => 0
-    | T_KwTyped => 0
-    | T_KwUntyped => 0
-    | T_KwCombinator => 0
-    | T_KwType => 0
-    | T_KwData => 0
-    | T_Ident str => 0
-    | T_Nat n => n
-    | T_EOF => 0
+  match tok [List U8] {
+    | T_LParen => nil [U8]
+    | T_RParen => nil [U8]
+    | T_LBrace => nil [U8]
+    | T_RBrace => nil [U8]
+    | T_LBracket => nil [U8]
+    | T_RBracket => nil [U8]
+    | T_Backslash => nil [U8]
+    | T_Arrow => nil [U8]
+    | T_FatArrow => nil [U8]
+    | T_Eq => nil [U8]
+    | T_Colon => nil [U8]
+    | T_Hash => nil [U8]
+    | T_Pipe => nil [U8]
+    | T_Dot => nil [U8]
+    | T_Comma => nil [U8]
+    | T_KwPoly => nil [U8]
+    | T_KwRec => nil [U8]
+    | T_KwLet => nil [U8]
+    | T_KwIn => nil [U8]
+    | T_KwMatch => nil [U8]
+    | T_KwModule => nil [U8]
+    | T_KwImport => nil [U8]
+    | T_KwExport => nil [U8]
+    | T_KwTyped => nil [U8]
+    | T_KwUntyped => nil [U8]
+    | T_KwCombinator => nil [U8]
+    | T_KwType => nil [U8]
+    | T_KwData => nil [U8]
+    | T_Ident str => nil [U8]
+    | T_Nat digits => digits
+    | T_EOF => nil [U8]
   }
 
 poly u8_space    : U8 = ' '
@@ -499,31 +493,6 @@ poly keywordTokenFromWord = \word : List U8 =>
     (\u : U8 => T_KwPoly)
     (\u : U8 => keywordTokenFromWordRec word)
 
-poly digitValueU8 = \d : U8 =>
-  if [Bin] (eqU8 d u8_0) (\u : U8 => BZ)
-  (\u : U8 => if [Bin] (eqU8 d u8_1) (\u : U8 => B1 BZ)
-  (\u : U8 => if [Bin] (eqU8 d u8_2) (\u : U8 => B0 (B1 BZ))
-  (\u : U8 => if [Bin] (eqU8 d u8_3) (\u : U8 => B1 (B1 BZ))
-  (\u : U8 => if [Bin] (eqU8 d u8_4) (\u : U8 => B0 (B0 (B1 BZ)))
-  (\u : U8 => if [Bin] (eqU8 d u8_5) (\u : U8 => B1 (B0 (B1 BZ)))
-  (\u : U8 => if [Bin] (eqU8 d u8_6) (\u : U8 => B0 (B1 (B1 BZ)))
-  (\u : U8 => if [Bin] (eqU8 d u8_7) (\u : U8 => B1 (B1 (B1 BZ)))
-  (\u : U8 => if [Bin] (eqU8 d u8_8) (\u : U8 => B0 (B0 (B0 (B1 BZ))))
-  (\u : U8 => if [Bin] (eqU8 d u8_9) (\u : U8 => B1 (B0 (B0 (B1 BZ))))
-  (\u : U8 => BZ))))))))))
-
-poly digitsU8ToBin = \digits : List U8 =>
-  foldl [U8] [Bin]
-    (\acc : Bin => \d : U8 => addBin (timesTen acc) (digitValueU8 d))
-    BZ
-    digits
-
-poly timesTen = \x : Bin =>
-  let x2 = addBin x x in
-  let x4 = addBin x2 x2 in
-  let x8 = addBin x4 x4 in
-  addBin x8 x2
-
 poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
   match res [Result ParseError B] {
     | Err e => Err [ParseError] [B] e
@@ -575,7 +544,7 @@ poly rec consumeDigits = \acc : List U8 => \input : List U8 =>
 
 poly rec consumeString = \acc : List U8 => \input : List U8 =>
   matchList [U8] [Result ParseError (Pair (List U8) (List U8))] input
-    (Err [ParseError] [Pair (List U8) (List U8)] (MkParseError BZ (nil [Bin])))
+    (Err [ParseError] [Pair (List U8) (List U8)] (MkParseError (nil [U8])))
     (\h : U8 => \t : List U8 =>
       if [Result ParseError (Pair (List U8) (List U8))] (eqU8 h u8_quote)
         (\u : U8 =>
@@ -620,8 +589,7 @@ poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
                   (\u : U8 =>
                     match (consumeDigits (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
                       | MkPair taken remaining =>
-                          let n = digitsU8ToBin taken in
-                          tokenizeAcc remaining (cons [Token] (T_Nat n) accRev)
+                          tokenizeAcc remaining (cons [Token] (T_Nat taken) accRev)
                     })
 
                   (\u : U8 =>
@@ -637,7 +605,7 @@ poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
                       (\u : U8 =>
                         if [Result ParseError (List Token)] (eqU8 c u8_eq)
                           (\u : U8 => tokenizeAcc cs (cons [Token] T_Eq accRev))
-                          (\u : U8 => Err [ParseError] [List Token] (MkParseError BZ (nil [Bin])))
+                          (\u : U8 => Err [ParseError] [List Token] (MkParseError (nil [U8])))
                       )
                   ))
 

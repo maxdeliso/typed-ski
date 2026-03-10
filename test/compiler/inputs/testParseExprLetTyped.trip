@@ -5,7 +5,6 @@ import Prelude true
 import Prelude false
 import Prelude if
 import Prelude Bin
-import Bin eqBin
 import Prelude List
 import Prelude cons
 import Prelude nil
@@ -49,13 +48,13 @@ poly isVarNamed = \expr : Expr => \name : List U8 =>
 poly main =
   let input =
     cons [Token] T_KwLet
-      (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
+      (cons [Token] (T_Ident "x")
         (cons [Token] T_Colon
-          (cons [Token] (T_Ident (cons [U8] (#u8(66)) (cons [U8] (#u8(105)) (cons [U8] (#u8(110)) (nil [U8])))))
+          (cons [Token] (T_Ident "Bin")
             (cons [Token] T_Eq
-              (cons [Token] (T_Nat 1)
+              (cons [Token] (T_Nat "1")
                 (cons [Token] T_KwIn
-                  (cons [Token] (T_Ident (cons [U8] (#u8(120)) (nil [U8])))
+                  (cons [Token] (T_Ident "x")
                     (cons [Token] T_EOF (nil [Token])))))))))
   in
   match (parseExpr input) [Bool] {
@@ -67,17 +66,14 @@ poly main =
         | E_App f x => false
         | E_Lam name body => false
         | E_Let name val body =>
-          if [Bool] (eqListU8 name (cons [U8] (#u8(120)) (nil [U8])))
+          if [Bool] (eqListU8 name "x")
             (\u : Bin =>
               match val [Bool] {
                 | E_Var n => false
                 | E_App f x => false
                 | E_Lam name body => false
                 | E_Let name val body => false
-                | E_Nat n =>
-                  if [Bool] (eqBin n 1)
-                    (\u : Bin => isVarNamed body (cons [U8] (#u8(120)) (nil [U8])))
-                    (\u : Bin => false)
+                | E_Nat n => isVarNamed body "x"
                 | E_Match scrutinee arms => false
               })
             (\u : Bin => false)

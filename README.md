@@ -58,6 +58,21 @@ This project uses **Nix** for reproducible builds and version management. The
 build system orchestrates C → WASM → TypeScript builds with a single source of
 truth for versioning.
 
+## Canonicalization
+
+The TypeScript bootstrap pipeline treats compiler artifacts as canonical,
+ASCII-only outputs:
+
+- Top-level Trip unparse preserves the original definition kind and emits
+  parseable canonical syntax such as `poly rec`, `typed`, `untyped`, and
+  `combinator`.
+- `.tripc` object files are emitted with canonical import/export/definition
+  ordering and recursively sorted object keys.
+- Link-time dependency traversal and SCC processing use explicit ASCII ordering
+  instead of incidental `Map`/`Set` iteration order.
+- Final SKI output is the fully parenthesized canonical `unparseSKI` form and
+  should be compared as UTF-8 bytes.
+
 ## Performance and Parallelism
 
 This project implements a high-performance, multi-threaded SKI reducer:

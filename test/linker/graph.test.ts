@@ -163,4 +163,27 @@ Deno.test("linker graph algorithms", async (t) => {
     const sccs = tarjanSCC(graph);
     expect(sccs).to.be.empty;
   });
+
+  await t.step("scc ordering is deterministic across insertion order", () => {
+    const graphA = buildGraph(
+      ["C", "A", "B", "D"],
+      [
+        ["C", "D"],
+        ["A", "B"],
+        ["B", "A"],
+      ],
+    );
+    const graphB = buildGraph(
+      ["D", "B", "A", "C"],
+      [
+        ["B", "A"],
+        ["A", "B"],
+        ["C", "D"],
+      ],
+    );
+
+    expect(sccDependencyOrder(graphA)).to.deep.equal(
+      sccDependencyOrder(graphB),
+    );
+  });
 });

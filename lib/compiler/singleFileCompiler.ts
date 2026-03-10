@@ -20,6 +20,11 @@ import type {
 } from "../meta/trip.ts";
 import type { ModuleImport, TripCObject } from "./objectFile.ts";
 import { serializeTripCObject } from "./objectFile.ts";
+import {
+  compareAscii,
+  compareAsciiTuple,
+  sortedStrings,
+} from "../shared/canonical.ts";
 
 /**
  * Compilation error specific to the single-file compiler
@@ -38,6 +43,18 @@ export class SingleFileCompilerError extends Error {
 export interface CompileToObjectFileOptions {
   /** Imported module objects available during compilation. */
   importedModules?: ReadonlyArray<TripCObject>;
+}
+
+type NamedDefinitionTerm = Exclude<
+  TripLangTerm,
+  ModuleDefinition | ImportDefinition | ExportDefinition
+>;
+
+function isNamedDefinitionTerm(
+  term: TripLangTerm,
+): term is NamedDefinitionTerm {
+  return term.kind !== "module" && term.kind !== "import" &&
+    term.kind !== "export";
 }
 
 /**
@@ -74,12 +91,17 @@ function extractModuleInfo(program: TripLangProgram): {
   // So we swap: name becomes the symbol, from becomes the module
   const imports: ModuleImport[] = program.terms
     .filter((term): term is ImportDefinition => term.kind === "import")
-    .map((imp) => ({ name: imp.ref, from: imp.name }));
+    .map((imp) => ({ name: imp.ref, from: imp.name }))
+    .sort((left, right) =>
+      compareAsciiTuple([left.from, left.name], [right.from, right.name])
+    );
 
   // Extract exports
-  const exports: string[] = program.terms
-    .filter((term): term is ExportDefinition => term.kind === "export")
-    .map((exp) => exp.name);
+  const exports: string[] = sortedStrings(
+    program.terms
+      .filter((term): term is ExportDefinition => term.kind === "export")
+      .map((exp) => exp.name),
+  );
 
   return { moduleName, imports, exports };
 }
@@ -91,33 +113,13 @@ function extractDefinitions(
   program: TripLangProgram,
 ): Record<string, TripLangTerm> {
   const definitions: Record<string, TripLangTerm> = {};
+  const orderedDefinitions = program.terms
+    .filter(isNamedDefinitionTerm)
+    .sort((left, right) => compareAscii(left.name, right.name));
 
-  for (const term of program.terms) {
+  for (const term of orderedDefinitions) {
     // Skip non-definition terms
-    if (
-      term.kind === "module" || term.kind === "import" || term.kind === "export"
-    ) {
-      continue;
-    }
-
-    // Extract the name from definition terms
-    let name: string;
-    switch (term.kind) {
-      case "poly":
-      case "typed":
-      case "untyped":
-      case "combinator":
-      case "type":
-      case "native":
-      case "data":
-        name = term.name;
-        break;
-      default:
-        // Skip unknown term types
-        continue;
-    }
-
-    definitions[name] = term;
+    definitions[term.name] = term;
   }
 
   return definitions;
@@ -129,14 +131,18 @@ function extractDefinitions(
 function extractDataDefinitions(program: TripLangProgram): DataDefinition[] {
   return program.terms.filter((term): term is DataDefinition =>
     term.kind === "data"
-  );
+  ).sort((left, right) => compareAscii(left.name, right.name));
 }
 
 function buildImportedDataDefinitionsByModule(
   options: CompileToObjectFileOptions,
 ): Map<string, ReadonlyArray<DataDefinition>> {
   const byModule = new Map<string, ReadonlyArray<DataDefinition>>();
-  for (const moduleObject of options.importedModules ?? []) {
+  const importedModules = [...(options.importedModules ?? [])].sort((
+    left,
+    right,
+  ) => compareAscii(left.module, right.module));
+  for (const moduleObject of importedModules) {
     byModule.set(moduleObject.module, moduleObject.dataDefinitions);
   }
   return byModule;

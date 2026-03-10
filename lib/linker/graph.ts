@@ -4,6 +4,22 @@
 
 export type DirectedGraph<Node> = ReadonlyMap<Node, ReadonlySet<Node>>;
 
+function compareNode<Node>(left: Node, right: Node): number {
+  const leftKey = String(left);
+  const rightKey = String(right);
+  if (leftKey < rightKey) {
+    return -1;
+  }
+  if (leftKey > rightKey) {
+    return 1;
+  }
+  return 0;
+}
+
+function sortedNodes<Node>(values: Iterable<Node>): Node[] {
+  return Array.from(values).sort(compareNode);
+}
+
 type TarjanWorkFrame<Node> =
   | {
     node: Node;
@@ -30,7 +46,7 @@ export function tarjanSCC<Node>(graph: DirectedGraph<Node>): Node[][] {
   let currentIndex = 0;
   const workStack: TarjanWorkFrame<Node>[] = [];
 
-  for (const node of graph.keys()) {
+  for (const node of sortedNodes(graph.keys())) {
     if (index.has(node)) continue;
     workStack.push({ node, phase: "enter" });
 
@@ -47,7 +63,7 @@ export function tarjanSCC<Node>(graph: DirectedGraph<Node>): Node[][] {
         stack.push(work.node);
         onStack.add(work.node);
 
-        const deps = Array.from(graph.get(work.node) ?? []);
+        const deps = sortedNodes(graph.get(work.node) ?? []);
         workStack.push({
           node: work.node,
           phase: "process",
@@ -101,7 +117,7 @@ export function tarjanSCC<Node>(graph: DirectedGraph<Node>): Node[][] {
             scc.push(popped);
             if (popped === work.node) break;
           }
-          sccs.push(scc);
+          sccs.push(sortedNodes(scc));
         }
 
         const parent = workStack[workStack.length - 1];

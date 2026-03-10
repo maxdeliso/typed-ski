@@ -105,6 +105,6 @@ poly main =
             | D_Export x => false
             | D_Type x => false
             | D_Data x => false
-            | D_Def x body => false
+            | D_Def kind isRec x body => false
           })
   }

@@ -113,6 +113,12 @@ Deno.test({
       assertion:
         "Expected parseProgram to parse module/import/export and definitions",
     },
+    {
+      name: "Parser stage 0 - parseProgram preserves definition kind metadata",
+      file: "testParseDefinitionKinds.trip",
+      assertion:
+        "Expected parseProgram to preserve poly/typed/untyped/combinator kind and rec flag in D_Def",
+    },
   ];
 
   const lexerObj = await getLexerObject();

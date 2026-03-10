@@ -617,6 +617,49 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
+  await t.step("sorts ambiguous export module names deterministically", () => {
+    const alpha = {
+      module: "Alpha",
+      exports: ["util"],
+      imports: [],
+      definitions: {
+        util: {
+          kind: "combinator" as const,
+          name: "util",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+        },
+      },
+    };
+
+    const zeta = {
+      module: "Zeta",
+      exports: ["util"],
+      imports: [],
+      definitions: {
+        util: {
+          kind: "combinator" as const,
+          name: "util",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.K },
+        },
+      },
+    };
+
+    let caughtMessage: string | null = null;
+    try {
+      linkModules([
+        { name: "Zeta", object: zeta },
+        { name: "Alpha", object: alpha },
+      ], false);
+      expect.fail("Should have thrown an error for duplicate exports");
+    } catch (error) {
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.equal(
+        "Ambiguous export 'util' found in multiple modules: Alpha, Zeta. Use qualified imports or rename exports.",
+      );
+    }
+  });
+
   await t.step(
     "detects duplicate local definitions within a module",
     () => {

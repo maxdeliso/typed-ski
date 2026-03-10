@@ -65,6 +65,11 @@ export E_Lam
 export E_Let
 export E_Nat
 export E_Match
+export DefKind
+export K_Poly
+export K_Typed
+export K_Untyped
+export K_Combinator
 export Decl
 export D_Module
 export D_Import
@@ -149,13 +154,19 @@ data Expr =
   | E_Nat (List U8)
   | E_Match Expr (List (Pair Pattern Expr))
 
+data DefKind =
+  | K_Poly
+  | K_Typed
+  | K_Untyped
+  | K_Combinator
+
 data Decl =
   | D_Module (List U8)
   | D_Import (List U8) (List U8)
   | D_Export (List U8)
   | D_Type (List U8)
   | D_Data (List U8)
-  | D_Def (List U8) Expr
+  | D_Def DefKind Bool (List U8) Expr
 
 poly parseError =
   MkParseError (nil [U8])
@@ -674,7 +685,7 @@ poly rec parseExpr = \toks : List Token =>
                 (\u : U8 => parseAppWith parseExpr toks))))
     )
 
-poly parseNamedDef = \toks : List Token =>
+poly parseNamedDef = \defKind : DefKind => \isRecursive : Bool => \toks : List Token =>
   match (expectIdent toks) [Result ParseError (Pair Decl (List Token))] {
     | Err e => Err [ParseError] [Pair Decl (List Token)] e
     | Ok nameRes =>
@@ -692,7 +703,7 @@ poly parseNamedDef = \toks : List Token =>
                   let body = fstExprToken bodyRes in
                   let rest = sndExprToken bodyRes in
                   Ok [ParseError] [Pair Decl (List Token)]
-                    (MkPair [Decl] [List Token] (D_Def name body) rest)
+                    (MkPair [Decl] [List Token] (D_Def defKind isRecursive name body) rest)
               }
           }
       }
@@ -785,21 +796,21 @@ poly parseDecl = \toks : List Token =>
                                 (\h2 : Token => \t2 : List Token =>
                                   if [Result ParseError (Pair Decl (List Token))]
                                     (eqU8 (tokenTag h2) kwRecTag)
-                                    (\u : U8 => parseNamedDef t2)
-                                    (\u : U8 => parseNamedDef t)
+                                    (\u : U8 => parseNamedDef K_Poly true t2)
+                                    (\u : U8 => parseNamedDef K_Poly false t)
                                 ))
                             (\u : U8 =>
                               if [Result ParseError (Pair Decl (List Token))]
                                 (eqU8 tag kwTypedTag)
-                                (\u : U8 => parseNamedDef t)
+                                (\u : U8 => parseNamedDef K_Typed false t)
                                 (\u : U8 =>
                                   if [Result ParseError (Pair Decl (List Token))]
                                     (eqU8 tag kwUntypedTag)
-                                    (\u : U8 => parseNamedDef t)
+                                    (\u : U8 => parseNamedDef K_Untyped false t)
                                     (\u : U8 =>
                                       if [Result ParseError (Pair Decl (List Token))]
                                         (eqU8 tag kwCombinatorTag)
-                                        (\u : U8 => parseNamedDef t)
+                                        (\u : U8 => parseNamedDef K_Combinator false t)
                                         (\u : U8 => Err [ParseError] [Pair Decl (List Token)] parseError)
                                     ))
                             ))

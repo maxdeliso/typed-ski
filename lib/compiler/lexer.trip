@@ -28,6 +28,7 @@ import Prelude append
 import Prelude reverse
 import Prelude U8
 import Prelude eqU8
+import Prelude ltU8
 
 export Token
 export T_LParen
@@ -243,71 +244,6 @@ poly u8_cr       : U8 = '\r'
 poly u8_tab      : U8 = '\t'
 poly u8_underscore : U8 = '_'
 
-poly u8_0 : U8 = '0'
-poly u8_1 : U8 = '1'
-poly u8_2 : U8 = '2'
-poly u8_3 : U8 = '3'
-poly u8_4 : U8 = '4'
-poly u8_5 : U8 = '5'
-poly u8_6 : U8 = '6'
-poly u8_7 : U8 = '7'
-poly u8_8 : U8 = '8'
-poly u8_9 : U8 = '9'
-
-poly u8_a : U8 = 'a'
-poly u8_b : U8 = 'b'
-poly u8_c : U8 = 'c'
-poly u8_d : U8 = 'd'
-poly u8_e : U8 = 'e'
-poly u8_f : U8 = 'f'
-poly u8_g : U8 = 'g'
-poly u8_h : U8 = 'h'
-poly u8_i : U8 = 'i'
-poly u8_j : U8 = 'j'
-poly u8_k : U8 = 'k'
-poly u8_l : U8 = 'l'
-poly u8_m : U8 = 'm'
-poly u8_n : U8 = 'n'
-poly u8_o : U8 = 'o'
-poly u8_p : U8 = 'p'
-poly u8_q : U8 = 'q'
-poly u8_r : U8 = 'r'
-poly u8_s : U8 = 's'
-poly u8_t : U8 = 't'
-poly u8_u : U8 = 'u'
-poly u8_v : U8 = 'v'
-poly u8_w : U8 = 'w'
-poly u8_x : U8 = 'x'
-poly u8_y : U8 = 'y'
-poly u8_z : U8 = 'z'
-
-poly u8_A : U8 = 'A'
-poly u8_B : U8 = 'B'
-poly u8_C : U8 = 'C'
-poly u8_D : U8 = 'D'
-poly u8_E : U8 = 'E'
-poly u8_F : U8 = 'F'
-poly u8_G : U8 = 'G'
-poly u8_H : U8 = 'H'
-poly u8_I : U8 = 'I'
-poly u8_J : U8 = 'J'
-poly u8_K : U8 = 'K'
-poly u8_L : U8 = 'L'
-poly u8_M : U8 = 'M'
-poly u8_N : U8 = 'N'
-poly u8_O : U8 = 'O'
-poly u8_P : U8 = 'P'
-poly u8_Q : U8 = 'Q'
-poly u8_R : U8 = 'R'
-poly u8_S : U8 = 'S'
-poly u8_T : U8 = 'T'
-poly u8_U : U8 = 'U'
-poly u8_V : U8 = 'V'
-poly u8_W : U8 = 'W'
-poly u8_X : U8 = 'X'
-poly u8_Y : U8 = 'Y'
-poly u8_Z : U8 = 'Z'
-
 poly u8_quote : U8 = '\"'
 poly u8_gt : U8 = '>'
 poly u8_dash : U8 = '-'
@@ -321,70 +257,14 @@ poly isSpaceU8 = \c : U8 =>
   (\u : U8 => false))))
 
 poly isDigitU8 = \c : U8 =>
-  if [Bool] (eqU8 c u8_0) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_1) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_2) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_3) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_4) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_5) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_6) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_7) (\u:U8 => true)
-  (\u:U8 => if [Bool] (eqU8 c u8_8) (\u:U8 => true)
-             (\u:U8 => eqU8 c u8_9)))))))))
+  if [Bool] (ltU8 c #u8(48)) (\u:U8 => false) (\u:U8 =>
+  if [Bool] (ltU8 c #u8(58)) (\u:U8 => true)  (\u:U8 => false))
 
 poly isAlphaU8 = \c : U8 =>
-  if [Bool] (eqU8 c u8_a) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_b) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_c) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_d) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_e) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_f) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_g) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_h) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_i) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_j) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_k) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_l) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_m) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_n) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_o) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_p) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_q) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_r) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_s) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_t) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_u) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_v) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_w) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_x) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_y) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_z) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_A) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_B) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_C) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_D) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_E) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_F) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_G) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_H) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_I) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_J) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_K) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_L) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_M) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_N) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_O) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_P) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_Q) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_R) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_S) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_T) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_U) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_V) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_W) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_X) (\u:U8=>true) (\u:U8 =>
-  if [Bool] (eqU8 c u8_Y) (\u:U8=>true)
-             (\u:U8 => eqU8 c u8_Z)))))))))))))))))))))))))))))))))))))))))))))))))))
+  if [Bool] (ltU8 c #u8(65)) (\u:U8 => false) (\u:U8 =>
+  if [Bool] (ltU8 c #u8(91)) (\u:U8 => true)  (\u:U8 =>
+  if [Bool] (ltU8 c #u8(97)) (\u:U8 => false) (\u:U8 =>
+  if [Bool] (ltU8 c #u8(123)) (\u:U8 => true) (\u:U8 => false))))
 
 poly isIdentCharU8 = \c : U8 =>
   or (isAlphaU8 c) (or (isDigitU8 c) (eqU8 c u8_underscore))

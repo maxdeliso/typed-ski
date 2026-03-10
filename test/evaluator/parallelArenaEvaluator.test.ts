@@ -13,8 +13,10 @@ import {
   unparseSKI,
 } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
-import { I, K, ReadOne, WriteOne } from "../../lib/ski/terminal.ts";
+import { C, I, K, ReadOne, WriteOne } from "../../lib/ski/terminal.ts";
 import { requiredAt } from "../util/required.ts";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function overrideEvaluatorExports(
   evaluator: ParallelArenaEvaluatorWasm,
@@ -309,7 +311,7 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
 
   await t.step("writeOne enqueues bytes to stdout", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    const expr = apply(WriteOne, { kind: "u8", value: 66 });
+    const expr = apply(apply(WriteOne, { kind: "u8", value: 66 }), I);
     const result = await evaluator.reduceAsync(expr);
     assertEquals(result.kind, "u8");
     assertEquals((result as { kind: "u8"; value: number }).value, 66);
@@ -325,10 +327,22 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     const message = "hello\n";
     const bytes = encoder.encode(message);
     for (const byte of bytes) {
-      const expr = apply(WriteOne, { kind: "u8", value: byte });
+      const expr = apply(apply(WriteOne, { kind: "u8", value: byte }), I);
       await evaluator.reduceAsync(expr);
     }
-    const stdout = await evaluator.readStdout(bytes.length);
+
+    let stdout = new Uint8Array(0);
+    for (let i = 0; i < 10 && stdout.length < bytes.length; i++) {
+      const chunk = await evaluator.readStdout(bytes.length - stdout.length);
+      if (chunk.length > 0) {
+        const next = new Uint8Array(stdout.length + chunk.length);
+        next.set(stdout);
+        next.set(chunk, stdout.length);
+        stdout = next;
+      }
+      if (stdout.length < bytes.length) await sleep(50);
+    }
+
     assertEquals(stdout, bytes);
     evaluator.terminate();
   });
@@ -338,7 +352,8 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
     const encoder = new TextEncoder();
     const payload = encoder.encode("echo");
     for (const byte of payload) {
-      const expr = apply(ReadOne, WriteOne);
+      // C WriteOne I acts as a callback: (C WriteOne I) byte -> WriteOne byte I
+      const expr = apply(ReadOne, apply(apply(C, WriteOne), I));
       const promise = evaluator.reduceAsync(expr);
       await evaluator.writeStdin(new Uint8Array([byte]));
       const result = await promise;
@@ -357,13 +372,18 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
       try {
         const encoder = new TextEncoder();
         const payload = encoder.encode("queued-echo");
+        // C WriteOne I acts as a callback: (C WriteOne I) byte -> WriteOne byte I
         const pending = Array.from(
           payload,
-          () => evaluator.reduceAsync(apply(ReadOne, WriteOne)),
+          () =>
+            evaluator.reduceAsync(apply(ReadOne, apply(apply(C, WriteOne), I))),
         );
         await evaluator.writeStdin(payload);
         const results = await Promise.all(pending);
-        const decoded = results.map((res) => (res as { value: number }).value);
+        const decoded = results.map((res) => {
+          assertEquals(res.kind, "u8");
+          return (res as { kind: "u8"; value: number }).value;
+        });
         assertEquals(decoded.length, payload.length);
         const sortedDecoded = [...decoded].sort((a, b) => a - b);
         const sortedPayload = Array.from(payload).sort((a, b) => a - b);
@@ -399,7 +419,8 @@ Deno.test("ParallelArenaEvaluator - stdin/stdout IO", async (t) => {
       assertEquals(writeResolved, false);
 
       const readResult = await evaluator.reduceAsync(apply(ReadOne, I));
-      assertEquals((readResult as { value: number }).value, 0);
+      assertEquals(readResult.kind, "u8");
+      assertEquals((readResult as { kind: "u8"; value: number }).value, 0);
       await extraWrite;
       assertEquals(writeResolved, true);
     } finally {
@@ -427,7 +448,8 @@ Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
       assertEquals(written, bytes.length);
       for (const byte of bytes) {
         const result = await evaluator.reduceAsync(apply(ReadOne, I));
-        assertEquals((result as { value: number }).value, byte);
+        assertEquals(result.kind, "u8");
+        assertEquals((result as { kind: "u8"; value: number }).value, byte);
       }
     } finally {
       evaluator.terminate();
@@ -447,7 +469,8 @@ Deno.test("ParallelArenaEvaluator - helper methods", async (t) => {
         assert(snapshot.pending > 0);
         await evaluator.writeStdin(new Uint8Array([7]));
         const result = await pendingWork;
-        assertEquals((result as { value: number }).value, 7);
+        assertEquals(result.kind, "u8");
+        assertEquals((result as { kind: "u8"; value: number }).value, 7);
         // After completion, pending should be zero
         assertEquals(evaluator.getTotalPending(), 0);
       } finally {

@@ -35,11 +35,15 @@ typedef enum {
   ARENA_SYM_SPRIME = 10,
   ARENA_SYM_BPRIME = 11,
   ARENA_SYM_CPRIME = 12,
-  ARENA_SYM_EQ_U8 = 13
+  ARENA_SYM_EQ_U8 = 13,
+  ARENA_SYM_LT_U8 = 14,
+  ARENA_SYM_DIV_U8 = 15,
+  ARENA_SYM_MOD_U8 = 16,
+  ARENA_SYM_ADD_U8 = 17
 } ArenaSym;
 
 #define EMPTY 0xffffffff
-#define TERM_CACHE_LEN (ARENA_SYM_EQ_U8 + 1)
+#define TERM_CACHE_LEN (ARENA_SYM_ADD_U8 + 1)
 
 typedef struct {
   atomic_uint head;

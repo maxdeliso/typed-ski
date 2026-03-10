@@ -23,6 +23,10 @@ import { SKITerminalSymbol, term } from "../../ski/terminal.ts";
 
 const INTRINSIC_TERMS: Readonly<Record<string, SKIExpression>> = {
   eqU8: term(SKITerminalSymbol.EqU8),
+  ltU8: term(SKITerminalSymbol.LtU8),
+  divU8: term(SKITerminalSymbol.DivU8),
+  modU8: term(SKITerminalSymbol.ModU8),
+  addU8: term(SKITerminalSymbol.AddU8),
   readOne: term(SKITerminalSymbol.ReadOne),
   writeOne: term(SKITerminalSymbol.WriteOne),
 };

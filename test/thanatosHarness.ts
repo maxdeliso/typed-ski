@@ -12,7 +12,7 @@ import type { SKIExpression } from "../lib/ski/expression.ts";
 import { apply, unparseSKI } from "../lib/ski/expression.ts";
 import { term } from "../lib/ski/terminal.ts";
 import type { SKITerminalSymbol } from "../lib/ski/terminal.ts";
-import { I, ReadOne, WriteOne } from "../lib/ski/terminal.ts";
+import { C, I, ReadOne, WriteOne } from "../lib/ski/terminal.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
@@ -74,6 +74,10 @@ const DAG_TERMINAL_CHARS = new Set<string>([
   ",",
   ".",
   "E",
+  "L",
+  "D",
+  "M",
+  "A",
 ]);
 
 function dagCharToSym(c: string): SKITerminalSymbol {
@@ -90,6 +94,12 @@ export function fromDagWire(dagStr: string): SKIExpression {
     const t = tokens[i]!;
     if (t.length === 1 && DAG_TERMINAL_CHARS.has(t)) {
       nodes.push(term(dagCharToSym(t)));
+    } else if (t.startsWith("#u8(") && t.endsWith(")")) {
+      const byte = parseInt(t.slice(4, -1), 10);
+      if (Number.isNaN(byte) || byte < 0 || byte > 255) {
+        throw new Error("invalid U8: " + t);
+      }
+      nodes.push({ kind: "u8", value: byte });
     } else if (t.startsWith("U") && t.length === 3) {
       const byte = parseInt(t.slice(1), 16);
       if (Number.isNaN(byte) || byte < 0 || byte > 255) {
@@ -395,7 +405,7 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-    const expr = apply(WriteOne, { kind: "u8", value: 65 });
+    const expr = apply(apply(WriteOne, { kind: "u8", value: 65 }), I);
     const dagLine = toDagWire(expr);
 
     const { ParallelArenaEvaluatorWasm } = await import(
@@ -419,6 +429,11 @@ Deno.test({
     await writer.write(new TextEncoder().encode(dagLine + "\n"));
     await writer.close();
     const { stdout: nativeStdout } = await proc.output();
+    if (nativeStdout.length === 0) {
+      console.error("nativeStdout is empty!");
+    } else {
+      console.error("nativeStdout:", new TextDecoder().decode(nativeStdout));
+    }
     assertEquals(nativeStdout.length >= 1, true);
     assertEquals(nativeStdout[0], 65, "native first byte must match JS");
     assertEquals(
@@ -582,7 +597,7 @@ Deno.test({
     const tmpStdin = await Deno.makeTempFile();
     await Deno.writeFile(tmpStdin, new Uint8Array([88])); // 'X'
     try {
-      const expr = apply(ReadOne, WriteOne);
+      const expr = apply(ReadOne, apply(apply(C, WriteOne), I));
       const dagLine = toDagWire(expr);
       const proc = new Deno.Command(THANATOS_BIN, {
         args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],

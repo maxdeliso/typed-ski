@@ -1093,90 +1093,75 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         o.val = susp_id;
         return o;
       }
-      if (sym == ARENA_SYM_WRITE_ONE) {
-        if (step_kind(nodes, right) != ARENA_KIND_U8) {
-          curr = right;
-          mode = MODE_DESCEND;
-          continue;
-        }
-        uint8_t byte = (uint8_t)step_sym(nodes, right);
-        SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-        if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
-                        1)) {
-          if (*remaining_steps == 0) {
-            return budget_outcome(mode, curr, stack, 0);
-          }
-          (*remaining_steps)--;
-          curr = right;
-          mode = MODE_DESCEND;
-          continue;
-        }
-        /* Blocked on stdout: suspend. Drop epoch before blocking. */
-        uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
-                                         curr, stack, *remaining_steps);
-        if (tls_worker_id < MAX_WORKERS)
-          atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
-                                memory_order_release);
-        enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
-                         &susp_id, 4);
-        StepOutcome o;
-        o.type = RESULT_YIELD;
-        o.val = susp_id;
-        return o;
-      }
     } else if (step_kind(nodes, left) == ARENA_KIND_NON_TERM) {
       uint32_t ll = step_left(nodes, left);
-      /* ((EQ_U8 a) b) -> True if a==b else False, when a,b are U8 */
-      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
-          step_sym(nodes, ll) == ARENA_SYM_EQ_U8) {
-        uint32_t a = step_right(nodes, left);
-        uint32_t b = right;
-        if (step_kind(nodes, a) == ARENA_KIND_U8 &&
-            step_kind(nodes, b) == ARENA_KIND_U8) {
-          if (*remaining_steps == 0) {
-            return budget_outcome(mode, curr, stack, 0);
+      /* Native U8 operations: (op a b) when a,b are U8 */
+      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL) {
+        uint32_t sym = step_sym(nodes, ll);
+        if (sym == ARENA_SYM_WRITE_ONE) {
+          uint32_t byte_node = step_right(nodes, left);
+          if (step_kind(nodes, byte_node) == ARENA_KIND_U8) {
+            uint8_t byte = (uint8_t)step_sym(nodes, byte_node);
+            SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+            if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
+                            1)) {
+              if (*remaining_steps == 0) {
+                return budget_outcome(mode, curr, stack, 0);
+              }
+              (*remaining_steps)--;
+              /* writeOne byte callback -> callback byte */
+              curr = allocCons(right, byte_node);
+              mode = MODE_DESCEND;
+              continue;
+            }
+            /* Blocked on stdout: suspend. Drop epoch before blocking. */
+            uint32_t susp_id =
+                alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT, curr, stack,
+                              *remaining_steps);
+            if (tls_worker_id < MAX_WORKERS)
+              atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                                    memory_order_release);
+            enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
+                             &susp_id, 4);
+            StepOutcome o;
+            o.type = RESULT_YIELD;
+            o.val = susp_id;
+            return o;
           }
-          (*remaining_steps)--;
-          uint8_t va = (uint8_t)step_sym(nodes, a);
-          uint8_t vb = (uint8_t)step_sym(nodes, b);
-          curr = (va == vb) ? arenaTrue() : arenaFalse();
-          mode = MODE_DESCEND;
-          continue;
         }
-      }
-      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
-          step_sym(nodes, ll) == ARENA_SYM_WRITE_ONE) {
-        uint32_t a = step_right(nodes, left);
-        uint32_t b = right;
-        if (step_kind(nodes, a) != ARENA_KIND_U8) {
-          curr = a;
-          mode = MODE_DESCEND;
-          continue;
-        }
-        uint8_t byte = (uint8_t)step_sym(nodes, a);
-        SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-        if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
-                        1)) {
-          if (*remaining_steps == 0) {
-            return budget_outcome(mode, curr, stack, 0);
+        if (sym >= ARENA_SYM_EQ_U8 && sym <= ARENA_SYM_ADD_U8) {
+          uint32_t a = step_right(nodes, left);
+          uint32_t b = right;
+          if (step_kind(nodes, a) == ARENA_KIND_U8 &&
+              step_kind(nodes, b) == ARENA_KIND_U8) {
+            if (*remaining_steps == 0) {
+              return budget_outcome(mode, curr, stack, 0);
+            }
+            (*remaining_steps)--;
+            uint8_t va = (uint8_t)step_sym(nodes, a);
+            uint8_t vb = (uint8_t)step_sym(nodes, b);
+
+            switch (sym) {
+            case ARENA_SYM_EQ_U8:
+              curr = (va == vb) ? arenaTrue() : arenaFalse();
+              break;
+            case ARENA_SYM_LT_U8:
+              curr = (va < vb) ? arenaTrue() : arenaFalse();
+              break;
+            case ARENA_SYM_DIV_U8:
+              curr = allocU8(vb == 0 ? 0 : va / vb);
+              break;
+            case ARENA_SYM_MOD_U8:
+              curr = allocU8(vb == 0 ? 0 : va % vb);
+              break;
+            case ARENA_SYM_ADD_U8:
+              curr = allocU8((uint8_t)(va + vb));
+              break;
+            }
+            mode = MODE_DESCEND;
+            continue;
           }
-          (*remaining_steps)--;
-          curr = allocCons(b, a);
-          mode = MODE_DESCEND;
-          continue;
         }
-        /* Blocked on stdout: suspend. Drop epoch before blocking. */
-        uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
-                                         curr, stack, *remaining_steps);
-        if (tls_worker_id < MAX_WORKERS)
-          atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
-                                memory_order_release);
-        enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
-                         &susp_id, 4);
-        StepOutcome o;
-        o.type = RESULT_YIELD;
-        o.val = susp_id;
-        return o;
       }
       if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
           step_sym(nodes, ll) == ARENA_SYM_K) {

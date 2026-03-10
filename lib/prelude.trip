@@ -43,10 +43,18 @@ export BZ
 export B0
 export B1
 export eqU8
+export ltU8
+export addU8
+export divU8
+export modU8
 export U8
 
 opaque type U8
 native eqU8 : U8 -> U8 -> Bool
+native ltU8 : U8 -> U8 -> Bool
+native addU8 : U8 -> U8 -> U8
+native divU8 : U8 -> U8 -> U8
+native modU8 : U8 -> U8 -> U8
 native readOne : #R -> (U8 -> R) -> R
 native writeOne : U8 -> #R -> (U8 -> R) -> R
 

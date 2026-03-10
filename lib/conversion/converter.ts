@@ -12,13 +12,17 @@ import type { DeBruijnTerm } from "../meta/frontend/deBruijn.ts";
 import type { SKIExpression } from "../ski/expression.ts";
 import { apply, applyMany } from "../ski/expression.ts";
 import {
+  AddU8,
   B,
   BPrime,
   C,
   CPrime,
+  DivU8,
   EqU8,
   I,
   K,
+  LtU8,
+  ModU8,
   ReadOne,
   S,
   SPrime,
@@ -70,6 +74,14 @@ const terminalFromSym = (sym: string): SKIExpression => {
       return WriteOne;
     case "E":
       return EqU8;
+    case "L":
+      return LtU8;
+    case "D":
+      return DivU8;
+    case "M":
+      return ModU8;
+    case "A":
+      return AddU8;
     default:
       throw new ConversionError(`unknown SKI terminal: ${sym}`);
   }
@@ -102,9 +114,11 @@ const toCore = (term: DeBruijnTerm): CoreTerm => {
     case "DbU8Literal":
       return { kind: "u8", value: term.value };
     case "DbFreeVar":
-      if (term.name === "eqU8") {
-        return { kind: "terminal", expr: EqU8 };
-      }
+      if (term.name === "eqU8") return { kind: "terminal", expr: EqU8 };
+      if (term.name === "ltU8") return { kind: "terminal", expr: LtU8 };
+      if (term.name === "addU8") return { kind: "terminal", expr: AddU8 };
+      if (term.name === "divU8") return { kind: "terminal", expr: DivU8 };
+      if (term.name === "modU8") return { kind: "terminal", expr: ModU8 };
       throw new ConversionError(`free variable detected: ${term.name}`);
     case "DbFreeTypeVar":
       throw new ConversionError(`free type variable detected: ${term.name}`);

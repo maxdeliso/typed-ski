@@ -5,4 +5,4 @@ import Prelude writeOne
 
 export main
 
-combinator main = , .
+combinator main = , (C . I)

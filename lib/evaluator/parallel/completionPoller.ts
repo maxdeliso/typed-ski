@@ -160,6 +160,7 @@ export class CompletionPoller {
         } finally {
           this.activeTimeouts.delete(cancel);
         }
+        if (this.aborted()) return;
       };
       let sliceStart = nowMs();
       let sliceEvents = 0;

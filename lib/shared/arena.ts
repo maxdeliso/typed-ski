@@ -9,13 +9,17 @@
 
 import type { SKIExpression } from "../ski/expression.ts";
 import {
+  AddU8,
   B,
   BPrime,
   C,
   CPrime,
+  DivU8,
   EqU8,
   I,
   K,
+  LtU8,
+  ModU8,
   ReadOne,
   S,
   SPrime,
@@ -64,6 +68,14 @@ export enum ArenaSym {
   CPrime = 12,
   /** eqU8 intrinsic */
   EqU8 = 13,
+  /** ltU8 intrinsic */
+  LtU8 = 14,
+  /** divU8 intrinsic */
+  DivU8 = 15,
+  /** modU8 intrinsic */
+  ModU8 = 16,
+  /** addU8 intrinsic */
+  AddU8 = 17,
 }
 
 /**
@@ -81,6 +93,10 @@ export const ARENA_SYM_TO_SKI: Record<ArenaSym, SKIExpression> = {
   [ArenaSym.ReadOne]: ReadOne,
   [ArenaSym.WriteOne]: WriteOne,
   [ArenaSym.EqU8]: EqU8,
+  [ArenaSym.LtU8]: LtU8,
+  [ArenaSym.DivU8]: DivU8,
+  [ArenaSym.ModU8]: ModU8,
+  [ArenaSym.AddU8]: AddU8,
 };
 
 /**

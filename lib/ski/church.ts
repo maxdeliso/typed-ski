@@ -51,6 +51,18 @@ const runtimeCombinators: Record<SKITerminalSymbol, RuntimeValue> = {
   [SKITerminalSymbol.EqU8]: () => {
     throw new Error("Cannot decode Church numerals for eqU8 intrinsic");
   },
+  [SKITerminalSymbol.LtU8]: () => {
+    throw new Error("Cannot decode Church numerals for ltU8 intrinsic");
+  },
+  [SKITerminalSymbol.DivU8]: () => {
+    throw new Error("Cannot decode Church numerals for divU8 intrinsic");
+  },
+  [SKITerminalSymbol.ModU8]: () => {
+    throw new Error("Cannot decode Church numerals for modU8 intrinsic");
+  },
+  [SKITerminalSymbol.AddU8]: () => {
+    throw new Error("Cannot decode Church numerals for addU8 intrinsic");
+  },
 };
 
 const evalRuntime = (expr: SKIExpression): RuntimeValue => {

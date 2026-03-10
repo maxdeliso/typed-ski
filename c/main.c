@@ -1,6 +1,7 @@
 #include "arena.h"
 #include "ski_io.h"
 #include "thanatos.h"
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,19 +26,16 @@ static uint32_t default_num_workers(void) {
   return 4;
 }
 
-/** Batch mode: program_input is the SKI/DAG text to parse and reduce;
- * runtime_stdin is the byte stream consumed by READ_ONE (separate channel).
- * Pass NULL for runtime_stdin_* when no runtime stdin is available. */
+/** Batch mode: program_input is the SKI/DAG text to parse and reduce.
+ * runtime_stdin_fd is an optional stream/file consumed lazily by READ_ONE on a
+ * separate channel. Pass -1 when no runtime stdin source is available. */
 static int run_batch_mode(uint32_t num_workers, uint32_t arena_capacity,
-                          char *program_input, size_t program_len, int use_dag,
-                          const uint8_t *runtime_stdin_bytes,
-                          size_t runtime_stdin_len, size_t *runtime_stdin_pos) {
+                          char *program_input, size_t program_len,
+                          int use_dag, int runtime_stdin_fd) {
   ThanatosConfig config = {
       .num_workers = num_workers,
       .arena_capacity = arena_capacity,
-      .stdin_bytes = runtime_stdin_bytes,
-      .stdin_len = runtime_stdin_len,
-      .stdin_pos = runtime_stdin_pos,
+      .stdin_fd = runtime_stdin_fd,
   };
   thanatos_init(config);
 
@@ -230,7 +228,7 @@ int main(int argc, char **argv) {
   uint32_t arena_capacity = 1 << 20;
   int use_dag = 0;
   int daemon = 0;
-  const char *stdin_file = NULL; /* Optional: runtime stdin for READ_ONE. */
+  const char *stdin_file = NULL; /* Optional runtime stdin stream for READ_ONE. */
   int arg_idx = 1;
 
   /* Consume flags in any order; remainder are positional (workers,
@@ -264,7 +262,7 @@ int main(int argc, char **argv) {
   }
 
   /* Batch mode: program input from process stdin (SKI/DAG lines). Runtime stdin
-   * for READ_ONE from --stdin-file if given. */
+   * for READ_ONE comes from --stdin-file if given and is consumed lazily. */
   size_t input_cap = INITIAL_LINE_CAP;
   char *input = malloc(input_cap);
   if (!input) {
@@ -290,51 +288,18 @@ int main(int argc, char **argv) {
       break;
   }
 
-  uint8_t *runtime_stdin = NULL;
-  size_t runtime_stdin_len = 0;
-  size_t runtime_stdin_pos = 0;
+  int runtime_stdin_fd = -1;
   if (stdin_file) {
-    FILE *f = fopen(stdin_file, "rb");
-    if (!f) {
+    runtime_stdin_fd = open(stdin_file, O_RDONLY | O_NONBLOCK);
+    if (runtime_stdin_fd < 0) {
       fprintf(stderr, "cannot open --stdin-file %s\n", stdin_file);
       free(input);
       return 1;
     }
-    if (fseek(f, 0, SEEK_END) != 0) {
-      fclose(f);
-      free(input);
-      return 1;
-    }
-    long sz = ftell(f);
-    if (sz < 0 || (unsigned long)sz > SIZE_MAX) {
-      fclose(f);
-      free(input);
-      return 1;
-    }
-    runtime_stdin_len = (size_t)sz;
-    if (runtime_stdin_len > 0) {
-      runtime_stdin = malloc(runtime_stdin_len);
-      if (!runtime_stdin) {
-        fclose(f);
-        free(input);
-        return 1;
-      }
-      rewind(f);
-      if (fread(runtime_stdin, 1, runtime_stdin_len, f) != runtime_stdin_len) {
-        fprintf(stderr, "failed to read --stdin-file %s\n", stdin_file);
-        free(runtime_stdin);
-        fclose(f);
-        free(input);
-        return 1;
-      }
-    }
-    fclose(f);
   }
 
   int ret = run_batch_mode(num_workers, arena_capacity, input, input_len,
-                           use_dag, runtime_stdin, runtime_stdin_len,
-                           runtime_stdin ? &runtime_stdin_pos : NULL);
-  free(runtime_stdin);
+                           use_dag, runtime_stdin_fd);
   free(input);
   return ret;
 }

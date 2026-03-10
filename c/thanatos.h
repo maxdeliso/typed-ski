@@ -2,24 +2,20 @@
 #define THANATOS_H
 
 #include "arena.h"
-#include <stddef.h>
-
 typedef struct {
   uint32_t num_workers;
   uint32_t arena_capacity;
-  /** Optional runtime stdin for READ_ONE (separate from program/SKI input).
-   * Model: preloaded finite byte source, not asynchronous streaming. */
-  const uint8_t *stdin_bytes;
-  size_t stdin_len;
-  /** Current read position; thanatos advances on each READ_ONE. NULL if not
-   * used. */
-  size_t *stdin_pos;
+  /** Optional runtime stdin stream for READ_ONE (separate from program/SKI
+   * input). Pass -1 when no runtime stdin source is available. Thanatos reads
+   * one byte lazily for each blocked READ_ONE suspension and takes ownership of
+   * the fd (it is closed by thanatos_shutdown). */
+  int stdin_fd;
 } ThanatosConfig;
 
-/* EOF semantics for READ_ONE: when stdin_bytes is exhausted we treat it as
- * a hard error (reduction fails, return EMPTY). This is intentionally stricter
- * than JS/WASM, which blocks (waits for the host to call writeStdin) rather
- * than failing. Native does not implement blocking wait for more input. */
+/* READ_ONE semantics now match JS/WASM more closely: if no byte is available
+ * yet, native waits until one arrives instead of failing. If stdin_fd == -1,
+ * READ_ONE remains parked indefinitely. For regular files, EOF is treated as a
+ * temporary condition so appending later bytes will wake pending reads. */
 
 void thanatos_init(ThanatosConfig config);
 

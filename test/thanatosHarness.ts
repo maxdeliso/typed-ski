@@ -17,6 +17,7 @@ import { parseSKI } from "../lib/parser/ski.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
+const TEST_NATIVE_WORKERS = 2;
 
 /** Path to the thanatos binary (built by make build-native). Override with env THANATOS_BIN for ASan etc. */
 export const THANATOS_BIN =
@@ -244,9 +245,11 @@ export class ThanatosSession {
 }
 
 function defaultWorkerCount(): number {
-  return typeof navigator !== "undefined" && navigator.hardwareConcurrency > 0
+  const detected = typeof navigator !== "undefined" &&
+      navigator.hardwareConcurrency > 0
     ? navigator.hardwareConcurrency
     : 4;
+  return Math.max(TEST_NATIVE_WORKERS, Math.min(detected, 4));
 }
 
 /** Global key for the singleton so one process is shared across all test files. */
@@ -406,7 +409,7 @@ Deno.test({
     assertEquals(jsStdout[0], 65);
 
     const proc = new Deno.Command(THANATOS_BIN, {
-      args: ["--dag"],
+      args: ["--dag", String(TEST_NATIVE_WORKERS)],
       cwd: PROJECT_ROOT,
       stdin: "piped",
       stdout: "piped",
@@ -426,13 +429,12 @@ Deno.test({
   },
 });
 
-/** Multiple writeOne: emit A, B, C bytes (possibly reordered by the native
- * engine’s scheduling); assert the first three stdout bytes are exactly the
- * multiset {65, 66, 67}.
+/** Multiple writeOne on a single continuation spine must preserve program
+ * order. Native batch mode should therefore emit ABC exactly, not merely some
+ * permutation of those bytes.
  *
  * Semantics: the DAG decodes to (WriteOne 65)((WriteOne 66)((WriteOne 67)I)),
- * i.e. three writeOne calls with continuations; the native reducer enqueues
- * each byte to the arena stdout ring and may reorder them.
+ * i.e. three causally ordered writeOne calls with continuations.
  *
  * Why stdout has more than 3 bytes: the thanatos binary in batch mode writes
  * (1) the arena stdout pump output (these 3 bytes) and (2) a textual line from
@@ -440,31 +442,32 @@ Deno.test({
  *
  * DAG string (postorder): . U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11 */
 Deno.test({
-  name: "native IO - multiple writeOne ABC (any order)",
+  name: "native IO - multiple writeOne ABC preserves sequential order",
   ignore: !thanatosAvailable(),
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
     const dagLine = ". U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11";
-    const proc = new Deno.Command(THANATOS_BIN, {
-      args: ["--dag"],
-      cwd: PROJECT_ROOT,
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "inherit",
-    }).spawn();
-    const writer = proc.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(dagLine + "\n"));
-    await writer.close();
-    const { stdout } = await proc.output();
-    assertEquals(stdout.length >= 3, true);
-    const first3 = Array.from(stdout.subarray(0, 3));
-    const sorted = [...first3].sort((a, b) => a - b);
-    assertEquals(
-      sorted,
-      [65, 66, 67],
-      "first three stdout bytes must be some permutation of ABC (65, 66, 67)",
-    );
+    for (let i = 0; i < 32; i++) {
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "inherit",
+      }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(dagLine + "\n"));
+      await writer.close();
+      const { stdout } = await proc.output();
+      assertEquals(stdout.length >= 3, true);
+      const first3 = Array.from(stdout.subarray(0, 3));
+      assertEquals(
+        first3,
+        [65, 66, 67],
+        `run ${i + 1}: first three stdout bytes must preserve ABC order`,
+      );
+    }
   },
 });
 
@@ -481,7 +484,7 @@ Deno.test({
       const expr = apply(ReadOne, I);
       const dagLine = toDagWire(expr);
       const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", "--stdin-file", tmpStdin],
+        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
         cwd: PROJECT_ROOT,
         stdin: "piped",
         stdout: "piped",
@@ -510,34 +513,62 @@ Deno.test({
   },
 });
 
-/** readOne with no runtime stdin: expect reduction error (EOF = hard error). */
+/** readOne with empty runtime stdin file: native must block until data arrives,
+ * matching the JS/WASM host contract more closely than the old EOF error path. */
 Deno.test({
-  name: "native IO - stdin exhaustion (readOne, no --stdin-file)",
+  name: "native IO - readOne blocks until --stdin-file receives data",
   ignore: !thanatosAvailable(),
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-    const expr = apply(ReadOne, I);
-    const dagLine = toDagWire(expr);
-    const proc = new Deno.Command(THANATOS_BIN, {
-      args: ["--dag"],
-      cwd: PROJECT_ROOT,
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "piped",
-    }).spawn();
-    const writer = proc.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(dagLine + "\n"));
-    await writer.close();
-    const { stdout, stderr } = await proc.output();
-    const outText = new TextDecoder().decode(stdout);
-    const errText = new TextDecoder().decode(stderr);
-    assertEquals(
-      outText.includes("reduction error") ||
-        errText.includes("stdin exhausted"),
-      true,
-      "must fail on exhausted stdin: stdout=" + outText + " stderr=" + errText,
-    );
+    const tmpStdin = await Deno.makeTempFile();
+    await Deno.writeFile(tmpStdin, new Uint8Array());
+    try {
+      const expr = apply(ReadOne, I);
+      const dagLine = toDagWire(expr);
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "piped",
+      }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(dagLine + "\n"));
+      await writer.close();
+
+      const outputPromise = proc.output();
+      const stateBeforeAppend = await Promise.race([
+        outputPromise.then(() => "finished"),
+        new Promise<"pending">((resolve) =>
+          setTimeout(() => resolve("pending"), 50)
+        ),
+      ]);
+      assertEquals(
+        stateBeforeAppend,
+        "pending",
+        "READ_ONE should stay blocked while runtime stdin is empty",
+      );
+
+      await Deno.writeFile(tmpStdin, new Uint8Array([65]), { append: true });
+
+      const { stdout, stderr, code } = await outputPromise;
+      const outText = new TextDecoder().decode(stdout);
+      const errText = new TextDecoder().decode(stderr);
+      assertEquals(code, 0, "exit 0 after input arrives");
+      assertEquals(
+        outText.includes("reduction error"),
+        false,
+        "must not report reduction error: " + errText,
+      );
+      assertEquals(
+        outText.includes("U41") || outText.includes("65"),
+        true,
+        "result should reflect byte 65 (U41): " + outText,
+      );
+    } finally {
+      await Deno.remove(tmpStdin);
+    }
   },
 });
 
@@ -554,7 +585,7 @@ Deno.test({
       const expr = apply(ReadOne, WriteOne);
       const dagLine = toDagWire(expr);
       const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", "--stdin-file", tmpStdin],
+        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
         cwd: PROJECT_ROOT,
         stdin: "piped",
         stdout: "piped",

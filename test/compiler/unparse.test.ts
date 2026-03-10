@@ -80,6 +80,26 @@ Deno.test({
         trip: "unparseCombinator (C_Term (T_Byte #u8(255)))",
         expected: "#u8(255)",
       },
+      {
+        name: "intrinsic LtU8",
+        trip: "unparseCombinator (C_Term T_LtU8)",
+        expected: "L",
+      },
+      {
+        name: "intrinsic DivU8",
+        trip: "unparseCombinator (C_Term T_DivU8)",
+        expected: "D",
+      },
+      {
+        name: "intrinsic ModU8",
+        trip: "unparseCombinator (C_Term T_ModU8)",
+        expected: "M",
+      },
+      {
+        name: "intrinsic AddU8",
+        trip: "unparseCombinator (C_Term T_AddU8)",
+        expected: "A",
+      },
     ];
 
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);

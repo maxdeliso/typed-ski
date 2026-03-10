@@ -29,6 +29,10 @@ export T_CPrime
 export T_WriteOne
 export T_ReadOne
 export T_EqU8
+export T_LtU8
+export T_DivU8
+export T_ModU8
+export T_AddU8
 export T_Byte
 export Comb
 export C_Term
@@ -48,6 +52,10 @@ data Terminal =
   | T_WriteOne
   | T_ReadOne
   | T_EqU8
+  | T_LtU8
+  | T_DivU8
+  | T_ModU8
+  | T_AddU8
   | T_Byte U8
 
 data Comb =
@@ -67,6 +75,10 @@ poly terminalBytes = \t : Terminal =>
     | T_WriteOne => "."
     | T_ReadOne => ","
     | T_EqU8 => "E"
+    | T_LtU8 => "L"
+    | T_DivU8 => "D"
+    | T_ModU8 => "M"
+    | T_AddU8 => "A"
     | T_Byte b => append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
   }
 

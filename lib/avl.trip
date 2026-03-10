@@ -36,6 +36,7 @@ export lookup
 export insert
 export delete
 export toListKeys
+export toListEntries
 export fromList
 export maxNat
 export gtNat
@@ -229,6 +230,15 @@ poly rec toListKeys = #K => #V => \t : Avl K V =>
         append [K]
           (toListKeys [K] [V] l)
           (cons [K] k (toListKeys [K] [V] r))
+  }
+
+poly rec toListEntries = #K => #V => \t : Avl K V =>
+  match t [List (Pair K V)] {
+    | Empty => nil [Pair K V]
+    | Node l k v _ r =>
+        append [Pair K V]
+          (toListEntries [K] [V] l)
+          (cons [Pair K V] (MkPair [K] [V] k v) (toListEntries [K] [V] r))
   }
 
 poly rec fromList = #K => #V => \lteKey : K -> K -> Bool => \entries : List (Pair K V) =>

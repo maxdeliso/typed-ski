@@ -119,6 +119,13 @@ Deno.test({
       assertion:
         "Expected parseProgram to preserve poly/typed/untyped/combinator kind and rec flag in D_Def",
     },
+    {
+      name:
+        "Parser stage 0 - tokenize then parseProgram preserves source-text rec definitions",
+      file: "testParseProgramSourceRec.trip",
+      assertion:
+        "Expected tokenize -> parseProgram to preserve poly rec metadata from source text",
+    },
   ];
 
   const lexerObj = await getLexerObject();

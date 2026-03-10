@@ -1,0 +1,35 @@
+module Test
+
+import Prelude Bool
+import Prelude false
+import Prelude if
+import Prelude List
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude U8
+import Prelude eqU8
+import Lexer tokenize
+import Lexer Token
+import Lexer tokenTag
+import Lexer T_KwPoly
+import Lexer T_KwRec
+
+export main
+
+poly source : List U8 = "poly rec p = p"
+
+poly main =
+  match (tokenize source) [Bool] {
+    | Err e => false
+    | Ok toks =>
+        matchList [Token] [Bool] toks false
+          (\h : Token => \t : List Token =>
+            if [Bool] (eqU8 (tokenTag h) (tokenTag T_KwPoly))
+              (\u : U8 =>
+                matchList [Token] [Bool] t false
+                  (\h2 : Token => \t2 : List Token =>
+                    eqU8 (tokenTag h2) (tokenTag T_KwRec)))
+              (\u : U8 => false))
+  }

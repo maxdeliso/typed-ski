@@ -1,0 +1,67 @@
+module Compiler
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude U8
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude map
+import Prelude matchList
+import Lexer tokenize
+import Parser parseProgram
+import Parser D_Def
+import Parser Decl
+import Avl empty
+import Avl lookup
+import Avl toListEntries
+import Bridge elaborateProgram
+import Lowering Lower
+import Lowering lowerToComb
+import Unparse Terminal
+import Unparse Comb
+import Unparse C_Term
+import Unparse C_App
+import Unparse T_I
+import Unparse unparseCombinator
+
+export compileToComb
+export main
+
+poly compileToComb = \source : List U8 =>
+  match (tokenize source) [Result (List U8) (List (Pair (List U8) Comb))] {
+    | Err e => Err [List U8] [List (Pair (List U8) Comb)] "Lex error"
+    | Ok toks =>
+        match (parseProgram toks) [Result (List U8) (List (Pair (List U8) Comb))] {
+          | Err e => Err [List U8] [List (Pair (List U8) Comb)] "Parse error"
+          | Ok decls =>
+              match (elaborateProgram (empty [List U8] [Lower]) decls) [Result (List U8) (List (Pair (List U8) Comb))] {
+                | Err e => Err [List U8] [List (Pair (List U8) Comb)] e
+                | Ok globals =>
+                    let entries = toListEntries [List U8] [Lower] globals in
+                    let results = map [Pair (List U8) Lower] [Pair (List U8) Comb]
+                      (\entry : Pair (List U8) Lower =>
+                        MkPair [List U8] [Comb]
+                          (fst [List U8] [Lower] entry)
+                          (lowerToComb (snd [List U8] [Lower] entry)))
+                      entries in
+                    Ok [List U8] [List (Pair (List U8) Comb)] results
+              }
+        }
+  }
+
+poly main =
+  let source = "module Test export id poly id = \\x => x" in
+  match (compileToComb source) [Comb] {
+    | Err e => C_Term T_I
+    | Ok results =>
+        matchList [Pair (List U8) Comb] [Comb] results
+          (C_Term T_I)
+          (\h : Pair (List U8) Comb => \t : List (Pair (List U8) Comb) =>
+             snd [List U8] [Comb] h)
+  }

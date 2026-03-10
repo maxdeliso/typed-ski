@@ -52,6 +52,37 @@ Deno.test("objectFile serialization and validation", async (t) => {
     assertEquals(revived.bigintMeta, 123n);
   });
 
+  await t.step("serializes equivalent nested objects canonically", () => {
+    const a: TripCObject = {
+      ...validObject,
+      definitions: {
+        main: {
+          name: "main",
+          term: {
+            name: "x",
+            kind: "systemF-var",
+          },
+          kind: "poly",
+        } as TripLangTerm,
+      },
+    };
+    const b: TripCObject = {
+      ...validObject,
+      definitions: {
+        main: {
+          kind: "poly",
+          term: {
+            kind: "systemF-var",
+            name: "x",
+          },
+          name: "main",
+        } as TripLangTerm,
+      },
+    };
+
+    assertEquals(serializeTripCObject(a), serializeTripCObject(b));
+  });
+
   await t.step("throws on invalid JSON", () => {
     assertThrows(
       () => deserializeTripCObject("{invalid json"),

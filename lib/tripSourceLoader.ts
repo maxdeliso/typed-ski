@@ -2,6 +2,7 @@ import { dirname, fromFileUrl, join } from "std/path";
 import { compileToObjectFile } from "./compiler/index.ts";
 import type { TripCObject } from "./compiler/objectFile.ts";
 import { parseTripLang } from "./parser/tripLang.ts";
+import { sortByKey, sortedStrings } from "./shared/canonical.ts";
 
 type TripSourceLocation = string | URL;
 
@@ -51,7 +52,7 @@ function importedModuleNames(source: string): string[] {
       modules.add(term.name);
     }
   }
-  return Array.from(modules);
+  return sortedStrings(modules);
 }
 
 async function resolveImportedModuleSourcePath(
@@ -117,7 +118,12 @@ async function loadTripModuleObjectInternal(
     loadingStack.delete(filePath);
   }
 
-  const object = compileToObjectFile(source, { importedModules });
+  const object = compileToObjectFile(source, {
+    importedModules: sortByKey(
+      importedModules,
+      (moduleObject) => moduleObject.module,
+    ),
+  });
   MODULE_CACHE.set(filePath, object);
   return object;
 }

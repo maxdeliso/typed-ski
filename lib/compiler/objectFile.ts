@@ -8,6 +8,7 @@
  * @module
  */
 import type { DataDefinition, TripLangTerm } from "../meta/trip.ts";
+import { sortedRecordEntries } from "../shared/canonical.ts";
 
 /**
  * Represents an import declaration in a module.
@@ -56,14 +57,32 @@ export interface TripCObject {
  */
 const BIGINT_TAG = "__trip_bigint__";
 
-export function serializeTripCObject(obj: TripCObject): string {
-  const replacer = (_key: string, value: unknown) => {
-    if (typeof value === "bigint") {
-      return { [BIGINT_TAG]: value.toString() };
+function canonicalizeForSerialization(value: unknown): unknown {
+  if (typeof value === "bigint") {
+    return { [BIGINT_TAG]: value.toString() };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeForSerialization);
+  }
+
+  if (value && typeof value === "object") {
+    const canonical: Record<string, unknown> = {};
+    for (
+      const [key, entry] of sortedRecordEntries(
+        value as Record<string, unknown>,
+      )
+    ) {
+      canonical[key] = canonicalizeForSerialization(entry);
     }
-    return value;
-  };
-  return JSON.stringify(obj, replacer, 2);
+    return canonical;
+  }
+
+  return value;
+}
+
+export function serializeTripCObject(obj: TripCObject): string {
+  return JSON.stringify(canonicalizeForSerialization(obj), null, 2);
 }
 
 /**

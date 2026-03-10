@@ -11,26 +11,26 @@ import { unparseUntypedLambda } from "../../parser/untyped.ts";
 import { unparseSystemF } from "../../parser/systemFTerm.ts";
 import { unparseTypedLambda } from "../../parser/typedLambda.ts";
 import { unparseType } from "../../parser/type.ts";
-import type { TripLangTerm } from "../trip.ts";
-
-const def = " := ";
+import type { TripLangProgram, TripLangTerm } from "../trip.ts";
 
 export function unparseTerm(dt: TripLangTerm): string {
   switch (dt.kind) {
     case "poly":
-      return `${dt.name}${dt.rec ? " (rec)" : ""}${def}${
-        unparseSystemF(dt.term)
-      }`;
+      return `poly${dt.rec ? " rec" : ""} ${dt.name}${
+        dt.type ? ` : ${unparseType(dt.type)}` : ""
+      } = ${unparseSystemF(dt.term)}`;
     case "typed":
-      return dt.name + def + unparseTypedLambda(dt.term);
+      return `typed ${dt.name}${
+        dt.type ? ` : ${unparseType(dt.type)}` : ""
+      } = ${unparseTypedLambda(dt.term)}`;
     case "untyped":
-      return dt.name + def + unparseUntypedLambda(dt.term);
+      return `untyped ${dt.name} = ${unparseUntypedLambda(dt.term)}`;
     case "combinator":
-      return dt.name + def + unparseSKI(dt.term);
+      return `combinator ${dt.name} = ${unparseSKI(dt.term)}`;
     case "native":
       return `native ${dt.name} : ${unparseType(dt.type)}`;
     case "type":
-      return dt.name + def + unparseType(dt.type);
+      return `type ${dt.name} = ${unparseType(dt.type)}`;
     case "data": {
       const params = dt.typeParams.length > 0
         ? ` ${dt.typeParams.join(" ")}`
@@ -47,11 +47,12 @@ export function unparseTerm(dt: TripLangTerm): string {
     case "module":
       return `module ${dt.name}`;
     case "import":
-      // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
-      // Parser produces: {name: moduleName, ref: symbolName}
-      // Unparse outputs: "import <symbol> from <module>" (e.g., "import zero from Prelude")
-      return `import ${dt.ref} from ${dt.name}`;
+      return `import ${dt.name} ${dt.ref}`;
     case "export":
       return `export ${dt.name}`;
   }
+}
+
+export function unparseProgram(program: TripLangProgram): string {
+  return program.terms.map(unparseTerm).join("\n");
 }

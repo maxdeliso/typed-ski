@@ -30,8 +30,8 @@ static uint32_t default_num_workers(void) {
  * runtime_stdin_fd is an optional stream/file consumed lazily by READ_ONE on a
  * separate channel. Pass -1 when no runtime stdin source is available. */
 static int run_batch_mode(uint32_t num_workers, uint32_t arena_capacity,
-                          char *program_input, size_t program_len,
-                          int use_dag, int runtime_stdin_fd) {
+                          char *program_input, size_t program_len, int use_dag,
+                          int runtime_stdin_fd) {
   ThanatosConfig config = {
       .num_workers = num_workers,
       .arena_capacity = arena_capacity,
@@ -228,7 +228,8 @@ int main(int argc, char **argv) {
   uint32_t arena_capacity = 1 << 20;
   int use_dag = 0;
   int daemon = 0;
-  const char *stdin_file = NULL; /* Optional runtime stdin stream for READ_ONE. */
+  const char *stdin_file =
+      NULL; /* Optional runtime stdin stream for READ_ONE. */
   int arg_idx = 1;
 
   /* Consume flags in any order; remainder are positional (workers,

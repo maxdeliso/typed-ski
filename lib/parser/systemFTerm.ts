@@ -696,17 +696,21 @@ export function unparseSystemF(term: SystemFTerm): string {
       }${FAT_ARROW}${unparseSystemF(term.body)}`;
     case "systemF-type-abs":
       return `${HASH}${term.typeVar}${FAT_ARROW}${unparseSystemF(term.body)}`;
-    case "systemF-type-app":
-      return `${unparseSystemF(term.term)}[${
-        unparseSystemFType(term.typeArg)
-      }]`;
+    case "systemF-type-app": {
+      const target = term.term.kind === "systemF-var" ||
+          term.term.kind === "systemF-type-app" ||
+          term.term.kind === "non-terminal"
+        ? unparseSystemF(term.term)
+        : `${LEFT_PAREN}${unparseSystemF(term.term)}${RIGHT_PAREN}`;
+      return `${target}[${unparseSystemFType(term.typeArg)}]`;
+    }
     case "systemF-match": {
       const arms = term.arms.map((arm) =>
-        `| ${arm.constructorName} ${arm.params.join(" ")} -> ${
-          unparseSystemF(arm.body)
-        }`
+        `| ${arm.constructorName}${
+          arm.params.length > 0 ? ` ${arm.params.join(" ")}` : ""
+        } ${FAT_ARROW} ${unparseSystemF(arm.body)}`
       ).join(" ");
-      return `match ${unparseSystemF(term.scrutinee)}[${
+      return `match ${unparseSystemF(term.scrutinee)} [${
         unparseSystemFType(term.returnType)
       }] { ${arms} }`;
     }

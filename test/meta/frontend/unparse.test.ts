@@ -1,5 +1,8 @@
 import { assert } from "chai";
-import { unparseTerm } from "../../../lib/meta/frontend/unparse.ts";
+import {
+  unparseProgram,
+  unparseTerm,
+} from "../../../lib/meta/frontend/unparse.ts";
 import { parseTripLang } from "../../../lib/parser/tripLang.ts";
 import { requiredAt } from "../../util/required.ts";
 
@@ -10,8 +13,7 @@ Deno.test("unparseTerm", async (t) => {
     const result = unparseTerm(
       requiredAt(program.terms, 1, "expected poly definition"),
     );
-    assert.include(result, "id");
-    assert.include(result, "#X=>");
+    assert.equal(result, "poly id = #X=>\\x:X=>x");
   });
 
   await t.step("should unparse a poly definition with match", () => {
@@ -29,9 +31,7 @@ Deno.test("unparseTerm", async (t) => {
     const program = parseTripLang(input);
     const dataTerm = requiredAt(program.terms, 1, "expected data definition");
     const result = unparseTerm(dataTerm);
-    assert.include(result, "data Maybe");
-    assert.include(result, "None");
-    assert.include(result, "Some");
+    assert.equal(result, "data Maybe = None | Some T");
   });
 
   await t.step("should unparse a typed definition", () => {
@@ -40,8 +40,7 @@ Deno.test("unparseTerm", async (t) => {
     const result = unparseTerm(
       requiredAt(program.terms, 1, "expected typed definition"),
     );
-    assert.include(result, "id");
-    assert.include(result, "\\x:A=>");
+    assert.equal(result, "typed id = \\x:A=>x");
   });
 
   await t.step("should unparse an untyped definition", () => {
@@ -50,8 +49,7 @@ Deno.test("unparseTerm", async (t) => {
     const result = unparseTerm(
       requiredAt(program.terms, 1, "expected untyped definition"),
     );
-    assert.include(result, "id");
-    assert.include(result, "\\x=>");
+    assert.equal(result, "untyped id = \\x=>x");
   });
 
   await t.step("should unparse a combinator definition", () => {
@@ -60,8 +58,7 @@ Deno.test("unparseTerm", async (t) => {
     const result = unparseTerm(
       requiredAt(program.terms, 1, "expected combinator definition"),
     );
-    assert.include(result, "id");
-    assert.include(result, "I");
+    assert.equal(result, "combinator id = I");
   });
 
   await t.step("should unparse a type definition", () => {
@@ -70,8 +67,7 @@ Deno.test("unparseTerm", async (t) => {
     const result = unparseTerm(
       requiredAt(program.terms, 1, "expected type definition"),
     );
-    assert.include(result, "MyType");
-    assert.include(result, "A->B");
+    assert.equal(result, "type MyType = (A->B)");
   });
 
   await t.step("should unparse a native definition", () => {
@@ -101,7 +97,7 @@ Deno.test("unparseTerm", async (t) => {
     const result = unparseTerm(
       requiredAt(program.terms, 1, "expected import definition"),
     );
-    assert.equal(result, "import bar from Foo");
+    assert.equal(result, "import Foo bar");
   });
 
   await t.step("should unparse export definition", () => {
@@ -111,5 +107,17 @@ Deno.test("unparseTerm", async (t) => {
       requiredAt(program.terms, 1, "expected export definition"),
     );
     assert.equal(result, "export Foo");
+  });
+
+  await t.step("should round-trip a program through canonical unparse", () => {
+    const input = `module Test
+import Foo bar
+export main
+poly rec main : #A->A = #A=>bar[A]`;
+    const program = parseTripLang(input);
+    const canonical = unparseProgram(program);
+    assert.include(canonical, "import Foo bar");
+    assert.include(canonical, "poly rec main : #A->A =");
+    assert.equal(unparseProgram(parseTripLang(canonical)), canonical);
   });
 });

@@ -50,17 +50,16 @@ static pthread_cond_t stdin_demand_cvar = PTHREAD_COND_INITIALIZER;
 static uint32_t stdin_demand_count = 0;
 
 /** Pump blocks on this when arena stdout ring is empty; dispatcher signals
- * after each CQE so pump wakes when there may be new stdout (no fixed sleep). */
+ * after each CQE so pump wakes when there may be new stdout (no fixed sleep).
+ */
 static pthread_mutex_t pump_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pump_cvar = PTHREAD_COND_INITIALIZER;
 static bool pump_wakeup_pending = false;
 
 static uint32_t io_wait_remove(uint32_t node_id);
 
-static void must_pthread_create(pthread_t *thread,
-                                void *(*entry)(void *),
-                                void *arg,
-                                const char *name) {
+static void must_pthread_create(pthread_t *thread, void *(*entry)(void *),
+                                void *arg, const char *name) {
   int rc = pthread_create(thread, NULL, entry, arg);
   if (rc != 0) {
     fprintf(stderr, "Thanatos: pthread_create(%s) failed (rc=%d)\n", name, rc);
@@ -139,8 +138,9 @@ static void *stdin_thread_main(void *arg) {
   (void)arg;
   while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
     pthread_mutex_lock(&stdin_demand_mutex);
-    while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire) &&
-           stdin_demand_count == 0) {
+    while (
+        atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire) &&
+        stdin_demand_count == 0) {
       pthread_cond_wait(&stdin_demand_cvar, &stdin_demand_mutex);
     }
     if (!atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
@@ -287,7 +287,8 @@ static void *stdout_thread_main(void *arg) {
     pthread_mutex_unlock(&stdout_publish_mutex);
     if (!published) {
       pthread_mutex_lock(&pump_mutex);
-      while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire) &&
+      while (atomic_load_explicit(&is_thanatos_initialized,
+                                  memory_order_acquire) &&
              !pump_wakeup_pending) {
         pthread_cond_wait(&pump_cvar, &pump_mutex);
       }
@@ -405,7 +406,8 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
       pending_reqs[slot].req_id = 0;
       pthread_mutex_unlock(&pending_reqs[slot].mutex);
       /* Drain any remaining arena stdout bytes before main prints the result
-       * line. Publication is serialized with the pump to preserve FIFO order. */
+       * line. Publication is serialized with the pump to preserve FIFO order.
+       */
       pthread_mutex_lock(&stdout_publish_mutex);
       drain_stdout_locked();
       pthread_mutex_unlock(&stdout_publish_mutex);

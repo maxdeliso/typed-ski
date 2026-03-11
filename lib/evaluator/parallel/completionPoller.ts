@@ -17,89 +17,40 @@ import type { RequestTracker } from "./requestTracker.ts";
 const EMPTY = -1n;
 const SUSPEND_MODE_IO_WAIT = 2;
 const DEFAULT_MAX_STEPS = 0xffffffff;
+
+// CQ Event Kinds (synchronized with c/arena.c)
 const CQ_EVENT_YIELD = 1;
 const CQ_EVENT_IO_WAIT = 2;
 const CQ_EVENT_ERROR = 3;
 
+function stepBudgetExhaustedError(reqId: number): Error {
+  return new Error(
+    `Request ${reqId} exhausted max steps before reaching normal form.`,
+  );
+}
+
 /**
  * Time budget (in milliseconds) for processing completion queue events before yielding.
- *
- * Default: 8ms
- * Rationale: Matches typical browser frame budgets (~16ms) divided by 2, ensuring we
- * yield frequently enough to maintain UI responsiveness while processing events efficiently.
- * This prevents main thread saturation and allows rendering to occur.
  */
 const SLICE_BUDGET_MS = 8;
 
 /**
  * Maximum number of completion queue events to process in a single time slice.
- *
- * Default: 4096 events
- * Rationale: Provides a reasonable upper bound on synchronous work per slice. Large enough
- * to process bursts efficiently, but small enough to prevent long-running synchronous
- * operations that could block rendering or other tasks.
  */
 const MAX_EVENTS_PER_SLICE = 4096;
 
 /**
- * Number of sleep iterations when no work is pending (hibernation mode).
- *
- * Default: 50 iterations
- * Rationale: When there's no pending work, we sleep in small chunks (1ms each) to check
- * for abort signals frequently while still conserving CPU. 50 iterations gives ~50ms total
- * sleep time, which is short enough to respond quickly to new work while long enough to
- * save significant CPU cycles during idle periods.
- */
-const HIBERNATION_ITERATIONS = 50;
-
-/**
- * Sleep duration (in milliseconds) when no work is pending.
- *
- * Default: 1ms
- * Rationale: Very short sleep that allows frequent abort checks while still yielding CPU
- * time. Short enough to respond quickly to new work, but long enough to avoid busy-waiting.
- */
-const HIBERNATION_SLEEP_MS = 1;
-
-/**
- * Threshold for empty completion queue retries before yielding to event loop.
- *
- * Default: 512 iterations
- * Rationale: When the completion queue is empty, we initially use queueMicrotask() for
- * rapid retries (low latency). After 512 consecutive empty pulls, we switch to sleep(0)
- * to yield to the event loop, preventing starvation of other tasks. 512 balances:
- * - High enough to avoid unnecessary context switches for transient emptiness
- * - Low enough to prevent blocking the event loop and maintain responsiveness
- */
-const EMPTY_STREAK_THRESHOLD = 512;
-
-/**
  * Threshold for busy-waiting in resubmitSuspension before yielding.
- *
- * Default: 64 iterations
- * Rationale: When resubmitting a suspension and the submission queue is full, we use
- * queueMicrotask() for rapid retries. After 64 failures, we switch to sleep(1ms) to yield.
- * Lower than other thresholds (64 vs 512) because resubmissions are more critical and
- * should yield sooner to avoid blocking other work units.
  */
 const RESUBMIT_BUSY_WAIT_THRESHOLD = 64;
 
 /**
  * Sleep duration (in milliseconds) when resubmit busy-wait threshold is exceeded.
- *
- * Default: 1ms
- * Rationale: Short sleep that yields CPU while allowing quick retry of resubmissions.
- * Longer than sleep(0) to ensure we actually yield, since resubmissions are critical.
  */
 const RESUBMIT_SLEEP_MS = 1;
 
 /**
  * Threshold for busy-waiting in submitSuspension before yielding.
- *
- * Default: 512 iterations
- * Rationale: When submitting a suspension and the submission queue is full, we use
- * queueMicrotask() for rapid retries. After 512 failures, we switch to sleep(0) to yield
- * to the event loop. Same threshold as empty streak for consistency in yielding behavior.
  */
 const SUBMIT_BUSY_WAIT_THRESHOLD = 512;
 
@@ -135,76 +86,60 @@ export class CompletionPoller {
   start(hostPullV2: () => bigint): void {
     if (this.pollerStarted) return;
     this.pollerStarted = true;
+
     const pull = hostPullV2;
     (async () => {
       let emptyStreak = 0;
-      // Prevent main-thread saturation under load by time-slicing CQ drains.
-      // Microtask yielding is not sufficient to guarantee rendering; prefer rAF when available.
       const nowMs = () =>
         (typeof performance !== "undefined" &&
             typeof performance.now === "function")
           ? performance.now()
           : Date.now();
-      const yieldToRenderer = async () => {
-        // Browser: yield to the next frame so painting can happen.
-        if (typeof requestAnimationFrame === "function") {
-          await new Promise<void>((r) => requestAnimationFrame(() => r()));
-          return;
-        }
-        // Non-browser (tests/deno): yield back to the macrotask queue.
+
+      const yieldToRenderer = async (ms = 0) => {
         if (this.aborted()) return;
-        const { promise, cancel } = sleep(0);
+        const { promise, cancel } = sleep(ms);
         this.activeTimeouts.add(cancel);
         try {
           await promise;
         } finally {
           this.activeTimeouts.delete(cancel);
         }
-        if (this.aborted()) return;
       };
+
       let sliceStart = nowMs();
       let sliceEvents = 0;
+
       const maybeYield = async () => {
-        // Avoid doing an unbounded amount of synchronous work without yielding.
         if (
           sliceEvents < MAX_EVENTS_PER_SLICE &&
           nowMs() - sliceStart < SLICE_BUDGET_MS
         ) {
+          // Always yield to microtask to prevent starving other promises/IO
+          await new Promise<void>((r) => queueMicrotask(r));
           return;
         }
         sliceEvents = 0;
         sliceStart = nowMs();
-        await yieldToRenderer();
+        await yieldToRenderer(0);
         sliceStart = nowMs();
       };
+
       const ex = this.exports as unknown as {
         kindOf: (id: number) => number;
         symOf: (id: number) => number;
+        hashOf?: (id: number) => number;
         leftOf: (id: number) => number;
         rightOf: (id: number) => number;
         hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
       };
+
       for (;;) {
         if (this.aborted()) return;
 
-        // OPTIMIZATION: If no work is pending, hibernate.
-        // This prevents burning CPU when the user is staring at the screen doing nothing.
-        // Use very short sleeps (1ms) in a loop to check aborted frequently while still saving CPU.
+        // Hibernate briefly if no work is pending.
         if (this.requestTracker.getTotalPending() === 0) {
-          // Check aborted before sleeping to avoid creating a timer that leaks
-          if (this.aborted()) return;
-          // Sleep in small chunks, checking aborted frequently
-          for (let i = 0; i < HIBERNATION_ITERATIONS; i++) {
-            if (this.aborted()) return;
-            const { promise, cancel } = sleep(HIBERNATION_SLEEP_MS);
-            this.activeTimeouts.add(cancel);
-            try {
-              await promise;
-            } finally {
-              this.activeTimeouts.delete(cancel);
-            }
-            if (this.aborted()) return;
-          }
+          await yieldToRenderer(10);
           sliceEvents = 0;
           sliceStart = nowMs();
           continue;
@@ -213,28 +148,20 @@ export class CompletionPoller {
         const packed = pull();
         if (packed === EMPTY) {
           this.ringStats.recordPullEmpty();
-          // If the CQ is empty, avoid burning CPU by spinning in the microtask queue.
-          // Use a short macrotask backoff once we've observed emptiness for a while.
           emptyStreak++;
-          if (emptyStreak < EMPTY_STREAK_THRESHOLD) {
+          if (emptyStreak < 10) {
             await new Promise<void>((r) => queueMicrotask(r));
           } else {
-            if (this.aborted()) return;
-            const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
-            this.activeTimeouts.add(cancel);
-            try {
-              await promise;
-            } finally {
-              this.activeTimeouts.delete(cancel);
-            }
-            if (this.aborted()) return;
+            await yieldToRenderer(1);
           }
           sliceEvents = 0;
           sliceStart = nowMs();
           continue;
         }
+
         this.ringStats.recordPullNonEmpty();
         emptyStreak = 0;
+
         const reqId = Number((packed >> 32n) & 0xffffffffn) >>> 0;
         const low = Number(packed & 0xffffffffn) >>> 0;
         const eventKind = low >>> 30;
@@ -250,47 +177,62 @@ export class CompletionPoller {
           continue;
         }
 
-        // If the worker yielded, resubmit to continue.
-        // (Do not resolve the promise yet; the job is still in-flight.)
+        // Check if this is a yield/suspension
         const isTypedYield = eventKind === CQ_EVENT_YIELD ||
           eventKind === CQ_EVENT_IO_WAIT;
-        const nodeKind = isTypedYield ? 0 : ex.kindOf(nodeId);
-        if (
-          isTypedYield ||
-          nodeKind === (ArenaKind.Suspension as number) ||
-          nodeKind === (ArenaKind.Continuation as number)
-        ) {
-          // If the caller already gave up / was aborted, drop the yielded work.
-          if (!this.requestTracker.isPending(reqId)) continue;
+        const shouldInspectNode = eventKind !== CQ_EVENT_IO_WAIT &&
+          nodeId < 0x3fffffff;
+        const nodeKind = shouldInspectNode ? ex.kindOf(nodeId) : 0;
 
+        const isControlNode = nodeKind === (ArenaKind.Suspension as number) ||
+          nodeKind === (ArenaKind.Continuation as number);
+
+        if (isTypedYield || isControlNode) {
+          if (!this.requestTracker.isPending(reqId)) {
+            // Already completed or aborted
+            sliceEvents++;
+            await maybeYield();
+            continue;
+          }
+
+          const suspensionMode = nodeKind === (ArenaKind.Suspension as number)
+            ? ex.symOf(nodeId)
+            : -1;
           const isIoWait = eventKind === CQ_EVENT_IO_WAIT ||
-            ex.symOf(nodeId) === SUSPEND_MODE_IO_WAIT;
+            suspensionMode === SUSPEND_MODE_IO_WAIT;
+
           if (isIoWait) {
             this.ioManager.registerIoWait(nodeId, reqId);
             const handled = await this.handleIoWaitSuspension(nodeId, reqId);
             if (!handled) {
-              // Will be handled later when stdin data arrives via ioManager.wakeStdinWaiters
+              // Handled later via wakeStdinWaiters (e.g. stdin available)
             }
             sliceEvents++;
             await maybeYield();
             continue;
           }
 
-          // Track resubmissions per work unit to prevent infinite loops from divergent terms.
-          // Check BEFORE attempting to resubmit - if limit exceeded, stop this work unit.
+          const isStepBudgetExhausted = eventKind === CQ_EVENT_YIELD &&
+            nodeKind === (ArenaKind.Suspension as number) &&
+            suspensionMode !== SUSPEND_MODE_IO_WAIT &&
+            ex.hashOf?.(nodeId) === 0;
+
+          if (isStepBudgetExhausted) {
+            this.requestTracker.markError(
+              reqId,
+              stepBudgetExhaustedError(reqId),
+            );
+            sliceEvents++;
+            await maybeYield();
+            continue;
+          }
+
+          // Regular yield: resubmit
           try {
             const resubmitCount = this.requestTracker.incrementResubmit(reqId);
             this.requestTracker.recordYield(reqId, nodeId, resubmitCount);
-
-            // Retry submitting until queue accepts (unbounded retries when queue is full).
-            // The per-work-unit resubmission limit above prevents individual work units
-            // from monopolizing resources.
-            // when resubmitting a suspension, max_steps is ignored by the worker
-            // (it uses the suspension's internal hash field for remaining budget), so we pass 0.
-            // The worker will read the count from the Suspension node's hash field.
             await this.resubmitSuspension(nodeId, reqId);
           } catch (error) {
-            // Resubmission limit exceeded or other error
             if (error instanceof Error) {
               this.requestTracker.markError(reqId, error);
             }
@@ -303,11 +245,11 @@ export class CompletionPoller {
           continue;
         }
 
-        // Regular completion
+        // Final result (CQ_EVENT_DONE)
         const wasPending = this.requestTracker.isPending(reqId);
-        // Defensive validation: occasionally a non-terminal root can still contain
-        // internal continuation/suspension descendants. Treat it as a yield and
-        // resubmit instead of leaking internal nodes to host decode.
+
+        // Check for control nodes in results - theoretically shouldn't happen with
+        // CQ_EVENT_DONE but good for robustness.
         if (
           wasPending &&
           this.requestTracker.getResubmitCount(reqId) > 0 &&
@@ -326,11 +268,12 @@ export class CompletionPoller {
           await maybeYield();
           continue;
         }
+
         this.requestTracker.markCompleted(reqId, nodeId);
         if (!wasPending) {
-          // Completion was stashed (no pending resolver)
           this.ringStats.recordCompletionStashed();
         }
+
         sliceEvents++;
         await maybeYield();
       }
@@ -341,6 +284,7 @@ export class CompletionPoller {
    * Stops the polling loop and cleans up resources.
    */
   stop(): void {
+    this.pollerStarted = false;
     for (const cancel of this.activeTimeouts) {
       cancel();
     }
@@ -351,7 +295,6 @@ export class CompletionPoller {
     nodeId: number,
     reqId: number,
   ): Promise<boolean> {
-    // Try to handle immediately if there's wake budget
     const handled = await this.ioManager.handleIoWaitSuspension(
       nodeId,
       reqId,
@@ -369,6 +312,7 @@ export class CompletionPoller {
     const ex = this.exports as unknown as {
       hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
     };
+    // Suspension resubmissions pass 0 maxSteps to indicate "continue from suspension"
     let rc = ex.hostSubmit(nodeId >>> 0, reqId, 0);
     let fullStreak = 0;
     while (rc === 1) {
@@ -388,7 +332,6 @@ export class CompletionPoller {
         }
         if (this.aborted()) return;
       }
-      // retry passes 0 max steps for suspensions
       rc = ex.hostSubmit(nodeId >>> 0, reqId, 0);
     }
     if (rc !== 0) {

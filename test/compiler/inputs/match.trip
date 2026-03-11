@@ -1,0 +1,24 @@
+module MatchTest
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude U8
+
+data MaybeA =
+  | NothingA
+  | JustA U8
+
+data MaybeB =
+  | NothingB
+  | JustB U8
+
+poly test = \ma : MaybeA => \mb : MaybeB => \f : U8 -> U8 =>
+  let res = match ma {
+    | NothingA => 0
+    | JustA a => match mb {
+        | NothingB => a
+        | JustB b => f (addU8 a b)
+      }
+  } in
+  addU8 res 1

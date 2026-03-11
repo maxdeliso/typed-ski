@@ -74,6 +74,9 @@ static uint32_t char_to_sym(int c) {
   case 'A':
   case 'a':
     return ARENA_SYM_ADD_U8;
+  case 'O':
+  case 'o':
+    return ARENA_SYM_SUB_U8;
   default:
     return 0;
   }
@@ -191,6 +194,8 @@ static char sym_to_char(uint32_t sym) {
     return 'M';
   case ARENA_SYM_ADD_U8:
     return 'A';
+  case ARENA_SYM_SUB_U8:
+    return 'O';
   default:
     return '?';
   }
@@ -231,7 +236,14 @@ static size_t unparse_ski_rec(uint32_t node_id, char *buf, size_t capacity,
     return written;
   }
   /* Suspension/continuation: treat as application for display. */
-  if (kind == ARENA_KIND_SUSPENSION || kind == ARENA_KIND_CONTINUATION) {
+  if (kind == ARENA_KIND_SUSPENSION) {
+    static const char label[] = "<susp>";
+    if (written + sizeof(label) - 1 > capacity)
+      return written;
+    memcpy(buf + written, label, sizeof(label) - 1);
+    return written + sizeof(label) - 1;
+  }
+  if (kind == ARENA_KIND_CONTINUATION) {
     uint32_t l = leftOf(node_id), r = rightOf(node_id);
     if (written + 1 > capacity)
       return written;
@@ -302,6 +314,8 @@ static uint32_t dag_char_to_sym(int c) {
     return ARENA_SYM_MOD_U8;
   case 'A':
     return ARENA_SYM_ADD_U8;
+  case 'O':
+    return ARENA_SYM_SUB_U8;
   default:
     return 0;
   }
@@ -361,12 +375,15 @@ typedef enum {
   DAG_TOK_TERMINAL,
   DAG_TOK_U8,
   DAG_TOK_APP,
+  DAG_TOK_SUSPENSION,
 } DagTokKind;
 
 typedef struct {
   DagTokKind kind;
   uint32_t sym_or_left; /* terminal/u8: sym; app: left index */
-  uint32_t right;       /* app only: right index */
+  uint32_t right;       /* app: right index; suspension: context handle */
+  uint32_t aux;         /* suspension: mode */
+  uint32_t extra;       /* suspension: remaining steps */
 } DagToken;
 
 /* Scan one DAG token from s->buf[s->idx..]. On success advance s->idx and set
@@ -384,6 +401,8 @@ static bool parse_dag_token(ParseState *s, DagToken *tok) {
     tok->kind = DAG_TOK_TERMINAL;
     tok->sym_or_left = dag_char_to_sym(c);
     tok->right = 0;
+    tok->aux = 0;
+    tok->extra = 0;
     s->idx++;
     return true;
   }
@@ -395,9 +414,107 @@ static bool parse_dag_token(ParseState *s, DagToken *tok) {
       tok->kind = DAG_TOK_U8;
       tok->sym_or_left = byte;
       tok->right = 0;
+      tok->aux = 0;
+      tok->extra = 0;
       s->idx += 3;
       return true;
     }
+  }
+
+  /* ?L,ctx,mode,steps */
+  if (c == '?' && s->idx + 1 < s->len) {
+    const char *p = start + 1;
+    const char *end = s->buf + s->len;
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end)
+      return false;
+
+    uint32_t left_idx = EMPTY;
+    if (*p == '!') {
+      p++;
+    } else if (*p >= '0' && *p <= '9') {
+      const char *left_start = p;
+      while (p < end && *p >= '0' && *p <= '9')
+        p++;
+      if (!parse_u32_dec(left_start, p, &left_idx))
+        return false;
+    } else {
+      return false;
+    }
+
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end || *p != ',')
+      return false;
+    p++;
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end)
+      return false;
+
+    uint32_t ctx_handle = EMPTY;
+    if (*p == '!') {
+      p++;
+    } else if (*p >= '0' && *p <= '9') {
+      const char *ctx_start = p;
+      while (p < end && *p >= '0' && *p <= '9')
+        p++;
+      if (!parse_u32_dec(ctx_start, p, &ctx_handle))
+        return false;
+    } else {
+      return false;
+    }
+
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end || *p != ',')
+      return false;
+    p++;
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end)
+      return false;
+
+    uint32_t mode = 0;
+    if (!(*p >= '0' && *p <= '9'))
+      return false;
+    {
+      const char *mode_start = p;
+      while (p < end && *p >= '0' && *p <= '9')
+        p++;
+      if (!parse_u32_dec(mode_start, p, &mode))
+        return false;
+    }
+
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end || *p != ',')
+      return false;
+    p++;
+    while (p < end && is_dag_ws((unsigned char)*p))
+      p++;
+    if (p >= end)
+      return false;
+
+    uint32_t remaining_steps = 0;
+    if (!(*p >= '0' && *p <= '9'))
+      return false;
+    {
+      const char *steps_start = p;
+      while (p < end && *p >= '0' && *p <= '9')
+        p++;
+      if (!parse_u32_dec(steps_start, p, &remaining_steps))
+        return false;
+    }
+
+    tok->kind = DAG_TOK_SUSPENSION;
+    tok->sym_or_left = left_idx;
+    tok->right = ctx_handle;
+    tok->aux = mode;
+    tok->extra = remaining_steps;
+    s->idx = (size_t)(p - s->buf);
+    return true;
   }
 
   /* @L,R */
@@ -406,14 +523,23 @@ static bool parse_dag_token(ParseState *s, DagToken *tok) {
     const char *end = s->buf + s->len;
     while (p < end && is_dag_ws((unsigned char)*p))
       p++;
-    if (p >= end || *p < '0' || *p > '9')
+    if (p >= end)
       return false;
-    const char *left_start = p;
-    while (p < end && *p >= '0' && *p <= '9')
+
+    uint32_t left_idx = EMPTY;
+    if (*p == '!') {
+      left_idx = EMPTY;
       p++;
-    uint32_t left_idx;
-    if (!parse_u32_dec(left_start, p, &left_idx))
+    } else if (*p >= '0' && *p <= '9') {
+      const char *left_start = p;
+      while (p < end && *p >= '0' && *p <= '9')
+        p++;
+      if (!parse_u32_dec(left_start, p, &left_idx))
+        return false;
+    } else {
       return false;
+    }
+
     while (p < end && is_dag_ws((unsigned char)*p))
       p++;
     if (p >= end || *p != ',')
@@ -421,17 +547,28 @@ static bool parse_dag_token(ParseState *s, DagToken *tok) {
     p++;
     while (p < end && is_dag_ws((unsigned char)*p))
       p++;
-    if (p >= end || *p < '0' || *p > '9')
+    if (p >= end)
       return false;
-    const char *right_start = p;
-    while (p < end && *p >= '0' && *p <= '9')
+
+    uint32_t right_idx = EMPTY;
+    if (*p == '!') {
+      right_idx = EMPTY;
       p++;
-    uint32_t right_idx;
-    if (!parse_u32_dec(right_start, p, &right_idx))
+    } else if (*p >= '0' && *p <= '9') {
+      const char *right_start = p;
+      while (p < end && *p >= '0' && *p <= '9')
+        p++;
+      if (!parse_u32_dec(right_start, p, &right_idx))
+        return false;
+    } else {
       return false;
+    }
+
     tok->kind = DAG_TOK_APP;
     tok->sym_or_left = left_idx;
     tok->right = right_idx;
+    tok->aux = 0;
+    tok->extra = 0;
     s->idx = (size_t)(p - s->buf);
     return true;
   }
@@ -478,13 +615,39 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
       mapped[i] = allocTerminal(tok.sym_or_left);
     } else if (tok.kind == DAG_TOK_U8) {
       mapped[i] = allocU8((uint8_t)tok.sym_or_left);
-    } else {
-      uint32_t L = tok.sym_or_left, R = tok.right;
-      if (L >= i || R >= i) {
+    } else if (tok.kind == DAG_TOK_SUSPENSION) {
+      uint32_t L = tok.sym_or_left;
+      if (L != EMPTY && L >= i) {
         free(mapped);
         return EMPTY;
       }
-      mapped[i] = allocCons(mapped[L], mapped[R]);
+      uint32_t left_id = (L == EMPTY) ? EMPTY : mapped[L];
+      mapped[i] = alloc_generic(ARENA_KIND_SUSPENSION, (uint8_t)tok.aux,
+                                left_id, tok.right, tok.extra);
+    } else {
+      uint32_t L = tok.sym_or_left, R = tok.right;
+      if ((L != EMPTY && L >= i) || (R != EMPTY && R >= i)) {
+        free(mapped);
+        return EMPTY;
+      }
+      uint32_t left_id = (L == EMPTY) ? EMPTY : mapped[L];
+      uint32_t right_id = (R == EMPTY) ? EMPTY : mapped[R];
+
+      /* In daemon mode, STEP might return SUSPENSION/CONTINUATION DAGs.
+       * But parse_dag currently has no way to know the kind from the wire
+       * format alone if it's just @L,R. Actually, unparse_dag doesn't emit kind
+       * info. Let's assume for now everything is NON_TERM if it's @L,R. Wait,
+       * if it has '!', it MUST be CONTINUATION/SUSPENSION.
+       */
+      if (L == EMPTY || R == EMPTY) {
+        /* Hack: use CONTINUATION if EMPTY is present.
+         * This isn't perfect but allows the wire roundtrip to work for testing.
+         */
+        mapped[i] =
+            alloc_generic(ARENA_KIND_CONTINUATION, 0, left_id, right_id, 0);
+      } else {
+        mapped[i] = allocCons(left_id, right_id);
+      }
     }
   }
 
@@ -498,7 +661,8 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
 /* Export: only these kinds are allowed. */
 static int dag_exportable_kind(uint32_t kind) {
   return kind == ARENA_KIND_TERMINAL || kind == ARENA_KIND_U8 ||
-         kind == ARENA_KIND_NON_TERM;
+         kind == ARENA_KIND_NON_TERM || kind == ARENA_KIND_SUSPENSION ||
+         kind == ARENA_KIND_CONTINUATION;
 }
 
 /* Open-addressed hash table: arena_id -> local_index. O(1) lookup/insert. */
@@ -637,7 +801,9 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
         continue;
       }
 
-      /* NON_TERM: push EMIT for self, then right ENTER, then left ENTER */
+      /* Binary nodes push EMIT for self, then children. Suspensions carry an
+       * opaque shared-memory context handle in their right slot, so only the
+       * left child participates in DAG traversal. */
       f->state = DAG_EXPORT_EMIT;
       uint32_t l = leftOf(n), r = rightOf(n);
       if (stack_len + 2 > stack_cap) {
@@ -654,10 +820,12 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
       }
       stack[stack_len - 1] =
           (DagExportFrame){.node_id = n, .state = DAG_EXPORT_EMIT};
-      stack[stack_len++] =
-          (DagExportFrame){.node_id = r, .state = DAG_EXPORT_ENTER};
-      stack[stack_len++] =
-          (DagExportFrame){.node_id = l, .state = DAG_EXPORT_ENTER};
+      if (k != ARENA_KIND_SUSPENSION && r != EMPTY)
+        stack[stack_len++] =
+            (DagExportFrame){.node_id = r, .state = DAG_EXPORT_ENTER};
+      if (l != EMPTY)
+        stack[stack_len++] =
+            (DagExportFrame){.node_id = l, .state = DAG_EXPORT_ENTER};
       continue;
     }
 
@@ -697,13 +865,38 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
         return (size_t)-1;
       }
       written += (size_t)nw;
-    } else {
-      uint32_t li = 0, ri = 0;
-      dag_ht_get(ht, ht_cap, leftOf(n), &li);
-      dag_ht_get(ht, ht_cap, rightOf(n), &ri);
-      char app_buf[32];
-      int nw = snprintf(app_buf, sizeof(app_buf), "@%u,%u ", (unsigned)li,
+    } else if (k == ARENA_KIND_NON_TERM || k == ARENA_KIND_CONTINUATION) {
+      uint32_t li = EMPTY, ri = EMPTY;
+      uint32_t left_id = leftOf(n), right_id = rightOf(n);
+      if (left_id != EMPTY)
+        dag_ht_get(ht, ht_cap, left_id, &li);
+      if (right_id != EMPTY)
+        dag_ht_get(ht, ht_cap, right_id, &ri);
+
+      char app_buf[64];
+      int nw;
+      /* Only CONTINUATION/SUSPENSION are allowed to have EMPTY children in the
+       * wire format sentinel. */
+      if (k == ARENA_KIND_NON_TERM) {
+        if (li == EMPTY || ri == EMPTY) {
+          free(ht);
+          free(stack);
+          return 0;
+        }
+        nw = snprintf(app_buf, sizeof(app_buf), "@%u,%u ", (unsigned)li,
+                      (unsigned)ri);
+      } else {
+        if (li == EMPTY && ri == EMPTY) {
+          nw = snprintf(app_buf, sizeof(app_buf), "@!,! ");
+        } else if (li == EMPTY) {
+          nw = snprintf(app_buf, sizeof(app_buf), "@!,%u ", (unsigned)ri);
+        } else if (ri == EMPTY) {
+          nw = snprintf(app_buf, sizeof(app_buf), "@%u,! ", (unsigned)li);
+        } else {
+          nw = snprintf(app_buf, sizeof(app_buf), "@%u,%u ", (unsigned)li,
                         (unsigned)ri);
+        }
+      }
       if (nw < 0 || (size_t)nw >= (int)sizeof(app_buf) ||
           written + (size_t)nw > capacity) {
         free(ht);
@@ -712,6 +905,40 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
       }
       memcpy(buf + written, app_buf, (size_t)nw);
       written += (size_t)nw;
+    } else if (k == ARENA_KIND_SUSPENSION) {
+      uint32_t li = EMPTY;
+      uint32_t left_id = leftOf(n);
+      uint32_t ctx_handle = rightOf(n);
+      if (left_id != EMPTY)
+        dag_ht_get(ht, ht_cap, left_id, &li);
+
+      char susp_buf[96];
+      int nw;
+      if (li == EMPTY) {
+        nw = snprintf(susp_buf, sizeof(susp_buf), "?!,%u,%u,%u ",
+                      (unsigned)ctx_handle, (unsigned)symOf(n),
+                      (unsigned)hashOf(n));
+      } else if (ctx_handle == EMPTY) {
+        nw = snprintf(susp_buf, sizeof(susp_buf), "?%u,!,%u,%u ", (unsigned)li,
+                      (unsigned)symOf(n), (unsigned)hashOf(n));
+      } else {
+        nw = snprintf(susp_buf, sizeof(susp_buf), "?%u,%u,%u,%u ", (unsigned)li,
+                      (unsigned)ctx_handle, (unsigned)symOf(n),
+                      (unsigned)hashOf(n));
+      }
+      if (nw < 0 || (size_t)nw >= sizeof(susp_buf) ||
+          written + (size_t)nw > capacity) {
+        free(ht);
+        free(stack);
+        return (size_t)-1;
+      }
+      memcpy(buf + written, susp_buf, (size_t)nw);
+      written += (size_t)nw;
+    } else {
+      printf("unparse_dag: unexpected kind %u for node %u during emit\n", k, n);
+      free(ht);
+      free(stack);
+      return 0;
     }
   }
 

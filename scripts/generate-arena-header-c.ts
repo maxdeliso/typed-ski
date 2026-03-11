@@ -5,6 +5,42 @@
 
 const cHeaderFile = await Deno.readTextFile("c/arena.h");
 
+type FieldLayout = {
+  name: string;
+  size: number;
+  align: number;
+};
+
+function alignUp(offset: number, align: number): number {
+  return (offset + align - 1) & ~(align - 1);
+}
+
+function parseFieldLayout(line: string): FieldLayout | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  const parts = trimmed.split(/\s+/);
+  const name = parts[parts.length - 1];
+  if (!name || name.startsWith("_pad")) {
+    return null;
+  }
+
+  const cleanName = name.split("[")[0];
+  if (!cleanName) return null;
+
+  const type = parts.slice(0, -1).join(" ");
+  switch (type) {
+    case "uint32_t":
+    case "atomic_uint":
+      return { name: cleanName, size: 4, align: 4 };
+    case "uint64_t":
+    case "_Atomic uint64_t":
+      return { name: cleanName, size: 8, align: 8 };
+    default:
+      throw new Error(`Unsupported SabHeader field type: ${type}`);
+  }
+}
+
 function parseCStruct(source: string, structName: string) {
   const structRegex = new RegExp(
     `typedef struct\\s*{([^}]*)}\\s*${structName};`,
@@ -13,23 +49,12 @@ function parseCStruct(source: string, structName: string) {
   const match = source.match(structRegex);
   if (!match) throw new Error(`Could not find struct ${structName}`);
 
-  const fields: { name: string; u32Slots: number }[] = [];
+  const fields: FieldLayout[] = [];
   const fieldLines = match[1].split(";");
   for (const line of fieldLines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    // Handle "type name" or "type name[size]" or "type _pad[size]"
-    const parts = trimmed.split(/\s+/);
-    const name = parts[parts.length - 1];
-    if (name && !name.startsWith("_pad")) {
-      const cleanName = name.split("[")[0];
-      if (cleanName) {
-        const type = parts[0];
-        fields.push({
-          name: cleanName,
-          u32Slots: type === "uint64_t" ? 2 : 1,
-        });
-      }
+    const field = parseFieldLayout(line);
+    if (field) {
+      fields.push(field);
     }
   }
   return fields;
@@ -37,13 +62,15 @@ function parseCStruct(source: string, structName: string) {
 
 const fields = parseCStruct(cHeaderFile, "SabHeader");
 
-let u32Index = 0;
+let byteOffset = 0;
 const indexByField: number[] = [];
 for (const f of fields) {
-  indexByField.push(u32Index);
-  u32Index += f.u32Slots;
+  byteOffset = alignUp(byteOffset, f.align);
+  indexByField.push(byteOffset / 4);
+  byteOffset += f.size;
 }
-const totalU32 = u32Index;
+const structAlign = Math.max(...fields.map((field) => field.align), 4);
+const totalU32 = alignUp(byteOffset, structAlign) / 4;
 
 let enumContent = "";
 for (let i = 0; i < fields.length; i++) {

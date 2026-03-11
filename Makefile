@@ -35,6 +35,7 @@ WASM_EXPORT_FLAGS := \
 	-Wl,--export=reset \
 	-Wl,--export=kindOf \
 	-Wl,--export=symOf \
+	-Wl,--export=hashOf \
 	-Wl,--export=leftOf \
 	-Wl,--export=rightOf \
 	-Wl,--export=allocTerminal \
@@ -57,11 +58,12 @@ NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
 
 MUSL_SOURCES := arena.c thanatos.c ski_io.c main.c performance_test.c
 MUSL_OBJS := $(addprefix obj/,$(MUSL_SOURCES:.c=.o))
+C_HEADERS := c/arena.h c/thanatos.h c/ski_io.h
 
 THANATOS_OBJS := obj/arena.o obj/thanatos.o obj/ski_io.o obj/main.o
 THANATOS_TEST_OBJS := obj/arena.o obj/thanatos.o obj/performance_test.o
 
-obj/%.o: c/%.c
+obj/%.o: c/%.c $(C_HEADERS)
 	mkdir -p obj
 	$(CC) $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) -fno-lto -fno-stack-protector \
 		-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -isystem $(MUSL_INC) -c $< -o $@
@@ -74,33 +76,33 @@ bin/thanatos-test: $(THANATOS_TEST_OBJS)
 	mkdir -p bin
 	$(MUSL_GCC) $(NATIVE_OPT_CFLAGS) -static -Wl,--gc-sections $^ -o $@
 
-bin/thanatos-test-lsan: c/arena.c c/thanatos.c c/performance_test.c
+bin/thanatos-test-lsan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c
+bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-test-asan: c/arena.c c/thanatos.c c/performance_test.c
+bin/thanatos-test-asan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
+bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-lsan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
+bin/thanatos-lsan: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c
+bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/dag-codec-test: c/arena.c c/ski_io.c c/dag_codec_test.c
+bin/dag-codec-test: c/arena.c c/ski_io.c c/dag_codec_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
 # Nix development shell wrapper
 # We keep essential Nix and system variables while ignoring the rest to ensure hermeticity
@@ -219,10 +221,10 @@ clean-internal:
 
 build-wasm-internal: wasm/release.wasm
 
-wasm/release.wasm: c/arena.c Makefile
+wasm/release.wasm: c/arena.c c/arena.h Makefile
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
-		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
+		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory -Wl,--allow-undefined \
 		-Wl,--max-memory=4294967296 $(WASM_OPT_LDFLAGS) \
 		$(WASM_EXPORT_FLAGS) \
 		-matomics -mbulk-memory -mmutable-globals \

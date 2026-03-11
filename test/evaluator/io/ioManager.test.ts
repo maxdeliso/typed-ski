@@ -8,7 +8,10 @@ import { assertEquals, assertRejects } from "std/assert";
 import type { ArenaWasmExports } from "../../../lib/evaluator/arenaEvaluator.ts";
 import { IoManager } from "../../../lib/evaluator/io/ioManager.ts";
 
-import { SabHeaderField } from "../../../lib/evaluator/arenaHeader.generated.ts";
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "../../../lib/evaluator/arenaHeader.generated.ts";
 import { RING_HEADER_U32 } from "../../../lib/evaluator/arenaHeader.generated.ts";
 
 /**
@@ -41,7 +44,11 @@ function createTestMemory(): WebAssembly.Memory {
  */
 function setupArenaHeader(memory: WebAssembly.Memory, baseAddr: number): void {
   const buffer = memory.buffer;
-  const headerView = new Uint32Array(buffer, baseAddr, 20);
+  const headerView = new Uint32Array(
+    buffer,
+    baseAddr,
+    SABHEADER_HEADER_SIZE_U32,
+  );
 
   // Set up minimal header: ring_entries, ring_mask, and offsets
   const RING_ENTRIES = 256;
@@ -56,7 +63,7 @@ function setupArenaHeader(memory: WebAssembly.Memory, baseAddr: number): void {
 
   // Align to 64-byte boundaries (and ensure 4-byte alignment for Uint32Array)
   const align64 = (n: number) => Math.ceil(n / 64) * 64;
-  let offset = align64(80); // After header (20 * 4 = 80 bytes)
+  let offset = align64(SABHEADER_HEADER_SIZE_U32 * 4);
 
   headerView[SabHeaderField.OFFSET_STDIN] = offset;
   offset += RING_TOTAL_SIZE_U8;

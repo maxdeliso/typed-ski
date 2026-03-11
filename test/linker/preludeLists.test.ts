@@ -8,9 +8,15 @@ import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEva
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+async function createPreludeEvaluator() {
+  return await ParallelArenaEvaluatorWasm.create(4, false, {
+    maxResubmits: 0,
+  });
+}
+
 Deno.test("prelude scott lists support head/tail", async () => {
   const source = loadInput("preludeListHeadTail.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 2n);
@@ -21,7 +27,7 @@ Deno.test("prelude scott lists support head/tail", async () => {
 
 Deno.test("prelude scott lists support matchList", async () => {
   const source = loadInput("preludeMatchList.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 42n);
@@ -32,7 +38,7 @@ Deno.test("prelude scott lists support matchList", async () => {
 
 Deno.test("string literal length via matchList", async () => {
   const source = loadInput("stringLengthMatchList.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { includeBin: true, evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 2n);
@@ -43,7 +49,7 @@ Deno.test("string literal length via matchList", async () => {
 
 Deno.test("prelude list combinators map/append/foldl", async () => {
   const source = loadInput("preludeListCombinators.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { includeBin: true, evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 8n);
@@ -54,7 +60,7 @@ Deno.test("prelude list combinators map/append/foldl", async () => {
 
 Deno.test("prelude list combinators takeWhile/dropWhile", async () => {
   const source = loadInput("preludeListPrefix.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { includeBin: true, evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 3n);
@@ -65,7 +71,7 @@ Deno.test("prelude list combinators takeWhile/dropWhile", async () => {
 
 Deno.test("prelude Result/Pair/ParseError data types", async () => {
   const source = loadInput("preludeDataPrelude.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { includeBin: true, evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 5n);
@@ -98,7 +104,7 @@ Deno.test({
 
 Deno.test("trip harness evaluates numeric literal main", async () => {
   const source = loadInput("literalMain.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  const evaluator = await createPreludeEvaluator();
   try {
     const result = await evaluateTrip(source, { evaluator });
     assertEquals(await UnChurchNumber(result, evaluator), 13n);

@@ -57,6 +57,7 @@ const terminalCache = new WeakMap<
     divU8: number;
     modU8: number;
     addU8: number;
+    subU8: number;
   }
 >();
 
@@ -97,6 +98,7 @@ function toArenaWithExports(
       divU8: exports.allocTerminal(ArenaSym.DivU8),
       modU8: exports.allocTerminal(ArenaSym.ModU8),
       addU8: exports.allocTerminal(ArenaSym.AddU8),
+      subU8: exports.allocTerminal(ArenaSym.SubU8),
     };
     terminalCache.set(exports, cache);
   }
@@ -168,6 +170,9 @@ function toArenaWithExports(
         case SKITerminalSymbol.AddU8:
           id = cache.addU8;
           break;
+        case SKITerminalSymbol.SubU8:
+          id = cache.subU8;
+          break;
         default:
           throw new Error("Unrecognised terminal symbol");
       }
@@ -210,7 +215,9 @@ function toArenaWithExports(
     }
   }
 
-  return exprCache.get(root)!;
+  const result = exprCache.get(root)!;
+
+  return result;
 }
 
 /**
@@ -332,8 +339,11 @@ export interface ArenaWasmExports {
   hostSubmit?(nodeId: number, reqId: number, maxSteps: number): number;
   hostPullV2?(): bigint;
   workerLoop?(workerId: number): void;
+  wasm_get_worker_id?(): number;
+  wasm_set_worker_id?(id: number): void;
   kindOf(id: number): number;
   symOf(id: number): number;
+  hashOf?(id: number): number;
   leftOf(id: number): number;
   rightOf(id: number): number;
 
@@ -376,9 +386,15 @@ export class ArenaEvaluatorWasm implements Evaluator {
       shared: true, // Enable SharedArrayBuffer support
     });
 
+    let worker_id = 64; // MAX_WORKERS
+
     const imports = {
       env: {
         memory: wasmMemory,
+        wasm_get_worker_id: () => worker_id,
+        wasm_set_worker_id: (id: number) => {
+          worker_id = id;
+        },
       },
     } as WebAssembly.Imports;
 

@@ -19,13 +19,19 @@ interface ConnectArenaMessage {
 }
 
 let wasmExports: ArenaWasmExports | null = null;
+let currentWorkerId = 64; // MAX_WORKERS
 
 async function init(msg: InitMessage) {
   const wasmBytes = await getReleaseWasmBytes();
   const module = await WebAssembly.compile(wasmBytes);
+  currentWorkerId = msg.workerId;
   const instance = await WebAssembly.instantiate(module, {
     env: {
       memory: msg.memory,
+      wasm_get_worker_id: () => currentWorkerId,
+      wasm_set_worker_id: (id: number) => {
+        currentWorkerId = id;
+      },
     },
   });
   wasmExports = instance.exports as unknown as ArenaWasmExports;
@@ -43,18 +49,10 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
   try {
     const rc = wasmExports.connectArena(msg.arenaPointer);
-    // Return codes from connectArena (see c/arena.c):
-    // 1 = Success
-    // 0 = Error: null pointer
-    // 2 = Error: header out of bounds
-    // 3 = Error: invalid capacity
-    // 4 = Error: Arena data out of bounds
-    // 5 = Error: Invalid Magic / Corrupted Header
-    // 6 = Error: Misaligned address
     if (rc === 1) {
       self.postMessage({ type: "connectArenaComplete" });
       // Enter the blocking worker loop; never returns.
-      wasmExports.workerLoop?.(0);
+      wasmExports.workerLoop?.(currentWorkerId);
     } else {
       self.postMessage({
         type: "connectArenaComplete",
@@ -64,9 +62,7 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   } catch (err) {
     self.postMessage({
       type: "connectArenaComplete",
-      error: `connectArena threw an error: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      error: (err as Error).message,
     });
   }
 }

@@ -37,6 +37,7 @@ export enum SKITerminalSymbol {
   ModU8 = "M",
   /** addU8 : U8 -> U8 -> U8 (native intrinsic). */
   AddU8 = "A",
+  SubU8 = "O",
 }
 
 /**
@@ -150,3 +151,8 @@ export const ModU8: SKITerminal = term(SKITerminalSymbol.ModU8);
  * The addU8 intrinsic terminal (native byte addition).
  */
 export const AddU8: SKITerminal = term(SKITerminalSymbol.AddU8);
+
+/**
+ * The subU8 intrinsic terminal (native byte subtraction).
+ */
+export const SubU8: SKITerminal = term(SKITerminalSymbol.SubU8);

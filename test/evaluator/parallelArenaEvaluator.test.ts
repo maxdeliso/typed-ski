@@ -7,16 +7,30 @@ import {
   SABHEADER_HEADER_SIZE_U32,
   SabHeaderField,
 } from "../../lib/evaluator/arenaHeader.generated.ts";
+import { ArenaKind } from "../../lib/shared/arena.ts";
 import {
   apply,
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
-import { C, I, K, ReadOne, WriteOne } from "../../lib/ski/terminal.ts";
+import { C, I, K, ReadOne, S, WriteOne } from "../../lib/ski/terminal.ts";
 import { requiredAt } from "../util/required.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function readHeaderU64(
+  headerView: Uint32Array,
+  field: SabHeaderField,
+): bigint {
+  const lo = BigInt(
+    requiredAt(headerView, field, `expected header field ${field}`),
+  );
+  const hi = BigInt(
+    requiredAt(headerView, field + 1, `expected header field ${field + 1}`),
+  );
+  return lo | (hi << 32n);
+}
 
 function overrideEvaluatorExports(
   evaluator: ParallelArenaEvaluatorWasm,
@@ -278,6 +292,65 @@ Deno.test("ParallelArenaEvaluator - work loop validation", async (t) => {
             `Worker 1: ${unparseSKI(result1)}, Worker 2: ${
               unparseSKI(result2)
             }`,
+        );
+      } finally {
+        evaluator.terminate();
+      }
+    },
+  );
+
+  await t.step(
+    "finite-step exhaustion keeps continuation context out of arena nodes",
+    async () => {
+      const evaluator = await ParallelArenaEvaluatorWasm.create(
+        2,
+        false,
+        { maxResubmits: 100 },
+      );
+      try {
+        const omega = (() => {
+          const sii = apply(apply(S, I), I);
+          return apply(sii, sii);
+        })();
+        let convergent: SKIExpression = I;
+        const ii = apply(I, I);
+        for (let i = 0; i < 64; i++) {
+          convergent = apply(ii, convergent);
+        }
+
+        const baseAddr = evaluator.$.debugGetArenaBaseAddr?.();
+        assert(baseAddr !== undefined && baseAddr !== 0);
+        const headerView = new Uint32Array(
+          evaluator.memory.buffer,
+          baseAddr,
+          SABHEADER_HEADER_SIZE_U32,
+        );
+
+        let errorCount = 0;
+        evaluator.onRequestError = (_reqId, _workerIndex, _expr, error) => {
+          if (error.includes("exhausted max steps")) {
+            errorCount++;
+          }
+        };
+
+        await Promise.allSettled([
+          evaluator.reduceAsync(convergent, 128),
+          evaluator.reduceAsync(omega, 128),
+          evaluator.reduceAsync(omega, 128),
+        ]);
+
+        assert(
+          errorCount > 0,
+          "expected workload to exhaust the finite request step budget",
+        );
+        assertEquals(
+          readHeaderU64(headerView, SabHeaderField.TOTAL_CONT_ALLOCS),
+          0n,
+          "finite-step exhaustion should not allocate arena Continuation nodes",
+        );
+        assert(
+          readHeaderU64(headerView, SabHeaderField.TOTAL_SUSP_ALLOCS) > 0n,
+          "finite-step exhaustion should still allocate Suspension nodes",
         );
       } finally {
         evaluator.terminate();
@@ -785,19 +858,98 @@ Deno.test("ParallelArenaEvaluator - request hooks call the expected callbacks", 
 });
 
 Deno.test("ParallelArenaEvaluator - onRequestYield hook fires for yielding work", async () => {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  const evaluator = await ParallelArenaEvaluatorWasm.create(
+    1,
+    false,
+    { maxResubmits: 8 },
+  );
+  const originalExports = evaluator.$;
+  const privateEvaluator = evaluator as unknown as {
+    completionPoller: { exports: ArenaWasmExports };
+  };
   try {
     let yielded = false;
-    evaluator.onRequestYield = () => {
+    evaluator.onRequestYield = (
+      _reqId,
+      _workerIndex,
+      _expr,
+      suspensionNodeId,
+      resubmitCount,
+    ) => {
+      assertEquals(suspensionNodeId, 99);
+      assertEquals(resubmitCount, 1);
       yielded = true;
     };
 
-    try {
-      await evaluator.reduceAsync(parseSKI("(SII)(SII)"), 100);
-    } catch {
-      // Rejections are acceptable here; we only assert that a yield was observed.
-    }
+    const arenaNodeId = evaluator.toArena(parseSKI("I"));
+    let submitCount = 0;
+    let pulledYield = false;
+    let pulledDone = false;
+
+    const mockedExports = {
+      ...originalExports,
+      hostSubmit: (_nodeId: number, _reqId: number, maxSteps: number) => {
+        submitCount++;
+        if (submitCount === 1) {
+          assertEquals(maxSteps, 0xffffffff);
+        } else if (submitCount === 2) {
+          assertEquals(maxSteps, 0);
+        }
+        return 0;
+      },
+      hostPullV2: () => {
+        if (submitCount >= 1 && !pulledYield) {
+          pulledYield = true;
+          return (1n << 32n) | (1n << 30n) | 99n;
+        }
+        if (submitCount >= 2 && !pulledDone) {
+          pulledDone = true;
+          return (1n << 32n) | BigInt(arenaNodeId >>> 0);
+        }
+        return -1n;
+      },
+      kindOf: (nodeId: number) =>
+        nodeId === 99 ? ArenaKind.Suspension : originalExports.kindOf(nodeId),
+      symOf: (
+        nodeId: number,
+      ) => (nodeId === 99 ? 0 : originalExports.symOf(nodeId)),
+      hashOf: (nodeId: number) =>
+        nodeId === 99 ? 1 : originalExports.hashOf?.(nodeId) ?? 0,
+    } as ArenaWasmExports;
+    overrideEvaluatorExports(evaluator, mockedExports);
+    Object.defineProperty(privateEvaluator.completionPoller, "exports", {
+      configurable: true,
+      value: mockedExports,
+    });
+
+    const resultNodeId = await evaluator.reduceArenaNodeIdAsync(arenaNodeId);
+    assertEquals(resultNodeId, arenaNodeId);
     assert(yielded, "onRequestYield should have been called");
+  } finally {
+    overrideEvaluatorExports(evaluator, originalExports);
+    Object.defineProperty(privateEvaluator.completionPoller, "exports", {
+      configurable: true,
+      value: originalExports,
+    });
+    evaluator.terminate();
+  }
+});
+
+Deno.test("ParallelArenaEvaluator - finite maxSteps rejects instead of hanging pending requests", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1, false, {
+    maxResubmits: 32,
+  });
+  try {
+    await assertRejects(
+      () => evaluator.reduceAsync(parseSKI("(SII)(SII)"), 100),
+      Error,
+      "exhausted max steps before reaching normal form",
+    );
+    assertEquals(
+      evaluator.getTotalPending(),
+      0,
+      "step-budget exhaustion should drain pending request state",
+    );
   } finally {
     evaluator.terminate();
   }

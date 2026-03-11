@@ -38,6 +38,7 @@ const TERMINAL_ALIASES: Record<string, SKITerminalSymbol> = {
   D: SKITerminalSymbol.DivU8,
   M: SKITerminalSymbol.ModU8,
   A: SKITerminalSymbol.AddU8,
+  O: SKITerminalSymbol.SubU8,
 };
 
 function normalizeSymbol(tok: string | null): SKITerminalSymbol | null {

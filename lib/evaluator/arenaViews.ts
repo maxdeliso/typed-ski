@@ -21,10 +21,12 @@ const NODE_OFFSET_SYM = 17;
 
 /**
  * Arena view for direct memory access (AoS layout).
- * Nodes never move on grow(); offset_nodes + id * 20 gives the node address.
+ * Nodes never move on grow(); offset_nodes + id * 32 gives the node address.
  */
 export interface ArenaViews {
   buffer: ArrayBuffer | SharedArrayBuffer;
+  u8: Uint8Array;
+  u32: Uint32Array;
   baseAddr: number;
   offsetNodes: number;
   capacity: number;
@@ -75,12 +77,15 @@ function buildArenaViews(
   );
 
   const capacity = headerView[SabHeaderField.CAPACITY]!;
-  // offset_nodes is uint64_t (indices 10=lo, 11=hi); read as number (fits for arena sizes)
+  // offset_nodes is uint64_t; read as number (fits for arena sizes)
   const offsetNodesLo = headerView[SabHeaderField.OFFSET_NODES]!;
   const offsetNodesHi = headerView[SabHeaderField.OFFSET_NODES + 1]!;
   const offsetNodes = offsetNodesLo + offsetNodesHi * 0x1_0000_0000;
 
-  return { buffer, baseAddr, offsetNodes, capacity };
+  const u8 = new Uint8Array(buffer);
+  const u32 = new Uint32Array(buffer);
+
+  return { buffer, u8, u32, baseAddr, offsetNodes, capacity };
 }
 
 /**
@@ -170,24 +175,20 @@ function nodeBase(views: ArenaViews, id: number): number {
 
 export function getKind(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u8 = new Uint8Array(views.buffer);
-  return u8[nodeBase(views, id) + NODE_OFFSET_KIND]!;
+  return views.u8[nodeBase(views, id) + NODE_OFFSET_KIND]!;
 }
 
 export function getSym(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u8 = new Uint8Array(views.buffer);
-  return u8[nodeBase(views, id) + NODE_OFFSET_SYM]!;
+  return views.u8[nodeBase(views, id) + NODE_OFFSET_SYM]!;
 }
 
 export function getLeft(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u32 = new Uint32Array(views.buffer);
-  return u32[(nodeBase(views, id) >>> 2) + (NODE_OFFSET_LEFT >>> 2)]!;
+  return views.u32[(nodeBase(views, id) >>> 2) + (NODE_OFFSET_LEFT >>> 2)]!;
 }
 
 export function getRight(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u32 = new Uint32Array(views.buffer);
-  return u32[(nodeBase(views, id) >>> 2) + (NODE_OFFSET_RIGHT >>> 2)]!;
+  return views.u32[(nodeBase(views, id) >>> 2) + (NODE_OFFSET_RIGHT >>> 2)]!;
 }

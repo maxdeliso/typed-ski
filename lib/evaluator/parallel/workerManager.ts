@@ -45,9 +45,8 @@ export class WorkerManager {
     workerCount: number,
     workerUrl: string,
     sharedMemory: WebAssembly.Memory,
-    verbose = false,
+    _verbose = false,
   ): Promise<Worker[]> {
-    if (verbose) console.error(`[DEBUG] Spawning ${workerCount} workers`);
     const workers: Worker[] = [];
     const initPromises: Promise<void>[] = [];
 
@@ -81,7 +80,7 @@ export class WorkerManager {
     workers: Worker[],
     arenaPointer: number,
   ): Promise<void> {
-    const connectPromises = workers.map(async (worker, workerIndex) => {
+    const connectPromises = workers.map(async (worker) => {
       try {
         worker.postMessage({
           type: "connectArena",
@@ -93,16 +92,10 @@ export class WorkerManager {
         );
         if (message.error) {
           // High-signal diagnostic for the workbench/server: connection failures often look like "worker died".
-          console.error(
-            `[ParallelArenaEvaluatorWasm] worker ${workerIndex} connectArena failed: ${message.error}`,
-          );
+
           throw new Error(message.error);
         }
       } catch (err) {
-        console.error(
-          `[ParallelArenaEvaluatorWasm] worker ${workerIndex} died during connectArena`,
-          err,
-        );
         throw err;
       }
     });
@@ -130,13 +123,11 @@ export class WorkerManager {
           onOOM(err);
         } else {
           // For non-OOM errors, just log and continue
-          console.error("Worker error (non-fatal):", err);
         }
       });
       // Some environments surface failed structured-clone / message errors separately.
       // These are not fatal - just log and continue.
       w.addEventListener("messageerror", () => {
-        console.error("Worker messageerror (non-fatal)");
       });
     }
   }

@@ -1,0 +1,94 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Prelude List
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude U8
+import Lexer tokenize
+import Lexer eqListU8
+import Parser parseProgram
+import Parser DefKind
+import Parser K_Poly
+import Parser K_Typed
+import Parser K_Untyped
+import Parser K_Combinator
+import Parser Decl
+import Parser D_Module
+import Parser D_Import
+import Parser D_Export
+import Parser D_Type
+import Parser D_Data
+import Parser D_Def
+
+export main
+
+poly source : List U8 = "poly rec p = p"
+
+poly eqDefKind = \a : DefKind => \b : DefKind =>
+  match a [Bool] {
+    | K_Poly =>
+      match b [Bool] {
+        | K_Poly => true
+        | K_Typed => false
+        | K_Untyped => false
+        | K_Combinator => false
+      }
+    | K_Typed =>
+      match b [Bool] {
+        | K_Poly => false
+        | K_Typed => true
+        | K_Untyped => false
+        | K_Combinator => false
+      }
+    | K_Untyped =>
+      match b [Bool] {
+        | K_Poly => false
+        | K_Typed => false
+        | K_Untyped => true
+        | K_Combinator => false
+      }
+    | K_Combinator =>
+      match b [Bool] {
+        | K_Poly => false
+        | K_Typed => false
+        | K_Untyped => false
+        | K_Combinator => true
+      }
+  }
+
+poly main =
+  match (tokenize source) [Bool] {
+    | Err e => false
+    | Ok toks =>
+        match (parseProgram toks) [Bool] {
+          | Err e => false
+          | Ok decls =>
+              matchList [Decl] [Bool] decls false
+                (\h : Decl => \t : List Decl =>
+                  match h [Bool] {
+                    | D_Module name => false
+                    | D_Import m s => false
+                    | D_Export x => false
+                    | D_Type x => false
+                    | D_Data x => false
+                    | D_Def kind isRec name body =>
+                        if [Bool] (eqDefKind kind K_Poly)
+                          (\u : U8 =>
+                            if [Bool] isRec
+                              (\u : U8 =>
+                                if [Bool] (eqListU8 name "p")
+                                  (\u : U8 =>
+                                    matchList [Decl] [Bool] t true
+                                      (\restH : Decl => \restT : List Decl => false))
+                                  (\u : U8 => false))
+                              (\u : U8 => false))
+                          (\u : U8 => false)
+                  })
+        }
+  }

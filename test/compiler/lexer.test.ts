@@ -200,6 +200,10 @@ Deno.test({
         file: "testLexCoreKeywords.trip",
         msg: "Expected let/match/in to tokenize as dedicated keyword tokens",
       },
+      {
+        file: "testLexRecKeyword.trip",
+        msg: "Expected `rec` in source text to tokenize as T_KwRec",
+      },
     ];
     const session = await getThanatosSession();
     for (const tc of structuralTests) {

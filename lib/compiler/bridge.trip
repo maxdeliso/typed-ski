@@ -1,0 +1,339 @@
+module Bridge
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Pair
+import Prelude MkPair
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude if
+import Prelude append
+import Prelude reverse
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+import Prelude U8
+import Prelude and
+import Prelude or
+import Prelude not
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude fst
+import Prelude snd
+import Prelude eqU8
+import Prelude ltU8
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat isZero
+import Nat pred
+import Nat add
+import Nat sub
+import Nat eq
+import Nat lte
+import Avl Avl
+import Avl empty
+import Avl lookup
+import Avl insert
+import Parser Expr
+import Parser E_Var
+import Parser E_App
+import Parser E_Lam
+import Parser E_Let
+import Parser E_Nat
+import Parser E_Match
+import Parser Pattern
+import Parser P_Ctor
+import Parser Decl
+import Parser D_Module
+import Parser D_Import
+import Parser D_Export
+import Parser D_Type
+import Parser D_Def
+import Parser D_Data
+import Unparse Terminal
+import Unparse T_S
+import Unparse T_K
+import Unparse T_I
+import Unparse T_B
+import Unparse T_C
+import Unparse T_SPrime
+import Unparse T_BPrime
+import Unparse T_CPrime
+import Unparse T_WriteOne
+import Unparse T_ReadOne
+import Unparse T_EqU8
+import Unparse T_LtU8
+import Unparse T_DivU8
+import Unparse T_ModU8
+import Unparse T_AddU8
+import Unparse T_Byte
+import Lowering Lower
+import Lowering L_Var
+import Lowering L_App
+import Lowering L_Lam
+import Lowering L_Native
+
+export elaborateProgram
+
+data Env = MkEnv (Avl (List U8) Lower) (List (List U8)) (Maybe (List U8))
+
+poly rec eqListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => eqListU8 ta tb)
+            (\u : U8 => false)))
+
+poly rec lteListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    true
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b
+        false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => lteListU8 ta tb)
+            (\u : U8 => ltU8 ha hb)))
+
+poly rec lookupLocal = \name : List U8 => \locals : List (List U8) => \idx : Nat =>
+  matchList [List U8] [Maybe Nat] locals
+    (None [Nat])
+    (\h : List U8 => \t : List (List U8) =>
+      if [Maybe Nat] (eqListU8 name h)
+        (\u : U8 => Some [Nat] idx)
+        (\u : U8 => lookupLocal name t (succ idx)))
+
+poly resolveNativeName = \name : List U8 =>
+  if [Maybe Lower] (eqListU8 name ".")
+    (\u : U8 => Some [Lower] (L_Native T_WriteOne))
+    (\u : U8 =>
+      if [Maybe Lower] (eqListU8 name ",")
+        (\u : U8 => Some [Lower] (L_Native T_ReadOne))
+        (\u : U8 =>
+          if [Maybe Lower] (eqListU8 name "writeOne")
+            (\u : U8 => Some [Lower] (L_Native T_WriteOne))
+            (\u : U8 =>
+              if [Maybe Lower] (eqListU8 name "readOne")
+                (\u : U8 => Some [Lower] (L_Native T_ReadOne))
+                (\u : U8 =>
+                  if [Maybe Lower] (eqListU8 name "addU8")
+                    (\u : U8 => Some [Lower] (L_Native T_AddU8))
+                    (\u : U8 =>
+                      if [Maybe Lower] (eqListU8 name "divU8")
+                        (\u : U8 => Some [Lower] (L_Native T_DivU8))
+                        (\u : U8 =>
+                          if [Maybe Lower] (eqListU8 name "modU8")
+                            (\u : U8 => Some [Lower] (L_Native T_ModU8))
+                            (\u : U8 =>
+                              if [Maybe Lower] (eqListU8 name "eqU8")
+                                (\u : U8 => Some [Lower] (L_Native T_EqU8))
+                                (\u : U8 =>
+                                  if [Maybe Lower] (eqListU8 name "ltU8")
+                                    (\u : U8 => Some [Lower] (L_Native T_LtU8))
+                                    (\u : U8 => None [Lower])))))))))
+
+poly unboundNameError = \name : List U8 =>
+  append [U8] "Unbound variable: " name
+
+poly resolveName = \env : Env => \name : List U8 =>
+  match env [Result (List U8) Lower] { | MkEnv globals locals recName =>
+    match (lookupLocal name locals zero) [Result (List U8) Lower] {
+      | Some idx => Ok [List U8] [Lower] (L_Var idx)
+      | None =>
+          match recName [Result (List U8) Lower] {
+            | Some rn =>
+                if [Result (List U8) Lower] (eqListU8 name rn)
+                  (\u : U8 => Ok [List U8] [Lower] (L_Var zero))
+                  (\u : U8 =>
+                    match (lookup [List U8] [Lower] lteListU8 name globals) [Result (List U8) Lower] {
+                      | Some l => Ok [List U8] [Lower] l
+                      | None =>
+                          match (resolveNativeName name) [Result (List U8) Lower] {
+                            | Some intrinsic => Ok [List U8] [Lower] intrinsic
+                            | None =>
+                                Err [List U8] [Lower] (unboundNameError name)
+                          }
+                    })
+            | None =>
+                match (lookup [List U8] [Lower] lteListU8 name globals) [Result (List U8) Lower] {
+                  | Some l => Ok [List U8] [Lower] l
+                  | None =>
+                      match (resolveNativeName name) [Result (List U8) Lower] {
+                        | Some intrinsic => Ok [List U8] [Lower] intrinsic
+                        | None =>
+                            Err [List U8] [Lower] (unboundNameError name)
+                      }
+                }
+          }
+    }
+  }
+
+poly digitValue = \c : U8 =>
+  modU8 c #u8(16)
+
+poly mul10U8 = \n : U8 =>
+  let two = addU8 n n in
+  let four = addU8 two two in
+  let eight = addU8 four four in
+  addU8 eight two
+
+poly rec trimLeadingZeros = \digits : List U8 =>
+  matchList [U8] [List U8] digits
+    (nil [U8])
+    (\h : U8 => \t : List U8 =>
+      if [List U8] (eqU8 h '0')
+        (\u : U8 => trimLeadingZeros t)
+        (\u : U8 => cons [U8] h t))
+
+poly isByteDigits = \digits : List U8 =>
+  matchList [U8] [Bool] digits
+    true
+    (\h0 : U8 => \t0 : List U8 =>
+      matchList [U8] [Bool] t0
+        true
+        (\h1 : U8 => \t1 : List U8 =>
+          matchList [U8] [Bool] t1
+            true
+            (\h2 : U8 => \t2 : List U8 =>
+              matchList [U8] [Bool] t2
+                (lteListU8 digits "255")
+                (\h3 : U8 => \t3 : List U8 => false))))
+
+poly rec parseByteDigitsAcc = \digits : List U8 => \acc : U8 =>
+  matchList [U8] [U8] digits acc
+    (\h : U8 => \t : List U8 =>
+      parseByteDigitsAcc t (addU8 (mul10U8 acc) (digitValue h)))
+
+poly parseByteDigits = \digits : List U8 =>
+  parseByteDigitsAcc digits #u8(0)
+
+poly rec div2DigitsAcc = \digits : List U8 => \carry : U8 => \started : Bool => \accRev : List U8 =>
+  matchList [U8] [Pair (List U8) U8] digits
+    (MkPair [List U8] [U8] (reverse [U8] accRev) carry)
+    (\h : U8 => \t : List U8 =>
+      let current = if [U8] (eqU8 carry #u8(0))
+                      (\u : U8 => digitValue h)
+                      (\u : U8 => addU8 #u8(10) (digitValue h)) in
+      let quotientDigit = divU8 current #u8(2) in
+      let remainder = modU8 current #u8(2) in
+      let nextStarted = if [Bool] started
+                          (\u : U8 => true)
+                          (\u : U8 => not (eqU8 quotientDigit #u8(0))) in
+      let nextAccRev = if [List U8] nextStarted
+                         (\u : U8 => cons [U8] (addU8 quotientDigit #u8(48)) accRev)
+                         (\u : U8 => accRev) in
+      div2DigitsAcc t remainder nextStarted nextAccRev)
+
+poly div2Digits = \digits : List U8 =>
+  div2DigitsAcc digits #u8(0) false (nil [U8])
+
+poly rec collectBits = \digits : List U8 => \acc : List U8 =>
+  match (div2Digits digits) [List U8] { | MkPair quotient remainder =>
+    let nextAcc = cons [U8] remainder acc in
+    matchList [U8] [List U8] quotient nextAcc
+      (\h : U8 => \t : List U8 => collectBits quotient nextAcc)
+  }
+
+poly binZeroLower =
+  L_Lam (L_Lam (L_Lam (L_Var (succ (succ zero)))))
+
+poly binZeroCtorLower =
+  L_Lam (L_Lam (L_Lam (L_Lam (L_App (L_Var (succ zero)) (L_Var (succ (succ (succ zero))))))))
+
+poly binOneCtorLower =
+  L_Lam (L_Lam (L_Lam (L_Lam (L_App (L_Var zero) (L_Var (succ (succ (succ zero))))))))
+
+poly stepBinLiteral = \bit : U8 => \acc : Lower =>
+  if [Lower] (eqU8 bit #u8(0))
+    (\u : U8 => L_App binZeroCtorLower acc)
+    (\u : U8 => L_App binOneCtorLower acc)
+
+poly rec buildBinLiteralAcc = \bits : List U8 => \acc : Lower =>
+  matchList [U8] [Lower] bits acc
+    (\h : U8 => \t : List U8 =>
+      buildBinLiteralAcc t (stepBinLiteral h acc))
+
+poly buildBinLiteral = \digits : List U8 =>
+  buildBinLiteralAcc (collectBits digits (nil [U8])) binZeroLower
+
+poly natToLower = \digits : List U8 =>
+  let trimmed = trimLeadingZeros digits in
+  matchList [U8] [Result (List U8) Lower] trimmed
+    (Ok [List U8] [Lower] (L_Native (T_Byte #u8(0))))
+    (\h : U8 => \t : List U8 =>
+      if [Result (List U8) Lower] (isByteDigits trimmed)
+        (\u : U8 => Ok [List U8] [Lower] (L_Native (T_Byte (parseByteDigits trimmed))))
+        (\u : U8 => Ok [List U8] [Lower] (buildBinLiteral trimmed)))
+
+poly zLower =
+  let delayed = L_Lam (L_App (L_App (L_Var (succ zero)) (L_Var (succ zero))) (L_Var zero)) in
+  let inner = L_Lam (L_App (L_Var (succ zero)) delayed) in
+  L_Lam (L_App inner inner)
+
+poly applyFixpoint = \body : Lower =>
+  L_App zLower (L_Lam body)
+
+poly rec elaborateExpr = \env : Env => \expr : Expr =>
+  match expr [Result (List U8) Lower] {
+    | E_Var name => resolveName env name
+    | E_App l r =>
+        match (elaborateExpr env l) [Result (List U8) Lower] {
+          | Err e => Err [List U8] [Lower] e
+          | Ok left =>
+              match (elaborateExpr env r) [Result (List U8) Lower] {
+                | Err e => Err [List U8] [Lower] e
+                | Ok right => Ok [List U8] [Lower] (L_App left right)
+              }
+        }
+    | E_Lam name body =>
+        match env [Result (List U8) Lower] { | MkEnv globals locals recName =>
+          match (elaborateExpr (MkEnv globals (cons [List U8] name locals) recName) body) [Result (List U8) Lower] {
+            | Err e => Err [List U8] [Lower] e
+            | Ok loweredBody => Ok [List U8] [Lower] (L_Lam loweredBody)
+          }
+        }
+    | E_Let name val body =>
+        elaborateExpr env (E_App (E_Lam name body) val)
+    | E_Nat digits => natToLower digits
+    | E_Match scrut arms =>
+        Err [List U8] [Lower] "Match lowering requires constructor-aware elaboration"
+  }
+
+poly elaborateDecl = \globals : Avl (List U8) Lower => \decl : Decl =>
+  match decl [Result (List U8) (Avl (List U8) Lower)] {
+    | D_Def kind isRec name body =>
+        let env = if [Env] isRec
+                    (\u : U8 => MkEnv globals (cons [List U8] name (nil [List U8])) (Some [List U8] name))
+                    (\u : U8 => MkEnv globals (nil [List U8]) (None [List U8])) in
+        match (elaborateExpr env body) [Result (List U8) (Avl (List U8) Lower)] {
+          | Err e => Err [List U8] [Avl (List U8) Lower] e
+          | Ok lowered =>
+              let final = if [Lower] isRec
+                            (\u : U8 => applyFixpoint lowered)
+                            (\u : U8 => lowered) in
+              Ok [List U8] [Avl (List U8) Lower]
+                (insert [List U8] [Lower] lteListU8 name final globals)
+        }
+    | D_Data name => Ok [List U8] [Avl (List U8) Lower] globals
+    | D_Module name => Ok [List U8] [Avl (List U8) Lower] globals
+    | D_Import moduleName symbolName => Ok [List U8] [Avl (List U8) Lower] globals
+    | D_Export name => Ok [List U8] [Avl (List U8) Lower] globals
+    | D_Type name => Ok [List U8] [Avl (List U8) Lower] globals
+  }
+
+poly rec elaborateProgram = \globals : Avl (List U8) Lower => \decls : List Decl =>
+  matchList [Decl] [Result (List U8) (Avl (List U8) Lower)] decls
+    (Ok [List U8] [Avl (List U8) Lower] globals)
+    (\h : Decl => \t : List Decl =>
+      match (elaborateDecl globals h) [Result (List U8) (Avl (List U8) Lower)] {
+        | Err e => Err [List U8] [Avl (List U8) Lower] e
+        | Ok nextGlobals => elaborateProgram nextGlobals t
+      })

@@ -2,6 +2,7 @@ import { assertEquals } from "std/assert";
 import { fromFileUrl } from "std/path";
 import { serializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import { getNatObject } from "../../lib/nat.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import {
   compileFreshObject,
@@ -80,17 +81,18 @@ Deno.test("fresh compiler corpus subprocess build matches the in-process baselin
 
 Deno.test("compileToObjectFile normalizes imported module metadata order", async () => {
   const prelude = await getPreludeObject();
+  const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);
   const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
 
   const ordered = serializeTripCObject(
     compileToObjectFile(parserSource, {
-      importedModules: [prelude, lexer],
+      importedModules: [prelude, lexer, nat],
     }),
   );
   const reversed = serializeTripCObject(
     compileToObjectFile(parserSource, {
-      importedModules: [lexer, prelude],
+      importedModules: [nat, lexer, prelude],
     }),
   );
 

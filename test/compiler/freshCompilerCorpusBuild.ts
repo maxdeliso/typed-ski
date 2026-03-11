@@ -57,7 +57,11 @@ export async function runFreshCompilerCorpusBuild(): Promise<DeterminismRun> {
   const prelude = await getPreludeObject();
   const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);
-  const parser = await compileFreshObject(PARSER_SOURCE_FILE, [prelude, lexer]);
+  const parser = await compileFreshObject(PARSER_SOURCE_FILE, [
+    prelude,
+    lexer,
+    nat,
+  ]);
   const bin = await compileFreshObject(BIN_SOURCE_FILE, [prelude, nat]);
   const binForLink: TripCObject = {
     ...bin,
@@ -74,6 +78,8 @@ export async function runFreshCompilerCorpusBuild(): Promise<DeterminismRun> {
 
   const parserOutput = linkModules([
     { name: "Prelude", object: prelude },
+    { name: "Bin", object: binForLink },
+    { name: "Nat", object: nat },
     { name: "Lexer", object: lexer },
     { name: "Parser", object: parser },
     { name: "Test", object: parserDriver },

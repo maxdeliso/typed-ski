@@ -1,0 +1,169 @@
+module CoreToLower
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Pair
+import Prelude MkPair
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude if
+import Prelude append
+import Prelude reverse
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+import Prelude U8
+import Prelude and
+import Prelude or
+import Prelude not
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude fst
+import Prelude snd
+import Prelude eqU8
+import Prelude ltU8
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat isZero
+import Nat pred
+import Nat add
+import Nat sub
+import Nat eq
+import Nat lte
+import Avl Avl
+import Avl empty
+import Avl lookup
+import Avl insert
+import Unparse Terminal
+import Unparse T_S
+import Unparse T_K
+import Unparse T_I
+import Unparse T_B
+import Unparse T_C
+import Unparse T_SPrime
+import Unparse T_BPrime
+import Unparse T_CPrime
+import Unparse T_WriteOne
+import Unparse T_ReadOne
+import Unparse T_EqU8
+import Unparse T_LtU8
+import Unparse T_DivU8
+import Unparse T_ModU8
+import Unparse T_AddU8
+import Unparse T_Byte
+import Lowering Lower
+import Lowering L_Var
+import Lowering L_App
+import Lowering L_Lam
+import Lowering L_Native
+import Core Core
+import Core Cr_Var
+import Core Cr_App
+import Core Cr_Lam
+import Core Cr_Native
+import Core Cr_Ctor
+import Core Cr_Match
+
+export coreToLower
+
+poly rec eqListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => eqListU8 ta tb)
+            (\u : U8 => false)))
+
+poly rec lookupLocal = \name : List U8 => \locals : List (List U8) => \idx : Nat =>
+  matchList [List U8] [Maybe Nat] locals
+    (None [Nat])
+    (\h : List U8 => \t : List (List U8) =>
+      if [Maybe Nat] (eqListU8 name h)
+        (\u : U8 => Some [Nat] idx)
+        (\u : U8 => lookupLocal name t (succ idx)))
+
+poly resolveNativeName = \name : List U8 =>
+  if [Maybe Lower] (eqListU8 name ".") (\u : U8 => Some [Lower] (L_Native T_WriteOne)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name ",") (\u : U8 => Some [Lower] (L_Native T_ReadOne)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "writeOne") (\u : U8 => Some [Lower] (L_Native T_WriteOne)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "readOne") (\u : U8 => Some [Lower] (L_Native T_ReadOne)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "addU8") (\u : U8 => Some [Lower] (L_Native T_AddU8)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "divU8") (\u : U8 => Some [Lower] (L_Native T_DivU8)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "modU8") (\u : U8 => Some [Lower] (L_Native T_ModU8)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "eqU8") (\u : U8 => Some [Lower] (L_Native T_EqU8)) (\u : U8 =>
+  if [Maybe Lower] (eqListU8 name "ltU8") (\u : U8 => Some [Lower] (L_Native T_LtU8)) (\u : U8 =>
+  None [Lower])))))))))
+
+poly rec applyScottArgs = \func : Lower => \nextArgIdx : Nat => \numArgs : Nat =>
+  if [Lower] (isZero numArgs)
+    (\u : U8 => func)
+    (\u : U8 => applyScottArgs (L_App func (L_Var nextArgIdx)) (pred nextArgIdx) (pred numArgs))
+
+poly rec wrapInLams = \n : Nat => \body : Lower =>
+  if [Lower] (isZero n)
+    (\u : U8 => body)
+    (\u : U8 => L_Lam (wrapInLams (pred n) body))
+
+poly buildScottBody = \tag : Nat => \total : Nat => \arity : Nat =>
+  let c_idx = sub total (succ tag) in
+  let a1_idx = add total (pred arity) in
+  applyScottArgs (L_Var c_idx) a1_idx arity
+
+poly buildScottCtor = \tag : Nat => \total : Nat => \arity : Nat =>
+  wrapInLams (add arity total) (buildScottBody tag total arity)
+
+poly resolveGlobalOrNative = \globals : Avl (List U8) Lower => \name : List U8 =>
+  match (lookup [List U8] [Lower] lteListU8 name globals) [Lower] {
+    | Some l => l
+    | None =>
+        match (resolveNativeName name) [Lower] {
+          | Some intrinsic => intrinsic
+          | None => L_Native (T_Byte #u8(0))
+        }
+  }
+
+poly rec applyArmsToScrut = \lower : Avl (List U8) Lower -> List (List U8) -> Maybe (List U8) -> Core -> Lower => \scrutLower : Lower => \arms : List Core => \globals : Avl (List U8) Lower => \locals : List (List U8) => \recName : Maybe (List U8) =>
+  matchList [Core] [Lower] arms
+    scrutLower
+    (\h : Core => \t : List Core =>
+      applyArmsToScrut lower (L_App scrutLower (lower globals locals recName h)) t globals locals recName)
+
+poly rec lteListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    true
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b
+        false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => lteListU8 ta tb)
+            (\u : U8 => ltU8 ha hb)))
+
+poly rec coreToLower = \globals : Avl (List U8) Lower => \locals : List (List U8) => \recName : Maybe (List U8) => \expr : Core =>
+  match expr [Lower] {
+    | Cr_Var name =>
+        match (lookupLocal name locals zero) [Lower] {
+          | Some idx => L_Var idx
+          | None =>
+              match recName [Lower] {
+                | Some rn =>
+                    if [Lower] (eqListU8 name rn)
+                      (\u : U8 => L_Var zero)
+                      (\u : U8 => resolveGlobalOrNative globals name)
+                | None => resolveGlobalOrNative globals name
+              }
+        }
+    | Cr_App l r => L_App (coreToLower globals locals recName l) (coreToLower globals locals recName r)
+    | Cr_Lam name body => L_Lam (coreToLower globals (cons [List U8] name locals) recName body)
+    | Cr_Native t => L_Native t
+    | Cr_Ctor tag total arity => buildScottCtor tag total arity
+    | Cr_Match scrut arms =>
+        applyArmsToScrut coreToLower (coreToLower globals locals recName scrut) arms globals locals recName
+  }

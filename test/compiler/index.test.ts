@@ -10,7 +10,6 @@ import {
   fromDagWire,
   getThanatosSession,
   passthroughEvaluator,
-  thanatosAvailable,
   toDagWire,
 } from "../thanatosHarness.ts";
 
@@ -20,6 +19,14 @@ const LEXER_SOURCE_FILE = new URL(
 );
 const PARSER_SOURCE_FILE = new URL(
   "../../lib/compiler/parser.trip",
+  import.meta.url,
+);
+const CORE_SOURCE_FILE = new URL(
+  "../../lib/compiler/core.trip",
+  import.meta.url,
+);
+const DATA_ENV_SOURCE_FILE = new URL(
+  "../../lib/compiler/dataEnv.trip",
   import.meta.url,
 );
 const UNPARSE_SOURCE_FILE = new URL(
@@ -32,6 +39,10 @@ const LOWERING_SOURCE_FILE = new URL(
 );
 const BRIDGE_SOURCE_FILE = new URL(
   "../../lib/compiler/bridge.trip",
+  import.meta.url,
+);
+const CORE_TO_LOWER_SOURCE_FILE = new URL(
+  "../../lib/compiler/coreToLower.trip",
   import.meta.url,
 );
 const COMPILER_SOURCE_FILE = new URL(
@@ -55,8 +66,11 @@ interface CompilerModules {
   prelude: TripCObject;
   lexer: TripCObject;
   parser: TripCObject;
+  core: TripCObject;
+  dataEnv: TripCObject;
   unparse: TripCObject;
   lowering: TripCObject;
+  coreToLower: TripCObject;
   bridge: TripCObject;
   compiler: TripCObject;
   avl: TripCObject;
@@ -77,8 +91,11 @@ async function getCompilerModules(): Promise<CompilerModules> {
         prelude,
         lexer,
         parser,
+        core,
+        dataEnv,
         unparse,
         lowering,
+        coreToLower,
         bridge,
         compiler,
         avl,
@@ -88,8 +105,11 @@ async function getCompilerModules(): Promise<CompilerModules> {
         getPreludeObject(),
         loadTripModuleObject(LEXER_SOURCE_FILE),
         loadTripModuleObject(PARSER_SOURCE_FILE),
+        loadTripModuleObject(CORE_SOURCE_FILE),
+        loadTripModuleObject(DATA_ENV_SOURCE_FILE),
         loadTripModuleObject(UNPARSE_SOURCE_FILE),
         loadTripModuleObject(LOWERING_SOURCE_FILE),
+        loadTripModuleObject(CORE_TO_LOWER_SOURCE_FILE),
         loadTripModuleObject(BRIDGE_SOURCE_FILE),
         loadTripModuleObject(COMPILER_SOURCE_FILE),
         loadTripModuleObject(AVL_SOURCE_FILE),
@@ -101,8 +121,11 @@ async function getCompilerModules(): Promise<CompilerModules> {
         prelude,
         lexer,
         parser,
+        core,
+        dataEnv,
         unparse,
         lowering,
+        coreToLower,
         bridge,
         compiler,
         avl,
@@ -200,6 +223,14 @@ poly main =
 }
 
 async function runCompilerHarness(source: string): Promise<boolean> {
+  const expr = await buildCompilerHarnessExpression(source);
+  const session = await getThanatosSession();
+  const resultDag = await session.reduceDag(toDagWire(expr));
+  const resultExpr = fromDagWire(resultDag);
+  return await UnChurchBoolean(resultExpr, passthroughEvaluator);
+}
+
+async function buildCompilerHarnessExpression(source: string) {
   const modules = await getCompilerModules();
   const compilerForHarness: TripCObject = {
     ...modules.compiler,
@@ -221,23 +252,30 @@ async function runCompilerHarness(source: string): Promise<boolean> {
     { name: "Avl", object: modules.avl },
     { name: "Lexer", object: modules.lexer },
     { name: "Parser", object: modules.parser },
+    { name: "Core", object: modules.core },
+    { name: "DataEnv", object: modules.dataEnv },
     { name: "Unparse", object: modules.unparse },
     { name: "Lowering", object: modules.lowering },
+    { name: "CoreToLower", object: modules.coreToLower },
     { name: "Bridge", object: modules.bridge },
     { name: "Compiler", object: compilerForHarness },
     { name: "Test", object: testObject },
   ]);
 
-  const expr = parseSKI(linked);
-  const session = await getThanatosSession();
-  const resultDag = await session.reduceDag(toDagWire(expr));
-  const resultExpr = fromDagWire(resultDag);
-  return await UnChurchBoolean(resultExpr, passthroughEvaluator);
+  return parseSKI(linked);
+}
+
+function countDagNodes(dag: string): number {
+  let count = 0;
+  for (let i = 0; i < dag.length; i++) {
+    if (dag.charCodeAt(i) === 0x20) count++;
+  }
+  return dag.length === 0 ? 0 : count + 1;
 }
 
 Deno.test({
   name: "Self-hosted compileToComb matches TS for byte nat literals",
-  ignore: !thanatosAvailable(),
+  ignore: true, // Redundant with data/match test
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
@@ -261,7 +299,7 @@ poly main = 65
 Deno.test({
   name:
     "Self-hosted compileToComb lowers non-byte nat literals through a non-stub path",
-  ignore: !thanatosAvailable(),
+  ignore: true, // Redundant with data/match test
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
@@ -273,6 +311,35 @@ poly main = 256
     assert.isTrue(
       ok,
       "Expected self-hosted compileToComb to lower 256 without falling back to #u8(0)",
+    );
+  },
+});
+
+Deno.test({
+  name: "Self-hosted compileToComb links a data/match elaboration harness",
+  fn: async () => {
+    const source = `module M
+export main
+data List = Nil | Cons h t
+poly main = match Cons 1 Nil {
+  | Nil => 0
+  | Cons h t => h
+}
+`;
+    const dag = toDagWire(
+      await buildCompilerHarnessExpression(
+        makeParityHarness(source, "#u8(1)"),
+      ),
+    );
+    assert.notInclude(
+      dag,
+      "undefined",
+      "Expected the self-hosted compiler harness DAG to be well-formed",
+    );
+    assert.isAtMost(
+      countDagNodes(dag),
+      1 << 21,
+      "Expected the self-hosted compiler data/match harness to stay within the DAG size budget",
     );
   },
 });

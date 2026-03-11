@@ -76,7 +76,7 @@ poly main =
                     | D_Import m s => false
                     | D_Export x => false
                     | D_Type x => false
-                    | D_Data x => false
+                    | D_Data x ctors => false
                     | D_Def kind isRec name body =>
                         if [Bool] (eqDefKind kind K_Poly)
                           (\u : U8 =>

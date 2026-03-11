@@ -55,6 +55,26 @@ import Parser D_Export
 import Parser D_Type
 import Parser D_Def
 import Parser D_Data
+import Core Core
+import Core Cr_Var
+import Core Cr_App
+import Core Cr_Lam
+import Core Cr_Native
+import Core Cr_Ctor
+import Core Cr_Match
+import CoreToLower coreToLower
+import DataEnv DataEnv
+import DataEnv MkDataEnv
+import DataEnv ctorTag
+import DataEnv ctorTotal
+import DataEnv ctorArity
+import DataEnv adtCtors
+import DataEnv datEnvCtors
+import DataEnv datEnvAdts
+import DataEnv CtorInfo
+import DataEnv MkCtorInfo
+import DataEnv ADTInfo
+import DataEnv MkADTInfo
 import Unparse Terminal
 import Unparse T_S
 import Unparse T_K
@@ -80,8 +100,6 @@ import Lowering L_Native
 
 export elaborateProgram
 
-data Env = MkEnv (Avl (List U8) Lower) (List (List U8)) (Maybe (List U8))
-
 poly rec eqListU8 = \a : List U8 => \b : List U8 =>
   matchList [U8] [Bool] a
     (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
@@ -102,14 +120,6 @@ poly rec lteListU8 = \a : List U8 => \b : List U8 =>
           if [Bool] (eqU8 ha hb)
             (\u : U8 => lteListU8 ta tb)
             (\u : U8 => ltU8 ha hb)))
-
-poly rec lookupLocal = \name : List U8 => \locals : List (List U8) => \idx : Nat =>
-  matchList [List U8] [Maybe Nat] locals
-    (None [Nat])
-    (\h : List U8 => \t : List (List U8) =>
-      if [Maybe Nat] (eqListU8 name h)
-        (\u : U8 => Some [Nat] idx)
-        (\u : U8 => lookupLocal name t (succ idx)))
 
 poly resolveNativeName = \name : List U8 =>
   if [Maybe Lower] (eqListU8 name ".")
@@ -142,39 +152,6 @@ poly resolveNativeName = \name : List U8 =>
 
 poly unboundNameError = \name : List U8 =>
   append [U8] "Unbound variable: " name
-
-poly resolveName = \env : Env => \name : List U8 =>
-  match env [Result (List U8) Lower] { | MkEnv globals locals recName =>
-    match (lookupLocal name locals zero) [Result (List U8) Lower] {
-      | Some idx => Ok [List U8] [Lower] (L_Var idx)
-      | None =>
-          match recName [Result (List U8) Lower] {
-            | Some rn =>
-                if [Result (List U8) Lower] (eqListU8 name rn)
-                  (\u : U8 => Ok [List U8] [Lower] (L_Var zero))
-                  (\u : U8 =>
-                    match (lookup [List U8] [Lower] lteListU8 name globals) [Result (List U8) Lower] {
-                      | Some l => Ok [List U8] [Lower] l
-                      | None =>
-                          match (resolveNativeName name) [Result (List U8) Lower] {
-                            | Some intrinsic => Ok [List U8] [Lower] intrinsic
-                            | None =>
-                                Err [List U8] [Lower] (unboundNameError name)
-                          }
-                    })
-            | None =>
-                match (lookup [List U8] [Lower] lteListU8 name globals) [Result (List U8) Lower] {
-                  | Some l => Ok [List U8] [Lower] l
-                  | None =>
-                      match (resolveNativeName name) [Result (List U8) Lower] {
-                        | Some intrinsic => Ok [List U8] [Lower] intrinsic
-                        | None =>
-                            Err [List U8] [Lower] (unboundNameError name)
-                      }
-                }
-          }
-    }
-  }
 
 poly digitValue = \c : U8 =>
   modU8 c #u8(16)
@@ -242,36 +219,37 @@ poly rec collectBits = \digits : List U8 => \acc : List U8 =>
       (\h : U8 => \t : List U8 => collectBits quotient nextAcc)
   }
 
-poly binZeroLower =
-  L_Lam (L_Lam (L_Lam (L_Var (succ (succ zero)))))
+poly binZeroCore =
+  Cr_Lam "z" (Cr_Lam "b0" (Cr_Lam "b1" (Cr_Var "z")))
 
-poly binZeroCtorLower =
-  L_Lam (L_Lam (L_Lam (L_Lam (L_App (L_Var (succ zero)) (L_Var (succ (succ (succ zero))))))))
+poly binZeroCtorCore =
+  Cr_Lam "acc" (Cr_Lam "z" (Cr_Lam "b0" (Cr_Lam "b1" (Cr_App (Cr_Var "b0") (Cr_Var "acc")))))
 
-poly binOneCtorLower =
-  L_Lam (L_Lam (L_Lam (L_Lam (L_App (L_Var zero) (L_Var (succ (succ (succ zero))))))))
+poly binOneCtorCore =
+  Cr_Lam "acc" (Cr_Lam "z" (Cr_Lam "b0" (Cr_Lam "b1" (Cr_App (Cr_Var "b1") (Cr_Var "acc")))))
 
-poly stepBinLiteral = \bit : U8 => \acc : Lower =>
-  if [Lower] (eqU8 bit #u8(0))
-    (\u : U8 => L_App binZeroCtorLower acc)
-    (\u : U8 => L_App binOneCtorLower acc)
+poly stepBinLiteralCore = \bit : U8 => \acc : Core =>
+  if [Core] (eqU8 bit #u8(0))
+    (\u : U8 => Cr_App binZeroCtorCore acc)
+    (\u : U8 => Cr_App binOneCtorCore acc)
 
-poly rec buildBinLiteralAcc = \bits : List U8 => \acc : Lower =>
-  matchList [U8] [Lower] bits acc
+poly rec buildBinLiteralCoreAcc = \bits : List U8 => \acc : Core =>
+  matchList [U8] [Core] bits acc
     (\h : U8 => \t : List U8 =>
-      buildBinLiteralAcc t (stepBinLiteral h acc))
+      buildBinLiteralCoreAcc t (stepBinLiteralCore h acc))
 
-poly buildBinLiteral = \digits : List U8 =>
-  buildBinLiteralAcc (collectBits digits (nil [U8])) binZeroLower
+poly buildBinLiteralCore = \digits : List U8 =>
+  buildBinLiteralCoreAcc (collectBits digits (nil [U8])) binZeroCore
 
-poly natToLower = \digits : List U8 =>
+poly natToCore = \digits : List U8 =>
   let trimmed = trimLeadingZeros digits in
-  matchList [U8] [Result (List U8) Lower] trimmed
-    (Ok [List U8] [Lower] (L_Native (T_Byte #u8(0))))
+  matchList [U8] [Result (List U8) Core] trimmed
+    (Ok [List U8] [Core] (Cr_Native (T_Byte #u8(0))))
     (\h : U8 => \t : List U8 =>
-      if [Result (List U8) Lower] (isByteDigits trimmed)
-        (\u : U8 => Ok [List U8] [Lower] (L_Native (T_Byte (parseByteDigits trimmed))))
-        (\u : U8 => Ok [List U8] [Lower] (buildBinLiteral trimmed)))
+      if [Result (List U8) Core] (isByteDigits trimmed)
+        (\u : U8 => Ok [List U8] [Core] (Cr_Native (T_Byte (parseByteDigits trimmed))))
+        (\u : U8 => Ok [List U8] [Core] (buildBinLiteralCore trimmed)))
+
 
 poly zLower =
   let delayed = L_Lam (L_App (L_App (L_Var (succ zero)) (L_Var (succ zero))) (L_Var zero)) in
@@ -281,59 +259,195 @@ poly zLower =
 poly applyFixpoint = \body : Lower =>
   L_App zLower (L_Lam body)
 
+data Env = MkEnv (Avl (List U8) Lower) (List (List U8)) (Maybe (List U8)) DataEnv
+
+poly resolveCoreName = \env : Env => \name : List U8 =>
+  match env [Core] { | MkEnv globals locals recName dEnv =>
+    match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Core] {
+      | Some info => Cr_Ctor (ctorTag info) (ctorTotal info) (ctorArity info)
+      | None => Cr_Var name
+    }
+  }
+
+poly rec findCtorInfoInArms = \dEnv : DataEnv => \arms : List (Pair Pattern Expr) =>
+  matchList [Pair Pattern Expr] [Maybe CtorInfo] arms
+    (None [CtorInfo])
+    (\h : Pair Pattern Expr => \t : List (Pair Pattern Expr) =>
+      match (fst [Pattern] [Expr] h) [Maybe CtorInfo] { | P_Ctor name args =>
+        match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Maybe CtorInfo] {
+          | Some info => Some [CtorInfo] info
+          | None => findCtorInfoInArms dEnv t
+        }
+      })
+
+poly rec findArmByName = \name : List U8 => \arms : List (Pair Pattern Expr) =>
+  matchList [Pair Pattern Expr] [Pair Pattern Expr] arms
+    (MkPair [Pattern] [Expr] (P_Ctor name (nil [List U8])) (E_Var "MISSING_ARM"))
+    (\h : Pair Pattern Expr => \t : List (Pair Pattern Expr) =>
+      match (fst [Pattern] [Expr] h) [Pair Pattern Expr] { | P_Ctor cName args =>
+        if [Pair Pattern Expr] (eqListU8 name cName)
+          (\u : U8 => h)
+          (\u : U8 => findArmByName name t)
+      })
+
+poly rec sortArms = \expectedNames : List (List U8) => \arms : List (Pair Pattern Expr) =>
+  matchList [List U8] [List (Pair Pattern Expr)] expectedNames
+    (nil [Pair Pattern Expr])
+    (\name : List U8 => \tNames : List (List U8) =>
+      let arm = findArmByName name arms in
+      cons [Pair Pattern Expr] arm (sortArms tNames arms))
+
+poly rec wrapInLambdas = \args : List (List U8) => \body : Core =>
+  matchList [List U8] [Core] args
+    body
+    (\h : List U8 => \t : List (List U8) =>
+      Cr_Lam h (wrapInLambdas t body))
+
+poly rec prependAll = #A => \items : List A => \acc : List A =>
+  matchList [A] [List A] items acc (\h : A => \t : List A => prependAll [A] t (cons [A] h acc))
+
+poly rec elaborateArms = \elaborate : Env -> Expr -> Result (List U8) Core => \env : Env => \arms : List (Pair Pattern Expr) =>
+  matchList [Pair Pattern Expr] [Result (List U8) (List Core)] arms
+    (Ok [List U8] [List Core] (nil [Core]))
+    (\h : Pair Pattern Expr => \t : List (Pair Pattern Expr) =>
+      match h [Result (List U8) (List Core)] { | MkPair pat body =>
+        match pat [Result (List U8) (List Core)] { | P_Ctor name args =>
+          match env [Result (List U8) (List Core)] { | MkEnv globals locals recName dEnv =>
+            let innerLocals = prependAll [List U8] args locals in
+            let innerEnv = MkEnv globals innerLocals recName dEnv in
+            match (elaborate innerEnv body) [Result (List U8) (List Core)] {
+              | Err e => Err [List U8] [List Core] e
+              | Ok coreBody =>
+                  let wrapped = wrapInLambdas args coreBody in
+                  match (elaborateArms elaborate env t) [Result (List U8) (List Core)] {
+                    | Err e => Err [List U8] [List Core] e
+                    | Ok rest => Ok [List U8] [List Core] (cons [Core] wrapped rest)
+                  }
+            }
+          }
+        }
+      })
+
+poly elaborateMatchWith = \elaborate : Env -> Expr -> Result (List U8) Core => \env : Env => \scrut : Expr => \arms : List (Pair Pattern Expr) =>
+  match (elaborate env scrut) [Result (List U8) Core] {
+    | Err e => Err [List U8] [Core] e
+    | Ok coreScrut =>
+        match env [Result (List U8) Core] { | MkEnv globals locals recName dEnv =>
+          match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
+            | None => Err [List U8] [Core] "Could not identify ADT for match"
+            | Some info =>
+                let adtName = ctorAdtName info in
+                match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
+                  | None => Err [List U8] [Core] "ADT metadata not found"
+                  | Some adtInfo =>
+                      let expectedNames = adtCtors adtInfo in
+                      let sortedArms = sortArms expectedNames arms in
+                      match (elaborateArms elaborate env sortedArms) [Result (List U8) Core] {
+                        | Err e => Err [List U8] [Core] e
+                        | Ok coreArms => Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
+                      }
+                }
+          }
+        }
+  }
+
 poly rec elaborateExpr = \env : Env => \expr : Expr =>
-  match expr [Result (List U8) Lower] {
-    | E_Var name => resolveName env name
+  match expr [Result (List U8) Core] {
+    | E_Var name => Ok [List U8] [Core] (resolveCoreName env name)
     | E_App l r =>
-        match (elaborateExpr env l) [Result (List U8) Lower] {
-          | Err e => Err [List U8] [Lower] e
+        match (elaborateExpr env l) [Result (List U8) Core] {
+          | Err e => Err [List U8] [Core] e
           | Ok left =>
-              match (elaborateExpr env r) [Result (List U8) Lower] {
-                | Err e => Err [List U8] [Lower] e
-                | Ok right => Ok [List U8] [Lower] (L_App left right)
+              match (elaborateExpr env r) [Result (List U8) Core] {
+                | Err e => Err [List U8] [Core] e
+                | Ok right => Ok [List U8] [Core] (Cr_App left right)
               }
         }
     | E_Lam name body =>
-        match env [Result (List U8) Lower] { | MkEnv globals locals recName =>
-          match (elaborateExpr (MkEnv globals (cons [List U8] name locals) recName) body) [Result (List U8) Lower] {
-            | Err e => Err [List U8] [Lower] e
-            | Ok loweredBody => Ok [List U8] [Lower] (L_Lam loweredBody)
+        match env [Result (List U8) Core] { | MkEnv globals locals recName dEnv =>
+          match (elaborateExpr (MkEnv globals (cons [List U8] name locals) recName dEnv) body) [Result (List U8) Core] {
+            | Err e => Err [List U8] [Core] e
+            | Ok coreBody => Ok [List U8] [Core] (Cr_Lam name coreBody)
           }
         }
     | E_Let name val body =>
-        elaborateExpr env (E_App (E_Lam name body) val)
-    | E_Nat digits => natToLower digits
+        match (elaborateExpr env val) [Result (List U8) Core] {
+          | Err e => Err [List U8] [Core] e
+          | Ok coreVal =>
+              match env [Result (List U8) Core] { | MkEnv globals locals recName dEnv =>
+                match (elaborateExpr (MkEnv globals (cons [List U8] name locals) recName dEnv) body) [Result (List U8) Core] {
+                  | Err e => Err [List U8] [Core] e
+                  | Ok coreBody => Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
+                }
+              }
+        }
+    | E_Nat digits => natToCore digits
     | E_Match scrut arms =>
-        Err [List U8] [Lower] "Match lowering requires constructor-aware elaboration"
+        elaborateMatchWith elaborateExpr env scrut arms
   }
 
-poly elaborateDecl = \globals : Avl (List U8) Lower => \decl : Decl =>
-  match decl [Result (List U8) (Avl (List U8) Lower)] {
+data State = MkState (Avl (List U8) Lower) DataEnv
+
+poly rec length = #A => \l : List A =>
+  matchList [A] [Nat] l zero (\h : A => \t : List A => succ (length [A] t))
+
+poly rec populateDataEnv = \adtName : List U8 => \ctors : List (Pair (List U8) Nat) => \total : Nat => \idx : Nat => \datEnv : DataEnv =>
+  matchList [Pair (List U8) Nat] [DataEnv] ctors
+    datEnv
+    (\h : Pair (List U8) Nat => \t : List (Pair (List U8) Nat) =>
+      let ctorName = fst [List U8] [Nat] h in
+      let arity = snd [List U8] [Nat] h in
+      let info = MkCtorInfo idx total arity adtName in
+      match datEnv [DataEnv] { | MkDataEnv cEnv aEnv =>
+        let nextCEnv = insert [List U8] [CtorInfo] lteListU8 ctorName info cEnv in
+        populateDataEnv adtName t total (succ idx) (MkDataEnv nextCEnv aEnv)
+      })
+
+poly rec getCtorNames = \ctors : List (Pair (List U8) Nat) =>
+  matchList [Pair (List U8) Nat] [List (List U8)] ctors
+    (nil [List U8])
+    (\h : Pair (List U8) Nat => \t : List (Pair (List U8) Nat) =>
+      cons [List U8] (fst [List U8] [Nat] h) (getCtorNames t))
+
+poly elaborateDecl = \state : State => \decl : Decl =>
+  match state [Result (List U8) State] { | MkState globals dEnv =>
+  match decl [Result (List U8) State] {
     | D_Def kind isRec name body =>
         let env = if [Env] isRec
-                    (\u : U8 => MkEnv globals (cons [List U8] name (nil [List U8])) (Some [List U8] name))
-                    (\u : U8 => MkEnv globals (nil [List U8]) (None [List U8])) in
-        match (elaborateExpr env body) [Result (List U8) (Avl (List U8) Lower)] {
-          | Err e => Err [List U8] [Avl (List U8) Lower] e
-          | Ok lowered =>
+                    (\u : U8 => MkEnv globals (cons [List U8] name (nil [List U8])) (Some [List U8] name) dEnv)
+                    (\u : U8 => MkEnv globals (nil [List U8]) (None [List U8]) dEnv) in
+        match (elaborateExpr env body) [Result (List U8) State] {
+          | Err e => Err [List U8] [State] e
+          | Ok core =>
               let final = if [Lower] isRec
-                            (\u : U8 => applyFixpoint lowered)
-                            (\u : U8 => lowered) in
-              Ok [List U8] [Avl (List U8) Lower]
-                (insert [List U8] [Lower] lteListU8 name final globals)
+                            (\u : U8 => applyFixpoint (coreToLower globals (cons [List U8] name (nil [List U8])) (Some [List U8] name) core))
+                            (\u : U8 => coreToLower globals (nil [List U8]) (None [List U8]) core) in
+              Ok [List U8] [State]
+                (MkState (insert [List U8] [Lower] lteListU8 name final globals) dEnv)
         }
-    | D_Data name => Ok [List U8] [Avl (List U8) Lower] globals
-    | D_Module name => Ok [List U8] [Avl (List U8) Lower] globals
-    | D_Import moduleName symbolName => Ok [List U8] [Avl (List U8) Lower] globals
-    | D_Export name => Ok [List U8] [Avl (List U8) Lower] globals
-    | D_Type name => Ok [List U8] [Avl (List U8) Lower] globals
-  }
+    | D_Data name ctors =>
+        let total = length [Pair (List U8) Nat] ctors in
+        let nextDEnv = populateDataEnv name ctors total zero dEnv in
+        let adtInfo = MkADTInfo (getCtorNames ctors) in
+        match nextDEnv [Result (List U8) State] { | MkDataEnv cEnv aEnv =>
+          let finalDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv) in
+          Ok [List U8] [State] (MkState globals finalDEnv)
+        }
+    | D_Module name => Ok [List U8] [State] state
+    | D_Import moduleName symbolName => Ok [List U8] [State] state
+    | D_Export name => Ok [List U8] [State] state
+    | D_Type name => Ok [List U8] [State] state
+  }}
 
-poly rec elaborateProgram = \globals : Avl (List U8) Lower => \decls : List Decl =>
+poly rec elaborateProgramRec = \state : State => \decls : List Decl =>
   matchList [Decl] [Result (List U8) (Avl (List U8) Lower)] decls
-    (Ok [List U8] [Avl (List U8) Lower] globals)
+    (match state [Result (List U8) (Avl (List U8) Lower)] { | MkState globals dEnv => Ok [List U8] [Avl (List U8) Lower] globals })
     (\h : Decl => \t : List Decl =>
-      match (elaborateDecl globals h) [Result (List U8) (Avl (List U8) Lower)] {
+      match (elaborateDecl state h) [Result (List U8) State] {
         | Err e => Err [List U8] [Avl (List U8) Lower] e
-        | Ok nextGlobals => elaborateProgram nextGlobals t
+        | Ok nextState => elaborateProgramRec nextState t
       })
+
+poly elaborateProgram = \globals : Avl (List U8) Lower => \decls : List Decl =>
+  let initialState = MkState globals (MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo])) in
+  elaborateProgramRec initialState decls

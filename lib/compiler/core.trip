@@ -1,0 +1,22 @@
+module Core
+
+import Prelude List
+import Prelude U8
+import Nat Nat
+import Unparse Terminal
+
+export Core
+export Cr_Var
+export Cr_App
+export Cr_Lam
+export Cr_Native
+export Cr_Ctor
+export Cr_Match
+
+data Core =
+  | Cr_Var (List U8)
+  | Cr_App Core Core
+  | Cr_Lam (List U8) Core
+  | Cr_Native Terminal
+  | Cr_Ctor Nat Nat Nat
+  | Cr_Match Core (List Core)

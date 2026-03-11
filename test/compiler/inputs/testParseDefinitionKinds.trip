@@ -122,7 +122,7 @@ poly main =
                         | D_Import m s => false
                         | D_Export x => false
                         | D_Type x => false
-                        | D_Data x => false
+                        | D_Data x ctors => false
                         | D_Def kind isRec name body =>
                           if [Bool] (eqDefKind kind K_Poly)
                             (\u : U8 =>
@@ -137,7 +137,7 @@ poly main =
                                             | D_Import m s => false
                                             | D_Export x => false
                                             | D_Type x => false
-                                            | D_Data x => false
+                                            | D_Data x ctors => false
                                             | D_Def kind2 isRec2 name2 body2 =>
                                               if [Bool] (eqDefKind kind2 K_Typed)
                                                 (\u : U8 =>
@@ -153,7 +153,7 @@ poly main =
                                                                 | D_Import m s => false
                                                                 | D_Export x => false
                                                                 | D_Type x => false
-                                                                | D_Data x => false
+                                                                | D_Data x ctors => false
                                                                 | D_Def kind3 isRec3 name3 body3 =>
                                                                   if [Bool] (eqDefKind kind3 K_Untyped)
                                                                     (\u : U8 =>
@@ -169,7 +169,7 @@ poly main =
                                                                                     | D_Import m s => false
                                                                                     | D_Export x => false
                                                                                     | D_Type x => false
-                                                                                    | D_Data x => false
+                                                                                    | D_Data x ctors => false
                                                                                     | D_Def kind4 isRec4 name4 body4 =>
                                                                                       if [Bool] (eqDefKind kind4 K_Combinator)
                                                                                         (\u : U8 =>
@@ -205,7 +205,7 @@ poly main =
             | D_Import m s => false
             | D_Export x => false
             | D_Type x => false
-            | D_Data x => false
+            | D_Data x ctors => false
             | D_Def kind isRec name body => false
           })
   }

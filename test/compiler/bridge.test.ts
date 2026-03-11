@@ -12,18 +12,17 @@ Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async (
   assert.include(source, "poly zLower");
   assert.include(source, "poly applyFixpoint");
   assert.include(source, "L_App zLower (L_Lam body)");
-  assert.include(source, "applyFixpoint lowered");
+  assert.include(source, "applyFixpoint (coreToLower");
   assert.notInclude(source, "#u8(89)");
   assert.include(source, 'eqListU8 name "."');
   assert.include(source, "Some [Lower] (L_Native T_WriteOne)");
   assert.include(source, 'eqListU8 name ","');
   assert.include(source, "Some [Lower] (L_Native T_ReadOne)");
   assert.include(source, "poly unboundNameError");
-  assert.include(source, "Err [List U8] [Lower] (unboundNameError name)");
-  assert.include(source, "poly buildBinLiteral");
+  assert.include(source, "poly buildBinLiteralCore");
   assert.include(
     source,
-    'Err [List U8] [Lower] "Match lowering requires constructor-aware elaboration"',
+    "Ok [List U8] [Core] (Cr_Match coreScrut coreArms)",
   );
 
   const bridgeObject = await loadTripModuleObject(BRIDGE_SOURCE_FILE);
@@ -31,6 +30,6 @@ Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async (
   assert.property(bridgeObject.definitions, "applyFixpoint");
   assert.property(bridgeObject.definitions, "resolveNativeName");
   assert.property(bridgeObject.definitions, "unboundNameError");
-  assert.property(bridgeObject.definitions, "buildBinLiteral");
+  assert.property(bridgeObject.definitions, "buildBinLiteralCore");
   assert.property(bridgeObject.definitions, "elaborateProgram");
 });

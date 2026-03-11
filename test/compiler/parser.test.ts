@@ -131,6 +131,8 @@ Deno.test({
   const lexerObj = await getLexerObject();
   const parserObj = await getParserObject();
   const preludeObj = await getPreludeObjectCached();
+  const natObj = await (await import("../../lib/nat.ts")).getNatObject();
+  const binObj = await (await import("../../lib/bin.ts")).getBinObject();
 
   const PARSER_TEST_REDUCE_TIMEOUT_MS = 20_000;
 
@@ -155,6 +157,8 @@ Deno.test({
       const testObj = await compileTestProgram(t.file);
       const linked = linkModules([
         { name: "Prelude", object: preludeObj },
+        { name: "Nat", object: natObj },
+        { name: "Bin", object: binObj },
         { name: "Lexer", object: lexerObj },
         { name: "Parser", object: parserObj },
         { name: "Test", object: testObj },

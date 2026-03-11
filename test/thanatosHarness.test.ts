@@ -37,11 +37,14 @@ export function thanatosAvailable(): boolean {
  */
 export function toDagWire(expr: SKIExpression): string {
   const order: SKIExpression[] = [];
+  const visited = new Set<SKIExpression>();
   function postorder(e: SKIExpression): void {
+    if (visited.has(e)) return;
     if (e.kind === "non-terminal") {
       postorder(e.lft);
       postorder(e.rgt);
     }
+    visited.add(e);
     order.push(e);
   }
   postorder(expr);

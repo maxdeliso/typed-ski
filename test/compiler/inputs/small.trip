@@ -1,0 +1,3 @@
+module Small
+export id
+poly id = \x => x

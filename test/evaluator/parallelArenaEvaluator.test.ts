@@ -803,6 +803,37 @@ Deno.test("ParallelArenaEvaluator - onRequestYield hook fires for yielding work"
   }
 });
 
+Deno.test("ParallelArenaEvaluator - bounded divergent work rejects and clears pending requests", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1, false, {
+    maxResubmits: 32,
+  });
+  try {
+    const requestErrors: string[] = [];
+    evaluator.onRequestError = (_reqId, _workerIndex, _expr, error) => {
+      requestErrors.push(error);
+    };
+
+    await assertRejects(
+      () => evaluator.reduceAsync(parseSKI("(SII)(SII)"), 100),
+      Error,
+      "exceeded maximum resubmissions",
+    );
+    assert(
+      requestErrors.some((error) =>
+        error.includes("exceeded maximum resubmissions")
+      ),
+      "expected bounded divergent work to surface through request errors",
+    );
+    assertEquals(
+      evaluator.getTotalPending(),
+      0,
+      "bounded divergent work should clear pending request state",
+    );
+  } finally {
+    evaluator.terminate();
+  }
+});
+
 Deno.test("ParallelArenaEvaluator - onRequestError hook fires on hostSubmit failures", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   const originalExports = evaluator.$;

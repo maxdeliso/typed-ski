@@ -60,8 +60,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "--help",
       ]);
@@ -75,8 +74,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "--version",
       ]);
@@ -89,8 +87,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
       ]);
 
@@ -102,8 +99,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "invalid",
       ]);
@@ -116,8 +112,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "2",
       ]);
@@ -153,9 +148,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-write",
-        "--allow-run",
+        "-A",
         "bin/genSvg.ts",
         "--help",
       ]);
@@ -169,9 +162,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-write",
-        "--allow-run",
+        "-A",
         "bin/genSvg.ts",
         "--version",
       ]);
@@ -184,8 +175,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genSvg.ts",
       ]);
 
@@ -197,8 +187,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genSvg.ts",
         "invalid",
       ]);
@@ -211,9 +200,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-write",
-        "--allow-run",
+        "-A",
         "bin/genSvg.ts",
         "2",
         "nonexistent.jsonl",
@@ -290,14 +277,14 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
         join(projectRoot, "bin/genForest.ts"),
       );
       expect(genForestTs).to.include(
-        "#!/usr/bin/env -S deno run --allow-read --allow-run",
+        "#!/usr/bin/env -S deno run -A",
       );
 
       const genSvgTs = await Deno.readTextFile(
         join(projectRoot, "bin/genSvg.ts"),
       );
       expect(genSvgTs).to.include(
-        "#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run",
+        "#!/usr/bin/env -S deno run -A",
       );
     });
 
@@ -325,22 +312,20 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "1",
         "--progress",
       ]);
       expect(result.success).to.be.true;
-      expect(result.stderr).to.include("[genForest] start");
+      expect(result.stderr).to.include("[genForest] start symbolCount");
     });
 
     await t.step("handles --no-labels flag", async () => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "1",
         "--no-labels",
@@ -353,8 +338,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "1",
         "--workers",
@@ -369,8 +353,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "1",
         "--max-steps",
@@ -386,8 +369,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "1",
         "--workers",
@@ -403,8 +385,7 @@ Deno.test("Forest Tools CLI Tests", async (t) => {
       const result = await runCommand([
         "deno",
         "run",
-        "--allow-read",
-        "--allow-run",
+        "-A",
         "bin/genForest.ts",
         "1",
         "extra",

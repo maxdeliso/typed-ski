@@ -74,6 +74,7 @@ let webglDirty = false;
 let webglRebuildTimer = null;
 let panelResizeObserver = null;
 let workbenchTornDown = false;
+const WORKBENCH_MAX_RESUBMITS = 50;
 
 const webglViewer = forestCanvas
   ? initWebglForestViewer({
@@ -466,7 +467,11 @@ async function loadWasm() {
       throw new Error("Worker count must be between 1 and 256");
     }
 
-    evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
+    evaluator = await ParallelArenaEvaluatorWasm.create(
+      workerCount,
+      false,
+      { maxResubmits: WORKBENCH_MAX_RESUBMITS },
+    );
     evaluator.onRequestQueued = (
       _reqId,
       _workerIndex,

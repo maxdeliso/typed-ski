@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
+#!/usr/bin/env -S deno run -A
 
 /**
  * SKI Evaluation Forest SVG Generator

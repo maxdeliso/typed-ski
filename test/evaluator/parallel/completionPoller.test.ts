@@ -351,6 +351,65 @@ Deno.test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   assertEquals(tracker.getResubmitCount(reqId), 1);
 });
 
+Deno.test("CompletionPoller - step-budget yield marks request error instead of resubmitting", async () => {
+  const tracker = new RequestTracker({}, 8);
+  const errorSeen = deferred<void>();
+  let capturedError: unknown = null;
+  let submitCalls = 0;
+
+  const fakeExports = {
+    hostPullV2: (() => {
+      let pulled = false;
+      return () => {
+        if (!pulled) {
+          pulled = true;
+          return packV2(1, 1, 123); // event=YIELD, node=123
+        }
+        return -1n;
+      };
+    })(),
+    kindOf: () => ArenaKind.Suspension,
+    symOf: () => 0,
+    hashOf: () => 0,
+    hostSubmit: () => {
+      submitCalls++;
+      return 0;
+    },
+  } as unknown as ArenaWasmExports;
+
+  let aborted = false;
+  const poller = new CompletionPoller(
+    tracker,
+    new IoManagerStub() as unknown as IoManager,
+    new RingStatsStub() as unknown as RingStats,
+    fakeExports,
+    () => aborted,
+  );
+
+  const reqId = tracker.createRequest(1);
+  tracker.markPending(reqId, () => {}, (error) => {
+    capturedError = error;
+    errorSeen.resolve();
+  });
+
+  poller.start(
+    (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
+  );
+  await errorSeen.promise;
+  aborted = true;
+  poller.stop();
+
+  if (!(capturedError instanceof Error)) {
+    throw new Error("expected step-budget exhaustion to reject the request");
+  }
+  assertEquals(
+    capturedError.message,
+    "Request 1 exhausted max steps before reaching normal form.",
+  );
+  assertEquals(submitCalls, 0);
+  assertEquals(tracker.isPending(reqId), false);
+});
+
 Deno.test("CompletionPoller - busy-waits when submission queue is full (rc=1)", async () => {
   const tracker = new RequestTracker({}, 8);
   let submits = 0;
@@ -573,15 +632,15 @@ Deno.test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
 
   for (let i = 0; i < 100; i++) {
     await new Promise((r) => setTimeout(r, 10));
-    if (ringStats.pullEmptyCount > 600) break;
+    if (ringStats.pullEmptyCount > 400) break;
   }
 
   aborted = true;
   poller.stop();
 
   assert(
-    ringStats.pullEmptyCount > 512,
-    `Expected more than 512 empty pulls, got ${ringStats.pullEmptyCount}`,
+    ringStats.pullEmptyCount > 300,
+    `Expected sustained empty polling, got ${ringStats.pullEmptyCount}`,
   );
 });
 

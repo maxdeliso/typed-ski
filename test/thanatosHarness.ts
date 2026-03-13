@@ -37,11 +37,14 @@ export function thanatosAvailable(): boolean {
  */
 export function toDagWire(expr: SKIExpression): string {
   const order: SKIExpression[] = [];
+  const visited = new Set<SKIExpression>();
   function postorder(e: SKIExpression): void {
+    if (visited.has(e)) return;
     if (e.kind === "non-terminal") {
       postorder(e.lft);
       postorder(e.rgt);
     }
+    visited.add(e);
     order.push(e);
   }
   postorder(expr);
@@ -109,12 +112,19 @@ export function fromDagWire(dagStr: string): SKIExpression {
     } else if (t.startsWith("@")) {
       const comma = t.indexOf(",", 1);
       if (comma < 0) throw new Error("invalid app: " + t);
-      const L = parseInt(t.slice(1, comma), 10);
-      const R = parseInt(t.slice(comma + 1), 10);
-      if (L >= i || R >= i || L < 0 || R < 0) {
+      const Lstr = t.slice(1, comma);
+      const Rstr = t.slice(comma + 1);
+
+      const L = Lstr === "!" ? -1 : parseInt(Lstr, 10);
+      const R = Rstr === "!" ? -1 : parseInt(Rstr, 10);
+
+      const left = L === -1 ? term("I" as SKITerminalSymbol) : nodes[L]!; // Placeholder for EMPTY in unparseable parts
+      const right = R === -1 ? term("I" as SKITerminalSymbol) : nodes[R]!;
+
+      if (L >= i || R >= i) {
         throw new Error("invalid app indices: " + t);
       }
-      nodes.push(apply(nodes[L]!, nodes[R]!));
+      nodes.push(apply(left, right));
     } else {
       throw new Error("invalid DAG token: " + t);
     }
@@ -201,6 +211,17 @@ export class ThanatosSession {
     throw new Error("thanatos: unexpected " + resp);
   }
 
+  /** Reduce a DAG string for a limited number of steps; returns DAG string (may be a suspension). */
+  async step(dag: string, steps: number): Promise<string> {
+    this.start();
+    const trimmed = dag.trim();
+    const resp = await this.serialRequest(`STEP ${steps} ${trimmed}`);
+    if (resp.startsWith("OK ")) return resp.slice(3).trim();
+    if (resp === "OK") return trimmed;
+    if (resp.startsWith("ERR ")) throw new Error("thanatos: " + resp.slice(4));
+    throw new Error("thanatos: unexpected " + resp);
+  }
+
   /** Reset the arena (clean slate). Starts daemon on first use if needed. */
   async reset(): Promise<void> {
     this.start();
@@ -215,7 +236,7 @@ export class ThanatosSession {
     if (resp !== "OK") throw new Error("thanatos: " + resp);
   }
 
-  /** STATS: returns the full response line (e.g. "OK top=0 capacity=... events=... dropped=..."). */
+  /** STATS: returns the full response line with arena, hash-cons, and dispatcher counters. */
   async stats(): Promise<string> {
     this.start();
     const resp = await this.serialRequest("STATS");
@@ -380,17 +401,60 @@ Deno.test({
   sanitizeOps: false,
   fn: async () => {
     const session = await getThanatosSession();
+    await session.reduceDag(toDagWire(parseSKI("I S")));
     await session.ping();
     await session.reset();
     const statsLine = await session.stats();
     if (
       !statsLine.includes("top=") ||
+      !statsLine.includes("total_nodes=") ||
+      !statsLine.includes("total_steps=") ||
       !statsLine.includes("capacity=") ||
       !statsLine.includes("events=") ||
-      !statsLine.includes("dropped=")
+      !statsLine.includes("dropped=") ||
+      !statsLine.includes("total_cons_allocs=") ||
+      !statsLine.includes("total_cont_allocs=") ||
+      !statsLine.includes("total_susp_allocs=") ||
+      !statsLine.includes("duplicate_lost_allocs=") ||
+      !statsLine.includes("hashcons_hits=") ||
+      !statsLine.includes("hashcons_misses=")
     ) {
       throw new Error("STATS missing expected fields: " + statsLine);
     }
+    const top = Number(statsLine.match(/top=(\d+)/)?.[1] ?? NaN);
+    const totalNodes = Number(statsLine.match(/total_nodes=(\d+)/)?.[1] ?? NaN);
+    const totalSteps = Number(statsLine.match(/total_steps=(\d+)/)?.[1] ?? NaN);
+    const events = Number(statsLine.match(/events=(\d+)/)?.[1] ?? NaN);
+    const dropped = Number(statsLine.match(/dropped=(\d+)/)?.[1] ?? NaN);
+    const totalConsAllocs = Number(
+      statsLine.match(/total_cons_allocs=(\d+)/)?.[1] ?? NaN,
+    );
+    const totalContAllocs = Number(
+      statsLine.match(/total_cont_allocs=(\d+)/)?.[1] ?? NaN,
+    );
+    const totalSuspAllocs = Number(
+      statsLine.match(/total_susp_allocs=(\d+)/)?.[1] ?? NaN,
+    );
+    const duplicateLostAllocs = Number(
+      statsLine.match(/duplicate_lost_allocs=(\d+)/)?.[1] ?? NaN,
+    );
+    const hashconsHits = Number(
+      statsLine.match(/hashcons_hits=(\d+)/)?.[1] ?? NaN,
+    );
+    const hashconsMisses = Number(
+      statsLine.match(/hashcons_misses=(\d+)/)?.[1] ?? NaN,
+    );
+    assertEquals(top, 0);
+    assertEquals(totalNodes, 0);
+    assertEquals(totalSteps, 0);
+    assertEquals(events, 0);
+    assertEquals(dropped, 0);
+    assertEquals(totalConsAllocs, 0);
+    assertEquals(totalContAllocs, 0);
+    assertEquals(totalSuspAllocs, 0);
+    assertEquals(duplicateLostAllocs, 0);
+    assertEquals(hashconsHits, 0);
+    assertEquals(hashconsMisses, 0);
   },
 });
 

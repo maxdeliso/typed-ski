@@ -72,7 +72,9 @@ function assertTypeDefinition(
 Deno.test("TripLang → System F compiler integration", async (t) => {
   // Use the parallel WASM arena reducer (worker pool) in this suite.
   // Important: terminate it at the end to avoid Deno leak detection (workers/timers).
-  const arenaEval = await ParallelArenaEvaluatorWasm.create(2);
+  const arenaEval = await ParallelArenaEvaluatorWasm.create(2, false, {
+    maxResubmits: 0,
+  });
   try {
     await t.step("executes condSucc example", async () => {
       const src = loadInput("condSucc.trip", __dirname);

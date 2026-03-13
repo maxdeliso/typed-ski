@@ -21,11 +21,11 @@ export MkDataEnv
 export datEnvCtors
 export datEnvAdts
 
-data CtorInfo = MkCtorInfo Nat Nat Nat (List U8)
+data CtorInfo = MkCtorInfo U8 U8 U8 (List U8)
 
-poly ctorTag = \i : CtorInfo => match i [Nat] { | MkCtorInfo t n a adt => t }
-poly ctorTotal = \i : CtorInfo => match i [Nat] { | MkCtorInfo t n a adt => n }
-poly ctorArity = \i : CtorInfo => match i [Nat] { | MkCtorInfo t n a adt => a }
+poly ctorTag = \i : CtorInfo => match i [U8] { | MkCtorInfo t n a adt => t }
+poly ctorTotal = \i : CtorInfo => match i [U8] { | MkCtorInfo t n a adt => n }
+poly ctorArity = \i : CtorInfo => match i [U8] { | MkCtorInfo t n a adt => a }
 poly ctorAdtName = \i : CtorInfo => match i [List U8] { | MkCtorInfo t n a adt => adt }
 
 data ADTInfo = MkADTInfo (List (List U8))

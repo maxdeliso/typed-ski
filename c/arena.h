@@ -39,11 +39,12 @@ typedef enum {
   ARENA_SYM_LT_U8 = 14,
   ARENA_SYM_DIV_U8 = 15,
   ARENA_SYM_MOD_U8 = 16,
-  ARENA_SYM_ADD_U8 = 17
+  ARENA_SYM_ADD_U8 = 17,
+  ARENA_SYM_SUB_U8 = 18
 } ArenaSym;
 
 #define EMPTY 0xffffffff
-#define TERM_CACHE_LEN (ARENA_SYM_ADD_U8 + 1)
+#define TERM_CACHE_LEN (ARENA_SYM_SUB_U8 + 1)
 
 typedef struct {
   atomic_uint head;
@@ -92,16 +93,29 @@ typedef struct {
   uint32_t offset_stdin_wait;
   uint32_t offset_stdout_wait;
   uint32_t offset_term_cache;
+  uint64_t offset_cont_segments;
   uint64_t offset_nodes;
   uint64_t offset_buckets;
+  uint32_t cont_segments;
+  atomic_uint cont_free_head;
+  atomic_uint cont_top;
   atomic_uint capacity;
   uint32_t bucket_mask;
   atomic_uint resize_seq;
   atomic_uint top;
+  _Atomic uint64_t total_nodes;
+  _Atomic uint64_t total_steps;
+  _Atomic uint64_t total_cons_allocs;
+  _Atomic uint64_t total_cont_allocs;
+  _Atomic uint64_t total_susp_allocs;
+  _Atomic uint64_t duplicate_lost_allocs;
+  _Atomic uint64_t hashcons_hits;
+  _Atomic uint64_t hashcons_misses;
 } SabHeader;
 
 #define RESULT_DONE 0
-#define RESULT_YIELD 1
+#define RESULT_BUDGET 1
+#define RESULT_IO_WAIT 2
 
 typedef struct {
   uint8_t type;
@@ -122,6 +136,8 @@ uint32_t rightOf(uint32_t n);
 uint32_t allocTerminal(uint32_t sym);
 uint32_t allocCons(uint32_t l, uint32_t r);
 uint32_t allocU8(uint8_t value);
+uint32_t alloc_generic(uint8_t kind_val, uint8_t sym_val, uint32_t left_val,
+                       uint32_t right_val, uint32_t hash_val);
 uint32_t arenaKernelStep(uint32_t expr);
 int64_t hostPullV2(void);
 /** Block until a completion is available; write it to *cqe. */

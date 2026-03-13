@@ -449,18 +449,75 @@ uint32_t thanatos_reduce_to_normal_form(uint32_t node_id) {
 }
 
 void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
+                        unsigned long long *out_total_nodes,
+                        unsigned long long *out_total_steps,
+                        unsigned long long *out_total_cons_allocs,
+                        unsigned long long *out_total_cont_allocs,
+                        unsigned long long *out_total_susp_allocs,
+                        unsigned long long *out_duplicate_lost_allocs,
+                        unsigned long long *out_hashcons_hits,
+                        unsigned long long *out_hashcons_misses,
                         unsigned long long *out_events,
                         unsigned long long *out_dropped) {
   if (out_top)
     *out_top = arena_top();
   if (out_capacity)
     *out_capacity = arena_capacity();
+  if (ARENA_BASE_ADDR) {
+    SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+    if (out_total_nodes)
+      *out_total_nodes =
+          atomic_load_explicit(&h->total_nodes, memory_order_relaxed);
+    if (out_total_steps)
+      *out_total_steps =
+          atomic_load_explicit(&h->total_steps, memory_order_relaxed);
+    if (out_total_cons_allocs)
+      *out_total_cons_allocs =
+          atomic_load_explicit(&h->total_cons_allocs, memory_order_relaxed);
+    if (out_total_cont_allocs)
+      *out_total_cont_allocs =
+          atomic_load_explicit(&h->total_cont_allocs, memory_order_relaxed);
+    if (out_total_susp_allocs)
+      *out_total_susp_allocs =
+          atomic_load_explicit(&h->total_susp_allocs, memory_order_relaxed);
+    if (out_duplicate_lost_allocs)
+      *out_duplicate_lost_allocs =
+          atomic_load_explicit(&h->duplicate_lost_allocs, memory_order_relaxed);
+    if (out_hashcons_hits)
+      *out_hashcons_hits =
+          atomic_load_explicit(&h->hashcons_hits, memory_order_relaxed);
+    if (out_hashcons_misses)
+      *out_hashcons_misses =
+          atomic_load_explicit(&h->hashcons_misses, memory_order_relaxed);
+  } else {
+    if (out_total_nodes)
+      *out_total_nodes = 0;
+    if (out_total_steps)
+      *out_total_steps = 0;
+    if (out_total_cons_allocs)
+      *out_total_cons_allocs = 0;
+    if (out_total_cont_allocs)
+      *out_total_cont_allocs = 0;
+    if (out_total_susp_allocs)
+      *out_total_susp_allocs = 0;
+    if (out_duplicate_lost_allocs)
+      *out_duplicate_lost_allocs = 0;
+    if (out_hashcons_hits)
+      *out_hashcons_hits = 0;
+    if (out_hashcons_misses)
+      *out_hashcons_misses = 0;
+  }
   if (out_events)
     *out_events =
         atomic_load_explicit(&dispatcher_events, memory_order_relaxed);
   if (out_dropped)
     *out_dropped =
         atomic_load_explicit(&dispatcher_dropped, memory_order_relaxed);
+}
+
+void thanatos_reset_stats(void) {
+  atomic_store_explicit(&dispatcher_events, 0, memory_order_release);
+  atomic_store_explicit(&dispatcher_dropped, 0, memory_order_release);
 }
 
 void thanatos_shutdown(void) {

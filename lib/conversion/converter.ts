@@ -26,6 +26,7 @@ import {
   ReadOne,
   S,
   SPrime,
+  SubU8,
   WriteOne,
 } from "../ski/terminal.ts";
 import { ConversionError } from "./conversionError.ts";
@@ -82,6 +83,8 @@ const terminalFromSym = (sym: string): SKIExpression => {
       return ModU8;
     case "A":
       return AddU8;
+    case "O":
+      return SubU8;
     default:
       throw new ConversionError(`unknown SKI terminal: ${sym}`);
   }
@@ -117,6 +120,7 @@ const toCore = (term: DeBruijnTerm): CoreTerm => {
       if (term.name === "eqU8") return { kind: "terminal", expr: EqU8 };
       if (term.name === "ltU8") return { kind: "terminal", expr: LtU8 };
       if (term.name === "addU8") return { kind: "terminal", expr: AddU8 };
+      if (term.name === "subU8") return { kind: "terminal", expr: SubU8 };
       if (term.name === "divU8") return { kind: "terminal", expr: DivU8 };
       if (term.name === "modU8") return { kind: "terminal", expr: ModU8 };
       throw new ConversionError(`free variable detected: ${term.name}`);

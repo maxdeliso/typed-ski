@@ -18,5 +18,5 @@ data Core =
   | Cr_App Core Core
   | Cr_Lam (List U8) Core
   | Cr_Native Terminal
-  | Cr_Ctor Nat Nat Nat
+  | Cr_Ctor U8 U8 U8
   | Cr_Match Core (List Core)

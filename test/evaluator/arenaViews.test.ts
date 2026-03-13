@@ -8,7 +8,10 @@ import {
   getSym,
   validateAndRebuildViews,
 } from "../../lib/evaluator/arenaViews.ts";
-import { SabHeaderField } from "../../lib/evaluator/arenaHeader.generated.ts";
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "../../lib/evaluator/arenaHeader.generated.ts";
 
 /** AoS node stride (must match arenaViews / C ArenaNode). */
 const NODE_STRIDE = 32;
@@ -26,8 +29,11 @@ Deno.test("arenaViews - coverage", async (t) => {
     "validateAndRebuildViews handles missing views or memory",
     () => {
       expect(validateAndRebuildViews(null, undefined, {})).to.be.null;
+      const buffer = new ArrayBuffer(0);
       const dummyViews = {
-        buffer: new ArrayBuffer(0),
+        buffer,
+        u8: new Uint8Array(buffer),
+        u32: new Uint32Array(buffer),
         baseAddr: 0,
         offsetNodes: 0,
         capacity: 10,
@@ -40,8 +46,11 @@ Deno.test("arenaViews - coverage", async (t) => {
 
   await t.step("validateAndRebuildViews handles missing baseAddr", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
+    const buffer = new ArrayBuffer(0);
     const dummyViews = {
-      buffer: new ArrayBuffer(0),
+      buffer,
+      u8: new Uint8Array(buffer),
+      u32: new Uint32Array(buffer),
       baseAddr: 0,
       offsetNodes: 0,
       capacity: 10,
@@ -75,6 +84,8 @@ Deno.test("arenaViews - coverage", async (t) => {
     }
     const views: ArenaViews = {
       buffer: buf,
+      u8,
+      u32,
       baseAddr: 0,
       offsetNodes: 0,
       capacity,
@@ -94,10 +105,14 @@ Deno.test("arenaViews - coverage", async (t) => {
   });
 
   await t.step("validateAndRebuildViews rebuilds when capacity changed", () => {
-    const headerSize = 18 * 4;
+    const headerSize = SABHEADER_HEADER_SIZE_U32 * 4;
     const baseAddr = 64;
     const buf = new ArrayBuffer(headerSize + 256);
-    const headerView = new Uint32Array(buf, baseAddr, 18);
+    const headerView = new Uint32Array(
+      buf,
+      baseAddr,
+      SABHEADER_HEADER_SIZE_U32,
+    );
     headerView[SabHeaderField.CAPACITY] = 5;
     headerView[SabHeaderField.OFFSET_NODES] = 0;
     headerView[SabHeaderField.OFFSET_NODES + 1] = 0;
@@ -117,10 +132,14 @@ Deno.test("arenaViews - coverage", async (t) => {
   await t.step(
     "getOrBuildArenaViews returns fresh views when cache stale",
     () => {
-      const headerSize = 18 * 4;
+      const headerSize = SABHEADER_HEADER_SIZE_U32 * 4;
       const baseAddr = 64;
       const buf = new ArrayBuffer(headerSize + 256);
-      const headerView = new Uint32Array(buf, baseAddr, 18);
+      const headerView = new Uint32Array(
+        buf,
+        baseAddr,
+        SABHEADER_HEADER_SIZE_U32,
+      );
       headerView[SabHeaderField.CAPACITY] = 4;
       headerView[SabHeaderField.OFFSET_NODES] = 0;
       headerView[SabHeaderField.OFFSET_NODES + 1] = 0;

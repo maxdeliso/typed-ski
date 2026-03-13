@@ -1,0 +1,43 @@
+module Telemetry
+
+import Prelude List
+import Prelude Result
+import Prelude U8
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude map
+import Prelude matchList
+import Lexer tokenize
+import Parser parseProgram
+import Parser D_Def
+import Parser Decl
+import Avl Avl
+import Avl empty
+import Avl lookup
+import Avl toListEntries
+import Bridge elaborateProgram
+import Lowering Lower
+import Lowering lowerToComb
+import Unparse Comb
+
+export phase1
+export phase2
+export phase3
+export phase4
+
+poly phase1 = \source : List U8 => tokenize source
+
+poly phase2 = \toks : List (Pair (List U8) (List U8)) => parseProgram toks
+
+poly phase3 = \decls : List Decl => elaborateProgram (empty [List U8] [Lower]) decls
+
+poly phase4 = \globals : Avl (List U8) Lower =>
+    let entries = toListEntries [List U8] [Lower] globals in
+    map [Pair (List U8) Lower] [Pair (List U8) Comb]
+      (\entry : Pair (List U8) Lower =>
+        MkPair [List U8] [Comb]
+          (fst [List U8] [Lower] entry)
+          (lowerToComb (snd [List U8] [Lower] entry)))
+      entries

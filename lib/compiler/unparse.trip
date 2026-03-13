@@ -33,12 +33,15 @@ export T_LtU8
 export T_DivU8
 export T_ModU8
 export T_AddU8
+export T_SubU8
 export T_Byte
 export Comb
 export C_Term
 export C_App
 export terminalBytes
 export unparseCombinator
+export terminalTag
+export terminalByteValue
 
 data Terminal =
   | T_S
@@ -56,6 +59,7 @@ data Terminal =
   | T_DivU8
   | T_ModU8
   | T_AddU8
+  | T_SubU8
   | T_Byte U8
 
 data Comb =
@@ -79,6 +83,7 @@ poly terminalBytes = \t : Terminal =>
     | T_DivU8 => "D"
     | T_ModU8 => "M"
     | T_AddU8 => "A"
+    | T_SubU8 => "O"
     | T_Byte b => append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
   }
 
@@ -101,3 +106,45 @@ poly rec u8ToDigits = \n : U8 =>
         (u8ToDigits (divU8 n #u8(10)))
         (cons [U8] (addU8 (modU8 n #u8(10)) #u8(48)) (nil [U8]))
     )
+
+poly terminalTag = \t : Terminal =>
+  match t [U8] {
+    | T_S => #u8(0)
+    | T_K => #u8(1)
+    | T_I => #u8(2)
+    | T_B => #u8(3)
+    | T_C => #u8(4)
+    | T_SPrime => #u8(5)
+    | T_BPrime => #u8(6)
+    | T_CPrime => #u8(7)
+    | T_WriteOne => #u8(8)
+    | T_ReadOne => #u8(9)
+    | T_EqU8 => #u8(10)
+    | T_LtU8 => #u8(11)
+    | T_DivU8 => #u8(12)
+    | T_ModU8 => #u8(13)
+    | T_AddU8 => #u8(14)
+    | T_SubU8 => #u8(15)
+    | T_Byte _ => #u8(16)
+  }
+
+poly terminalByteValue = \t : Terminal =>
+  match t [U8] {
+    | T_S => #u8(0)
+    | T_K => #u8(0)
+    | T_I => #u8(0)
+    | T_B => #u8(0)
+    | T_C => #u8(0)
+    | T_SPrime => #u8(0)
+    | T_BPrime => #u8(0)
+    | T_CPrime => #u8(0)
+    | T_WriteOne => #u8(0)
+    | T_ReadOne => #u8(0)
+    | T_EqU8 => #u8(0)
+    | T_LtU8 => #u8(0)
+    | T_DivU8 => #u8(0)
+    | T_ModU8 => #u8(0)
+    | T_AddU8 => #u8(0)
+    | T_SubU8 => #u8(0)
+    | T_Byte b => b
+  }

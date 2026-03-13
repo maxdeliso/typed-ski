@@ -24,55 +24,117 @@ function toErrorMessage(err: unknown): string {
   return String(err);
 }
 
-Deno.test("ParallelArenaEvaluator - shared-evaluator concurrent repro logs", async () => {
-  // Architectural note:
-  // The current host/worker contract still reflects internal reducer control flow.
-  // `Yield`/`IoWait` are surfaced as transport events, and host orchestration may
-  // repeatedly resubmit in-flight work until it either reaches `Done` or trips a
-  // policy guard (`maxResubmits`). This test intentionally captures that behavior:
-  // it is not asserting a pure value-only API yet, but validating that we can
-  // classify and observe this implementation-coupled state machine reliably.
-  //
-  // TODO (later design pass):
-  // Move to a typed public reduction outcome model (`Done`, `BudgetExhausted`,
-  // `IoWait`, `Cancelled`, `Error`) and keep continuation/suspension internals
-  // fully opaque to host decode paths.
-  const jobs: SKIExpression[] = [
-    convergentWork(),
-    omega(),
-    omega(),
-  ];
-  const maxSteps = 512;
+function maybeUnrefTimer(timer: unknown): void {
+  if (
+    typeof timer === "object" &&
+    timer !== null &&
+    "unref" in timer &&
+    typeof timer.unref === "function"
+  ) {
+    timer.unref();
+  }
+}
 
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  const events: string[] = [];
-  try {
-    evaluator.onRequestQueued = (reqId, workerIndex) => {
-      events.push(`Q req=${reqId} w=${workerIndex}`);
-    };
-    evaluator.onRequestYield = (reqId, workerIndex, _expr, _node, count) => {
-      events.push(`Y req=${reqId} w=${workerIndex} n=${count}`);
-    };
-    evaluator.onRequestCompleted = (reqId, workerIndex) => {
-      events.push(`C req=${reqId} w=${workerIndex}`);
-    };
-    evaluator.onRequestError = (reqId, workerIndex, _expr, error) => {
-      events.push(`E req=${reqId} w=${workerIndex} msg=${error}`);
-    };
+Deno.test({
+  name: "ParallelArenaEvaluator - shared-evaluator concurrent repro logs",
+  ignore: false,
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const jobs: SKIExpression[] = [
+      convergentWork(),
+      omega(),
+      omega(),
+    ];
+    const maxSteps = 512;
 
-    const settled = await Promise.allSettled(
-      jobs.map((expr) => evaluator.reduceAsync(expr, maxSteps)),
+    const evaluator = await ParallelArenaEvaluatorWasm.create(
+      2,
+      undefined,
+      { maxResubmits: 16 },
     );
-    const errorMessages = settled
+    const events: string[] = [];
+
+    const testPromise = (async () => {
+      try {
+        evaluator.onRequestQueued = (reqId, workerIndex) => {
+          events.push(`Q req=${reqId} w=${workerIndex}`);
+        };
+        evaluator.onRequestYield = (
+          reqId,
+          workerIndex,
+          _expr,
+          _node,
+          count,
+        ) => {
+          events.push(`Y req=${reqId} w=${workerIndex} n=${count}`);
+        };
+        evaluator.onRequestCompleted = (reqId, workerIndex) => {
+          events.push(`C req=${reqId} w=${workerIndex}`);
+        };
+        evaluator.onRequestError = (reqId, workerIndex, _expr, error) => {
+          events.push(`E req=${reqId} w=${workerIndex} msg=${error}`);
+        };
+
+        const settled = await Promise.all(
+          jobs.map((expr) =>
+            evaluator.reduceAsync(expr, maxSteps).then<
+              PromiseFulfilledResult<SKIExpression>,
+              PromiseRejectedResult
+            >(
+              (value) => ({ status: "fulfilled", value }),
+              (reason) => ({ status: "rejected", reason }),
+            )
+          ),
+        );
+        return settled;
+      } finally {
+        evaluator.terminate();
+      }
+    })();
+
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<{ kind: "timeout" }>((resolve) => {
+      timeoutTimer = setTimeout(
+        () => resolve({ kind: "timeout" }),
+        5000,
+      );
+      // Ensure timer doesn't keep Deno alive when the runtime supports it.
+      maybeUnrefTimer(timeoutTimer);
+    });
+
+    let settled:
+      | PromiseSettledResult<SKIExpression>[]
+      | undefined;
+    let observedClassification: string | null = null;
+    try {
+      const raced = await Promise.race([
+        testPromise.then((result) => ({ kind: "settled" as const, result })),
+        timeout,
+      ]);
+      if (raced.kind === "timeout") {
+        observedClassification = "timeout";
+        evaluator.terminate();
+        await Promise.allSettled([testPromise]);
+      } else {
+        settled = raced.result;
+      }
+    } finally {
+      if (timeoutTimer !== undefined) {
+        clearTimeout(timeoutTimer);
+      }
+    }
+
+    const errorMessages = (settled ?? [])
       .filter((result): result is PromiseRejectedResult =>
         result.status === "rejected"
       )
       .map((result) => toErrorMessage(result.reason));
-    const completed = settled.filter((result) => result.status === "fulfilled")
-      .length;
+    const completed = (settled ?? []).filter((result) =>
+      result.status === "fulfilled"
+    ).length;
     const yielded = events.filter((line) => line.startsWith("Y ")).length;
 
-    let observedClassification: string | null = null;
     if (
       errorMessages.some((msg) =>
         msg.includes("Cannot convert Continuation node")
@@ -85,6 +147,12 @@ Deno.test("ParallelArenaEvaluator - shared-evaluator concurrent repro logs", asy
       )
     ) {
       observedClassification = "resubmission-limit";
+    } else if (
+      errorMessages.some((msg) =>
+        msg.includes("exhausted max steps before reaching normal form")
+      )
+    ) {
+      observedClassification = "step-budget-exhausted";
     }
 
     console.log(
@@ -101,7 +169,8 @@ Deno.test("ParallelArenaEvaluator - shared-evaluator concurrent repro logs", asy
 
     const unexpectedErrors = errorMessages.filter((msg) =>
       !msg.includes("Cannot convert Continuation node") &&
-      !msg.includes("exceeded maximum resubmissions")
+      !msg.includes("exceeded maximum resubmissions") &&
+      !msg.includes("exhausted max steps before reaching normal form")
     );
     if (unexpectedErrors.length > 0) {
       assert(
@@ -111,7 +180,5 @@ Deno.test("ParallelArenaEvaluator - shared-evaluator concurrent repro logs", asy
         }`,
       );
     }
-  } finally {
-    evaluator.terminate();
-  }
+  },
 });

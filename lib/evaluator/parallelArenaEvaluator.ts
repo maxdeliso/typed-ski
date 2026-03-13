@@ -9,12 +9,12 @@
  */
 
 import type { SKIExpression } from "../ski/expression.ts";
+import { SKITerminalSymbol } from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
 import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";
-import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
 import { type ArenaRingStatsSnapshot, RingStats } from "./io/ringStats.ts";
 import { CompletionPoller } from "./parallel/completionPoller.ts";
 import {
@@ -23,6 +23,7 @@ import {
   type RequestTrackerHooks,
 } from "./parallel/requestTracker.ts";
 import { WorkerManager } from "./parallel/workerManager.ts";
+import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
 
 // Re-export for external use
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
@@ -81,10 +82,12 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   private readonly ioManager: IoManager;
   private readonly completionPoller: CompletionPoller;
   private readonly ringStats: RingStats;
+  private readonly inFlightReductions = new Map<string, Promise<number>>();
 
   // State
   private aborted = false;
   private abortError: Error | null = null;
+  private workersTerminated = false;
   private readonly activeTimeouts = new Set<() => void>();
 
   private constructor(
@@ -150,237 +153,56 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     if (this.aborted) return;
     this.aborted = true;
     this.abortError = err;
-    // Clear all active timeouts to prevent leaks
+    this.completionPoller.stop();
     for (const cancel of this.activeTimeouts) {
       cancel();
     }
     this.activeTimeouts.clear();
+    this.terminateWorkers();
     this.requestTracker.abortAll(err);
-    this.ioManager.cleanup();
-    this.completionPoller.stop();
+  }
+
+  private terminateWorkers(): void {
+    if (this.workersTerminated) return;
+    this.workersTerminated = true;
     WorkerManager.terminate(this.workers);
   }
 
   /**
-   * Workbench UI helper.
-   * Returns per-worker pending counts (best-effort logical assignment).
+   * Factory method to create and initialize a parallel evaluator.
    */
-  getPendingCounts(): number[] {
-    return this.requestTracker.getPendingCounts();
-  }
-
-  /**
-   * Returns the total number of pending requests.
-   * This is the authoritative count based on the pending Map.
-   */
-  getTotalPending(): number {
-    return this.requestTracker.getTotalPending();
-  }
-
-  getRingStatsSnapshot(): ArenaRingStatsSnapshot {
-    return this.ringStats.getSnapshot(
-      this.requestTracker.getTotalPending(),
-      this.requestTracker.getTotalCompleted(),
-    );
-  }
-
-  /**
-   * Self-test to validate that the arena header and IO rings are correctly configured.
-   * This catches issues like out-of-sync header files early.
-   */
-  private validateIoRingsConfiguration(): void {
-    validateIoRingsConfiguration(this.$, this.memory);
-  }
-
-  async readStdout(maxBytes = 4096): Promise<Uint8Array> {
-    return await this.ioManager.readStdout(maxBytes);
-  }
-
-  async writeStdin(bytes: Uint8Array): Promise<number> {
-    return await this.ioManager.writeStdin(bytes);
-  }
-
-  /**
-   * Submit an already-allocated arena node id to the worker pool and await the resulting arena node id.
-   *
-   * Notes:
-   * - The number of reduction steps is specified per-request via `maxSteps`.
-   * - This is the primitive used by higher-level helpers (e.g. reduceAsync) and tooling (e.g. genForest).
-   */
-  async reduceArenaNodeIdAsync(
-    arenaNodeId: number,
-    expr?: SKIExpression,
-    maxSteps: number = 0xffffffff,
-  ): Promise<number> {
-    if (this.aborted) {
-      throw this.abortError ?? new Error("Evaluator terminated");
-    }
-    const ex = this.$ as unknown as {
-      hostSubmit?: (nodeId: number, reqId: number, maxSteps: number) => number;
-      hostPullV2?: () => bigint;
-    };
-    if (!ex.hostPullV2 || !ex.hostSubmit) {
-      throw new Error("hostSubmit/hostPullV2 exports are required");
-    }
-
-    const nWorkers = Math.max(1, this.workers.length);
-    const reqId = this.requestTracker.createRequest(nWorkers, expr);
-
-    // Ensure poller is started
-    this.completionPoller.start(ex.hostPullV2);
-
-    // Check for stashed completion (race condition handling)
-    const stashed = this.requestTracker.getStashedCompletion(reqId);
-    if (stashed !== undefined) {
-      return stashed;
-    }
-
-    // Register promise resolver
-    const resultPromise = new Promise<number>((resolve, reject) => {
-      this.requestTracker.markPending(reqId, resolve, reject);
-    });
-
-    try {
-      // Non-blocking submit: retry until queued, with a fixed cap on retries.
-      // 0 = ok, 1 = full, 2 = not connected
-      // maxSteps is strictly passed as Uint32
-      let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
-      let fullStreak = 0;
-      while (rc === 1) {
-        this.ringStats.recordSubmitFull();
-        if (this.aborted) {
-          throw (this.abortError ?? new Error("Evaluator terminated"));
-        }
-        // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
-        // Back off to a macrotask so we don't peg a CPU core.
-        fullStreak++;
-        if (fullStreak < 512) {
-          await new Promise<void>((r) => queueMicrotask(r));
-        } else {
-          if (this.aborted) {
-            throw (this.abortError ?? new Error("Evaluator terminated"));
-          }
-          const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
-          this.activeTimeouts.add(cancel);
-          try {
-            await promise;
-          } finally {
-            this.activeTimeouts.delete(cancel);
-          }
-          if (this.aborted) {
-            throw (this.abortError ?? new Error("Evaluator terminated"));
-          }
-        }
-        // retry also includes maxSteps
-        rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
-      }
-      if (rc !== 0) {
-        if (rc === 2) this.ringStats.recordSubmitNotConnected();
-        throw new Error(`hostSubmit failed with code ${rc}`);
-      }
-      this.ringStats.recordSubmitOk();
-
-      return await resultPromise;
-    } catch (err) {
-      if (err instanceof Error) {
-        this.requestTracker.markError(reqId, err);
-      } else {
-        this.requestTracker.markError(reqId, new Error(String(err)));
-      }
-      // Await the now-rejected resultPromise to ensure it is handled
-      return await resultPromise;
-    }
-  }
-
-  private static validateSabExports(
-    exports: ArenaWasmExports,
-  ): {
-    exports: ArenaWasmExports;
-    connectArena: (ptr: number) => number;
-    debugLockState: () => number;
-    getArenaMode: () => number;
-    debugGetArenaBaseAddr: () => number;
-  } {
-    const {
-      debugLockState,
-      getArenaMode,
-      debugGetArenaBaseAddr,
-    } = exports;
-
-    if (!exports.initArena || typeof exports.initArena !== "function") {
-      throw new Error(
-        "initArena export is required but missing. SharedArrayBuffer support is required for ParallelArenaEvaluatorWasm.",
-      );
-    }
-    if (!exports.connectArena || typeof exports.connectArena !== "function") {
-      throw new Error(
-        "connectArena export is required but missing.",
-      );
-    }
-    if (!debugLockState || typeof debugLockState !== "function") {
-      throw new Error("debugLockState export is required but missing");
-    }
-    if (!getArenaMode || typeof getArenaMode !== "function") {
-      throw new Error("getArenaMode export is required but missing");
-    }
-    if (
-      !debugGetArenaBaseAddr ||
-      typeof debugGetArenaBaseAddr !== "function"
-    ) {
-      throw new Error(
-        "debugGetArenaBaseAddr export is required but missing",
-      );
-    }
-
-    return {
-      exports,
-      connectArena: exports.connectArena as (ptr: number) => number,
-      debugLockState,
-      getArenaMode,
-      debugGetArenaBaseAddr,
-    };
-  }
-
   static async create(
-    workerCount = navigator.hardwareConcurrency || 4,
+    workerCount: number = 4,
     verbose = false,
     options: ParallelArenaEvaluatorOptions = {},
   ): Promise<ParallelArenaEvaluatorWasm> {
+    if (!Number.isInteger(workerCount) || workerCount < 1) {
+      throw new Error(
+        `ParallelArenaEvaluatorWasm.create requires at least one worker; got ${workerCount}`,
+      );
+    }
+
     if (verbose) {
       console.error(
-        `[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: ${workerCount}, navigator.hardwareConcurrency: ${navigator.hardwareConcurrency}`,
+        `[DEBUG] ParallelArenaEvaluatorWasm.create workerCount=${workerCount}`,
       );
     }
-    if (workerCount < 1) {
-      throw new Error(
-        "ParallelArenaEvaluatorWasm requires at least one worker",
-      );
-    }
-    if (
-      options.maxResubmits !== undefined &&
-      (!Number.isInteger(options.maxResubmits) || options.maxResubmits < 0)
-    ) {
-      throw new Error(
-        `maxResubmits must be an integer >= 0, got ${options.maxResubmits}`,
-      );
-    }
-    const INITIAL_CAP = 1 << 20; // 1M nodes
-    const MAX_PAGES = 65536; // 4GB maximum
-    const INITIAL_ARENA_PAGES = 1024; // ~64MB
-    const sharedMemory = new WebAssembly.Memory({
-      initial: INITIAL_ARENA_PAGES,
-      maximum: MAX_PAGES,
-      shared: true,
-    });
-
-    // NOTE: keep stdout clean for CLI tools (e.g. genForest) that stream JSONL.
-    // If you want this, run with `--verbose` at the CLI layer instead.
 
     if (typeof SharedArrayBuffer === "undefined") {
       throw new Error(
         "SharedArrayBuffer is unavailable; ensure the page is cross-origin isolated (COOP+COEP).",
       );
     }
+
+    const INITIAL_CAP = 1 << 20; // 1M nodes
+    const MAX_PAGES = 65536; // 4GB maximum
+    const INITIAL_ARENA_PAGES = 1024; // ~64MB
+
+    const sharedMemory = new WebAssembly.Memory({
+      initial: INITIAL_ARENA_PAGES,
+      maximum: MAX_PAGES,
+      shared: true,
+    });
 
     const sharedBuffer = sharedMemory.buffer;
     if (!(sharedBuffer instanceof SharedArrayBuffer)) {
@@ -391,24 +213,24 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
     const bytes = await getReleaseWasmBytes();
     const wasmModule = await WebAssembly.compile(bytes);
+    let worker_id = 64; // MAX_WORKERS
     const sharedInstance = await WebAssembly.instantiate(wasmModule, {
       env: {
         memory: sharedMemory,
+        wasm_get_worker_id: () => worker_id,
+        wasm_set_worker_id: (id: number) => {
+          worker_id = id;
+        },
       },
     } as WebAssembly.Imports);
-    const exports = sharedInstance.exports as unknown as ArenaWasmExports;
+    const exports = sharedInstance.exports as unknown as WebAssembly.Exports;
 
     // Validate exports
-    const validated = this.validateSabExports(exports);
+    const validated = ArenaEvaluatorWasm.normalizeExports(exports);
 
     const arenaPointer = (() => {
-      const init = validated.exports.initArena!;
+      const init = validated.initArena!;
       const result = init(INITIAL_CAP);
-      // initArena return codes:
-      // - 0: Invalid capacity (not power of 2, or out of valid range)
-      // - 1: Out of memory (OOM)
-      // - 2: Bounds check failure (allocation logic error)
-      // - Any other value: Success (returns the arena header address)
       if (result === 0) {
         throw new Error("initArena failed: invalid capacity or parameters");
       }
@@ -431,14 +253,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     await WorkerManager.connectWorkersToArena(workers, arenaPointer);
 
     const evaluator = new ParallelArenaEvaluatorWasm(
-      exports,
+      validated,
       sharedMemory,
       workers,
       options,
     );
 
     // Run self-test to validate IO rings configuration
-    // This catches header/enum mismatches early
     evaluator.validateIoRingsConfiguration();
 
     return evaluator;
@@ -446,19 +267,143 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
   /**
    * Offload reduction to WASM workers via the shared SQ/CQ rings (io_uring-style).
-   *
-   * Contract:
-   * - **Submit (SQ)**: host enqueues `{ nodeId, reqId, maxSteps }` using `hostSubmit`.
-   * - **Complete (CQ)**: workers dequeue, reduce for the request-specific `maxSteps`, then enqueue
-   *   `{ nodeId, reqId, eventKind }` where `eventKind` is one of:
-   *   `0=Done`, `1=Yield`, `2=IoWait`, `3=Error`.
-   * - **Polling**: host drains CQ via `hostPullV2()`, which returns a packed bigint:
-   *   `-1n` if empty, otherwise:
-   *   - bits `63..32`: `reqId`
-   *   - bits `31..30`: `eventKind`
-   *   - bits `29..0`: `nodeId`
-   *   Results may arrive out-of-order; `reqId` is used to match completions to callers.
    */
+  async reduceArenaNodeIdAsync(
+    arenaNodeId: number,
+    expr?: SKIExpression,
+    maxSteps: number = 0xffffffff,
+  ): Promise<number> {
+    const normalizedNodeId = arenaNodeId >>> 0;
+    const normalizedMaxSteps = maxSteps >>> 0;
+
+    if (expr && !containsIoTerminals(expr)) {
+      const inFlightKey = `${normalizedNodeId}:${normalizedMaxSteps}`;
+      const existing = this.inFlightReductions.get(inFlightKey);
+      if (existing) {
+        return await existing;
+      }
+
+      const sharedPromise = this.submitReduceArenaNodeIdAsync(
+        normalizedNodeId,
+        expr,
+        normalizedMaxSteps,
+      );
+      this.inFlightReductions.set(inFlightKey, sharedPromise);
+
+      try {
+        return await sharedPromise;
+      } finally {
+        if (this.inFlightReductions.get(inFlightKey) === sharedPromise) {
+          this.inFlightReductions.delete(inFlightKey);
+        }
+      }
+    }
+
+    return await this.submitReduceArenaNodeIdAsync(
+      normalizedNodeId,
+      expr,
+      normalizedMaxSteps,
+    );
+  }
+
+  private async submitReduceArenaNodeIdAsync(
+    arenaNodeId: number,
+    expr?: SKIExpression,
+    maxSteps: number = 0xffffffff,
+  ): Promise<number> {
+    if (this.aborted) {
+      throw this.abortError ?? new Error("Evaluator terminated");
+    }
+    const ex = this.$;
+    if (!ex.hostPullV2 || !ex.hostSubmit) {
+      throw new Error("hostSubmit/hostPullV2 exports are required");
+    }
+
+    const nWorkers = Math.max(1, this.workers.length);
+    const reqId = this.requestTracker.createRequest(nWorkers, expr);
+
+    const resultPromise = new Promise<number>((resolve, reject) => {
+      // markPending internally checks for stashed completions
+      this.requestTracker.markPending(reqId, resolve, reject);
+    });
+
+    // Ensure poller is started
+    this.completionPoller.start(ex.hostPullV2);
+
+    try {
+      // Non-blocking submit: retry until queued, with a fixed cap on retries.
+      let rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
+      let fullStreak = 0;
+      while (rc === 1) {
+        this.ringStats.recordSubmitFull();
+        if (this.aborted) {
+          throw (this.abortError ?? new Error("Evaluator terminated"));
+        }
+        fullStreak++;
+        if (fullStreak < 512) {
+          await new Promise<void>((r) => queueMicrotask(r));
+        } else {
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
+          const { promise, cancel } = sleep(0);
+          this.activeTimeouts.add(cancel);
+          try {
+            await promise;
+          } finally {
+            this.activeTimeouts.delete(cancel);
+          }
+          if (this.aborted) {
+            throw (this.abortError ?? new Error("Evaluator terminated"));
+          }
+        }
+        rc = ex.hostSubmit(arenaNodeId >>> 0, reqId, maxSteps >>> 0);
+      }
+      if (rc !== 0) {
+        if (rc === 2) this.ringStats.recordSubmitNotConnected();
+        throw new Error(`hostSubmit failed with code ${rc}`);
+      }
+
+      this.ringStats.recordSubmitOk();
+
+      return await resultPromise;
+    } catch (err) {
+      if (err instanceof Error) {
+        this.requestTracker.markError(reqId, err);
+      } else {
+        this.requestTracker.markError(reqId, new Error(String(err)));
+      }
+      return await resultPromise;
+    }
+  }
+
+  getRingStatsSnapshot(): ArenaRingStatsSnapshot {
+    return this.ringStats.getSnapshot(
+      this.requestTracker.getTotalPending(),
+      this.requestTracker.getTotalCompleted(),
+    );
+  }
+
+  getPendingCounts(): number[] {
+    return this.requestTracker.getPendingCounts();
+  }
+
+  getTotalPending(): number {
+    return this.requestTracker.getTotalPending();
+  }
+
+  validateIoRingsConfiguration(): void {
+    validateIoRingsConfiguration(this.$, this.memory);
+  }
+
+  async readStdout(maxBytes = 4096): Promise<Uint8Array> {
+    return await this.ioManager.readStdout(maxBytes);
+  }
+
+  async writeStdin(bytes: Uint8Array): Promise<number> {
+    return await this.ioManager.writeStdin(bytes);
+  }
+
   async reduceAsync(
     expr: SKIExpression,
     max = 0xffffffff,
@@ -472,10 +417,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     return this.fromArena(resultArenaNodeId);
   }
 
-  /**
-   * Synchronous reduce is not supported in the parallel evaluator.
-   * Call `reduceAsync` instead.
-   */
   override reduce(_expr: SKIExpression, _max = 0xffffffff): SKIExpression {
     throw new Error(
       "ParallelArenaEvaluatorWasm.reduce is disabled; use reduceAsync instead.",
@@ -484,5 +425,26 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
   terminate() {
     this.abortAll(new Error("Evaluator terminated"));
+    this.terminateWorkers();
   }
+}
+
+function containsIoTerminals(expr: SKIExpression): boolean {
+  const stack = [expr];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.kind === "terminal") {
+      if (
+        current.sym === SKITerminalSymbol.ReadOne ||
+        current.sym === SKITerminalSymbol.WriteOne
+      ) {
+        return true;
+      }
+      continue;
+    }
+    if (current.kind === "non-terminal") {
+      stack.push(current.rgt, current.lft);
+    }
+  }
+  return false;
 }

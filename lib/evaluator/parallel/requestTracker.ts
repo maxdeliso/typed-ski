@@ -17,7 +17,7 @@ import type { SKIExpression } from "../../ski/expression.ts";
  *   many times before converging.
  * - A very low cap (for example 10) prematurely rejects valid evaluations.
  */
-export const DEFAULT_MAX_RESUBMITS = 10_000;
+export const DEFAULT_MAX_RESUBMITS = 1000;
 
 /**
  * Error thrown when a work unit exceeds the maximum number of resubmissions.
@@ -79,7 +79,7 @@ export interface RequestTrackerHooks {
  * Manages request lifecycle for parallel evaluation.
  */
 export class RequestTracker {
-  private nextRequestId = 1;
+  private nextRequestId = 0;
   private readonly pending = new Map<number, RequestResolver>();
   // Completions that arrive before their Promise resolver is registered.
   private readonly stashedCompletions = new Map<number, number>();
@@ -114,7 +114,7 @@ export class RequestTracker {
     nWorkers: number,
     expr?: SKIExpression,
   ): number {
-    const reqId = this.nextRequestId++ >>> 0;
+    const reqId = (this.nextRequestId++ % 0x7fffffff) + 1;
 
     // Track logical worker slot for UI (round-robin assignment).
     if (this.workerPendingCounts.length !== nWorkers) {
@@ -156,6 +156,10 @@ export class RequestTracker {
     const existing = this.stashedCompletions.get(reqId);
     if (existing !== undefined) {
       this.stashedCompletions.delete(reqId);
+      // Decrement counter since it was already completed
+      const workerIndex = this.getWorkerIndex(reqId);
+      this.decrementWorkerPending(workerIndex);
+      this.cleanupRequest(reqId);
       resolve(existing);
       return;
     }
@@ -183,6 +187,7 @@ export class RequestTracker {
     } else {
       // Completion can race with registration, or belong to a caller that already
       // gave up. Stash it so a future awaiter can still observe it.
+
       this.stashedCompletions.set(reqId, nodeId);
     }
   }

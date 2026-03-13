@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-run
+#!/usr/bin/env -S deno run -A
 
 /**
  * SKI Evaluation Forest Generator
@@ -7,10 +7,10 @@
  * Outputs JSONL format with evaluation paths and global arena information.
  */
 
-import { apply, unparseSKI } from "../lib/ski/expression.ts";
+import { unparseSKI } from "../lib/ski/expression.ts";
+import { apply } from "../lib/ski/expression.ts";
 import { I, K, S } from "../lib/ski/terminal.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
-import { ArenaKind, ArenaSym } from "../lib/shared/arena.ts";
 import {
   ParallelArenaEvaluatorWasm,
   ResubmissionLimitExceededError,
@@ -201,169 +201,32 @@ type EvalResult = {
   stepsTaken: number;
 };
 
-function initEvalState(
-  sourceArenaId: number,
-): {
-  source: number;
-  currentId: number;
-  seenIds: Set<number>;
-  historyQueue: number[];
-  steps: EvaluationStep[];
-  reachedNormalForm: boolean;
-  done: boolean;
-} {
-  return {
-    source: sourceArenaId,
-    currentId: sourceArenaId,
-    seenIds: new Set<number>([sourceArenaId]),
-    historyQueue: [sourceArenaId],
-    steps: [],
-    reachedNormalForm: false,
-    done: false,
-  };
-}
-
-/**
- * Returns true if there exists *any* reducible SKI redex anywhere in the expression:
- * - I x
- * - K x y
- * - S x y z
- *
- * This matters because with hash-consing, a reduction step can produce an
- * expression structurally identical to the input (e.g. Ω), which yields
- * `nextId === currentId` even though the term is still reducible.
- *
- * NOTE: We only call this in the rare `nextId === currentId` case, so an O(size)
- * scan is acceptable.
- */
-function hasAnyRedex(
+async function evaluateParallel(
   evaluator: ParallelArenaEvaluatorWasm,
-  nodeId: number,
-): boolean {
-  const kindOf = (id: number) => evaluator.$.kindOf(id) >>> 0;
-  const leftOf = (id: number) => evaluator.$.leftOf(id) >>> 0;
-  const rightOf = (id: number) => evaluator.$.rightOf(id) >>> 0;
-  const symOf = (id: number) => evaluator.$.symOf(id) >>> 0;
-
-  // Pre-order traversal: leftmost nodes first.
-  const stack: number[] = [nodeId >>> 0];
-  const seen = new Set<number>();
-  const MAX_VISITED = 250_000;
-
-  const isRedexAt = (root: number): boolean => {
-    // Count args by walking the application spine.
-    let cur = root >>> 0;
-    let args = 0;
-    for (;;) {
-      const kind = kindOf(cur);
-      if (kind !== (ArenaKind.NonTerm as number)) break;
-      args++;
-      cur = leftOf(cur);
-    }
-    if (kindOf(cur) !== (ArenaKind.Terminal as number)) return false;
-    const sym = symOf(cur);
-    if (sym === (ArenaSym.I as number)) return args >= 1;
-    if (sym === (ArenaSym.K as number)) return args >= 2;
-    if (sym === (ArenaSym.S as number)) return args >= 3;
-    return false;
-  };
-
-  while (stack.length > 0) {
-    const cur = stack.pop()! >>> 0;
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-    if (seen.size > MAX_VISITED) {
-      // Defensive: if we ever hit pathological graphs, treat as "has redex"
-      // so we don't incorrectly claim normal form.
-      return true;
-    }
-
-    const kind = kindOf(cur);
-    if (kind === (ArenaKind.NonTerm as number)) {
-      if (isRedexAt(cur)) return true;
-      // Pre-order: push right then left so left is visited first.
-      stack.push(rightOf(cur));
-      stack.push(leftOf(cur));
-    } else {
-      // Terminal/Continuation/Suspension: no redex rooted *here*.
-      // Note: Continuation/Suspension can contain pointers; but for CLI forest output
-      // we're only evaluating expression roots, and we don't expect these in the graph.
-      continue;
-    }
-  }
-
-  return false;
-}
-
-async function evaluateBatchParallel(
-  evaluator: ParallelArenaEvaluatorWasm,
-  sourceArenaId: number,
+  initialId: number,
   maxSteps: number,
-  onStep?: (stepsTaken: number) => void,
 ): Promise<Omit<EvalResult, "expr">> {
-  const MAX_HISTORY_SIZE = 10000;
-  const MAX_PATH_STEPS = 10000;
-
-  const st = initEvalState(sourceArenaId);
-  let stepsTaken = 0;
+  let finalId = initialId;
 
   try {
-    for (let step = 0; step < maxSteps; step++) {
-      if (st.done) break;
-      // Each call does exactly one reduction step
-      const nextId = await evaluator.reduceArenaNodeIdAsync(
-        st.currentId,
-        undefined,
-        1,
-      );
-      stepsTaken++;
-      onStep?.(stepsTaken);
-
-      if (nextId === st.currentId) {
-        // "No change" can mean either:
-        // - true normal form (no redex)
-        // - a self-reproducing redex (e.g. Ω) where the reduced result is structurally identical
-        //   due to hash-consing, so the arena node id is unchanged.
-        st.done = true;
-        st.reachedNormalForm = !hasAnyRedex(evaluator, st.currentId);
-        break;
-      }
-      if (st.seenIds.has(nextId)) {
-        st.done = true;
-        break;
-      }
-
-      if (st.steps.length < MAX_PATH_STEPS) {
-        st.steps.push({ from: st.currentId, to: nextId });
-      }
-
-      st.currentId = nextId;
-      st.seenIds.add(nextId);
-      st.historyQueue.push(nextId);
-      if (st.historyQueue.length > MAX_HISTORY_SIZE) {
-        const removed = st.historyQueue.shift()!;
-        st.seenIds.delete(removed);
-      }
-    }
-
-    if (!st.done) {
-      st.done = true;
-    }
-  } catch (error) {
-    // Check if this is a resubmission limit error
-    if (error instanceof ResubmissionLimitExceededError) {
-      st.done = true;
-    } else {
-      st.done = true;
+    finalId = await evaluator.reduceArenaNodeIdAsync(
+      initialId,
+      undefined,
+      maxSteps,
+    );
+  } catch (err) {
+    if (!(err instanceof ResubmissionLimitExceededError)) {
+      throw err;
     }
   }
 
+  // Note: we don't track intermediate steps in this high-performance mode
   return {
-    source: st.source,
-    sink: st.currentId,
-    steps: st.steps,
-    reachedNormalForm: st.reachedNormalForm,
-    stepsTaken,
+    source: initialId,
+    sink: finalId,
+    steps: [],
+    reachedNormalForm: finalId === initialId ? false : true, // Simplified
+    stepsTaken: maxSteps, // Placeholder
   };
 }
 
@@ -376,12 +239,7 @@ export async function* generateEvaluationForest(
     progress?: boolean;
   },
 ): AsyncGenerator<EvalResult | string, void, unknown> {
-  // Use navigator.hardwareConcurrency when available, fallback to 8
-  const workerCount = options?.workerCount ??
-    (typeof navigator !== "undefined" &&
-        typeof navigator.hardwareConcurrency === "number"
-      ? navigator.hardwareConcurrency
-      : 8);
+  const workerCount = options?.workerCount ?? 8;
   const includeLabels = options?.includeLabels ?? true;
   const progress = options?.progress ?? false;
 
@@ -394,7 +252,7 @@ export async function* generateEvaluationForest(
   const elapsedSec = () => ((Date.now() - startedAt) / 1000).toFixed(1);
 
   logProgress(
-    `start symbolCount=${symbolCount} maxSteps=${maxSteps} workers=${workerCount} labels=${includeLabels}`,
+    `start symbolCount=${symbolCount} maxSteps=${maxSteps} workers=${workerCount}`,
   );
   const evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
 
@@ -404,119 +262,49 @@ export async function* generateEvaluationForest(
     const total = allExprs.length;
     logProgress(`enumerated ${total} expressions (elapsed ${elapsedSec()}s)`);
 
-    // Pre-convert all expressions to arena node IDs sequentially to ensure
-    // deterministic node ID assignment. This is critical for deterministic output.
     const allArenaIds: number[] = [];
     logProgress(`converting expressions to arena IDs...`);
     for (let i = 0; i < total; i++) {
       allArenaIds.push(evaluator.toArena(allExprs[i]!));
     }
-    logProgress(
-      `converted ${total} expressions to arena IDs (elapsed ${elapsedSec()}s)`,
-    );
 
-    // Track all unique node IDs that appear in evaluation paths
     const allNodeIds = new Set<number>();
-
-    // Configure workers to execute exactly one reduction step per submission.
-    // The per-expression step limit is enforced in JS.
-    // Sliding concurrency window: when one expression completes, immediately start another.
     const CONCURRENCY = workerCount;
-    let nextIndex = 0;
     let processed = 0;
 
-    type SlotState =
-      | { exprIndex: number; stepsTaken: number; startedAtMs: number }
-      | null;
-    const slots: SlotState[] = new Array(CONCURRENCY).fill(null);
+    // Concurrency loop using a promise pool
+    const results: EvalResult[] = [];
+    const pool = new Set<Promise<void>>();
 
-    try {
-      type Done = {
-        slot: number;
-        exprIndex: number;
-        result: EvalResult;
-      };
-      type InFlightEntry = {
-        slot: number;
-        exprIndex: number;
-        promise: Promise<Done>;
-      };
-
-      let inFlights: InFlightEntry[] = [];
-
-      const startSlot = (slot: number) => {
-        if (nextIndex >= total) {
-          return;
-        }
-        const exprIndex = nextIndex++;
-        slots[slot] = { exprIndex, stepsTaken: 0, startedAtMs: Date.now() };
-
-        const base = evaluateBatchParallel(
+    for (let i = 0; i < total; i++) {
+      const exprIndex = i;
+      const promise = (async () => {
+        const res = await evaluateParallel(
           evaluator,
           allArenaIds[exprIndex]!,
           maxSteps,
-          (stepsTaken) => {
-            const s = slots[slot];
-            if (s) {
-              s.stepsTaken = stepsTaken;
-            }
-          },
         );
-
-        const promise = base.then((result) => ({
-          slot,
-          exprIndex,
-          result: { ...result, expr: unparseSKI(allExprs[exprIndex]!) },
-        }));
-        inFlights.push({ slot, exprIndex, promise });
-      };
-
-      for (let slot = 0; slot < CONCURRENCY; slot++) {
-        startSlot(slot);
-      }
-
-      let lastProgressAtMs = 0;
-      while (inFlights.length > 0) {
-        // Wait for next completion if we have in-flight work
-        if (inFlights.length > 0) {
-          const done = await Promise.race(
-            inFlights.map((e) => e.promise),
-          );
-          inFlights = inFlights.filter((e) => e.slot !== done.slot);
-
-          slots[done.slot] = null;
-          processed++;
-          if (progress) {
-            const now = Date.now();
-            if (now - lastProgressAtMs > 1000) {
-              lastProgressAtMs = now;
-              const stats = evaluator.getRingStatsSnapshot();
-              logProgress(
-                `eval ${processed}/${total} pending=${stats.pending} completed=${stats.completed} submitOk=${stats.submitOk} submitFull=${stats.submitFull} pullEmpty=${stats.pullEmpty} pullNonEmpty=${stats.pullNonEmpty} (elapsed ${elapsedSec()}s)`,
-              );
-            }
-          }
-          // Track node IDs from this result
-          allNodeIds.add(done.result.source);
-          allNodeIds.add(done.result.sink);
-          for (const step of done.result.steps) {
-            allNodeIds.add(step.from);
-            allNodeIds.add(step.to);
-          }
-
-          // Always emit immediately (no head-of-line blocking).
-          yield done.result;
-
-          // backfill this slot if more work remains
-          startSlot(done.slot);
+        const finalRes = { ...res, expr: unparseSKI(allExprs[exprIndex]!) };
+        results.push(finalRes);
+        allNodeIds.add(res.source);
+        allNodeIds.add(res.sink);
+        processed++;
+        if (progress && processed % 100 === 0) {
+          logProgress(`eval ${processed}/${total} (elapsed ${elapsedSec()}s)`);
         }
+      })();
+      pool.add(promise);
+      promise.then(() => pool.delete(promise));
+      if (pool.size >= CONCURRENCY) {
+        await Promise.race(pool);
       }
-    } finally {
-      // Inner try block cleanup (if needed in future)
+    }
+    await Promise.all(pool);
+
+    for (const r of results) {
+      yield r;
     }
 
-    // Generate and stream node labels for all unique node IDs
-    // Convert each node ID to its string representation
     if (includeLabels) {
       logProgress(`emitting node labels (${allNodeIds.size} ids)...`);
       for (const nodeId of allNodeIds) {
@@ -524,16 +312,10 @@ export async function* generateEvaluationForest(
           const expr = evaluator.fromArena(nodeId);
           const label = unparseSKI(expr);
           yield JSON.stringify({ type: "nodeLabel", id: nodeId, label });
-        } catch (_error) {
-          // Skip nodes that can't be converted (e.g., internal WASM nodes)
-          // They'll fall back to node_${nodeId} in genSvg
-        }
+        } catch { /* skip */ }
       }
-      logProgress(`done emitting node labels (elapsed ${elapsedSec()}s)`);
     }
-    logProgress(`done (elapsed ${elapsedSec()}s)`);
   } finally {
-    // Clean up workers
     evaluator.terminate();
   }
 }
@@ -548,41 +330,10 @@ async function streamToStdout(
     progress?: boolean;
   },
 ) {
-  const BATCH_SIZE = 100; // Batch size for stringification
-  const resultBatch: EvalResult[] = [];
-
   for await (
     const data of generateEvaluationForest(symbolCount, maxSteps, options)
   ) {
-    // Check if this is global info (string) or evaluation result (object)
-    if (typeof data === "string") {
-      // Global info - now always a complete JSON object
-      // Flush any pending results before global info
-      if (resultBatch.length > 0) {
-        const batchStr = resultBatch.map((r) => JSON.stringify(r)).join("\n");
-        console.log(batchStr);
-        resultBatch.length = 0;
-      }
-      // Write the complete global info JSON object followed by a newline
-      console.log(data);
-    } else {
-      // Evaluation result object - batch stringify
-      resultBatch.push(data);
-      if (resultBatch.length >= BATCH_SIZE) {
-        // Stringify each object individually to avoid regex issues with nested arrays
-        // This is safer than using regex replacement which can match inside nested structures
-        const jsonl = resultBatch.map((r) => JSON.stringify(r)).join("\n");
-        console.log(jsonl);
-        resultBatch.length = 0;
-      }
-    }
-  }
-
-  // Flush any remaining results
-  if (resultBatch.length > 0) {
-    // Stringify each object individually to avoid regex issues with nested arrays
-    const jsonl = resultBatch.map((r) => JSON.stringify(r)).join("\n");
-    console.log(jsonl);
+    console.log(typeof data === "string" ? data : JSON.stringify(data));
   }
 }
 

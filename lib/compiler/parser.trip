@@ -173,7 +173,7 @@ data Decl =
   | D_Import (List U8) (List U8)
   | D_Export (List U8)
   | D_Type (List U8)
-  | D_Data (List U8) (List (Pair (List U8) Nat))
+  | D_Data (List U8) (List (Pair (List U8) U8))
   | D_Def DefKind Bool (List U8) Expr
 
 poly parseError =
@@ -729,58 +729,58 @@ poly skipOneType = \toks : List Token =>
         )
     )
 
-poly rec parseCtorArity = \toks : List Token => \acc : Nat =>
-  matchList [Token] [Result ParseError (Pair Nat (List Token))] toks
-    (Ok [ParseError] [Pair Nat (List Token)] (MkPair [Nat] [List Token] acc toks))
+poly rec parseCtorArity = \toks : List Token => \acc : U8 =>
+  matchList [Token] [Result ParseError (Pair U8 (List Token))] toks
+    (Ok [ParseError] [Pair U8 (List Token)] (MkPair [U8] [List Token] acc toks))
     (\h : Token => \t : List Token =>
       let tag = tokenTag h in
-      if [Result ParseError (Pair Nat (List Token))]
+      if [Result ParseError (Pair U8 (List Token))]
         (or (eqU8 tag pipeTag) (isTopLevelStartToken h))
-        (\u : U8 => Ok [ParseError] [Pair Nat (List Token)] (MkPair [Nat] [List Token] acc toks))
+        (\u : U8 => Ok [ParseError] [Pair U8 (List Token)] (MkPair [U8] [List Token] acc toks))
         (\u : U8 =>
           match (skipOneType toks) [Result ParseError (List Token)] {
-            | Err e => Err [ParseError] [Pair Nat (List Token)] e
-            | Ok rest => parseCtorArity rest (succ acc)
+            | Err e => Err [ParseError] [Pair U8 (List Token)] e
+            | Ok rest => parseCtorArity rest (addU8 acc #u8(1))
           }
         )
     )
 
-poly rec parseDataCtors = \toks : List Token => \acc : List (Pair (List U8) Nat) =>
-  matchList [Token] [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] toks
-    (Ok [ParseError] [Pair (List (Pair (List U8) Nat)) (List Token)] (MkPair [List (Pair (List U8) Nat)] [List Token] (reverse [Pair (List U8) Nat] acc) toks))
+poly rec parseDataCtors = \toks : List Token => \acc : List (Pair (List U8) U8) =>
+  matchList [Token] [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] toks
+    (Ok [ParseError] [Pair (List (Pair (List U8) U8)) (List Token)] (MkPair [List (Pair (List U8) U8)] [List Token] (reverse [Pair (List U8) U8] acc) toks))
     (\h : Token => \t : List Token =>
       let tag = tokenTag h in
-      if [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] (isTopLevelStartToken h)
-        (\u : U8 => Ok [ParseError] [Pair (List (Pair (List U8) Nat)) (List Token)] (MkPair [List (Pair (List U8) Nat)] [List Token] (reverse [Pair (List U8) Nat] acc) toks))
+      if [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] (isTopLevelStartToken h)
+        (\u : U8 => Ok [ParseError] [Pair (List (Pair (List U8) U8)) (List Token)] (MkPair [List (Pair (List U8) U8)] [List Token] (reverse [Pair (List U8) U8] acc) toks))
         (\u : U8 =>
-          if [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] (eqU8 tag pipeTag)
+          if [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] (eqU8 tag pipeTag)
             (\u : U8 =>
-              match (expectIdent t) [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] {
-                | Err e => Err [ParseError] [Pair (List (Pair (List U8) Nat)) (List Token)] e
+              match (expectIdent t) [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] {
+                | Err e => Err [ParseError] [Pair (List (Pair (List U8) U8)) (List Token)] e
                 | Ok ctorRes =>
                   let ctorName = fstNameToken ctorRes in
                   let afterCtor = sndNameToken ctorRes in
-                  match (parseCtorArity afterCtor zero) [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] {
-                    | Err e => Err [ParseError] [Pair (List (Pair (List U8) Nat)) (List Token)] e
+                  match (parseCtorArity afterCtor #u8(0)) [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] {
+                    | Err e => Err [ParseError] [Pair (List (Pair (List U8) U8)) (List Token)] e
                     | Ok arityRes =>
-                      let arity = fst [Nat] [List Token] arityRes in
-                      let rest = snd [Nat] [List Token] arityRes in
-                      parseDataCtors rest (cons [Pair (List U8) Nat] (MkPair [List U8] [Nat] ctorName arity) acc)
+                      let arity = fst [U8] [List Token] arityRes in
+                      let rest = snd [U8] [List Token] arityRes in
+                      parseDataCtors rest (cons [Pair (List U8) U8] (MkPair [List U8] [U8] ctorName arity) acc)
                   }
               })
             (\u : U8 =>
-              if [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] (eqU8 tag identTag)
+              if [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] (eqU8 tag identTag)
                 (\u : U8 =>
                   let ctorName = tokenText h in
-                  match (parseCtorArity t zero) [Result ParseError (Pair (List (Pair (List U8) Nat)) (List Token))] {
-                    | Err e => Err [ParseError] [Pair (List (Pair (List U8) Nat)) (List Token)] e
+                  match (parseCtorArity t #u8(0)) [Result ParseError (Pair (List (Pair (List U8) U8)) (List Token))] {
+                    | Err e => Err [ParseError] [Pair (List (Pair (List U8) U8)) (List Token)] e
                     | Ok arityRes =>
-                      let arity = fst [Nat] [List Token] arityRes in
-                      let rest = snd [Nat] [List Token] arityRes in
-                      parseDataCtors rest (cons [Pair (List U8) Nat] (MkPair [List U8] [Nat] ctorName arity) acc)
+                      let arity = fst [U8] [List Token] arityRes in
+                      let rest = snd [U8] [List Token] arityRes in
+                      parseDataCtors rest (cons [Pair (List U8) U8] (MkPair [List U8] [U8] ctorName arity) acc)
                   }
                 )
-                (\u : U8 => Err [ParseError] [Pair (List (Pair (List U8) Nat)) (List Token)] parseError)
+                (\u : U8 => Err [ParseError] [Pair (List (Pair (List U8) U8)) (List Token)] parseError)
             )
         )
     )

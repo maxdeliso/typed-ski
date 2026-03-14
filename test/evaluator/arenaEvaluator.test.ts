@@ -546,6 +546,33 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
+  await t.step("fromArena throws on unknown arena node kinds", () => {
+    const exports = {
+      kindOf: () => 99,
+      debugGetArenaBaseAddr: () => 0,
+      reset: () => {},
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      allocU8: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as ArenaWasmExports;
+
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
+      new WebAssembly.Memory({ initial: 1 }),
+    );
+
+    assertThrows(
+      () => evaluator.fromArena(1),
+      Error,
+      "Cannot convert arena node 1 with kind 99",
+    );
+  });
+
   await t.step("toArena throws on unknown terminal symbols", () => {
     const exports = {
       allocTerminal: () => 0,

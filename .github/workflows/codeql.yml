@@ -15,11 +15,16 @@ permissions:
 
 jobs:
   analyze:
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, javascript-typescript, c-cpp]
+        include:
+          - language: actions
+          - language: javascript-typescript
+          - language: c-cpp
+            build-mode: manual
 
     steps:
       - uses: actions/checkout@v6
@@ -28,8 +33,15 @@ jobs:
         uses: cachix/install-nix-action@v31
 
       - uses: github/codeql-action/init@v4
+        if: ${{ matrix.language != 'c-cpp' }}
         with:
           languages: ${{ matrix.language }}
+
+      - uses: github/codeql-action/init@v4
+        if: ${{ matrix.language == 'c-cpp' }}
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Build artifacts
         if: matrix.language == 'c-cpp'

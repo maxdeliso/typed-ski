@@ -16,6 +16,7 @@ import {
   ArenaKind,
   type ArenaNodeId,
   ArenaSym,
+  isControlPtr,
 } from "../shared/arena.ts";
 import type { ArenaNode } from "../shared/types.ts";
 import {
@@ -268,6 +269,13 @@ function fromArenaWithExports(
     }
 
     // Use direct memory access if views are available, otherwise fall back to WASM calls
+    if (isControlPtr(id)) {
+      throw new Error(
+        `Cannot convert control pointer ${
+          id >>> 0
+        } to SKI expression. Control arena state must not leak into value results.`,
+      );
+    }
     const kind = getKind(id);
 
     if (kind === 1) { // ArenaKind.Terminal
@@ -279,17 +287,7 @@ function fromArenaWithExports(
       const value = getSym(id);
       cache.set(id, { kind: "u8", value });
       stack.pop();
-    } else if (kind === 3 || kind === 4) { // ArenaKind.Continuation || ArenaKind.Suspension
-      // CONTINUATION/SUSPENSION: These are internal WASM-only nodes used for iterative reduction.
-      // They should never appear in the final result, but if they do (e.g., due to a bug or
-      // incomplete reduction), we cannot convert them to SKI expressions.
-      // Skip them and pop from stack to avoid infinite loops.
-      throw new Error(
-        `Cannot convert ${
-          kind === 3 ? "Continuation" : "Suspension"
-        } node ${id} to SKI expression. This node type is internal to the WASM reducer and should not appear in results.`,
-      );
-    } else {
+    } else if (kind === ArenaKind.NonTerm) {
       // NON-TERMINAL: Check children (AoS: use view getters when available)
       const leftId = views && id < views.capacity
         ? viewGetLeft(id, views)
@@ -315,6 +313,12 @@ function fromArenaWithExports(
         if (!rightDone) stack.push(rightId);
         if (!leftDone) stack.push(leftId);
       }
+    } else {
+      throw new Error(
+        `Cannot convert arena node ${
+          id >>> 0
+        } with kind ${kind} to SKI expression.`,
+      );
     }
   }
 

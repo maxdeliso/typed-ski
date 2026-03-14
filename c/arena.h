@@ -19,9 +19,7 @@ typedef _Bool bool;
 typedef enum {
   ARENA_KIND_TERMINAL = 1,
   ARENA_KIND_NON_TERM = 2,
-  ARENA_KIND_CONTINUATION = 3,
-  ARENA_KIND_SUSPENSION = 4,
-  ARENA_KIND_U8 = 5
+  ARENA_KIND_U8 = 3
 } ArenaKind;
 
 typedef enum {
@@ -44,6 +42,20 @@ typedef enum {
 
 #define EMPTY 0xffffffff
 #define TERM_CACHE_LEN (ARENA_SYM_ADD_U8 + 1)
+#define CONTROL_PTR_BIT 0x80000000u
+
+static inline bool is_control_ptr(uint32_t ptr) {
+  return (ptr & CONTROL_PTR_BIT) != 0;
+}
+static inline bool is_value_ptr(uint32_t ptr) {
+  return (ptr & CONTROL_PTR_BIT) == 0;
+}
+static inline uint32_t control_index(uint32_t ptr) {
+  return ptr & ~CONTROL_PTR_BIT;
+}
+static inline uint32_t make_control_ptr(uint32_t idx) {
+  return idx | CONTROL_PTR_BIT;
+}
 
 typedef struct {
   atomic_uint head;
@@ -79,7 +91,38 @@ typedef struct {
 
 #define MODE_DESCEND 0
 #define MODE_RETURN 1
-#define MODE_IO_WAIT 2
+
+typedef enum {
+  FRAME_UPDATE = 1,
+} FrameKind;
+
+typedef enum {
+  SUSP_WAIT_IO_STDIN = 1,
+  SUSP_WAIT_IO_STDOUT = 2,
+  SUSP_GAS_EXHAUSTED = 3,
+  SUSP_STEP_LIMIT = 4,
+} SuspensionReason;
+
+typedef enum {
+  SUSP_STATUS_FREE = 0,
+  SUSP_STATUS_PARKED = 1,
+  SUSP_STATUS_READY = 2,
+  SUSP_STATUS_CLAIMED = 3,
+} SuspensionStatus;
+
+typedef enum {
+  WORKER_RUNNING = 1,
+  WORKER_YIELD_RETRY = 2,
+  WORKER_IDLE = 3,
+} WorkerStatus;
+
+typedef struct {
+  uint8_t kind;
+  uint8_t submode;
+  uint16_t flags;
+  uint32_t a;
+  uint32_t b;
+} Frame;
 
 typedef struct {
   uint32_t magic;
@@ -91,6 +134,8 @@ typedef struct {
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
   uint32_t offset_stdout_wait;
+  uint32_t offset_control;
+  uint32_t control_bytes;
   uint32_t offset_term_cache;
   uint64_t offset_nodes;
   uint64_t offset_buckets;
@@ -141,5 +186,10 @@ bool arena_stdout_try_pop(uint8_t *byte_out);
  * 4). Used by native runtime to wake IO waiters. */
 bool arena_stdin_wait_try_dequeue(uint32_t *node_id_out);
 bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out);
+
+/* Control-pointer introspection for native scheduler/runtime integration. */
+uint32_t controlSuspensionReason(uint32_t ptr);
+uint32_t controlSuspensionCurrentValue(uint32_t ptr);
+uint32_t controlSuspensionRemainingSteps(uint32_t ptr);
 
 #endif

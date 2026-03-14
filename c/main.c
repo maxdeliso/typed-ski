@@ -26,6 +26,21 @@ static uint32_t default_num_workers(void) {
   return 4;
 }
 
+static int parse_u32_arg(const char *text, uint32_t *out) {
+  uint64_t value = 0;
+  if (text == NULL || out == NULL || *text == '\0')
+    return 0;
+  for (const unsigned char *p = (const unsigned char *)text; *p != '\0'; p++) {
+    if (*p < '0' || *p > '9')
+      return 0;
+    value = value * 10u + (uint64_t)(*p - '0');
+    if (value > 0xffffffffu)
+      return 0;
+  }
+  *out = (uint32_t)value;
+  return 1;
+}
+
 /** Batch mode: program_input is the SKI/DAG text to parse and reduce.
  * runtime_stdin_fd is an optional stream/file consumed lazily by READ_ONE on a
  * separate channel. Pass -1 when no runtime stdin source is available. */
@@ -94,7 +109,7 @@ static int run_batch_mode(uint32_t num_workers, uint32_t arena_capacity,
         continue;
       }
       if (n == 0) {
-        fprintf(stderr, "result not exportable (suspension/continuation)\n");
+        fprintf(stderr, "result not exportable (control pointer)\n");
         continue;
       }
     } else {
@@ -205,7 +220,7 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
         continue;
       }
       if (n == 0) {
-        printf("ERR runtime-node-kind\n");
+        printf("ERR runtime-control-ptr\n");
         fflush(stdout);
         continue;
       }
@@ -252,10 +267,22 @@ int main(int argc, char **argv) {
       break;
   }
 
-  if (arg_idx < argc)
-    num_workers = (uint32_t)atoi(argv[arg_idx]);
-  if (arg_idx + 1 < argc)
-    arena_capacity = (uint32_t)atoi(argv[arg_idx + 1]);
+  if (arg_idx < argc) {
+    uint32_t parsed = 0;
+    if (!parse_u32_arg(argv[arg_idx], &parsed)) {
+      fprintf(stderr, "invalid worker count: %s\n", argv[arg_idx]);
+      return 1;
+    }
+    num_workers = parsed;
+  }
+  if (arg_idx + 1 < argc) {
+    uint32_t parsed = 0;
+    if (!parse_u32_arg(argv[arg_idx + 1], &parsed)) {
+      fprintf(stderr, "invalid arena capacity: %s\n", argv[arg_idx + 1]);
+      return 1;
+    }
+    arena_capacity = parsed;
+  }
 
   if (daemon) {
     /* Daemon mode: clean protocol channel; stdout pump disabled. */

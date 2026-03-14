@@ -14,9 +14,9 @@ import {
   getRight,
 } from "../../lib/evaluator/arenaViews.ts";
 import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
+import { makeControlPtr } from "../../lib/shared/arena.ts";
 import type { ArenaNode } from "../../lib/shared/types.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { ArenaKind } from "../../lib/shared/arena.ts";
 import {
   apply,
   equivalent,
@@ -519,10 +519,9 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     expect(chunks[1]).to.have.lengthOf(1); // id 4
   });
 
-  await t.step("fromArena throws on Continuation and Suspension nodes", () => {
-    const continuationExports = {
-      kindOf: (id: number) =>
-        id === 1 ? ArenaKind.Continuation : ArenaKind.Suspension,
+  await t.step("fromArena throws on control pointers", () => {
+    const exports = {
+      kindOf: () => 0,
       debugGetArenaBaseAddr: () => 0,
       reset: () => {},
       allocTerminal: () => 0,
@@ -535,40 +534,15 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       rightOf: () => 0,
     } as ArenaWasmExports;
 
-    const continuationEvaluator = new ArenaEvaluatorWasm(
-      continuationExports,
+    const evaluator = new ArenaEvaluatorWasm(
+      exports,
       new WebAssembly.Memory({ initial: 1 }),
     );
 
     assertThrows(
-      () => continuationEvaluator.fromArena(1),
+      () => evaluator.fromArena(makeControlPtr(1)),
       Error,
-      "Cannot convert Continuation node 1 to SKI expression",
-    );
-
-    const suspensionExports = {
-      kindOf: () => ArenaKind.Suspension,
-      debugGetArenaBaseAddr: () => 0,
-      reset: () => {},
-      allocTerminal: () => 0,
-      allocCons: () => 0,
-      allocU8: () => 0,
-      arenaKernelStep: () => 0,
-      reduce: () => 0,
-      symOf: () => 0,
-      leftOf: () => 0,
-      rightOf: () => 0,
-    } as ArenaWasmExports;
-
-    const suspensionEvaluator = new ArenaEvaluatorWasm(
-      suspensionExports,
-      new WebAssembly.Memory({ initial: 1 }),
-    );
-
-    assertThrows(
-      () => suspensionEvaluator.fromArena(2),
-      Error,
-      "Cannot convert Suspension node 2 to SKI expression",
+      "Cannot convert control pointer",
     );
   });
 

@@ -456,7 +456,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
    *   `-1n` if empty, otherwise:
    *   - bits `63..32`: `reqId`
    *   - bits `31..30`: `eventKind`
-   *   - bits `29..0`: `nodeId`
+   *   - bits `29..0`: `nodeId` for value completions, or control index for yields/io-waits
+   *     (the host reconstructs the tagged control pointer using `CONTROL_PTR_BIT`)
    *   Results may arrive out-of-order; `reqId` is used to match completions to callers.
    */
   async reduceAsync(

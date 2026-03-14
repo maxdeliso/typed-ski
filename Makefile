@@ -5,7 +5,8 @@
 	format-c-internal format-nix-internal format-check-nix-internal \
 	thanatos-check thanatos-check-lsan thanatos-check-ubsan thanatos-check-asan \
 	thanatos-check-lsan-long thanatos-check-ubsan-long thanatos-check-asan-long \
-	thanatos-tsan-repl thanatos-ubsan-repl
+	thanatos-tsan-repl thanatos-ubsan-repl \
+	coverage-lcov-internal
 
 all: build
 
@@ -111,6 +112,8 @@ NIX_RUN := nix $(NIX_FLAGS) develop --ignore-environment \
 	--keep TERM --keep HOME --keep USER --keep LANG --keep SSL_CERT_FILE \
 	--command $(MAKE)
 
+DENO_TEST_CMD ?= deno task test
+
 # Public entry points
 build:
 	$(NIX_RUN) build-internal
@@ -174,7 +177,7 @@ test-internal: build-wasm-internal build-native-internal
 	deno run -A scripts/generate-arena-header-c.ts
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
-	nix $(NIX_FLAGS) run .#test
+	$(DENO_TEST_CMD)
 	$(MAKE) dag-codec-check-internal
 	$(MAKE) thanatos-check-internal
 	$(MAKE) thanatos-check-lsan-internal
@@ -187,6 +190,9 @@ dag-codec-check-internal: build-native-internal
 coverage-internal: build-wasm-internal
 	deno run -A scripts/generate-arena-header-c.ts
 	deno task test:coverage
+	$(MAKE) coverage-lcov-internal
+
+coverage-lcov-internal:
 	deno task coverage:lcov
 
 CLEAN_ARTIFACTS := \

@@ -164,13 +164,7 @@ static void *stdin_thread_main(void *arg) {
  * IO wait reason in CQ_EVENT_IO_WAIT or suspension tag (e.g. IO_WAIT_READ /
  * IO_WAIT_WRITE) for a durable mechanism. */
 static bool io_wait_is_stdin(uint32_t node_id) {
-  uint32_t curr = leftOf(node_id);
-  uint32_t head = curr;
-  while (kindOf(head) == ARENA_KIND_NON_TERM)
-    head = leftOf(head);
-  if (kindOf(head) != ARENA_KIND_TERMINAL)
-    return false;
-  return symOf(head) == ARENA_SYM_READ_ONE;
+  return controlSuspensionReason(node_id) == SUSP_WAIT_IO_STDIN;
 }
 
 static void io_wait_register(uint32_t node_id, uint32_t req_id) {
@@ -231,7 +225,7 @@ dispatcher_thread_main(void *arg) {
 
     uint32_t req_id = cqe.req_id;
     uint32_t event = cqe.event_kind & 0x3;
-    uint32_t node = cqe.node_id & 0x3fffffff;
+    uint32_t node = cqe.node_id;
     unsigned long long seq =
         atomic_fetch_add_explicit(&dispatcher_events, 1, memory_order_relaxed) +
         1;
@@ -399,8 +393,9 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
     uint32_t event = pending_reqs[slot].event_kind;
     bool step_budget_exhausted =
         (event == CQ_EVENT_YIELD) && (max_steps != 0xffffffffu) &&
-        (kindOf(node) == ARENA_KIND_SUSPENSION) &&
-        (symOf(node) != MODE_IO_WAIT) && (hashOf(node) == 0);
+        is_control_ptr(node) &&
+        (controlSuspensionReason(node) == SUSP_STEP_LIMIT) &&
+        (controlSuspensionRemainingSteps(node) == 0);
 
     if (event == CQ_EVENT_DONE || step_budget_exhausted) {
       pending_reqs[slot].req_id = 0;

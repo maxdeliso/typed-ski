@@ -23,9 +23,9 @@ size_t unparse_ski(uint32_t node_id, char *buf, size_t capacity);
 uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx);
 
 /* Serialize arena DAG to wire format (postorder, one token per node). Only
- * TERMINAL, U8, NON_TERM are exportable; SUSPENSION/CONTINUATION cause error.
- * Returns bytes written, or 0 on invalid node kind, or (size_t)-1 on buffer
- * overflow (caller may retry with larger buffer). */
+ * TERMINAL, U8, NON_TERM are exportable; control pointers are rejected.
+ * Returns bytes written, or 0 on invalid node kind/control pointer, or
+ * (size_t)-1 on buffer overflow (caller may retry with larger buffer). */
 size_t unparse_dag(uint32_t root, char *buf, size_t capacity);
 
 #endif

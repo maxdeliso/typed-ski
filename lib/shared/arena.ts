@@ -34,12 +34,26 @@ export enum ArenaKind {
   Terminal = 1,
   /** Non-terminal node (internal) */
   NonTerm = 2,
-  /** Internal stack frame for iterative reduction (WASM only) */
-  Continuation = 3,
-  /** Paused reducer state (WASM only): host should resubmit */
-  Suspension = 4,
   /** U8 literal (byte 0..255) */
-  U8 = 5,
+  U8 = 3,
+}
+
+export const CONTROL_PTR_BIT = 0x80000000;
+
+export function isControlPtr(ptr: number): boolean {
+  return (ptr & CONTROL_PTR_BIT) !== 0;
+}
+
+export function isValuePtr(ptr: number): boolean {
+  return (ptr & CONTROL_PTR_BIT) === 0;
+}
+
+export function controlIndex(ptr: number): number {
+  return ptr & ~CONTROL_PTR_BIT;
+}
+
+export function makeControlPtr(index: number): number {
+  return (index | CONTROL_PTR_BIT) >>> 0;
 }
 
 /**

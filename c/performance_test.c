@@ -3,6 +3,29 @@
 #include <stdlib.h>
 #include <time.h>
 
+static int parse_u32_arg(const char *text, uint32_t *out) {
+  uint64_t value = 0;
+  if (text == NULL || out == NULL || *text == '\0')
+    return 0;
+  for (const unsigned char *p = (const unsigned char *)text; *p != '\0'; p++) {
+    if (*p < '0' || *p > '9')
+      return 0;
+    value = value * 10u + (uint64_t)(*p - '0');
+    if (value > 0xffffffffu)
+      return 0;
+  }
+  *out = (uint32_t)value;
+  return 1;
+}
+
+static int parse_int_arg(const char *text, int *out) {
+  uint32_t value = 0;
+  if (!parse_u32_arg(text, &value) || value > 0x7fffffffu || out == NULL)
+    return 0;
+  *out = (int)value;
+  return 1;
+}
+
 static uint32_t rand_expression(int depth) {
   if (depth <= 0 || (rand() % 10) == 0) {
     int r = rand() % 3;
@@ -29,34 +52,35 @@ int main(int argc, char **argv) {
   uint32_t max_steps = 0xffffffffu;
   unsigned int seed = 0; /* 0 means use time(NULL) */
 
-  if (argc > 1)
-    num_threads = atoi(argv[1]);
+  if (argc > 1 && !parse_int_arg(argv[1], &num_threads)) {
+    fprintf(stderr, "Invalid thread count: %s\n", argv[1]);
+    return 1;
+  }
   if (argc > 2) {
-    arena_capacity = (uint32_t)strtoul(argv[2], NULL, 0);
-    if (arena_capacity == 0) {
+    if (!parse_u32_arg(argv[2], &arena_capacity) || arena_capacity == 0) {
       fprintf(stderr, "Invalid arena capacity: %s\n", argv[2]);
       return 1;
     }
   }
   if (argc > 3) {
-    reductions = atoi(argv[3]);
-    if (reductions <= 0) {
+    if (!parse_int_arg(argv[3], &reductions) || reductions <= 0) {
       fprintf(stderr, "Invalid reductions count: %s\n", argv[3]);
       return 1;
     }
   }
   if (argc > 4) {
-    depth = atoi(argv[4]);
-    if (depth < 0) {
+    if (!parse_int_arg(argv[4], &depth)) {
       fprintf(stderr, "Invalid expression depth: %s\n", argv[4]);
       return 1;
     }
   }
-  if (argc > 5) {
-    max_steps = (uint32_t)strtoul(argv[5], NULL, 0);
+  if (argc > 5 && !parse_u32_arg(argv[5], &max_steps)) {
+    fprintf(stderr, "Invalid max_steps: %s\n", argv[5]);
+    return 1;
   }
-  if (argc > 6) {
-    seed = (unsigned int)strtoul(argv[6], NULL, 0);
+  if (argc > 6 && !parse_u32_arg(argv[6], &seed)) {
+    fprintf(stderr, "Invalid seed: %s\n", argv[6]);
+    return 1;
   }
 
   if (seed == 0)

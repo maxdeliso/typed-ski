@@ -4,7 +4,7 @@ import type { IoManager } from "../../../lib/evaluator/io/ioManager.ts";
 import type { RingStats } from "../../../lib/evaluator/io/ringStats.ts";
 import { CompletionPoller } from "../../../lib/evaluator/parallel/completionPoller.ts";
 import { RequestTracker } from "../../../lib/evaluator/parallel/requestTracker.ts";
-import { ArenaKind } from "../../../lib/shared/arena.ts";
+import { makeControlPtr } from "../../../lib/shared/arena.ts";
 
 class RingStatsStub {
   public pullEmptyCount = 0;
@@ -59,99 +59,9 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
-interface CompletionPollerPrivate {
-  containsInternalControlNode(
-    rootNodeId: number,
-    ex: {
-      kindOf: (id: number) => number;
-      leftOf: (id: number) => number;
-      rightOf: (id: number) => number;
-    },
-  ): boolean;
-}
-
-Deno.test("CompletionPoller - resubmits leaked continuation descendant instead of completing", async () => {
-  const tracker = new RequestTracker({}, 8);
-  const submits: Array<{ nodeId: number; reqId: number; maxSteps: number }> =
-    [];
-  const submitSeen = deferred<void>();
-
-  // Node graph:
-  // 100 (NonTerm) -> left: 101 (Terminal), right: 102 (Continuation)
-  const fakeExports = {
-    kindOf: (id: number): number => {
-      if (id === 100) return ArenaKind.NonTerm;
-      if (id === 101) return ArenaKind.Terminal;
-      if (id === 102) return ArenaKind.Continuation;
-      return ArenaKind.Terminal;
-    },
-    leftOf: (id: number): number => (id === 100 ? 101 : 0),
-    rightOf: (id: number): number => (id === 100 ? 102 : 0),
-    symOf: (_id: number): number => 0,
-    hostSubmit: (nodeId: number, reqId: number, maxSteps: number): number => {
-      submits.push({ nodeId, reqId, maxSteps });
-      submitSeen.resolve();
-      return 0;
-    },
-  } as unknown as ArenaWasmExports;
-
-  let aborted = false;
-  const poller = new CompletionPoller(
-    tracker,
-    new IoManagerStub() as unknown as IoManager,
-    new RingStatsStub() as unknown as RingStats,
-    fakeExports,
-    () => aborted,
-  );
-
-  const reqId = tracker.createRequest(1);
-  // Simulate that this request already yielded at least once.
-  tracker.incrementResubmit(reqId);
-
-  let resolved = false;
-  let rejected = false;
-  tracker.markPending(reqId, () => {
-    resolved = true;
-  }, () => {
-    rejected = true;
-  });
-
-  let pulled = false;
-  poller.start(() => {
-    if (!pulled) {
-      pulled = true;
-      return pack(reqId, 100);
-    }
-    return -1n;
-  });
-
-  await submitSeen.promise;
-  aborted = true;
-  poller.stop();
-
-  assertEquals(resolved, false);
-  assertEquals(rejected, false);
-  assertEquals(tracker.isPending(reqId), true);
-  assertEquals(tracker.getResubmitCount(reqId), 2);
-  assertEquals(submits.length, 1);
-  assertEquals(submits[0], { nodeId: 100, reqId, maxSteps: 0xffffffff });
-});
-
 Deno.test("CompletionPoller - clean completion still resolves request", async () => {
   const tracker = new RequestTracker({}, 8);
-  const fakeExports = {
-    kindOf: (id: number): number => {
-      if (id === 200) return ArenaKind.NonTerm;
-      if (id === 201) return ArenaKind.Terminal;
-      if (id === 202) return ArenaKind.Terminal;
-      return ArenaKind.Terminal;
-    },
-    leftOf: (id: number): number => (id === 200 ? 201 : 0),
-    rightOf: (id: number): number => (id === 200 ? 202 : 0),
-    symOf: (_id: number): number => 0,
-    hostSubmit: (_nodeId: number, _reqId: number, _maxSteps: number): number =>
-      0,
-  } as unknown as ArenaWasmExports;
+  const fakeExports = {} as ArenaWasmExports;
 
   let aborted = false;
   const poller = new CompletionPoller(
@@ -228,7 +138,7 @@ Deno.test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", asy
     leftOf: (_id: number): number => 0,
     rightOf: (_id: number): number => 0,
     hostSubmit: (nodeId: number, reqId: number, _maxSteps: number): number => {
-      assertEquals(nodeId, 77);
+      assertEquals(nodeId, makeControlPtr(77));
       assertEquals(reqId, 1);
       return 0;
     },
@@ -253,7 +163,7 @@ Deno.test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", asy
   aborted = true;
   poller.stop();
 
-  assertEquals(ioWaitRegistered, { nodeId: 77, reqId: 1 });
+  assertEquals(ioWaitRegistered, { nodeId: makeControlPtr(77), reqId: 1 });
   assertEquals(ioWaitHandledCount, 1);
   assertEquals(tracker.isPending(1), true);
 });
@@ -319,8 +229,6 @@ Deno.test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
         return -1n;
       };
     })(),
-    symOf: () => 0,
-    kindOf: () => ArenaKind.Terminal,
     hostSubmit: (nodeId: number, _reqId: number, _maxSteps: number): number => {
       resubmits.push(nodeId);
       yieldSeen.resolve();
@@ -347,66 +255,8 @@ Deno.test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   aborted = true;
   poller.stop();
 
-  assertEquals(resubmits, [99]);
+  assertEquals(resubmits, [makeControlPtr(99)]);
   assertEquals(tracker.getResubmitCount(reqId), 1);
-});
-
-Deno.test("CompletionPoller - busy-waits when submission queue is full (rc=1)", async () => {
-  const tracker = new RequestTracker({}, 8);
-  let submits = 0;
-  const completionSeen = deferred<void>();
-
-  const fakeExports = {
-    hostPullV2: (() => {
-      let pulled = false;
-      return () => {
-        if (!pulled) {
-          pulled = true;
-          return packV2(1, 0, 200); // event=DONE, node=200
-        }
-        return -1n;
-      };
-    })(),
-    kindOf: (id: number): number => {
-      if (id === 200) return ArenaKind.NonTerm;
-      if (id === 102) return ArenaKind.Continuation;
-      return ArenaKind.Terminal;
-    },
-    leftOf: (_id: number): number => 102, // Force internal control node check to pass
-    rightOf: (_id: number): number => 102,
-    hostSubmit: (
-      _nodeId: number,
-      _reqId: number,
-      _maxSteps: number,
-    ): number => {
-      submits++;
-      if (submits < 3) return 1; // Full twice
-      completionSeen.resolve();
-      return 0;
-    },
-  } as unknown as ArenaWasmExports;
-
-  let aborted = false;
-  const poller = new CompletionPoller(
-    tracker,
-    new IoManagerStub() as unknown as IoManager,
-    new RingStatsStub() as unknown as RingStats,
-    fakeExports,
-    () => aborted,
-  );
-
-  const reqId = tracker.createRequest(1);
-  tracker.incrementResubmit(reqId); // Need resubmitCount > 0 for internal control node check
-  tracker.markPending(reqId, () => {}, () => {});
-
-  poller.start(
-    (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
-  );
-  await completionSeen.promise;
-  aborted = true;
-  poller.stop();
-
-  assertEquals(submits, 3);
 });
 
 Deno.test("CompletionPoller - hibernation when no work pending", async () => {
@@ -474,8 +324,6 @@ Deno.test("CompletionPoller - submitSuspension busy-waits on full queue", async 
       ioWaitSeen.resolve();
       return 0;
     },
-    symOf: () => 2, // SUSPEND_MODE_IO_WAIT
-    kindOf: () => ArenaKind.Suspension,
   } as unknown as ArenaWasmExports;
 
   let aborted = false;
@@ -526,8 +374,6 @@ Deno.test("CompletionPoller - resubmitSuspension busy-waits on full queue", asyn
       yieldSeen.resolve();
       return 0;
     },
-    symOf: () => 0,
-    kindOf: () => ArenaKind.Suspension,
   } as unknown as ArenaWasmExports;
 
   let aborted = false;
@@ -585,33 +431,10 @@ Deno.test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
   );
 });
 
-Deno.test("CompletionPoller - containsInternalControlNode handles cyclic graphs", () => {
-  const tracker = new RequestTracker();
-  const fakeExports = {
-    kindOf: (id: number) => (id === 1 ? ArenaKind.NonTerm : ArenaKind.Terminal),
-    leftOf: (_id: number) => 1,
-    rightOf: (_id: number) => 1,
-  } as unknown as ArenaWasmExports;
-
-  const poller = new CompletionPoller(
-    tracker,
-    new IoManagerStub() as unknown as IoManager,
-    new RingStatsStub() as unknown as RingStats,
-    fakeExports,
-    () => false,
-  );
-
-  const privatePoller = poller as unknown as CompletionPollerPrivate;
-  const result = privatePoller.containsInternalControlNode(1, fakeExports);
-  assertEquals(result, false, "Cycle traversal should not hang");
-});
-
 Deno.test("CompletionPoller - completion is stashed when resolver is not pending", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
-  const fakeExports = {
-    kindOf: () => ArenaKind.Terminal,
-  } as unknown as ArenaWasmExports;
+  const fakeExports = {} as ArenaWasmExports;
 
   let aborted = false;
   const poller = new CompletionPoller(
@@ -647,61 +470,10 @@ Deno.test("CompletionPoller - completion is stashed when resolver is not pending
   assertEquals(tracker.getStashedCompletion(reqId), 100);
 });
 
-Deno.test("CompletionPoller - handles IO_WAIT via v1 symOf path", async () => {
-  const tracker = new RequestTracker();
-  const ringStats = new RingStatsStub();
-  let ioWaitNodeId = -1;
-
-  const ioManager = {
-    registerIoWait: (nodeId: number) => {
-      ioWaitNodeId = nodeId;
-    },
-    handleIoWaitSuspension: () => Promise.resolve(false),
-  } as unknown as IoManager;
-
-  const fakeExports = {
-    kindOf: (_id: number) => ArenaKind.Suspension,
-    symOf: () => 2, // SUSPEND_MODE_IO_WAIT
-  } as unknown as ArenaWasmExports;
-
-  let aborted = false;
-  const poller = new CompletionPoller(
-    tracker,
-    ioManager,
-    ringStats as unknown as RingStats,
-    fakeExports,
-    () => aborted,
-  );
-
-  const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, () => {});
-
-  let pulled = false;
-  poller.start(() => {
-    if (!pulled) {
-      pulled = true;
-      return packV2(reqId, 0, 100);
-    }
-    return -1n;
-  });
-
-  for (let i = 0; i < 20; i++) {
-    await new Promise((r) => setTimeout(r, 5));
-    if (ioWaitNodeId !== -1) break;
-  }
-
-  aborted = true;
-  poller.stop();
-
-  assertEquals(ioWaitNodeId, 100);
-});
-
 Deno.test("CompletionPoller - maybeYield drains long completion bursts", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
-  const fakeExports = {
-    kindOf: () => ArenaKind.Terminal,
-  } as unknown as ArenaWasmExports;
+  const fakeExports = {} as ArenaWasmExports;
 
   let aborted = false;
   const poller = new CompletionPoller(

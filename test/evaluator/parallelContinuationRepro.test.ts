@@ -75,10 +75,10 @@ Deno.test("ParallelArenaEvaluator - shared-evaluator concurrent repro logs", asy
     let observedClassification: string | null = null;
     if (
       errorMessages.some((msg) =>
-        msg.includes("Cannot convert Continuation node")
+        msg.includes("Cannot convert control pointer")
       )
     ) {
-      observedClassification = "continuation-leak";
+      observedClassification = "control-pointer-leak";
     } else if (
       errorMessages.some((msg) =>
         msg.includes("exceeded maximum resubmissions")
@@ -100,7 +100,7 @@ Deno.test("ParallelArenaEvaluator - shared-evaluator concurrent repro logs", asy
     }
 
     const unexpectedErrors = errorMessages.filter((msg) =>
-      !msg.includes("Cannot convert Continuation node") &&
+      !msg.includes("Cannot convert control pointer") &&
       !msg.includes("exceeded maximum resubmissions")
     );
     if (unexpectedErrors.length > 0) {

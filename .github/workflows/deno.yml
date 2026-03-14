@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 permissions:
   contents: read
 
@@ -22,7 +25,7 @@ jobs:
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make build-internal
 
       - name: Run test suite
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make test-internal
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make test-internal DENO_TEST_CMD='deno task test:coverage'
 
       - name: Long LSAN test (fixed seed)
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-lsan-long-internal
@@ -34,7 +37,7 @@ jobs:
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-asan-long-internal
 
       - name: Generate coverage report
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-lcov-internal
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

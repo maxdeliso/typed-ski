@@ -5,7 +5,8 @@
 	format-c-internal format-nix-internal format-check-nix-internal \
 	thanatos-check thanatos-check-lsan thanatos-check-ubsan thanatos-check-asan \
 	thanatos-check-lsan-long thanatos-check-ubsan-long thanatos-check-asan-long \
-	thanatos-tsan-repl thanatos-ubsan-repl
+	thanatos-tsan-repl thanatos-ubsan-repl \
+	coverage-lcov-internal
 
 all: build
 
@@ -19,12 +20,13 @@ CLANG_RESOURCE_DIR ?= /usr/lib/clang/21
 C_FEATURE_FLAGS := -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=199309L
 C_COMMON_FLAGS := $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) \
                    -isystem $(CLANG_RESOURCE_DIR)/include
+C_DEBUG_TRAP_FLAGS := -DARENA_DEBUG_TRAP_ON_CONTROL_PTR=1
 C_RELEASE_FLAGS := -O3
-C_ASAN_FLAGS := -g -O1 -fsanitize=address -fno-omit-frame-pointer
-C_LSAN_FLAGS := -g -O1 -fsanitize=leak -fno-omit-frame-pointer
-C_DEBUG_FLAGS := -g -O1
+C_ASAN_FLAGS := -g -O1 -fsanitize=address -fno-omit-frame-pointer $(C_DEBUG_TRAP_FLAGS)
+C_LSAN_FLAGS := -g -O1 -fsanitize=leak -fno-omit-frame-pointer $(C_DEBUG_TRAP_FLAGS)
+C_DEBUG_FLAGS := -g -O1 $(C_DEBUG_TRAP_FLAGS)
 C_TSAN_FLAGS := -g -O1 -fsanitize=thread
-C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined
+C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined $(C_DEBUG_TRAP_FLAGS)
 
 WASM_OPT ?= wasm-opt
 WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections
@@ -57,11 +59,12 @@ NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
 
 MUSL_SOURCES := arena.c thanatos.c ski_io.c main.c performance_test.c
 MUSL_OBJS := $(addprefix obj/,$(MUSL_SOURCES:.c=.o))
+C_HEADERS := $(wildcard c/*.h)
 
 THANATOS_OBJS := obj/arena.o obj/thanatos.o obj/ski_io.o obj/main.o
 THANATOS_TEST_OBJS := obj/arena.o obj/thanatos.o obj/performance_test.o
 
-obj/%.o: c/%.c
+obj/%.o: c/%.c $(C_HEADERS)
 	mkdir -p obj
 	$(CC) $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) -fno-lto -fno-stack-protector \
 		-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -isystem $(MUSL_INC) -c $< -o $@
@@ -74,33 +77,33 @@ bin/thanatos-test: $(THANATOS_TEST_OBJS)
 	mkdir -p bin
 	$(MUSL_GCC) $(NATIVE_OPT_CFLAGS) -static -Wl,--gc-sections $^ -o $@
 
-bin/thanatos-test-lsan: c/arena.c c/thanatos.c c/performance_test.c
+bin/thanatos-test-lsan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c
+bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-test-asan: c/arena.c c/thanatos.c c/performance_test.c
+bin/thanatos-test-asan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
+bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-lsan: c/arena.c c/thanatos.c c/ski_io.c c/main.c
+bin/thanatos-lsan: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c
+bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/dag-codec-test: c/arena.c c/ski_io.c c/dag_codec_test.c
+bin/dag-codec-test: c/arena.c c/ski_io.c c/dag_codec_test.c $(C_HEADERS)
 	mkdir -p bin
-	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $^ -o $@
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
 # Nix development shell wrapper
 # We keep essential Nix and system variables while ignoring the rest to ensure hermeticity
@@ -108,6 +111,8 @@ NIX_RUN := nix $(NIX_FLAGS) develop --ignore-environment \
 	--keep NIX_PATH --keep NIX_DAEMON_SOCKET --keep NIX_CONF_DIR \
 	--keep TERM --keep HOME --keep USER --keep LANG --keep SSL_CERT_FILE \
 	--command $(MAKE)
+
+DENO_TEST_CMD ?= deno task test
 
 # Public entry points
 build:
@@ -172,7 +177,7 @@ test-internal: build-wasm-internal build-native-internal
 	deno run -A scripts/generate-arena-header-c.ts
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
-	nix $(NIX_FLAGS) run .#test
+	$(DENO_TEST_CMD)
 	$(MAKE) dag-codec-check-internal
 	$(MAKE) thanatos-check-internal
 	$(MAKE) thanatos-check-lsan-internal
@@ -185,6 +190,9 @@ dag-codec-check-internal: build-native-internal
 coverage-internal: build-wasm-internal
 	deno run -A scripts/generate-arena-header-c.ts
 	deno task test:coverage
+	$(MAKE) coverage-lcov-internal
+
+coverage-lcov-internal:
 	deno task coverage:lcov
 
 CLEAN_ARTIFACTS := \
@@ -219,7 +227,7 @@ clean-internal:
 
 build-wasm-internal: wasm/release.wasm
 
-wasm/release.wasm: c/arena.c Makefile
+wasm/release.wasm: c/arena.c $(C_HEADERS) Makefile
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
 		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \

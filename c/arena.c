@@ -13,6 +13,7 @@ void *memmove(void *dest, const void *src, size_t n) {
 #define IMPORT_MEMORY                                                          \
   __attribute__((import_module("env"), import_name("memory")))
 #else
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,19 @@ static const uint32_t POISON_SEQ = 0xffffffff;
 
 /** QSBR: max worker threads that can register; readers drain before grow(). */
 #define MAX_WORKERS 64
+enum {
+  /* Reserved scratch slice for synchronous host-side arenaKernelStep(). */
+  CONTROL_SYNC_SLICE_ID = MAX_WORKERS,
+  CONTROL_SLICE_COUNT = MAX_WORKERS + 1,
+  CONTROL_MAX_FRAMES = 2048,
+  CONTROL_CONT_SLOTS = 1024,
+  CONTROL_SUSP_SLOTS = 2048,
+  CONTROL_CONT_BASE = 1,
+  CONTROL_SUSP_BASE = CONTROL_CONT_BASE + CONTROL_CONT_SLOTS,
+  CONTROL_INVALID_INDEX = 0,
+  CONT_FLAG_ALLOCATED = 0x1,
+  SUSP_FLAG_ALLOCATED = 0x1,
+};
 static atomic_uint WORKER_EPOCHS[MAX_WORKERS];
 static atomic_uint GLOBAL_EPOCH;
 /** Set by worker at batch start, cleared at batch end; allocators unregister
@@ -195,17 +209,150 @@ typedef struct {
 } __attribute__((aligned(32))) ArenaNode;
 
 typedef struct {
+  uint32_t current_val;
+  uint32_t sp;
+  uint32_t remaining_steps;
+  uint8_t mode;
+  uint8_t status;
+  uint16_t reserved;
+} WorkerState;
+
+typedef struct {
+  uint32_t current_val;
+  uint32_t saved_sp;
+  uint32_t remaining_steps;
+  uint8_t mode;
+  uint8_t flags;
+  uint16_t reserved;
+  uint32_t next_free;
+  /* Simplicity-first snapshot: large but fixed and fragmentation-free. */
+  Frame frames[CONTROL_MAX_FRAMES];
+} ReifiedCont;
+
+typedef struct {
+  uint8_t reason;
+  /* Concurrently claimed by workers during resume. */
+  atomic_uchar status;
+  uint16_t flags;
+  uint32_t cont_ptr;
+  uint32_t wait_token;
+  uint32_t next_free;
+} Suspension;
+
+typedef struct {
+  atomic_ullong cont_head;
+  atomic_ullong susp_head;
+  atomic_uint cont_in_use;
+  atomic_uint cont_high_water;
+  atomic_uint susp_in_use;
+  atomic_uint susp_high_water;
+  atomic_uint cooperative_retries;
+  atomic_uint park_count;
+  atomic_uint resume_count;
+  atomic_uint worker_high_water[CONTROL_SLICE_COUNT];
+} ControlHeader;
+
+typedef struct {
+  ControlHeader *header;
+  Frame *worker_frames;
+  ReifiedCont *conts;
+  Suspension *suspensions;
+} ControlViews;
+
+typedef struct {
   uint32_t offset_sq;
   uint32_t offset_cq;
   uint32_t offset_stdin;
   uint32_t offset_stdout;
   uint32_t offset_stdin_wait;
   uint32_t offset_stdout_wait;
+  uint32_t offset_control;
+  uint32_t control_bytes;
   uint32_t offset_term_cache;
   uint64_t offset_nodes;
   uint64_t offset_buckets;
   uint64_t total_size;
 } SabLayout;
+
+static inline uint32_t control_header_bytes(void) {
+  return align64((uint32_t)sizeof(ControlHeader));
+}
+
+static inline uint32_t control_worker_bytes(void) {
+  return (uint32_t)(sizeof(Frame) * CONTROL_SLICE_COUNT *
+                    CONTROL_MAX_FRAMES);
+}
+
+static inline uint32_t control_cont_bytes(void) {
+  return (uint32_t)(sizeof(ReifiedCont) * CONTROL_CONT_SLOTS);
+}
+
+static inline uint32_t control_susp_bytes(void) {
+  return (uint32_t)(sizeof(Suspension) * CONTROL_SUSP_SLOTS);
+}
+
+static inline uint32_t total_control_bytes(void) {
+  return align64(control_header_bytes() + control_worker_bytes() +
+                 control_cont_bytes() + control_susp_bytes());
+}
+
+static inline uint64_t pack_freelist_head(uint32_t version, uint32_t index) {
+  return ((uint64_t)version << 32) | (uint64_t)index;
+}
+
+static inline uint32_t freelist_head_index(uint64_t head) {
+  return (uint32_t)(head & 0xffffffffu);
+}
+
+static inline uint32_t freelist_head_version(uint64_t head) {
+  return (uint32_t)(head >> 32);
+}
+
+#if defined(NDEBUG)
+#define CONTROL_DEBUG_POISON 0
+#else
+#define CONTROL_DEBUG_POISON 1
+#endif
+
+#if defined(ARENA_DEBUG_TRAP_ON_CONTROL_PTR) && ARENA_DEBUG_TRAP_ON_CONTROL_PTR
+#define CONTROL_DEBUG_TRAP_ON_VALUE_ACCESSOR 1
+#else
+#define CONTROL_DEBUG_TRAP_ON_VALUE_ACCESSOR 0
+#endif
+
+static inline void trap_invariant(void) {
+#ifdef __wasm__
+  __builtin_trap();
+#else
+  abort();
+#endif
+}
+
+static inline bool control_ptr_value_accessor_violation(uint32_t ptr) {
+  if (!is_control_ptr(ptr))
+    return false;
+#if CONTROL_DEBUG_TRAP_ON_VALUE_ACCESSOR
+  trap_invariant();
+#endif
+  return true;
+}
+
+static inline ControlViews control_views_from_header(SabHeader *h) {
+  ControlViews v;
+  uint8_t *base = ARENA_BASE_ADDR + h->offset_control;
+  v.header = (ControlHeader *)base;
+  base += control_header_bytes();
+  v.worker_frames = (Frame *)base;
+  base += control_worker_bytes();
+  v.conts = (ReifiedCont *)base;
+  base += control_cont_bytes();
+  v.suspensions = (Suspension *)base;
+  return v;
+}
+
+static inline ControlViews control_views(void) {
+  return control_views_from_header((SabHeader *)ARENA_BASE_ADDR);
+}
 
 /** Order: term_cache -> nodes -> buckets. Nodes never move on grow(). Uses
  * 64-bit for offset_buckets/total_size to avoid overflow at large capacity. */
@@ -218,13 +365,47 @@ static SabLayout calculate_layout(uint32_t capacity) {
   l.offset_stdin_wait = align64(l.offset_stdout + ring_bytes(RING_ENTRIES, 1));
   l.offset_stdout_wait =
       align64(l.offset_stdin_wait + ring_bytes(RING_ENTRIES, 4));
-  l.offset_term_cache =
+  l.offset_control =
       align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
+  l.control_bytes = total_control_bytes();
+  l.offset_term_cache = align64(l.offset_control + l.control_bytes);
   l.offset_nodes = (uint64_t)align64(l.offset_term_cache + TERM_CACHE_LEN * 4);
   l.offset_buckets =
       align64_u64(l.offset_nodes + (uint64_t)capacity * sizeof(ArenaNode));
   l.total_size = l.offset_buckets + (uint64_t)capacity * 4;
   return l;
+}
+
+static void control_init_at(SabHeader *h) {
+  ControlViews cv = control_views_from_header(h);
+  memset(cv.header, 0, h->control_bytes);
+  atomic_init(&cv.header->cont_head,
+              pack_freelist_head(0, CONTROL_CONT_BASE));
+  atomic_init(&cv.header->susp_head,
+              pack_freelist_head(0, CONTROL_SUSP_BASE));
+  atomic_init(&cv.header->cont_in_use, 0);
+  atomic_init(&cv.header->cont_high_water, 0);
+  atomic_init(&cv.header->susp_in_use, 0);
+  atomic_init(&cv.header->susp_high_water, 0);
+  atomic_init(&cv.header->cooperative_retries, 0);
+  atomic_init(&cv.header->park_count, 0);
+  atomic_init(&cv.header->resume_count, 0);
+  for (uint32_t i = 0; i < CONTROL_SLICE_COUNT; i++)
+    atomic_init(&cv.header->worker_high_water[i], 0);
+
+  for (uint32_t i = 0; i < CONTROL_CONT_SLOTS; i++) {
+    cv.conts[i].flags = 0;
+    cv.conts[i].next_free =
+        (i + 1 < CONTROL_CONT_SLOTS) ? (CONTROL_CONT_BASE + i + 1)
+                                     : CONTROL_INVALID_INDEX;
+  }
+  for (uint32_t i = 0; i < CONTROL_SUSP_SLOTS; i++) {
+    cv.suspensions[i].flags = 0;
+    atomic_init(&cv.suspensions[i].status, SUSP_STATUS_FREE);
+    cv.suspensions[i].next_free =
+        (i + 1 < CONTROL_SUSP_SLOTS) ? (CONTROL_SUSP_BASE + i + 1)
+                                     : CONTROL_INVALID_INDEX;
+  }
 }
 
 static void *allocate_raw_arena(uint32_t capacity) {
@@ -264,6 +445,8 @@ static void *allocate_raw_arena(uint32_t capacity) {
   h->offset_stdout = layout.offset_stdout;
   h->offset_stdin_wait = layout.offset_stdin_wait;
   h->offset_stdout_wait = layout.offset_stdout_wait;
+  h->offset_control = layout.offset_control;
+  h->control_bytes = layout.control_bytes;
   h->offset_term_cache = layout.offset_term_cache;
   h->offset_nodes = layout.offset_nodes;
   h->offset_buckets = layout.offset_buckets;
@@ -278,6 +461,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdout, RING_ENTRIES, 1);
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdin_wait, RING_ENTRIES, 4);
   ring_init_at(ARENA_BASE_ADDR + h->offset_stdout_wait, RING_ENTRIES, 4);
+  control_init_at(h);
 
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
@@ -360,6 +544,7 @@ void reset(void) {
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_store_explicit(&cache[i], EMPTY, memory_order_release);
+  control_init_at(h);
   atomic_store_explicit(&GROW_COUNT, 0, memory_order_release);
   TRUE_ID = EMPTY;
   FALSE_ID = EMPTY;
@@ -427,6 +612,8 @@ static inline bool check_stable(uint32_t seq) {
 /** Wait-free: nodes never move in memory on grow(). */
 uint32_t kindOf(uint32_t n) {
   ensure_arena();
+  if (control_ptr_value_accessor_violation(n))
+    return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
@@ -436,6 +623,8 @@ uint32_t kindOf(uint32_t n) {
 
 uint32_t symOf(uint32_t n) {
   ensure_arena();
+  if (control_ptr_value_accessor_violation(n))
+    return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
@@ -445,6 +634,8 @@ uint32_t symOf(uint32_t n) {
 
 uint32_t hashOf(uint32_t n) {
   ensure_arena();
+  if (control_ptr_value_accessor_violation(n))
+    return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
@@ -454,6 +645,8 @@ uint32_t hashOf(uint32_t n) {
 
 uint32_t leftOf(uint32_t n) {
   ensure_arena();
+  if (control_ptr_value_accessor_violation(n))
+    return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
@@ -463,6 +656,8 @@ uint32_t leftOf(uint32_t n) {
 
 uint32_t rightOf(uint32_t n) {
   ensure_arena();
+  if (control_ptr_value_accessor_violation(n))
+    return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
@@ -604,6 +799,8 @@ static inline uint32_t mix(uint32_t a, uint32_t b) {
 
 uint32_t allocCons(uint32_t l, uint32_t r) {
   ensure_arena();
+  if (is_control_ptr(l) || is_control_ptr(r))
+    trap_invariant();
 
   /* Wait-free hash reads (nodes never move). */
   uint32_t hl = hashOf(l);
@@ -712,58 +909,355 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
   }
 }
 
-static uint32_t alloc_generic(uint8_t kind_val, uint8_t sym_val,
-                              uint32_t left_val, uint32_t right_val,
-                              uint32_t hash_val) {
-  ensure_arena();
-  while (true) {
-    SabHeader *h;
-    uint32_t seq = enter_stable(&h);
-    uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
-    if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
-      if (tls_worker_id < MAX_WORKERS) {
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
-                              memory_order_release);
-        grow();
-        uint32_t cur_epoch =
-            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
-                              memory_order_release);
-      } else {
-        grow();
-      }
-      continue;
-    }
-    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-    atomic_store_explicit(&nodes[id].sym, sym_val, memory_order_release);
-    atomic_store_explicit(&nodes[id].left, left_val, memory_order_release);
-    atomic_store_explicit(&nodes[id].right, right_val, memory_order_release);
-    atomic_store_explicit(&nodes[id].hash32, hash_val, memory_order_release);
-    atomic_store_explicit(&nodes[id].kind, kind_val, memory_order_release);
-
-    if (!check_stable(seq))
-      continue;
-
-    return id;
+static inline void update_high_water(atomic_uint *slot, uint32_t value) {
+  uint32_t current = atomic_load_explicit(slot, memory_order_relaxed);
+  while (value > current &&
+         !atomic_compare_exchange_weak_explicit(slot, &current, value,
+                                                memory_order_relaxed,
+                                                memory_order_relaxed)) {
   }
 }
 
-__attribute__((noinline)) static void update_continuation(uint32_t id,
-                                                          uint32_t parent,
-                                                          uint32_t target,
-                                                          uint8_t stage) {
-  if (id >= MAX_CAP)
-    return;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  uint32_t cap = atomic_load_explicit(&h->capacity, memory_order_relaxed);
-  if (id >= cap)
-    return; /* avoid write to invalid slot (e.g. corrupt id from graph read) */
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  atomic_store_explicit(&nodes[id].left, parent, memory_order_relaxed);
-  atomic_store_explicit(&nodes[id].right, target, memory_order_relaxed);
-  atomic_store_explicit(&nodes[id].sym, stage, memory_order_relaxed);
-  atomic_store_explicit(&nodes[id].kind, ARENA_KIND_CONTINUATION,
+static inline uint32_t control_cont_ptr_from_slot(uint32_t slot) {
+  return make_control_ptr(CONTROL_CONT_BASE + slot);
+}
+
+static inline uint32_t control_susp_ptr_from_slot(uint32_t slot) {
+  return make_control_ptr(CONTROL_SUSP_BASE + slot);
+}
+
+static inline bool control_index_is_cont(uint32_t index) {
+  return index >= CONTROL_CONT_BASE && index < CONTROL_SUSP_BASE;
+}
+
+static inline bool control_index_is_susp(uint32_t index) {
+  return index >= CONTROL_SUSP_BASE &&
+         index < (CONTROL_SUSP_BASE + CONTROL_SUSP_SLOTS);
+}
+
+static inline ReifiedCont *control_cont_from_ptr(ControlViews cv,
+                                                 uint32_t ptr) {
+  if (!is_control_ptr(ptr))
+    return NULL;
+  uint32_t index = control_index(ptr);
+  if (!control_index_is_cont(index))
+    return NULL;
+  return &cv.conts[index - CONTROL_CONT_BASE];
+}
+
+static inline Suspension *control_susp_from_ptr(ControlViews cv, uint32_t ptr) {
+  if (!is_control_ptr(ptr))
+    return NULL;
+  uint32_t index = control_index(ptr);
+  if (!control_index_is_susp(index))
+    return NULL;
+  return &cv.suspensions[index - CONTROL_SUSP_BASE];
+}
+
+static uint32_t control_pop_cont(ControlViews cv) {
+  while (true) {
+    unsigned long long head =
+        atomic_load_explicit(&cv.header->cont_head, memory_order_acquire);
+    uint32_t index = freelist_head_index(head);
+    if (index == CONTROL_INVALID_INDEX)
+      return EMPTY;
+    if (!control_index_is_cont(index))
+      trap_invariant();
+    uint32_t slot = index - CONTROL_CONT_BASE;
+    uint32_t next = cv.conts[slot].next_free;
+    unsigned long long next_head =
+        pack_freelist_head(freelist_head_version(head) + 1, next);
+    unsigned long long expected = head;
+    if (atomic_compare_exchange_weak_explicit(
+            &cv.header->cont_head, &expected, next_head, memory_order_acq_rel,
+            memory_order_acquire)) {
+      cv.conts[slot].flags = CONT_FLAG_ALLOCATED;
+      cv.conts[slot].next_free = CONTROL_INVALID_INDEX;
+      uint32_t in_use =
+          atomic_fetch_add_explicit(&cv.header->cont_in_use, 1,
+                                    memory_order_relaxed) +
+          1;
+      update_high_water(&cv.header->cont_high_water, in_use);
+      return slot;
+    }
+  }
+}
+
+static inline void worker_reset_state(WorkerState *ws, uint8_t status) {
+  ws->current_val = EMPTY;
+  ws->sp = 0;
+  ws->remaining_steps = 0;
+  ws->mode = MODE_DESCEND;
+  ws->status = status;
+  ws->reserved = 0;
+}
+
+static inline void control_poison_cont(ReifiedCont *cont) {
+  cont->current_val = EMPTY;
+  cont->saved_sp = 0;
+  cont->remaining_steps = 0;
+  cont->mode = 0;
+  cont->reserved = 0;
+  cont->next_free = CONTROL_INVALID_INDEX;
+#if CONTROL_DEBUG_POISON
+  memset(cont->frames, 0xa5, sizeof(cont->frames));
+#endif
+}
+
+static inline void control_poison_susp(Suspension *susp) {
+  susp->reason = 0;
+  susp->cont_ptr = 0;
+  susp->wait_token = 0;
+  susp->next_free = CONTROL_INVALID_INDEX;
+}
+
+/* After a successful pop, the slot is exclusively owned until pushed back. */
+static uint32_t control_pop_susp(ControlViews cv) {
+  while (true) {
+    unsigned long long head =
+        atomic_load_explicit(&cv.header->susp_head, memory_order_acquire);
+    uint32_t index = freelist_head_index(head);
+    if (index == CONTROL_INVALID_INDEX)
+      return EMPTY;
+    if (!control_index_is_susp(index))
+      trap_invariant();
+    uint32_t slot = index - CONTROL_SUSP_BASE;
+    uint32_t next = cv.suspensions[slot].next_free;
+    unsigned long long next_head =
+        pack_freelist_head(freelist_head_version(head) + 1, next);
+    unsigned long long expected = head;
+    if (atomic_compare_exchange_weak_explicit(
+            &cv.header->susp_head, &expected, next_head, memory_order_acq_rel,
+            memory_order_acquire)) {
+      cv.suspensions[slot].flags = SUSP_FLAG_ALLOCATED;
+      atomic_store_explicit(&cv.suspensions[slot].status, SUSP_STATUS_CLAIMED,
+                            memory_order_relaxed);
+      cv.suspensions[slot].next_free = CONTROL_INVALID_INDEX;
+      uint32_t in_use =
+          atomic_fetch_add_explicit(&cv.header->susp_in_use, 1,
+                                    memory_order_relaxed) +
+          1;
+      update_high_water(&cv.header->susp_high_water, in_use);
+      return slot;
+    }
+  }
+}
+
+static void control_push_cont(ControlViews cv, uint32_t slot) {
+  if (slot >= CONTROL_CONT_SLOTS || cv.conts[slot].flags != CONT_FLAG_ALLOCATED)
+    trap_invariant();
+  uint32_t index = CONTROL_CONT_BASE + slot;
+  control_poison_cont(&cv.conts[slot]);
+  cv.conts[slot].flags = 0;
+  while (true) {
+    unsigned long long head =
+        atomic_load_explicit(&cv.header->cont_head, memory_order_acquire);
+    cv.conts[slot].next_free = freelist_head_index(head);
+    unsigned long long next_head =
+        pack_freelist_head(freelist_head_version(head) + 1, index);
+    unsigned long long expected = head;
+    if (atomic_compare_exchange_weak_explicit(
+            &cv.header->cont_head, &expected, next_head, memory_order_acq_rel,
+            memory_order_acquire)) {
+      atomic_fetch_sub_explicit(&cv.header->cont_in_use, 1,
+                                memory_order_relaxed);
+      return;
+    }
+  }
+}
+
+static void control_push_susp(ControlViews cv, uint32_t slot) {
+  if (slot >= CONTROL_SUSP_SLOTS ||
+      cv.suspensions[slot].flags != SUSP_FLAG_ALLOCATED)
+    trap_invariant();
+  if (atomic_load_explicit(&cv.suspensions[slot].status,
+                           memory_order_acquire) != SUSP_STATUS_CLAIMED)
+    trap_invariant();
+  uint32_t index = CONTROL_SUSP_BASE + slot;
+  control_poison_susp(&cv.suspensions[slot]);
+  cv.suspensions[slot].flags = 0;
+  atomic_store_explicit(&cv.suspensions[slot].status, SUSP_STATUS_FREE,
                         memory_order_release);
+  while (true) {
+    unsigned long long head =
+        atomic_load_explicit(&cv.header->susp_head, memory_order_acquire);
+    cv.suspensions[slot].next_free = freelist_head_index(head);
+    unsigned long long next_head =
+        pack_freelist_head(freelist_head_version(head) + 1, index);
+    unsigned long long expected = head;
+    if (atomic_compare_exchange_weak_explicit(
+            &cv.header->susp_head, &expected, next_head, memory_order_acq_rel,
+            memory_order_acquire)) {
+      atomic_fetch_sub_explicit(&cv.header->susp_in_use, 1,
+                                memory_order_relaxed);
+      return;
+    }
+  }
+}
+
+static inline Frame *control_worker_frames(ControlViews cv, uint32_t slice_id) {
+  if (slice_id >= CONTROL_SLICE_COUNT)
+    trap_invariant();
+  return &cv.worker_frames[slice_id * CONTROL_MAX_FRAMES];
+}
+
+static inline void worker_track_sp(ControlViews cv, uint32_t slice_id,
+                                   uint32_t sp) {
+  if (sp > CONTROL_MAX_FRAMES)
+    trap_invariant();
+  update_high_water(&cv.header->worker_high_water[slice_id], sp);
+}
+
+static inline void worker_push_frame(ControlViews cv, uint32_t slice_id,
+                                     WorkerState *ws, Frame frame) {
+  if (ws->sp >= CONTROL_MAX_FRAMES)
+    trap_invariant();
+  Frame *frames = control_worker_frames(cv, slice_id);
+  frames[ws->sp++] = frame;
+  worker_track_sp(cv, slice_id, ws->sp);
+}
+
+static inline Frame worker_pop_frame(ControlViews cv, uint32_t slice_id,
+                                     WorkerState *ws) {
+  if (ws->sp == 0)
+    trap_invariant();
+  Frame *frames = control_worker_frames(cv, slice_id);
+  return frames[--ws->sp];
+}
+
+/* Parking transfers ownership from the live Tier A slice to Tier B/Tier C. */
+static bool park_worker_state(uint32_t slice_id, WorkerState *ws,
+                              SuspensionReason reason, uint32_t wait_token,
+                              uint32_t *out_susp_ptr) {
+  ControlViews cv = control_views();
+  uint32_t cont_slot = control_pop_cont(cv);
+  if (cont_slot == EMPTY)
+    return false;
+
+  ReifiedCont *cont = &cv.conts[cont_slot];
+  cont->current_val = ws->current_val;
+  cont->saved_sp = ws->sp;
+  cont->remaining_steps = ws->remaining_steps;
+  cont->mode = ws->mode;
+  cont->reserved = 0;
+  if (ws->sp > 0) {
+    memcpy(cont->frames, control_worker_frames(cv, slice_id),
+           ws->sp * sizeof(Frame));
+  }
+
+  uint32_t susp_slot = control_pop_susp(cv);
+  if (susp_slot == EMPTY) {
+    control_push_cont(cv, cont_slot);
+    return false;
+  }
+
+  Suspension *susp = &cv.suspensions[susp_slot];
+  susp->reason = (uint8_t)reason;
+  susp->cont_ptr = control_cont_ptr_from_slot(cont_slot);
+  susp->wait_token = wait_token;
+  atomic_store_explicit(&susp->status, SUSP_STATUS_PARKED,
+                        memory_order_release);
+  worker_reset_state(ws, WORKER_IDLE);
+  atomic_fetch_add_explicit(&cv.header->park_count, 1, memory_order_relaxed);
+  if (out_susp_ptr != NULL)
+    *out_susp_ptr = control_susp_ptr_from_slot(susp_slot);
+  return true;
+}
+
+static bool control_try_claim_suspension(Suspension *susp) {
+  if (susp->flags != SUSP_FLAG_ALLOCATED)
+    return false;
+
+  uint8_t expected = SUSP_STATUS_PARKED;
+  if (atomic_compare_exchange_strong_explicit(
+          &susp->status, &expected, SUSP_STATUS_CLAIMED,
+          memory_order_acq_rel, memory_order_acquire)) {
+    return true;
+  }
+
+  if (expected != SUSP_STATUS_READY)
+    return false;
+
+  expected = SUSP_STATUS_READY;
+  return atomic_compare_exchange_strong_explicit(
+      &susp->status, &expected, SUSP_STATUS_CLAIMED, memory_order_acq_rel,
+      memory_order_acquire);
+}
+
+/* Only one worker may successfully claim a parked suspension for resume. */
+static bool resume_worker_state(uint32_t slice_id, uint32_t susp_ptr,
+                                WorkerState *ws) {
+  ControlViews cv = control_views();
+  Suspension *susp = control_susp_from_ptr(cv, susp_ptr);
+  if (susp == NULL || !control_try_claim_suspension(susp))
+    return false;
+
+  uint32_t cont_ptr = susp->cont_ptr;
+  ReifiedCont *cont = control_cont_from_ptr(cv, cont_ptr);
+  if (cont == NULL || cont->flags != CONT_FLAG_ALLOCATED)
+    trap_invariant();
+  if (cont->saved_sp > CONTROL_MAX_FRAMES)
+    trap_invariant();
+
+  ws->current_val = cont->current_val;
+  ws->sp = cont->saved_sp;
+  ws->remaining_steps = cont->remaining_steps;
+  ws->mode = cont->mode;
+  ws->status = WORKER_RUNNING;
+  ws->reserved = 0;
+  if (ws->sp > 0) {
+    memcpy(control_worker_frames(cv, slice_id), cont->frames,
+           ws->sp * sizeof(Frame));
+  }
+  worker_track_sp(cv, slice_id, ws->sp);
+
+  atomic_fetch_add_explicit(&cv.header->resume_count, 1, memory_order_relaxed);
+  control_push_cont(cv, control_index(cont_ptr) - CONTROL_CONT_BASE);
+  control_push_susp(cv, control_index(susp_ptr) - CONTROL_SUSP_BASE);
+  return true;
+}
+
+static inline void worker_cooperative_yield(void) {
+#ifdef __wasm__
+  /* Temporary host-yield stub: the zero-timeout wait is only a rendezvous
+   * hint, not a durable notify/wake protocol yet. */
+  atomic_uint *gate = &GLOBAL_EPOCH;
+  uint32_t observed = atomic_load_explicit(gate, memory_order_relaxed);
+  __builtin_wasm_memory_atomic_wait32((int *)gate, (int)observed, 0);
+#elif defined(__linux__)
+  sched_yield();
+#else
+  (void)0;
+#endif
+}
+
+uint32_t controlSuspensionReason(uint32_t ptr) {
+  ensure_arena();
+  ControlViews cv = control_views();
+  Suspension *susp = control_susp_from_ptr(cv, ptr);
+  if (susp == NULL || susp->flags != SUSP_FLAG_ALLOCATED)
+    return 0;
+  return susp->reason;
+}
+
+uint32_t controlSuspensionCurrentValue(uint32_t ptr) {
+  ensure_arena();
+  ControlViews cv = control_views();
+  Suspension *susp = control_susp_from_ptr(cv, ptr);
+  if (susp == NULL || susp->flags != SUSP_FLAG_ALLOCATED)
+    return 0;
+  ReifiedCont *cont = control_cont_from_ptr(cv, susp->cont_ptr);
+  return (cont == NULL) ? 0 : cont->current_val;
+}
+
+uint32_t controlSuspensionRemainingSteps(uint32_t ptr) {
+  ensure_arena();
+  ControlViews cv = control_views();
+  Suspension *susp = control_susp_from_ptr(cv, ptr);
+  if (susp == NULL || susp->flags != SUSP_FLAG_ALLOCATED)
+    return 0;
+  ReifiedCont *cont = control_cont_from_ptr(cv, susp->cont_ptr);
+  return (cont == NULL) ? 0 : cont->remaining_steps;
 }
 
 __attribute__((no_sanitize("address"), noinline)) static void
@@ -878,6 +1372,8 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   h->offset_stdout = layout.offset_stdout;
   h->offset_stdin_wait = layout.offset_stdin_wait;
   h->offset_stdout_wait = layout.offset_stdout_wait;
+  h->offset_control = layout.offset_control;
+  h->control_bytes = layout.control_bytes;
   h->offset_term_cache = layout.offset_term_cache;
   h->offset_nodes = layout.offset_nodes;
   h->offset_buckets = layout.offset_buckets;
@@ -910,43 +1406,6 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   atomic_fetch_add_explicit(&h->resize_seq, 1, memory_order_release);
 }
 
-__attribute__((unused)) static uint32_t unwind_to_root(uint32_t curr,
-                                                       uint32_t stack) {
-  while (stack != EMPTY) {
-    uint32_t recycled = stack;
-    stack = leftOf(recycled);
-    uint32_t parent_node = rightOf(recycled);
-    uint8_t stage = (uint8_t)symOf(recycled);
-
-    if (stage == STAGE_LEFT) {
-      if (curr != leftOf(parent_node)) {
-        curr = allocCons(curr, rightOf(parent_node));
-      } else {
-        curr = parent_node;
-      }
-    } else {
-      if (curr != rightOf(parent_node)) {
-        curr = allocCons(leftOf(parent_node), curr);
-      } else {
-        curr = parent_node;
-      }
-    }
-  }
-  return curr;
-}
-
-/** On budget (gas or step limit): always suspend (curr, stack, mode). Never
- * unwind_to_root here — that would be O(depth) and can allocate. */
-static inline StepOutcome budget_outcome(uint8_t mode, uint32_t curr,
-                                         uint32_t stack,
-                                         uint32_t remaining_steps) {
-  StepOutcome o;
-  o.type = RESULT_YIELD;
-  o.val =
-      alloc_generic(ARENA_KIND_SUSPENSION, mode, curr, stack, remaining_steps);
-  return o;
-}
-
 /** Prelude true = K */
 static uint32_t arenaTrue(void) {
   if (TRUE_ID == EMPTY) {
@@ -972,98 +1431,150 @@ static uint32_t arenaFalse(void) {
 /** Direct node loads: wait-free fast paths with no live capacity check.
  * Safe because AoS nodes never move and memory is reserved up to MAX_CAP. */
 static inline uint32_t step_kind(ArenaNode *nodes, uint32_t n) {
-  if (n >= MAX_CAP)
+  if (is_control_ptr(n) || n >= MAX_CAP)
     return 0;
   return nodes ? atomic_load_explicit(&nodes[n].kind, memory_order_acquire)
                : kindOf(n);
 }
 static inline uint32_t step_sym(ArenaNode *nodes, uint32_t n) {
-  if (n >= MAX_CAP)
+  if (is_control_ptr(n) || n >= MAX_CAP)
     return 0;
   return nodes ? atomic_load_explicit(&nodes[n].sym, memory_order_acquire)
                : symOf(n);
 }
-static inline uint32_t step_hash(ArenaNode *nodes, uint32_t n) {
-  if (n >= MAX_CAP)
-    return 0;
-  return nodes ? atomic_load_explicit(&nodes[n].hash32, memory_order_acquire)
-               : hashOf(n);
-}
 static inline uint32_t step_left(ArenaNode *nodes, uint32_t n) {
-  if (n >= MAX_CAP)
+  if (is_control_ptr(n) || n >= MAX_CAP)
     return 0;
-  return nodes ? atomic_load_explicit(&nodes[n].left, memory_order_acquire)
-               : leftOf(n);
+  uint32_t val = nodes ? atomic_load_explicit(&nodes[n].left, memory_order_acquire)
+                       : leftOf(n);
+  if (val != EMPTY && is_control_ptr(val))
+    trap_invariant();
+  return val;
 }
 static inline uint32_t step_right(ArenaNode *nodes, uint32_t n) {
-  if (n >= MAX_CAP)
+  if (is_control_ptr(n) || n >= MAX_CAP)
     return 0;
-  return nodes ? atomic_load_explicit(&nodes[n].right, memory_order_acquire)
-               : rightOf(n);
+  uint32_t val =
+      nodes ? atomic_load_explicit(&nodes[n].right, memory_order_acquire)
+            : rightOf(n);
+  if (val != EMPTY && is_control_ptr(val))
+    trap_invariant();
+  return val;
+}
+static inline void control_retry_tick(void) {
+  ControlViews cv = control_views();
+  atomic_fetch_add_explicit(&cv.header->cooperative_retries, 1,
+                            memory_order_relaxed);
+  worker_cooperative_yield();
 }
 
-static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
-                                  uint32_t *gas, uint32_t *remaining_steps,
-                                  uint32_t free_node, ArenaNode *nodes) {
+static StepOutcome park_budget_yield(uint32_t slice_id, WorkerState *ws,
+                                     SuspensionReason reason,
+                                     bool allow_retry) {
+  StepOutcome out = {RESULT_YIELD, EMPTY};
+  while (!park_worker_state(slice_id, ws, reason, 0, &out.val)) {
+    if (!allow_retry)
+      trap_invariant();
+    control_retry_tick();
+  }
+  return out;
+}
+
+static bool maybe_park_io_wait(uint32_t slice_id, WorkerState *ws,
+                               SuspensionReason reason, uint32_t wait_offset,
+                               bool allow_retry, StepOutcome *out) {
+  uint32_t susp_ptr = EMPTY;
+  if (!park_worker_state(slice_id, ws, reason, 0, &susp_ptr)) {
+    if (!allow_retry)
+      trap_invariant();
+    control_retry_tick();
+    return false;
+  }
+  if (tls_worker_id < MAX_WORKERS) {
+    atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+                          memory_order_release);
+  }
+  enqueue_blocking((Ring *)(ARENA_BASE_ADDR + wait_offset), &susp_ptr, 4);
+  out->type = RESULT_YIELD;
+  out->val = susp_ptr;
+  return true;
+}
+
+static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
+                                  uint32_t *gas, ArenaNode *nodes,
+                                  bool yield_on_gas,
+                                  bool yield_on_step_limit,
+                                  bool allow_retry) {
+  ControlViews cv = control_views();
+  StepOutcome out = {RESULT_DONE, EMPTY};
+
   while (true) {
     if (*gas == 0) {
-      return budget_outcome(mode, curr, stack, *remaining_steps);
+      if (!yield_on_gas) {
+        *gas = ARENA_STEP_GAS;
+      } else {
+        return park_budget_yield(slice_id, ws, SUSP_GAS_EXHAUSTED,
+                                 allow_retry);
+      }
     }
     (*gas)--;
 
-    if (mode == MODE_RETURN) {
-      if (stack == EMPTY) {
-        StepOutcome o;
-        o.type = RESULT_DONE;
-        o.val = curr;
-        return o;
+    if (ws->mode == MODE_RETURN) {
+      if (ws->sp == 0) {
+        out.val = ws->current_val;
+        return out;
       }
-      uint32_t recycled = stack;
-      stack = step_left(nodes, recycled);
-      uint32_t parent_node = step_right(nodes, recycled);
-      uint8_t stage = (uint8_t)step_sym(nodes, recycled);
+      Frame f = worker_pop_frame(cv, slice_id, ws);
+      uint32_t parent_node = f.a;
+      uint8_t stage = f.submode;
 
       if (stage == STAGE_LEFT) {
-        if (curr != step_left(nodes, parent_node)) {
-          curr = allocCons(curr, step_right(nodes, parent_node));
-          free_node = recycled;
-          mode = MODE_RETURN;
+        if (ws->current_val != step_left(nodes, parent_node)) {
+          ws->current_val =
+              allocCons(ws->current_val, step_right(nodes, parent_node));
+          ws->mode = MODE_RETURN;
           continue;
         }
-        update_continuation(recycled, stack, parent_node, STAGE_RIGHT);
-        stack = recycled;
-        mode = MODE_DESCEND;
-        curr = step_right(nodes, parent_node);
-        continue;
-      } else {
-        if (curr != step_right(nodes, parent_node)) {
-          curr = allocCons(step_left(nodes, parent_node), curr);
-        } else {
-          curr = parent_node;
-        }
-        free_node = recycled;
-        mode = MODE_RETURN;
+        worker_push_frame(
+            cv, slice_id, ws,
+            (Frame){FRAME_UPDATE, STAGE_RIGHT, 0, parent_node, 0});
+        ws->current_val = step_right(nodes, parent_node);
+        ws->mode = MODE_DESCEND;
         continue;
       }
-    }
 
-    if (step_kind(nodes, curr) != ARENA_KIND_NON_TERM) {
-      mode = MODE_RETURN;
+      if (ws->current_val != step_right(nodes, parent_node)) {
+        ws->current_val =
+            allocCons(step_left(nodes, parent_node), ws->current_val);
+      } else {
+        ws->current_val = parent_node;
+      }
+      ws->mode = MODE_RETURN;
       continue;
     }
 
-    uint32_t left = step_left(nodes, curr);
-    uint32_t right = step_right(nodes, curr);
+    if (step_kind(nodes, ws->current_val) != ARENA_KIND_NON_TERM) {
+      ws->mode = MODE_RETURN;
+      continue;
+    }
+
+    uint32_t left = step_left(nodes, ws->current_val);
+    uint32_t right = step_right(nodes, ws->current_val);
 
     if (step_kind(nodes, left) == ARENA_KIND_TERMINAL) {
       uint32_t sym = step_sym(nodes, left);
       if (sym == ARENA_SYM_I) {
-        if (*remaining_steps == 0) {
-          return budget_outcome(mode, curr, stack, 0);
+        if (ws->remaining_steps == 0) {
+          if (yield_on_step_limit) {
+            return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                     allow_retry);
+          }
+          ws->mode = MODE_RETURN;
+          continue;
         }
-        (*remaining_steps)--;
-        curr = right;
-        mode = MODE_DESCEND;
+        ws->remaining_steps--;
+        ws->current_val = right;
+        ws->mode = MODE_DESCEND;
         continue;
       }
       if (sym == ARENA_SYM_READ_ONE) {
@@ -1071,31 +1582,27 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         uint8_t byte;
         if (try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdin), &byte,
                         1)) {
-          if (*remaining_steps == 0) {
-            return budget_outcome(mode, curr, stack, 0);
+          if (ws->remaining_steps == 0) {
+            if (yield_on_step_limit) {
+              return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                       allow_retry);
+            }
+            ws->mode = MODE_RETURN;
+            continue;
           }
-          (*remaining_steps)--;
-          curr = allocCons(right, allocU8(byte));
-          mode = MODE_DESCEND;
+          ws->remaining_steps--;
+          ws->current_val = allocCons(right, allocU8(byte));
+          ws->mode = MODE_DESCEND;
           continue;
         }
-        /* Blocked on stdin: suspend (never unwind — would be O(depth)). Drop
-         * epoch before blocking. */
-        uint32_t susp_id = alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT,
-                                         curr, stack, *remaining_steps);
-        if (tls_worker_id < MAX_WORKERS)
-          atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
-                                memory_order_release);
-        enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdin_wait),
-                         &susp_id, 4);
-        StepOutcome o;
-        o.type = RESULT_YIELD;
-        o.val = susp_id;
-        return o;
+        if (maybe_park_io_wait(slice_id, ws, SUSP_WAIT_IO_STDIN,
+                               h->offset_stdin_wait, allow_retry, &out)) {
+          return out;
+        }
+        continue;
       }
     } else if (step_kind(nodes, left) == ARENA_KIND_NON_TERM) {
       uint32_t ll = step_left(nodes, left);
-      /* Native U8 operations: (op a b) when a,b are U8 */
       if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL) {
         uint32_t sym = step_sym(nodes, ll);
         if (sym == ARENA_SYM_WRITE_ONE) {
@@ -1105,28 +1612,24 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
             SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
             if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
                             1)) {
-              if (*remaining_steps == 0) {
-                return budget_outcome(mode, curr, stack, 0);
+              if (ws->remaining_steps == 0) {
+                if (yield_on_step_limit) {
+                  return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                           allow_retry);
+                }
+                ws->mode = MODE_RETURN;
+                continue;
               }
-              (*remaining_steps)--;
-              /* writeOne byte callback -> callback byte */
-              curr = allocCons(right, byte_node);
-              mode = MODE_DESCEND;
+              ws->remaining_steps--;
+              ws->current_val = allocCons(right, byte_node);
+              ws->mode = MODE_DESCEND;
               continue;
             }
-            /* Blocked on stdout: suspend. Drop epoch before blocking. */
-            uint32_t susp_id =
-                alloc_generic(ARENA_KIND_SUSPENSION, MODE_IO_WAIT, curr, stack,
-                              *remaining_steps);
-            if (tls_worker_id < MAX_WORKERS)
-              atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
-                                    memory_order_release);
-            enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
-                             &susp_id, 4);
-            StepOutcome o;
-            o.type = RESULT_YIELD;
-            o.val = susp_id;
-            return o;
+            if (maybe_park_io_wait(slice_id, ws, SUSP_WAIT_IO_STDOUT,
+                                   h->offset_stdout_wait, allow_retry, &out)) {
+              return out;
+            }
+            continue;
           }
         }
         if (sym >= ARENA_SYM_EQ_U8 && sym <= ARENA_SYM_ADD_U8) {
@@ -1134,43 +1637,53 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
           uint32_t b = right;
           if (step_kind(nodes, a) == ARENA_KIND_U8 &&
               step_kind(nodes, b) == ARENA_KIND_U8) {
-            if (*remaining_steps == 0) {
-              return budget_outcome(mode, curr, stack, 0);
+            if (ws->remaining_steps == 0) {
+              if (yield_on_step_limit) {
+                return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                         allow_retry);
+              }
+              ws->mode = MODE_RETURN;
+              continue;
             }
-            (*remaining_steps)--;
+            ws->remaining_steps--;
             uint8_t va = (uint8_t)step_sym(nodes, a);
             uint8_t vb = (uint8_t)step_sym(nodes, b);
 
             switch (sym) {
             case ARENA_SYM_EQ_U8:
-              curr = (va == vb) ? arenaTrue() : arenaFalse();
+              ws->current_val = (va == vb) ? arenaTrue() : arenaFalse();
               break;
             case ARENA_SYM_LT_U8:
-              curr = (va < vb) ? arenaTrue() : arenaFalse();
+              ws->current_val = (va < vb) ? arenaTrue() : arenaFalse();
               break;
             case ARENA_SYM_DIV_U8:
-              curr = allocU8(vb == 0 ? 0 : va / vb);
+              ws->current_val = allocU8(vb == 0 ? 0 : va / vb);
               break;
             case ARENA_SYM_MOD_U8:
-              curr = allocU8(vb == 0 ? 0 : va % vb);
+              ws->current_val = allocU8(vb == 0 ? 0 : va % vb);
               break;
             case ARENA_SYM_ADD_U8:
-              curr = allocU8((uint8_t)(va + vb));
+              ws->current_val = allocU8((uint8_t)(va + vb));
               break;
             }
-            mode = MODE_DESCEND;
+            ws->mode = MODE_DESCEND;
             continue;
           }
         }
       }
       if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
           step_sym(nodes, ll) == ARENA_SYM_K) {
-        if (*remaining_steps == 0) {
-          return budget_outcome(mode, curr, stack, 0);
+        if (ws->remaining_steps == 0) {
+          if (yield_on_step_limit) {
+            return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                     allow_retry);
+          }
+          ws->mode = MODE_RETURN;
+          continue;
         }
-        (*remaining_steps)--;
-        curr = step_right(nodes, left);
-        mode = MODE_DESCEND;
+        ws->remaining_steps--;
+        ws->current_val = step_right(nodes, left);
+        ws->mode = MODE_DESCEND;
         continue;
       }
       if (step_kind(nodes, ll) == ARENA_KIND_NON_TERM) {
@@ -1178,33 +1691,54 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
         if (step_kind(nodes, lll) == ARENA_KIND_TERMINAL) {
           uint32_t sym = step_sym(nodes, lll);
           if (sym == ARENA_SYM_S) {
-            if (*remaining_steps == 0)
-              return budget_outcome(mode, curr, stack, 0);
-            (*remaining_steps)--;
-            uint32_t x = step_right(nodes, ll), y = step_right(nodes, left),
-                     z = right;
-            curr = allocCons(allocCons(x, z), allocCons(y, z));
-            mode = MODE_DESCEND;
+            if (ws->remaining_steps == 0) {
+              if (yield_on_step_limit) {
+                return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                         allow_retry);
+              }
+              ws->mode = MODE_RETURN;
+              continue;
+            }
+            ws->remaining_steps--;
+            uint32_t x = step_right(nodes, ll);
+            uint32_t y = step_right(nodes, left);
+            uint32_t z = right;
+            ws->current_val = allocCons(allocCons(x, z), allocCons(y, z));
+            ws->mode = MODE_DESCEND;
             continue;
           }
           if (sym == ARENA_SYM_B) {
-            if (*remaining_steps == 0)
-              return budget_outcome(mode, curr, stack, 0);
-            (*remaining_steps)--;
-            uint32_t x = step_right(nodes, ll), y = step_right(nodes, left),
-                     z = right;
-            curr = allocCons(x, allocCons(y, z));
-            mode = MODE_DESCEND;
+            if (ws->remaining_steps == 0) {
+              if (yield_on_step_limit) {
+                return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                         allow_retry);
+              }
+              ws->mode = MODE_RETURN;
+              continue;
+            }
+            ws->remaining_steps--;
+            uint32_t x = step_right(nodes, ll);
+            uint32_t y = step_right(nodes, left);
+            uint32_t z = right;
+            ws->current_val = allocCons(x, allocCons(y, z));
+            ws->mode = MODE_DESCEND;
             continue;
           }
           if (sym == ARENA_SYM_C) {
-            if (*remaining_steps == 0)
-              return budget_outcome(mode, curr, stack, 0);
-            (*remaining_steps)--;
-            uint32_t x = step_right(nodes, ll), y = step_right(nodes, left),
-                     z = right;
-            curr = allocCons(allocCons(x, z), y);
-            mode = MODE_DESCEND;
+            if (ws->remaining_steps == 0) {
+              if (yield_on_step_limit) {
+                return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                         allow_retry);
+              }
+              ws->mode = MODE_RETURN;
+              continue;
+            }
+            ws->remaining_steps--;
+            uint32_t x = step_right(nodes, ll);
+            uint32_t y = step_right(nodes, left);
+            uint32_t z = right;
+            ws->current_val = allocCons(allocCons(x, z), y);
+            ws->mode = MODE_DESCEND;
             continue;
           }
         } else if (step_kind(nodes, lll) == ARENA_KIND_NON_TERM) {
@@ -1212,33 +1746,58 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
           if (step_kind(nodes, llll) == ARENA_KIND_TERMINAL) {
             uint32_t sym = step_sym(nodes, llll);
             if (sym == ARENA_SYM_SPRIME) {
-              if (*remaining_steps == 0)
-                return budget_outcome(mode, curr, stack, 0);
-              (*remaining_steps)--;
-              uint32_t w = step_right(nodes, lll), x = step_right(nodes, ll),
-                       y = step_right(nodes, left), z = right;
-              curr = allocCons(allocCons(w, allocCons(x, z)), allocCons(y, z));
-              mode = MODE_DESCEND;
+              if (ws->remaining_steps == 0) {
+                if (yield_on_step_limit) {
+                  return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                           allow_retry);
+                }
+                ws->mode = MODE_RETURN;
+                continue;
+              }
+              ws->remaining_steps--;
+              uint32_t w = step_right(nodes, lll);
+              uint32_t x = step_right(nodes, ll);
+              uint32_t y = step_right(nodes, left);
+              uint32_t z = right;
+              ws->current_val =
+                  allocCons(allocCons(w, allocCons(x, z)), allocCons(y, z));
+              ws->mode = MODE_DESCEND;
               continue;
             }
             if (sym == ARENA_SYM_BPRIME) {
-              if (*remaining_steps == 0)
-                return budget_outcome(mode, curr, stack, 0);
-              (*remaining_steps)--;
-              uint32_t w = step_right(nodes, lll), x = step_right(nodes, ll),
-                       y = step_right(nodes, left), z = right;
-              curr = allocCons(allocCons(w, x), allocCons(y, z));
-              mode = MODE_DESCEND;
+              if (ws->remaining_steps == 0) {
+                if (yield_on_step_limit) {
+                  return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                           allow_retry);
+                }
+                ws->mode = MODE_RETURN;
+                continue;
+              }
+              ws->remaining_steps--;
+              uint32_t w = step_right(nodes, lll);
+              uint32_t x = step_right(nodes, ll);
+              uint32_t y = step_right(nodes, left);
+              uint32_t z = right;
+              ws->current_val = allocCons(allocCons(w, x), allocCons(y, z));
+              ws->mode = MODE_DESCEND;
               continue;
             }
             if (sym == ARENA_SYM_CPRIME) {
-              if (*remaining_steps == 0)
-                return budget_outcome(mode, curr, stack, 0);
-              (*remaining_steps)--;
-              uint32_t w = step_right(nodes, lll), x = step_right(nodes, ll),
-                       y = step_right(nodes, left), z = right;
-              curr = allocCons(allocCons(w, allocCons(x, z)), y);
-              mode = MODE_DESCEND;
+              if (ws->remaining_steps == 0) {
+                if (yield_on_step_limit) {
+                  return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                           allow_retry);
+                }
+                ws->mode = MODE_RETURN;
+                continue;
+              }
+              ws->remaining_steps--;
+              uint32_t w = step_right(nodes, lll);
+              uint32_t x = step_right(nodes, ll);
+              uint32_t y = step_right(nodes, left);
+              uint32_t z = right;
+              ws->current_val = allocCons(allocCons(w, allocCons(x, z)), y);
+              ws->mode = MODE_DESCEND;
               continue;
             }
           }
@@ -1246,64 +1805,40 @@ static StepOutcome step_iterative(uint32_t curr, uint32_t stack, uint8_t mode,
       }
     }
 
-    if (free_node != EMPTY) {
-      update_continuation(free_node, stack, curr, STAGE_LEFT);
-      stack = free_node;
-      free_node = EMPTY;
-    } else {
-      stack =
-          alloc_generic(ARENA_KIND_CONTINUATION, STAGE_LEFT, stack, curr, 0);
-    }
-    curr = left;
-    mode = MODE_DESCEND;
+    worker_push_frame(cv, slice_id, ws,
+                      (Frame){FRAME_UPDATE, STAGE_LEFT, 0, ws->current_val, 0});
+    ws->current_val = left;
+    ws->mode = MODE_DESCEND;
   }
 }
 
 uint32_t arenaKernelStep(uint32_t expr) {
   ensure_arena();
-  uint32_t curr = expr;
-  uint32_t stack = EMPTY;
-  uint8_t mode = MODE_DESCEND;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  WorkerState ws = {
+      .current_val = expr,
+      .sp = 0,
+      .remaining_steps = 1,
+      .mode = MODE_DESCEND,
+      .status = WORKER_RUNNING,
+      .reserved = 0,
+  };
 
-  uint32_t remaining_steps = 1;
-  uint32_t free_node = EMPTY;
-
-  if (kindOf(curr) == ARENA_KIND_SUSPENSION) {
-    uint32_t susp = curr;
-    curr = leftOf(susp);
-    stack = rightOf(susp);
-    mode = (uint8_t)symOf(susp);
-    if (mode == MODE_IO_WAIT)
-      mode = MODE_DESCEND;
-    remaining_steps = hashOf(susp);
-    free_node = susp;
+  if (is_control_ptr(expr)) {
+    if (!resume_worker_state(CONTROL_SYNC_SLICE_ID, expr, &ws))
+      return expr;
   }
 
-  /* Semantic step: one rewrite, or normal form, or real IO wait. Internally
-   * chunk with gas; on gas exhaustion resume immediately instead of returning.
-   */
-  while (remaining_steps > 0) {
+  while (true) {
     uint32_t gas = ARENA_STEP_GAS;
-    StepOutcome o = step_iterative(curr, stack, mode, &gas, &remaining_steps,
-                                   free_node, NULL);
-
-    if (o.type == RESULT_YIELD) {
-      if (symOf(o.val) == MODE_IO_WAIT)
-        return o.val; /* Real IO wait: return suspension to caller. */
-      /* Gas exhausted: resume immediately; do not return to caller. */
-      uint32_t susp = o.val;
-      curr = leftOf(susp);
-      stack = rightOf(susp);
-      mode = (uint8_t)symOf(susp);
-      remaining_steps = hashOf(susp);
-      free_node = susp;
-      continue;
-    }
-
-    return o.val; /* RESULT_DONE: normal form or one semantic step done. */
+    StepOutcome o =
+        step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, nodes, false, false,
+                       false);
+    if (o.type == RESULT_YIELD)
+      return o.val;
+    return o.val;
   }
-
-  return unwind_to_root(curr, stack);
 }
 
 uint32_t reduce(uint32_t expr, uint32_t max) {
@@ -1312,8 +1847,8 @@ uint32_t reduce(uint32_t expr, uint32_t max) {
   uint32_t cur = expr;
   for (uint32_t i = 0; i < limit; i++) {
     uint32_t next = arenaKernelStep(cur);
-    if (next == cur)
-      break;
+    if (next == cur || is_control_ptr(next))
+      return next;
     cur = next;
   }
   return cur;
@@ -1327,7 +1862,8 @@ __attribute__((no_sanitize("address"))) int64_t hostPullV2(void) {
   Cqe cqe;
   if (try_dequeue((Ring *)(base + h->offset_cq), &cqe, sizeof(Cqe))) {
     uint32_t event = cqe.event_kind & 0x3;
-    uint32_t node = cqe.node_id & 0x3fffffff;
+    uint32_t node =
+        is_control_ptr(cqe.node_id) ? control_index(cqe.node_id) : cqe.node_id;
     uint32_t packed_low = (event << 30) | node;
     return ((int64_t)cqe.req_id << 32) | (int64_t)packed_low;
   }
@@ -1421,64 +1957,71 @@ void workerLoop(uint32_t worker_id) {
       nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
     }
 
-    uint32_t curr = job.node_id;
-    uint32_t stack = EMPTY;
-    uint8_t mode = MODE_DESCEND;
-    uint32_t remaining_steps;
-    uint32_t free_node = EMPTY;
+    WorkerState ws = {
+        .current_val = job.node_id,
+        .sp = 0,
+        .remaining_steps =
+            (job.max_steps == 0xffffffffu) ? 0xffffffffu : job.max_steps,
+        .mode = MODE_DESCEND,
+        .status = WORKER_RUNNING,
+        .reserved = 0,
+    };
 
-    if (step_kind(nodes, curr) == ARENA_KIND_SUSPENSION) {
-      uint32_t susp = curr;
-      curr = step_left(nodes, susp);
-      stack = step_right(nodes, susp);
-      mode = (uint8_t)step_sym(nodes, susp);
-      if (mode == MODE_IO_WAIT)
-        mode = MODE_DESCEND;
-      remaining_steps = step_hash(nodes, susp);
-      free_node = susp;
+    if (is_control_ptr(job.node_id)) {
+      if (!resume_worker_state(worker_id, job.node_id, &ws)) {
+        Cqe error = {job.node_id, job.req_id, CQ_EVENT_ERROR};
+        if (use_qsbr)
+          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+                                memory_order_release);
+        enqueue_blocking(cq, &error, sizeof(Cqe));
+        if (use_qsbr) {
+          tls_worker_id = MAX_WORKERS;
+        }
+        continue;
+      }
     } else {
-      remaining_steps =
-          (job.max_steps == 0xffffffff) ? 0xffffffff : job.max_steps;
+      ws.current_val = job.node_id;
     }
 
     while (true) {
-      if (remaining_steps == 0) {
-
-        uint32_t susp_id =
-            alloc_generic(ARENA_KIND_SUSPENSION, mode, curr, stack, 0);
-        Cqe result = {susp_id, job.req_id, CQ_EVENT_YIELD};
+      if (ws.remaining_steps == 0) {
+        StepOutcome budget = park_budget_yield(worker_id, &ws, SUSP_STEP_LIMIT,
+                                               true);
+        Cqe result = {budget.val, job.req_id, CQ_EVENT_YIELD};
         if (use_qsbr)
           atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
                                 memory_order_release);
         enqueue_blocking(cq, &result, sizeof(Cqe));
         break;
       }
+      uint32_t before = ws.current_val;
       uint32_t gas = batch_gas;
-      StepOutcome o = step_iterative(curr, stack, mode, &gas, &remaining_steps,
-                                     free_node, nodes);
+      StepOutcome o =
+          step_iterative(worker_id, &ws, &gas, nodes, true, true, true);
       if (o.type == RESULT_YIELD) {
-        uint32_t o_sym = step_sym(nodes, o.val);
-        Cqe res = {o.val, job.req_id,
-                   (o_sym == MODE_IO_WAIT) ? CQ_EVENT_IO_WAIT : CQ_EVENT_YIELD};
+        uint32_t reason = controlSuspensionReason(o.val);
+        uint32_t event =
+            (reason == SUSP_WAIT_IO_STDIN || reason == SUSP_WAIT_IO_STDOUT)
+                ? CQ_EVENT_IO_WAIT
+                : CQ_EVENT_YIELD;
+        Cqe res = {o.val, job.req_id, event};
         if (use_qsbr)
           atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
                                 memory_order_release);
         enqueue_blocking(cq, &res, sizeof(Cqe));
         break;
-      } else {
-        if (o.val == curr) {
-          Cqe res = {curr, job.req_id, CQ_EVENT_DONE};
-          if (use_qsbr)
-            atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
-                                  memory_order_release);
-          enqueue_blocking(cq, &res, sizeof(Cqe));
-          break;
-        }
-        curr = o.val;
-        stack = EMPTY;
-        mode = MODE_DESCEND;
-        free_node = EMPTY;
       }
+      if (o.val == before) {
+        Cqe res = {o.val, job.req_id, CQ_EVENT_DONE};
+        if (use_qsbr)
+          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+                                memory_order_release);
+        enqueue_blocking(cq, &res, sizeof(Cqe));
+        break;
+      }
+      ws.current_val = o.val;
+      ws.sp = 0;
+      ws.mode = MODE_DESCEND;
     }
 
     /* Quiescent state: no longer touching the arena. */

@@ -201,6 +201,8 @@ static size_t unparse_ski_rec(uint32_t node_id, char *buf, size_t capacity,
                               size_t written) {
   if (node_id == EMPTY || capacity <= written)
     return written;
+  if (is_control_ptr(node_id))
+    return written;
   uint32_t kind = kindOf(node_id);
   if (kind == ARENA_KIND_TERMINAL) {
     if (written + 2 > capacity)
@@ -216,22 +218,6 @@ static size_t unparse_ski_rec(uint32_t node_id, char *buf, size_t capacity,
     return written + (size_t)n;
   }
   if (kind == ARENA_KIND_NON_TERM) {
-    uint32_t l = leftOf(node_id), r = rightOf(node_id);
-    if (written + 1 > capacity)
-      return written;
-    buf[written++] = '(';
-    written = unparse_ski_rec(l, buf, capacity, written);
-    if (written + 1 > capacity)
-      return written;
-    buf[written++] = ' ';
-    written = unparse_ski_rec(r, buf, capacity, written);
-    if (written + 1 > capacity)
-      return written;
-    buf[written++] = ')';
-    return written;
-  }
-  /* Suspension/continuation: treat as application for display. */
-  if (kind == ARENA_KIND_SUSPENSION || kind == ARENA_KIND_CONTINUATION) {
     uint32_t l = leftOf(node_id), r = rightOf(node_id);
     if (written + 1 > capacity)
       return written;

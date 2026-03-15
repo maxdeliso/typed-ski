@@ -1,9 +1,21 @@
 module DataEnv
 
 import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Pair
+import Prelude MkPair
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude if
 import Prelude U8
-import Nat Nat
+import Prelude and
 import Avl Avl
+import Avl empty
+import Avl lookup
+import Avl insert
 
 export CtorInfo
 export MkCtorInfo
@@ -11,27 +23,26 @@ export ctorTag
 export ctorTotal
 export ctorArity
 export ctorAdtName
-
 export ADTInfo
 export MkADTInfo
 export adtCtors
-
 export DataEnv
 export MkDataEnv
 export datEnvCtors
 export datEnvAdts
 
-data CtorInfo = MkCtorInfo Nat Nat Nat (List U8)
+data CtorInfo = MkCtorInfo U8 U8 U8 (List U8)
 
-poly ctorTag = \i : CtorInfo => match i [Nat] { | MkCtorInfo t n a adt => t }
-poly ctorTotal = \i : CtorInfo => match i [Nat] { | MkCtorInfo t n a adt => n }
-poly ctorArity = \i : CtorInfo => match i [Nat] { | MkCtorInfo t n a adt => a }
+poly ctorTag = \i : CtorInfo => match i [U8] { | MkCtorInfo t n a adt => t }
+poly ctorTotal = \i : CtorInfo => match i [U8] { | MkCtorInfo t n a adt => n }
+poly ctorArity = \i : CtorInfo => match i [U8] { | MkCtorInfo t n a adt => a }
 poly ctorAdtName = \i : CtorInfo => match i [List U8] { | MkCtorInfo t n a adt => adt }
 
 data ADTInfo = MkADTInfo (List (List U8))
-poly adtCtors = \i : ADTInfo => match i [List (List U8)] { | MkADTInfo ctors => ctors }
+
+poly adtCtors = \i : ADTInfo => match i [List (List U8)] { | MkADTInfo cs => cs }
 
 data DataEnv = MkDataEnv (Avl (List U8) CtorInfo) (Avl (List U8) ADTInfo)
 
-poly datEnvCtors = \e : DataEnv => match e [Avl (List U8) CtorInfo] { | MkDataEnv ctors adts => ctors }
-poly datEnvAdts = \e : DataEnv => match e [Avl (List U8) ADTInfo] { | MkDataEnv ctors adts => adts }
+poly datEnvCtors = \e : DataEnv => match e [Avl (List U8) CtorInfo] { | MkDataEnv c a => c }
+poly datEnvAdts = \e : DataEnv => match e [Avl (List U8) ADTInfo] { | MkDataEnv c a => a }

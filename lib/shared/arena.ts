@@ -23,6 +23,7 @@ import {
   ReadOne,
   S,
   SPrime,
+  SubU8,
   WriteOne,
 } from "../ski/terminal.ts";
 
@@ -90,6 +91,8 @@ export enum ArenaSym {
   ModU8 = 16,
   /** addU8 intrinsic */
   AddU8 = 17,
+  /** subU8 intrinsic */
+  SubU8 = 18,
 }
 
 /**
@@ -111,6 +114,7 @@ export const ARENA_SYM_TO_SKI: Record<ArenaSym, SKIExpression> = {
   [ArenaSym.DivU8]: DivU8,
   [ArenaSym.ModU8]: ModU8,
   [ArenaSym.AddU8]: AddU8,
+  [ArenaSym.SubU8]: SubU8,
 };
 
 /**

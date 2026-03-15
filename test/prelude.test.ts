@@ -1,6 +1,4 @@
 import { assertEquals } from "std/assert";
-import { compileToObjectFileString } from "../lib/compiler/index.ts";
-import { deserializeTripCObject } from "../lib/compiler/objectFile.ts";
 import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
@@ -8,45 +6,15 @@ import { getBinObject } from "../lib/bin.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
-
-const PRELUDE_TEST = `module TestPrelude
-
-import Nat zero
-import Nat succ
-import Nat add
-import Prelude not
-import Prelude and
-import Prelude or
-import Prelude pair
-import Prelude fst
-import Prelude snd
-import Nat pred
-import Nat sub
-import Nat isZero
-import Nat lte
-import Nat gte
-import Prelude true
-import Prelude false
-import Nat Nat
-
-export main
-
-poly main =
-  let a = (not false) [Nat] (succ zero) zero in
-  let b = add a ((and true true) [Nat] (succ zero) zero) in
-  let c = add b ((or false true) [Nat] (succ zero) zero) in
-  let d = add c (pred (succ (succ zero))) in
-  let e = add d (sub (succ (succ (succ zero))) (succ zero)) in
-  let f = add e ((lte (succ zero) (succ (succ zero))) [Nat] (succ zero) zero) in
-  add f ((gte (succ (succ zero)) (succ zero)) [Nat] (succ zero) zero)
-`;
+import { loadTripModuleObject } from "../lib/tripSourceLoader.ts";
 
 Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
   const preludeObject = await getPreludeObject();
   const binObject = await getBinObject();
   const natObject = await getNatObject();
-  const serialized = compileToObjectFileString(PRELUDE_TEST);
-  const testObject = deserializeTripCObject(serialized);
+  const testObject = await loadTripModuleObject(
+    new URL("./compiler/inputs/preludeTest.trip", import.meta.url),
+  );
 
   const skiExpression = linkModules([
     { name: "Prelude", object: preludeObject },
@@ -64,6 +32,33 @@ Deno.test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
       decoded,
       8n,
       "not/and/or/pred/sub/lte/gte expressions should sum to 8",
+    );
+  } finally {
+    evaluator.terminate();
+  }
+});
+
+Deno.test("subU8 primitive subtraction", async () => {
+  const preludeObject = await getPreludeObject();
+  const testObject = await loadTripModuleObject(
+    new URL("./compiler/inputs/subU8Test.trip", import.meta.url),
+  );
+
+  const skiExpression = linkModules([
+    { name: "Prelude", object: preludeObject },
+    { name: "SubU8Test", object: testObject },
+  ], true);
+
+  const skiExpr = parseSKI(skiExpression);
+  const evaluator = await ParallelArenaEvaluatorWasm.create();
+  try {
+    const evaluated = await evaluator.reduceAsync(skiExpr);
+    // fromArena for a U8 should give { kind: "u8", value: number }
+    const result = evaluator.fromArena(evaluator.toArena(evaluated));
+    assertEquals(
+      result,
+      { kind: "u8", value: 8 },
+      "subU8 #u8(10) #u8(2) should be #u8(8)",
     );
   } finally {
     evaluator.terminate();

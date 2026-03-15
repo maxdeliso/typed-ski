@@ -27,6 +27,7 @@ const INTRINSIC_TERMS: Readonly<Record<string, SKIExpression>> = {
   divU8: term(SKITerminalSymbol.DivU8),
   modU8: term(SKITerminalSymbol.ModU8),
   addU8: term(SKITerminalSymbol.AddU8),
+  subU8: term(SKITerminalSymbol.SubU8),
   readOne: term(SKITerminalSymbol.ReadOne),
   writeOne: term(SKITerminalSymbol.WriteOne),
 };

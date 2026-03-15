@@ -26,6 +26,7 @@ import {
   ReadOne,
   S,
   SPrime,
+  SubU8,
   WriteOne,
 } from "../ski/terminal.ts";
 import { ConversionError } from "./conversionError.ts";
@@ -82,6 +83,8 @@ const terminalFromSym = (sym: string): SKIExpression => {
       return ModU8;
     case "A":
       return AddU8;
+    case "O":
+      return SubU8;
     default:
       throw new ConversionError(`unknown SKI terminal: ${sym}`);
   }

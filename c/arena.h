@@ -37,11 +37,12 @@ typedef enum {
   ARENA_SYM_LT_U8 = 14,
   ARENA_SYM_DIV_U8 = 15,
   ARENA_SYM_MOD_U8 = 16,
-  ARENA_SYM_ADD_U8 = 17
+  ARENA_SYM_ADD_U8 = 17,
+  ARENA_SYM_SUB_U8 = 18
 } ArenaSym;
 
 #define EMPTY 0xffffffff
-#define TERM_CACHE_LEN (ARENA_SYM_ADD_U8 + 1)
+#define TERM_CACHE_LEN (ARENA_SYM_SUB_U8 + 1)
 #define CONTROL_PTR_BIT 0x80000000u
 
 static inline bool is_control_ptr(uint32_t ptr) {

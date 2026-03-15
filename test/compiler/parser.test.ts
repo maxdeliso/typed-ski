@@ -2,6 +2,7 @@ import { assert } from "chai";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
+import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -54,6 +55,72 @@ async function compileTestProgram(
 ): Promise<ReturnType<typeof deserializeTripCObject>> {
   const testFilePath = join(__dirname, "inputs", inputFileName);
   return await loadTripModuleObject(testFilePath);
+}
+
+function makeParseCtorArityOverflowHarness(): string {
+  return `module Test
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude U8
+import Lexer Token
+import Lexer T_Ident
+import Lexer T_EOF
+import Parser parseCtorArity
+
+export main
+
+poly main =
+  match (parseCtorArity (cons [Token] (T_Ident "A") (cons [Token] T_EOF (nil [Token]))) #u8(255)) [Bool] {
+    | Err e => true
+    | Ok arityRes => false
+  }
+`;
+}
+
+function makeCheckedIncrementOverflowHarness(): string {
+  return `module Test
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude U8
+import Parser checkedIncrementU8
+
+export main
+
+poly main =
+  match (checkedIncrementU8 #u8(255)) [Bool] {
+    | Err e => true
+    | Ok next => false
+  }
+`;
+}
+
+async function runInlineParserHarness(source: string): Promise<boolean> {
+  const lexerObj = await getLexerObject();
+  const parserObj = await getParserObject();
+  const preludeObj = await getPreludeObjectCached();
+  const testObj = compileToObjectFile(source);
+  const linked = linkModules([
+    { name: "Prelude", object: preludeObj },
+    { name: "Lexer", object: lexerObj },
+    { name: "Parser", object: parserObj },
+    { name: "Test", object: testObj },
+  ]);
+  const expr = parseSKI(linked);
+  const session = await getThanatosSession();
+  const resultDag = await session.reduceDag(toDagWire(expr));
+  const resultExpr = fromDagWire(resultDag);
+  return await UnChurchBoolean(resultExpr, passthroughEvaluator);
 }
 
 Deno.test({
@@ -181,4 +248,46 @@ Deno.test({
       clearTimeout(timeoutId!);
     }
   }
+});
+
+Deno.test({
+  name: "Parser rejects constructor type nesting beyond U8 depth",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
+    assert.include(
+      parserSource,
+      "match (checkedIncrementU8 depth)",
+      "Expected skipBalanced to use checkedIncrementU8 for nested type tracking",
+    );
+    const ok = await runInlineParserHarness(
+      makeCheckedIncrementOverflowHarness(),
+    );
+    assert.isTrue(
+      ok,
+      "Expected checkedIncrementU8 to reject U8 overflow while tracking parser nesting depth",
+    );
+  },
+});
+
+Deno.test({
+  name: "Parser rejects constructor arity beyond U8 range",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
+    assert.include(
+      parserSource,
+      "match (checkedIncrementU8 acc)",
+      "Expected parseCtorArity to use checkedIncrementU8 for arity tracking",
+    );
+    const ok = await runInlineParserHarness(
+      makeParseCtorArityOverflowHarness(),
+    );
+    assert.isTrue(
+      ok,
+      "Expected parseCtorArity to reject constructor arity overflow at #u8(255)",
+    );
+  },
 });

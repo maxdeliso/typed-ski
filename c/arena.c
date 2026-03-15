@@ -279,8 +279,7 @@ static inline uint32_t control_header_bytes(void) {
 }
 
 static inline uint32_t control_worker_bytes(void) {
-  return (uint32_t)(sizeof(Frame) * CONTROL_SLICE_COUNT *
-                    CONTROL_MAX_FRAMES);
+  return (uint32_t)(sizeof(Frame) * CONTROL_SLICE_COUNT * CONTROL_MAX_FRAMES);
 }
 
 static inline uint32_t control_cont_bytes(void) {
@@ -379,10 +378,8 @@ static SabLayout calculate_layout(uint32_t capacity) {
 static void control_init_at(SabHeader *h) {
   ControlViews cv = control_views_from_header(h);
   memset(cv.header, 0, h->control_bytes);
-  atomic_init(&cv.header->cont_head,
-              pack_freelist_head(0, CONTROL_CONT_BASE));
-  atomic_init(&cv.header->susp_head,
-              pack_freelist_head(0, CONTROL_SUSP_BASE));
+  atomic_init(&cv.header->cont_head, pack_freelist_head(0, CONTROL_CONT_BASE));
+  atomic_init(&cv.header->susp_head, pack_freelist_head(0, CONTROL_SUSP_BASE));
   atomic_init(&cv.header->cont_in_use, 0);
   atomic_init(&cv.header->cont_high_water, 0);
   atomic_init(&cv.header->susp_in_use, 0);
@@ -395,16 +392,16 @@ static void control_init_at(SabHeader *h) {
 
   for (uint32_t i = 0; i < CONTROL_CONT_SLOTS; i++) {
     cv.conts[i].flags = 0;
-    cv.conts[i].next_free =
-        (i + 1 < CONTROL_CONT_SLOTS) ? (CONTROL_CONT_BASE + i + 1)
-                                     : CONTROL_INVALID_INDEX;
+    cv.conts[i].next_free = (i + 1 < CONTROL_CONT_SLOTS)
+                                ? (CONTROL_CONT_BASE + i + 1)
+                                : CONTROL_INVALID_INDEX;
   }
   for (uint32_t i = 0; i < CONTROL_SUSP_SLOTS; i++) {
     cv.suspensions[i].flags = 0;
     atomic_init(&cv.suspensions[i].status, SUSP_STATUS_FREE);
-    cv.suspensions[i].next_free =
-        (i + 1 < CONTROL_SUSP_SLOTS) ? (CONTROL_SUSP_BASE + i + 1)
-                                     : CONTROL_INVALID_INDEX;
+    cv.suspensions[i].next_free = (i + 1 < CONTROL_SUSP_SLOTS)
+                                      ? (CONTROL_SUSP_BASE + i + 1)
+                                      : CONTROL_INVALID_INDEX;
   }
 }
 
@@ -911,10 +908,9 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
 
 static inline void update_high_water(atomic_uint *slot, uint32_t value) {
   uint32_t current = atomic_load_explicit(slot, memory_order_relaxed);
-  while (value > current &&
-         !atomic_compare_exchange_weak_explicit(slot, &current, value,
-                                                memory_order_relaxed,
-                                                memory_order_relaxed)) {
+  while (value > current && !atomic_compare_exchange_weak_explicit(
+                                slot, &current, value, memory_order_relaxed,
+                                memory_order_relaxed)) {
   }
 }
 
@@ -968,15 +964,14 @@ static uint32_t control_pop_cont(ControlViews cv) {
     unsigned long long next_head =
         pack_freelist_head(freelist_head_version(head) + 1, next);
     unsigned long long expected = head;
-    if (atomic_compare_exchange_weak_explicit(
-            &cv.header->cont_head, &expected, next_head, memory_order_acq_rel,
-            memory_order_acquire)) {
+    if (atomic_compare_exchange_weak_explicit(&cv.header->cont_head, &expected,
+                                              next_head, memory_order_acq_rel,
+                                              memory_order_acquire)) {
       cv.conts[slot].flags = CONT_FLAG_ALLOCATED;
       cv.conts[slot].next_free = CONTROL_INVALID_INDEX;
-      uint32_t in_use =
-          atomic_fetch_add_explicit(&cv.header->cont_in_use, 1,
-                                    memory_order_relaxed) +
-          1;
+      uint32_t in_use = atomic_fetch_add_explicit(&cv.header->cont_in_use, 1,
+                                                  memory_order_relaxed) +
+                        1;
       update_high_water(&cv.header->cont_high_water, in_use);
       return slot;
     }
@@ -1026,17 +1021,16 @@ static uint32_t control_pop_susp(ControlViews cv) {
     unsigned long long next_head =
         pack_freelist_head(freelist_head_version(head) + 1, next);
     unsigned long long expected = head;
-    if (atomic_compare_exchange_weak_explicit(
-            &cv.header->susp_head, &expected, next_head, memory_order_acq_rel,
-            memory_order_acquire)) {
+    if (atomic_compare_exchange_weak_explicit(&cv.header->susp_head, &expected,
+                                              next_head, memory_order_acq_rel,
+                                              memory_order_acquire)) {
       cv.suspensions[slot].flags = SUSP_FLAG_ALLOCATED;
       atomic_store_explicit(&cv.suspensions[slot].status, SUSP_STATUS_CLAIMED,
                             memory_order_relaxed);
       cv.suspensions[slot].next_free = CONTROL_INVALID_INDEX;
-      uint32_t in_use =
-          atomic_fetch_add_explicit(&cv.header->susp_in_use, 1,
-                                    memory_order_relaxed) +
-          1;
+      uint32_t in_use = atomic_fetch_add_explicit(&cv.header->susp_in_use, 1,
+                                                  memory_order_relaxed) +
+                        1;
       update_high_water(&cv.header->susp_high_water, in_use);
       return slot;
     }
@@ -1056,9 +1050,9 @@ static void control_push_cont(ControlViews cv, uint32_t slot) {
     unsigned long long next_head =
         pack_freelist_head(freelist_head_version(head) + 1, index);
     unsigned long long expected = head;
-    if (atomic_compare_exchange_weak_explicit(
-            &cv.header->cont_head, &expected, next_head, memory_order_acq_rel,
-            memory_order_acquire)) {
+    if (atomic_compare_exchange_weak_explicit(&cv.header->cont_head, &expected,
+                                              next_head, memory_order_acq_rel,
+                                              memory_order_acquire)) {
       atomic_fetch_sub_explicit(&cv.header->cont_in_use, 1,
                                 memory_order_relaxed);
       return;
@@ -1085,9 +1079,9 @@ static void control_push_susp(ControlViews cv, uint32_t slot) {
     unsigned long long next_head =
         pack_freelist_head(freelist_head_version(head) + 1, index);
     unsigned long long expected = head;
-    if (atomic_compare_exchange_weak_explicit(
-            &cv.header->susp_head, &expected, next_head, memory_order_acq_rel,
-            memory_order_acquire)) {
+    if (atomic_compare_exchange_weak_explicit(&cv.header->susp_head, &expected,
+                                              next_head, memory_order_acq_rel,
+                                              memory_order_acquire)) {
       atomic_fetch_sub_explicit(&cv.header->susp_in_use, 1,
                                 memory_order_relaxed);
       return;
@@ -1170,8 +1164,8 @@ static bool control_try_claim_suspension(Suspension *susp) {
 
   uint8_t expected = SUSP_STATUS_PARKED;
   if (atomic_compare_exchange_strong_explicit(
-          &susp->status, &expected, SUSP_STATUS_CLAIMED,
-          memory_order_acq_rel, memory_order_acquire)) {
+          &susp->status, &expected, SUSP_STATUS_CLAIMED, memory_order_acq_rel,
+          memory_order_acquire)) {
     return true;
   }
 
@@ -1445,8 +1439,9 @@ static inline uint32_t step_sym(ArenaNode *nodes, uint32_t n) {
 static inline uint32_t step_left(ArenaNode *nodes, uint32_t n) {
   if (is_control_ptr(n) || n >= MAX_CAP)
     return 0;
-  uint32_t val = nodes ? atomic_load_explicit(&nodes[n].left, memory_order_acquire)
-                       : leftOf(n);
+  uint32_t val =
+      nodes ? atomic_load_explicit(&nodes[n].left, memory_order_acquire)
+            : leftOf(n);
   if (val != EMPTY && is_control_ptr(val))
     trap_invariant();
   return val;
@@ -1502,8 +1497,7 @@ static bool maybe_park_io_wait(uint32_t slice_id, WorkerState *ws,
 
 static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                                   uint32_t *gas, ArenaNode *nodes,
-                                  bool yield_on_gas,
-                                  bool yield_on_step_limit,
+                                  bool yield_on_gas, bool yield_on_step_limit,
                                   bool allow_retry) {
   ControlViews cv = control_views();
   StepOutcome out = {RESULT_DONE, EMPTY};
@@ -1513,8 +1507,7 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
       if (!yield_on_gas) {
         *gas = ARENA_STEP_GAS;
       } else {
-        return park_budget_yield(slice_id, ws, SUSP_GAS_EXHAUSTED,
-                                 allow_retry);
+        return park_budget_yield(slice_id, ws, SUSP_GAS_EXHAUSTED, allow_retry);
       }
     }
     (*gas)--;
@@ -1632,7 +1625,7 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
             continue;
           }
         }
-        if (sym >= ARENA_SYM_EQ_U8 && sym <= ARENA_SYM_ADD_U8) {
+        if (sym >= ARENA_SYM_EQ_U8 && sym <= ARENA_SYM_SUB_U8) {
           uint32_t a = step_right(nodes, left);
           uint32_t b = right;
           if (step_kind(nodes, a) == ARENA_KIND_U8 &&
@@ -1664,6 +1657,9 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
               break;
             case ARENA_SYM_ADD_U8:
               ws->current_val = allocU8((uint8_t)(va + vb));
+              break;
+            case ARENA_SYM_SUB_U8:
+              ws->current_val = allocU8((uint8_t)(va - vb));
               break;
             }
             ws->mode = MODE_DESCEND;
@@ -1832,9 +1828,8 @@ uint32_t arenaKernelStep(uint32_t expr) {
 
   while (true) {
     uint32_t gas = ARENA_STEP_GAS;
-    StepOutcome o =
-        step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, nodes, false, false,
-                       false);
+    StepOutcome o = step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, nodes,
+                                   false, false, false);
     if (o.type == RESULT_YIELD)
       return o.val;
     return o.val;
@@ -1985,8 +1980,8 @@ void workerLoop(uint32_t worker_id) {
 
     while (true) {
       if (ws.remaining_steps == 0) {
-        StepOutcome budget = park_budget_yield(worker_id, &ws, SUSP_STEP_LIMIT,
-                                               true);
+        StepOutcome budget =
+            park_budget_yield(worker_id, &ws, SUSP_STEP_LIMIT, true);
         Cqe result = {budget.val, job.req_id, CQ_EVENT_YIELD};
         if (use_qsbr)
           atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,

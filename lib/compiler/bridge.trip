@@ -26,15 +26,6 @@ import Prelude fst
 import Prelude snd
 import Prelude eqU8
 import Prelude ltU8
-import Nat Nat
-import Nat zero
-import Nat succ
-import Nat isZero
-import Nat pred
-import Nat add
-import Nat sub
-import Nat eq
-import Nat lte
 import Avl Avl
 import Avl empty
 import Avl lookup
@@ -91,6 +82,7 @@ import Unparse T_LtU8
 import Unparse T_DivU8
 import Unparse T_ModU8
 import Unparse T_AddU8
+import Unparse T_SubU8
 import Unparse T_Byte
 import Lowering Lower
 import Lowering L_Var
@@ -99,6 +91,7 @@ import Lowering L_Lam
 import Lowering L_Native
 
 export elaborateProgram
+export checkedLengthU8
 
 poly rec eqListU8 = \a : List U8 => \b : List U8 =>
   matchList [U8] [Bool] a
@@ -137,18 +130,21 @@ poly resolveNativeName = \name : List U8 =>
                   if [Maybe Lower] (eqListU8 name "addU8")
                     (\u : U8 => Some [Lower] (L_Native T_AddU8))
                     (\u : U8 =>
-                      if [Maybe Lower] (eqListU8 name "divU8")
-                        (\u : U8 => Some [Lower] (L_Native T_DivU8))
+                      if [Maybe Lower] (eqListU8 name "subU8")
+                        (\u : U8 => Some [Lower] (L_Native T_SubU8))
                         (\u : U8 =>
-                          if [Maybe Lower] (eqListU8 name "modU8")
-                            (\u : U8 => Some [Lower] (L_Native T_ModU8))
+                          if [Maybe Lower] (eqListU8 name "divU8")
+                            (\u : U8 => Some [Lower] (L_Native T_DivU8))
                             (\u : U8 =>
-                              if [Maybe Lower] (eqListU8 name "eqU8")
-                                (\u : U8 => Some [Lower] (L_Native T_EqU8))
+                              if [Maybe Lower] (eqListU8 name "modU8")
+                                (\u : U8 => Some [Lower] (L_Native T_ModU8))
                                 (\u : U8 =>
-                                  if [Maybe Lower] (eqListU8 name "ltU8")
-                                    (\u : U8 => Some [Lower] (L_Native T_LtU8))
-                                    (\u : U8 => None [Lower])))))))))
+                                  if [Maybe Lower] (eqListU8 name "eqU8")
+                                    (\u : U8 => Some [Lower] (L_Native T_EqU8))
+                                    (\u : U8 =>
+                                      if [Maybe Lower] (eqListU8 name "ltU8")
+                                        (\u : U8 => Some [Lower] (L_Native T_LtU8))
+                                        (\u : U8 => None [Lower]))))))))))
 
 poly unboundNameError = \name : List U8 =>
   append [U8] "Unbound variable: " name
@@ -213,7 +209,7 @@ poly div2Digits = \digits : List U8 =>
   div2DigitsAcc digits #u8(0) false (nil [U8])
 
 poly rec collectBits = \digits : List U8 => \acc : List U8 =>
-  match (div2Digits digits) [List U8] { | MkPair quotient remainder =>
+  match (div2Digits digits) [Pair (List U8) U8] { | MkPair quotient remainder =>
     let nextAcc = cons [U8] remainder acc in
     matchList [U8] [List U8] quotient nextAcc
       (\h : U8 => \t : List U8 => collectBits quotient nextAcc)
@@ -252,8 +248,8 @@ poly natToCore = \digits : List U8 =>
 
 
 poly zLower =
-  let delayed = L_Lam (L_App (L_App (L_Var (succ zero)) (L_Var (succ zero))) (L_Var zero)) in
-  let inner = L_Lam (L_App (L_Var (succ zero)) delayed) in
+  let delayed = L_Lam (L_App (L_App (L_Var #u8(1)) (L_Var #u8(1))) (L_Var #u8(0))) in
+  let inner = L_Lam (L_App (L_Var #u8(1)) delayed) in
   L_Lam (L_App inner inner)
 
 poly applyFixpoint = \body : Lower =>
@@ -388,55 +384,63 @@ poly rec elaborateExpr = \env : Env => \expr : Expr =>
 
 data State = MkState (Avl (List U8) Lower) DataEnv
 
-poly rec length = #A => \l : List A =>
-  matchList [A] [Nat] l zero (\h : A => \t : List A => succ (length [A] t))
+poly ctorCountOverflowError = "Data declaration has more than 255 constructors"
 
-poly rec populateDataEnv = \adtName : List U8 => \ctors : List (Pair (List U8) Nat) => \total : Nat => \idx : Nat => \datEnv : DataEnv =>
-  matchList [Pair (List U8) Nat] [DataEnv] ctors
+poly rec checkedLengthU8 = #A => \l : List A => \acc : U8 =>
+  matchList [A] [Result (List U8) U8] l
+    (Ok [List U8] [U8] acc)
+    (\h : A => \t : List A =>
+      if [Result (List U8) U8] (ltU8 acc #u8(255))
+        (\u : U8 => checkedLengthU8 [A] t (addU8 acc #u8(1)))
+        (\u : U8 => Err [List U8] [U8] ctorCountOverflowError))
+
+poly rec populateDataEnv = \adtName : List U8 => \ctors : List (Pair (List U8) U8) => \total : U8 => \idx : U8 => \datEnv : DataEnv =>
+  matchList [Pair (List U8) U8] [DataEnv] ctors
     datEnv
-    (\h : Pair (List U8) Nat => \t : List (Pair (List U8) Nat) =>
-      let ctorName = fst [List U8] [Nat] h in
-      let arity = snd [List U8] [Nat] h in
+    (\h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) =>
+      let ctorName = fst [List U8] [U8] h in
+      let arity = snd [List U8] [U8] h in
       let info = MkCtorInfo idx total arity adtName in
       match datEnv [DataEnv] { | MkDataEnv cEnv aEnv =>
-        let nextCEnv = insert [List U8] [CtorInfo] lteListU8 ctorName info cEnv in
-        populateDataEnv adtName t total (succ idx) (MkDataEnv nextCEnv aEnv)
+        let nextDatEnv = MkDataEnv (insert [List U8] [CtorInfo] lteListU8 ctorName info cEnv) aEnv in
+        populateDataEnv adtName t total (addU8 idx #u8(1)) nextDatEnv
       })
 
-poly rec getCtorNames = \ctors : List (Pair (List U8) Nat) =>
-  matchList [Pair (List U8) Nat] [List (List U8)] ctors
+poly rec getCtorNames = \ctors : List (Pair (List U8) U8) =>
+  matchList [Pair (List U8) U8] [List (List U8)] ctors
     (nil [List U8])
-    (\h : Pair (List U8) Nat => \t : List (Pair (List U8) Nat) =>
-      cons [List U8] (fst [List U8] [Nat] h) (getCtorNames t))
+    (\h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) =>
+      cons [List U8] (fst [List U8] [U8] h) (getCtorNames t))
 
 poly elaborateDecl = \state : State => \decl : Decl =>
   match state [Result (List U8) State] { | MkState globals dEnv =>
   match decl [Result (List U8) State] {
+    | D_Module name => Ok [List U8] [State] state
+    | D_Import mod sym => Ok [List U8] [State] state
+    | D_Export sym => Ok [List U8] [State] state
+    | D_Type name => Ok [List U8] [State] state
     | D_Def kind isRec name body =>
-        let env = if [Env] isRec
-                    (\u : U8 => MkEnv globals (cons [List U8] name (nil [List U8])) (Some [List U8] name) dEnv)
-                    (\u : U8 => MkEnv globals (nil [List U8]) (None [List U8]) dEnv) in
+        let recName = if [Maybe (List U8)] isRec (Some [List U8] name) (None [List U8]) in
+        let env = MkEnv globals (nil [List U8]) recName dEnv in
         match (elaborateExpr env body) [Result (List U8) State] {
           | Err e => Err [List U8] [State] e
           | Ok core =>
-              let final = if [Lower] isRec
-                            (\u : U8 => applyFixpoint (coreToLower globals (cons [List U8] name (nil [List U8])) (Some [List U8] name) core))
-                            (\u : U8 => coreToLower globals (nil [List U8]) (None [List U8]) core) in
-              Ok [List U8] [State]
-                (MkState (insert [List U8] [Lower] lteListU8 name final globals) dEnv)
+              let finalLow = if [Lower] isRec
+                (\u : U8 => applyFixpoint (coreToLower globals (nil [List U8]) recName core))
+                (\u : U8 => coreToLower globals (nil [List U8]) recName core) in
+              Ok [List U8] [State] (MkState (insert [List U8] [Lower] lteListU8 name finalLow globals) dEnv)
         }
     | D_Data name ctors =>
-        let total = length [Pair (List U8) Nat] ctors in
-        let nextDEnv = populateDataEnv name ctors total zero dEnv in
-        let adtInfo = MkADTInfo (getCtorNames ctors) in
-        match nextDEnv [Result (List U8) State] { | MkDataEnv cEnv aEnv =>
-          let finalDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv) in
-          Ok [List U8] [State] (MkState globals finalDEnv)
+        match (checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)) [Result (List U8) State] {
+          | Err e => Err [List U8] [State] e
+          | Ok total =>
+              let nextDEnv = populateDataEnv name ctors total #u8(0) dEnv in
+              match nextDEnv [Result (List U8) State] { | MkDataEnv cEnv aEnv =>
+                let adtInfo = MkADTInfo (getCtorNames ctors) in
+                let finalDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv) in
+                Ok [List U8] [State] (MkState globals finalDEnv)
+              }
         }
-    | D_Module name => Ok [List U8] [State] state
-    | D_Import moduleName symbolName => Ok [List U8] [State] state
-    | D_Export name => Ok [List U8] [State] state
-    | D_Type name => Ok [List U8] [State] state
   }}
 
 poly rec elaborateProgramRec = \state : State => \decls : List Decl =>

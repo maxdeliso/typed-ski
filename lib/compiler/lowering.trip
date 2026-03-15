@@ -13,7 +13,14 @@ import Prelude if
 import Prelude addU8
 import Prelude U8
 import Prelude and
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude or
+import Prelude eqU8
+import Prelude ltU8
 import Nat Nat
+
 import Nat zero
 import Nat succ
 import Nat isZero
@@ -22,6 +29,10 @@ import Nat add
 import Nat sub
 import Nat eq
 import Nat lte
+import Avl Avl
+import Avl empty
+import Avl lookup
+import Avl insert
 import Unparse Terminal
 import Unparse Comb
 import Unparse C_Term
@@ -34,7 +45,17 @@ import Unparse T_C
 import Unparse T_SPrime
 import Unparse T_BPrime
 import Unparse T_CPrime
+import Unparse T_WriteOne
+import Unparse T_ReadOne
+import Unparse T_EqU8
+import Unparse T_LtU8
+import Unparse T_DivU8
+import Unparse T_ModU8
+import Unparse T_AddU8
+import Unparse T_SubU8
 import Unparse T_Byte
+import Unparse terminalTag
+import Unparse terminalByteValue
 
 export Lower
 export L_Var
@@ -51,62 +72,108 @@ export emitBulk
 export selectOuter
 export sbi
 export yComb
+export lteLower
 
 data Lower =
-  | L_Var Nat
+  | L_Var U8
   | L_App Lower Lower
   | L_Lam Lower
   | L_Native Terminal
 
-data Res = MkRes Nat Comb
+poly rec lteTerminal = \a : Terminal => \b : Terminal =>
+  let tagA = terminalTag a in
+  let tagB = terminalTag b in
+  if [Bool] (eqU8 tagA tagB)
+    (\u : U8 =>
+      if [Bool] (eqU8 tagA #u8(15))
+        (\u : U8 => lteU8 (terminalByteValue a) (terminalByteValue b))
+        (\u : U8 => true))
+    (\u : U8 => ltU8 tagA tagB)
+
+poly rec lteLower = \a : Lower => \b : Lower =>
+  match a [Bool] {
+    | L_Var i =>
+        match b [Bool] {
+          | L_Var j => lteU8 i j
+          | L_App _ _ => true
+          | L_Lam _ => true
+          | L_Native _ => true
+        }
+    | L_App l1 r1 =>
+        match b [Bool] {
+          | L_Var _ => false
+          | L_App l2 r2 =>
+              if [Bool] (and (lteLower l1 l2) (lteLower l2 l1))
+                (\u : U8 => lteLower r1 r2)
+                (\u : U8 => lteLower l1 l2)
+          | L_Lam _ => true
+          | L_Native _ => true
+        }
+    | L_Lam b1 =>
+        match b [Bool] {
+          | L_Var _ => false
+          | L_App _ _ => false
+          | L_Lam b2 => lteLower b1 b2
+          | L_Native _ => true
+        }
+    | L_Native t1 =>
+        match b [Bool] {
+          | L_Var _ => false
+          | L_App _ _ => false
+          | L_Lam _ => false
+          | L_Native t2 => lteTerminal t1 t2
+        }
+  }
+
+data Res = MkRes U8 Comb
 
 poly sbi = C_App (C_App (C_Term T_S) (C_Term T_B)) (C_Term T_I)
 
-poly rec selectOuter = \arity : Nat =>
-  if [Comb] (isZero arity)
+poly rec selectOuter = \arity : U8 =>
+  if [Comb] (eqU8 arity #u8(0))
     (\u : U8 => C_Term T_I)
     (\u : U8 =>
-      if [Comb] (isZero (pred arity))
+      if [Comb] (eqU8 arity #u8(1))
         (\u : U8 => C_Term T_I)
-        (\u : U8 => C_App (C_App (C_Term T_B) (selectOuter (pred arity))) (C_Term T_K))
+        (\u : U8 => C_App (C_App (C_Term T_B) (selectOuter (subU8 arity #u8(1)))) (C_Term T_K))
     )
 
-poly rec emitBulk = \kind : U8 => \depth : Nat =>
-  if [Comb] (isZero (pred depth))
+poly rec emitBulk = \kind : U8 => \depth : U8 =>
+  if [Comb] (eqU8 depth #u8(1))
     (\u : U8 =>
       if [Comb] (eqU8 kind #u8(0)) (\u : U8 => C_Term T_S) (\u : U8 =>
       if [Comb] (eqU8 kind #u8(1)) (\u : U8 => C_Term T_B) (\u : U8 =>
       C_Term T_C)))
     (\u : U8 =>
-      let prev = emitBulk kind (pred depth) in
+      let prev = emitBulk kind (subU8 depth #u8(1)) in
       if [Comb] (eqU8 kind #u8(0)) (\u : U8 => C_App (C_Term T_SPrime) prev) (\u : U8 =>
       if [Comb] (eqU8 kind #u8(1)) (\u : U8 => C_App (C_Term T_BPrime) prev) (\u : U8 =>
       C_App (C_Term T_CPrime) prev))
     )
 
-poly rec liftArity = \expr : Comb => \from : Nat => \to : Nat =>
-  if [Comb] (lte to from)
-    (\u : U8 => expr)
+poly rec liftArity = \expr : Comb => \from : U8 => \to : U8 =>
+  if [Comb] (ltU8 from to)
     (\u : U8 =>
-      liftArity (C_App (C_Term T_K) expr) (succ from) to
+      liftArity (C_App (C_Term T_K) expr) (addU8 from #u8(1)) to
     )
+    (\u : U8 => expr)
 
 poly zip = \l : Res => \r : Res =>
   match l [Res] { | MkRes n exprA =>
   match r [Res] { | MkRes m exprB =>
-    if [Res] (and (isZero n) (isZero m))
-      (\u : U8 => MkRes zero (C_App exprA exprB))
+    if [Res] (and (eqU8 n #u8(0)) (eqU8 m #u8(0)))
+      (\u : U8 => MkRes #u8(0) (C_App exprA exprB))
       (\u : U8 =>
-    if [Res] (isZero n)
+    if [Res] (eqU8 n #u8(0))
       (\u : U8 => MkRes m (C_App (C_App (emitBulk #u8(1) m) exprA) exprB))
       (\u : U8 =>
-    if [Res] (isZero m)
+    if [Res] (eqU8 m #u8(0))
       (\u : U8 => MkRes n (C_App (C_App (emitBulk #u8(2) n) exprA) exprB))
       (\u : U8 =>
-    if [Res] (eq n m)
+    if [Res] (eqU8 n m)
       (\u : U8 => MkRes n (C_App (C_App (emitBulk #u8(0) n) exprA) exprB))
       (\u : U8 =>
-    if [Res] (lte n m)
+    if [Res] (ltU8 n m)
       (\u : U8 =>
         let liftedA = liftArity exprA n m in
         MkRes m (C_App (C_App (emitBulk #u8(0) m) liftedA) exprB))
@@ -118,16 +185,18 @@ poly zip = \l : Res => \r : Res =>
 
 poly rec compile = \term : Lower =>
   match term [Res] {
-    | L_Var i => MkRes (succ i) (selectOuter (succ i))
+    | L_Var i =>
+        let iPlus1 = addU8 i #u8(1) in
+        MkRes iPlus1 (selectOuter iPlus1)
     | L_App l r => zip (compile l) (compile r)
     | L_Lam body =>
         let res = compile body in
         match res [Res] { | MkRes n expr =>
-          if [Res] (isZero n)
-            (\u : U8 => MkRes zero (C_App (C_Term T_K) expr))
-            (\u : U8 => MkRes (pred n) expr)
+          if [Res] (eqU8 n #u8(0))
+            (\u : U8 => MkRes #u8(0) (C_App (C_Term T_K) expr))
+            (\u : U8 => MkRes (subU8 n #u8(1)) expr)
         }
-    | L_Native t => MkRes zero (C_Term t)
+    | L_Native t => MkRes #u8(0) (C_Term t)
   }
 
 poly yComb =

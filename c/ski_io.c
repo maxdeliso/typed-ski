@@ -74,6 +74,9 @@ static uint32_t char_to_sym(int c) {
   case 'A':
   case 'a':
     return ARENA_SYM_ADD_U8;
+  case 'O':
+  case 'o':
+    return ARENA_SYM_SUB_U8;
   default:
     return 0;
   }
@@ -191,6 +194,8 @@ static char sym_to_char(uint32_t sym) {
     return 'M';
   case ARENA_SYM_ADD_U8:
     return 'A';
+  case ARENA_SYM_SUB_U8:
+    return 'O';
   default:
     return '?';
   }
@@ -288,6 +293,8 @@ static uint32_t dag_char_to_sym(int c) {
     return ARENA_SYM_MOD_U8;
   case 'A':
     return ARENA_SYM_ADD_U8;
+  case 'O':
+    return ARENA_SYM_SUB_U8;
   default:
     return 0;
   }

@@ -178,9 +178,37 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   }
 
   getRingStatsSnapshot(): ArenaRingStatsSnapshot {
+    const baseAddr = this.$.debugGetArenaBaseAddr?.() ?? 0;
+    const extra = {
+      totalNodes: 0,
+      totalSteps: 0,
+      totalConsAllocs: 0,
+      totalContAllocs: 0,
+      totalSuspAllocs: 0,
+      duplicateLostAllocs: 0,
+      hashconsHits: 0,
+      hashconsMisses: 0,
+    };
+
+    if (baseAddr !== 0) {
+      const u64 = new BigUint64Array(this.memory.buffer, baseAddr);
+      // SabHeaderField indices are in u32 slots.
+      // total_nodes is at offset 20 (u32 slots) => index 10 in u64 array.
+      // All subsequent fields are also u64.
+      extra.totalNodes = Number(u64[10]);
+      extra.totalSteps = Number(u64[11]);
+      extra.totalConsAllocs = Number(u64[12]);
+      extra.totalContAllocs = Number(u64[13]);
+      extra.totalSuspAllocs = Number(u64[14]);
+      extra.duplicateLostAllocs = Number(u64[15]);
+      extra.hashconsHits = Number(u64[16]);
+      extra.hashconsMisses = Number(u64[17]);
+    }
+
     return this.ringStats.getSnapshot(
       this.requestTracker.getTotalPending(),
       this.requestTracker.getTotalCompleted(),
+      extra,
     );
   }
 

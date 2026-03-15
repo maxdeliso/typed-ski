@@ -171,6 +171,7 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
         line[3] == 'E' && line[4] == 'T' &&
         (len == 5 || line[5] == ' ' || line[5] == '\t')) {
       reset();
+      thanatos_reset_stats();
       printf("OK\n");
       fflush(stdout);
       continue;
@@ -179,10 +180,23 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
         line[3] == 'T' && line[4] == 'S' &&
         (len == 5 || line[5] == ' ' || line[5] == '\t')) {
       uint32_t top = 0, capacity = 0;
-      unsigned long long events = 0, dropped = 0;
-      thanatos_get_stats(&top, &capacity, &events, &dropped);
-      printf("OK top=%u capacity=%u events=%llu dropped=%llu\n", (unsigned)top,
-             (unsigned)capacity, events, dropped);
+      unsigned long long events = 0, dropped = 0, total_nodes = 0,
+                         total_steps = 0, total_cons_allocs = 0,
+                         total_cont_allocs = 0, total_susp_allocs = 0,
+                         duplicate_lost_allocs = 0, hashcons_hits = 0,
+                         hashcons_misses = 0;
+      thanatos_get_stats(&top, &capacity, &total_nodes, &total_steps,
+                         &total_cons_allocs, &total_cont_allocs,
+                         &total_susp_allocs, &duplicate_lost_allocs,
+                         &hashcons_hits, &hashcons_misses, &events, &dropped);
+      printf(
+          "OK top=%u capacity=%u total_nodes=%llu total_steps=%llu events=%llu "
+          "dropped=%llu total_cons_allocs=%llu total_cont_allocs=%llu "
+          "total_susp_allocs=%llu duplicate_lost_allocs=%llu "
+          "hashcons_hits=%llu hashcons_misses=%llu\n",
+          (unsigned)top, (unsigned)capacity, total_nodes, total_steps, events,
+          dropped, total_cons_allocs, total_cont_allocs, total_susp_allocs,
+          duplicate_lost_allocs, hashcons_hits, hashcons_misses);
       fflush(stdout);
       continue;
     }
@@ -208,6 +222,54 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
         continue;
       }
       uint32_t result = thanatos_reduce_to_normal_form(root);
+      if (result == EMPTY) {
+        printf("ERR reduction error\n");
+        fflush(stdout);
+        continue;
+      }
+      size_t n = unparse_dag(result, outbuf, sizeof(outbuf));
+      if (n == (size_t)-1) {
+        printf("ERR result too large\n");
+        fflush(stdout);
+        continue;
+      }
+      if (n == 0) {
+        printf("ERR runtime-control-ptr\n");
+        fflush(stdout);
+        continue;
+      }
+      printf("OK %s\n", outbuf);
+      fflush(stdout);
+      continue;
+    }
+    if (len >= 4 && line[0] == 'S' && line[1] == 'T' && line[2] == 'E' &&
+        line[3] == 'P' && (len == 4 || line[4] == ' ' || line[4] == '\t')) {
+      const char *p = line + 4;
+      while (*p == ' ' || *p == '\t')
+        p++;
+      if (*p == '\0') {
+        printf("ERR STEP requires step_count and DAG payload\n");
+        fflush(stdout);
+        continue;
+      }
+      uint32_t steps = (uint32_t)strtoul(p, (char **)&p, 10);
+      while (*p == ' ' || *p == '\t')
+        p++;
+      if (*p == '\0') {
+        printf("ERR STEP requires DAG payload\n");
+        fflush(stdout);
+        continue;
+      }
+      const char *dag = p;
+      size_t dag_len = (size_t)(line + len - dag);
+      size_t end_idx = 0;
+      uint32_t root = parse_dag(dag, dag_len, &end_idx);
+      if (root == EMPTY) {
+        printf("ERR parse error\n");
+        fflush(stdout);
+        continue;
+      }
+      uint32_t result = thanatos_reduce(root, steps);
       if (result == EMPTY) {
         printf("ERR reduction error\n");
         fflush(stdout);

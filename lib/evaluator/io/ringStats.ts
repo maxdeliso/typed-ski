@@ -16,6 +16,14 @@ export type ArenaRingStatsSnapshot = {
   completionsStashed: number;
   pending: number;
   completed: number;
+  totalNodes: number;
+  totalSteps: number;
+  totalConsAllocs: number;
+  totalContAllocs: number;
+  totalSuspAllocs: number;
+  duplicateLostAllocs: number;
+  hashconsHits: number;
+  hashconsMisses: number;
 };
 
 /**
@@ -53,7 +61,20 @@ export class RingStats {
     this.completionsStashed++;
   }
 
-  getSnapshot(pending: number, completed: number): ArenaRingStatsSnapshot {
+  getSnapshot(
+    pending: number,
+    completed: number,
+    extra: {
+      totalNodes: number;
+      totalSteps: number;
+      totalConsAllocs: number;
+      totalContAllocs: number;
+      totalSuspAllocs: number;
+      duplicateLostAllocs: number;
+      hashconsHits: number;
+      hashconsMisses: number;
+    },
+  ): ArenaRingStatsSnapshot {
     return {
       submitOk: this.submitOk,
       submitFull: this.submitFull,
@@ -63,6 +84,7 @@ export class RingStats {
       completionsStashed: this.completionsStashed,
       pending,
       completed,
+      ...extra,
     };
   }
 

@@ -444,18 +444,48 @@ uint32_t thanatos_reduce_to_normal_form(uint32_t node_id) {
 }
 
 void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
+                        unsigned long long *out_total_nodes,
+                        unsigned long long *out_total_steps,
+                        unsigned long long *out_total_cons_allocs,
+                        unsigned long long *out_total_cont_allocs,
+                        unsigned long long *out_total_susp_allocs,
+                        unsigned long long *out_duplicate_lost_allocs,
+                        unsigned long long *out_hashcons_hits,
+                        unsigned long long *out_hashcons_misses,
                         unsigned long long *out_events,
                         unsigned long long *out_dropped) {
   if (out_top)
     *out_top = arena_top();
   if (out_capacity)
     *out_capacity = arena_capacity();
+  if (out_total_nodes)
+    *out_total_nodes = arena_total_nodes();
+  if (out_total_steps)
+    *out_total_steps = arena_total_steps();
+  if (out_total_cons_allocs)
+    *out_total_cons_allocs = arena_total_cons_allocs();
+  if (out_total_cont_allocs)
+    *out_total_cont_allocs = arena_total_cont_allocs();
+  if (out_total_susp_allocs)
+    *out_total_susp_allocs = arena_total_susp_allocs();
+  if (out_duplicate_lost_allocs)
+    *out_duplicate_lost_allocs = arena_duplicate_lost_allocs();
+  if (out_hashcons_hits)
+    *out_hashcons_hits = arena_hashcons_hits();
+  if (out_hashcons_misses)
+    *out_hashcons_misses = arena_hashcons_misses();
+
   if (out_events)
     *out_events =
         atomic_load_explicit(&dispatcher_events, memory_order_relaxed);
   if (out_dropped)
     *out_dropped =
         atomic_load_explicit(&dispatcher_dropped, memory_order_relaxed);
+}
+
+void thanatos_reset_stats(void) {
+  atomic_store_explicit(&dispatcher_events, 0, memory_order_release);
+  atomic_store_explicit(&dispatcher_dropped, 0, memory_order_release);
 }
 
 void thanatos_shutdown(void) {

@@ -144,6 +144,14 @@ typedef struct {
   uint32_t bucket_mask;
   atomic_uint resize_seq;
   atomic_uint top;
+  _Atomic uint64_t total_nodes;
+  _Atomic uint64_t total_steps;
+  _Atomic uint64_t total_cons_allocs;
+  _Atomic uint64_t total_cont_allocs;
+  _Atomic uint64_t total_susp_allocs;
+  _Atomic uint64_t duplicate_lost_allocs;
+  _Atomic uint64_t hashcons_hits;
+  _Atomic uint64_t hashcons_misses;
 } SabHeader;
 
 #define RESULT_DONE 0
@@ -160,6 +168,14 @@ void reset(void);
 /** Current allocation top (next node index) and capacity; for diagnostics. */
 uint32_t arena_top(void);
 uint32_t arena_capacity(void);
+unsigned long long arena_total_nodes(void);
+unsigned long long arena_total_steps(void);
+unsigned long long arena_total_cons_allocs(void);
+unsigned long long arena_total_cont_allocs(void);
+unsigned long long arena_total_susp_allocs(void);
+unsigned long long arena_duplicate_lost_allocs(void);
+unsigned long long arena_hashcons_hits(void);
+unsigned long long arena_hashcons_misses(void);
 uint32_t kindOf(uint32_t n);
 uint32_t symOf(uint32_t n);
 uint32_t hashOf(uint32_t n);
@@ -192,5 +208,11 @@ bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out);
 uint32_t controlSuspensionReason(uint32_t ptr);
 uint32_t controlSuspensionCurrentValue(uint32_t ptr);
 uint32_t controlSuspensionRemainingSteps(uint32_t ptr);
+
+uint32_t debugGetArenaBaseAddr(void);
+uint32_t getArenaMode(void);
+uint32_t debugCalculateArenaSize(uint32_t capacity);
+uint32_t debugLockState(void);
+uint32_t debugGetRingEntries(void);
 
 #endif

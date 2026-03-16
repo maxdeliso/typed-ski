@@ -25,7 +25,8 @@ function parseCStruct(source: string, structName: string) {
       const cleanName = name.split("[")[0];
       if (cleanName) {
         const type = parts[0];
-        const is64 = type.includes("uint64_t") || parts.some(p => p.includes("uint64_t"));
+        const is64 = type.includes("uint64_t") ||
+          parts.some((p) => p.includes("uint64_t"));
         fields.push({
           name: cleanName,
           u32Slots: is64 ? 2 : 1,

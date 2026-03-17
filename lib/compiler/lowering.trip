@@ -11,6 +11,8 @@ import Prelude Ok
 import Prelude Err
 import Prelude if
 import Prelude addU8
+import Prelude divU8
+import Prelude modU8
 import Prelude U8
 import Prelude and
 import Prelude Maybe
@@ -129,33 +131,121 @@ data Res = MkRes U8 Comb
 
 poly sbi = C_App (C_App (C_Term T_S) (C_Term T_B)) (C_Term T_I)
 
+poly combS = C_Term T_S
+poly combK = C_Term T_K
+poly combI = C_Term T_I
+poly combB = C_Term T_B
+poly combC = C_Term T_C
+poly combSPrime = C_Term T_SPrime
+poly combCPrime = C_Term T_CPrime
+poly combBB = C_App combB combB
+poly combBK = C_App combB combK
+poly bbSbi = C_App (C_App combB combBB) sbi
+poly bbSPrimeSbi = C_App (C_App combB (C_App combB combSPrime)) sbi
+poly bbCPrimeSbi = C_App (C_App combB (C_App combB combCPrime)) sbi
+
+poly selectOuter2 = C_App (C_App combB combI) combK
+poly selectOuter3 = C_App (C_App combB selectOuter2) combK
+poly selectOuter4 = C_App (C_App combB selectOuter3) combK
+poly selectOuter5 = C_App (C_App combB selectOuter4) combK
+poly selectOuter6 = C_App (C_App combB selectOuter5) combK
+
 poly rec selectOuter = \arity : U8 =>
   if [Comb] (eqU8 arity #u8(0))
-    (\u : U8 => C_Term T_I)
+    (\u : U8 => combI)
     (\u : U8 =>
       if [Comb] (eqU8 arity #u8(1))
-        (\u : U8 => C_Term T_I)
-        (\u : U8 => C_App (C_App (C_Term T_B) (selectOuter (subU8 arity #u8(1)))) (C_Term T_K))
+        (\u : U8 => combI)
+        (\u : U8 =>
+          if [Comb] (eqU8 arity #u8(2))
+            (\u : U8 => selectOuter2)
+            (\u : U8 =>
+              if [Comb] (eqU8 arity #u8(3))
+                (\u : U8 => selectOuter3)
+                (\u : U8 =>
+                  if [Comb] (eqU8 arity #u8(4))
+                    (\u : U8 => selectOuter4)
+                    (\u : U8 =>
+                      if [Comb] (eqU8 arity #u8(5))
+                        (\u : U8 => selectOuter5)
+                        (\u : U8 =>
+                          if [Comb] (eqU8 arity #u8(6))
+                            (\u : U8 => selectOuter6)
+                            (\u : U8 => C_App (C_App combB (selectOuter (subU8 arity #u8(1)))) combK)
+                        )
+                    )
+                )
+            )
+        )
     )
 
-poly rec emitBulk = \kind : U8 => \depth : U8 =>
+poly rec emitBulkB = \depth : U8 =>
   if [Comb] (eqU8 depth #u8(1))
+    (\u : U8 => combB)
     (\u : U8 =>
-      if [Comb] (eqU8 kind #u8(0)) (\u : U8 => C_Term T_S) (\u : U8 =>
-      if [Comb] (eqU8 kind #u8(1)) (\u : U8 => C_Term T_B) (\u : U8 =>
-      C_Term T_C)))
-    (\u : U8 =>
-      let prev = emitBulk kind (subU8 depth #u8(1)) in
-      if [Comb] (eqU8 kind #u8(0)) (\u : U8 => C_App (C_Term T_SPrime) prev) (\u : U8 =>
-      if [Comb] (eqU8 kind #u8(1)) (\u : U8 => C_App (C_Term T_BPrime) prev) (\u : U8 =>
-      C_App (C_Term T_CPrime) prev))
+      let smaller = emitBulkB (divU8 depth #u8(2)) in
+      if [Comb] (eqU8 (modU8 depth #u8(2)) #u8(0))
+        (\u : U8 => C_App sbi smaller)
+        (\u : U8 => C_App bbSbi smaller)
     )
 
-poly rec liftArity = \expr : Comb => \from : U8 => \to : U8 =>
-  if [Comb] (ltU8 from to)
+poly rec emitBulkSCore = \depth : U8 =>
+  if [Comb] (eqU8 depth #u8(1))
+    (\u : U8 => combSPrime)
     (\u : U8 =>
-      liftArity (C_App (C_Term T_K) expr) (addU8 from #u8(1)) to
+      let smaller = emitBulkSCore (divU8 depth #u8(2)) in
+      if [Comb] (eqU8 (modU8 depth #u8(2)) #u8(0))
+        (\u : U8 => C_App sbi smaller)
+        (\u : U8 => C_App bbSPrimeSbi smaller)
     )
+
+poly emitBulkS = \depth : U8 =>
+  if [Comb] (eqU8 depth #u8(1))
+    (\u : U8 => combS)
+    (\u : U8 => C_App (emitBulkSCore depth) combI)
+
+poly rec emitBulkCCore = \depth : U8 =>
+  if [Comb] (eqU8 depth #u8(1))
+    (\u : U8 => combCPrime)
+    (\u : U8 =>
+      let smaller = emitBulkCCore (divU8 depth #u8(2)) in
+      if [Comb] (eqU8 (modU8 depth #u8(2)) #u8(0))
+        (\u : U8 => C_App sbi smaller)
+        (\u : U8 => C_App bbCPrimeSbi smaller)
+    )
+
+poly emitBulkC = \depth : U8 =>
+  if [Comb] (eqU8 depth #u8(1))
+    (\u : U8 => combC)
+    (\u : U8 => C_App (emitBulkCCore depth) combI)
+
+poly emitBulk = \kind : U8 => \depth : U8 =>
+  if [Comb] (eqU8 kind #u8(0))
+    (\u : U8 => emitBulkS depth)
+    (\u : U8 =>
+      if [Comb] (eqU8 kind #u8(1))
+        (\u : U8 => emitBulkB depth)
+        (\u : U8 => emitBulkC depth)
+    )
+
+poly rec dropArity = \count : U8 =>
+  if [Comb] (eqU8 count #u8(0))
+    (\u : U8 => combI)
+    (\u : U8 =>
+      if [Comb] (eqU8 count #u8(1))
+        (\u : U8 => combK)
+        (\u : U8 =>
+          let half = dropArity (divU8 count #u8(2)) in
+          let doubled = C_App (C_App combB half) half in
+          if [Comb] (eqU8 (modU8 count #u8(2)) #u8(0))
+            (\u : U8 => doubled)
+            (\u : U8 => C_App combBK doubled)
+        )
+    )
+
+poly liftArity = \expr : Comb => \from : U8 => \to : U8 =>
+  if [Comb] (ltU8 from to)
+    (\u : U8 => C_App (dropArity (subU8 to from)) expr)
     (\u : U8 => expr)
 
 poly zip = \l : Res => \r : Res =>

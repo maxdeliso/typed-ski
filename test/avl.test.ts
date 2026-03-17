@@ -17,7 +17,7 @@ import {
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
-} from "./thanatosHarness.ts";
+} from "./thanatosHarness.test.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INPUT_DIR = join(__dirname, "inputs", "avl");
@@ -132,8 +132,6 @@ Deno.test(
 Deno.test({
   name: "Avl module tests (batched, thanatos)",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const results = await evaluateTestModulesBatchThanatos(AVL_CASES);
 

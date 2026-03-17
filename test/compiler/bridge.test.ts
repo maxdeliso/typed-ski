@@ -11,7 +11,7 @@ import {
   getThanatosSession,
   passthroughEvaluator,
   toDagWire,
-} from "../thanatosHarness.ts";
+} from "../thanatosHarness.test.ts";
 
 const LEXER_SOURCE_FILE = new URL(
   "../../lib/compiler/lexer.trip",
@@ -178,9 +178,13 @@ async function runBridgeHarness(source: string): Promise<boolean> {
   ]);
   const expr = parseSKI(linked);
   const session = await getThanatosSession();
-  const resultDag = await session.reduceDag(toDagWire(expr));
-  const resultExpr = fromDagWire(resultDag);
-  return await UnChurchBoolean(resultExpr, passthroughEvaluator);
+  try {
+    const resultDag = await session.reduceDag(toDagWire(expr));
+    const resultExpr = fromDagWire(resultDag);
+    return await UnChurchBoolean(resultExpr, passthroughEvaluator);
+  } finally {
+    await session.close();
+  }
 }
 
 Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async () => {
@@ -217,8 +221,6 @@ Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async (
 
 Deno.test({
   name: "Bridge rejects data declarations with too many constructors",
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const source = await Deno.readTextFile(BRIDGE_SOURCE_FILE);
     assert.include(

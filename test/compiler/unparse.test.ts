@@ -31,8 +31,6 @@ async function getPreludeObjectCached() {
 
 Deno.test({
   name: "Unparse - Stage 1 Corpus",
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const unparseObj = await getUnparseObject();
     const preludeObj = await getPreludeObjectCached();

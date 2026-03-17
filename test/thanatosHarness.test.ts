@@ -411,9 +411,17 @@ Deno.test({
       await session.reset();
       const statsLine = await session.stats();
       assert(
-        statsLine.includes("top=") ||
-          statsLine.includes("capacity=") ||
-          statsLine.includes("events=") ||
+        statsLine.includes("top=") &&
+          statsLine.includes("capacity=") &&
+          statsLine.includes("total_nodes=") &&
+          statsLine.includes("total_steps=") &&
+          statsLine.includes("total_cons_allocs=") &&
+          statsLine.includes("total_cont_allocs=") &&
+          statsLine.includes("total_susp_allocs=") &&
+          statsLine.includes("duplicate_lost_allocs=") &&
+          statsLine.includes("hashcons_hits=") &&
+          statsLine.includes("hashcons_misses=") &&
+          statsLine.includes("events=") &&
           statsLine.includes("dropped="),
         "STATS missing expected fields: " + statsLine,
       );

@@ -41,6 +41,13 @@ static int parse_u32_arg(const char *text, uint32_t *out) {
   return 1;
 }
 
+static int daemon_command_matches(const char *line, size_t len,
+                                  const char *command, size_t command_len) {
+  return len >= command_len && memcmp(line, command, command_len) == 0 &&
+         (len == command_len || line[command_len] == ' ' ||
+          line[command_len] == '\t');
+}
+
 /** Batch mode: program_input is the SKI/DAG text to parse and reduce.
  * runtime_stdin_fd is an optional stream/file consumed lazily by READ_ONE on a
  * separate channel. Pass -1 when no runtime stdin source is available. */
@@ -155,40 +162,46 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
       continue;
     }
 
-    if (len >= 4 && line[0] == 'Q' && line[1] == 'U' && line[2] == 'I' &&
-        line[3] == 'T' && (len == 4 || line[4] == ' ' || line[4] == '\t')) {
+    if (daemon_command_matches(line, len, "QUIT", sizeof("QUIT") - 1)) {
       printf("OK\n");
       fflush(stdout);
       break;
     }
-    if (len >= 4 && line[0] == 'P' && line[1] == 'I' && line[2] == 'N' &&
-        line[3] == 'G' && (len == 4 || line[4] == ' ' || line[4] == '\t')) {
+    if (daemon_command_matches(line, len, "PING", sizeof("PING") - 1)) {
       printf("OK\n");
       fflush(stdout);
       continue;
     }
-    if (len >= 5 && line[0] == 'R' && line[1] == 'E' && line[2] == 'S' &&
-        line[3] == 'E' && line[4] == 'T' &&
-        (len == 5 || line[5] == ' ' || line[5] == '\t')) {
+    if (daemon_command_matches(line, len, "RESET", sizeof("RESET") - 1)) {
       reset();
+      thanatos_reset_stats();
       printf("OK\n");
       fflush(stdout);
       continue;
     }
-    if (len >= 5 && line[0] == 'S' && line[1] == 'T' && line[2] == 'A' &&
-        line[3] == 'T' && line[4] == 'S' &&
-        (len == 5 || line[5] == ' ' || line[5] == '\t')) {
+    if (daemon_command_matches(line, len, "STATS", sizeof("STATS") - 1)) {
       uint32_t top = 0, capacity = 0;
-      unsigned long long events = 0, dropped = 0;
-      thanatos_get_stats(&top, &capacity, &events, &dropped);
-      printf("OK top=%u capacity=%u events=%llu dropped=%llu\n", (unsigned)top,
-             (unsigned)capacity, events, dropped);
+      unsigned long long events = 0, dropped = 0, total_nodes = 0,
+                         total_steps = 0, total_cons_allocs = 0,
+                         total_cont_allocs = 0, total_susp_allocs = 0,
+                         duplicate_lost_allocs = 0, hashcons_hits = 0,
+                         hashcons_misses = 0;
+      thanatos_get_stats(&top, &capacity, &total_nodes, &total_steps,
+                         &total_cons_allocs, &total_cont_allocs,
+                         &total_susp_allocs, &duplicate_lost_allocs,
+                         &hashcons_hits, &hashcons_misses, &events, &dropped);
+      printf(
+          "OK top=%u capacity=%u total_nodes=%llu total_steps=%llu events=%llu "
+          "dropped=%llu total_cons_allocs=%llu total_cont_allocs=%llu "
+          "total_susp_allocs=%llu duplicate_lost_allocs=%llu "
+          "hashcons_hits=%llu hashcons_misses=%llu\n",
+          (unsigned)top, (unsigned)capacity, total_nodes, total_steps, events,
+          dropped, total_cons_allocs, total_cont_allocs, total_susp_allocs,
+          duplicate_lost_allocs, hashcons_hits, hashcons_misses);
       fflush(stdout);
       continue;
     }
-    if (len >= 6 && line[0] == 'R' && line[1] == 'E' && line[2] == 'D' &&
-        line[3] == 'U' && line[4] == 'C' && line[5] == 'E' &&
-        (len == 6 || line[6] == ' ' || line[6] == '\t')) {
+    if (daemon_command_matches(line, len, "REDUCE", sizeof("REDUCE") - 1)) {
       const char *dag = line + 6;
       size_t dag_len = len - 6;
       while (dag_len > 0 && (*dag == ' ' || *dag == '\t')) {
@@ -208,6 +221,53 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
         continue;
       }
       uint32_t result = thanatos_reduce_to_normal_form(root);
+      if (result == EMPTY) {
+        printf("ERR reduction error\n");
+        fflush(stdout);
+        continue;
+      }
+      size_t n = unparse_dag(result, outbuf, sizeof(outbuf));
+      if (n == (size_t)-1) {
+        printf("ERR result too large\n");
+        fflush(stdout);
+        continue;
+      }
+      if (n == 0) {
+        printf("ERR runtime-control-ptr\n");
+        fflush(stdout);
+        continue;
+      }
+      printf("OK %s\n", outbuf);
+      fflush(stdout);
+      continue;
+    }
+    if (daemon_command_matches(line, len, "STEP", sizeof("STEP") - 1)) {
+      const char *p = line + 4;
+      while (*p == ' ' || *p == '\t')
+        p++;
+      if (*p == '\0') {
+        printf("ERR STEP requires step_count and DAG payload\n");
+        fflush(stdout);
+        continue;
+      }
+      uint32_t steps = (uint32_t)strtoul(p, (char **)&p, 10);
+      while (*p == ' ' || *p == '\t')
+        p++;
+      if (*p == '\0') {
+        printf("ERR STEP requires DAG payload\n");
+        fflush(stdout);
+        continue;
+      }
+      const char *dag = p;
+      size_t dag_len = (size_t)(line + len - dag);
+      size_t end_idx = 0;
+      uint32_t root = parse_dag(dag, dag_len, &end_idx);
+      if (root == EMPTY) {
+        printf("ERR parse error\n");
+        fflush(stdout);
+        continue;
+      }
+      uint32_t result = thanatos_reduce(root, steps);
       if (result == EMPTY) {
         printf("ERR reduction error\n");
         fflush(stdout);

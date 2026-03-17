@@ -474,6 +474,15 @@ static void *allocate_raw_arena(uint32_t capacity) {
   for (uint32_t u = 0; u < 256; u++)
     atomic_init(&U8_CACHE[u], EMPTY);
 
+  atomic_init(&h->total_nodes, 0);
+  atomic_init(&h->total_steps, 0);
+  atomic_init(&h->total_cons_allocs, 0);
+  atomic_init(&h->total_cont_allocs, 0);
+  atomic_init(&h->total_susp_allocs, 0);
+  atomic_init(&h->duplicate_lost_allocs, 0);
+  atomic_init(&h->hashcons_hits, 0);
+  atomic_init(&h->hashcons_misses, 0);
+
   return ARENA_BASE_ADDR;
 }
 
@@ -547,6 +556,16 @@ void reset(void) {
   FALSE_ID = EMPTY;
   for (uint32_t u = 0; u < 256; u++)
     atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_release);
+
+  atomic_store_explicit(&h->total_nodes, 0, memory_order_release);
+  atomic_store_explicit(&h->total_steps, 0, memory_order_release);
+  atomic_store_explicit(&h->total_cons_allocs, 0, memory_order_release);
+  atomic_store_explicit(&h->total_cont_allocs, 0, memory_order_release);
+  atomic_store_explicit(&h->total_susp_allocs, 0, memory_order_release);
+  atomic_store_explicit(&h->duplicate_lost_allocs, 0, memory_order_release);
+  atomic_store_explicit(&h->hashcons_hits, 0, memory_order_release);
+  atomic_store_explicit(&h->hashcons_misses, 0, memory_order_release);
+
   atomic_store_explicit(
       &h->resize_seq,
       atomic_load_explicit(&h->resize_seq, memory_order_relaxed) & ~1,
@@ -676,6 +695,62 @@ uint32_t arena_capacity(void) {
   return atomic_load_explicit(&h->capacity, memory_order_relaxed);
 }
 
+unsigned long long arena_total_nodes(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_nodes, memory_order_relaxed);
+}
+
+unsigned long long arena_total_steps(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_steps, memory_order_relaxed);
+}
+
+unsigned long long arena_total_cons_allocs(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_cons_allocs, memory_order_relaxed);
+}
+
+unsigned long long arena_total_cont_allocs(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_cont_allocs, memory_order_relaxed);
+}
+
+unsigned long long arena_total_susp_allocs(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_susp_allocs, memory_order_relaxed);
+}
+
+unsigned long long arena_duplicate_lost_allocs(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->duplicate_lost_allocs, memory_order_relaxed);
+}
+
+unsigned long long arena_hashcons_hits(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->hashcons_hits, memory_order_relaxed);
+}
+
+unsigned long long arena_hashcons_misses(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->hashcons_misses, memory_order_relaxed);
+}
+
 static void grow(void);
 
 /* Node publication: write all payload fields first (relaxed), then store kind
@@ -701,6 +776,7 @@ uint32_t allocTerminal(uint32_t sym) {
     }
 
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
+    atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
       if (tls_worker_id < MAX_WORKERS) {
         atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
@@ -746,6 +822,7 @@ uint32_t allocU8(uint8_t value) {
     uint32_t seq = enter_stable(&h);
 
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
+    atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
       if (tls_worker_id < MAX_WORKERS) {
         atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
@@ -796,6 +873,7 @@ static inline uint32_t mix(uint32_t a, uint32_t b) {
 
 uint32_t allocCons(uint32_t l, uint32_t r) {
   ensure_arena();
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (is_control_ptr(l) || is_control_ptr(r))
     trap_invariant();
 
@@ -806,7 +884,6 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
 
   /* Search existing bucket under seqlock (buckets/capacity change on grow). */
   while (true) {
-    SabHeader *h;
     uint32_t seq = enter_stable(&h);
     if (l >= atomic_load_explicit(&h->capacity, memory_order_relaxed) ||
         r >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
@@ -833,18 +910,23 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
     }
 
     if (check_stable(seq)) {
-      if (found != EMPTY)
+      if (found != EMPTY) {
+        atomic_fetch_add_explicit(&h->hashcons_hits, 1, memory_order_relaxed);
         return found;
+      }
       break;
     }
   }
 
+  atomic_fetch_add_explicit(&h->total_cons_allocs, 1, memory_order_relaxed);
+  atomic_fetch_add_explicit(&h->hashcons_misses, 1, memory_order_relaxed);
+
   /* Allocate and link into bucket. */
   while (true) {
-    SabHeader *h;
     uint32_t seq = enter_stable(&h);
     uint32_t b = hval & h->bucket_mask;
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
+    atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
       if (tls_worker_id < MAX_WORKERS) {
         atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
@@ -897,6 +979,8 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
             atomic_load_explicit(&nodes[cur2].right, memory_order_acquire) ==
                 r) {
           atomic_store_explicit(&nodes[id].kind, 0, memory_order_release);
+          atomic_fetch_add_explicit(&h->duplicate_lost_allocs, 1,
+                                    memory_order_relaxed);
           return cur2;
         }
         cur2 =
@@ -1123,10 +1207,13 @@ static inline Frame worker_pop_frame(ControlViews cv, uint32_t slice_id,
 static bool park_worker_state(uint32_t slice_id, WorkerState *ws,
                               SuspensionReason reason, uint32_t wait_token,
                               uint32_t *out_susp_ptr) {
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   ControlViews cv = control_views();
   uint32_t cont_slot = control_pop_cont(cv);
   if (cont_slot == EMPTY)
     return false;
+
+  atomic_fetch_add_explicit(&h->total_cont_allocs, 1, memory_order_relaxed);
 
   ReifiedCont *cont = &cv.conts[cont_slot];
   cont->current_val = ws->current_val;
@@ -1144,6 +1231,8 @@ static bool park_worker_state(uint32_t slice_id, WorkerState *ws,
     control_push_cont(cv, cont_slot);
     return false;
   }
+
+  atomic_fetch_add_explicit(&h->total_susp_allocs, 1, memory_order_relaxed);
 
   Suspension *susp = &cv.suspensions[susp_slot];
   susp->reason = (uint8_t)reason;
@@ -1499,10 +1588,12 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                                   uint32_t *gas, ArenaNode *nodes,
                                   bool yield_on_gas, bool yield_on_step_limit,
                                   bool allow_retry) {
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   ControlViews cv = control_views();
   StepOutcome out = {RESULT_DONE, EMPTY};
 
   while (true) {
+    atomic_fetch_add_explicit(&h->total_steps, 1, memory_order_relaxed);
     if (*gas == 0) {
       if (!yield_on_gas) {
         *gas = ARENA_STEP_GAS;

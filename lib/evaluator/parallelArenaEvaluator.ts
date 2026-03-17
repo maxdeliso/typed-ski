@@ -10,6 +10,7 @@
 
 import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
+import { SabHeaderField } from "./arenaHeader.generated.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
 import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import { sleep } from "./async.ts";
@@ -178,9 +179,41 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   }
 
   getRingStatsSnapshot(): ArenaRingStatsSnapshot {
+    const baseAddr = this.$.debugGetArenaBaseAddr?.() ?? 0;
+    const extra = {
+      totalNodes: 0,
+      totalSteps: 0,
+      totalConsAllocs: 0,
+      totalContAllocs: 0,
+      totalSuspAllocs: 0,
+      duplicateLostAllocs: 0,
+      hashconsHits: 0,
+      hashconsMisses: 0,
+    };
+
+    if (baseAddr !== 0) {
+      const headerView = new DataView(this.memory.buffer, baseAddr);
+      const readHeaderU64 = (field: SabHeaderField) =>
+        Number(
+          headerView.getBigUint64(field * Uint32Array.BYTES_PER_ELEMENT, true),
+        );
+
+      extra.totalNodes = readHeaderU64(SabHeaderField.TOTAL_NODES);
+      extra.totalSteps = readHeaderU64(SabHeaderField.TOTAL_STEPS);
+      extra.totalConsAllocs = readHeaderU64(SabHeaderField.TOTAL_CONS_ALLOCS);
+      extra.totalContAllocs = readHeaderU64(SabHeaderField.TOTAL_CONT_ALLOCS);
+      extra.totalSuspAllocs = readHeaderU64(SabHeaderField.TOTAL_SUSP_ALLOCS);
+      extra.duplicateLostAllocs = readHeaderU64(
+        SabHeaderField.DUPLICATE_LOST_ALLOCS,
+      );
+      extra.hashconsHits = readHeaderU64(SabHeaderField.HASHCONS_HITS);
+      extra.hashconsMisses = readHeaderU64(SabHeaderField.HASHCONS_MISSES);
+    }
+
     return this.ringStats.getSnapshot(
       this.requestTracker.getTotalPending(),
       this.requestTracker.getTotalCompleted(),
+      extra,
     );
   }
 

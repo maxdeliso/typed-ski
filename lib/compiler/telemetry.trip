@@ -1,7 +1,10 @@
 module Telemetry
 
 import Prelude List
+import Prelude nil
 import Prelude Result
+import Prelude Ok
+import Prelude Err
 import Prelude U8
 import Prelude Pair
 import Prelude MkPair
@@ -10,6 +13,7 @@ import Prelude snd
 import Prelude map
 import Prelude matchList
 import Lexer tokenize
+import Lexer Token
 import Parser parseProgram
 import Parser D_Def
 import Parser Decl
@@ -27,11 +31,23 @@ export phase2
 export phase3
 export phase4
 
-poly phase1 = \source : List U8 => tokenize source
+poly phase1 = \source : List U8 =>
+  match (tokenize source) [List Token] {
+    | Err e => nil [Token]
+    | Ok toks => toks
+  }
 
-poly phase2 = \toks : List (Pair (List U8) (List U8)) => parseProgram toks
+poly phase2 = \toks : List Token =>
+  match (parseProgram toks) [List Decl] {
+    | Err e => nil [Decl]
+    | Ok decls => decls
+  }
 
-poly phase3 = \decls : List Decl => elaborateProgram (empty [List U8] [Lower]) decls
+poly phase3 = \decls : List Decl =>
+  match (elaborateProgram (empty [List U8] [Lower]) decls) [Avl (List U8) Lower] {
+    | Err e => empty [List U8] [Lower]
+    | Ok globals => globals
+  }
 
 poly phase4 = \globals : Avl (List U8) Lower =>
     let entries = toListEntries [List U8] [Lower] globals in

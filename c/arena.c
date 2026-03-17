@@ -708,7 +708,7 @@ uint32_t kindOf(uint32_t n) {
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
   atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
-  return atomic_load_explicit(&kinds[n], memory_order_acquire);
+  return load_kind_pub(kinds, n);
 }
 
 uint32_t symOf(uint32_t n) {
@@ -873,8 +873,8 @@ uint32_t allocTerminal(uint32_t sym) {
     atomic_uint *hashes =
         (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
 
-    atomic_store_explicit(&syms[id], (uint8_t)sym, memory_order_release);
-    atomic_store_explicit(&hashes[id], sym, memory_order_release);
+    atomic_store_explicit(&syms[id], (uint8_t)sym, memory_order_relaxed);
+    atomic_store_explicit(&hashes[id], sym, memory_order_relaxed);
     atomic_store_explicit(&kinds[id], ARENA_KIND_TERMINAL,
                           memory_order_release);
 
@@ -1046,9 +1046,9 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
         (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
     atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
 
-    atomic_store_explicit(&lefts[id], l, memory_order_release);
-    atomic_store_explicit(&rights[id], r, memory_order_release);
-    atomic_store_explicit(&hashes[id], hval, memory_order_release);
+    atomic_store_explicit(&lefts[id], l, memory_order_relaxed);
+    atomic_store_explicit(&rights[id], r, memory_order_relaxed);
+    atomic_store_explicit(&hashes[id], hval, memory_order_relaxed);
     atomic_store_explicit(&kinds[id], ARENA_KIND_NON_TERM,
                           memory_order_release);
 
@@ -1071,11 +1071,10 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
       uint32_t cur2 = atomic_load_explicit(&buckets[b], memory_order_acquire);
       while (cur2 != EMPTY &&
              cur2 < atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
-        if (atomic_load_explicit(&kinds[cur2], memory_order_acquire) ==
-                ARENA_KIND_NON_TERM &&
-            atomic_load_explicit(&hashes[cur2], memory_order_acquire) == hval &&
-            atomic_load_explicit(&lefts[cur2], memory_order_acquire) == l &&
-            atomic_load_explicit(&rights[cur2], memory_order_acquire) == r) {
+        if (load_kind_pub(kinds, cur2) == ARENA_KIND_NON_TERM &&
+            load_u32_payload(hashes, cur2) == hval &&
+            load_u32_payload(lefts, cur2) == l &&
+            load_u32_payload(rights, cur2) == r) {
           atomic_store_explicit(&kinds[id], 0, memory_order_release);
           atomic_fetch_add_explicit(&h->duplicate_lost_allocs, 1,
                                     memory_order_relaxed);

@@ -255,14 +255,10 @@ poly zLower =
 poly applyFixpoint = \body : Lower =>
   L_App zLower (L_Lam body)
 
-data Env = MkEnv (Avl (List U8) Lower) (List (List U8)) (Maybe (List U8)) DataEnv
-
-poly resolveCoreName = \env : Env => \name : List U8 =>
-  match env [Core] { | MkEnv globals locals recName dEnv =>
-    match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Core] {
-      | Some info => Cr_Ctor (ctorTag info) (ctorTotal info) (ctorArity info)
-      | None => Cr_Var name
-    }
+poly resolveCoreName = \dEnv : DataEnv => \name : List U8 =>
+  match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Core] {
+    | Some info => Cr_Ctor (ctorTag info) (ctorTotal info) (ctorArity info)
+    | None => Cr_Var name
   }
 
 poly rec findCtorInfoInArms = \dEnv : DataEnv => \arms : List (Pair Pattern Expr) =>
@@ -302,84 +298,74 @@ poly rec wrapInLambdas = \args : List (List U8) => \body : Core =>
 poly rec prependAll = #A => \items : List A => \acc : List A =>
   matchList [A] [List A] items acc (\h : A => \t : List A => prependAll [A] t (cons [A] h acc))
 
-poly rec elaborateArms = \elaborate : Env -> Expr -> Result (List U8) Core => \env : Env => \arms : List (Pair Pattern Expr) =>
+poly rec elaborateArms = \elaborate : DataEnv -> Expr -> Result (List U8) Core => \dEnv : DataEnv => \arms : List (Pair Pattern Expr) =>
   matchList [Pair Pattern Expr] [Result (List U8) (List Core)] arms
     (Ok [List U8] [List Core] (nil [Core]))
     (\h : Pair Pattern Expr => \t : List (Pair Pattern Expr) =>
       match h [Result (List U8) (List Core)] { | MkPair pat body =>
         match pat [Result (List U8) (List Core)] { | P_Ctor name args =>
-          match env [Result (List U8) (List Core)] { | MkEnv globals locals recName dEnv =>
-            let innerLocals = prependAll [List U8] args locals in
-            let innerEnv = MkEnv globals innerLocals recName dEnv in
-            match (elaborate innerEnv body) [Result (List U8) (List Core)] {
-              | Err e => Err [List U8] [List Core] e
-              | Ok coreBody =>
-                  let wrapped = wrapInLambdas args coreBody in
-                  match (elaborateArms elaborate env t) [Result (List U8) (List Core)] {
-                    | Err e => Err [List U8] [List Core] e
-                    | Ok rest => Ok [List U8] [List Core] (cons [Core] wrapped rest)
-                  }
-            }
+          match (elaborate dEnv body) [Result (List U8) (List Core)] {
+            | Err e => Err [List U8] [List Core] e
+            | Ok coreBody =>
+                let wrapped = wrapInLambdas args coreBody in
+                match (elaborateArms elaborate dEnv t) [Result (List U8) (List Core)] {
+                  | Err e => Err [List U8] [List Core] e
+                  | Ok rest => Ok [List U8] [List Core] (cons [Core] wrapped rest)
+                }
           }
         }
       })
 
-poly elaborateMatchWith = \elaborate : Env -> Expr -> Result (List U8) Core => \env : Env => \scrut : Expr => \arms : List (Pair Pattern Expr) =>
-  match (elaborate env scrut) [Result (List U8) Core] {
+poly elaborateMatchWith = \elaborate : DataEnv -> Expr -> Result (List U8) Core => \dEnv : DataEnv => \scrut : Expr => \arms : List (Pair Pattern Expr) =>
+  match (elaborate dEnv scrut) [Result (List U8) Core] {
     | Err e => Err [List U8] [Core] e
     | Ok coreScrut =>
-        match env [Result (List U8) Core] { | MkEnv globals locals recName dEnv =>
-          match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
-            | None => Err [List U8] [Core] "Could not identify ADT for match"
-            | Some info =>
-                let adtName = ctorAdtName info in
-                match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
-                  | None => Err [List U8] [Core] "ADT metadata not found"
-                  | Some adtInfo =>
-                      let expectedNames = adtCtors adtInfo in
-                      let sortedArms = sortArms expectedNames arms in
-                      match (elaborateArms elaborate env sortedArms) [Result (List U8) Core] {
-                        | Err e => Err [List U8] [Core] e
-                        | Ok coreArms => Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
-                      }
-                }
-          }
+        match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
+          | None => Err [List U8] [Core] "Could not identify ADT for match"
+          | Some info =>
+              let adtName = ctorAdtName info in
+              match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
+                | None => Err [List U8] [Core] "ADT metadata not found"
+                | Some adtInfo =>
+                    let expectedNames = adtCtors adtInfo in
+                    let sortedArms = sortArms expectedNames arms in
+                    match (elaborateArms elaborate dEnv sortedArms) [Result (List U8) Core] {
+                      | Err e => Err [List U8] [Core] e
+                      | Ok coreArms => Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
+                    }
+              }
         }
   }
 
-poly rec elaborateExpr = \env : Env => \expr : Expr =>
+poly rec elaborateExpr = \dEnv : DataEnv => \expr : Expr =>
   match expr [Result (List U8) Core] {
-    | E_Var name => Ok [List U8] [Core] (resolveCoreName env name)
+    | E_Var name => Ok [List U8] [Core] (resolveCoreName dEnv name)
     | E_App l r =>
-        match (elaborateExpr env l) [Result (List U8) Core] {
+        match (elaborateExpr dEnv l) [Result (List U8) Core] {
           | Err e => Err [List U8] [Core] e
           | Ok left =>
-              match (elaborateExpr env r) [Result (List U8) Core] {
+              match (elaborateExpr dEnv r) [Result (List U8) Core] {
                 | Err e => Err [List U8] [Core] e
                 | Ok right => Ok [List U8] [Core] (Cr_App left right)
               }
         }
     | E_Lam name body =>
-        match env [Result (List U8) Core] { | MkEnv globals locals recName dEnv =>
-          match (elaborateExpr (MkEnv globals (cons [List U8] name locals) recName dEnv) body) [Result (List U8) Core] {
-            | Err e => Err [List U8] [Core] e
-            | Ok coreBody => Ok [List U8] [Core] (Cr_Lam name coreBody)
-          }
+        match (elaborateExpr dEnv body) [Result (List U8) Core] {
+          | Err e => Err [List U8] [Core] e
+          | Ok coreBody => Ok [List U8] [Core] (Cr_Lam name coreBody)
         }
     | E_Let name val body =>
-        match (elaborateExpr env val) [Result (List U8) Core] {
+        match (elaborateExpr dEnv val) [Result (List U8) Core] {
           | Err e => Err [List U8] [Core] e
           | Ok coreVal =>
-              match env [Result (List U8) Core] { | MkEnv globals locals recName dEnv =>
-                match (elaborateExpr (MkEnv globals (cons [List U8] name locals) recName dEnv) body) [Result (List U8) Core] {
-                  | Err e => Err [List U8] [Core] e
-                  | Ok coreBody => Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
-                }
+              match (elaborateExpr dEnv body) [Result (List U8) Core] {
+                | Err e => Err [List U8] [Core] e
+                | Ok coreBody => Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
               }
         }
     | E_Nat digits => natToCore digits
     | E_Match scrut arms =>
-        elaborateMatchWith elaborateExpr env scrut arms
+        elaborateMatchWith elaborateExpr dEnv scrut arms
   }
 
 data State = MkState (Avl (List U8) Lower) DataEnv
@@ -412,17 +398,27 @@ poly rec getCtorNames = \ctors : List (Pair (List U8) U8) =>
     (\h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) =>
       cons [List U8] (fst [List U8] [U8] h) (getCtorNames t))
 
-poly elaborateDecl = \state : State => \decl : Decl =>
+poly rec filterElaboratableDecls = \decls : List Decl =>
+  matchList [Decl] [List Decl] decls
+    (nil [Decl])
+    (\h : Decl => \t : List Decl =>
+      match h [List Decl] {
+        | D_Def kind isRec name body =>
+            cons [Decl] h (filterElaboratableDecls t)
+        | D_Data name ctors =>
+            cons [Decl] h (filterElaboratableDecls t)
+        | D_Module name => filterElaboratableDecls t
+        | D_Import mod sym => filterElaboratableDecls t
+        | D_Export sym => filterElaboratableDecls t
+        | D_Type name => filterElaboratableDecls t
+      })
+
+poly elaborateElaboratableDecl = \state : State => \decl : Decl =>
   match state [Result (List U8) State] { | MkState globals dEnv =>
   match decl [Result (List U8) State] {
-    | D_Module name => Ok [List U8] [State] state
-    | D_Import mod sym => Ok [List U8] [State] state
-    | D_Export sym => Ok [List U8] [State] state
-    | D_Type name => Ok [List U8] [State] state
     | D_Def kind isRec name body =>
         let recName = if [Maybe (List U8)] isRec (Some [List U8] name) (None [List U8]) in
-        let env = MkEnv globals (nil [List U8]) recName dEnv in
-        match (elaborateExpr env body) [Result (List U8) State] {
+        match (elaborateExpr dEnv body) [Result (List U8) State] {
           | Err e => Err [List U8] [State] e
           | Ok core =>
               let finalLow = if [Lower] isRec
@@ -441,17 +437,21 @@ poly elaborateDecl = \state : State => \decl : Decl =>
                 Ok [List U8] [State] (MkState globals finalDEnv)
               }
         }
+    | D_Module name => Ok [List U8] [State] state
+    | D_Import mod sym => Ok [List U8] [State] state
+    | D_Export sym => Ok [List U8] [State] state
+    | D_Type name => Ok [List U8] [State] state
   }}
 
 poly rec elaborateProgramRec = \state : State => \decls : List Decl =>
   matchList [Decl] [Result (List U8) (Avl (List U8) Lower)] decls
     (match state [Result (List U8) (Avl (List U8) Lower)] { | MkState globals dEnv => Ok [List U8] [Avl (List U8) Lower] globals })
     (\h : Decl => \t : List Decl =>
-      match (elaborateDecl state h) [Result (List U8) State] {
+      match (elaborateElaboratableDecl state h) [Result (List U8) State] {
         | Err e => Err [List U8] [Avl (List U8) Lower] e
         | Ok nextState => elaborateProgramRec nextState t
       })
 
 poly elaborateProgram = \globals : Avl (List U8) Lower => \decls : List Decl =>
   let initialState = MkState globals (MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo])) in
-  elaborateProgramRec initialState decls
+  elaborateProgramRec initialState (filterElaboratableDecls decls)

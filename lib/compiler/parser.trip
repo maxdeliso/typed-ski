@@ -574,14 +574,10 @@ poly rec parseExpr = \toks : List Token =>
             | Ok tvRes =>
               match tvRes [Result ParseError (Pair Expr (List Token))] {
                 | MkPair typeVar afterTypeVar =>
-                    match (skipUntil afterTypeVar fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                    match (expect afterTypeVar fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
                       | Err e => Err [ParseError] [Pair Expr (List Token)] e
-                      | Ok atArrow =>
-                        match (expect atArrow fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
-                          | Err e => Err [ParseError] [Pair Expr (List Token)] e
-                          | Ok bodyToks =>
-                            parseExpr bodyToks
-                        }
+                      | Ok bodyToks =>
+                        parseExpr bodyToks
                     }
               }
           })

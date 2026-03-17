@@ -376,10 +376,11 @@ Deno.test("dumpArena", async (t) => {
               "D",
               "M",
               "A",
+              "O",
               "?",
             ]
               .includes(sym) || /^#u8\(\d+\)$/.test(sym)),
-          "Terminal symbol should be S, K, I, B, C, P, Q, R, `,`, `.`, E, L, D, M, A, #u8(n), or `?` " +
+          "Terminal symbol should be S, K, I, B, C, P, Q, R, `,`, `.`, E, L, D, M, A, O, #u8(n), or `?` " +
             `(got ${sym})`,
         );
       } else {
@@ -665,11 +666,11 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
 
     evaluator.toArena(parseSKI("I"));
-    assertEquals(allocTerminalCalls, 15);
+    assertEquals(allocTerminalCalls, 16);
 
     evaluator.reset();
     evaluator.toArena(parseSKI("I"));
-    assertEquals(allocTerminalCalls, 30);
+    assertEquals(allocTerminalCalls, 32);
   });
 
   await t.step("structural hash-consing (consCache)", () => {

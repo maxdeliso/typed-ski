@@ -1,0 +1,8 @@
+module SubU8Test
+
+import Prelude subU8
+import Prelude U8
+
+export main
+
+poly main = subU8 #u8(10) #u8(2)

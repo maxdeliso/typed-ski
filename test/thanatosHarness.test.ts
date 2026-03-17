@@ -4,7 +4,7 @@
  * runThanatosBatch sends expressions through the session with surface↔DAG conversion.
  */
 
-import { assertEquals } from "std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "std/assert";
 import { existsSync } from "std/fs";
 import { dirname, fromFileUrl, join } from "std/path";
 import type { Evaluator } from "../lib/evaluator/evaluator.ts";
@@ -78,6 +78,7 @@ const DAG_TERMINAL_CHARS = new Set<string>([
   "D",
   "M",
   "A",
+  "O",
 ]);
 
 function dagCharToSym(c: string): SKITerminalSymbol {
@@ -249,6 +250,7 @@ export class ThanatosSession {
       this.writer = null;
       this.reader = null;
       if (child != null) await child.status;
+      removeSignalListeners();
       getSessionPromiseRef().current = null;
     }
   }
@@ -308,6 +310,26 @@ function ensureSignalListeners(): void {
   }
 }
 
+function removeSignalListeners(): void {
+  if (!signalListenersRegistered) return;
+  if (
+    typeof Deno !== "undefined" &&
+    typeof Deno.removeSignalListener === "function"
+  ) {
+    try {
+      Deno.removeSignalListener("SIGINT", onProcessSignal);
+    } catch {
+      /* ignore */
+    }
+    try {
+      Deno.removeSignalListener("SIGTERM", onProcessSignal);
+    } catch {
+      /* ignore */
+    }
+    signalListenersRegistered = false;
+  }
+}
+
 /**
  * Return the singleton thanatos daemon session. Starts the process on first call;
  * all callers (across all test files) share the same process. Thread-safe: one init.
@@ -344,52 +366,59 @@ export const passthroughEvaluator: Evaluator = {
 export async function runThanatosBatch(exprLines: string[]): Promise<string[]> {
   if (exprLines.length === 0) return [];
   const session = await getThanatosSession();
-  const out: string[] = [];
-  for (const line of exprLines) {
-    const expr = parseSKI(line);
-    const dag = toDagWire(expr);
-    const resultDag = await session.reduceDag(dag);
-    out.push(unparseSKI(fromDagWire(resultDag)));
+  try {
+    const out: string[] = [];
+    for (const line of exprLines) {
+      const expr = parseSKI(line);
+      const dag = toDagWire(expr);
+      const resultDag = await session.reduceDag(dag);
+      out.push(unparseSKI(fromDagWire(resultDag)));
+    }
+    return out;
+  } finally {
+    await session.close();
   }
-  return out;
 }
 
 Deno.test({
   name: "RESET after several reductions then REDUCE",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const session = await getThanatosSession();
-    // Several REDUCEs to populate arena
-    const r1 = await session.reduceDag(toDagWire(parseSKI("I S")));
-    assertEquals(unparseSKI(fromDagWire(r1)), "S");
-    const r2 = await session.reduceDag(toDagWire(parseSKI("K S K")));
-    assertEquals(unparseSKI(fromDagWire(r2)), "S");
-    await session.reset();
-    // One more REDUCE after RESET proves arena was cleared and reducer still works
-    const r3 = await session.reduceDag(toDagWire(parseSKI("I K")));
-    assertEquals(unparseSKI(fromDagWire(r3)), "K");
+    try {
+      // Several REDUCEs to populate arena
+      const r1 = await session.reduceDag(toDagWire(parseSKI("I S")));
+      assertEquals(unparseSKI(fromDagWire(r1)), "S");
+      const r2 = await session.reduceDag(toDagWire(parseSKI("K S K")));
+      assertEquals(unparseSKI(fromDagWire(r2)), "S");
+      await session.reset();
+      // One more REDUCE after RESET proves arena was cleared and reducer still works
+      const r3 = await session.reduceDag(toDagWire(parseSKI("I K")));
+      assertEquals(unparseSKI(fromDagWire(r3)), "K");
+    } finally {
+      await session.close();
+    }
   },
 });
 
 Deno.test({
   name: "daemon PING RESET STATS QUIT",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const session = await getThanatosSession();
-    await session.ping();
-    await session.reset();
-    const statsLine = await session.stats();
-    if (
-      !statsLine.includes("top=") ||
-      !statsLine.includes("capacity=") ||
-      !statsLine.includes("events=") ||
-      !statsLine.includes("dropped=")
-    ) {
-      throw new Error("STATS missing expected fields: " + statsLine);
+    try {
+      await session.ping();
+      await session.reset();
+      const statsLine = await session.stats();
+      assert(
+        statsLine.includes("top=") ||
+          statsLine.includes("capacity=") ||
+          statsLine.includes("events=") ||
+          statsLine.includes("dropped="),
+        "STATS missing expected fields: " + statsLine,
+      );
+    } finally {
+      await session.close();
     }
   },
 });
@@ -402,8 +431,6 @@ Deno.test({
 Deno.test({
   name: "native vs JS/WASM same stdout bytes (writeOne)",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const expr = apply(apply(WriteOne, { kind: "u8", value: 65 }), I);
     const dagLine = toDagWire(expr);
@@ -412,35 +439,48 @@ Deno.test({
       "../lib/evaluator/parallelArenaEvaluator.ts"
     );
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    await evaluator.reduceAsync(expr);
-    const jsStdout = await evaluator.readStdout(1);
-    evaluator.terminate();
-    assertEquals(jsStdout.length, 1);
-    assertEquals(jsStdout[0], 65);
+    try {
+      await evaluator.reduceAsync(expr);
+      const jsStdout = await evaluator.readStdout(1);
+      assertEquals(jsStdout.length, 1);
+      assertEquals(jsStdout[0], 65);
 
-    const proc = new Deno.Command(THANATOS_BIN, {
-      args: ["--dag", String(TEST_NATIVE_WORKERS)],
-      cwd: PROJECT_ROOT,
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "inherit",
-    }).spawn();
-    const writer = proc.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(dagLine + "\n"));
-    await writer.close();
-    const { stdout: nativeStdout } = await proc.output();
-    if (nativeStdout.length === 0) {
-      console.error("nativeStdout is empty!");
-    } else {
-      console.error("nativeStdout:", new TextDecoder().decode(nativeStdout));
+      const proc = new Deno.Command(THANATOS_BIN, {
+        args: ["--dag", String(TEST_NATIVE_WORKERS)],
+        cwd: PROJECT_ROOT,
+        stdin: "piped",
+        stdout: "piped",
+        stderr: "inherit",
+      }).spawn();
+      try {
+        const writer = proc.stdin.getWriter();
+        await writer.write(new TextEncoder().encode(dagLine + "\n"));
+        await writer.close();
+        const { stdout: nativeStdout } = await proc.output();
+        if (nativeStdout.length === 0) {
+          console.error("nativeStdout is empty!");
+        } else {
+          console.error(
+            "nativeStdout:",
+            new TextDecoder().decode(nativeStdout),
+          );
+        }
+        assertEquals(nativeStdout.length >= 1, true);
+        assertEquals(nativeStdout[0], 65, "native first byte must match JS");
+        assertEquals(
+          nativeStdout.subarray(0, jsStdout.length),
+          jsStdout,
+          "native program stdout must equal JS program stdout",
+        );
+      } catch (e) {
+        try {
+          proc.kill();
+        } catch { /* ignore */ }
+        throw e;
+      }
+    } finally {
+      evaluator.terminate();
     }
-    assertEquals(nativeStdout.length >= 1, true);
-    assertEquals(nativeStdout[0], 65, "native first byte must match JS");
-    assertEquals(
-      nativeStdout.subarray(0, jsStdout.length),
-      jsStdout,
-      "native program stdout must equal JS program stdout",
-    );
   },
 });
 
@@ -459,8 +499,6 @@ Deno.test({
 Deno.test({
   name: "native IO - multiple writeOne ABC preserves sequential order",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const dagLine = ". U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11";
     for (let i = 0; i < 32; i++) {
@@ -471,17 +509,24 @@ Deno.test({
         stdout: "piped",
         stderr: "inherit",
       }).spawn();
-      const writer = proc.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(dagLine + "\n"));
-      await writer.close();
-      const { stdout } = await proc.output();
-      assertEquals(stdout.length >= 3, true);
-      const first3 = Array.from(stdout.subarray(0, 3));
-      assertEquals(
-        first3,
-        [65, 66, 67],
-        `run ${i + 1}: first three stdout bytes must preserve ABC order`,
-      );
+      try {
+        const writer = proc.stdin.getWriter();
+        await writer.write(new TextEncoder().encode(dagLine + "\n"));
+        await writer.close();
+        const { stdout } = await proc.output();
+        assertEquals(stdout.length >= 3, true);
+        const first3 = Array.from(stdout.subarray(0, 3));
+        assertEquals(
+          first3,
+          [65, 66, 67],
+          `run ${i + 1}: first three stdout bytes must preserve ABC order`,
+        );
+      } catch (e) {
+        try {
+          proc.kill();
+        } catch { /* ignore */ }
+        throw e;
+      }
     }
   },
 });
@@ -490,8 +535,6 @@ Deno.test({
 Deno.test({
   name: "native IO - readOne with --stdin-file",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const tmpStdin = await Deno.makeTempFile();
     await Deno.writeFile(tmpStdin, new Uint8Array([65]));
@@ -505,23 +548,30 @@ Deno.test({
         stdout: "piped",
         stderr: "piped",
       }).spawn();
-      const writer = proc.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(dagLine + "\n"));
-      await writer.close();
-      const { stdout, stderr, code } = await proc.output();
-      const outText = new TextDecoder().decode(stdout);
-      const errText = new TextDecoder().decode(stderr);
-      assertEquals(code, 0, "exit 0");
-      assertEquals(
-        outText.includes("reduction error"),
-        false,
-        "must not report reduction error: " + errText,
-      );
-      assertEquals(
-        outText.includes("U41") || outText.includes("65"),
-        true,
-        "result should reflect byte 65 (U41): " + outText,
-      );
+      try {
+        const writer = proc.stdin.getWriter();
+        await writer.write(new TextEncoder().encode(dagLine + "\n"));
+        await writer.close();
+        const { stdout, stderr, code } = await proc.output();
+        const outText = new TextDecoder().decode(stdout);
+        const errText = new TextDecoder().decode(stderr);
+        assertEquals(code, 0, "exit 0");
+        assertEquals(
+          outText.includes("reduction error"),
+          false,
+          "must not report reduction error: " + errText,
+        );
+        assertEquals(
+          outText.includes("U41") || outText.includes("65"),
+          true,
+          "result should reflect byte 65 (U41): " + outText,
+        );
+      } catch (e) {
+        try {
+          proc.kill();
+        } catch { /* ignore */ }
+        throw e;
+      }
     } finally {
       await Deno.remove(tmpStdin);
     }
@@ -533,8 +583,6 @@ Deno.test({
 Deno.test({
   name: "native IO - readOne blocks until --stdin-file receives data",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const tmpStdin = await Deno.makeTempFile();
     await Deno.writeFile(tmpStdin, new Uint8Array());
@@ -548,39 +596,46 @@ Deno.test({
         stdout: "piped",
         stderr: "piped",
       }).spawn();
-      const writer = proc.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(dagLine + "\n"));
-      await writer.close();
+      try {
+        const writer = proc.stdin.getWriter();
+        await writer.write(new TextEncoder().encode(dagLine + "\n"));
+        await writer.close();
 
-      const outputPromise = proc.output();
-      const stateBeforeAppend = await Promise.race([
-        outputPromise.then(() => "finished"),
-        new Promise<"pending">((resolve) =>
-          setTimeout(() => resolve("pending"), 50)
-        ),
-      ]);
-      assertEquals(
-        stateBeforeAppend,
-        "pending",
-        "READ_ONE should stay blocked while runtime stdin is empty",
-      );
+        const outputPromise = proc.output();
+        const stateBeforeAppend = await Promise.race([
+          outputPromise.then(() => "finished"),
+          new Promise<"pending">((resolve) =>
+            setTimeout(() => resolve("pending"), 50)
+          ),
+        ]);
+        assertEquals(
+          stateBeforeAppend,
+          "pending",
+          "READ_ONE should stay blocked while runtime stdin is empty",
+        );
 
-      await Deno.writeFile(tmpStdin, new Uint8Array([65]), { append: true });
+        await Deno.writeFile(tmpStdin, new Uint8Array([65]), { append: true });
 
-      const { stdout, stderr, code } = await outputPromise;
-      const outText = new TextDecoder().decode(stdout);
-      const errText = new TextDecoder().decode(stderr);
-      assertEquals(code, 0, "exit 0 after input arrives");
-      assertEquals(
-        outText.includes("reduction error"),
-        false,
-        "must not report reduction error: " + errText,
-      );
-      assertEquals(
-        outText.includes("U41") || outText.includes("65"),
-        true,
-        "result should reflect byte 65 (U41): " + outText,
-      );
+        const { stdout, stderr, code } = await outputPromise;
+        const outText = new TextDecoder().decode(stdout);
+        const errText = new TextDecoder().decode(stderr);
+        assertEquals(code, 0, "exit 0 after input arrives");
+        assertEquals(
+          outText.includes("reduction error"),
+          false,
+          "must not report reduction error: " + errText,
+        );
+        assertEquals(
+          outText.includes("U41") || outText.includes("65"),
+          true,
+          "result should reflect byte 65 (U41): " + outText,
+        );
+      } catch (e) {
+        try {
+          proc.kill();
+        } catch { /* ignore */ }
+        throw e;
+      }
     } finally {
       await Deno.remove(tmpStdin);
     }
@@ -591,8 +646,6 @@ Deno.test({
 Deno.test({
   name: "native IO - interleaved read/write echo",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const tmpStdin = await Deno.makeTempFile();
     await Deno.writeFile(tmpStdin, new Uint8Array([88])); // 'X'
@@ -606,14 +659,66 @@ Deno.test({
         stdout: "piped",
         stderr: "inherit",
       }).spawn();
-      const writer = proc.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(dagLine + "\n"));
-      await writer.close();
-      const { stdout } = await proc.output();
-      assertEquals(stdout.length >= 1, true);
-      assertEquals(stdout[0], 88, "echoed byte must be 88 (X)");
+      try {
+        const writer = proc.stdin.getWriter();
+        await writer.write(new TextEncoder().encode(dagLine + "\n"));
+        await writer.close();
+        const { stdout } = await proc.output();
+        assertEquals(stdout.length >= 1, true);
+        assertEquals(stdout[0], 88, "echoed byte must be 88 (X)");
+      } catch (e) {
+        try {
+          proc.kill();
+        } catch { /* ignore */ }
+        throw e;
+      }
     } finally {
       await Deno.remove(tmpStdin);
+    }
+  },
+});
+
+Deno.test({
+  name: "fromDagWire - error paths (coverage)",
+  fn: () => {
+    // Empty DAG
+    assertThrows(() => fromDagWire(""), Error, "empty DAG");
+    // Invalid U8 #u8(256)
+    assertThrows(() => fromDagWire("#u8(256)"), Error, "invalid U8");
+    // Invalid U8 UXY
+    assertThrows(() => fromDagWire("UXY"), Error, "invalid U8");
+    // Invalid app (missing comma)
+    assertThrows(() => fromDagWire("@0"), Error, "invalid app");
+    // Invalid app indices (out of bounds)
+    assertThrows(() => fromDagWire("@0,0"), Error, "invalid app indices");
+    // Invalid DAG token
+    assertThrows(() => fromDagWire("X"), Error, "invalid DAG token");
+  },
+});
+
+Deno.test({
+  name: "dagCharToSym - error (coverage)",
+  fn: () => {
+    assertThrows(
+      () => dagCharToSym("?"),
+      Error,
+      "invalid DAG terminal: ?",
+    );
+  },
+});
+
+Deno.test({
+  name: "ThanatosSession - reduceDag error (coverage)",
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      await assertRejects(
+        () => session.reduceDag("INVALID"),
+        Error,
+        "thanatos: parse error",
+      );
+    } finally {
+      await session.close();
     }
   },
 });

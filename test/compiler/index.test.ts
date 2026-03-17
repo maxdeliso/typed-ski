@@ -6,12 +6,7 @@ import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
-import {
-  fromDagWire,
-  getThanatosSession,
-  passthroughEvaluator,
-  toDagWire,
-} from "../thanatosHarness.ts";
+import { toDagWire } from "../thanatosHarness.test.ts";
 
 const LEXER_SOURCE_FILE = new URL(
   "../../lib/compiler/lexer.trip",
@@ -219,15 +214,12 @@ poly main =
     | Err e => false
     | Ok results => notStub results
   }
-`;
+  `;
 }
 
 async function runCompilerHarness(source: string): Promise<boolean> {
   const expr = await buildCompilerHarnessExpression(source);
-  const session = await getThanatosSession();
-  const resultDag = await session.reduceDag(toDagWire(expr));
-  const resultExpr = fromDagWire(resultDag);
-  return await UnChurchBoolean(resultExpr, passthroughEvaluator);
+  return await UnChurchBoolean(expr);
 }
 
 async function buildCompilerHarnessExpression(source: string) {
@@ -276,8 +268,6 @@ function countDagNodes(dag: string): number {
 Deno.test({
   name: "Self-hosted compileToComb matches TS for byte nat literals",
   ignore: true, // Redundant with data/match test
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const source = `module M
 export main
@@ -300,8 +290,6 @@ Deno.test({
   name:
     "Self-hosted compileToComb lowers non-byte nat literals through a non-stub path",
   ignore: true, // Redundant with data/match test
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const source = `module M
 export main

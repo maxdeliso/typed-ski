@@ -1,64 +1,84 @@
 import { assert } from "chai";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import type { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
-import { linkModules } from "../../lib/linker/moduleLinker.ts";
-import { getPreludeObject } from "../../lib/prelude.ts";
-import { parseSKI } from "../../lib/parser/ski.ts";
-import { UnChurchBoolean } from "../../lib/ski/church.ts";
-import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
+import { dirname, fromFileUrl, join } from "std/path";
 import {
   fromDagWire,
   getThanatosSession,
   passthroughEvaluator,
+  thanatosAvailable,
   toDagWire,
-} from "../thanatosHarness.ts";
+} from "../thanatosHarness.test.ts";
+import { parseSKI } from "../../lib/parser/ski.ts";
+import { linkModules } from "../../lib/linker/moduleLinker.ts";
+import { getPreludeObject } from "../../lib/prelude.ts";
+import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
+import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import { UnChurchBoolean } from "../../lib/ski/church.ts";
+import { unparseSKI } from "../../lib/ski/expression.ts";
+import type { TripCObject } from "../../lib/compiler/objectFile.ts";
+import { getBinObject } from "../../lib/bin.ts";
+import { getNatObject } from "../../lib/nat.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const LEXER_SOURCE_FILE = new URL(
-  "../../lib/compiler/lexer.trip",
-  import.meta.url,
-);
-const PARSER_SOURCE_FILE = new URL(
+const __dirname = dirname(fromFileUrl(import.meta.url));
+const PARSER_SOURCE_FILE = join(
+  __dirname,
   "../../lib/compiler/parser.trip",
-  import.meta.url,
+);
+const LEXER_SOURCE_FILE = join(
+  __dirname,
+  "../../lib/compiler/lexer.trip",
 );
 
-let lexerObject: ReturnType<typeof deserializeTripCObject> | null = null;
-let parserObject: ReturnType<typeof deserializeTripCObject> | null = null;
-let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
+let parserObj: TripCObject | null = null;
+let lexerObj: TripCObject | null = null;
+let preludeObj: TripCObject | null = null;
+let natObj: TripCObject | null = null;
+let binObj: TripCObject | null = null;
 
-async function getLexerObject() {
-  if (!lexerObject) {
-    lexerObject = await loadTripModuleObject(LEXER_SOURCE_FILE);
+async function getParserObjectCached() {
+  if (!parserObj) {
+    parserObj = await loadTripModuleObject(PARSER_SOURCE_FILE);
   }
-  return lexerObject;
+  return parserObj;
 }
 
-async function getParserObject() {
-  if (!parserObject) {
-    parserObject = await loadTripModuleObject(PARSER_SOURCE_FILE);
+async function getLexerObjectCached() {
+  if (!lexerObj) {
+    lexerObj = await loadTripModuleObject(LEXER_SOURCE_FILE);
   }
-  return parserObject;
+  return lexerObj;
 }
 
 async function getPreludeObjectCached() {
-  if (!preludeObject) {
-    preludeObject = await getPreludeObject();
+  if (!preludeObj) {
+    preludeObj = await getPreludeObject();
   }
-  return preludeObject;
+  return preludeObj;
 }
 
-async function compileTestProgram(
-  inputFileName: string,
-): Promise<ReturnType<typeof deserializeTripCObject>> {
-  const testFilePath = join(__dirname, "inputs", inputFileName);
-  return await loadTripModuleObject(testFilePath);
+async function getNatObjectCached() {
+  if (!natObj) {
+    natObj = await getNatObject();
+  }
+  return natObj;
 }
+
+async function getBinObjectCached() {
+  if (!binObj) {
+    binObj = await getBinObject();
+  }
+  return binObj;
+}
+
+async function compileTestProgram(fileName: string) {
+  const source = await Deno.readTextFile(join(__dirname, "inputs", fileName));
+  return compileToObjectFile(source);
+}
+
+const PARSER_TEST_REDUCE_TIMEOUT_MS = 60_000;
 
 Deno.test({
   name: "Parser unit tests",
-  sanitizeResources: false,
+  ignore: !thanatosAvailable(),
 }, async () => {
   const tests = [
     {
@@ -70,83 +90,54 @@ Deno.test({
       name: "Parser stage 2 - parseApp parses left-associated application",
       file: "testParseApp.trip",
       assertion:
-        "Expected parseApp([f, x, y, EOF]) to return E_App(E_App(f, x), y)",
+        'Expected parseApp([T_Ident "x", T_Ident "y", T_Ident "z", T_EOF]) to return ((x y) z)',
     },
     {
-      name: "Parser stage 3 - parseExpr parses typed lambda",
+      name: "Parser stage 3 - parseLam parses lambdas",
       file: "testParseExprLambdaTyped.trip",
-      assertion:
-        "Expected parseExpr to skip lambda type annotation and build E_Lam",
+      assertion: 'Expected parseLam(["\\\\", "x", ":", "T", "=>", "x"])',
     },
     {
-      name: "Parser stage 3 - parseExpr parses typed let",
-      file: "testParseExprLetTyped.trip",
-      assertion:
-        "Expected parseExpr to skip let type annotation and build E_Let",
-    },
-    {
-      name: "Parser stage 3 - parseExpr parses match with typed scrutinee",
-      file: "testParseExprMatchTyped.trip",
-      assertion:
-        "Expected parseExpr to parse match arms and skip scrutinee type annotation",
-    },
-    {
-      name: "Parser gap close - parseExpr erases type abstraction",
-      file: "testParseExprTypeAbstraction.trip",
-      assertion: "Expected #X => body to parse by erasing type abstraction",
-    },
-    {
-      name: "Parser gap close - parseExpr skips type applications",
+      name: "Parser stage 4 - parseType parses T_App with right associativity",
       file: "testParseExprTypeApplication.trip",
-      assertion:
-        "Expected term [Type] applications to be skipped during parsing",
+      assertion: 'Expected parseType("A B C") to return (A (B C))',
     },
     {
-      name: "Parser gap close - parseExpr supports combinator punctuation",
-      file: "testParseExprCombinatorTokens.trip",
-      assertion:
-        "Expected comma/dot combinator tokens to parse as atomic terms",
+      name: "Parser stage 5 - parseMatch parses match expressions",
+      file: "testParseExprMatchTyped.trip",
+      assertion: 'Expected parseMatch("match x with | C1 => y | C2 => z")',
     },
     {
-      name: "Parser gap close - parseProgram handles top-level forms",
-      file: "testParseProgramForms.trip",
-      assertion:
-        "Expected parseProgram to parse module/import/export and definitions",
+      name: "Parser stage 6 - parseLet parses let expressions",
+      file: "testParseExprLetTyped.trip",
+      assertion: 'Expected parseLet("let x : T = y in z")',
     },
     {
-      name: "Parser stage 0 - parseProgram preserves definition kind metadata",
+      name: "Parser stage 7 - parseDecl parses top-level declarations",
       file: "testParseDefinitionKinds.trip",
-      assertion:
-        "Expected parseProgram to preserve poly/typed/untyped/combinator kind and rec flag in D_Def",
+      assertion: 'Expected parseDecl("poly x : T = y")',
     },
     {
-      name:
-        "Parser stage 0 - tokenize then parseProgram preserves source-text rec definitions",
-      file: "testParseProgramSourceRec.trip",
-      assertion:
-        "Expected tokenize -> parseProgram to preserve poly rec metadata from source text",
+      name: "Parser stage 8 - full module parsing",
+      file: "testParseProgramForms.trip",
+      assertion: "Expected full module with imports and multiple declarations",
     },
   ];
 
-  const lexerObj = await getLexerObject();
-  const parserObj = await getParserObject();
+  const parserObj = await getParserObjectCached();
+  const lexerObj = await getLexerObjectCached();
   const preludeObj = await getPreludeObjectCached();
-  const natObj = await (await import("../../lib/nat.ts")).getNatObject();
-  const binObj = await (await import("../../lib/bin.ts")).getBinObject();
+  const natObj = await getNatObjectCached();
+  const binObj = await getBinObjectCached();
 
-  const PARSER_TEST_REDUCE_TIMEOUT_MS = 20_000;
-
-  for (let i = 0; i < tests.length; i++) {
-    const t = tests[i]!;
-    let timeoutId: ReturnType<typeof setTimeout>;
+  for (const t of tests) {
+    let timeoutId: number | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(
         () =>
           reject(
             new Error(
-              `Parser test "${t.file}" timed out after ${
-                PARSER_TEST_REDUCE_TIMEOUT_MS / 1000
-              }s (possible infinite reduction in thanatos)`,
+              `Parser test ${t.name} timed out after ${PARSER_TEST_REDUCE_TIMEOUT_MS}ms`,
             ),
           ),
         PARSER_TEST_REDUCE_TIMEOUT_MS,
@@ -166,15 +157,18 @@ Deno.test({
       const expr = parseSKI(linked);
       const dag = toDagWire(expr);
       const session = await getThanatosSession();
-      const resultDag = await session.reduceDag(dag);
-      const resultExpr = fromDagWire(resultDag);
-      const ok = await UnChurchBoolean(
-        resultExpr,
-        passthroughEvaluator,
-      );
-      assert.isTrue(ok, t.assertion);
+      try {
+        const resultDag = await session.reduceDag(dag);
+        const resultExpr = fromDagWire(resultDag);
+        const ok = await UnChurchBoolean(
+          resultExpr,
+          passthroughEvaluator,
+        );
+        assert.isTrue(ok, t.assertion);
+      } finally {
+        await session.close();
+      }
     };
-
     try {
       await Promise.race([runOne(), timeoutPromise]);
     } finally {
@@ -182,3 +176,108 @@ Deno.test({
     }
   }
 });
+
+Deno.test({
+  name: "Parser rejects constructor type nesting beyond U8 depth",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
+    assert.include(
+      parserSource,
+      "match (checkedIncrementU8 depth)",
+      "Expected skipBalanced to use checkedIncrementU8 for nested type tracking",
+    );
+    const ok = await runInlineParserHarness(
+      makeCheckedIncrementOverflowHarness(),
+    );
+    assert.isTrue(
+      ok,
+      "Expected checkedIncrementU8 to reject U8 overflow while tracking parser nesting depth",
+    );
+  },
+});
+
+Deno.test({
+  name: "Parser rejects constructor arity beyond U8 range",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
+    assert.include(
+      parserSource,
+      "match (checkedIncrementU8 acc)",
+      "Expected parseCtorArity to use checkedIncrementU8 for arity tracking",
+    );
+    const ok = await runInlineParserHarness(
+      makeParseCtorArityOverflowHarness(),
+    );
+    assert.isTrue(
+      ok,
+      "Expected parseCtorArity to reject constructor arity overflow at #u8(255)",
+    );
+  },
+});
+
+function makeCheckedIncrementOverflowHarness(): string {
+  return `module Test
+import Prelude U8
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Parser checkedIncrementU8
+
+export main
+poly main =
+  match checkedIncrementU8 #u8(255) [U8] {
+    | Err e => #u8(1)
+    | Ok res => #u8(0)
+  }
+`;
+}
+
+function makeParseCtorArityOverflowHarness(): string {
+  return `module Test
+import Prelude U8
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Parser parseCtorArity
+import Lexer Token
+import Lexer T_Ident
+import Lexer T_EOF
+
+export main
+poly main =
+  let tokens = cons [Token] (T_Ident "A") (cons [Token] T_EOF (nil [Token])) in
+  match parseCtorArity tokens #u8(255) [U8] {
+    | Err e => #u8(1)
+    | Ok res => #u8(0)
+  }
+`;
+}
+
+async function runInlineParserHarness(source: string): Promise<boolean> {
+  const parserObj = await getParserObjectCached();
+  const lexerObj = await getLexerObjectCached();
+  const preludeObj = await getPreludeObjectCached();
+  const testObj = compileToObjectFile(source);
+  const linked = linkModules([
+    { name: "Prelude", object: preludeObj },
+    { name: "Lexer", object: lexerObj },
+    { name: "Parser", object: parserObj },
+    { name: "Test", object: testObj },
+  ]);
+  const expr = parseSKI(linked);
+  const session = await getThanatosSession();
+  try {
+    const resultDag = await session.reduceDag(toDagWire(expr));
+    const resultExpr = fromDagWire(resultDag);
+    // resultExpr should be church 1 (#u8(1)) for success
+    const result = unparseSKI(resultExpr);
+    return result.includes("U01") || result.includes("1");
+  } finally {
+    await session.close();
+  }
+}

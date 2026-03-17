@@ -85,8 +85,8 @@
     "dist": "mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task bundle:tripc:node && deno task compile:tripc",
     "test": "deno test --allow-read --allow-write --allow-run --allow-env --parallel test/",
     "test:coverage": "rm -rf coverage && deno test --allow-read --allow-write --allow-run --allow-env --parallel --coverage=coverage/ test/",
-    "coverage:lcov": "deno coverage coverage/ --lcov --output=coverage.lcov",
-    "coverage:report": "deno coverage coverage/"
+    "coverage:lcov": "deno coverage coverage/ --exclude=test/ --lcov --output=coverage.lcov",
+    "coverage:report": "deno coverage coverage/ --exclude=test/"
   },
-  "version": "0.15.17"
+  "version": "0.15.18"
 }

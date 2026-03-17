@@ -26,7 +26,7 @@ import {
   runThanatosBatch,
   thanatosAvailable,
   toDagWire,
-} from "../thanatosHarness.ts";
+} from "../thanatosHarness.test.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEXER_SOURCE_FILE = new URL(
@@ -73,8 +73,6 @@ async function compileAndValidateTestProgram(
 Deno.test({
   name: "Lexer - isSpace structure validation",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const program = await compileAndValidateTestProgram("testIsSpace.trip");
     const lines = await runThanatosBatch([unparseSKI(program)]);
@@ -91,8 +89,6 @@ Deno.test({
 Deno.test({
   name: "Lexer - isSpace character codes",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const lexerObj = await getLexerObject();
     const preludeObj = await getPreludeObjectCached();
@@ -151,8 +147,6 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 Deno.test({
   name: 'Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF',
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const lexerObj = await getLexerObject();
     const preludeObj = await getPreludeObjectCached();
@@ -180,8 +174,6 @@ Deno.test({
 Deno.test({
   name: "Lexer - structural validations",
   ignore: !thanatosAvailable(),
-  sanitizeResources: false,
-  sanitizeOps: false,
   fn: async () => {
     const structuralTests = [
       {
@@ -206,13 +198,17 @@ Deno.test({
       },
     ];
     const session = await getThanatosSession();
-    for (const tc of structuralTests) {
-      const program = await compileAndValidateTestProgram(tc.file);
-      const dag = toDagWire(program);
-      const resultDag = await session.reduceDag(dag);
-      const resultExpr = fromDagWire(resultDag);
-      const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
-      assert.isTrue(ok, tc.msg);
+    try {
+      for (const tc of structuralTests) {
+        const program = await compileAndValidateTestProgram(tc.file);
+        const dag = toDagWire(program);
+        const resultDag = await session.reduceDag(dag);
+        const resultExpr = fromDagWire(resultDag);
+        const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
+        assert.isTrue(ok, tc.msg);
+      }
+    } finally {
+      await session.close();
     }
   },
 });

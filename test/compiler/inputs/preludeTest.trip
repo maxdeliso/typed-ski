@@ -1,0 +1,30 @@
+module TestPrelude
+
+import Nat zero
+import Nat succ
+import Nat add
+import Prelude not
+import Prelude and
+import Prelude or
+import Prelude pair
+import Prelude fst
+import Prelude snd
+import Nat pred
+import Nat sub
+import Nat isZero
+import Nat lte
+import Nat gte
+import Prelude true
+import Prelude false
+import Nat Nat
+
+export main
+
+poly main =
+  let a = (not false) [Nat] (succ zero) zero in
+  let b = add a ((and true true) [Nat] (succ zero) zero) in
+  let c = add b ((or false true) [Nat] (succ zero) zero) in
+  let d = add c (pred (succ (succ zero))) in
+  let e = add d (sub (succ (succ (succ zero))) (succ zero)) in
+  let f = add e ((lte (succ zero) (succ (succ zero))) [Nat] (succ zero) zero) in
+  add f ((gte (succ (succ zero)) (succ zero)) [Nat] (succ zero) zero)

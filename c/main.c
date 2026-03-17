@@ -41,6 +41,13 @@ static int parse_u32_arg(const char *text, uint32_t *out) {
   return 1;
 }
 
+static int daemon_command_matches(const char *line, size_t len,
+                                  const char *command, size_t command_len) {
+  return len >= command_len && memcmp(line, command, command_len) == 0 &&
+         (len == command_len || line[command_len] == ' ' ||
+          line[command_len] == '\t');
+}
+
 /** Batch mode: program_input is the SKI/DAG text to parse and reduce.
  * runtime_stdin_fd is an optional stream/file consumed lazily by READ_ONE on a
  * separate channel. Pass -1 when no runtime stdin source is available. */
@@ -155,30 +162,24 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
       continue;
     }
 
-    if (len >= 4 && line[0] == 'Q' && line[1] == 'U' && line[2] == 'I' &&
-        line[3] == 'T' && (len == 4 || line[4] == ' ' || line[4] == '\t')) {
+    if (daemon_command_matches(line, len, "QUIT", sizeof("QUIT") - 1)) {
       printf("OK\n");
       fflush(stdout);
       break;
     }
-    if (len >= 4 && line[0] == 'P' && line[1] == 'I' && line[2] == 'N' &&
-        line[3] == 'G' && (len == 4 || line[4] == ' ' || line[4] == '\t')) {
+    if (daemon_command_matches(line, len, "PING", sizeof("PING") - 1)) {
       printf("OK\n");
       fflush(stdout);
       continue;
     }
-    if (len >= 5 && line[0] == 'R' && line[1] == 'E' && line[2] == 'S' &&
-        line[3] == 'E' && line[4] == 'T' &&
-        (len == 5 || line[5] == ' ' || line[5] == '\t')) {
+    if (daemon_command_matches(line, len, "RESET", sizeof("RESET") - 1)) {
       reset();
       thanatos_reset_stats();
       printf("OK\n");
       fflush(stdout);
       continue;
     }
-    if (len >= 5 && line[0] == 'S' && line[1] == 'T' && line[2] == 'A' &&
-        line[3] == 'T' && line[4] == 'S' &&
-        (len == 5 || line[5] == ' ' || line[5] == '\t')) {
+    if (daemon_command_matches(line, len, "STATS", sizeof("STATS") - 1)) {
       uint32_t top = 0, capacity = 0;
       unsigned long long events = 0, dropped = 0, total_nodes = 0,
                          total_steps = 0, total_cons_allocs = 0,
@@ -200,9 +201,7 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
       fflush(stdout);
       continue;
     }
-    if (len >= 6 && line[0] == 'R' && line[1] == 'E' && line[2] == 'D' &&
-        line[3] == 'U' && line[4] == 'C' && line[5] == 'E' &&
-        (len == 6 || line[6] == ' ' || line[6] == '\t')) {
+    if (daemon_command_matches(line, len, "REDUCE", sizeof("REDUCE") - 1)) {
       const char *dag = line + 6;
       size_t dag_len = len - 6;
       while (dag_len > 0 && (*dag == ' ' || *dag == '\t')) {
@@ -242,8 +241,7 @@ static int run_daemon_mode(uint32_t num_workers, uint32_t arena_capacity) {
       fflush(stdout);
       continue;
     }
-    if (len >= 4 && line[0] == 'S' && line[1] == 'T' && line[2] == 'E' &&
-        line[3] == 'P' && (len == 4 || line[4] == ' ' || line[4] == '\t')) {
+    if (daemon_command_matches(line, len, "STEP", sizeof("STEP") - 1)) {
       const char *p = line + 4;
       while (*p == ' ' || *p == '\t')
         p++;

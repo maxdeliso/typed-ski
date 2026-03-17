@@ -10,6 +10,7 @@
 
 import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
+import { SabHeaderField } from "./arenaHeader.generated.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
 import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import { sleep } from "./async.ts";
@@ -191,18 +192,22 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     };
 
     if (baseAddr !== 0) {
-      const u64 = new BigUint64Array(this.memory.buffer, baseAddr);
-      // SabHeaderField indices are in u32 slots.
-      // total_nodes is at offset 20 (u32 slots) => index 10 in u64 array.
-      // All subsequent fields are also u64.
-      extra.totalNodes = Number(u64[10]);
-      extra.totalSteps = Number(u64[11]);
-      extra.totalConsAllocs = Number(u64[12]);
-      extra.totalContAllocs = Number(u64[13]);
-      extra.totalSuspAllocs = Number(u64[14]);
-      extra.duplicateLostAllocs = Number(u64[15]);
-      extra.hashconsHits = Number(u64[16]);
-      extra.hashconsMisses = Number(u64[17]);
+      const headerView = new DataView(this.memory.buffer, baseAddr);
+      const readHeaderU64 = (field: SabHeaderField) =>
+        Number(
+          headerView.getBigUint64(field * Uint32Array.BYTES_PER_ELEMENT, true),
+        );
+
+      extra.totalNodes = readHeaderU64(SabHeaderField.TOTAL_NODES);
+      extra.totalSteps = readHeaderU64(SabHeaderField.TOTAL_STEPS);
+      extra.totalConsAllocs = readHeaderU64(SabHeaderField.TOTAL_CONS_ALLOCS);
+      extra.totalContAllocs = readHeaderU64(SabHeaderField.TOTAL_CONT_ALLOCS);
+      extra.totalSuspAllocs = readHeaderU64(SabHeaderField.TOTAL_SUSP_ALLOCS);
+      extra.duplicateLostAllocs = readHeaderU64(
+        SabHeaderField.DUPLICATE_LOST_ALLOCS,
+      );
+      extra.hashconsHits = readHeaderU64(SabHeaderField.HASHCONS_HITS);
+      extra.hashconsMisses = readHeaderU64(SabHeaderField.HASHCONS_MISSES);
     }
 
     return this.ringStats.getSnapshot(

@@ -138,7 +138,12 @@ typedef struct {
   uint32_t offset_control;
   uint32_t control_bytes;
   uint32_t offset_term_cache;
-  uint64_t offset_nodes;
+  uint64_t offset_node_left;
+  uint64_t offset_node_right;
+  uint64_t offset_node_hash32;
+  uint64_t offset_node_next_idx;
+  uint64_t offset_node_kind;
+  uint64_t offset_node_sym;
   uint64_t offset_buckets;
   atomic_uint capacity;
   uint32_t bucket_mask;

@@ -8,14 +8,10 @@ import {
   getSym,
   validateAndRebuildViews,
 } from "../../lib/evaluator/arenaViews.ts";
-import { SabHeaderField } from "../../lib/evaluator/arenaHeader.generated.ts";
-
-/** AoS node stride (must match arenaViews / C ArenaNode). */
-const NODE_STRIDE = 32;
-const NODE_OFFSET_LEFT = 0;
-const NODE_OFFSET_RIGHT = 4;
-const NODE_OFFSET_KIND = 16;
-const NODE_OFFSET_SYM = 17;
+import {
+  SABHEADER_HEADER_SIZE_U32,
+  SabHeaderField,
+} from "../../lib/evaluator/arenaHeader.generated.ts";
 
 Deno.test("arenaViews - coverage", async (t) => {
   await t.step("getOrBuildArenaViews handles missing memory", () => {
@@ -29,8 +25,13 @@ Deno.test("arenaViews - coverage", async (t) => {
       const dummyViews = {
         buffer: new ArrayBuffer(0),
         baseAddr: 0,
-        offsetNodes: 0,
         capacity: 10,
+        offsetNodeLeft: 0,
+        offsetNodeRight: 0,
+        offsetNodeHash32: 0,
+        offsetNodeNextIdx: 0,
+        offsetNodeKind: 0,
+        offsetNodeSym: 0,
       } satisfies ArenaViews;
       expect(validateAndRebuildViews(dummyViews, undefined, {})).to.equal(
         dummyViews,
@@ -43,10 +44,17 @@ Deno.test("arenaViews - coverage", async (t) => {
     const dummyViews = {
       buffer: new ArrayBuffer(0),
       baseAddr: 0,
-      offsetNodes: 0,
       capacity: 10,
+      offsetNodeLeft: 0,
+      offsetNodeRight: 0,
+      offsetNodeHash32: 0,
+      offsetNodeNextIdx: 0,
+      offsetNodeKind: 0,
+      offsetNodeSym: 0,
     } satisfies ArenaViews;
-    expect(validateAndRebuildViews(dummyViews, memory, {})).to.be.null;
+    expect(validateAndRebuildViews(dummyViews, memory, {})).to.equal(
+      dummyViews,
+    );
   });
 
   await t.step("getOrBuildArenaViews handles missing baseAddr", () => {
@@ -60,24 +68,35 @@ Deno.test("arenaViews - coverage", async (t) => {
       .be.null;
   });
 
-  await t.step("getKind/getLeft/getRight/getSym with AoS layout", () => {
-    // Minimal buffer: 5 nodes at offset 0 (baseAddr=0, offsetNodes=0)
+  await t.step("getKind/getLeft/getRight/getSym with SoA layout", () => {
     const capacity = 5;
-    const buf = new ArrayBuffer(capacity * NODE_STRIDE);
+    // Layout: Left (cap*4), Right (cap*4), Kind (cap*1), Sym (cap*1)
+    const offsetLeft = 0;
+    const offsetRight = capacity * 4;
+    const offsetKind = offsetRight + capacity * 4;
+    const offsetSym = offsetKind + capacity;
+
+    const buf = new ArrayBuffer((offsetSym + capacity + 3) & ~3);
     const u32 = new Uint32Array(buf);
     const u8 = new Uint8Array(buf);
+
     for (let i = 0; i < capacity; i++) {
-      const base = (i * NODE_STRIDE) >>> 2;
-      u32[base + (NODE_OFFSET_LEFT >>> 2)] = 0;
-      u32[base + (NODE_OFFSET_RIGHT >>> 2)] = 0;
-      u8[i * NODE_STRIDE + NODE_OFFSET_KIND] = 1;
-      u8[i * NODE_STRIDE + NODE_OFFSET_SYM] = (i % 3) + 1; // S=1,K=2,I=3
+      u32[(offsetLeft + i * 4) >>> 2] = i + 100;
+      u32[(offsetRight + i * 4) >>> 2] = i + 200;
+      u8[offsetKind + i] = 1;
+      u8[offsetSym + i] = (i % 3) + 1; // S=1,K=2,I=3
     }
+
     const views: ArenaViews = {
       buffer: buf,
       baseAddr: 0,
-      offsetNodes: 0,
       capacity,
+      offsetNodeLeft: offsetLeft,
+      offsetNodeRight: offsetRight,
+      offsetNodeHash32: 0,
+      offsetNodeNextIdx: 0,
+      offsetNodeKind: offsetKind,
+      offsetNodeSym: offsetSym,
     };
 
     expect(getKind(10, views)).to.equal(-1);
@@ -86,21 +105,31 @@ Deno.test("arenaViews - coverage", async (t) => {
     expect(getSym(10, views)).to.equal(-1);
 
     expect(getKind(0, views)).to.equal(1);
-    expect(getLeft(0, views)).to.equal(0);
-    expect(getRight(0, views)).to.equal(0);
+    expect(getLeft(0, views)).to.equal(100);
+    expect(getRight(0, views)).to.equal(200);
     expect(getSym(0, views)).to.equal(1);
     expect(getSym(1, views)).to.equal(2);
     expect(getSym(2, views)).to.equal(3);
   });
 
   await t.step("validateAndRebuildViews rebuilds when capacity changed", () => {
-    const headerSize = 18 * 4;
+    const headerSize = SABHEADER_HEADER_SIZE_U32 * 4;
     const baseAddr = 64;
-    const buf = new ArrayBuffer(headerSize + 256);
-    const headerView = new Uint32Array(buf, baseAddr, 18);
+    const buf = new ArrayBuffer(baseAddr + headerSize + 256);
+    const headerView = new Uint32Array(
+      buf,
+      baseAddr,
+      SABHEADER_HEADER_SIZE_U32,
+    );
     headerView[SabHeaderField.CAPACITY] = 5;
-    headerView[SabHeaderField.OFFSET_NODES] = 0;
-    headerView[SabHeaderField.OFFSET_NODES + 1] = 0;
+    // Set all offsets to 0 for simplicity in this test
+    headerView[SabHeaderField.OFFSET_NODE_LEFT] = 0;
+    headerView[SabHeaderField.OFFSET_NODE_RIGHT] = 0;
+    headerView[SabHeaderField.OFFSET_NODE_HASH32] = 0;
+    headerView[SabHeaderField.OFFSET_NODE_NEXT_IDX] = 0;
+    headerView[SabHeaderField.OFFSET_NODE_KIND] = 0;
+    headerView[SabHeaderField.OFFSET_NODE_SYM] = 0;
+
     const memory = { buffer: buf } as WebAssembly.Memory;
     const provider = { debugGetArenaBaseAddr: () => baseAddr };
 
@@ -117,13 +146,22 @@ Deno.test("arenaViews - coverage", async (t) => {
   await t.step(
     "getOrBuildArenaViews returns fresh views when cache stale",
     () => {
-      const headerSize = 18 * 4;
+      const headerSize = SABHEADER_HEADER_SIZE_U32 * 4;
       const baseAddr = 64;
-      const buf = new ArrayBuffer(headerSize + 256);
-      const headerView = new Uint32Array(buf, baseAddr, 18);
+      const buf = new ArrayBuffer(baseAddr + headerSize + 256);
+      const headerView = new Uint32Array(
+        buf,
+        baseAddr,
+        SABHEADER_HEADER_SIZE_U32,
+      );
       headerView[SabHeaderField.CAPACITY] = 4;
-      headerView[SabHeaderField.OFFSET_NODES] = 0;
-      headerView[SabHeaderField.OFFSET_NODES + 1] = 0;
+      headerView[SabHeaderField.OFFSET_NODE_LEFT] = 0;
+      headerView[SabHeaderField.OFFSET_NODE_RIGHT] = 0;
+      headerView[SabHeaderField.OFFSET_NODE_HASH32] = 0;
+      headerView[SabHeaderField.OFFSET_NODE_NEXT_IDX] = 0;
+      headerView[SabHeaderField.OFFSET_NODE_KIND] = 0;
+      headerView[SabHeaderField.OFFSET_NODE_SYM] = 0;
+
       const memory = { buffer: buf } as WebAssembly.Memory;
       const provider = { debugGetArenaBaseAddr: () => baseAddr };
 

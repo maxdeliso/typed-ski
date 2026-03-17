@@ -410,11 +410,8 @@ Deno.test("dumpArena", async (t) => {
     const views = getOrBuildArenaViews(evaluator.memory, evaluator.$);
     assert(views !== null, "Arena views should be available");
 
-    // Create an artificial hole at id=0 (AoS: kind at baseAddr + offsetNodes + 0*32 + 16).
-    const NODE_STRIDE = 32;
-    const NODE_OFFSET_KIND = 16;
-    const kindByte = views.baseAddr + views.offsetNodes + 0 * NODE_STRIDE +
-      NODE_OFFSET_KIND;
+    // Create an artificial hole at id=0 (SoA: kind at baseAddr + offsetNodeKind + 0).
+    const kindByte = views.baseAddr + views.offsetNodeKind + 0;
     new Uint8Array(views.buffer)[kindByte] = 0;
 
     const { nodes } = evaluator.dumpArena();

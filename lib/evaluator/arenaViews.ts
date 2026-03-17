@@ -12,22 +12,20 @@ import {
   SabHeaderField,
 } from "./arenaHeader.generated.ts";
 
-/** AoS: each node is 32 bytes (id<<5 indexing; left, right, hash32, next_idx, kind, sym, pad). */
-const ARENA_NODE_STRIDE_BYTES = 32;
-const NODE_OFFSET_LEFT = 0;
-const NODE_OFFSET_RIGHT = 4;
-const NODE_OFFSET_KIND = 16;
-const NODE_OFFSET_SYM = 17;
-
 /**
- * Arena view for direct memory access (AoS layout).
- * Nodes never move on grow(); offset_nodes + id * 20 gives the node address.
+ * Arena view for direct memory access (SoA layout).
+ * Nodes never move on grow().
  */
 export interface ArenaViews {
   buffer: ArrayBuffer | SharedArrayBuffer;
   baseAddr: number;
-  offsetNodes: number;
   capacity: number;
+  offsetNodeLeft: number;
+  offsetNodeRight: number;
+  offsetNodeHash32: number;
+  offsetNodeNextIdx: number;
+  offsetNodeKind: number;
+  offsetNodeSym: number;
 }
 
 /**
@@ -49,8 +47,7 @@ const viewsCache = new Map<
 >();
 
 /**
- * Build typed array views of the arena memory for direct access.
- * Reads the arena header to get offsets and creates views of the data arrays.
+ * Internal helper: Build arena views from wasm exports.
  */
 function buildArenaViews(
   memory: WebAssembly.Memory,
@@ -75,12 +72,31 @@ function buildArenaViews(
   );
 
   const capacity = headerView[SabHeaderField.CAPACITY]!;
-  // offset_nodes is uint64_t (indices 10=lo, 11=hi); read as number (fits for arena sizes)
-  const offsetNodesLo = headerView[SabHeaderField.OFFSET_NODES]!;
-  const offsetNodesHi = headerView[SabHeaderField.OFFSET_NODES + 1]!;
-  const offsetNodes = offsetNodesLo + offsetNodesHi * 0x1_0000_0000;
 
-  return { buffer, baseAddr, offsetNodes, capacity };
+  const get64 = (field: number) => {
+    const lo = headerView[field]!;
+    const hi = headerView[field + 1]!;
+    return lo + hi * 0x1_0000_0000;
+  };
+
+  const offsetNodeLeft = get64(SabHeaderField.OFFSET_NODE_LEFT);
+  const offsetNodeRight = get64(SabHeaderField.OFFSET_NODE_RIGHT);
+  const offsetNodeHash32 = get64(SabHeaderField.OFFSET_NODE_HASH32);
+  const offsetNodeNextIdx = get64(SabHeaderField.OFFSET_NODE_NEXT_IDX);
+  const offsetNodeKind = get64(SabHeaderField.OFFSET_NODE_KIND);
+  const offsetNodeSym = get64(SabHeaderField.OFFSET_NODE_SYM);
+
+  return {
+    buffer,
+    baseAddr,
+    capacity,
+    offsetNodeLeft,
+    offsetNodeRight,
+    offsetNodeHash32,
+    offsetNodeNextIdx,
+    offsetNodeKind,
+    offsetNodeSym,
+  };
 }
 
 /**
@@ -98,20 +114,17 @@ export function validateAndRebuildViews(
 
   const baseAddr = provider.debugGetArenaBaseAddr?.();
   if (!baseAddr) {
-    return null;
+    return views;
   }
 
-  // Check current capacity from header
-  const buffer = memory.buffer;
   const headerView = new Uint32Array(
-    buffer,
+    memory.buffer,
     baseAddr,
     SABHEADER_HEADER_SIZE_U32,
   );
-  const currentCapacity = headerView[SabHeaderField.CAPACITY];
+  const currentCapacity = headerView[SabHeaderField.CAPACITY]!;
 
-  // If capacity changed, views are stale - rebuild them
-  if (currentCapacity !== views.capacity) {
+  if (currentCapacity !== views.capacity || baseAddr !== views.baseAddr) {
     return buildArenaViews(memory, provider);
   }
 
@@ -119,75 +132,59 @@ export function validateAndRebuildViews(
 }
 
 /**
- * Get or build arena views with caching.
- * Uses memory.buffer as cache key since it's stable per evaluator instance.
- * Validates cached views are still current and rebuilds if stale.
+ * Public accessor for arena views with caching.
  */
 export function getOrBuildArenaViews(
   memory: WebAssembly.Memory | undefined,
   provider: ArenaViewsProvider,
 ): ArenaViews | null {
-  if (!memory) {
-    return null;
-  }
+  if (!memory) return null;
 
-  const buffer = memory.buffer;
-  const baseAddr = provider.debugGetArenaBaseAddr?.();
-  const cached = viewsCache.get(buffer);
-
+  const cached = viewsCache.get(memory.buffer);
   let views: ArenaViews | null = null;
 
-  // Check if cached views are still valid (same base address and capacity)
-  if (cached && baseAddr && cached.lastBaseAddr === baseAddr) {
-    // Validate cached views are still current (check capacity)
+  if (cached) {
     const validated = validateAndRebuildViews(cached.views, memory, provider);
-    if (validated && validated.capacity === cached.lastCapacity) {
+    if (validated) {
       views = validated;
     } else {
-      // Views are stale or invalid, rebuild
-      views = validated || buildArenaViews(memory, provider);
+      views = buildArenaViews(memory, provider);
     }
   } else {
-    // No cache or base address changed, build new views
     views = buildArenaViews(memory, provider);
   }
 
-  // Update cache if we have valid views and base address
-  if (views && baseAddr) {
-    viewsCache.set(buffer, {
+  if (views) {
+    viewsCache.set(memory.buffer, {
       views,
       lastCapacity: views.capacity,
-      lastBaseAddr: baseAddr,
+      lastBaseAddr: views.baseAddr,
     });
   }
 
   return views;
 }
 
-function nodeBase(views: ArenaViews, id: number): number {
-  return views.baseAddr + views.offsetNodes + id * ARENA_NODE_STRIDE_BYTES;
-}
-
 export function getKind(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
   const u8 = new Uint8Array(views.buffer);
-  return u8[nodeBase(views, id) + NODE_OFFSET_KIND]!;
+  return u8[views.baseAddr + views.offsetNodeKind + id]!;
 }
 
 export function getSym(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
   const u8 = new Uint8Array(views.buffer);
-  return u8[nodeBase(views, id) + NODE_OFFSET_SYM]!;
+  return u8[views.baseAddr + views.offsetNodeSym + id]!;
 }
 
 export function getLeft(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
   const u32 = new Uint32Array(views.buffer);
-  return u32[(nodeBase(views, id) >>> 2) + (NODE_OFFSET_LEFT >>> 2)]!;
+  return u32[(views.baseAddr + views.offsetNodeLeft + id * 4) >>> 2]!;
 }
 
 export function getRight(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
   const u32 = new Uint32Array(views.buffer);
-  return u32[(nodeBase(views, id) >>> 2) + (NODE_OFFSET_RIGHT >>> 2)]!;
+  return u32[(views.baseAddr + views.offsetNodeRight + id * 4) >>> 2]!;
 }

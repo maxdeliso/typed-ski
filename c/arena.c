@@ -269,7 +269,12 @@ typedef struct {
   uint32_t offset_control;
   uint32_t control_bytes;
   uint32_t offset_term_cache;
-  uint64_t offset_nodes;
+  uint64_t offset_node_left;
+  uint64_t offset_node_right;
+  uint64_t offset_node_hash32;
+  uint64_t offset_node_next_idx;
+  uint64_t offset_node_kind;
+  uint64_t offset_node_sym;
   uint64_t offset_buckets;
   uint64_t total_size;
 } SabLayout;
@@ -327,6 +332,42 @@ static inline void trap_invariant(void) {
 #endif
 }
 
+#ifdef NDEBUG
+#define ARENA_ASSERT(x) (void)(x)
+#else
+#define ARENA_ASSERT(x)                                                        \
+  do {                                                                         \
+    if (!(x))                                                                  \
+      trap_invariant();                                                        \
+  } while (0)
+#endif
+
+/**
+ * Memory ordering helpers: Publication Gate Model.
+ * Load 'kind' with acquire to establish publication, then load payload relaxed.
+ */
+static inline uint8_t load_kind_pub(atomic_uchar *kinds, uint32_t n) {
+  return atomic_load_explicit(&kinds[n], memory_order_acquire);
+}
+
+static inline uint32_t load_u32_payload(atomic_uint *arr, uint32_t n) {
+  return atomic_load_explicit(&arr[n], memory_order_relaxed);
+}
+
+static inline uint8_t load_u8_payload(atomic_uchar *arr, uint32_t n) {
+  return atomic_load_explicit(&arr[n], memory_order_relaxed);
+}
+
+/** Debug-only structural invariant checks. */
+static inline void debug_check_child_ptr(uint32_t v) {
+#ifndef NDEBUG
+  if (v != EMPTY && is_control_ptr(v))
+    trap_invariant();
+#else
+  (void)v;
+#endif
+}
+
 static inline bool control_ptr_value_accessor_violation(uint32_t ptr) {
   if (!is_control_ptr(ptr))
     return false;
@@ -368,9 +409,19 @@ static SabLayout calculate_layout(uint32_t capacity) {
       align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
   l.control_bytes = total_control_bytes();
   l.offset_term_cache = align64(l.offset_control + l.control_bytes);
-  l.offset_nodes = (uint64_t)align64(l.offset_term_cache + TERM_CACHE_LEN * 4);
-  l.offset_buckets =
-      align64_u64(l.offset_nodes + (uint64_t)capacity * sizeof(ArenaNode));
+  /* Invariant offsets: partition the reserved MAX_CAP space immediately. */
+  l.offset_node_left =
+      (uint64_t)align64(l.offset_term_cache + TERM_CACHE_LEN * 4);
+  l.offset_node_right = align64_u64(l.offset_node_left + (uint64_t)MAX_CAP * 4);
+  l.offset_node_hash32 =
+      align64_u64(l.offset_node_right + (uint64_t)MAX_CAP * 4);
+  l.offset_node_next_idx =
+      align64_u64(l.offset_node_hash32 + (uint64_t)MAX_CAP * 4);
+  l.offset_node_kind =
+      align64_u64(l.offset_node_next_idx + (uint64_t)MAX_CAP * 4);
+  l.offset_node_sym = align64_u64(l.offset_node_kind + (uint64_t)MAX_CAP * 1);
+  /* Buckets follow the node arrays. */
+  l.offset_buckets = align64_u64(l.offset_node_sym + (uint64_t)MAX_CAP * 1);
   l.total_size = l.offset_buckets + (uint64_t)capacity * 4;
   return l;
 }
@@ -445,8 +496,27 @@ static void *allocate_raw_arena(uint32_t capacity) {
   h->offset_control = layout.offset_control;
   h->control_bytes = layout.control_bytes;
   h->offset_term_cache = layout.offset_term_cache;
-  h->offset_nodes = layout.offset_nodes;
+  h->offset_node_left = layout.offset_node_left;
+  h->offset_node_right = layout.offset_node_right;
+  h->offset_node_hash32 = layout.offset_node_hash32;
+  h->offset_node_next_idx = layout.offset_node_next_idx;
+  h->offset_node_kind = layout.offset_node_kind;
+  h->offset_node_sym = layout.offset_node_sym;
   h->offset_buckets = layout.offset_buckets;
+
+  /* Layout sanity assertions. */
+  ARENA_ASSERT(h->offset_node_left < h->offset_node_right);
+  ARENA_ASSERT(h->offset_node_right < h->offset_node_hash32);
+  ARENA_ASSERT(h->offset_node_hash32 < h->offset_node_next_idx);
+  ARENA_ASSERT(h->offset_node_next_idx < h->offset_node_kind);
+  ARENA_ASSERT(h->offset_node_kind < h->offset_node_sym);
+  ARENA_ASSERT(h->offset_node_sym < h->offset_buckets);
+#ifndef __wasm__
+  if (ARENA_RESERVED_BYTES > 0) {
+    ARENA_ASSERT(layout.total_size <= ARENA_RESERVED_BYTES);
+  }
+#endif
+
   atomic_init(&h->capacity, capacity);
   h->bucket_mask = capacity - 1;
   atomic_init(&h->resize_seq, 0);
@@ -464,8 +534,12 @@ static void *allocate_raw_arena(uint32_t capacity) {
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_init(&cache[i], EMPTY);
 
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  memset(nodes, 0, capacity * sizeof(ArenaNode));
+  memset(ARENA_BASE_ADDR + h->offset_node_left, 0, capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_right, 0, capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_hash32, 0, capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_next_idx, 0, capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_kind, 0, capacity * 1);
+  memset(ARENA_BASE_ADDR + h->offset_node_sym, 0, capacity * 1);
 
   atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
   for (uint32_t i = 0; i < capacity; i++)
@@ -633,8 +707,8 @@ uint32_t kindOf(uint32_t n) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  return atomic_load_explicit(&nodes[n].kind, memory_order_acquire);
+  atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+  return atomic_load_explicit(&kinds[n], memory_order_acquire);
 }
 
 uint32_t symOf(uint32_t n) {
@@ -644,8 +718,8 @@ uint32_t symOf(uint32_t n) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  return atomic_load_explicit(&nodes[n].sym, memory_order_acquire);
+  atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+  return atomic_load_explicit(&syms[n], memory_order_acquire);
 }
 
 uint32_t hashOf(uint32_t n) {
@@ -655,8 +729,9 @@ uint32_t hashOf(uint32_t n) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  return atomic_load_explicit(&nodes[n].hash32, memory_order_acquire);
+  atomic_uint *hashes =
+      (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+  return atomic_load_explicit(&hashes[n], memory_order_acquire);
 }
 
 uint32_t leftOf(uint32_t n) {
@@ -666,8 +741,8 @@ uint32_t leftOf(uint32_t n) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  return atomic_load_explicit(&nodes[n].left, memory_order_acquire);
+  atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+  return atomic_load_explicit(&lefts[n], memory_order_acquire);
 }
 
 uint32_t rightOf(uint32_t n) {
@@ -677,8 +752,8 @@ uint32_t rightOf(uint32_t n) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
     return 0;
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-  return atomic_load_explicit(&nodes[n].right, memory_order_acquire);
+  atomic_uint *rights = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
+  return atomic_load_explicit(&rights[n], memory_order_acquire);
 }
 
 uint32_t arena_top(void) {
@@ -792,10 +867,15 @@ uint32_t allocTerminal(uint32_t sym) {
       continue;
     }
 
-    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-    atomic_store_explicit(&nodes[id].sym, (uint8_t)sym, memory_order_release);
-    atomic_store_explicit(&nodes[id].hash32, sym, memory_order_release);
-    atomic_store_explicit(&nodes[id].kind, ARENA_KIND_TERMINAL,
+    atomic_uchar *kinds =
+        (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+    atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+    atomic_uint *hashes =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+
+    atomic_store_explicit(&syms[id], (uint8_t)sym, memory_order_release);
+    atomic_store_explicit(&hashes[id], sym, memory_order_release);
+    atomic_store_explicit(&kinds[id], ARENA_KIND_TERMINAL,
                           memory_order_release);
 
     if (sym < TERM_CACHE_LEN) {
@@ -838,13 +918,20 @@ uint32_t allocU8(uint8_t value) {
       continue;
     }
 
-    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
-    atomic_store_explicit(&nodes[id].left, EMPTY, memory_order_relaxed);
-    atomic_store_explicit(&nodes[id].right, EMPTY, memory_order_relaxed);
-    atomic_store_explicit(&nodes[id].sym, value, memory_order_relaxed);
-    atomic_store_explicit(&nodes[id].hash32, (uint32_t)value,
-                          memory_order_relaxed);
-    atomic_store_explicit(&nodes[id].kind, ARENA_KIND_U8, memory_order_release);
+    atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+    atomic_uint *rights =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
+    atomic_uint *hashes =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+    atomic_uchar *kinds =
+        (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+    atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+
+    atomic_store_explicit(&lefts[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&rights[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&syms[id], value, memory_order_relaxed);
+    atomic_store_explicit(&hashes[id], (uint32_t)value, memory_order_relaxed);
+    atomic_store_explicit(&kinds[id], ARENA_KIND_U8, memory_order_release);
 
     if (!check_stable(seq))
       continue;
@@ -888,7 +975,15 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
     if (l >= atomic_load_explicit(&h->capacity, memory_order_relaxed) ||
         r >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
       return EMPTY;
-    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    atomic_uchar *kinds =
+        (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+    atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+    atomic_uint *rights =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
+    atomic_uint *hashes =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+    atomic_uint *next_idxs =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
     atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
     uint32_t b = hval & h->bucket_mask;
 
@@ -897,16 +992,14 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
 
     while (cur != EMPTY &&
            cur < atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
-      if (atomic_load_explicit(&nodes[cur].kind, memory_order_acquire) ==
-              ARENA_KIND_NON_TERM &&
-          atomic_load_explicit(&nodes[cur].hash32, memory_order_acquire) ==
-              hval &&
-          atomic_load_explicit(&nodes[cur].left, memory_order_acquire) == l &&
-          atomic_load_explicit(&nodes[cur].right, memory_order_acquire) == r) {
+      if (load_kind_pub(kinds, cur) == ARENA_KIND_NON_TERM &&
+          load_u32_payload(hashes, cur) == hval &&
+          load_u32_payload(lefts, cur) == l &&
+          load_u32_payload(rights, cur) == r) {
         found = cur;
         break;
       }
-      cur = atomic_load_explicit(&nodes[cur].next_idx, memory_order_acquire);
+      cur = atomic_load_explicit(&next_idxs[cur], memory_order_acquire);
     }
 
     if (check_stable(seq)) {
@@ -942,13 +1035,21 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
       continue;
     }
 
-    ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+    atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+    atomic_uint *rights =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
+    atomic_uint *hashes =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+    atomic_uchar *kinds =
+        (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+    atomic_uint *next_idxs =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
     atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
 
-    atomic_store_explicit(&nodes[id].left, l, memory_order_release);
-    atomic_store_explicit(&nodes[id].right, r, memory_order_release);
-    atomic_store_explicit(&nodes[id].hash32, hval, memory_order_release);
-    atomic_store_explicit(&nodes[id].kind, ARENA_KIND_NON_TERM,
+    atomic_store_explicit(&lefts[id], l, memory_order_release);
+    atomic_store_explicit(&rights[id], r, memory_order_release);
+    atomic_store_explicit(&hashes[id], hval, memory_order_release);
+    atomic_store_explicit(&kinds[id], ARENA_KIND_NON_TERM,
                           memory_order_release);
 
     if (!check_stable(seq))
@@ -959,7 +1060,7 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
         return id;
 
       uint32_t head = atomic_load_explicit(&buckets[b], memory_order_acquire);
-      atomic_store_explicit(&nodes[id].next_idx, head, memory_order_relaxed);
+      atomic_store_explicit(&next_idxs[id], head, memory_order_relaxed);
       if (atomic_compare_exchange_weak_explicit(&buckets[b], &head, id,
                                                 memory_order_release,
                                                 memory_order_relaxed)) {
@@ -970,21 +1071,17 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
       uint32_t cur2 = atomic_load_explicit(&buckets[b], memory_order_acquire);
       while (cur2 != EMPTY &&
              cur2 < atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
-        if (atomic_load_explicit(&nodes[cur2].kind, memory_order_acquire) ==
+        if (atomic_load_explicit(&kinds[cur2], memory_order_acquire) ==
                 ARENA_KIND_NON_TERM &&
-            atomic_load_explicit(&nodes[cur2].hash32, memory_order_acquire) ==
-                hval &&
-            atomic_load_explicit(&nodes[cur2].left, memory_order_acquire) ==
-                l &&
-            atomic_load_explicit(&nodes[cur2].right, memory_order_acquire) ==
-                r) {
-          atomic_store_explicit(&nodes[id].kind, 0, memory_order_release);
+            atomic_load_explicit(&hashes[cur2], memory_order_acquire) == hval &&
+            atomic_load_explicit(&lefts[cur2], memory_order_acquire) == l &&
+            atomic_load_explicit(&rights[cur2], memory_order_acquire) == r) {
+          atomic_store_explicit(&kinds[id], 0, memory_order_release);
           atomic_fetch_add_explicit(&h->duplicate_lost_allocs, 1,
                                     memory_order_relaxed);
           return cur2;
         }
-        cur2 =
-            atomic_load_explicit(&nodes[cur2].next_idx, memory_order_acquire);
+        cur2 = atomic_load_explicit(&next_idxs[cur2], memory_order_acquire);
       }
     }
   }
@@ -1458,16 +1555,46 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   h->offset_control = layout.offset_control;
   h->control_bytes = layout.control_bytes;
   h->offset_term_cache = layout.offset_term_cache;
-  h->offset_nodes = layout.offset_nodes;
+  h->offset_node_left = layout.offset_node_left;
+  h->offset_node_right = layout.offset_node_right;
+  h->offset_node_hash32 = layout.offset_node_hash32;
+  h->offset_node_next_idx = layout.offset_node_next_idx;
+  h->offset_node_kind = layout.offset_node_kind;
+  h->offset_node_sym = layout.offset_node_sym;
   h->offset_buckets = layout.offset_buckets;
 
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
+  /* Layout sanity assertions. */
+  ARENA_ASSERT(h->offset_node_left < h->offset_node_right);
+  ARENA_ASSERT(h->offset_node_right < h->offset_node_hash32);
+  ARENA_ASSERT(h->offset_node_hash32 < h->offset_node_next_idx);
+  ARENA_ASSERT(h->offset_node_next_idx < h->offset_node_kind);
+  ARENA_ASSERT(h->offset_node_kind < h->offset_node_sym);
+  ARENA_ASSERT(h->offset_node_sym < h->offset_buckets);
+#ifndef __wasm__
+  if (ARENA_RESERVED_BYTES > 0) {
+    ARENA_ASSERT(layout.total_size <= ARENA_RESERVED_BYTES);
+  }
+#endif
+
+  atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+  atomic_uint *hashes =
+      (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+  atomic_uint *next_idxs =
+      (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
   atomic_uint *new_buckets =
       (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
 
   /* Zero new node slots [old_cap .. new_cap-1] (existing nodes never moved). */
-  if (new_cap > old_cap)
-    memset(&nodes[old_cap], 0, (new_cap - old_cap) * sizeof(ArenaNode));
+  if (new_cap > old_cap) {
+    uint32_t diff = new_cap - old_cap;
+    memset(ARENA_BASE_ADDR + h->offset_node_left + old_cap * 4, 0, diff * 4);
+    memset(ARENA_BASE_ADDR + h->offset_node_right + old_cap * 4, 0, diff * 4);
+    memset(ARENA_BASE_ADDR + h->offset_node_hash32 + old_cap * 4, 0, diff * 4);
+    memset(ARENA_BASE_ADDR + h->offset_node_next_idx + old_cap * 4, 0,
+           diff * 4);
+    memset(ARENA_BASE_ADDR + h->offset_node_kind + old_cap * 1, 0, diff * 1);
+    memset(ARENA_BASE_ADDR + h->offset_node_sym + old_cap * 1, 0, diff * 1);
+  }
 
   zero_buckets(new_buckets, new_cap);
 
@@ -1476,13 +1603,12 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
 
   /* Rehash existing NON_TERM nodes into new buckets. */
   for (uint32_t i = 0; i < count; i++) {
-    if (atomic_load_explicit(&nodes[i].kind, memory_order_acquire) !=
-        ARENA_KIND_NON_TERM)
+    if (load_kind_pub(kinds, i) != ARENA_KIND_NON_TERM)
       continue;
-    uint32_t hv = atomic_load_explicit(&nodes[i].hash32, memory_order_relaxed);
+    uint32_t hv = load_u32_payload(hashes, i);
     uint32_t b = hv & h->bucket_mask;
     uint32_t head = atomic_load_explicit(&new_buckets[b], memory_order_relaxed);
-    atomic_store_explicit(&nodes[i].next_idx, head, memory_order_relaxed);
+    atomic_store_explicit(&next_idxs[i], head, memory_order_relaxed);
     atomic_store_explicit(&new_buckets[b], i, memory_order_relaxed);
   }
 
@@ -1513,38 +1639,6 @@ static uint32_t arenaFalse(void) {
  * post-grow node (then fall back to kindOf path). */
 /** Direct node loads: wait-free fast paths with no live capacity check.
  * Safe because AoS nodes never move and memory is reserved up to MAX_CAP. */
-static inline uint32_t step_kind(ArenaNode *nodes, uint32_t n) {
-  if (is_control_ptr(n) || n >= MAX_CAP)
-    return 0;
-  return nodes ? atomic_load_explicit(&nodes[n].kind, memory_order_acquire)
-               : kindOf(n);
-}
-static inline uint32_t step_sym(ArenaNode *nodes, uint32_t n) {
-  if (is_control_ptr(n) || n >= MAX_CAP)
-    return 0;
-  return nodes ? atomic_load_explicit(&nodes[n].sym, memory_order_acquire)
-               : symOf(n);
-}
-static inline uint32_t step_left(ArenaNode *nodes, uint32_t n) {
-  if (is_control_ptr(n) || n >= MAX_CAP)
-    return 0;
-  uint32_t val =
-      nodes ? atomic_load_explicit(&nodes[n].left, memory_order_acquire)
-            : leftOf(n);
-  if (val != EMPTY && is_control_ptr(val))
-    trap_invariant();
-  return val;
-}
-static inline uint32_t step_right(ArenaNode *nodes, uint32_t n) {
-  if (is_control_ptr(n) || n >= MAX_CAP)
-    return 0;
-  uint32_t val =
-      nodes ? atomic_load_explicit(&nodes[n].right, memory_order_acquire)
-            : rightOf(n);
-  if (val != EMPTY && is_control_ptr(val))
-    trap_invariant();
-  return val;
-}
 static inline void control_retry_tick(void) {
   ControlViews cv = control_views();
   atomic_fetch_add_explicit(&cv.header->cooperative_retries, 1,
@@ -1585,12 +1679,16 @@ static bool maybe_park_io_wait(uint32_t slice_id, WorkerState *ws,
 }
 
 static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
-                                  uint32_t *gas, ArenaNode *nodes,
+                                  uint32_t *gas, SabHeader *h,
                                   bool yield_on_gas, bool yield_on_step_limit,
                                   bool allow_retry) {
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   ControlViews cv = control_views();
   StepOutcome out = {RESULT_DONE, EMPTY};
+
+  atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+  atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+  atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+  atomic_uint *rights = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
 
   while (true) {
     atomic_fetch_add_explicit(&h->total_steps, 1, memory_order_relaxed);
@@ -1613,23 +1711,31 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
       uint8_t stage = f.submode;
 
       if (stage == STAGE_LEFT) {
-        if (ws->current_val != step_left(nodes, parent_node)) {
-          ws->current_val =
-              allocCons(ws->current_val, step_right(nodes, parent_node));
+        uint32_t l = load_u32_payload(lefts, parent_node);
+        debug_check_child_ptr(l);
+        if (ws->current_val != l) {
+          uint32_t r = load_u32_payload(rights, parent_node);
+          debug_check_child_ptr(r);
+          ws->current_val = allocCons(ws->current_val, r);
           ws->mode = MODE_RETURN;
           continue;
         }
         worker_push_frame(
             cv, slice_id, ws,
             (Frame){FRAME_UPDATE, STAGE_RIGHT, 0, parent_node, 0});
-        ws->current_val = step_right(nodes, parent_node);
+        uint32_t r = load_u32_payload(rights, parent_node);
+        debug_check_child_ptr(r);
+        ws->current_val = r;
         ws->mode = MODE_DESCEND;
         continue;
       }
 
-      if (ws->current_val != step_right(nodes, parent_node)) {
-        ws->current_val =
-            allocCons(step_left(nodes, parent_node), ws->current_val);
+      uint32_t r = load_u32_payload(rights, parent_node);
+      debug_check_child_ptr(r);
+      if (ws->current_val != r) {
+        uint32_t l = load_u32_payload(lefts, parent_node);
+        debug_check_child_ptr(l);
+        ws->current_val = allocCons(l, ws->current_val);
       } else {
         ws->current_val = parent_node;
       }
@@ -1637,16 +1743,27 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
       continue;
     }
 
-    if (step_kind(nodes, ws->current_val) != ARENA_KIND_NON_TERM) {
+    uint32_t cur = ws->current_val;
+    if (cur >= MAX_CAP) {
       ws->mode = MODE_RETURN;
       continue;
     }
 
-    uint32_t left = step_left(nodes, ws->current_val);
-    uint32_t right = step_right(nodes, ws->current_val);
+    uint8_t cur_kind = load_kind_pub(kinds, cur);
+    if (cur_kind != ARENA_KIND_NON_TERM) {
+      ws->mode = MODE_RETURN;
+      continue;
+    }
 
-    if (step_kind(nodes, left) == ARENA_KIND_TERMINAL) {
-      uint32_t sym = step_sym(nodes, left);
+    uint32_t left = load_u32_payload(lefts, cur);
+    uint32_t right = load_u32_payload(rights, cur);
+    debug_check_child_ptr(left);
+    debug_check_child_ptr(right);
+
+    uint8_t l_kind = (left < MAX_CAP) ? load_kind_pub(kinds, left) : 0;
+
+    if (l_kind == ARENA_KIND_TERMINAL) {
+      uint32_t sym = load_u8_payload(syms, left);
       if (sym == ARENA_SYM_I) {
         if (ws->remaining_steps == 0) {
           if (yield_on_step_limit) {
@@ -1662,7 +1779,6 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
         continue;
       }
       if (sym == ARENA_SYM_READ_ONE) {
-        SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
         uint8_t byte;
         if (try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdin), &byte,
                         1)) {
@@ -1685,15 +1801,18 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
         }
         continue;
       }
-    } else if (step_kind(nodes, left) == ARENA_KIND_NON_TERM) {
-      uint32_t ll = step_left(nodes, left);
-      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL) {
-        uint32_t sym = step_sym(nodes, ll);
+    } else if (l_kind == ARENA_KIND_NON_TERM) {
+      uint32_t ll = load_u32_payload(lefts, left);
+      debug_check_child_ptr(ll);
+      uint8_t ll_kind = (ll < MAX_CAP) ? load_kind_pub(kinds, ll) : 0;
+      if (ll_kind == ARENA_KIND_TERMINAL) {
+        uint32_t sym = load_u8_payload(syms, ll);
         if (sym == ARENA_SYM_WRITE_ONE) {
-          uint32_t byte_node = step_right(nodes, left);
-          if (step_kind(nodes, byte_node) == ARENA_KIND_U8) {
-            uint8_t byte = (uint8_t)step_sym(nodes, byte_node);
-            SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+          uint32_t byte_node = load_u32_payload(rights, left);
+          debug_check_child_ptr(byte_node);
+          if (byte_node < MAX_CAP &&
+              load_kind_pub(kinds, byte_node) == ARENA_KIND_U8) {
+            uint8_t byte = (uint8_t)load_u8_payload(syms, byte_node);
             if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
                             1)) {
               if (ws->remaining_steps == 0) {
@@ -1717,49 +1836,54 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
           }
         }
         if (sym >= ARENA_SYM_EQ_U8 && sym <= ARENA_SYM_SUB_U8) {
-          uint32_t a = step_right(nodes, left);
+          uint32_t a = load_u32_payload(rights, left);
           uint32_t b = right;
-          if (step_kind(nodes, a) == ARENA_KIND_U8 &&
-              step_kind(nodes, b) == ARENA_KIND_U8) {
-            if (ws->remaining_steps == 0) {
-              if (yield_on_step_limit) {
-                return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
-                                         allow_retry);
+          debug_check_child_ptr(a);
+          debug_check_child_ptr(b);
+          if (a < MAX_CAP && b < MAX_CAP) {
+            uint8_t ka = load_kind_pub(kinds, a);
+            uint8_t kb = load_kind_pub(kinds, b);
+            if (ka == ARENA_KIND_U8 && kb == ARENA_KIND_U8) {
+              if (ws->remaining_steps == 0) {
+                if (yield_on_step_limit) {
+                  return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                           allow_retry);
+                }
+                ws->mode = MODE_RETURN;
+                continue;
               }
-              ws->mode = MODE_RETURN;
+              ws->remaining_steps--;
+              uint8_t va = (uint8_t)load_u8_payload(syms, a);
+              uint8_t vb = (uint8_t)load_u8_payload(syms, b);
+
+              switch (sym) {
+              case ARENA_SYM_EQ_U8:
+                ws->current_val = (va == vb) ? arenaTrue() : arenaFalse();
+                break;
+              case ARENA_SYM_LT_U8:
+                ws->current_val = (va < vb) ? arenaTrue() : arenaFalse();
+                break;
+              case ARENA_SYM_DIV_U8:
+                ws->current_val = allocU8(vb == 0 ? 0 : va / vb);
+                break;
+              case ARENA_SYM_MOD_U8:
+                ws->current_val = allocU8(vb == 0 ? 0 : va % vb);
+                break;
+              case ARENA_SYM_ADD_U8:
+                ws->current_val = allocU8((uint8_t)(va + vb));
+                break;
+              case ARENA_SYM_SUB_U8:
+                ws->current_val = allocU8((uint8_t)(va - vb));
+                break;
+              }
+              ws->mode = MODE_DESCEND;
               continue;
             }
-            ws->remaining_steps--;
-            uint8_t va = (uint8_t)step_sym(nodes, a);
-            uint8_t vb = (uint8_t)step_sym(nodes, b);
-
-            switch (sym) {
-            case ARENA_SYM_EQ_U8:
-              ws->current_val = (va == vb) ? arenaTrue() : arenaFalse();
-              break;
-            case ARENA_SYM_LT_U8:
-              ws->current_val = (va < vb) ? arenaTrue() : arenaFalse();
-              break;
-            case ARENA_SYM_DIV_U8:
-              ws->current_val = allocU8(vb == 0 ? 0 : va / vb);
-              break;
-            case ARENA_SYM_MOD_U8:
-              ws->current_val = allocU8(vb == 0 ? 0 : va % vb);
-              break;
-            case ARENA_SYM_ADD_U8:
-              ws->current_val = allocU8((uint8_t)(va + vb));
-              break;
-            case ARENA_SYM_SUB_U8:
-              ws->current_val = allocU8((uint8_t)(va - vb));
-              break;
-            }
-            ws->mode = MODE_DESCEND;
-            continue;
           }
         }
       }
-      if (step_kind(nodes, ll) == ARENA_KIND_TERMINAL &&
-          step_sym(nodes, ll) == ARENA_SYM_K) {
+      if (ll_kind == ARENA_KIND_TERMINAL &&
+          load_u8_payload(syms, ll) == ARENA_SYM_K) {
         if (ws->remaining_steps == 0) {
           if (yield_on_step_limit) {
             return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
@@ -1769,14 +1893,18 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
           continue;
         }
         ws->remaining_steps--;
-        ws->current_val = step_right(nodes, left);
+        uint32_t r_left = load_u32_payload(rights, left);
+        debug_check_child_ptr(r_left);
+        ws->current_val = r_left;
         ws->mode = MODE_DESCEND;
         continue;
       }
-      if (step_kind(nodes, ll) == ARENA_KIND_NON_TERM) {
-        uint32_t lll = step_left(nodes, ll);
-        if (step_kind(nodes, lll) == ARENA_KIND_TERMINAL) {
-          uint32_t sym = step_sym(nodes, lll);
+      if (ll_kind == ARENA_KIND_NON_TERM) {
+        uint32_t lll = load_u32_payload(lefts, ll);
+        debug_check_child_ptr(lll);
+        uint8_t lll_kind = (lll < MAX_CAP) ? load_kind_pub(kinds, lll) : 0;
+        if (lll_kind == ARENA_KIND_TERMINAL) {
+          uint32_t sym = load_u8_payload(syms, lll);
           if (sym == ARENA_SYM_S) {
             if (ws->remaining_steps == 0) {
               if (yield_on_step_limit) {
@@ -1787,9 +1915,12 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
               continue;
             }
             ws->remaining_steps--;
-            uint32_t x = step_right(nodes, ll);
-            uint32_t y = step_right(nodes, left);
+            uint32_t x = load_u32_payload(rights, ll);
+            uint32_t y = load_u32_payload(rights, left);
             uint32_t z = right;
+            debug_check_child_ptr(x);
+            debug_check_child_ptr(y);
+            debug_check_child_ptr(z);
             ws->current_val = allocCons(allocCons(x, z), allocCons(y, z));
             ws->mode = MODE_DESCEND;
             continue;
@@ -1804,9 +1935,12 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
               continue;
             }
             ws->remaining_steps--;
-            uint32_t x = step_right(nodes, ll);
-            uint32_t y = step_right(nodes, left);
+            uint32_t x = load_u32_payload(rights, ll);
+            uint32_t y = load_u32_payload(rights, left);
             uint32_t z = right;
+            debug_check_child_ptr(x);
+            debug_check_child_ptr(y);
+            debug_check_child_ptr(z);
             ws->current_val = allocCons(x, allocCons(y, z));
             ws->mode = MODE_DESCEND;
             continue;
@@ -1821,17 +1955,22 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
               continue;
             }
             ws->remaining_steps--;
-            uint32_t x = step_right(nodes, ll);
-            uint32_t y = step_right(nodes, left);
+            uint32_t x = load_u32_payload(rights, ll);
+            uint32_t y = load_u32_payload(rights, left);
             uint32_t z = right;
+            debug_check_child_ptr(x);
+            debug_check_child_ptr(y);
+            debug_check_child_ptr(z);
             ws->current_val = allocCons(allocCons(x, z), y);
             ws->mode = MODE_DESCEND;
             continue;
           }
-        } else if (step_kind(nodes, lll) == ARENA_KIND_NON_TERM) {
-          uint32_t llll = step_left(nodes, lll);
-          if (step_kind(nodes, llll) == ARENA_KIND_TERMINAL) {
-            uint32_t sym = step_sym(nodes, llll);
+        } else if (lll_kind == ARENA_KIND_NON_TERM) {
+          uint32_t llll = load_u32_payload(lefts, lll);
+          debug_check_child_ptr(llll);
+          uint8_t llll_kind = (llll < MAX_CAP) ? load_kind_pub(kinds, llll) : 0;
+          if (llll_kind == ARENA_KIND_TERMINAL) {
+            uint32_t sym = load_u8_payload(syms, llll);
             if (sym == ARENA_SYM_SPRIME) {
               if (ws->remaining_steps == 0) {
                 if (yield_on_step_limit) {
@@ -1842,10 +1981,14 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                 continue;
               }
               ws->remaining_steps--;
-              uint32_t w = step_right(nodes, lll);
-              uint32_t x = step_right(nodes, ll);
-              uint32_t y = step_right(nodes, left);
+              uint32_t w = load_u32_payload(rights, lll);
+              uint32_t x = load_u32_payload(rights, ll);
+              uint32_t y = load_u32_payload(rights, left);
               uint32_t z = right;
+              debug_check_child_ptr(w);
+              debug_check_child_ptr(x);
+              debug_check_child_ptr(y);
+              debug_check_child_ptr(z);
               ws->current_val =
                   allocCons(allocCons(w, allocCons(x, z)), allocCons(y, z));
               ws->mode = MODE_DESCEND;
@@ -1861,10 +2004,14 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                 continue;
               }
               ws->remaining_steps--;
-              uint32_t w = step_right(nodes, lll);
-              uint32_t x = step_right(nodes, ll);
-              uint32_t y = step_right(nodes, left);
+              uint32_t w = load_u32_payload(rights, lll);
+              uint32_t x = load_u32_payload(rights, ll);
+              uint32_t y = load_u32_payload(rights, left);
               uint32_t z = right;
+              debug_check_child_ptr(w);
+              debug_check_child_ptr(x);
+              debug_check_child_ptr(y);
+              debug_check_child_ptr(z);
               ws->current_val = allocCons(allocCons(w, x), allocCons(y, z));
               ws->mode = MODE_DESCEND;
               continue;
@@ -1879,10 +2026,14 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                 continue;
               }
               ws->remaining_steps--;
-              uint32_t w = step_right(nodes, lll);
-              uint32_t x = step_right(nodes, ll);
-              uint32_t y = step_right(nodes, left);
+              uint32_t w = load_u32_payload(rights, lll);
+              uint32_t x = load_u32_payload(rights, ll);
+              uint32_t y = load_u32_payload(rights, left);
               uint32_t z = right;
+              debug_check_child_ptr(w);
+              debug_check_child_ptr(x);
+              debug_check_child_ptr(y);
+              debug_check_child_ptr(z);
               ws->current_val = allocCons(allocCons(w, allocCons(x, z)), y);
               ws->mode = MODE_DESCEND;
               continue;
@@ -1902,7 +2053,6 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
 uint32_t arenaKernelStep(uint32_t expr) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  ArenaNode *nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
   WorkerState ws = {
       .current_val = expr,
       .sp = 0,
@@ -1919,8 +2069,8 @@ uint32_t arenaKernelStep(uint32_t expr) {
 
   while (true) {
     uint32_t gas = ARENA_STEP_GAS;
-    StepOutcome o = step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, nodes,
-                                   false, false, false);
+    StepOutcome o = step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, h, false,
+                                   false, false);
     if (o.type == RESULT_YIELD)
       return o.val;
     return o.val;
@@ -2031,16 +2181,14 @@ void workerLoop(uint32_t worker_id) {
     Sqe job;
     dequeue_blocking(sq, &job, sizeof(Sqe));
 
-    /* QSBR fast path: register epoch and pass raw nodes; step_* read current
-     * capacity from header. */
-    ArenaNode *nodes = NULL;
+    /* QSBR fast path: register epoch; step_* read current capacity from header.
+     */
     if (use_qsbr) {
       uint32_t current_epoch =
           atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
       atomic_store_explicit(&WORKER_EPOCHS[worker_id], current_epoch,
                             memory_order_release);
       tls_worker_id = worker_id;
-      nodes = (ArenaNode *)(ARENA_BASE_ADDR + h->offset_nodes);
     }
 
     WorkerState ws = {
@@ -2082,8 +2230,7 @@ void workerLoop(uint32_t worker_id) {
       }
       uint32_t before = ws.current_val;
       uint32_t gas = batch_gas;
-      StepOutcome o =
-          step_iterative(worker_id, &ws, &gas, nodes, true, true, true);
+      StepOutcome o = step_iterative(worker_id, &ws, &gas, h, true, true, true);
       if (o.type == RESULT_YIELD) {
         uint32_t reason = controlSuspensionReason(o.val);
         uint32_t event =

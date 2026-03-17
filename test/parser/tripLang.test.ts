@@ -410,34 +410,7 @@ data Token =
     expect(tokenData!.name).to.equal("Token");
     expect(tokenData!.typeParams).to.deep.equal([]);
     expect(tokenData!.constructors).to.deep.equal([
-      { name: "T_LParen", fields: [] },
-      { name: "T_RParen", fields: [] },
-      { name: "T_LBrace", fields: [] },
-      { name: "T_RBrace", fields: [] },
-      { name: "T_LBracket", fields: [] },
-      { name: "T_RBracket", fields: [] },
-      { name: "T_Backslash", fields: [] },
-      { name: "T_Arrow", fields: [] },
-      { name: "T_FatArrow", fields: [] },
-      { name: "T_Eq", fields: [] },
-      { name: "T_Colon", fields: [] },
-      { name: "T_Hash", fields: [] },
-      { name: "T_Pipe", fields: [] },
-      { name: "T_Dot", fields: [] },
-      { name: "T_Comma", fields: [] },
-      { name: "T_KwPoly", fields: [] },
-      { name: "T_KwRec", fields: [] },
-      { name: "T_KwLet", fields: [] },
-      { name: "T_KwIn", fields: [] },
-      { name: "T_KwMatch", fields: [] },
-      { name: "T_KwModule", fields: [] },
-      { name: "T_KwImport", fields: [] },
-      { name: "T_KwExport", fields: [] },
-      { name: "T_KwTyped", fields: [] },
-      { name: "T_KwUntyped", fields: [] },
-      { name: "T_KwCombinator", fields: [] },
-      { name: "T_KwType", fields: [] },
-      { name: "T_KwData", fields: [] },
+      { name: "T_Tagged", fields: [mkTypeVariable("U8")] },
       {
         name: "T_Ident",
         fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("U8"))],
@@ -446,7 +419,6 @@ data Token =
         name: "T_Nat",
         fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("U8"))],
       },
-      { name: "T_EOF", fields: [] },
     ]);
   });
 

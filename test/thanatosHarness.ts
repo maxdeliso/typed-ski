@@ -4,7 +4,7 @@
  * runThanatosBatch sends expressions through the session with surface↔DAG conversion.
  */
 
-import { assertEquals } from "std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "std/assert";
 import { existsSync } from "std/fs";
 import { dirname, fromFileUrl, join } from "std/path";
 import type { Evaluator } from "../lib/evaluator/evaluator.ts";
@@ -78,6 +78,7 @@ const DAG_TERMINAL_CHARS = new Set<string>([
   "D",
   "M",
   "A",
+  "O",
 ]);
 
 function dagCharToSym(c: string): SKITerminalSymbol {
@@ -383,14 +384,14 @@ Deno.test({
     await session.ping();
     await session.reset();
     const statsLine = await session.stats();
-    if (
-      !statsLine.includes("top=") ||
-      !statsLine.includes("capacity=") ||
-      !statsLine.includes("events=") ||
-      !statsLine.includes("dropped=")
-    ) {
-      throw new Error("STATS missing expected fields: " + statsLine);
-    }
+    assert(
+      statsLine.includes("top=") ||
+        statsLine.includes("capacity=") ||
+        statsLine.includes("events=") ||
+        statsLine.includes("dropped="),
+      "STATS missing expected fields: " + statsLine,
+    );
+    await session.close();
   },
 });
 
@@ -615,5 +616,48 @@ Deno.test({
     } finally {
       await Deno.remove(tmpStdin);
     }
+  },
+});
+
+Deno.test({
+  name: "fromDagWire - error paths (coverage)",
+  fn: () => {
+    // Empty DAG
+    assertThrows(() => fromDagWire(""), Error, "empty DAG");
+    // Invalid U8 #u8(256)
+    assertThrows(() => fromDagWire("#u8(256)"), Error, "invalid U8");
+    // Invalid U8 UXY
+    assertThrows(() => fromDagWire("UXY"), Error, "invalid U8");
+    // Invalid app (missing comma)
+    assertThrows(() => fromDagWire("@0"), Error, "invalid app");
+    // Invalid app indices (out of bounds)
+    assertThrows(() => fromDagWire("@0,0"), Error, "invalid app indices");
+    // Invalid DAG token
+    assertThrows(() => fromDagWire("X"), Error, "invalid DAG token");
+  },
+});
+
+Deno.test({
+  name: "dagCharToSym - error (coverage)",
+  fn: () => {
+    assertThrows(
+      () => (dagCharToSym)("?"),
+      Error,
+      "invalid DAG terminal: ?",
+    );
+  },
+});
+
+Deno.test({
+  name: "ThanatosSession - reduceDag error (coverage)",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const session = await getThanatosSession();
+    await assertRejects(
+      () => session.reduceDag("INVALID"),
+      Error,
+      "thanatos: parse error",
+    );
   },
 });

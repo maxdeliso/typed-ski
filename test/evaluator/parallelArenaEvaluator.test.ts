@@ -890,3 +890,42 @@ Deno.test("ParallelArenaEvaluator - reduceArenaNodeIdAsync validates required ho
     evaluator.terminate();
   }
 });
+
+Deno.test("ParallelArenaEvaluator - more error paths (coverage)", async (t) => {
+  await t.step("create throws for workerCount < 1", async () => {
+    await assertRejects(
+      () => ParallelArenaEvaluatorWasm.create(0),
+      Error,
+      "ParallelArenaEvaluatorWasm requires at least one worker",
+    );
+  });
+
+  await t.step("reduce (sync) is disabled", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    try {
+      assertThrows(
+        () => evaluator.reduce(I),
+        Error,
+        "ParallelArenaEvaluatorWasm.reduce is disabled; use reduceAsync instead.",
+      );
+    } finally {
+      evaluator.terminate();
+    }
+  });
+
+  await t.step("terminate is idempotent", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    evaluator.terminate();
+    evaluator.terminate(); // Should not throw
+  });
+
+  await t.step("reduceAsync rejects after termination", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    evaluator.terminate();
+    await assertRejects(
+      () => evaluator.reduceAsync(I),
+      Error,
+      "Evaluator terminated",
+    );
+  });
+});

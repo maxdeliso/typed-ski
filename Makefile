@@ -174,7 +174,9 @@ build-internal: build-wasm-internal build-native-internal
 	deno task dist
 
 test-internal: build-wasm-internal build-native-internal
+	nix $(NIX_FLAGS) run .#generate-version-ts
 	deno run -A scripts/generate-arena-header-c.ts
+	deno task dist
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
 	$(DENO_TEST_CMD)
@@ -188,6 +190,7 @@ dag-codec-check-internal: build-native-internal
 	./bin/dag-codec-test
 
 coverage-internal: build-wasm-internal
+	nix $(NIX_FLAGS) run .#generate-version-ts
 	deno run -A scripts/generate-arena-header-c.ts
 	deno task test:coverage
 	$(MAKE) coverage-lcov-internal

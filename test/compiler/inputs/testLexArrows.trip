@@ -4,6 +4,7 @@ import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
+import Prelude eqU8
 import Prelude U8
 import Prelude List
 import Prelude nil
@@ -14,144 +15,21 @@ import Prelude Ok
 import Prelude Err
 import Lexer tokenize
 import Lexer Token
-import Lexer T_LParen
-import Lexer T_RParen
-import Lexer T_LBrace
-import Lexer T_RBrace
-import Lexer T_LBracket
-import Lexer T_RBracket
-import Lexer T_Backslash
+import Lexer tokenTag
 import Lexer T_Arrow
 import Lexer T_FatArrow
 import Lexer T_Eq
-import Lexer T_Colon
-import Lexer T_Hash
-import Lexer T_Pipe
-import Lexer T_Dot
-import Lexer T_Comma
-import Lexer T_KwPoly
-import Lexer T_KwRec
-import Lexer T_KwLet
-import Lexer T_KwIn
-import Lexer T_KwMatch
-import Lexer T_KwModule
-import Lexer T_KwImport
-import Lexer T_KwExport
-import Lexer T_KwTyped
-import Lexer T_KwUntyped
-import Lexer T_KwCombinator
-import Lexer T_KwType
-import Lexer T_KwData
-import Lexer T_Ident
-import Lexer T_Nat
-import Lexer T_EOF
 
 export main
 
 poly isArrowToken = \tok : Token =>
-  match tok [Bool] {
-    | T_LParen => false
-    | T_RParen => false
-    | T_LBrace => false
-    | T_RBrace => false
-    | T_LBracket => false
-    | T_RBracket => false
-    | T_Backslash => false
-    | T_Arrow => true
-    | T_FatArrow => false
-    | T_Eq => false
-    | T_Colon => false
-    | T_Hash => false
-    | T_Pipe => false
-    | T_Dot => false
-    | T_Comma => false
-    | T_KwPoly => false
-    | T_KwRec => false
-    | T_KwLet => false
-    | T_KwIn => false
-    | T_KwMatch => false
-    | T_KwModule => false
-    | T_KwImport => false
-    | T_KwExport => false
-    | T_KwTyped => false
-    | T_KwUntyped => false
-    | T_KwCombinator => false
-    | T_KwType => false
-    | T_KwData => false
-    | T_Ident str => false
-    | T_Nat n => false
-    | T_EOF => false
-  }
+  eqU8 (tokenTag tok) (tokenTag T_Arrow)
 
 poly isFatArrowToken = \tok : Token =>
-  match tok [Bool] {
-    | T_LParen => false
-    | T_RParen => false
-    | T_LBrace => false
-    | T_RBrace => false
-    | T_LBracket => false
-    | T_RBracket => false
-    | T_Backslash => false
-    | T_Arrow => false
-    | T_FatArrow => true
-    | T_Eq => false
-    | T_Colon => false
-    | T_Hash => false
-    | T_Pipe => false
-    | T_Dot => false
-    | T_Comma => false
-    | T_KwPoly => false
-    | T_KwRec => false
-    | T_KwLet => false
-    | T_KwIn => false
-    | T_KwMatch => false
-    | T_KwModule => false
-    | T_KwImport => false
-    | T_KwExport => false
-    | T_KwTyped => false
-    | T_KwUntyped => false
-    | T_KwCombinator => false
-    | T_KwType => false
-    | T_KwData => false
-    | T_Ident str => false
-    | T_Nat n => false
-    | T_EOF => false
-  }
+  eqU8 (tokenTag tok) (tokenTag T_FatArrow)
 
 poly isEqToken = \tok : Token =>
-  match tok [Bool] {
-    | T_LParen => false
-    | T_RParen => false
-    | T_LBrace => false
-    | T_RBrace => false
-    | T_LBracket => false
-    | T_RBracket => false
-    | T_Backslash => false
-    | T_Arrow => false
-    | T_FatArrow => false
-    | T_Eq => true
-    | T_Colon => false
-    | T_Hash => false
-    | T_Pipe => false
-    | T_Dot => false
-    | T_Comma => false
-    | T_KwPoly => false
-    | T_KwRec => false
-    | T_KwLet => false
-    | T_KwIn => false
-    | T_KwMatch => false
-    | T_KwModule => false
-    | T_KwImport => false
-    | T_KwExport => false
-    | T_KwTyped => false
-    | T_KwUntyped => false
-    | T_KwCombinator => false
-    | T_KwType => false
-    | T_KwData => false
-    | T_Ident str => false
-    | T_Nat n => false
-    | T_EOF => false
-  }
+  eqU8 (tokenTag tok) (tokenTag T_Eq)
 
 poly listArrow : List U8 = "->"
 poly listFatArrow : List U8 = "=>"

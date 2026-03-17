@@ -1,10 +1,10 @@
 import { assert } from "chai";
 import { dirname, fromFileUrl, join } from "std/path";
-import { existsSync } from "std/fs";
 import {
   fromDagWire,
   getThanatosSession,
   passthroughEvaluator,
+  thanatosAvailable,
   toDagWire,
 } from "../thanatosHarness.test.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -75,32 +75,6 @@ async function compileTestProgram(fileName: string) {
 }
 
 const PARSER_TEST_REDUCE_TIMEOUT_MS = 60_000;
-
-function thanatosAvailable(): boolean {
-  return existsSync(join(__dirname, "../../bin/thanatos"));
-}
-
-export async function runParserHarness(source: string): Promise<boolean> {
-  const parserObj = await getParserObjectCached();
-  const lexerObj = await getLexerObjectCached();
-  const preludeObj = await getPreludeObjectCached();
-  const testObj = compileToObjectFile(source);
-  const linked = linkModules([
-    { name: "Prelude", object: preludeObj },
-    { name: "Lexer", object: lexerObj },
-    { name: "Parser", object: parserObj },
-    { name: "Test", object: testObj },
-  ]);
-  const expr = parseSKI(linked);
-  const session = await getThanatosSession();
-  try {
-    const resultDag = await session.reduceDag(toDagWire(expr));
-    const resultExpr = fromDagWire(resultDag);
-    return await UnChurchBoolean(resultExpr, passthroughEvaluator);
-  } finally {
-    await session.close();
-  }
-}
 
 Deno.test({
   name: "Parser unit tests",

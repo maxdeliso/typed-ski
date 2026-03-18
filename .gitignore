@@ -44,6 +44,10 @@ coverage-c.lcov
 
 # Build artifacts
 obj/
+bin/thanatos
+bin/thanatos-*
+bin/dag-codec-*
+bin/dag-codec-test
 
 # Codecov artifacts (downloaded by CI)
 codecov

@@ -21,11 +21,8 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
-      - name: Build artifacts
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make build-internal
-
-      - name: Run test suite
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make test-internal DENO_TEST_CMD='deno task test:coverage'
+      - name: Run tests and generate coverage
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
 
       - name: Long LSAN test (fixed seed)
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-lsan-long-internal
@@ -35,9 +32,6 @@ jobs:
 
       - name: Long ASAN test (fixed seed)
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-asan-long-internal
-
-      - name: Generate coverage report
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

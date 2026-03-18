@@ -58,7 +58,7 @@ WASM_OPT_POST_FLAGS := -Oz --strip-producers --strip-target-features
 NATIVE_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -march=native
 NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
 
-MUSL_SOURCES := arena.c thanatos.c ski_io.c util.c batch.c main.c performance_test.c
+MUSL_SOURCES := arena.c thanatos.c ski_io.c util.c main.c performance_test.c
 MUSL_OBJS := $(addprefix obj/,$(MUSL_SOURCES:.c=.o))
 C_HEADERS := $(wildcard core/*.h)
 
@@ -187,13 +187,27 @@ build-internal: build-wasm-internal build-native-internal
 	deno run -A scripts/generateArenaHeaderC.ts
 	deno task dist
 
-test-internal: build-wasm-internal build-native-internal
-	nix $(NIX_FLAGS) run .#generate-version-ts
-	deno run -A scripts/generateArenaHeaderC.ts
-	deno task dist
+coverage-binaries-internal: build-wasm-internal bin/thanatos-coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/arena.c core/ski_io.c core/util.c core/dag_codec_test.c -o bin/dag-codec-coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/arena.c core/thanatos.c core/performance_test.c -o bin/thanatos-test-coverage
+
+coverage-report-internal:
+	$(MAKE) coverage-lcov-internal
+	printf '#!/bin/sh\nexec llvm-cov gcov "$$@"\n' > coverage-c/llvm-gcov.sh
+	chmod +x coverage-c/llvm-gcov.sh
+	lcov --capture --directory obj/coverage --directory . --output-file coverage-c/coverage.info --no-external --base-directory . --gcov-tool ./coverage-c/llvm-gcov.sh --ignore-errors unsupported,source
+	cp coverage-c/coverage.info coverage-c.lcov
+
+THANATOS_BIN_VAL ?= ./bin/thanatos
+DAG_CODEC_TEST_BIN ?= ./bin/dag-codec-test
+THANATOS_TEST_BIN ?= ./bin/thanatos-test
+
+test-internal: build-internal
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
-	$(DENO_TEST_CMD)
+	THANATOS_BIN=$(THANATOS_BIN_VAL) $(DENO_TEST_CMD)
 	$(MAKE) dag-codec-check-internal
 	$(MAKE) thanatos-check-internal
 	$(MAKE) thanatos-check-lsan-internal
@@ -201,32 +215,20 @@ test-internal: build-wasm-internal build-native-internal
 	$(MAKE) thanatos-check-asan-internal
 
 dag-codec-check-internal: build-native-internal
-	./bin/dag-codec-test
+	$(DAG_CODEC_TEST_BIN)
 
-coverage-internal: build-wasm-internal bin/thanatos-coverage
-	nix $(NIX_FLAGS) run .#generate-version-ts
-	deno run -A scripts/generateArenaHeaderC.ts
+thanatos-check-internal: build-native-internal
+	timeout 30s $(THANATOS_TEST_BIN) $(THANATOS_SHORT_ARGS)
+
+coverage-internal: coverage-binaries-internal
 	rm -rf coverage coverage-c
 	mkdir -p coverage-c
-	# Run tests once with both TS coverage and instrumented C binary
-	# Also run direct C tests with instrumentation
-	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-		core/arena.c core/ski_io.c core/util.c core/dag_codec_test.c -o bin/dag-codec-coverage
-	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-		core/arena.c core/thanatos.c core/performance_test.c -o bin/thanatos-test-coverage
-
-	./bin/dag-codec-coverage
-	./bin/thanatos-test-coverage $(THANATOS_SHORT_ARGS)
-	THANATOS_BIN=./bin/thanatos-coverage deno task test:coverage
-
-	# Generate TS LCOV report
-	$(MAKE) coverage-lcov-internal
-
-	# Generate C LCOV report
-	printf '#!/bin/sh\nexec llvm-cov gcov "$$@"\n' > coverage-c/llvm-gcov.sh
-	chmod +x coverage-c/llvm-gcov.sh
-	lcov --capture --directory obj/coverage --directory . --output-file coverage-c/coverage.info --no-external --base-directory . --gcov-tool ./coverage-c/llvm-gcov.sh --ignore-errors unsupported
-	cp coverage-c/coverage.info coverage-c.lcov
+	$(MAKE) test-internal \
+		DENO_TEST_CMD='deno task test:coverage' \
+		THANATOS_BIN_VAL='./bin/thanatos-coverage' \
+		DAG_CODEC_TEST_BIN='./bin/dag-codec-coverage' \
+		THANATOS_TEST_BIN='./bin/thanatos-test-coverage'
+	$(MAKE) coverage-report-internal
 
 coverage-lcov-internal:
 	deno task coverage:lcov
@@ -293,9 +295,6 @@ THANATOS_LONG_ARGS := 4 131072 4096 5 1024 $(THANATOS_CI_SEED)
 build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan bin/thanatos-test-asan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug \
 	bin/dag-codec-test
-
-thanatos-check-internal: build-native-internal
-	timeout 30s ./bin/thanatos-test $(THANATOS_SHORT_ARGS)
 
 thanatos-check-lsan-internal: build-native-internal
 	timeout 60s ./bin/thanatos-test-lsan $(THANATOS_SHORT_ARGS)

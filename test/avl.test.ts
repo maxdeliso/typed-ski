@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFileString } from "../lib/compiler/index.ts";
 import { deserializeTripCObject } from "../lib/compiler/objectFile.ts";
-import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { getAvlObject } from "../lib/avl.ts";
 import { getBinObject } from "../lib/bin.ts";
@@ -52,30 +51,9 @@ async function buildTestExpression(
     { name: "Nat", object: natObject },
     { name: "Avl", object: avlObject },
     { name: moduleName, object: testObject },
-  ], false);
+  ]);
 
   return parseSKI(skiExpression);
-}
-
-async function evaluateTestModulesBatch(
-  modules: Array<{ name: string; fileName: string }>,
-): Promise<Map<string, bigint>> {
-  const results = new Map<string, bigint>();
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-
-  try {
-    for (const { name, fileName } of modules) {
-      const source = await loadInput(fileName);
-      const expr = await buildTestExpression(source, name);
-      const evaluated = await evaluator.reduceAsync(expr);
-      const val = await UnChurchNumber(evaluated, evaluator);
-      results.set(name, val);
-    }
-  } finally {
-    evaluator.terminate();
-  }
-
-  return results;
 }
 
 /**
@@ -113,21 +91,6 @@ async function evaluateTestModulesBatchThanatos(
 Deno.test("thanatosHarness runThanatosBatch empty input", async () => {
   assertEquals(await runThanatosBatch([]), []);
 });
-
-Deno.test(
-  {
-    name: "Avl module tests (batched)",
-    ignore: thanatosAvailable(),
-    fn: async () => {
-      const results = await evaluateTestModulesBatch(AVL_CASES);
-
-      assertEquals(results.get("AvlNatTreeTest"), 12n);
-      assertEquals(results.get("AvlBinBoolTreeTest"), 9n);
-      assertEquals(results.get("AvlInsertTraversalTest"), 321n);
-      assertEquals(results.get("AvlDeleteTraversalTest"), 36n);
-    },
-  },
-);
 
 Deno.test({
   name: "Avl module tests (batched, thanatos)",

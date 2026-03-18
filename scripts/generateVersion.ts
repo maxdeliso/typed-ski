@@ -21,6 +21,6 @@ const content = `/**
 export const VERSION = "${version}";
 `;
 
-await Deno.writeTextFile("lib/shared/version.ts", content);
+await Deno.writeTextFile("lib/shared/version.generated.ts", content);
 
 console.log(`Successfully generated version file with version: ${version}`);

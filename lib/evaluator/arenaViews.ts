@@ -64,7 +64,7 @@ function buildArenaViews(
 
   const buffer = memory.buffer;
   // Read header as Uint32Array - offsets are stored in the header itself
-  // We use generated constants to access field indices, ensuring they match c/arena.h SabHeader layout
+  // We use generated constants to access field indices, ensuring they match core/arena.h SabHeader layout
   const headerView = new Uint32Array(
     buffer,
     baseAddr,

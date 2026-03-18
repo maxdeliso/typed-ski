@@ -99,7 +99,7 @@ Deno.test("TripLang Linker", async (t) => {
   await t.step("loads modules correctly", async () => {
     // Load a compiled module (linker_ prefix for parallel-safe distinct names)
     const aContent = await compileTripFile(
-      "A-linker-test.trip",
+      "ALinkerTest.trip",
       "linker_A_linker_test.tripc",
     );
     const aObject = deserializeTripCObject(aContent);
@@ -115,7 +115,7 @@ Deno.test("TripLang Linker", async (t) => {
   await t.step("creates program space from multiple modules", async () => {
     // Load multiple modules (linker_ prefix for parallel-safe distinct names)
     const aContent = await compileTripFile(
-      "A-linker-test.trip",
+      "ALinkerTest.trip",
       "linker_A_linker_test.tripc",
     );
     const bContent = await compileTripFile("B.trip", "linker_B.tripc");
@@ -174,8 +174,8 @@ Deno.test("TripLang Linker", async (t) => {
   await t.step(
     "pre-lowers poly rec definitions during resolution",
     async () => {
-      const fileName = "linker_rec.trip";
-      const tripcName = "linker_rec.tripc";
+      const fileName = "linkerRec.trip";
+      const tripcName = "linkerRec.tripc";
 
       const recContent = await compileTripFile(fileName, tripcName);
       const recObject = deserializeTripCObject(recContent);
@@ -191,8 +191,8 @@ Deno.test("TripLang Linker", async (t) => {
   );
 
   await t.step("ignores self-recursion during resolution", async () => {
-    const fileName = "linker_rec_only.trip";
-    const tripcName = "linker_rec_only.tripc";
+    const fileName = "linkerRecOnly.trip";
+    const tripcName = "linkerRecOnly.tripc";
 
     const recContent = await compileTripFile(fileName, tripcName);
     const recObject = deserializeTripCObject(recContent);

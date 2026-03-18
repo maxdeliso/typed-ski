@@ -3,7 +3,7 @@
  *
  * This module orchestrates the creation of the Shared Memory environment,
  * spawns the worker pool, and manages the main thread's interaction with the
- * shared C/WASM arena.
+ * shared Core/WASM arena.
  *
  * @module
  */

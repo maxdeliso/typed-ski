@@ -27,6 +27,7 @@ C_LSAN_FLAGS := -g -O1 -fsanitize=leak -fno-omit-frame-pointer $(C_DEBUG_TRAP_FL
 C_DEBUG_FLAGS := -g -O1 $(C_DEBUG_TRAP_FLAGS)
 C_TSAN_FLAGS := -g -O1 -fsanitize=thread
 C_UBSAN_FLAGS := -g -O1 -fsanitize=undefined $(C_DEBUG_TRAP_FLAGS)
+C_COVERAGE_FLAGS := -g -Og --coverage $(C_DEBUG_TRAP_FLAGS)
 
 WASM_OPT ?= wasm-opt
 WASM_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections
@@ -57,14 +58,19 @@ WASM_OPT_POST_FLAGS := -Oz --strip-producers --strip-target-features
 NATIVE_OPT_CFLAGS := -O3 -flto -ffunction-sections -fdata-sections -march=native
 NATIVE_OPT_LDFLAGS := -Wl,--gc-sections -static
 
-MUSL_SOURCES := arena.c thanatos.c ski_io.c main.c performance_test.c
+MUSL_SOURCES := arena.c thanatos.c ski_io.c util.c batch.c main.c performance_test.c
 MUSL_OBJS := $(addprefix obj/,$(MUSL_SOURCES:.c=.o))
-C_HEADERS := $(wildcard c/*.h)
+C_HEADERS := $(wildcard core/*.h)
 
-THANATOS_OBJS := obj/arena.o obj/thanatos.o obj/ski_io.o obj/main.o
+CORE_SRCS := arena.c thanatos.c ski_io.c util.c session.c main.c
+CORE_PATHS := $(addprefix core/,$(CORE_SRCS))
+CORE_OBJS := $(addprefix obj/,$(CORE_SRCS:.c=.o))
+CORE_COV_OBJS := $(addprefix obj/coverage/,$(CORE_SRCS:.c=.o))
+
+THANATOS_OBJS := $(CORE_OBJS)
 THANATOS_TEST_OBJS := obj/arena.o obj/thanatos.o obj/performance_test.o
 
-obj/%.o: c/%.c $(C_HEADERS)
+obj/%.o: core/%.c $(C_HEADERS)
 	mkdir -p obj
 	$(CC) $(NATIVE_OPT_CFLAGS) $(C_COMMON_FLAGS) -fno-lto -fno-stack-protector \
 		-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -isystem $(MUSL_INC) -c $< -o $@
@@ -77,31 +83,39 @@ bin/thanatos-test: $(THANATOS_TEST_OBJS)
 	mkdir -p bin
 	$(MUSL_GCC) $(NATIVE_OPT_CFLAGS) -static -Wl,--gc-sections $^ -o $@
 
-bin/thanatos-test-lsan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
+bin/thanatos-test-lsan: core/arena.c core/thanatos.c core/performance_test.c $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-test-ubsan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
+bin/thanatos-test-ubsan: core/arena.c core/thanatos.c core/performance_test.c $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-test-asan: c/arena.c c/thanatos.c c/performance_test.c $(C_HEADERS)
+bin/thanatos-test-asan: core/arena.c core/thanatos.c core/performance_test.c $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-asan: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
+bin/thanatos-asan: $(CORE_PATHS) $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-lsan: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
+bin/thanatos-lsan: $(CORE_PATHS) $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_LSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/thanatos-debug: c/arena.c c/thanatos.c c/ski_io.c c/main.c $(C_HEADERS)
+bin/thanatos-debug: $(CORE_PATHS) $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
-bin/dag-codec-test: c/arena.c c/ski_io.c c/dag_codec_test.c $(C_HEADERS)
+obj/coverage/%.o: core/%.c $(C_HEADERS)
+	mkdir -p obj/coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -c $< -o $@
+
+bin/thanatos-coverage: $(CORE_COV_OBJS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $^ -pthread -o $@
+
+bin/dag-codec-test: core/arena.c core/ski_io.c core/util.c core/dag_codec_test.c $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
@@ -170,12 +184,12 @@ start:
 build-internal: build-wasm-internal build-native-internal
 	nix $(NIX_FLAGS) run .#verify-version
 	nix $(NIX_FLAGS) run .#generate-version-ts
-	deno run -A scripts/generate-arena-header-c.ts
+	deno run -A scripts/generateArenaHeaderC.ts
 	deno task dist
 
 test-internal: build-wasm-internal build-native-internal
 	nix $(NIX_FLAGS) run .#generate-version-ts
-	deno run -A scripts/generate-arena-header-c.ts
+	deno run -A scripts/generateArenaHeaderC.ts
 	deno task dist
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
@@ -189,11 +203,30 @@ test-internal: build-wasm-internal build-native-internal
 dag-codec-check-internal: build-native-internal
 	./bin/dag-codec-test
 
-coverage-internal: build-wasm-internal
+coverage-internal: build-wasm-internal bin/thanatos-coverage
 	nix $(NIX_FLAGS) run .#generate-version-ts
-	deno run -A scripts/generate-arena-header-c.ts
-	deno task test:coverage
+	deno run -A scripts/generateArenaHeaderC.ts
+	rm -rf coverage coverage-c
+	mkdir -p coverage-c
+	# Run tests once with both TS coverage and instrumented C binary
+	# Also run direct C tests with instrumentation
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/arena.c core/ski_io.c core/util.c core/dag_codec_test.c -o bin/dag-codec-coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/arena.c core/thanatos.c core/performance_test.c -o bin/thanatos-test-coverage
+
+	./bin/dag-codec-coverage
+	./bin/thanatos-test-coverage $(THANATOS_SHORT_ARGS)
+	THANATOS_BIN=./bin/thanatos-coverage deno task test:coverage
+
+	# Generate TS LCOV report
 	$(MAKE) coverage-lcov-internal
+
+	# Generate C LCOV report
+	printf '#!/bin/sh\nexec llvm-cov gcov "$$@"\n' > coverage-c/llvm-gcov.sh
+	chmod +x coverage-c/llvm-gcov.sh
+	lcov --capture --directory obj/coverage --directory . --output-file coverage-c/coverage.info --no-external --base-directory . --gcov-tool ./coverage-c/llvm-gcov.sh --ignore-errors unsupported
+	cp coverage-c/coverage.info coverage-c.lcov
 
 coverage-lcov-internal:
 	deno task coverage:lcov
@@ -207,10 +240,15 @@ CLEAN_ARTIFACTS := \
 	bin/thanatos-asan \
 	bin/thanatos-lsan \
 	bin/thanatos-debug \
+	bin/thanatos-coverage \
+	bin/thanatos-test-coverage \
 	bin/dag-codec-test \
+	bin/dag-codec-coverage \
 	obj/arena.o \
 	obj/thanatos.o \
 	obj/ski_io.o \
+	obj/util.o \
+	obj/session.o \
 	obj/main.o \
 	obj/performance_test.o \
 	wasm/release.wasm \
@@ -219,18 +257,22 @@ CLEAN_ARTIFACTS := \
 	dist/tripc.node.js \
 	dist/tripc \
 	coverage.lcov \
+	coverage-c.lcov \
 	lib/shared/version.generated.ts \
 	lib/evaluator/arenaHeader.generated.ts
 
 clean-internal:
 	rm -f $(CLEAN_ARTIFACTS)
 	-find coverage -type f -delete 2>/dev/null || true
-	-rmdir obj wasm dist coverage 2>/dev/null || true
+	-find obj/coverage -type f -delete 2>/dev/null || true
+	-rm *.gcda *.gcno 2>/dev/null || true
+	-rmdir obj/coverage 2>/dev/null || true
+	-rmdir obj wasm dist coverage coverage-c 2>/dev/null || true
 	-rmdir bin 2>/dev/null || true
 
 build-wasm-internal: wasm/release.wasm
 
-wasm/release.wasm: c/arena.c $(C_HEADERS) Makefile
+wasm/release.wasm: core/arena.c $(C_HEADERS) Makefile
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
 		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
@@ -276,12 +318,12 @@ thanatos-check-asan-long-internal: build-native-internal
 thanatos-tsan-repl: build-native-internal
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_TSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -o bin/thanatos-tsan-repl \
-		c/arena.c c/thanatos.c c/ski_io.c c/main.c
+		core/arena.c core/thanatos.c core/ski_io.c core/session.c core/main.c
 
 thanatos-ubsan-repl: build-native-internal
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -o bin/thanatos-ubsan-repl \
-		c/arena.c c/thanatos.c c/ski_io.c c/main.c
+		core/arena.c core/thanatos.c core/ski_io.c core/session.c core/main.c
 
 format-internal:
 	nix $(NIX_FLAGS) run .#fmt
@@ -290,7 +332,7 @@ format-internal:
 	mbake format --config .mbake.toml Makefile
 
 format-c-internal:
-	clang-format -i c/*.c c/*.h
+	clang-format -i core/*.c core/*.h
 
 format-nix-internal:
 	nixpkgs-fmt flake.nix

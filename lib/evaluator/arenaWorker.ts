@@ -43,7 +43,7 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
   try {
     const rc = wasmExports.connectArena(msg.arenaPointer);
-    // Return codes from connectArena (see c/arena.c):
+    // Return codes from connectArena (see core/arena.c):
     // 1 = Success
     // 0 = Error: null pointer
     // 2 = Error: header out of bounds

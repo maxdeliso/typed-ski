@@ -28,22 +28,22 @@ interface ArithmeticCase {
 const ARITHMETIC_CASES: ArithmeticCase[] = [
   {
     key: "basic",
-    testFileName: "inputs/prelude_arithmetic.trip",
+    testFileName: "inputs/preludeArithmetic.trip",
     moduleName: "TestArithmetic",
   },
   {
     key: "simple",
-    testFileName: "inputs/prelude_simple.trip",
+    testFileName: "inputs/preludeSimple.trip",
     moduleName: "TestSimple",
   },
   {
     key: "multiplication",
-    testFileName: "inputs/prelude_mult.trip",
+    testFileName: "inputs/preludeMult.trip",
     moduleName: "TestMultiplication",
   },
   {
     key: "complex",
-    testFileName: "inputs/prelude_complex.trip",
+    testFileName: "inputs/preludeComplex.trip",
     moduleName: "TestComplexArithmetic",
   },
 ];
@@ -179,8 +179,8 @@ Deno.test("links numeric literals across modules without leaking Nat", async () 
   const binObject = await getBinObject();
   const natObject = await getNatObject();
 
-  const providerFileName = "inputs/prelude_literal_provider.trip";
-  const consumerFileName = "inputs/prelude_literal_consumer.trip";
+  const providerFileName = "inputs/preludeLiteralProvider.trip";
+  const consumerFileName = "inputs/preludeLiteralConsumer.trip";
 
   const providerObject = await loadTripModuleObject(
     join(__dirname, providerFileName),
@@ -221,7 +221,7 @@ Deno.test("fails to link when module exports Nat conflicting with Prelude", asyn
   const binObject = await getBinObject();
   const natObject = await getNatObject();
 
-  const conflictingFileName = "inputs/prelude_conflicting_nat.trip";
+  const conflictingFileName = "inputs/preludeConflictingNat.trip";
   const conflictingObject = await loadTripModuleObject(
     join(__dirname, conflictingFileName),
   );

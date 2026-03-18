@@ -37,6 +37,10 @@ type_svg/
 # Test coverage
 coverage/
 coverage.lcov
+coverage-c/
+coverage-c.lcov
+*.gcda
+*.gcno
 
 # Build artifacts
 obj/

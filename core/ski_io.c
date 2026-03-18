@@ -1,4 +1,6 @@
 #include "ski_io.h"
+#include "util.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -255,12 +257,8 @@ size_t unparse_ski(uint32_t node_id, char *buf, size_t capacity) {
 
 /* --- DAG wire codec --- */
 
-static int is_dag_ws(int c) {
-  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
-}
-
 /* Map single char to ARENA_SYM_* for DAG terminal tokens. Returns 0 if not a
- * DAG terminal. DAG uses exact S K I B C P Q R , . E (no lowercase). */
+ * DAG terminal. */
 static uint32_t dag_char_to_sym(int c) {
   switch (c) {
   case 'S':
@@ -301,32 +299,10 @@ static uint32_t dag_char_to_sym(int c) {
 }
 
 static bool parse_hex_byte(const char *p, uint8_t *out) {
-  if (p[0] >= '0' && p[0] <= '9' && p[1] >= '0' && p[1] <= '9') {
-    *out = (uint8_t)((p[0] - '0') * 16 + (p[1] - '0'));
-    return true;
-  }
-  if (p[0] >= '0' && p[0] <= '9' && p[1] >= 'A' && p[1] <= 'F') {
-    *out = (uint8_t)((p[0] - '0') * 16 + (p[1] - 'A' + 10));
-    return true;
-  }
-  if (p[0] >= 'A' && p[0] <= 'F' && p[1] >= '0' && p[1] <= '9') {
-    *out = (uint8_t)((p[0] - 'A' + 10) * 16 + (p[1] - '0'));
-    return true;
-  }
-  if (p[0] >= 'A' && p[0] <= 'F' && p[1] >= 'A' && p[1] <= 'F') {
-    *out = (uint8_t)((p[0] - 'A' + 10) * 16 + (p[1] - 'A' + 10));
-    return true;
-  }
-  if (p[0] >= 'a' && p[0] <= 'f' && p[1] >= 'a' && p[1] <= 'f') {
-    *out = (uint8_t)((p[0] - 'a' + 10) * 16 + (p[1] - 'a' + 10));
-    return true;
-  }
-  if (p[0] >= 'a' && p[0] <= 'f' && p[1] >= '0' && p[1] <= '9') {
-    *out = (uint8_t)((p[0] - 'a' + 10) * 16 + (p[1] - '0'));
-    return true;
-  }
-  if (p[0] >= '0' && p[0] <= '9' && p[1] >= 'a' && p[1] <= 'f') {
-    *out = (uint8_t)((p[0] - '0') * 16 + (p[1] - 'a' + 10));
+  int h1 = hex_digit(p[0]);
+  int h2 = hex_digit(p[1]);
+  if (h1 >= 0 && h2 >= 0) {
+    *out = (uint8_t)((h1 << 4) | h2);
     return true;
   }
   return false;
@@ -372,7 +348,7 @@ static bool parse_dag_token(ParseState *s, DagToken *tok) {
   const char *start = s->buf + s->idx;
   int c = (unsigned char)start[0];
 
-  /* Terminal: single char S K I B C P Q R , . E */
+  /* Terminal: single char */
   if (dag_char_to_sym(c) != 0) {
     tok->kind = DAG_TOK_TERMINAL;
     tok->sym_or_left = dag_char_to_sym(c);
@@ -395,37 +371,32 @@ static bool parse_dag_token(ParseState *s, DagToken *tok) {
 
   /* @L,R */
   if (c == '@' && s->idx + 1 < s->len) {
-    const char *p = start + 1;
+    s->idx++;
     const char *end = s->buf + s->len;
-    while (p < end && is_dag_ws((unsigned char)*p))
-      p++;
-    if (p >= end || *p < '0' || *p > '9')
+    uint32_t L, R;
+
+    skip_ws(s);
+    const char *p = s->buf + s->idx;
+    if (p >= end || !parse_u32_dec(p, end, &L))
       return false;
-    const char *left_start = p;
-    while (p < end && *p >= '0' && *p <= '9')
-      p++;
-    uint32_t left_idx;
-    if (!parse_u32_dec(left_start, p, &left_idx))
+    while (s->idx < s->len && s->buf[s->idx] >= '0' && s->buf[s->idx] <= '9')
+      s->idx++;
+
+    skip_ws(s);
+    if (s->idx >= s->len || s->buf[s->idx] != ',')
       return false;
-    while (p < end && is_dag_ws((unsigned char)*p))
-      p++;
-    if (p >= end || *p != ',')
+    s->idx++;
+
+    skip_ws(s);
+    p = s->buf + s->idx;
+    if (p >= end || !parse_u32_dec(p, end, &R))
       return false;
-    p++;
-    while (p < end && is_dag_ws((unsigned char)*p))
-      p++;
-    if (p >= end || *p < '0' || *p > '9')
-      return false;
-    const char *right_start = p;
-    while (p < end && *p >= '0' && *p <= '9')
-      p++;
-    uint32_t right_idx;
-    if (!parse_u32_dec(right_start, p, &right_idx))
-      return false;
+    while (s->idx < s->len && s->buf[s->idx] >= '0' && s->buf[s->idx] <= '9')
+      s->idx++;
+
     tok->kind = DAG_TOK_APP;
-    tok->sym_or_left = left_idx;
-    tok->right = right_idx;
-    s->idx = (size_t)(p - s->buf);
+    tok->sym_or_left = L;
+    tok->right = R;
     return true;
   }
 
@@ -446,24 +417,34 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
     DagToken tok;
     while (parse_dag_token(&scan, &tok)) {
       count++;
-      if (count > 1024 * 1024)
+      if (count > 1024 * 1024) {
+        fprintf(stderr, "parse_dag: token count exceeds limit (1M tokens)\n");
         return EMPTY;
+      }
     }
     skip_ws(&scan);
-    if (scan.idx != len)
+    if (scan.idx != len) {
+      fprintf(stderr,
+              "parse_dag: scan error (trailing garbage or incomplete parse at "
+              "idx %zu/%zu)\n",
+              scan.idx, len);
       return EMPTY;
+    }
   }
 
   if (count == 0)
     return EMPTY;
 
   uint32_t *mapped = (uint32_t *)malloc(count * sizeof(uint32_t));
-  if (!mapped)
+  if (!mapped) {
+    fprintf(stderr, "parse_dag: malloc failed for %zu tokens\n", count);
     return EMPTY;
+  }
 
   for (size_t i = 0; i < count; i++) {
     DagToken tok;
     if (!parse_dag_token(&s, &tok)) {
+      fprintf(stderr, "parse_dag: failed to parse token %zu (pass 2)\n", i);
       free(mapped);
       return EMPTY;
     }
@@ -473,7 +454,11 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
       mapped[i] = allocU8((uint8_t)tok.sym_or_left);
     } else {
       uint32_t L = tok.sym_or_left, R = tok.right;
-      if (L >= i || R >= i) {
+      if (L >= (uint32_t)i || R >= (uint32_t)i) {
+        fprintf(stderr,
+                "parse_dag: invalid application @%u,%u (forward ref or OOB) at "
+                "token %zu\n",
+                L, R, i);
         free(mapped);
         return EMPTY;
       }
@@ -520,8 +505,8 @@ static int dag_ht_get(DagHtEntry *tbl, uint32_t cap, uint32_t key,
   return 0;
 }
 
-/* Ensure table has room for one more; rehash if needed. Returns 0 on alloc
- * failure. */
+/* Ensure table has room for one more; rehash if needed. Returns NULL on alloc
+ * failure or if safety limit is exceeded. */
 static DagHtEntry *dag_ht_ensure(DagHtEntry *tbl, uint32_t *cap,
                                  uint32_t count) {
   uint32_t c = *cap;
@@ -530,9 +515,17 @@ static DagHtEntry *dag_ht_ensure(DagHtEntry *tbl, uint32_t *cap,
   uint32_t new_cap = c * 2;
   if (new_cap < 64u)
     new_cap = 64u;
-  DagHtEntry *new_tbl = (DagHtEntry *)malloc(new_cap * sizeof(DagHtEntry));
-  if (!new_tbl)
+
+  if (new_cap > 16 * 1024 * 1024) { /* Safety trap: 16M entries */
+    fprintf(stderr, "dag_ht_ensure: hash table exceeds safety limit\n");
     return NULL;
+  }
+
+  DagHtEntry *new_tbl = (DagHtEntry *)malloc(new_cap * sizeof(DagHtEntry));
+  if (!new_tbl) {
+    fprintf(stderr, "dag_ht_ensure: malloc failed for %u entries\n", new_cap);
+    return NULL;
+  }
   for (uint32_t i = 0; i < new_cap; i++)
     new_tbl[i].key = DAG_HT_EMPTY;
   uint32_t mask = new_cap - 1;
@@ -570,8 +563,80 @@ typedef struct {
   int state;
 } DagExportFrame;
 
+typedef struct {
+  char *buf;
+  size_t capacity;
+  size_t written;
+  DagHtEntry *ht;
+  uint32_t ht_cap;
+  uint32_t ht_count;
+  uint32_t next_local;
+  DagExportFrame *stack;
+  size_t stack_cap;
+  size_t stack_len;
+} UnparseCtx;
+
 #define DAG_HT_INIT 256
 #define DAG_STACK_INIT 64
+
+static void unparse_ctx_free(UnparseCtx *ctx) {
+  free(ctx->ht);
+  free(ctx->stack);
+}
+
+static bool unparse_append(UnparseCtx *ctx, const char *fmt, ...) {
+  if (ctx->written >= ctx->capacity)
+    return false;
+  va_list args;
+  va_start(args, fmt);
+  int nw = vsnprintf(ctx->buf + ctx->written, ctx->capacity - ctx->written, fmt,
+                     args);
+  va_end(args);
+  if (nw < 0 || (size_t)nw >= ctx->capacity - ctx->written)
+    return false;
+  ctx->written += (size_t)nw;
+  return true;
+}
+
+static bool unparse_push(UnparseCtx *ctx, uint32_t node_id, int state) {
+  if (ctx->stack_len >= ctx->stack_cap) {
+    size_t new_cap = ctx->stack_cap * 2;
+    if (new_cap > 16 * 1024 * 1024) { /* Safety trap: 16M frames */
+      fprintf(stderr, "unparse_push: stack exceeds safety limit\n");
+      return false;
+    }
+    DagExportFrame *new_stack =
+        (DagExportFrame *)realloc(ctx->stack, new_cap * sizeof(DagExportFrame));
+    if (!new_stack) {
+      fprintf(stderr, "unparse_push: realloc failed for %zu frames\n", new_cap);
+      return false;
+    }
+    ctx->stack = new_stack;
+    ctx->stack_cap = new_cap;
+  }
+  ctx->stack[ctx->stack_len++] = (DagExportFrame){node_id, state};
+  return true;
+}
+
+static bool unparse_emit_node(UnparseCtx *ctx, uint32_t n) {
+  uint32_t k = kindOf(n);
+  ctx->ht = dag_ht_ensure(ctx->ht, &ctx->ht_cap, ctx->ht_count + 1);
+  if (!ctx->ht)
+    return false;
+  dag_ht_put(ctx->ht, ctx->ht_cap, n, ctx->next_local++);
+  ctx->ht_count++;
+
+  if (k == ARENA_KIND_TERMINAL) {
+    return unparse_append(ctx, "%c ", sym_to_char(symOf(n)));
+  } else if (k == ARENA_KIND_U8) {
+    return unparse_append(ctx, "U%02x ", (unsigned)symOf(n));
+  } else {
+    uint32_t li = 0, ri = 0;
+    dag_ht_get(ctx->ht, ctx->ht_cap, leftOf(n), &li);
+    dag_ht_get(ctx->ht, ctx->ht_cap, rightOf(n), &ri);
+    return unparse_append(ctx, "@%u,%u ", (unsigned)li, (unsigned)ri);
+  }
+}
 
 size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
   if (!buf || capacity == 0)
@@ -583,45 +648,48 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
   if (!dag_exportable_kind(kind))
     return 0;
 
-  uint32_t ht_cap = DAG_HT_INIT;
-  DagHtEntry *ht = (DagHtEntry *)malloc(ht_cap * sizeof(DagHtEntry));
-  if (!ht)
-    return 0;
-  for (uint32_t i = 0; i < ht_cap; i++)
-    ht[i].key = DAG_HT_EMPTY;
+  UnparseCtx ctx = {
+      .buf = buf,
+      .capacity = capacity,
+      .written = 0,
+      .ht_cap = DAG_HT_INIT,
+      .ht_count = 0,
+      .next_local = 0,
+      .stack_cap = DAG_STACK_INIT,
+      .stack_len = 0,
+  };
 
-  DagExportFrame *stack =
-      (DagExportFrame *)malloc(DAG_STACK_INIT * sizeof(DagExportFrame));
-  size_t stack_cap = DAG_STACK_INIT;
-  size_t stack_len = 0;
-  if (!stack) {
-    free(ht);
+  ctx.ht = (DagHtEntry *)malloc(ctx.ht_cap * sizeof(DagHtEntry));
+  if (!ctx.ht)
+    return 0;
+  for (uint32_t i = 0; i < ctx.ht_cap; i++)
+    ctx.ht[i].key = DAG_HT_EMPTY;
+
+  ctx.stack = (DagExportFrame *)malloc(ctx.stack_cap * sizeof(DagExportFrame));
+  if (!ctx.stack) {
+    free(ctx.ht);
     return 0;
   }
 
-  size_t written = 0;
-  uint32_t next_local = 0;
-  uint32_t ht_count = 0;
+  if (!unparse_push(&ctx, root, DAG_EXPORT_ENTER)) {
+    unparse_ctx_free(&ctx);
+    return 0;
+  }
 
-  stack[0].node_id = root;
-  stack[0].state = DAG_EXPORT_ENTER;
-  stack_len = 1;
-
-  while (stack_len > 0) {
-    DagExportFrame *f = &stack[stack_len - 1];
+  while (ctx.stack_len > 0) {
+    DagExportFrame *f = &ctx.stack[ctx.stack_len - 1];
     uint32_t n = f->node_id;
     uint32_t k = kindOf(n);
 
     if (f->state == DAG_EXPORT_ENTER) {
       uint32_t existing;
-      if (dag_ht_get(ht, ht_cap, n, &existing)) {
-        stack_len--;
+      if (dag_ht_get(ctx.ht, ctx.ht_cap, n, &existing)) {
+        ctx.stack_len--;
         continue;
       }
 
       if (!dag_exportable_kind(k)) {
-        free(ht);
-        free(stack);
+        unparse_ctx_free(&ctx);
         return 0;
       }
 
@@ -630,89 +698,35 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
         continue;
       }
 
-      /* NON_TERM: push EMIT for self, then right ENTER, then left ENTER */
+      /* NON_TERM: replace current ENTER with EMIT, then push R ENTER, then L
+       * ENTER */
       f->state = DAG_EXPORT_EMIT;
       uint32_t l = leftOf(n), r = rightOf(n);
-      if (stack_len + 2 > stack_cap) {
-        size_t new_cap = stack_cap * 2;
-        DagExportFrame *new_stack =
-            (DagExportFrame *)realloc(stack, new_cap * sizeof(DagExportFrame));
-        if (!new_stack) {
-          free(ht);
-          free(stack);
-          return 0;
-        }
-        stack = new_stack;
-        stack_cap = new_cap;
+      if (!unparse_push(&ctx, r, DAG_EXPORT_ENTER)) {
+        unparse_ctx_free(&ctx);
+        return 0;
       }
-      stack[stack_len - 1] =
-          (DagExportFrame){.node_id = n, .state = DAG_EXPORT_EMIT};
-      stack[stack_len++] =
-          (DagExportFrame){.node_id = r, .state = DAG_EXPORT_ENTER};
-      stack[stack_len++] =
-          (DagExportFrame){.node_id = l, .state = DAG_EXPORT_ENTER};
+      if (!unparse_push(&ctx, l, DAG_EXPORT_ENTER)) {
+        unparse_ctx_free(&ctx);
+        return 0;
+      }
       continue;
     }
 
     /* EMIT */
-    stack_len--;
-    ht = dag_ht_ensure(ht, &ht_cap, ht_count + 1);
-    if (!ht) {
-      free(stack);
-      return 0;
-    }
-    dag_ht_put(ht, ht_cap, n, next_local);
-    ht_count++;
-    next_local++;
-
-    if (k == ARENA_KIND_TERMINAL) {
-      char ch = sym_to_char(symOf(n));
-      if (written >= capacity) {
-        free(ht);
-        free(stack);
-        return (size_t)-1;
-      }
-      buf[written++] = ch;
-      if (written < capacity)
-        buf[written++] = ' ';
-    } else if (k == ARENA_KIND_U8) {
-      int need = 4 + (written < capacity ? 1 : 0);
-      if (written + need > capacity) {
-        free(ht);
-        free(stack);
-        return (size_t)-1;
-      }
-      int nw = snprintf(buf + written, capacity - written, "U%02x ",
-                        (unsigned)symOf(n));
-      if (nw < 0 || (size_t)nw >= capacity - written) {
-        free(ht);
-        free(stack);
-        return (size_t)-1;
-      }
-      written += (size_t)nw;
-    } else {
-      uint32_t li = 0, ri = 0;
-      dag_ht_get(ht, ht_cap, leftOf(n), &li);
-      dag_ht_get(ht, ht_cap, rightOf(n), &ri);
-      char app_buf[32];
-      int nw = snprintf(app_buf, sizeof(app_buf), "@%u,%u ", (unsigned)li,
-                        (unsigned)ri);
-      if (nw < 0 || (size_t)nw >= (int)sizeof(app_buf) ||
-          written + (size_t)nw > capacity) {
-        free(ht);
-        free(stack);
-        return (size_t)-1;
-      }
-      memcpy(buf + written, app_buf, (size_t)nw);
-      written += (size_t)nw;
+    ctx.stack_len--;
+    if (!unparse_emit_node(&ctx, n)) {
+      unparse_ctx_free(&ctx);
+      return (size_t)-1;
     }
   }
 
-  if (written > 0 && buf[written - 1] == ' ')
-    written--;
-  free(ht);
-  free(stack);
-  if (written < capacity)
-    buf[written] = '\0';
-  return written;
+  if (ctx.written > 0 && ctx.buf[ctx.written - 1] == ' ')
+    ctx.written--;
+  if (ctx.written < ctx.capacity)
+    ctx.buf[ctx.written] = '\0';
+
+  size_t final_written = ctx.written;
+  unparse_ctx_free(&ctx);
+  return final_written;
 }

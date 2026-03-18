@@ -3,7 +3,7 @@
  * from C header file.
  */
 
-const cHeaderFile = await Deno.readTextFile("c/arena.h");
+const cHeaderFile = await Deno.readTextFile("core/arena.h");
 
 function parseCStruct(source: string, structName: string) {
   const structRegex = new RegExp(
@@ -62,7 +62,7 @@ for (let i = 0; i < fields.length; i++) {
 }
 
 const content = `/**
- * SabHeader field indices (generated from c/arena.h)
+ * SabHeader field indices (generated from core/arena.h)
  *
  * These constants represent the index into the SabHeader when viewed as a Uint32Array.
  * uint64_t fields (offset_nodes, offset_buckets) occupy two consecutive indices (lo, hi).

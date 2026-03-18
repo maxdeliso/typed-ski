@@ -38,15 +38,27 @@ static pthread_t stdin_thread;
 static bool stdout_thread_started = false;
 static bool stdin_thread_started = false;
 
+static pthread_mutex_t io_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t stdout_publish_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t stdin_demand_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t stdin_demand_cvar = PTHREAD_COND_INITIALIZER;
+
+/** Optional runtime stdout handler; if NULL, uses putchar(). */
+static void (*stdout_handler)(uint8_t, void *) = NULL;
+static void *stdout_handler_ctx = NULL;
+
+void thanatos_set_stdout_handler(void (*handler)(uint8_t, void *), void *ctx) {
+  pthread_mutex_lock(&stdout_publish_mutex);
+  stdout_handler = handler;
+  stdout_handler_ctx = ctx;
+  pthread_mutex_unlock(&stdout_publish_mutex);
+}
+
 /** Optional runtime stdin stream for READ_ONE (set from config at init). */
 static int stdin_stream_fd = -1;
 
 static PendingReq pending_reqs[MAX_PENDING_REQS];
 static IoWaitEntry io_wait_map[MAX_IO_WAIT];
-static pthread_mutex_t io_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t stdout_publish_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t stdin_demand_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t stdin_demand_cvar = PTHREAD_COND_INITIALIZER;
 static uint32_t stdin_demand_count = 0;
 
 /** Pump blocks on this when arena stdout ring is empty; dispatcher signals
@@ -93,7 +105,11 @@ static bool publish_one_stdout_byte_locked(void) {
   uint8_t byte;
   if (!arena_stdout_try_pop(&byte))
     return false;
-  putchar(byte);
+  if (stdout_handler != NULL) {
+    stdout_handler(byte, stdout_handler_ctx);
+  } else {
+    putchar(byte);
+  }
   wake_one_stdout_waiter();
   return true;
 }
@@ -159,10 +175,6 @@ static void *stdin_thread_main(void *arg) {
   return NULL;
 }
 
-/** Temporary: infer READ_ONE vs WRITE_ONE by walking the suspension's stored
- * term (left-spine to head). Fragile if representation changes; prefer encoding
- * IO wait reason in CQ_EVENT_IO_WAIT or suspension tag (e.g. IO_WAIT_READ /
- * IO_WAIT_WRITE) for a durable mechanism. */
 static bool io_wait_is_stdin(uint32_t node_id) {
   return controlSuspensionReason(node_id) == SUSP_WAIT_IO_STDIN;
 }
@@ -213,8 +225,9 @@ dispatcher_thread_main(void *arg) {
     if (ARENA_BASE_ADDR) {
       SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
       if (h->magic != 0x534B4941) {
-        printf("Dispatcher: magic mismatch! expected 0x534B4941, got 0x%x\n",
-               h->magic);
+        fprintf(stderr,
+                "Dispatcher: magic mismatch! expected 0x534B4941, got 0x%x\n",
+                h->magic);
       }
     }
     Cqe cqe;
@@ -230,8 +243,8 @@ dispatcher_thread_main(void *arg) {
         atomic_fetch_add_explicit(&dispatcher_events, 1, memory_order_relaxed) +
         1;
     if (dispatcher_trace) {
-      printf("Dispatcher: event=%llu req_id=%u kind=%u node=%u\n", seq, req_id,
-             event, node);
+      fprintf(stderr, "Dispatcher: event=%llu req_id=%u kind=%u node=%u\n", seq,
+              req_id, event, node);
     }
 
     bool found = false;

@@ -344,17 +344,29 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
   }
 
   int in_fd = open(in_str, O_RDONLY);
+  if (in_fd < 0) {
+    session_printf(s, "ERR cannot open input file\n");
+    session_fflush(s);
+    return;
+  }
+
   uint8_t *in_map = NULL;
   size_t in_size = 0;
-  if (in_fd >= 0) {
-    struct stat st;
-    if (fstat(in_fd, &st) == 0 && st.st_size > 0) {
-      in_size = st.st_size;
-      in_map = mmap(NULL, in_size, PROT_READ, MAP_SHARED, in_fd, 0);
-      if (in_map == MAP_FAILED) {
-        in_map = NULL;
-        in_size = 0;
-      }
+  struct stat st;
+  if (fstat(in_fd, &st) != 0) {
+    close(in_fd);
+    session_printf(s, "ERR cannot stat input file\n");
+    session_fflush(s);
+    return;
+  }
+  if (st.st_size > 0) {
+    in_size = st.st_size;
+    in_map = mmap(NULL, in_size, PROT_READ, MAP_SHARED, in_fd, 0);
+    if (in_map == MAP_FAILED) {
+      close(in_fd);
+      session_printf(s, "ERR mmap input failed\n");
+      session_fflush(s);
+      return;
     }
   }
 
@@ -362,8 +374,7 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
   if (out_fd < 0) {
     if (in_map)
       munmap(in_map, in_size);
-    if (in_fd >= 0)
-      close(in_fd);
+    close(in_fd);
     session_printf(s, "ERR cannot open output file\n");
     session_fflush(s);
     return;
@@ -373,8 +384,7 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
   if (ftruncate(out_fd, max_out_size) < 0) {
     if (in_map)
       munmap(in_map, in_size);
-    if (in_fd >= 0)
-      close(in_fd);
+    close(in_fd);
     close(out_fd);
     session_printf(s, "ERR ftruncate output failed\n");
     session_fflush(s);
@@ -386,8 +396,7 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
   if (out_map == MAP_FAILED) {
     if (in_map)
       munmap(in_map, in_size);
-    if (in_fd >= 0)
-      close(in_fd);
+    close(in_fd);
     close(out_fd);
     session_printf(s, "ERR mmap output failed\n");
     session_fflush(s);
@@ -400,14 +409,16 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
     if (in_map)
       munmap(in_map, in_size);
     munmap(out_map, max_out_size);
-    if (in_fd >= 0)
-      close(in_fd);
+    close(in_fd);
     close(out_fd);
     session_printf(s, "ERR parse error\n");
     session_fflush(s);
     return;
   }
 
+  /* File-backed arena I/O is process-global state; REDUCE_FILE is single-flight
+   * within a process and the session layer must not overlap these reductions.
+   */
   arena_set_io_mmap(in_map, in_size, out_map, max_out_size);
   uint32_t result = thanatos_reduce_to_normal_form(root);
   size_t written = arena_get_mmap_out_cursor();
@@ -415,8 +426,7 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
 
   if (in_map)
     munmap(in_map, in_size);
-  if (in_fd >= 0)
-    close(in_fd);
+  close(in_fd);
 
   if (written > 0)
     msync(out_map, written, MS_SYNC);

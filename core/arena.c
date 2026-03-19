@@ -67,9 +67,15 @@ static atomic_uint GROW_COUNT = 0;
 static size_t ARENA_RESERVED_BYTES = 0;
 
 #ifndef __wasm__
+/* Native mmap-backed file I/O is ambient arena state. The session layer treats
+ * REDUCE_FILE as single-flight, so at most one file-backed reduction may be
+ * active per process at a time.
+ */
 static uint8_t *mmap_stdin_buf = NULL;
 static size_t mmap_stdin_size = 0;
 static atomic_size_t mmap_stdin_cursor = 0;
+/* Distinguishes an active empty file from "no file-backed stdin". */
+static atomic_bool mmap_stdin_active = false;
 
 static uint8_t *mmap_stdout_buf = NULL;
 static size_t mmap_stdout_size = 0;
@@ -77,12 +83,16 @@ static atomic_size_t mmap_stdout_cursor = 0;
 
 void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
                        size_t out_size) {
+  bool file_io_active =
+      (in_map != NULL) || (in_size != 0) || (out_map != NULL) || (out_size != 0);
   mmap_stdin_buf = in_map;
   mmap_stdin_size = in_size;
   atomic_store_explicit(&mmap_stdin_cursor, 0, memory_order_release);
   mmap_stdout_buf = out_map;
   mmap_stdout_size = out_size;
   atomic_store_explicit(&mmap_stdout_cursor, 0, memory_order_release);
+  atomic_store_explicit(&mmap_stdin_active, file_io_active,
+                        memory_order_release);
 }
 
 size_t arena_get_mmap_out_cursor(void) {
@@ -1822,7 +1832,7 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
         }
 
 #ifndef __wasm__
-        if (mmap_stdin_buf != NULL) {
+        if (atomic_load_explicit(&mmap_stdin_active, memory_order_acquire)) {
           size_t cursor = atomic_fetch_add_explicit(&mmap_stdin_cursor, 1,
                                                     memory_order_relaxed);
           if (cursor < mmap_stdin_size) {

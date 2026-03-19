@@ -101,12 +101,17 @@ static void wake_one_stdout_waiter(void) {
   }
 }
 
+/* Caller must hold stdout_publish_mutex while reading handler state and
+ * publishing bytes so handler swaps stay synchronized with stdout draining.
+ */
 static bool publish_one_stdout_byte_locked(void) {
   uint8_t byte;
   if (!arena_stdout_try_pop(&byte))
     return false;
-  if (stdout_handler != NULL) {
-    stdout_handler(byte, stdout_handler_ctx);
+  void (*handler)(uint8_t, void *) = stdout_handler;
+  void *handler_ctx = stdout_handler_ctx;
+  if (handler != NULL) {
+    handler(byte, handler_ctx);
   } else {
     putchar(byte);
   }

@@ -28,6 +28,37 @@ export function thanatosAvailable(): boolean {
   return existsSync(THANATOS_BIN);
 }
 
+async function runThanatosProcess(
+  args: string[],
+  input = "",
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const child = new Deno.Command(THANATOS_BIN, {
+    args,
+    cwd: PROJECT_ROOT,
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+
+  const writer = child.stdin.getWriter();
+  if (input.length > 0) {
+    await writer.write(new TextEncoder().encode(input));
+  }
+  await writer.close();
+
+  const [status, stdout, stderr] = await Promise.all([
+    child.status,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+
+  return {
+    code: status.code,
+    stdout,
+    stderr,
+  };
+}
+
 /**
  * DAG wire format: terminals S K I B C P Q R , . E | Uxx | @L,R (space-separated, postorder).
  * Uses object identity (Map) for node indices: preserves sharing only when the AST already
@@ -629,6 +660,141 @@ Deno.test({
     } finally {
       await session.close();
     }
+  },
+});
+
+Deno.test({
+  name: "REDUCE_FILE - rejects missing input file",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    const outPath = await Deno.makeTempFile();
+    try {
+      const res = await session.rawRequest(
+        `REDUCE_FILE missing-input.bin "${outPath}" I`,
+      );
+      assertEquals(res, "ERR cannot open input file");
+    } finally {
+      await Deno.remove(outPath).catch(() => {});
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "REDUCE_FILE - empty input file fails with EOF-backed reduction error",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    const inPath = await Deno.makeTempFile();
+    const outPath = await Deno.makeTempFile();
+    try {
+      const dag = toDagWire(parseSKI(", (C . I) I"));
+      await Deno.writeFile(inPath, new Uint8Array(0));
+      await assertRejects(
+        () => session.reduceFile(dag, inPath, outPath),
+        Error,
+        "thanatos: reduction error",
+      );
+      assertEquals((await Deno.stat(outPath)).size, 0);
+    } finally {
+      await Deno.remove(inPath).catch(() => {});
+      await Deno.remove(outPath).catch(() => {});
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "REDUCE_FILE - /dev/full reports output setup failure",
+  ignore: !thanatosAvailable() || !existsSync("/dev/full"),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      const res = await session.rawRequest("REDUCE_FILE /dev/null /dev/full I");
+      assertEquals(res, "ERR ftruncate output failed");
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "thanatos CLI - single-shot surface mode trims blank lines and preserves stdout order",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const result = await runThanatosProcess(
+      ["1", "65536"],
+      "\n  \n. #u8(65) I   \r\n",
+    );
+    assertEquals(result.code, 0, result.stderr);
+    assertEquals(result.stdout, "A#u8(65)\n");
+  },
+});
+
+Deno.test({
+  name: "thanatos CLI - --dag with --stdin-file reads runtime stdin",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const stdinPath = await Deno.makeTempFile();
+    try {
+      await Deno.writeFile(stdinPath, new Uint8Array([0x2a]));
+      const result = await runThanatosProcess(
+        ["--dag", "--stdin-file", stdinPath, "1", "65536"],
+        ", I @0,1\n",
+      );
+      assertEquals(result.code, 0, result.stderr);
+      assertEquals(result.stdout, "U2a\n");
+    } finally {
+      await Deno.remove(stdinPath).catch(() => {});
+    }
+  },
+});
+
+Deno.test({
+  name: "thanatos CLI - argument validation",
+  ignore: !thanatosAvailable(),
+  fn: async (t) => {
+    await t.step("--stdin-file requires a path", async () => {
+      const result = await runThanatosProcess(["--stdin-file"]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes("--stdin-file requires a path"),
+        result.stderr,
+      );
+    });
+
+    await t.step("invalid worker count", async () => {
+      const result = await runThanatosProcess(["bogus"]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes("invalid worker count: bogus"),
+        result.stderr,
+      );
+    });
+
+    await t.step("invalid arena capacity", async () => {
+      const result = await runThanatosProcess(["1", "bogus"]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes("invalid arena capacity: bogus"),
+        result.stderr,
+      );
+    });
+
+    await t.step("cannot open runtime stdin file", async () => {
+      const missingPath = join(PROJECT_ROOT, "missing-runtime-stdin.bin");
+      const result = await runThanatosProcess([
+        "--stdin-file",
+        missingPath,
+      ]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes(`cannot open --stdin-file ${missingPath}`),
+        result.stderr,
+      );
+    });
   },
 });
 

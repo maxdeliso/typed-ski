@@ -95,6 +95,18 @@ bin/thanatos-test-asan: core/arena.c core/thanatos.c core/performance_test.c $(C
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
 
+bin/session-test: core/arena.c core/thanatos.c core/ski_io.c core/session.c core/util.c core/session_test.c $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
+
+bin/ski-io-test: core/arena.c core/thanatos.c core/ski_io.c core/util.c core/ski_io_test.c $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
+
+bin/util-test: core/util.c core/util_test.c $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(C_DEBUG_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
+
 bin/thanatos-asan: $(CORE_PATHS) $(C_HEADERS)
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_ASAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) $(filter %.c,$^) -o $@
@@ -192,6 +204,12 @@ coverage-binaries-internal: build-wasm-internal bin/thanatos-coverage
 		core/arena.c core/ski_io.c core/util.c core/dag_codec_test.c -o bin/dag-codec-coverage
 	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
 		core/arena.c core/thanatos.c core/performance_test.c -o bin/thanatos-test-coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/arena.c core/thanatos.c core/ski_io.c core/session.c core/util.c core/session_test.c -o bin/session-coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/arena.c core/thanatos.c core/ski_io.c core/util.c core/ski_io_test.c -o bin/ski-io-coverage
+	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+		core/util.c core/util_test.c -o bin/util-coverage
 
 coverage-report-internal:
 	$(MAKE) coverage-lcov-internal
@@ -223,6 +241,11 @@ thanatos-check-internal: build-native-internal
 coverage-internal: coverage-binaries-internal
 	rm -rf coverage coverage-c
 	mkdir -p coverage-c
+	./bin/dag-codec-coverage
+	./bin/thanatos-test-coverage $(THANATOS_SHORT_ARGS)
+	./bin/session-coverage
+	./bin/ski-io-coverage
+	./bin/util-coverage
 	$(MAKE) test-internal \
 		DENO_TEST_CMD='deno task test:coverage' \
 		THANATOS_BIN_VAL='./bin/thanatos-coverage' \
@@ -246,6 +269,12 @@ CLEAN_ARTIFACTS := \
 	bin/thanatos-test-coverage \
 	bin/dag-codec-test \
 	bin/dag-codec-coverage \
+	bin/session-test \
+	bin/session-coverage \
+	bin/ski-io-test \
+	bin/ski-io-coverage \
+	bin/util-test \
+	bin/util-coverage \
 	obj/arena.o \
 	obj/thanatos.o \
 	obj/ski_io.o \

@@ -48,6 +48,7 @@ bin/thanatos
 bin/thanatos-*
 bin/dag-codec-*
 bin/dag-codec-test
+bin/*-coverage
 
 # Codecov artifacts (downloaded by CI)
 codecov

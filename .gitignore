@@ -37,9 +37,18 @@ type_svg/
 # Test coverage
 coverage/
 coverage.lcov
+coverage-c/
+coverage-c.lcov
+*.gcda
+*.gcno
 
 # Build artifacts
 obj/
+bin/thanatos
+bin/thanatos-*
+bin/dag-codec-*
+bin/dag-codec-test
+bin/*-coverage
 
 # Codecov artifacts (downloaded by CI)
 codecov

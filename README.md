@@ -18,7 +18,7 @@ This project uses a Makefile for common development tasks:
 ```bash
 make setup  # Install necessary tools (Nix, configure experimental features)
 make build  # Compile all artifacts (WASM, TypeScript, dist files)
-make test   # Run the complete test suite (C/WASM + Deno tests, linting, formatting)
+make test   # Run the complete test suite (Core/WASM + Deno tests, linting, formatting)
 ```
 
 For detailed information about what each target does, see the

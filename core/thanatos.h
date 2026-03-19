@@ -19,6 +19,10 @@ typedef struct {
 
 void thanatos_init(ThanatosConfig config);
 
+/** Set a callback for arena stdout bytes. If set, thanatos_reduce and the
+ * pump will call this instead of putchar(). */
+void thanatos_set_stdout_handler(void (*handler)(uint8_t, void *), void *ctx);
+
 /** Start worker and dispatcher threads. If enable_stdout_pump is true, also
  * start the thread that forwards arena stdout to process stdout; set false
  * when stdout is used for protocol (e.g. daemon mode).

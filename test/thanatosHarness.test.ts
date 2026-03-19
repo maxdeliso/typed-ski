@@ -12,7 +12,6 @@ import type { SKIExpression } from "../lib/ski/expression.ts";
 import { apply, unparseSKI } from "../lib/ski/expression.ts";
 import { term } from "../lib/ski/terminal.ts";
 import type { SKITerminalSymbol } from "../lib/ski/terminal.ts";
-import { C, I, ReadOne, WriteOne } from "../lib/ski/terminal.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
@@ -27,6 +26,37 @@ export const THANATOS_BIN =
 
 export function thanatosAvailable(): boolean {
   return existsSync(THANATOS_BIN);
+}
+
+async function runThanatosProcess(
+  args: string[],
+  input = "",
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const child = new Deno.Command(THANATOS_BIN, {
+    args,
+    cwd: PROJECT_ROOT,
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+
+  const writer = child.stdin.getWriter();
+  if (input.length > 0) {
+    await writer.write(new TextEncoder().encode(input));
+  }
+  await writer.close();
+
+  const [status, stdout, stderr] = await Promise.all([
+    child.status,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+
+  return {
+    code: status.code,
+    stdout,
+    stderr,
+  };
 }
 
 /**
@@ -195,6 +225,12 @@ export class ThanatosSession {
     return result;
   }
 
+  /** Raw request for error testing. Returns full response string (including ERR). */
+  async rawRequest(line: string): Promise<string> {
+    this.start();
+    return await this.serialRequest(line);
+  }
+
   /** Reduce a DAG string to normal form; returns DAG string or throws on ERR. Starts daemon on first use if needed. */
   async reduceDag(dag: string): Promise<string> {
     this.start();
@@ -203,6 +239,60 @@ export class ThanatosSession {
     if (resp === "OK") return "";
     if (resp.startsWith("ERR ")) throw new Error("thanatos: " + resp.slice(4));
     throw new Error("thanatos: unexpected " + resp);
+  }
+
+  /** Reduce a DAG with stdin data; returns { stdout, resultDag }. */
+  async reduceIo(
+    dag: string,
+    stdin: Uint8Array,
+  ): Promise<{ stdout: Uint8Array; resultDag: string }> {
+    this.start();
+    let stdinHex = Array.from(stdin).map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (stdinHex === "") stdinHex = "-";
+    // Protocol: REDUCE_IO <stdin_hex> <dag>
+    // Response: OK <stdout_hex> <result_dag>
+    const resp = await this.serialRequest(
+      "REDUCE_IO " + stdinHex + " " + dag.trim(),
+    );
+    if (!resp.startsWith("OK ")) {
+      if (resp.startsWith("ERR ")) {
+        throw new Error("thanatos: " + resp.slice(4));
+      }
+      throw new Error("thanatos: unexpected " + resp);
+    }
+    const parts = resp.slice(3).trim().split(/\s+/);
+    if (parts.length < 1) throw new Error("thanatos: missing result in OK");
+    const stdoutHex = parts[0]!;
+    const resultDag = parts.slice(1).join(" ");
+    let stdout: Uint8Array;
+    if (stdoutHex === "-") {
+      stdout = new Uint8Array(0);
+    } else {
+      stdout = new Uint8Array(
+        (stdoutHex.match(/.{1,2}/g) || []).map((byte) => parseInt(byte, 16)),
+      );
+    }
+    return { stdout, resultDag };
+  }
+
+  /** Reduce a DAG using zero-copy file mapping for I/O; returns resultDag. */
+  async reduceFile(
+    dag: string,
+    inPath: string,
+    outPath: string,
+  ): Promise<string> {
+    this.start();
+    const resp = await this.serialRequest(
+      "REDUCE_FILE " + inPath + " " + outPath + " " + dag.trim(),
+    );
+    if (!resp.startsWith("OK ")) {
+      if (resp.startsWith("ERR ")) {
+        throw new Error("thanatos: " + resp.slice(4));
+      }
+      throw new Error("thanatos: unexpected " + resp);
+    }
+    return resp.slice(3).trim();
   }
 
   /** Reset the arena (clean slate). Starts daemon on first use if needed. */
@@ -383,6 +473,125 @@ export async function runThanatosBatch(exprLines: string[]): Promise<string[]> {
   }
 }
 
+export async function runThanatosSnapshot(
+  name: string,
+  session: ThanatosSession,
+): Promise<void> {
+  const snapshotDir = join(PROJECT_ROOT, "test", "thanatosSnapshots", name);
+  const inputSkiPath = join(snapshotDir, "input.ski");
+  const stdinPath = join(snapshotDir, "stdin.bin");
+  const expectedStdoutPath = join(snapshotDir, "stdout.bin");
+  const expectedResultDagPath = join(snapshotDir, "result.dag");
+
+  const program = await Deno.readTextFile(inputSkiPath);
+  const stdin = await Deno.readFile(stdinPath);
+  const expectedStdout = await Deno.readFile(expectedStdoutPath);
+
+  const expr = parseSKI(program);
+  const dag = toDagWire(expr);
+
+  const inPath = await Deno.makeTempFile();
+  const outPath = await Deno.makeTempFile();
+
+  try {
+    await Deno.writeFile(inPath, stdin);
+    const actualResultDag = await session.reduceFile(
+      dag,
+      inPath,
+      outPath,
+    );
+    const actualStdout = await Deno.readFile(outPath);
+
+    assertEquals(
+      actualStdout,
+      expectedStdout,
+      `Snapshot "${name}" did not produce expected stdout`,
+    );
+
+    if (existsSync(expectedResultDagPath)) {
+      const expectedResultDag = await Deno.readTextFile(expectedResultDagPath);
+      // Compare unparsed SKI to avoid fragile DAG string matches if possible,
+      // or just compare DAG if intended.
+      assertEquals(
+        unparseSKI(fromDagWire(actualResultDag)),
+        unparseSKI(fromDagWire(expectedResultDag)),
+        `Snapshot "${name}" did not produce expected result DAG`,
+      );
+    }
+  } finally {
+    await Deno.remove(inPath).catch(() => {});
+    await Deno.remove(outPath).catch(() => {});
+  }
+}
+
+Deno.test({
+  name: "session based IO - readOne echo",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      await runThanatosSnapshot("readOneEcho", session);
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "native IO - multiple writeOne ABC preserves sequential order via session (streaming)",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      for (let i = 0; i < 32; i++) {
+        await runThanatosSnapshot("writeOneABC", session);
+      }
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "native IO - readOne via session (streaming)",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      await runThanatosSnapshot("readOneA", session);
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "native IO - interleaved read/write echo via session",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      await runThanatosSnapshot("interleavedEcho", session);
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "native IO - readOne echo via zero-copy mmap file session",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      await runThanatosSnapshot("readOneMmapS", session);
+    } finally {
+      await session.close();
+    }
+  },
+});
+
 Deno.test({
   name: "RESET after several reductions then REDUCE",
   ignore: !thanatosAvailable(),
@@ -434,258 +643,158 @@ Deno.test({
   },
 });
 
-/**
- * Stage 8: Native IO support — same compiler binary emits same bytes as JS/WASM.
- * Runs writeOne 65 via thanatos batch mode and via JS evaluator; asserts stdout
- * bytes match.
- */
 Deno.test({
-  name: "native vs JS/WASM same stdout bytes (writeOne)",
+  name: "REDUCE_FILE - rejects path > 1023 chars",
   ignore: !thanatosAvailable(),
   fn: async () => {
-    const expr = apply(apply(WriteOne, { kind: "u8", value: 65 }), I);
-    const dagLine = toDagWire(expr);
+    const session = await getThanatosSession();
+    try {
+      const longPath = "a".repeat(1024);
+      const res = await session.rawRequest(`REDUCE_FILE ${longPath} out.bin I`);
+      assertEquals(res, "ERR path too long (max 1023 chars)");
 
-    const { ParallelArenaEvaluatorWasm } = await import(
-      "../lib/evaluator/parallelArenaEvaluator.ts"
+      const res2 = await session.rawRequest(
+        `REDUCE_FILE in.bin "${longPath}" I`,
+      );
+      assertEquals(res2, "ERR path too long (max 1023 chars)");
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "REDUCE_FILE - rejects missing input file",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    const outPath = await Deno.makeTempFile();
+    try {
+      const res = await session.rawRequest(
+        `REDUCE_FILE missing-input.bin "${outPath}" I`,
+      );
+      assertEquals(res, "ERR cannot open input file");
+    } finally {
+      await Deno.remove(outPath).catch(() => {});
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "REDUCE_FILE - empty input file fails with EOF-backed reduction error",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const session = await getThanatosSession();
+    const inPath = await Deno.makeTempFile();
+    const outPath = await Deno.makeTempFile();
+    try {
+      const dag = toDagWire(parseSKI(", (C . I) I"));
+      await Deno.writeFile(inPath, new Uint8Array(0));
+      await assertRejects(
+        () => session.reduceFile(dag, inPath, outPath),
+        Error,
+        "thanatos: reduction error",
+      );
+      assertEquals((await Deno.stat(outPath)).size, 0);
+    } finally {
+      await Deno.remove(inPath).catch(() => {});
+      await Deno.remove(outPath).catch(() => {});
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "REDUCE_FILE - /dev/full reports output setup failure",
+  ignore: !thanatosAvailable() || !existsSync("/dev/full"),
+  fn: async () => {
+    const session = await getThanatosSession();
+    try {
+      const res = await session.rawRequest("REDUCE_FILE /dev/null /dev/full I");
+      assertEquals(res, "ERR ftruncate output failed");
+    } finally {
+      await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "thanatos CLI - single-shot surface mode trims blank lines and preserves stdout order",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const result = await runThanatosProcess(
+      ["1", "65536"],
+      "\n  \n. #u8(65) I   \r\n",
     );
-    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-    try {
-      await evaluator.reduceAsync(expr);
-      const jsStdout = await evaluator.readStdout(1);
-      assertEquals(jsStdout.length, 1);
-      assertEquals(jsStdout[0], 65);
+    assertEquals(result.code, 0, result.stderr);
+    assertEquals(result.stdout, "A#u8(65)\n");
+  },
+});
 
-      const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", String(TEST_NATIVE_WORKERS)],
-        cwd: PROJECT_ROOT,
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "inherit",
-      }).spawn();
-      try {
-        const writer = proc.stdin.getWriter();
-        await writer.write(new TextEncoder().encode(dagLine + "\n"));
-        await writer.close();
-        const { stdout: nativeStdout } = await proc.output();
-        if (nativeStdout.length === 0) {
-          console.error("nativeStdout is empty!");
-        } else {
-          console.error(
-            "nativeStdout:",
-            new TextDecoder().decode(nativeStdout),
-          );
-        }
-        assertEquals(nativeStdout.length >= 1, true);
-        assertEquals(nativeStdout[0], 65, "native first byte must match JS");
-        assertEquals(
-          nativeStdout.subarray(0, jsStdout.length),
-          jsStdout,
-          "native program stdout must equal JS program stdout",
-        );
-      } catch (e) {
-        try {
-          proc.kill();
-        } catch { /* ignore */ }
-        throw e;
-      }
+Deno.test({
+  name: "thanatos CLI - --dag with --stdin-file reads runtime stdin",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const stdinPath = await Deno.makeTempFile();
+    try {
+      await Deno.writeFile(stdinPath, new Uint8Array([0x2a]));
+      const result = await runThanatosProcess(
+        ["--dag", "--stdin-file", stdinPath, "1", "65536"],
+        ", I @0,1\n",
+      );
+      assertEquals(result.code, 0, result.stderr);
+      assertEquals(result.stdout, "U2a\n");
     } finally {
-      evaluator.terminate();
+      await Deno.remove(stdinPath).catch(() => {});
     }
   },
 });
 
-/** Multiple writeOne on a single continuation spine must preserve program
- * order. Native batch mode should therefore emit ABC exactly, not merely some
- * permutation of those bytes.
- *
- * Semantics: the DAG decodes to (WriteOne 65)((WriteOne 66)((WriteOne 67)I)),
- * i.e. three causally ordered writeOne calls with continuations.
- *
- * Why stdout has more than 3 bytes: the thanatos binary in batch mode writes
- * (1) the arena stdout pump output (these 3 bytes) and (2) a textual line from
- * main.c (unparse_dag(result) + newline). We only assert on the first 3 bytes.
- *
- * DAG string (postorder): . U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11 */
 Deno.test({
-  name: "native IO - multiple writeOne ABC preserves sequential order",
+  name: "thanatos CLI - argument validation",
   ignore: !thanatosAvailable(),
-  fn: async () => {
-    const dagLine = ". U41 @0,1 . U42 @3,4 . U43 @6,7 I @8,9 @5,10 @2,11";
-    for (let i = 0; i < 32; i++) {
-      const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", String(TEST_NATIVE_WORKERS)],
-        cwd: PROJECT_ROOT,
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "inherit",
-      }).spawn();
-      try {
-        const writer = proc.stdin.getWriter();
-        await writer.write(new TextEncoder().encode(dagLine + "\n"));
-        await writer.close();
-        const { stdout } = await proc.output();
-        assertEquals(stdout.length >= 3, true);
-        const first3 = Array.from(stdout.subarray(0, 3));
-        assertEquals(
-          first3,
-          [65, 66, 67],
-          `run ${i + 1}: first three stdout bytes must preserve ABC order`,
-        );
-      } catch (e) {
-        try {
-          proc.kill();
-        } catch { /* ignore */ }
-        throw e;
-      }
-    }
-  },
-});
+  fn: async (t) => {
+    await t.step("--stdin-file requires a path", async () => {
+      const result = await runThanatosProcess(["--stdin-file"]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes("--stdin-file requires a path"),
+        result.stderr,
+      );
+    });
 
-/** readOne with runtime stdin from --stdin-file; assert result line (no reduction error). */
-Deno.test({
-  name: "native IO - readOne with --stdin-file",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const tmpStdin = await Deno.makeTempFile();
-    await Deno.writeFile(tmpStdin, new Uint8Array([65]));
-    try {
-      const expr = apply(ReadOne, I);
-      const dagLine = toDagWire(expr);
-      const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
-        cwd: PROJECT_ROOT,
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "piped",
-      }).spawn();
-      try {
-        const writer = proc.stdin.getWriter();
-        await writer.write(new TextEncoder().encode(dagLine + "\n"));
-        await writer.close();
-        const { stdout, stderr, code } = await proc.output();
-        const outText = new TextDecoder().decode(stdout);
-        const errText = new TextDecoder().decode(stderr);
-        assertEquals(code, 0, "exit 0");
-        assertEquals(
-          outText.includes("reduction error"),
-          false,
-          "must not report reduction error: " + errText,
-        );
-        assertEquals(
-          outText.includes("U41") || outText.includes("65"),
-          true,
-          "result should reflect byte 65 (U41): " + outText,
-        );
-      } catch (e) {
-        try {
-          proc.kill();
-        } catch { /* ignore */ }
-        throw e;
-      }
-    } finally {
-      await Deno.remove(tmpStdin);
-    }
-  },
-});
+    await t.step("invalid worker count", async () => {
+      const result = await runThanatosProcess(["bogus"]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes("invalid worker count: bogus"),
+        result.stderr,
+      );
+    });
 
-/** readOne with empty runtime stdin file: native must block until data arrives,
- * matching the JS/WASM host contract more closely than the old EOF error path. */
-Deno.test({
-  name: "native IO - readOne blocks until --stdin-file receives data",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const tmpStdin = await Deno.makeTempFile();
-    await Deno.writeFile(tmpStdin, new Uint8Array());
-    try {
-      const expr = apply(ReadOne, I);
-      const dagLine = toDagWire(expr);
-      const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
-        cwd: PROJECT_ROOT,
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "piped",
-      }).spawn();
-      try {
-        const writer = proc.stdin.getWriter();
-        await writer.write(new TextEncoder().encode(dagLine + "\n"));
-        await writer.close();
+    await t.step("invalid arena capacity", async () => {
+      const result = await runThanatosProcess(["1", "bogus"]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes("invalid arena capacity: bogus"),
+        result.stderr,
+      );
+    });
 
-        const outputPromise = proc.output();
-        const stateBeforeAppend = await Promise.race([
-          outputPromise.then(() => "finished"),
-          new Promise<"pending">((resolve) =>
-            setTimeout(() => resolve("pending"), 50)
-          ),
-        ]);
-        assertEquals(
-          stateBeforeAppend,
-          "pending",
-          "READ_ONE should stay blocked while runtime stdin is empty",
-        );
-
-        await Deno.writeFile(tmpStdin, new Uint8Array([65]), { append: true });
-
-        const { stdout, stderr, code } = await outputPromise;
-        const outText = new TextDecoder().decode(stdout);
-        const errText = new TextDecoder().decode(stderr);
-        assertEquals(code, 0, "exit 0 after input arrives");
-        assertEquals(
-          outText.includes("reduction error"),
-          false,
-          "must not report reduction error: " + errText,
-        );
-        assertEquals(
-          outText.includes("U41") || outText.includes("65"),
-          true,
-          "result should reflect byte 65 (U41): " + outText,
-        );
-      } catch (e) {
-        try {
-          proc.kill();
-        } catch { /* ignore */ }
-        throw e;
-      }
-    } finally {
-      await Deno.remove(tmpStdin);
-    }
-  },
-});
-
-/** Interleaved read/write: read one byte, write it (echo); runtime stdin from file. */
-Deno.test({
-  name: "native IO - interleaved read/write echo",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const tmpStdin = await Deno.makeTempFile();
-    await Deno.writeFile(tmpStdin, new Uint8Array([88])); // 'X'
-    try {
-      const expr = apply(ReadOne, apply(apply(C, WriteOne), I));
-      const dagLine = toDagWire(expr);
-      const proc = new Deno.Command(THANATOS_BIN, {
-        args: ["--dag", "--stdin-file", tmpStdin, String(TEST_NATIVE_WORKERS)],
-        cwd: PROJECT_ROOT,
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "inherit",
-      }).spawn();
-      try {
-        const writer = proc.stdin.getWriter();
-        await writer.write(new TextEncoder().encode(dagLine + "\n"));
-        await writer.close();
-        const { stdout } = await proc.output();
-        assertEquals(stdout.length >= 1, true);
-        assertEquals(stdout[0], 88, "echoed byte must be 88 (X)");
-      } catch (e) {
-        try {
-          proc.kill();
-        } catch { /* ignore */ }
-        throw e;
-      }
-    } finally {
-      await Deno.remove(tmpStdin);
-    }
+    await t.step("cannot open runtime stdin file", async () => {
+      const missingPath = join(PROJECT_ROOT, "missing-runtime-stdin.bin");
+      const result = await runThanatosProcess([
+        "--stdin-file",
+        missingPath,
+      ]);
+      assertEquals(result.code, 1);
+      assert(
+        result.stderr.includes(`cannot open --stdin-file ${missingPath}`),
+        result.stderr,
+      );
+    });
   },
 });
 

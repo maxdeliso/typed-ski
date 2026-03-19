@@ -15,6 +15,7 @@ typedef _Bool bool;
 #include <stdint.h>
 #endif
 #include <stdatomic.h>
+#include <stddef.h>
 
 typedef enum {
   ARENA_KIND_TERMINAL = 1,
@@ -102,6 +103,8 @@ typedef enum {
   SUSP_WAIT_IO_STDOUT = 2,
   SUSP_GAS_EXHAUSTED = 3,
   SUSP_STEP_LIMIT = 4,
+  SUSP_IO_EOF = 5,
+  SUSP_IO_ERROR = 6,
 } SuspensionReason;
 
 typedef enum {
@@ -203,6 +206,11 @@ void workerLoop(uint32_t worker_id);
  * (for '.'). */
 void arena_stdin_push(uint8_t byte);
 bool arena_stdout_try_pop(uint8_t *byte_out);
+
+/* Zero-copy file mapping interface */
+void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
+                       size_t out_size);
+size_t arena_get_mmap_out_cursor(void);
 
 /** Try to dequeue one suspension id from stdin_wait or stdout_wait (slot_size
  * 4). Used by native runtime to wake IO waiters. */

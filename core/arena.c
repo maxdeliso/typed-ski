@@ -66,6 +66,50 @@ static atomic_uint GROW_COUNT = 0;
  * overflow at MAX_CAP). */
 static size_t ARENA_RESERVED_BYTES = 0;
 
+#ifndef __wasm__
+/* Native mmap-backed file I/O is ambient arena state. The session layer treats
+ * REDUCE_FILE as single-flight, so at most one file-backed reduction may be
+ * active per process at a time.
+ */
+static uint8_t *mmap_stdin_buf = NULL;
+static size_t mmap_stdin_size = 0;
+static atomic_size_t mmap_stdin_cursor = 0;
+/* Distinguishes an active empty file from "no file-backed stdin". */
+static atomic_bool mmap_stdin_active = false;
+
+static uint8_t *mmap_stdout_buf = NULL;
+static size_t mmap_stdout_size = 0;
+static atomic_size_t mmap_stdout_cursor = 0;
+
+void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
+                       size_t out_size) {
+  bool file_io_active =
+      (in_map != NULL) || (in_size != 0) || (out_map != NULL) || (out_size != 0);
+  mmap_stdin_buf = in_map;
+  mmap_stdin_size = in_size;
+  atomic_store_explicit(&mmap_stdin_cursor, 0, memory_order_release);
+  mmap_stdout_buf = out_map;
+  mmap_stdout_size = out_size;
+  atomic_store_explicit(&mmap_stdout_cursor, 0, memory_order_release);
+  atomic_store_explicit(&mmap_stdin_active, file_io_active,
+                        memory_order_release);
+}
+
+size_t arena_get_mmap_out_cursor(void) {
+  return atomic_load_explicit(&mmap_stdout_cursor, memory_order_acquire);
+}
+#else
+void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
+                       size_t out_size) {
+  (void)in_map;
+  (void)in_size;
+  (void)out_map;
+  (void)out_size;
+}
+
+size_t arena_get_mmap_out_cursor(void) { return 0; }
+#endif
+
 /** Cached node IDs for True (K) and False (K I); invalidated by reset(). */
 static uint32_t TRUE_ID = EMPTY;
 static uint32_t FALSE_ID = EMPTY;
@@ -1778,17 +1822,40 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
         continue;
       }
       if (sym == ARENA_SYM_READ_ONE) {
+        if (ws->remaining_steps == 0) {
+          if (yield_on_step_limit) {
+            return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                     allow_retry);
+          }
+          ws->mode = MODE_RETURN;
+          continue;
+        }
+
+#ifndef __wasm__
+        if (atomic_load_explicit(&mmap_stdin_active, memory_order_acquire)) {
+          size_t cursor = atomic_fetch_add_explicit(&mmap_stdin_cursor, 1,
+                                                    memory_order_relaxed);
+          if (cursor < mmap_stdin_size) {
+            uint8_t byte = mmap_stdin_buf[cursor];
+            ws->remaining_steps--;
+            ws->current_val = allocCons(right, allocU8(byte));
+            ws->mode = MODE_DESCEND;
+            continue;
+          } else {
+            /* Deterministic EOF for finite files: return from reduction with
+             * error instead of parking forever. */
+            atomic_fetch_sub_explicit(&mmap_stdin_cursor, 1,
+                                      memory_order_relaxed);
+            StepOutcome out =
+                park_budget_yield(slice_id, ws, SUSP_IO_EOF, allow_retry);
+            return out;
+          }
+        }
+#endif
+
         uint8_t byte;
         if (try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdin), &byte,
                         1)) {
-          if (ws->remaining_steps == 0) {
-            if (yield_on_step_limit) {
-              return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
-                                       allow_retry);
-            }
-            ws->mode = MODE_RETURN;
-            continue;
-          }
           ws->remaining_steps--;
           ws->current_val = allocCons(right, allocU8(byte));
           ws->mode = MODE_DESCEND;
@@ -1811,17 +1878,40 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
           debug_check_child_ptr(byte_node);
           if (byte_node < MAX_CAP &&
               load_kind_pub(kinds, byte_node) == ARENA_KIND_U8) {
+            if (ws->remaining_steps == 0) {
+              if (yield_on_step_limit) {
+                return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                         allow_retry);
+              }
+              ws->mode = MODE_RETURN;
+              continue;
+            }
+
             uint8_t byte = (uint8_t)load_u8_payload(syms, byte_node);
+
+#ifndef __wasm__
+            if (mmap_stdout_buf != NULL) {
+              size_t cursor = atomic_fetch_add_explicit(&mmap_stdout_cursor, 1,
+                                                        memory_order_relaxed);
+              if (cursor < mmap_stdout_size) {
+                mmap_stdout_buf[cursor] = byte;
+                ws->remaining_steps--;
+                ws->current_val = allocCons(right, byte_node);
+                ws->mode = MODE_DESCEND;
+                continue;
+              } else {
+                /* Overflow: deterministic failure. */
+                atomic_fetch_sub_explicit(&mmap_stdout_cursor, 1,
+                                          memory_order_relaxed);
+                StepOutcome out =
+                    park_budget_yield(slice_id, ws, SUSP_IO_ERROR, allow_retry);
+                return out;
+              }
+            }
+#endif
+
             if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
                             1)) {
-              if (ws->remaining_steps == 0) {
-                if (yield_on_step_limit) {
-                  return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
-                                           allow_retry);
-                }
-                ws->mode = MODE_RETURN;
-                continue;
-              }
               ws->remaining_steps--;
               ws->current_val = allocCons(right, byte_node);
               ws->mode = MODE_DESCEND;
@@ -2232,10 +2322,14 @@ void workerLoop(uint32_t worker_id) {
       StepOutcome o = step_iterative(worker_id, &ws, &gas, h, true, true, true);
       if (o.type == RESULT_YIELD) {
         uint32_t reason = controlSuspensionReason(o.val);
-        uint32_t event =
-            (reason == SUSP_WAIT_IO_STDIN || reason == SUSP_WAIT_IO_STDOUT)
-                ? CQ_EVENT_IO_WAIT
-                : CQ_EVENT_YIELD;
+        uint32_t event;
+        if (reason == SUSP_WAIT_IO_STDIN || reason == SUSP_WAIT_IO_STDOUT) {
+          event = CQ_EVENT_IO_WAIT;
+        } else if (reason == SUSP_IO_EOF || reason == SUSP_IO_ERROR) {
+          event = CQ_EVENT_ERROR;
+        } else {
+          event = CQ_EVENT_YIELD;
+        }
         Cqe res = {o.val, job.req_id, event};
         if (use_qsbr)
           atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,

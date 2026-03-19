@@ -76,7 +76,6 @@ Deno.test("prelude Result/Pair/ParseError data types", async () => {
 
 Deno.test({
   name: "trip harness evaluates IO programs",
-  ignore: false, // TODO: later
   fn: async () => {
     const source = loadInput("echoOne.trip", __dirname);
 

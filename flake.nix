@@ -35,15 +35,11 @@
         '';
 
         generateVersionTs = pkgs.writeShellScriptBin "generate-version-ts" ''
-          mkdir -p lib/shared
-          cat > lib/shared/version.generated.ts << EOF_VERSION
-          export const VERSION = "${version}";
-          EOF_VERSION
-          echo "Generated lib/shared/version.generated.ts"
+          ${deno}/bin/deno run -A scripts/generateVersion.ts
         '';
 
         generateArenaHeaderC = pkgs.writeShellScriptBin "generate-arena-header-c" ''
-          ${deno}/bin/deno run -A scripts/generate-arena-header-c.ts
+          ${deno}/bin/deno run -A scripts/generateArenaHeaderC.ts
         '';
 
         typedSki = pkgs.stdenv.mkDerivation {
@@ -92,7 +88,7 @@
                   -Wl,--export=debugGetRingEntries \
                   -matomics -mbulk-memory -mmutable-globals \
                   -isystem "${wasmIncludeDir}" \
-                  -o wasm/release.wasm c/arena.c
+                  -o wasm/release.wasm core/arena.c
             ${pkgs.binaryen}/bin/wasm-opt -Oz --strip-producers --strip-target-features \
               wasm/release.wasm -o wasm/release.wasm
 
@@ -101,7 +97,7 @@
             $CC -O3 -flto -ffunction-sections -fdata-sections -march=native \
                 -Wall -Wextra -Wpedantic -Wstrict-prototypes -Werror -pthread -std=c11 \
                 -static -Wl,--gc-sections \
-                -o bin/thanatos c/arena.c c/thanatos.c c/ski_io.c c/main.c
+                -o bin/thanatos core/arena.c core/thanatos.c core/ski_io.c core/util.c core/batch.c core/main.c
 
             echo ""
             echo "=== WASM Module Structure (release) ==="
@@ -131,6 +127,7 @@
             pkgs.binaryen
             pkgs.mbake
             pkgs.nix
+            pkgs.lcov
             deno
             generateArenaHeaderC
           ];

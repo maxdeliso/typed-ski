@@ -10,8 +10,9 @@
 import type { SKIExpression } from "../../ski/expression.ts";
 
 /**
+ * @internal
  * Default upper bound for per-request suspension resubmissions.
- *
+
  * Rationale:
  * - Real workloads (especially large linked Trip programs) can legitimately yield
  *   many times before converging.
@@ -20,6 +21,7 @@ import type { SKIExpression } from "../../ski/expression.ts";
 export const DEFAULT_MAX_RESUBMITS = 10_000;
 
 /**
+ * @internal
  * Error thrown when a work unit exceeds the maximum number of resubmissions.
  * This typically indicates that the expression does not normalize (diverges).
  */
@@ -42,6 +44,7 @@ type RequestResolver = {
 };
 
 /**
+ * @internal
  * Optional instrumentation hooks (used by `server/workbench.js`).
  *
  * Notes:
@@ -76,6 +79,7 @@ export interface RequestTrackerHooks {
 }
 
 /**
+ * @internal
  * Manages request lifecycle for parallel evaluation.
  */
 export class RequestTracker {

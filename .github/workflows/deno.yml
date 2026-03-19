@@ -21,6 +21,9 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
+      - name: Verify dist bundles
+        run: nix --extra-experimental-features 'nix-command flakes' develop --command make bundle-internal
+
       - name: Run tests and generate coverage
         run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
 

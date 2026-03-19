@@ -1,16 +1,17 @@
-#!/usr/bin/env -S deno run --allow-net --allow-read --allow-env --allow-run --allow-run
+#!/usr/bin/env -S deno run --allow-net --allow-read --allow-env --allow-run
+
+import { join } from "std/path";
 
 /**
  * Simple HTTP server for WASM profiling demo
  * Sets required headers for SharedArrayBuffer support
  * Serves from project root to access wasm/ directory
- * Transpiles TypeScript to JavaScript on the fly for browser compatibility
+ * Expects pre-bundled JavaScript files for any TypeScript requests.
  */
 
 const PORT = parseInt(Deno.args[0] || "8080", 10);
 
 // Get project root (parent of server/)
-// This script is in server/, so project root is parent directory
 const serverFileUrl = import.meta.url;
 const serverDirUrl = new URL(".", serverFileUrl);
 const projectRootUrl = new URL("..", serverDirUrl);
@@ -21,38 +22,6 @@ const projectRootPrefix = projectRootPath.endsWith("/")
 
 function isWithinProjectRoot(path: string): boolean {
   return path === projectRootPath || path.startsWith(projectRootPrefix);
-}
-
-async function transpileTypeScript(filePath: string): Promise<string> {
-  try {
-    // Use deno bundle to transpile TypeScript to JavaScript
-    // This bundles the file and all its dependencies into a single JS file
-    // Use --no-check to avoid type checking issues and ensure browser compatibility
-    const bundleProcess = new Deno.Command(Deno.execPath(), {
-      args: [
-        "bundle",
-        "--no-check",
-        "--platform=browser",
-        filePath,
-      ],
-      stdout: "piped",
-      stderr: "piped",
-      cwd: projectRootUrl.pathname,
-    });
-
-    const { code, stdout, stderr } = await bundleProcess.output();
-
-    if (code !== 0) {
-      const errorText = new TextDecoder().decode(stderr);
-      throw new Error(`Bundle failed: ${errorText}`);
-    }
-
-    const jsContent = new TextDecoder().decode(stdout);
-    return jsContent;
-  } catch (error) {
-    console.error(`Transpilation error for ${filePath}:`, error);
-    throw error;
-  }
 }
 
 // Base headers for SharedArrayBuffer support (reused across requests)
@@ -80,7 +49,9 @@ const contentTypeTable: Record<string, string> = {
 };
 
 function getContentType(filePath: string): string {
-  const ext = filePath.substring(filePath.lastIndexOf("."));
+  const lastDot = filePath.lastIndexOf(".");
+  if (lastDot === -1) return "text/plain";
+  const ext = filePath.substring(lastDot);
   return contentTypeTable[ext] || "text/plain";
 }
 
@@ -120,33 +91,28 @@ async function handler(req: Request): Promise<Response> {
     // Check if file exists
     const stat = await Deno.stat(resolvedPath);
 
-    // Handle TypeScript files - transpile to JavaScript
+    // Handle TypeScript files by serving the matching pre-bundled JS from dist/.
     if (localPath.endsWith(".ts") || localPath.endsWith(".tsx")) {
-      try {
-        const jsContent = await transpileTypeScript(resolvedPath);
+      const bundleFileName = localPath.substring(localPath.lastIndexOf("/") + 1)
+        .replace(/\.tsx?$/, ".js");
+      const jsPath = join(projectRootPath, "dist", bundleFileName);
 
+      try {
+        const jsContent = await Deno.readTextFile(jsPath);
         const headers = createHeaders("application/javascript");
         return new Response(jsContent, { headers });
-      } catch (transpileError) {
-        console.error(
-          `Transpilation error for ${resolvedPath}:`,
-          transpileError,
-        );
-        const errorMessage = transpileError instanceof Error
-          ? transpileError.message
-          : String(transpileError);
-        const errorStack = transpileError instanceof Error
-          ? transpileError.stack
-          : "";
-        return new Response(
-          `Error transpiling TypeScript: ${errorMessage}\n\n${errorStack}`,
-          {
-            status: 500,
-            headers: {
-              "Content-Type": "text/plain",
-            },
-          },
-        );
+      } catch (_e) {
+        const errorMsg =
+          `Error: Pre-bundled JavaScript file not found for ${localPath}.\n` +
+          `Expected at: ${jsPath}\n\n` +
+          `The workbench now serves browser bundles from dist/. ` +
+          `Please run 'make bundle' or 'make start' to generate the necessary artifacts.`;
+
+        console.error(errorMsg);
+        return new Response(errorMsg, {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        });
       }
     }
 

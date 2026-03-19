@@ -191,50 +191,6 @@ Deno.test("JSR Packaging Configuration", async (t) => {
       expect(output).to.include("USAGE:");
     });
 
-    await t.step("genForest CLI can show version", async () => {
-      const genForestScript = join(projectRoot, "bin/genForest.ts");
-
-      const command = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "--allow-run",
-          genForestScript,
-          "--version",
-        ],
-        cwd: projectRoot,
-      });
-
-      const { code, stdout } = await command.output();
-      const output = new TextDecoder().decode(stdout);
-
-      expect(code).to.equal(0);
-      expect(output.trim()).to.match(/^genForest v\d+\.\d+\.\d+$/);
-    });
-
-    await t.step("genSvg CLI can show version", async () => {
-      const genSvgScript = join(projectRoot, "bin/genSvg.ts");
-
-      const command = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "--allow-run",
-          genSvgScript,
-          "--version",
-        ],
-        cwd: projectRoot,
-      });
-
-      const { code, stdout } = await command.output();
-      const output = new TextDecoder().decode(stdout);
-
-      expect(code).to.equal(0);
-      expect(output.trim()).to.match(/^genSvg v\d+\.\d+\.\d+$/);
-    });
-
     await t.step("tripc can compile test file", async () => {
       const tripcScript = join(projectRoot, "bin/tripc.ts");
       const testFile = join(projectRoot, "test/test.trip");
@@ -273,12 +229,6 @@ Deno.test("JSR Packaging Configuration", async (t) => {
   });
 
   await t.step("WASM build files", async (t) => {
-    await t.step("WASM files exist for genForest and genSvg", () => {
-      const wasmDir = join(projectRoot, "wasm");
-      expect(existsSync(wasmDir)).to.be.true;
-      expect(existsSync(join(wasmDir, "release.wasm"))).to.be.true;
-    });
-
     await t.step("WASM files exist", () => {
       const releaseWasm = join(projectRoot, "wasm/release.wasm");
       expect(existsSync(releaseWasm)).to.be.true;

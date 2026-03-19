@@ -1,6 +1,6 @@
 import { assert, expect } from "chai";
 
-import { Y } from "../../lib/consts/combinators.ts";
+import { Y } from "../util/combinators.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {

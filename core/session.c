@@ -13,11 +13,8 @@
 
 #define MAX_STEPS 0xffffffffu
 
-void thanatos_session_init(ThanatosSession *s, bool is_daemon, bool use_dag,
-                           FILE *stdout_stream) {
+void thanatos_session_init(ThanatosSession *s, FILE *stdout_stream) {
   db_init(&s->out);
-  s->is_daemon = is_daemon;
-  s->use_dag = use_dag;
   s->stdout_stream = stdout_stream;
 }
 
@@ -46,39 +43,22 @@ static bool unparse_and_respond(ThanatosSession *s, uint32_t result,
     return false;
 
   while (1) {
-    size_t n;
-    if (s->use_dag) {
-      n = unparse_dag(result, s->out.ptr, s->out.cap);
-    } else {
-      n = unparse_ski(result, s->out.ptr, s->out.cap);
+    size_t n = unparse_dag(result, s->out.ptr, s->out.cap);
+
+    if (n == (size_t)-1) {
+      if (!db_ensure(&s->out, s->out.cap * 2))
+        return false;
+      continue;
+    }
+    if (n == 0) {
+      session_printf(s, "ERR runtime-control-ptr\n");
+      return true;
     }
 
-    if (s->use_dag) {
-      if (n == (size_t)-1) {
-        if (!db_ensure(&s->out, s->out.cap * 2))
-          return false;
-        continue;
-      }
-      if (n == 0) {
-        session_printf(s, "ERR runtime-control-ptr\n");
-        return true;
-      }
-    } else {
-      if (n >= s->out.cap) {
-        if (!db_ensure(&s->out, s->out.cap * 2))
-          return false;
-        continue;
-      }
+    if (protocol_prefix && protocol_prefix[0] != '\0') {
+      session_printf(s, "%s", protocol_prefix);
     }
-
-    if (s->is_daemon) {
-      if (protocol_prefix && protocol_prefix[0] != '\0') {
-        session_printf(s, "%s", protocol_prefix);
-      }
-      session_printf(s, "%s\n", s->out.ptr);
-    } else {
-      session_printf(s, "%s\n", s->out.ptr);
-    }
+    session_printf(s, "%s\n", s->out.ptr);
     return true;
   }
 }
@@ -139,27 +119,21 @@ static int parse_one_path(const char **p_start, char *out, size_t max) {
 }
 
 static void handle_quit(ThanatosSession *s) {
-  if (s->is_daemon) {
-    session_printf(s, "OK\n");
-    session_fflush(s);
-    exit(0);
-  }
+  session_printf(s, "OK\n");
+  session_fflush(s);
+  exit(0);
 }
 
 static void handle_ping(ThanatosSession *s) {
-  if (s->is_daemon) {
-    session_printf(s, "OK\n");
-    session_fflush(s);
-  }
+  session_printf(s, "OK\n");
+  session_fflush(s);
 }
 
 static void handle_reset(ThanatosSession *s) {
   reset();
   thanatos_reset_stats();
-  if (s->is_daemon) {
-    session_printf(s, "OK\n");
-    session_fflush(s);
-  }
+  session_printf(s, "OK\n");
+  session_fflush(s);
 }
 
 static void handle_stats(ThanatosSession *s) {
@@ -172,20 +146,15 @@ static void handle_stats(ThanatosSession *s) {
                      &total_cons_allocs, &total_cont_allocs, &total_susp_allocs,
                      &duplicate_lost_allocs, &hashcons_hits, &hashcons_misses,
                      &events, &dropped);
-  if (s->is_daemon) {
-    session_printf(
-        s,
-        "OK top=%u capacity=%u total_nodes=%llu total_steps=%llu events=%llu "
-        "dropped=%llu total_cons_allocs=%llu total_cont_allocs=%llu "
-        "total_susp_allocs=%llu duplicate_lost_allocs=%llu "
-        "hashcons_hits=%llu hashcons_misses=%llu\n",
-        (unsigned)top, (unsigned)capacity, total_nodes, total_steps, events,
-        dropped, total_cons_allocs, total_cont_allocs, total_susp_allocs,
-        duplicate_lost_allocs, hashcons_hits, hashcons_misses);
-  } else {
-    session_printf(s, "top=%u capacity=%u steps=%llu\n", (unsigned)top,
-                   (unsigned)capacity, total_steps);
-  }
+  session_printf(
+      s,
+      "OK top=%u capacity=%u total_nodes=%llu total_steps=%llu events=%llu "
+      "dropped=%llu total_cons_allocs=%llu total_cont_allocs=%llu "
+      "total_susp_allocs=%llu duplicate_lost_allocs=%llu "
+      "hashcons_hits=%llu hashcons_misses=%llu\n",
+      (unsigned)top, (unsigned)capacity, total_nodes, total_steps, events,
+      dropped, total_cons_allocs, total_cont_allocs, total_susp_allocs,
+      duplicate_lost_allocs, hashcons_hits, hashcons_misses);
   session_fflush(s);
 }
 
@@ -195,28 +164,21 @@ static void handle_reduce(ThanatosSession *s, const char *payload, size_t len) {
     len--;
   }
   if (len == 0) {
-    if (s->is_daemon)
-      session_printf(s, "ERR REDUCE requires payload\n");
+    session_printf(s, "ERR REDUCE requires payload\n");
     session_fflush(s);
     return;
   }
   size_t end_idx = 0;
-  uint32_t root;
-  if (s->use_dag) {
-    root = parse_dag(payload, len, &end_idx);
-  } else {
-    root = parse_ski(payload, len, &end_idx);
-  }
+  uint32_t root = parse_dag(payload, len, &end_idx);
 
   if (root == EMPTY) {
-    session_printf(s, s->is_daemon ? "ERR parse error\n" : "parse error\n");
+    session_printf(s, "ERR parse error\n");
     session_fflush(s);
     return;
   }
   uint32_t result = thanatos_reduce_to_normal_form(root);
   if (result == EMPTY) {
-    session_printf(s, s->is_daemon ? "ERR reduction error\n"
-                                   : "reduction error\n");
+    session_printf(s, "ERR reduction error\n");
     session_fflush(s);
     return;
   }
@@ -504,12 +466,7 @@ void thanatos_session_handle_line(ThanatosSession *s, const char *line,
   } else if (command_matches(line, len, "STEP", 4)) {
     handle_step(s, line, len);
   } else {
-    /* If no command prefix and not strictly daemon, treat as naked REDUCE. */
-    if (!s->is_daemon) {
-      handle_reduce(s, line, len);
-    } else {
-      session_printf(s, "ERR unknown command\n");
-      session_fflush(s);
-    }
+    session_printf(s, "ERR unknown command\n");
+    session_fflush(s);
   }
 }

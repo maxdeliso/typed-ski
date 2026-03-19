@@ -6,12 +6,12 @@ import type { DataDefinition, SymbolTable } from "../../../lib/meta/trip.ts";
 import { parseTripLang } from "../../../lib/parser/tripLang.ts";
 import {
   mkSystemFAbs,
-  mkSystemFApp,
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFVar,
   type SystemFTerm,
 } from "../../../lib/terms/systemF.ts";
+import { mkSystemFApp } from "../../util/ast.ts";
 import {
   arrow,
   type BaseType,

@@ -11,6 +11,7 @@ import {
   eraseSystemF,
   externalReferences,
   indexSymbols,
+  ParallelArenaEvaluatorWasm,
   parseSystemF,
   parseTripLang,
   resolveExternalProgramReferences,
@@ -22,7 +23,6 @@ import {
 } from "../../lib/index.ts";
 
 import type { BaseType } from "../../lib/types/types.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 
 import {
   resolvePoly,

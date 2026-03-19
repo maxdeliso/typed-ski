@@ -71,22 +71,29 @@ export enum SabHeaderField {
 ${enumContent}}
 
 export const SABHEADER_HEADER_SIZE_U32 = ${totalU32};
-export const SABHEADER_HEADER_FIELDS = [
-${fieldsContent}] as const;
 
 /**
  * Ring buffer header constants
  */
+
 const CACHE_LINE_BYTES = 64;
 const CACHE_LINE_U32 = CACHE_LINE_BYTES / 4;
 
+/** @internal */
 export const RING_HEADER_BYTES = CACHE_LINE_BYTES * 3;
+/** @internal */
 export const RING_HEADER_U32 = RING_HEADER_BYTES / 4;
+/** @internal */
 export const RING_HEAD_INDEX = 0;
+/** @internal */
 export const RING_NOT_FULL_INDEX = 1;
+/** @internal */
 export const RING_TAIL_INDEX = CACHE_LINE_U32;
+/** @internal */
 export const RING_NOT_EMPTY_INDEX = RING_TAIL_INDEX + 1;
+/** @internal */
 export const RING_MASK_INDEX = RING_TAIL_INDEX + CACHE_LINE_U32;
+/** @internal */
 export const RING_ENTRIES_INDEX = RING_MASK_INDEX + 1;
 `;
 

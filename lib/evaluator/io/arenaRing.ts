@@ -148,6 +148,7 @@ class ArenaRingView {
 }
 
 /**
+ * @internal
  * Container for all IO ring buffers (stdin, stdout, stdinWait).
  */
 export class ArenaIoRings {

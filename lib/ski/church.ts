@@ -138,10 +138,8 @@ const integerRootCeil = (n: bigint, k: bigint): bigint => {
  * Checks if n is a perfect power: n = a^b for integers a, b > 1
  * Returns [a, b] if found, null otherwise.
  * Prefers smallest exponent b to minimize application depth.
- *
- * @internal Exported for testing purposes
  */
-export function findPerfectPower(
+function findPerfectPower(
   value: number | bigint,
 ): [bigint, bigint] | null {
   const n = toBigInt(value);
@@ -167,10 +165,8 @@ export function findPerfectPower(
  * Finds factors of a composite number.
  * Returns [a, b] where a * b = n, preferring balanced factors.
  * Returns null if n is prime.
- *
- * @internal Exported for testing purposes
  */
-export function findFactors(value: number | bigint): [bigint, bigint] | null {
+function findFactors(value: number | bigint): [bigint, bigint] | null {
   const n = toBigInt(value);
   if (n < 4n) return null;
   const sqrtN = sqrtBigInt(n);
@@ -367,6 +363,7 @@ export const UnChurchNumber = async (
 };
 
 /**
+ * @internal
  * UnChurchBoolean applies the Church boolean expression to two Church numerals
  * (here ChurchN(1) and ChurchN(0)) and then reduces and uses UnChurch to obtain a bigint.
  * If the result is 1, then the Church boolean was true; if 0, then it was false.
@@ -383,4 +380,5 @@ export const UnChurchBoolean = async (
   return (await UnChurchNumber(testExpr, evaluator)) === 1n;
 };
 
+/** @internal */
 export const ChurchB = (b: boolean): SKIExpression => b ? True : False;

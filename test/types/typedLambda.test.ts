@@ -3,11 +3,10 @@ import { expect } from "chai";
 import { mkVar } from "../../lib/terms/lambda.ts";
 import {
   addBinding,
-  createTypedApplication,
   emptyContext,
-  mkTypedAbs,
   typecheckTypedLambda,
 } from "../../lib/types/typedLambda.ts";
+import { createTypedApplication, mkTypedAbs } from "../util/ast.ts";
 import {
   arrow,
   arrows,
@@ -19,14 +18,14 @@ Deno.test("typed λ-calculus type-checker", async (t) => {
   await t.step("type-checking errors", async (t) => {
     await t.step("free variable triggers error", () => {
       expect(() => typecheckTypedLambda(mkVar("x")))
-        .to.throw(/unknown term named: x/);
+        .to.throw(/unbound variable x/);
     });
 
     await t.step("duplicate binding in context", () => {
       let ctx = emptyContext();
       ctx = addBinding(ctx, "x", mkTypeVariable("a"));
       expect(() => addBinding(ctx, "x", mkTypeVariable("b")))
-        .to.throw(/duplicated binding for name: x/);
+        .to.throw(/variable x already bound in context/);
     });
   });
 

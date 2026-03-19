@@ -6,14 +6,20 @@
  *
  * @module
  */
-import { arrow, type BaseType, typesLitEq } from "./types.ts";
+import { mkUntypedAbs } from "../terms/lambda.ts";
+import type { UntypedLambda } from "../terms/lambda.ts";
 import { unparseType } from "../parser/type.ts";
-import {
-  createApplication,
-  type LambdaVar,
-  mkUntypedAbs,
-  type UntypedLambda,
-} from "../terms/lambda.ts";
+import { TypeError } from "./typeError.ts";
+import { typesLitEq } from "./types.ts";
+import type { BaseType } from "./types.ts";
+
+/**
+ * A term variable in the typed lambda calculus.
+ */
+interface TypedLambdaVar {
+  kind: "lambda-var";
+  name: string;
+}
 
 /**
  * This is a typed lambda abstraction, consisting of three parts.
@@ -30,7 +36,7 @@ import {
  * The type is a.
  * The body of the expression is y.
  */
-interface TypedLambdaAbs {
+export interface TypedLambdaAbs {
   kind: "typed-lambda-abstraction";
   varName: string;
   ty: BaseType;
@@ -38,24 +44,7 @@ interface TypedLambdaAbs {
 }
 
 /**
- * This recursive type represents the legal terms of the simply typed lambda calculus.
- *
- * Simply typed lambda calculus extends the untyped lambda calculus with explicit
- * type annotations. Every abstraction must specify the type of its parameter,
- * and type checking ensures that applications are well-typed.
- *
- * A TypedLambda can be:
- * - a variable (LambdaVar),
- * - a typed abstraction λx:T.t (TypedLambdaAbs)
- * - an application t u (TypedLambdaApplication)
- */
-export type TypedLambda =
-  | LambdaVar
-  | TypedLambdaAbs
-  | TypedLambdaApplication;
-
-/**
- * An application in the typed lambda calculus
+ * An application in the typed lambda calculus.
  */
 interface TypedLambdaApplication {
   kind: "non-terminal";
@@ -90,70 +79,77 @@ export const createTypedApplication = (
 });
 
 /**
- * Γ, or capital Gamma, represents the set of mappings from names to types.
+ * A typed lambda term can be one of:
+ * 1. A variable (TypedLambdaVar)
+ * 2. An abstraction (TypedLambdaAbs)
+ * 3. An application (TypedLambdaApplication)
+ */
+export type TypedLambda =
+  | TypedLambdaVar
+  | TypedLambdaAbs
+  | TypedLambdaApplication;
+
+/**
+ * A context is a mapping from variable names to their types.
  */
 export type Context = Map<string, BaseType>;
 
-/** Create an empty context. */
-export function emptyContext(): Context {
-  return new Map<string, BaseType>();
-}
+/**
+ * Create an empty context.
+ */
+export const emptyContext = (): Context => new Map();
 
+/**
+ * Add a binding to a context.
+ */
 export const addBinding = (
   ctx: Context,
   name: string,
   ty: BaseType,
 ): Context => {
-  if (ctx.has(name)) {
-    throw new TypeError("duplicated binding for name: " + name);
-  }
-
   const newCtx = new Map(ctx);
+  if (newCtx.has(name)) {
+    throw new TypeError(`variable ${name} already bound in context`);
+  }
   newCtx.set(name, ty);
   return newCtx;
 };
 
 /**
- * Infers the type of a simply typed lambda calculus term under an empty context.
- * @param typedTerm a typed lambda term
- * @returns the inferred base type
- * @throws TypeError if the term is ill-typed
- */
-export const typecheckTypedLambda = (typedTerm: TypedLambda): BaseType => {
-  return typecheckGiven(emptyContext(), typedTerm);
-};
-
-/**
- * Type checks terms in the simply typed lambda calculus.
- * Throws an Error if a valid type could not be deduced.
+ * Typechecks a typed lambda expression.
  *
- * @param ctx a set of bindings from names to types
- * @param typedTerm a lambda term annotated with an input type
- * @returns the type of the entire term
+ * This function performs type inference and checking on a typed lambda term.
+ * It ensures that all variables are bound and that all function applications
+ * are between compatible types.
+ *
+ * @param t The typed lambda term to check
+ * @param ctx The context containing variable type assignments
+ * @returns The type of the expression if it is well-typed
+ * @throws TypeError if the expression is not well-typed
  */
-const typecheckGiven = (
-  ctx: Context,
-  typedTerm: TypedLambda,
+export const typecheckTypedLambda = (
+  t: TypedLambda,
+  ctx: Context = emptyContext(),
 ): BaseType => {
-  switch (typedTerm.kind) {
+  switch (t.kind) {
     case "lambda-var": {
-      const termName = typedTerm.name;
-      const lookedUp = ctx.get(termName);
-
-      if (lookedUp === undefined) {
-        throw new TypeError("unknown term named: " + termName);
+      const ty = ctx.get(t.name);
+      if (ty === undefined) {
+        throw new TypeError(`unbound variable ${t.name}`);
       }
-
-      return lookedUp;
+      return ty;
     }
     case "typed-lambda-abstraction": {
-      const updatedCtx = addBinding(ctx, typedTerm.varName, typedTerm.ty);
-      const bodyTy = typecheckGiven(updatedCtx, typedTerm.body);
-      return arrow(typedTerm.ty, bodyTy);
+      const newCtx = addBinding(ctx, t.varName, t.ty);
+      return {
+        kind: "non-terminal",
+        lft: t.ty,
+        rgt: typecheckTypedLambda(t.body, newCtx),
+      };
     }
     case "non-terminal": {
-      const tyLft = typecheckGiven(ctx, typedTerm.lft);
-      const tyRgt = typecheckGiven(ctx, typedTerm.rgt);
+      const tyLft = typecheckTypedLambda(t.lft, ctx);
+      const tyRgt = typecheckTypedLambda(t.rgt, ctx);
 
       if (tyLft.kind !== "non-terminal") {
         throw new TypeError("arrow type expected on lhs");
@@ -177,22 +173,6 @@ const typecheckGiven = (
   }
 };
 
-export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
-  if (a.kind === "lambda-var" && b.kind === "lambda-var") {
-    return a.name === b.name;
-  } else if (
-    a.kind === "typed-lambda-abstraction" &&
-    b.kind === "typed-lambda-abstraction"
-  ) {
-    return typesLitEq(a.ty, b.ty) && a.varName === b.varName &&
-      typedTermsLitEq(a.body, b.body);
-  } else if (a.kind === "non-terminal" && b.kind === "non-terminal") {
-    return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt);
-  } else {
-    return false;
-  }
-};
-
 /**
  * Erases type annotations from a simply typed lambda expression.
  *
@@ -211,10 +191,11 @@ export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
     case "typed-lambda-abstraction":
       return mkUntypedAbs(t.varName, eraseTypedLambda(t.body));
     case "non-terminal":
-      return createApplication(
-        eraseTypedLambda(t.lft),
-        eraseTypedLambda(t.rgt),
-      );
+      return {
+        kind: "non-terminal",
+        lft: eraseTypedLambda(t.lft),
+        rgt: eraseTypedLambda(t.rgt),
+      };
     default:
       throw new Error("Unknown term kind");
   }

@@ -5,9 +5,10 @@
  */
 
 import {
-  type ArenaEvaluatorWasm,
+  ArenaEvaluatorWasm,
   createArenaEvaluatorReleaseSync,
 } from "./arenaEvaluator.ts";
+export { ArenaEvaluatorWasm };
 import type { Evaluator } from "./evaluator.ts";
 
 /**

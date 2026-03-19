@@ -20,7 +20,7 @@ import type {
 } from "../trip.ts";
 import { CompilationError } from "./errors.ts";
 
-export interface IndexSymbolsOptions {
+interface IndexSymbolsOptions {
   /**
    * ADT metadata indexed by imported module name.
    * This is typically sourced from imported `.tripc` objects.

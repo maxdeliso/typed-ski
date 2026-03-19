@@ -22,19 +22,11 @@ static uint32_t default_num_workers(void) {
 int main(int argc, char **argv) {
   uint32_t num_workers = default_num_workers();
   uint32_t arena_capacity = 1 << 20;
-  int use_dag = 0;
-  int daemon_mode = 0;
   const char *stdin_file = NULL;
   int arg_idx = 1;
 
   while (arg_idx < argc) {
-    if (strcmp(argv[arg_idx], "--daemon") == 0) {
-      daemon_mode = 1;
-      arg_idx++;
-    } else if (strcmp(argv[arg_idx], "--dag") == 0) {
-      use_dag = 1;
-      arg_idx++;
-    } else if (strcmp(argv[arg_idx], "--stdin-file") == 0) {
+    if (strcmp(argv[arg_idx], "--stdin-file") == 0) {
       arg_idx++;
       if (arg_idx >= argc) {
         fprintf(stderr, "--stdin-file requires a path\n");
@@ -68,20 +60,16 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (daemon_mode) {
-    use_dag = 1;
-  }
-
   ThanatosConfig config = {
       .num_workers = num_workers,
       .arena_capacity = arena_capacity,
       .stdin_fd = runtime_stdin_fd,
   };
   thanatos_init(config);
-  thanatos_start_threads(!daemon_mode);
+  thanatos_start_threads(false);
 
   ThanatosSession session;
-  thanatos_session_init(&session, daemon_mode, use_dag, stdout);
+  thanatos_session_init(&session, stdout);
 
   char *line = NULL;
   size_t line_cap = 0;

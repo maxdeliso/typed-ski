@@ -119,6 +119,7 @@ const createSystemFApplication = (
 });
 
 /**
+ * @internal
  * Expands systemF-let to App(Abs(x, typeOfValue, body), value) using the
  * type of value. Used before passes that expect no systemF-let (e.g. de Bruijn).
  */

@@ -3,11 +3,8 @@ import { expect } from "chai";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 
-import {
-  ArenaEvaluatorWasm,
-  type ArenaWasmExports,
-  createArenaEvaluator,
-} from "../../lib/evaluator/arenaEvaluator.ts";
+import { ArenaEvaluatorWasm, createArenaEvaluator } from "../../lib/index.ts";
+import type { ArenaWasmExports } from "../../lib/evaluator/arenaEvaluator.ts";
 import {
   getLeft,
   getOrBuildArenaViews,

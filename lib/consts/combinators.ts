@@ -8,40 +8,18 @@
  */
 import { parseSKI } from "../parser/ski.ts";
 import { apply, applyMany } from "../ski/expression.ts";
+export { I, K, S } from "../ski/terminal.ts";
 import { I, K, S } from "../ski/terminal.ts";
 
-/*
- * Zero. apply a function to its arguments zero times.
- *
- * λfx.x
- *
- * KIfx
- * Ix (by K)
- * x (by I)
- *
- * λfx.x ≡ KI
- */
-export const Zero = apply(K, I);
-export const Snd = Zero;
+/** @internal */
+export const True = K;
 
 /*
  * false is the second alternative of two arguments
- *
- * false ? a : b = b
- *
- * λab.b ≡ KI ≡ False
  */
-export const False = Zero;
+export const False = apply(K, I);
 
-/*
- * true is the first alternative of two arguments
- *
- * true ? a : b = a
- *
- * λab.a ≡ K ≡ True
- */
-export const True = K;
-export const Fst = True;
+export const Zero = False;
 
 /*
  * One. apply a function to its arguments once.
@@ -94,22 +72,6 @@ export const B = parseSKI("S(KS)K");
 export const Succ = apply(S, B);
 
 /*
- * Binary addition
- *
- * λmnfx.mf((nf)x)
- *
- * BS(BB)mnfx
- * S((BB)m)nfx
- * ((BB)m)f(nf)x
- * BBmf(nf)x
- * B(mf)(nf)x
- * (mf)((nf)x)
- *
- * λmnfx.mf((nf)x) ≡ BS(BB) ≡ Plus
- */
-export const Plus = applyMany(B, S, apply(B, B));
-
-/*
  * Cardinal
  *
  * or flip once removed
@@ -142,7 +104,8 @@ const C = applyMany(S, applyMany(B, B, S), apply(K, K));
  */
 const T = apply(C, I);
 
-/*
+/**
+ * @internal
  * Vireo
  *
  * or Pair
@@ -161,54 +124,3 @@ const T = apply(C, I);
  * Sometimes called a cons cell.
  */
 export const V = applyMany(B, C, T);
-
-/*
- * Retrieve the first element in a Cons cell.
- *
- * Car p
- *
- * p = <a, b>
- *
- * T Fst p
- * p Fst
- * p K
- * a
- */
-export const Car = apply(T, Fst);
-
-/*
- * Retrieve the second element in a Cons cell.
- *
- * Cdr p
- *
- * p = <a, b>
- *
- * T Snd p
- * p Snd
- * p KI
- * b
- */
-export const Cdr = apply(T, Snd);
-
-/*
- * Duplicate the second argument of a function.
- *
- * λxy.xyy
- *
- * SS(SK)xy
- * Sx((SK)x)y
- * xy(((SK)x)y)
- * xy(Ky(Kx))
- * xyy
- *
- * λxy.xyy ≡ W
- */
-
-// λabcde.ab(cde)
-const E = apply(B, applyMany(B, B, B));
-
-// λabc.cba
-export const F = applyMany(E, T, T, E, T);
-
-// λf.(λx.f(x x))(λx.f(x x))
-export const Y = parseSKI("S(K(SII))(S(S(KS)K)(K(SII)))");

@@ -10,6 +10,7 @@ type CancellableSleep = {
 };
 
 /**
+ * @internal
  * Cancellable sleep that returns both the timer promise and a cancellation function.
  */
 export function sleep(ms: number): CancellableSleep {

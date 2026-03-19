@@ -8,7 +8,8 @@ import {
 import { parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 
-import { emptyContext, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
+import { emptyContext } from "../../lib/types/typedLambda.ts";
+import { typedTermsLitEq } from "../util/ast.ts";
 
 import {
   arrow,

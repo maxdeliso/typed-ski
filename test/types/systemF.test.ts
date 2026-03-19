@@ -2,12 +2,12 @@ import { expect } from "chai";
 
 import {
   mkSystemFAbs,
-  mkSystemFApp,
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFVar,
   type SystemFTerm,
 } from "../../lib/terms/systemF.ts";
+import { mkSystemFApp } from "../util/ast.ts";
 
 import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
 import { unparseType } from "../../lib/parser/type.ts";

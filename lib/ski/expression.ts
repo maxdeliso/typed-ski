@@ -39,7 +39,7 @@ interface SKIApplication {
 /**
  * A U8 literal node (byte value 0..255).
  */
-export interface SKIU8 {
+interface SKIU8 {
   kind: "u8";
   value: number;
 }
@@ -91,6 +91,7 @@ export const toSKIKey = (expr: SKIExpression): SKIKey => {
 };
 
 /**
+ * @internal
  * Compare two SKI expressions for structural equivalence.
  */
 export const equivalent = (
@@ -144,6 +145,7 @@ export const unparseSKI = (expr: SKIExpression): string => {
 };
 
 /**
+ * @internal
  * @param exp an abstract expression.
  * @returns how many terminals are present in the expression.
  */

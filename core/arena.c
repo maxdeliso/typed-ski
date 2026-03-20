@@ -870,6 +870,75 @@ unsigned long long arena_hashcons_misses(void) {
   return atomic_load_explicit(&h->hashcons_misses, memory_order_relaxed);
 }
 
+void arena_hash_table_stats(unsigned long long *out_items,
+                            unsigned long long *out_used_buckets,
+                            unsigned long long *out_chain_sq_sum,
+                            uint32_t *out_max_chain) {
+  unsigned long long items = 0;
+  unsigned long long used_buckets = 0;
+  unsigned long long chain_sq_sum = 0;
+  uint32_t max_chain = 0;
+
+  if (ARENA_BASE_ADDR != NULL) {
+    SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+    while (true) {
+      uint32_t seq = enter_stable(&h);
+      uint32_t cap = atomic_load_explicit(&h->capacity, memory_order_acquire);
+      atomic_uint *buckets =
+          (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
+      atomic_uint *next_idxs =
+          (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
+      atomic_uchar *kinds =
+          (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+      unsigned long long local_items = 0;
+      unsigned long long local_used_buckets = 0;
+      unsigned long long local_chain_sq_sum = 0;
+      uint32_t local_max_chain = 0;
+
+      for (uint32_t b = 0; b < cap; b++) {
+        uint32_t chain = 0;
+        uint32_t cur = atomic_load_explicit(&buckets[b], memory_order_acquire);
+
+        while (cur != EMPTY && cur < cap) {
+          if (chain == cap)
+            break;
+          if (load_kind_pub(kinds, cur) != ARENA_KIND_NON_TERM)
+            break;
+          chain++;
+          cur = atomic_load_explicit(&next_idxs[cur], memory_order_acquire);
+        }
+
+        if (chain == 0)
+          continue;
+
+        local_items += chain;
+        local_used_buckets++;
+        local_chain_sq_sum +=
+            (unsigned long long)chain * (unsigned long long)chain;
+        if (chain > local_max_chain)
+          local_max_chain = chain;
+      }
+
+      if (check_stable(seq)) {
+        items = local_items;
+        used_buckets = local_used_buckets;
+        chain_sq_sum = local_chain_sq_sum;
+        max_chain = local_max_chain;
+        break;
+      }
+    }
+  }
+
+  if (out_items)
+    *out_items = items;
+  if (out_used_buckets)
+    *out_used_buckets = used_buckets;
+  if (out_chain_sq_sum)
+    *out_chain_sq_sum = chain_sq_sum;
+  if (out_max_chain)
+    *out_max_chain = max_chain;
+}
+
 static void grow(void);
 
 /* Node publication: write all payload fields first (relaxed), then store kind
@@ -989,7 +1058,19 @@ uint32_t allocU8(uint8_t value) {
   }
 }
 
-static inline uint32_t avalanche32(uint32_t x) {
+#ifndef ARENA_HASH_MIX_MODE
+#define ARENA_HASH_MIX_MODE 0
+#endif
+
+#ifndef ARENA_HASH_BUCKET_MODE
+#define ARENA_HASH_BUCKET_MODE 0
+#endif
+
+static inline __attribute__((unused)) uint32_t rotl32(uint32_t x, uint32_t r) {
+  return (x << r) | (x >> (32 - r));
+}
+
+static inline __attribute__((unused)) uint32_t avalanche32(uint32_t x) {
   x ^= x >> 16;
   x *= 0x7feb352d;
   x ^= x >> 15;
@@ -998,8 +1079,72 @@ static inline uint32_t avalanche32(uint32_t x) {
   return x;
 }
 
+static inline __attribute__((unused)) uint32_t fmix32(uint32_t x) {
+  x ^= x >> 16;
+  x *= 0x85ebca6b;
+  x ^= x >> 13;
+  x *= 0xc2b2ae35;
+  x ^= x >> 16;
+  return x;
+}
+
+static inline __attribute__((unused)) uint64_t fmix64(uint64_t x) {
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ULL;
+  x ^= x >> 33;
+  return x;
+}
+
+const char *arena_hash_mix_name(void) {
+#if ARENA_HASH_MIX_MODE == 0
+  return "avalanche-xormul";
+#elif ARENA_HASH_MIX_MODE == 1
+  return "fmix32-xorrot";
+#elif ARENA_HASH_MIX_MODE == 2
+  return "fmix64-pair";
+#elif ARENA_HASH_MIX_MODE == 3
+  return "fnv-stream-fmix32";
+#else
+#error "Unsupported ARENA_HASH_MIX_MODE"
+#endif
+}
+
+const char *arena_hash_bucket_name(void) {
+#if ARENA_HASH_BUCKET_MODE == 0
+  return "mask-lowbits";
+#elif ARENA_HASH_BUCKET_MODE == 1
+  return "fmix32-mask";
+#else
+#error "Unsupported ARENA_HASH_BUCKET_MODE"
+#endif
+}
+
+static inline uint32_t bucket_index(uint32_t hv, uint32_t bucket_mask) {
+#if ARENA_HASH_BUCKET_MODE == 0
+  return hv & bucket_mask;
+#elif ARENA_HASH_BUCKET_MODE == 1
+  return fmix32(hv) & bucket_mask;
+#else
+#error "Unsupported ARENA_HASH_BUCKET_MODE"
+#endif
+}
+
 static inline uint32_t mix(uint32_t a, uint32_t b) {
-  return avalanche32(a ^ (b * 0x9e3779b9));
+#if ARENA_HASH_MIX_MODE == 0
+  return avalanche32(a ^ (b * 0x9e3779b9u));
+#elif ARENA_HASH_MIX_MODE == 1
+  return fmix32(a ^ rotl32(b, 16) ^ 0x9e3779b9u);
+#elif ARENA_HASH_MIX_MODE == 2
+  uint64_t x = (((uint64_t)a << 32) | (uint64_t)b) ^ 0x9e3779b97f4a7c15ULL;
+  x = fmix64(x);
+  return (uint32_t)(x ^ (x >> 32));
+#elif ARENA_HASH_MIX_MODE == 3
+  return fmix32((a * 0x01000193u) ^ b ^ 0x9e3779b9u);
+#else
+#error "Unsupported ARENA_HASH_MIX_MODE"
+#endif
 }
 
 uint32_t allocCons(uint32_t l, uint32_t r) {
@@ -1029,7 +1174,7 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
     atomic_uint *next_idxs =
         (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
     atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
-    uint32_t b = hval & h->bucket_mask;
+    uint32_t b = bucket_index(hval, h->bucket_mask);
 
     uint32_t cur = atomic_load_explicit(&buckets[b], memory_order_acquire);
     uint32_t found = EMPTY;
@@ -1061,7 +1206,7 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
   /* Allocate and link into bucket. */
   while (true) {
     uint32_t seq = enter_stable(&h);
-    uint32_t b = hval & h->bucket_mask;
+    uint32_t b = bucket_index(hval, h->bucket_mask);
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
     atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
@@ -1649,7 +1794,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
     if (load_kind_pub(kinds, i) != ARENA_KIND_NON_TERM)
       continue;
     uint32_t hv = load_u32_payload(hashes, i);
-    uint32_t b = hv & h->bucket_mask;
+    uint32_t b = bucket_index(hv, h->bucket_mask);
     uint32_t head = atomic_load_explicit(&new_buckets[b], memory_order_relaxed);
     atomic_store_explicit(&next_idxs[i], head, memory_order_relaxed);
     atomic_store_explicit(&new_buckets[b], i, memory_order_relaxed);

@@ -44,6 +44,61 @@ static long long get_time_ns(void) {
   return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
+typedef struct {
+  uint32_t top;
+  uint32_t capacity;
+  unsigned long long total_nodes;
+  unsigned long long total_steps;
+  unsigned long long total_cons_allocs;
+  unsigned long long duplicate_lost_allocs;
+  unsigned long long hashcons_hits;
+  unsigned long long hashcons_misses;
+  unsigned long long hash_items;
+  unsigned long long hash_used_buckets;
+  unsigned long long hash_chain_sq_sum;
+  uint32_t hash_max_chain;
+} PerfStats;
+
+static PerfStats capture_stats(void) {
+  PerfStats stats;
+  thanatos_get_stats(&stats.top, &stats.capacity, &stats.total_nodes,
+                     &stats.total_steps, &stats.total_cons_allocs, NULL, NULL,
+                     &stats.duplicate_lost_allocs, &stats.hashcons_hits,
+                     &stats.hashcons_misses, NULL, NULL);
+  arena_hash_table_stats(&stats.hash_items, &stats.hash_used_buckets,
+                         &stats.hash_chain_sq_sum, &stats.hash_max_chain);
+  return stats;
+}
+
+static void print_hash_stats(const char *label, const PerfStats *before,
+                             const PerfStats *after) {
+  unsigned long long hits = after->hashcons_hits - before->hashcons_hits;
+  unsigned long long misses = after->hashcons_misses - before->hashcons_misses;
+  unsigned long long total = hits + misses;
+  unsigned long long duplicate_lost =
+      after->duplicate_lost_allocs - before->duplicate_lost_allocs;
+  double hit_rate = (total == 0) ? 0.0 : (100.0 * (double)hits / (double)total);
+  double used_pct = (after->capacity == 0)
+                        ? 0.0
+                        : (100.0 * (double)after->hash_used_buckets /
+                           (double)after->capacity);
+  double avg_hit_probes =
+      (after->hash_items == 0)
+          ? 0.0
+          : ((double)after->hash_chain_sq_sum + (double)after->hash_items) /
+                (2.0 * (double)after->hash_items);
+  double avg_miss_probes = (after->capacity == 0) ? 0.0
+                                                  : (double)after->hash_items /
+                                                        (double)after->capacity;
+
+  printf("%s hash: hits=%llu misses=%llu hit-rate=%.2f%% items=%llu "
+         "used-buckets=%llu/%u (%.2f%%) avg-hit-probes~=%.3f "
+         "avg-miss-probes~=%.3f max-chain=%u duplicate-lost=%llu\n",
+         label, hits, misses, hit_rate, after->hash_items,
+         after->hash_used_buckets, after->capacity, used_pct, avg_hit_probes,
+         avg_miss_probes, after->hash_max_chain, duplicate_lost);
+}
+
 int main(int argc, char **argv) {
   int num_threads = 8;
   uint32_t arena_capacity = 1u << 26;
@@ -90,6 +145,8 @@ int main(int argc, char **argv) {
   printf("Starting Thanatos Performance Test with %d threads (arena=%u, N=%d, "
          "depth=%d, max_steps=%u, seed=%u)...\n",
          num_threads, arena_capacity, reductions, depth, max_steps, seed);
+  printf("Hash mixer: %s\n", arena_hash_mix_name());
+  printf("Hash buckets: %s\n", arena_hash_bucket_name());
 
   ThanatosConfig config = {.num_workers = num_threads,
                            .arena_capacity = arena_capacity};
@@ -124,11 +181,20 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Failed to allocate expression array\n");
     return 1;
   }
+
+  PerfStats before_generation = capture_stats();
+  long long gen_start = get_time_ns();
   for (int i = 0; i < reductions; i++) {
     if ((i % 100) == 0)
       printf("Generating %d/%d...\n", i, reductions);
     exprs[i] = rand_expression(depth);
   }
+  long long gen_end = get_time_ns();
+  PerfStats after_generation = capture_stats();
+
+  printf("Completed generation in %.3f ms\n",
+         (gen_end - gen_start) / 1000000.0);
+  print_hash_stats("Generation", &before_generation, &after_generation);
 
   printf("Measuring reduction performance...\n");
   long long start = get_time_ns();
@@ -142,10 +208,12 @@ int main(int argc, char **argv) {
   long long end = get_time_ns();
   long long elapsed = end - start;
   double avg = (double)elapsed / reductions;
+  PerfStats after_reduction = capture_stats();
 
   printf("Completed %d reductions in %.3f ms\n", reductions,
          elapsed / 1000000.0);
   printf("Average reduction time: %.3f ns\n", avg);
+  print_hash_stats("Reduction", &after_generation, &after_reduction);
 
   thanatos_shutdown();
   free(exprs);

@@ -1,12 +1,13 @@
 .PHONY: all build test coverage bundle \
-	build-wasm build-native print-wasm \
+	build-wasm build-native print-wasm hash-perf-experiment hash-bucket-experiment \
 	format format-check lint \
 	dist clean \
 	format-c-internal format-nix-internal format-check-nix-internal \
 	thanatos-check thanatos-check-lsan thanatos-check-ubsan thanatos-check-asan \
 	thanatos-check-lsan-long thanatos-check-ubsan-long thanatos-check-asan-long \
 	thanatos-tsan-repl thanatos-ubsan-repl \
-	coverage-lcov-internal
+	coverage-lcov-internal hash-perf-experiment-internal \
+	hash-bucket-experiment-internal
 
 all: build
 
@@ -193,6 +194,12 @@ build-wasm:
 build-native:
 	$(NIX_RUN) build-native-internal
 
+hash-perf-experiment:
+	$(NIX_RUN) hash-perf-experiment-internal
+
+hash-bucket-experiment:
+	$(NIX_RUN) hash-bucket-experiment-internal
+
 thanatos-check:
 	$(NIX_RUN) thanatos-check-internal
 
@@ -275,6 +282,56 @@ coverage-report-internal:
 THANATOS_BIN_VAL ?= ./bin/thanatos
 DAG_CODEC_TEST_BIN ?= ./bin/dag-codec-test
 THANATOS_TEST_BIN ?= ./bin/thanatos-test
+HASH_EXPERIMENT_SRCS := core/arena.c core/thanatos.c core/performance_test.c
+HASH_EXPERIMENT_FLAGS := $(C_RELEASE_FLAGS) -ffunction-sections -fdata-sections -march=native \
+	$(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS)
+HASH_EXPERIMENT_LDFLAGS := -Wl,--gc-sections
+HASH_EXPERIMENT_ARGS ?= $(THANATOS_SHORT_ARGS)
+HASH_BASELINE_DEFS := -DARENA_HASH_MIX_MODE=0 -DARENA_HASH_BUCKET_MODE=0
+HASH_EXPERIMENT_BUCKET_DEFS := -DARENA_HASH_BUCKET_MODE=0
+
+bin/thanatos-test-hash-baseline: $(HASH_EXPERIMENT_SRCS) $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(HASH_EXPERIMENT_FLAGS) $(HASH_EXPERIMENT_LDFLAGS) \
+		$(HASH_BASELINE_DEFS) $(filter %.c,$^) -o $@
+
+bin/thanatos-test-hash-fmix32: $(HASH_EXPERIMENT_SRCS) $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(HASH_EXPERIMENT_FLAGS) $(HASH_EXPERIMENT_LDFLAGS) \
+		$(HASH_EXPERIMENT_BUCKET_DEFS) -DARENA_HASH_MIX_MODE=1 \
+		$(filter %.c,$^) -o $@
+
+bin/thanatos-test-hash-pair64: $(HASH_EXPERIMENT_SRCS) $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(HASH_EXPERIMENT_FLAGS) $(HASH_EXPERIMENT_LDFLAGS) \
+		$(HASH_EXPERIMENT_BUCKET_DEFS) -DARENA_HASH_MIX_MODE=2 \
+		$(filter %.c,$^) -o $@
+
+bin/thanatos-test-hash-stream: $(HASH_EXPERIMENT_SRCS) $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(HASH_EXPERIMENT_FLAGS) $(HASH_EXPERIMENT_LDFLAGS) \
+		$(HASH_EXPERIMENT_BUCKET_DEFS) -DARENA_HASH_MIX_MODE=3 \
+		$(filter %.c,$^) -o $@
+
+bin/thanatos-test-hash-bucket-fmix32: $(HASH_EXPERIMENT_SRCS) $(C_HEADERS)
+	mkdir -p bin
+	$(WRAPPED_CC) $(HASH_EXPERIMENT_FLAGS) $(HASH_EXPERIMENT_LDFLAGS) \
+		-DARENA_HASH_BUCKET_MODE=1 -DARENA_HASH_MIX_MODE=0 \
+		$(filter %.c,$^) -o $@
+
+hash-perf-experiment-internal: bin/thanatos-test-hash-baseline \
+	bin/thanatos-test-hash-fmix32 \
+	bin/thanatos-test-hash-pair64 \
+	bin/thanatos-test-hash-stream
+	./bin/thanatos-test-hash-baseline $(HASH_EXPERIMENT_ARGS)
+	./bin/thanatos-test-hash-fmix32 $(HASH_EXPERIMENT_ARGS)
+	./bin/thanatos-test-hash-pair64 $(HASH_EXPERIMENT_ARGS)
+	./bin/thanatos-test-hash-stream $(HASH_EXPERIMENT_ARGS)
+
+hash-bucket-experiment-internal: bin/thanatos-test-hash-baseline \
+	bin/thanatos-test-hash-bucket-fmix32
+	./bin/thanatos-test-hash-baseline $(HASH_EXPERIMENT_ARGS)
+	./bin/thanatos-test-hash-bucket-fmix32 $(HASH_EXPERIMENT_ARGS)
 
 bundle-internal: wasm/release.wasm $(DIST_TARGETS)
 
@@ -347,6 +404,11 @@ CLEAN_ARTIFACTS := \
 	bin/thanatos-test-lsan \
 	bin/thanatos-test-ubsan \
 	bin/thanatos-test-asan \
+	bin/thanatos-test-hash-baseline \
+	bin/thanatos-test-hash-bucket-fmix32 \
+	bin/thanatos-test-hash-fmix32 \
+	bin/thanatos-test-hash-pair64 \
+	bin/thanatos-test-hash-stream \
 	bin/thanatos-asan \
 	bin/thanatos-lsan \
 	bin/thanatos-debug \

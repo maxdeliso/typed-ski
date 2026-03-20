@@ -212,6 +212,19 @@ void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
                        size_t out_size);
 size_t arena_get_mmap_out_cursor(void);
 
+/* Hash mixer selected at compile time for allocCons(). */
+const char *arena_hash_mix_name(void);
+
+/* Bucket extractor selected at compile time for hashcons buckets. */
+const char *arena_hash_bucket_name(void);
+
+/* Snapshot hash bucket occupancy: items = sum(chain_len), used_buckets =
+ * count(chain_len > 0), chain_sq_sum = sum(chain_len^2). */
+void arena_hash_table_stats(unsigned long long *out_items,
+                            unsigned long long *out_used_buckets,
+                            unsigned long long *out_chain_sq_sum,
+                            uint32_t *out_max_chain);
+
 /** Try to dequeue one suspension id from stdin_wait or stdout_wait (slot_size
  * 4). Used by native runtime to wake IO waiters. */
 bool arena_stdin_wait_try_dequeue(uint32_t *node_id_out);

@@ -19,10 +19,9 @@ const PROJECT_ROOT = join(__dirname, "..");
 const TEST_NATIVE_WORKERS = 2;
 
 /** Path to the thanatos binary (built by make build-native). Override with env THANATOS_BIN for ASan etc. */
-export const THANATOS_BIN =
-  typeof Deno !== "undefined" && Deno.env.get("THANATOS_BIN")
-    ? Deno.env.get("THANATOS_BIN")!
-    : join(PROJECT_ROOT, "bin", "thanatos");
+const THANATOS_BIN = typeof Deno !== "undefined" && Deno.env.get("THANATOS_BIN")
+  ? Deno.env.get("THANATOS_BIN")!
+  : join(PROJECT_ROOT, "bin", "thanatos");
 
 export function thanatosAvailable(): boolean {
   return existsSync(THANATOS_BIN);
@@ -157,7 +156,7 @@ export function fromDagWire(dagStr: string): SKIExpression {
 }
 
 /** Long-lived daemon session: one process, DAG protocol, serialized requests. */
-export class ThanatosSession {
+class ThanatosSession {
   private child: Deno.ChildProcess | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -165,13 +164,13 @@ export class ThanatosSession {
   private pending: Promise<void> = Promise.resolve();
   private closed = false;
 
-  /** Start the daemon (spawns process with --daemon). Call once. */
+  /** Start the daemon. Call once. */
   start(workers?: number): void {
     if (this.child != null) return;
     if (!thanatosAvailable()) throw new Error("thanatos binary not found");
     const w = workers ?? defaultWorkerCount();
     this.child = new Deno.Command(THANATOS_BIN, {
-      args: ["--daemon", String(w)],
+      args: [String(w)],
       cwd: PROJECT_ROOT,
       stdin: "piped",
       stdout: "piped",
@@ -473,7 +472,10 @@ export async function runThanatosBatch(exprLines: string[]): Promise<string[]> {
   }
 }
 
-export async function runThanatosSnapshot(
+/**
+ * Internal helper for snapshot testing with a thanatos session.
+ */
+async function runThanatosSnapshot(
   name: string,
   session: ThanatosSession,
 ): Promise<void> {
@@ -721,31 +723,33 @@ Deno.test({
 
 Deno.test({
   name:
-    "thanatos CLI - single-shot surface mode trims blank lines and preserves stdout order",
+    "thanatos CLI - daemon mode (always on) trims blank lines and responds with OK",
   ignore: !thanatosAvailable(),
   fn: async () => {
     const result = await runThanatosProcess(
       ["1", "65536"],
-      "\n  \n. #u8(65) I   \r\n",
+      "\n  \nREDUCE I U41 @0,1   \r\n",
     );
     assertEquals(result.code, 0, result.stderr);
-    assertEquals(result.stdout, "A#u8(65)\n");
+    // OK <result_dag>
+    // Result of (I U41) is U41
+    assertEquals(result.stdout, "OK U41\n");
   },
 });
 
 Deno.test({
-  name: "thanatos CLI - --dag with --stdin-file reads runtime stdin",
+  name: "thanatos CLI - --stdin-file reads runtime stdin",
   ignore: !thanatosAvailable(),
   fn: async () => {
     const stdinPath = await Deno.makeTempFile();
     try {
       await Deno.writeFile(stdinPath, new Uint8Array([0x2a]));
       const result = await runThanatosProcess(
-        ["--dag", "--stdin-file", stdinPath, "1", "65536"],
-        ", I @0,1\n",
+        ["--stdin-file", stdinPath, "1", "65536"],
+        "REDUCE , I @0,1\n",
       );
       assertEquals(result.code, 0, result.stderr);
-      assertEquals(result.stdout, "U2a\n");
+      assertEquals(result.stdout, "OK U2a\n");
     } finally {
       await Deno.remove(stdinPath).catch(() => {});
     }

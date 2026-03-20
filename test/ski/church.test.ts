@@ -1,25 +1,13 @@
 import { expect } from "chai";
+import { Car, Cdr, F, Fst, Plus, Snd } from "../util/combinators.ts";
 
-import {
-  B,
-  Car,
-  Cdr,
-  F,
-  False,
-  Fst,
-  Plus,
-  Snd,
-  Succ,
-  True,
-  V,
-  Zero,
-} from "../../lib/consts/combinators.ts";
+import { B, False, Succ, True, V, Zero } from "../../lib/consts/combinators.ts";
+
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
+import { findFactors, findPerfectPower } from "../util/math.ts";
 import {
   ChurchB,
   ChurchN,
-  findFactors,
-  findPerfectPower,
   UnChurchBoolean,
   UnChurchNumber,
 } from "../../lib/ski/church.ts";

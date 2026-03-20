@@ -1,5 +1,5 @@
-#include "session.h"
 #include "arena.h"
+#include "session.h"
 #include "ski_io.h"
 #include "thanatos.h"
 #include <assert.h>
@@ -30,7 +30,8 @@ static void write_one_byte_file(const char *path, int byte) {
   fclose(fp);
 }
 
-static void write_bytes_file(const char *path, const uint8_t *bytes, size_t len) {
+static void write_bytes_file(const char *path, const uint8_t *bytes,
+                             size_t len) {
   FILE *fp = fopen(path, "wb");
   assert(fp != NULL);
   if (len > 0) {
@@ -72,7 +73,7 @@ static void test_daemon_success_paths(void) {
   assert(mem != NULL);
 
   ThanatosSession s;
-  thanatos_session_init(&s, true, true, mem);
+  thanatos_session_init(&s, mem);
 
   thanatos_session_handle_line(&s, "PING", 4);
   thanatos_session_handle_line(&s, "STATS", 5);
@@ -155,7 +156,7 @@ static void test_daemon_errors(void) {
   assert(mem != NULL);
 
   ThanatosSession s;
-  thanatos_session_init(&s, true, true, mem);
+  thanatos_session_init(&s, mem);
 
   thanatos_session_handle_line(&s, "GIBBERISH", 9);
   thanatos_session_handle_line(&s, "REDUCE", 6);
@@ -171,8 +172,8 @@ static void test_daemon_errors(void) {
   thanatos_session_handle_line(&s, "STEP 1 @1,1", 10);
 
   char command[4096];
-  int n = snprintf(command, sizeof(command), "REDUCE_FILE missing.bin out.bin %s",
-                   identity_dag);
+  int n = snprintf(command, sizeof(command),
+                   "REDUCE_FILE missing.bin out.bin %s", identity_dag);
   assert(n > 0 && (size_t)n < sizeof(command));
   thanatos_session_handle_line(&s, command, (size_t)n);
 
@@ -227,7 +228,8 @@ static void test_daemon_errors(void) {
   assert_contains(output, "ERR REDUCE_IO invalid hex digit\n");
   assert_contains(output, "ERR REDUCE_IO hex must be even length\n");
   assert_contains(output, "ERR reduction error\n");
-  assert_contains(output, "ERR REDUCE_FILE requires <in_path> <out_path> <dag>\n");
+  assert_contains(output,
+                  "ERR REDUCE_FILE requires <in_path> <out_path> <dag>\n");
   assert_contains(output, "ERR cannot open input file\n");
   assert_contains(output, "ERR cannot open output file\n");
   assert_contains(output, "ERR path too long (max 1023 chars)\n");
@@ -240,33 +242,6 @@ static void test_daemon_errors(void) {
   remove(input_path);
   remove(empty_input_path);
   remove(empty_output_path);
-  fclose(mem);
-  thanatos_session_free(&s);
-}
-
-static void test_non_daemon_surface_mode(void) {
-  printf("test_non_daemon_surface_mode...\n");
-  reset();
-  thanatos_reset_stats();
-
-  char output[4096];
-  memset(output, 0, sizeof(output));
-  FILE *mem = fmemopen(output, sizeof(output), "w");
-  assert(mem != NULL);
-
-  ThanatosSession s;
-  thanatos_session_init(&s, false, false, mem);
-
-  thanatos_session_handle_line(&s, "I K", 3);
-  thanatos_session_handle_line(&s, "STATS", 5);
-  thanatos_session_handle_line(&s, "(", 1);
-
-  fflush(mem);
-  assert_contains(output, "K\n");
-  assert_contains(output, "top=");
-  assert_contains(output, "parse error\n");
-  assert(strstr(output, "OK top=") == NULL);
-
   fclose(mem);
   thanatos_session_free(&s);
 }
@@ -284,7 +259,6 @@ int main(void) {
 
   test_daemon_success_paths();
   test_daemon_errors();
-  test_non_daemon_surface_mode();
 
   thanatos_shutdown();
   printf("session_test passed!\n");

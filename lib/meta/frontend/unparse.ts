@@ -13,6 +13,9 @@ import { unparseTypedLambda } from "../../parser/typedLambda.ts";
 import { unparseType } from "../../parser/type.ts";
 import type { TripLangProgram, TripLangTerm } from "../trip.ts";
 
+/**
+ * @internal
+ */
 export function unparseTerm(dt: TripLangTerm): string {
   switch (dt.kind) {
     case "poly":
@@ -53,6 +56,9 @@ export function unparseTerm(dt: TripLangTerm): string {
   }
 }
 
+/**
+ * @internal
+ */
 export function unparseProgram(program: TripLangProgram): string {
   return program.terms.map(unparseTerm).join("\n");
 }

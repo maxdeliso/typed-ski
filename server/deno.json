@@ -1,5 +1,6 @@
 {
   "imports": {
-    "@maxdeliso/typed-ski": "../lib/index.ts"
+    "@maxdeliso/typed-ski": "../lib/index.ts",
+    "std/path": "jsr:@std/path@^1.1.4"
   }
 }

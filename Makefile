@@ -1,4 +1,4 @@
-.PHONY: all build test coverage \
+.PHONY: all build test coverage bundle \
 	build-wasm build-native print-wasm \
 	format format-check lint \
 	dist clean \
@@ -136,9 +136,43 @@ bin/dag-codec-test: core/arena.c core/ski_io.c core/util.c core/dag_codec_test.c
 NIX_RUN := nix $(NIX_FLAGS) develop --ignore-environment \
 	--keep NIX_PATH --keep NIX_DAEMON_SOCKET --keep NIX_CONF_DIR \
 	--keep TERM --keep HOME --keep USER --keep LANG --keep SSL_CERT_FILE \
+	--keep PORT \
 	--command $(MAKE)
 
 DENO_TEST_CMD ?= deno task test
+
+GENERATED_TS_TARGETS := \
+	lib/shared/version.generated.ts \
+	lib/evaluator/arenaHeader.generated.ts
+
+TRIPC_DIST_TARGETS := \
+	dist/tripc.js \
+	dist/tripc.min.js \
+	dist/tripc.node.js \
+	dist/tripc
+
+BROWSER_DIST_TARGETS := \
+	dist/webglForest.js \
+	dist/workbench.js \
+	dist/arenaWorker.js
+
+DIST_TARGETS := $(TRIPC_DIST_TARGETS) $(BROWSER_DIST_TARGETS)
+WASM_BUILD_STATE := .make/wasm-build-state.txt
+
+NATIVE_BUILD_TARGETS := \
+	bin/thanatos \
+	bin/thanatos-test \
+	bin/thanatos-test-lsan \
+	bin/thanatos-test-ubsan \
+	bin/thanatos-test-asan \
+	bin/thanatos-asan \
+	bin/thanatos-lsan \
+	bin/thanatos-debug \
+	bin/dag-codec-test
+
+TRIPC_BUNDLE_SOURCES := $(shell find bin lib -type f \( -name '*.ts' -o -name '*.js' \) -print)
+BROWSER_BUNDLE_SOURCES := $(shell find server lib -type f \( -name '*.ts' -o -name '*.js' \) -print)
+DENO_BUILD_CONFIGS := deno.jsonc server/deno.json
 
 # Public entry points
 build:
@@ -192,12 +226,32 @@ format-check:
 start:
 	$(NIX_RUN) start-internal
 
+bundle:
+	$(NIX_RUN) bundle-internal
+
 # Internal targets (assume they are running inside nix develop)
-build-internal: build-wasm-internal build-native-internal
+build-internal: $(NATIVE_BUILD_TARGETS) wasm/release.wasm $(GENERATED_TS_TARGETS) $(DIST_TARGETS)
+
+$(WASM_BUILD_STATE): Makefile
+	mkdir -p $(dir $@)
+	@printf '%s\n' \
+		'WASM_CC=$(WASM_CC)' \
+		'WASM_LD=$(WASM_LD)' \
+		'WASM_RESOURCE_DIR=$(WASM_RESOURCE_DIR)' \
+		'WASM_OPT=$(WASM_OPT)' \
+		'WASM_OPT_CFLAGS=$(WASM_OPT_CFLAGS)' \
+		'WASM_OPT_LDFLAGS=$(WASM_OPT_LDFLAGS)' \
+		'WASM_EXPORT_FLAGS=$(WASM_EXPORT_FLAGS)' \
+		'WASM_OPT_POST_FLAGS=$(WASM_OPT_POST_FLAGS)' \
+		> $@.tmp
+	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv $@.tmp $@; fi
+
+lib/shared/version.generated.ts: deno.jsonc scripts/generateVersion.ts
 	nix $(NIX_FLAGS) run .#verify-version
 	nix $(NIX_FLAGS) run .#generate-version-ts
+
+lib/evaluator/arenaHeader.generated.ts: core/arena.h scripts/generateArenaHeaderC.ts
 	deno run -A scripts/generateArenaHeaderC.ts
-	deno task dist
 
 coverage-binaries-internal: build-wasm-internal bin/thanatos-coverage
 	$(WRAPPED_CC) $(C_COVERAGE_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
@@ -222,7 +276,38 @@ THANATOS_BIN_VAL ?= ./bin/thanatos
 DAG_CODEC_TEST_BIN ?= ./bin/dag-codec-test
 THANATOS_TEST_BIN ?= ./bin/thanatos-test
 
+bundle-internal: wasm/release.wasm $(DIST_TARGETS)
+
+dist/tripc.js: $(TRIPC_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno bundle --no-check --platform=browser bin/tripc.ts -o $@
+
+dist/tripc.min.js: $(TRIPC_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno bundle --no-check --minify --platform=browser bin/tripc.ts -o $@
+
+dist/tripc.node.js: $(TRIPC_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno bundle --no-check --platform=browser bin/tripc.ts -o $@
+
+dist/tripc: $(TRIPC_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno compile --allow-read --allow-write --output $@ bin/tripc.ts
+
+dist/webglForest.js: $(BROWSER_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno bundle --no-check --platform=browser server/webglForest.ts -o $@
+
+dist/workbench.js: $(BROWSER_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno bundle --no-check --platform=browser server/workbench.js -o $@
+
+dist/arenaWorker.js: $(BROWSER_BUNDLE_SOURCES) $(GENERATED_TS_TARGETS) $(DENO_BUILD_CONFIGS) Makefile
+	mkdir -p $(dir $@)
+	deno bundle --no-check --platform=browser lib/evaluator/arenaWorker.ts -o $@
+
 test-internal: build-internal
+	$(MAKE) bundle-internal
 	$(MAKE) format-check-internal
 	nix $(NIX_FLAGS) run .#lint
 	THANATOS_BIN=$(THANATOS_BIN_VAL) $(DENO_TEST_CMD)
@@ -282,11 +367,15 @@ CLEAN_ARTIFACTS := \
 	obj/session.o \
 	obj/main.o \
 	obj/performance_test.o \
+	$(WASM_BUILD_STATE) \
 	wasm/release.wasm \
 	dist/tripc.js \
 	dist/tripc.min.js \
 	dist/tripc.node.js \
 	dist/tripc \
+	dist/webglForest.js \
+	dist/workbench.js \
+	dist/arenaWorker.js \
 	coverage.lcov \
 	coverage-c.lcov \
 	lib/shared/version.generated.ts \
@@ -298,12 +387,12 @@ clean-internal:
 	-find obj/coverage -type f -delete 2>/dev/null || true
 	-rm *.gcda *.gcno 2>/dev/null || true
 	-rmdir obj/coverage 2>/dev/null || true
-	-rmdir obj wasm dist coverage coverage-c 2>/dev/null || true
+	-rmdir obj wasm dist coverage coverage-c .make 2>/dev/null || true
 	-rmdir bin 2>/dev/null || true
 
 build-wasm-internal: wasm/release.wasm
 
-wasm/release.wasm: core/arena.c $(C_HEADERS) Makefile
+wasm/release.wasm: core/arena.c $(C_HEADERS) $(WASM_BUILD_STATE)
 	mkdir -p wasm
 	$$WASM_CC -fuse-ld=$$WASM_LD --target=wasm32 $(WASM_OPT_CFLAGS) -nostdlib \
 		-Wl,--no-entry -Wl,--import-memory -Wl,--shared-memory \
@@ -321,9 +410,7 @@ THANATOS_SHORT_ARGS := 2 65536 1024 4 512 $(THANATOS_CI_SEED)
 # Long run: 4 threads, 128k arena, 4096 reductions, depth 5, max_steps 1024 (for *san in CI)
 THANATOS_LONG_ARGS := 4 131072 4096 5 1024 $(THANATOS_CI_SEED)
 
-build-native-internal: bin/thanatos bin/thanatos-test bin/thanatos-test-lsan \
-	bin/thanatos-test-ubsan bin/thanatos-test-asan bin/thanatos-asan bin/thanatos-lsan bin/thanatos-debug \
-	bin/dag-codec-test
+build-native-internal: $(NATIVE_BUILD_TARGETS)
 
 thanatos-check-lsan-internal: build-native-internal
 	timeout 60s ./bin/thanatos-test-lsan $(THANATOS_SHORT_ARGS)
@@ -373,8 +460,8 @@ format-check-internal:
 format-check-nix-internal:
 	nixpkgs-fmt --check flake.nix
 
-start-internal:
-	deno run --allow-net --allow-read --allow-env --allow-run server/serveWorkbench.ts $(PORT)
+start-internal: bundle-internal
+	deno run -c deno.jsonc --allow-net --allow-read --allow-env --allow-run server/serveWorkbench.ts $(PORT)
 
 print-wasm-internal: build-wasm-internal
 	@echo "=== Local WASM artifacts ==="

@@ -1,13 +1,14 @@
 import { expect } from "chai";
 import { mkVar } from "../../lib/terms/lambda.ts";
-import { createTypedApplication } from "../../lib/types/typedLambda.ts";
-
+import {
+  createTypedApplication,
+  mkTypedAbs,
+  typedTermsLitEq,
+} from "../util/ast.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseArrowTypeNoApp, parseType } from "../../lib/parser/type.ts";
 import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 import { createParserState } from "../../lib/parser/parserState.ts";
-
-import { mkTypedAbs, typedTermsLitEq } from "../../lib/types/typedLambda.ts";
 import { makeTypedBinNumeral } from "../../lib/types/binLiteral.ts";
 import {
   arrow,

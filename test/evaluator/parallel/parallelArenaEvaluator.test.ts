@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "std/assert";
-import { ParallelArenaEvaluatorWasm } from "../../../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../../../lib/index.ts";
 import { parseSKI } from "../../../lib/parser/ski.ts";
 
 Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue (rc=1)", async () => {

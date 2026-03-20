@@ -83,8 +83,8 @@ static atomic_size_t mmap_stdout_cursor = 0;
 
 void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
                        size_t out_size) {
-  bool file_io_active =
-      (in_map != NULL) || (in_size != 0) || (out_map != NULL) || (out_size != 0);
+  bool file_io_active = (in_map != NULL) || (in_size != 0) ||
+                        (out_map != NULL) || (out_size != 0);
   mmap_stdin_buf = in_map;
   mmap_stdin_size = in_size;
   atomic_store_explicit(&mmap_stdin_cursor, 0, memory_order_release);

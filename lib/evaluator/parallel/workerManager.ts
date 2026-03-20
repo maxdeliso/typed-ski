@@ -35,6 +35,7 @@ type WorkerToMainMessage =
   | WorkerErrorMessage;
 
 /**
+ * @internal
  * Manages Web Worker lifecycle for parallel evaluation.
  */
 export class WorkerManager {

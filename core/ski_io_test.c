@@ -1,5 +1,5 @@
-#include "ski_io.h"
 #include "arena.h"
+#include "ski_io.h"
 #include "thanatos.h"
 #include <assert.h>
 #include <stdio.h>
@@ -21,22 +21,14 @@ typedef struct {
 } TerminalCase;
 
 static const TerminalCase TERMINAL_CASES[] = {
-    {'S', 's', ARENA_SYM_S},
-    {'K', 'k', ARENA_SYM_K},
-    {'I', 'i', ARENA_SYM_I},
-    {'B', 'b', ARENA_SYM_B},
-    {'C', 'c', ARENA_SYM_C},
-    {'P', 'p', ARENA_SYM_SPRIME},
-    {'Q', 'q', ARENA_SYM_BPRIME},
-    {'R', 'r', ARENA_SYM_CPRIME},
-    {',', 0, ARENA_SYM_READ_ONE},
-    {'.', 0, ARENA_SYM_WRITE_ONE},
-    {'E', 'e', ARENA_SYM_EQ_U8},
-    {'L', 'l', ARENA_SYM_LT_U8},
-    {'D', 'd', ARENA_SYM_DIV_U8},
-    {'M', 'm', ARENA_SYM_MOD_U8},
-    {'A', 'a', ARENA_SYM_ADD_U8},
-    {'O', 'o', ARENA_SYM_SUB_U8},
+    {'S', 's', ARENA_SYM_S},      {'K', 'k', ARENA_SYM_K},
+    {'I', 'i', ARENA_SYM_I},      {'B', 'b', ARENA_SYM_B},
+    {'C', 'c', ARENA_SYM_C},      {'P', 'p', ARENA_SYM_SPRIME},
+    {'Q', 'q', ARENA_SYM_BPRIME}, {'R', 'r', ARENA_SYM_CPRIME},
+    {',', 0, ARENA_SYM_READ_ONE}, {'.', 0, ARENA_SYM_WRITE_ONE},
+    {'E', 'e', ARENA_SYM_EQ_U8},  {'L', 'l', ARENA_SYM_LT_U8},
+    {'D', 'd', ARENA_SYM_DIV_U8}, {'M', 'm', ARENA_SYM_MOD_U8},
+    {'A', 'a', ARENA_SYM_ADD_U8}, {'O', 'o', ARENA_SYM_SUB_U8},
 };
 
 static void test_parse_ski_round_trip(void) {
@@ -64,7 +56,8 @@ static void test_parse_ski_invalid_inputs(void) {
 static void test_parse_ski_all_terminals(void) {
   printf("test_parse_ski_all_terminals...\n");
   reset();
-  for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]); i++) {
+  for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]);
+       i++) {
     char text[2] = {TERMINAL_CASES[i].glyph, '\0'};
     size_t end = 0;
     uint32_t root = parse_ski(text, 1, &end);
@@ -108,7 +101,8 @@ static void test_unparse_ski_edge_cases(void) {
   assert(strcmp(buf, "") == 0);
   assert(unparse_ski(allocTerminal(ARENA_SYM_I), NULL, 0) == 0);
 
-  uint32_t root = allocCons(allocTerminal(ARENA_SYM_S), allocTerminal(ARENA_SYM_K));
+  uint32_t root =
+      allocCons(allocTerminal(ARENA_SYM_S), allocTerminal(ARENA_SYM_K));
   size_t n = unparse_ski(root, buf, 4);
   assert(n <= sizeof(buf));
 }
@@ -117,7 +111,8 @@ static void test_unparse_ski_all_terminals(void) {
   printf("test_unparse_ski_all_terminals...\n");
   reset();
   char buf[16];
-  for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]); i++) {
+  for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]);
+       i++) {
     uint32_t node = allocTerminal(TERMINAL_CASES[i].sym);
     size_t n = unparse_ski(node, buf, sizeof(buf));
     assert(n == 1);
@@ -156,7 +151,8 @@ static void test_parse_dag_success_with_whitespace(void) {
 static void test_parse_dag_all_terminals(void) {
   printf("test_parse_dag_all_terminals...\n");
   reset();
-  for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]); i++) {
+  for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]);
+       i++) {
     char text[2] = {TERMINAL_CASES[i].glyph, '\0'};
     size_t end = 0;
     uint32_t root = parse_dag(text, 1, &end);

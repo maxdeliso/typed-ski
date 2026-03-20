@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { compileToObjectFileString } from "../lib/compiler/index.ts";
 import { deserializeTripCObject } from "../lib/compiler/objectFile.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
-import { getAvlObject } from "../lib/avl.ts";
+import { getAvlObject } from "./util/avl.ts";
 import { getBinObject } from "../lib/bin.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { parseSKI } from "../lib/parser/ski.ts";

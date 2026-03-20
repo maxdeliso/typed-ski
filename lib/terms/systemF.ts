@@ -133,17 +133,6 @@ export const mkSystemFTypeApp = (
 });
 
 /**
- * Creates a System F term application (t u).
- * @param lft the function term
- * @param rgt the argument term
- * @returns a new System F application node
- */
-export const mkSystemFApp = (
-  lft: SystemFTerm,
-  rgt: SystemFTerm,
-): SystemFTerm => ({ kind: "non-terminal", lft, rgt });
-
-/**
  * An application in System F representing the application of one term to another.
  *
  * Applications are binary operations where the left term is applied to the right term.

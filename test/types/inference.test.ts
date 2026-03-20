@@ -1,6 +1,7 @@
 import { expect } from "chai";
 
-import { mkUntypedAbs, mkVar, typelessApp } from "../../lib/terms/lambda.ts";
+import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
+import { typelessApp } from "../util/ast.ts";
 import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
 import {
   arrow,

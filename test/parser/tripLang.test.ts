@@ -10,7 +10,7 @@ import {
 } from "../../lib/terms/systemF.ts";
 import type { SystemFTerm } from "../../lib/terms/systemF.ts";
 import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
-import { createTypedApplication } from "../../lib/types/typedLambda.ts";
+import { createTypedApplication } from "../util/ast.ts";
 import { arrow, mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";

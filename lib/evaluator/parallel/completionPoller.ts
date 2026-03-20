@@ -102,6 +102,7 @@ const RESUBMIT_SLEEP_MS = 1;
 const SUBMIT_BUSY_WAIT_THRESHOLD = 512;
 
 /**
+ * @internal
  * Polls the completion queue and handles results/suspensions.
  */
 export class CompletionPoller {

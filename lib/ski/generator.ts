@@ -58,7 +58,7 @@ const PURE_RANDOM_TERMINAL_SYMBOLS = ALL_RANDOM_TERMINAL_SYMBOLS.filter(
     sym !== SKITerminalSymbol.WriteOne,
 );
 
-export interface RandTerminalOptions {
+interface RandTerminalOptions {
   /**
    * Include effectful IO terminals in the random pool.
    *

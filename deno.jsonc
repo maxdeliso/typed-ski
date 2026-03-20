@@ -3,9 +3,7 @@
   "license": "MIT",
   "exports": {
     ".": "./lib/index.ts",
-    "./bin/tripc": "./bin/tripc.ts",
-    "./bin/genForest": "./bin/genForest.ts",
-    "./bin/genSvg": "./bin/genSvg.ts"
+    "./bin/tripc": "./bin/tripc.ts"
   },
   "publish": {
     "include": [
@@ -72,12 +70,11 @@
     "std/fs": "jsr:@std/fs@^1.0.22",
     "std/assert": "jsr:@std/assert@^1.0.17",
     "chai": "npm:chai@^6.2.2",
-    "random-seed": "npm:random-seed@0.3.0"
+    "random-seed": "npm:random-seed@0.3.0",
+    "ts-morph": "npm:ts-morph@^25.0.0"
   },
   "tasks": {
     "tripc": "deno run --allow-read --allow-write bin/tripc.ts",
-    "genForest": "deno run --allow-read --allow-write --allow-run bin/genForest.ts",
-    "genSvg": "deno run --allow-read --allow-write --allow-run bin/genSvg.ts",
     "bundle:tripc": "deno bundle -o dist/tripc.js bin/tripc.ts",
     "bundle:tripc:minified": "deno bundle --minify -o dist/tripc.min.js bin/tripc.ts",
     "bundle:tripc:node": "deno bundle --platform=browser -o dist/tripc.node.js bin/tripc.ts",
@@ -88,5 +85,5 @@
     "coverage:lcov": "deno coverage coverage/ --exclude=test/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/ --exclude=test/"
   },
-  "version": "0.16.1"
+  "version": "0.16.2"
 }

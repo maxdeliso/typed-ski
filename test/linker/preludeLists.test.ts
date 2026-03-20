@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { evaluateTrip, evaluateTripWithIo } from "../util/tripHarness.ts";
 import { loadInput } from "../util/fileLoader.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

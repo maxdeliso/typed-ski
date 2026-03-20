@@ -85,12 +85,3 @@ export const createApplication = (
   lft: left,
   rgt: right,
 });
-
-/**
- * Creates a left-associative application chain from multiple untyped lambda terms.
- * For example, typelessApp(a, b, c) creates ((a b) c).
- * @param uts the untyped lambda terms to apply in sequence
- * @returns the resulting application chain
- */
-export const typelessApp = (...uts: UntypedLambda[]) =>
-  uts.reduce(createApplication);

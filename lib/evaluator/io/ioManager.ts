@@ -14,7 +14,6 @@ import { ArenaIoRings } from "./arenaRing.ts";
 /**
  * Maximum number of bytes to read from stdout in a single call.
  *
- * Default: 4096 bytes (4KB)
  * Rationale: This is a standard page size and provides a good balance between
  * memory usage and efficiency. It's large enough to minimize syscall overhead
  * while remaining small enough to avoid excessive memory allocation.
@@ -24,7 +23,6 @@ const DEFAULT_STDOUT_READ_SIZE = 4096;
 /**
  * Threshold for busy-waiting before yielding to the event loop.
  *
- * Default: 512 iterations
  * Rationale: When a ring buffer is full or a submission queue is busy, we
  * initially use queueMicrotask() for rapid retries (low latency). After 512
  * consecutive failures, we switch to sleep(0) to yield to the event loop,
@@ -35,6 +33,7 @@ const DEFAULT_STDOUT_READ_SIZE = 4096;
 const BUSY_WAIT_THRESHOLD = 512;
 
 /**
+ * @internal
  * Manages IO operations (stdin/stdout) and suspension wake-ups.
  */
 export class IoManager {

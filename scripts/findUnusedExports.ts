@@ -1,57 +1,29 @@
 #!/usr/bin/env -S deno run -A
 
-// deno-lint-ignore no-import-prefix no-unversioned-import
-import { Node, Project } from "npm:ts-morph";
+import { Node, Project, SyntaxKind } from "ts-morph";
 import { join } from "std/path";
 
 const project = new Project({
   useInMemoryFileSystem: true,
 });
 
-// Add source files
 const dirs = ["lib", "bin", "test", "server"];
 const files: string[] = [];
 
-for (const dir of dirs) {
+function findFiles(dir: string, depth = 0) {
   try {
     for (const entry of Deno.readDirSync(dir)) {
-      if (
-        entry.isFile &&
-        (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx"))
-      ) {
-        files.push(join(dir, entry.name));
-      } else if (entry.isDirectory) {
-        // Simple 1-level recursion for now, adjust if deeper structure needed
-        try {
-          for (const sub of Deno.readDirSync(join(dir, entry.name))) {
-            if (
-              sub.isFile &&
-              (sub.name.endsWith(".ts") || sub.name.endsWith(".tsx"))
-            ) {
-              files.push(join(dir, entry.name, sub.name));
-            } else if (sub.isDirectory) {
-              // 2-level recursion
-              try {
-                for (
-                  const sub2 of Deno.readDirSync(
-                    join(dir, entry.name, sub.name),
-                  )
-                ) {
-                  if (
-                    sub2.isFile &&
-                    (sub2.name.endsWith(".ts") || sub2.name.endsWith(".tsx"))
-                  ) {
-                    files.push(join(dir, entry.name, sub.name, sub2.name));
-                  }
-                }
-              } catch {
-                // Ignore error
-              }
-            }
-          }
-        } catch {
-          // Ignore error
+      const fullPath = join(dir, entry.name);
+      if (entry.isFile) {
+        if (
+          entry.name.endsWith(".ts") ||
+          entry.name.endsWith(".tsx") ||
+          (dir.startsWith("server") && entry.name.endsWith(".js"))
+        ) {
+          files.push(fullPath);
         }
+      } else if (entry.isDirectory) {
+        findFiles(fullPath, depth + 1);
       }
     }
   } catch (e) {
@@ -61,57 +33,207 @@ for (const dir of dirs) {
   }
 }
 
+for (const dir of dirs) findFiles(dir);
+
 console.log(`Analyzing ${files.length} files...`);
 
 for (const file of files) {
-  const content = Deno.readTextFileSync(file);
-  project.createSourceFile(file, content);
+  try {
+    const content = Deno.readTextFileSync(file);
+    project.createSourceFile(file, content);
+  } catch (e) {
+    console.error(`Failed to read ${file}: ${e}`);
+  }
 }
 
-const entryPoints = [
+const PROD_ROOTS = [
   "lib/index.ts",
   "bin/tripc.ts",
-  "bin/genForest.ts",
-  "bin/genSvg.ts",
-  "bin/genTypeSvg.ts",
+  "server/serveWorkbench.ts",
+  "server/webglForest.ts",
 ];
+const TEST_ROOTS = files.filter((f) => f.startsWith("test/"));
 
-const unusedExports: string[] = [];
+function isInternal(node: Node): boolean {
+  let current: Node | undefined = node;
+  while (current) {
+    if (Node.isJSDocable(current)) {
+      if (
+        current.getJsDocs().some((doc) => doc.getText().includes("@internal"))
+      ) {
+        return true;
+      }
+    }
+    if (Node.isVariableDeclaration(current)) {
+      const statement = current.getVariableStatement();
+      if (
+        statement &&
+        statement.getJsDocs().some((doc) => doc.getText().includes("@internal"))
+      ) {
+        return true;
+      }
+    }
+    if (Node.isSourceFile(current)) break;
+    current = current.getParent();
+  }
+  return false;
+}
 
-for (const sourceFile of project.getSourceFiles()) {
-  const filePath = sourceFile.getFilePath().substring(1); // Remove leading slash
-  if (entryPoints.includes(filePath)) continue;
-  if (filePath.endsWith(".d.ts")) continue;
+function traceReachability(rootFiles: string[]): Set<Node> {
+  const reachable = new Set<Node>();
+  const queue: Node[] = [];
 
-  for (const [name, declarations] of sourceFile.getExportedDeclarations()) {
-    let isUsed = false;
+  for (const rootFile of rootFiles) {
+    const sourceFile = project.getSourceFile(rootFile);
+    if (!sourceFile) continue;
 
-    // Check if it's used in other files
-    for (const decl of declarations) {
-      if (Node.isReferenceFindable(decl)) {
-        const refs = decl.findReferencesAsNodes();
-        // Filter refs: ignore self-references (declarations themselves) and internal usage in the same file
-        const externalRefs = refs.filter((ref) => {
-          const refSourceFile = ref.getSourceFile();
-          return refSourceFile !== sourceFile;
-        });
-
-        if (externalRefs.length > 0) {
-          isUsed = true;
-          break;
+    for (const declarations of sourceFile.getExportedDeclarations().values()) {
+      for (const decl of declarations) {
+        if (!reachable.has(decl)) {
+          reachable.add(decl);
+          queue.push(decl);
         }
       }
     }
 
-    if (!isUsed) {
-      unusedExports.push(`${filePath}: ${name}`);
+    sourceFile.forEachDescendant((node) => {
+      if (
+        Node.isStatement(node) && !Node.isExportDeclaration(node) &&
+        !Node.isExportSpecifier(node)
+      ) {
+        node.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id) => {
+          id.getDefinitions().forEach((def) => {
+            const decl = def.getDeclarationNode();
+            if (decl && !reachable.has(decl)) {
+              reachable.add(decl);
+              queue.push(decl);
+            }
+          });
+        });
+      }
+    });
+  }
+
+  let processed = 0;
+  while (processed < queue.length) {
+    const current = queue[processed++]!;
+    current.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id) => {
+      id.getDefinitions().forEach((def) => {
+        const decl = def.getDeclarationNode();
+        if (decl && !reachable.has(decl)) {
+          const sourceFile = decl.getSourceFile();
+          if (
+            sourceFile && !sourceFile.getFilePath().includes("node_modules")
+          ) {
+            reachable.add(decl);
+            queue.push(decl);
+          }
+        }
+      });
+    });
+  }
+
+  return reachable;
+}
+
+console.log("Tracing production reachability...");
+const productionReachable = traceReachability(PROD_ROOTS);
+
+console.log("Tracing test reachability...");
+const testReachable = traceReachability(TEST_ROOTS);
+
+const stats = {
+  totallyDead: [] as string[],
+  leakedInternal: [] as string[],
+  missingInternalTag: [] as string[],
+  wellBehavedInternal: [] as string[],
+  publicApi: [] as string[],
+  serverOnly: [] as string[],
+};
+
+for (const sourceFile of project.getSourceFiles()) {
+  const filePath = sourceFile.getFilePath().substring(1);
+  if (PROD_ROOTS.includes(filePath)) continue;
+  if (filePath.endsWith(".d.ts")) continue;
+
+  for (const [name, declarations] of sourceFile.getExportedDeclarations()) {
+    for (const decl of declarations) {
+      const isProd = productionReachable.has(decl);
+      const isTest = testReachable.has(decl);
+      const tagged = isInternal(decl);
+      const location = `${filePath}:${name}`;
+
+      const isExportedFromRoot = PROD_ROOTS.some((root) => {
+        const sf = project.getSourceFile(root);
+        return sf?.getExportedDeclarations().has(name);
+      });
+
+      if (!isProd && !isTest) {
+        const isServer = files.filter((f) => f.startsWith("server/")).some(
+          (f) => {
+            const content = Deno.readTextFileSync(f);
+            return content.includes(name);
+          },
+        );
+        if (isServer) stats.serverOnly.push(location);
+        else stats.totallyDead.push(location);
+      } else if (isProd && tagged) {
+        if (isExportedFromRoot) {
+          stats.leakedInternal.push(location);
+        } else {
+          stats.wellBehavedInternal.push(location);
+        }
+      } else if (isProd && !tagged) {
+        stats.publicApi.push(location);
+      } else if (!isProd && isTest) {
+        if (tagged || filePath.startsWith("test/")) {
+          stats.wellBehavedInternal.push(location);
+        } else {
+          stats.missingInternalTag.push(location);
+        }
+      }
     }
   }
 }
 
-if (unusedExports.length > 0) {
-  console.log("Potential unused exports:");
-  unusedExports.forEach((e) => console.log(e));
-} else {
-  console.log("No unused exports found.");
+function unique(arr: string[]): string[] {
+  return [...new Set(arr)].sort();
 }
+
+console.log("\n=== REACHABILITY REPORT ===\n");
+
+const totallyDead = unique(stats.totallyDead);
+if (totallyDead.length > 0) {
+  console.log("TOTALLY UNREACHABLE (Safe to delete):");
+  totallyDead.forEach((e) => console.log(`  - ${e}`));
+  console.log("");
+}
+
+const leaked = unique(stats.leakedInternal);
+if (leaked.length > 0) {
+  console.log("LEAKED INTERNALS (Marked @internal but used by PROD):");
+  leaked.forEach((e) => console.log(`  - ${e}`));
+  console.log("");
+}
+
+const missing = unique(stats.missingInternalTag);
+if (missing.length > 0) {
+  console.log("MISSING @internal TAG (Used only by TESTS):");
+  missing.forEach((e) => console.log(`  - ${e}`));
+  console.log("");
+}
+
+const server = unique(stats.serverOnly);
+if (server.length > 0) {
+  console.log("SERVER-ONLY (Used by workbench JS):");
+  server.forEach((e) => console.log(`  - ${e}`));
+  console.log("");
+}
+
+console.log(`SUMMARY:
+  - Public API Symbols:    ${unique(stats.publicApi).length}
+  - Well-behaved Internals: ${unique(stats.wellBehavedInternal).length}
+  - Issues Found:          ${
+  totallyDead.length + leaked.length + missing.length
+}
+`);

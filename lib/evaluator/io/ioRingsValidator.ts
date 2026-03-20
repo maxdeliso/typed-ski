@@ -15,6 +15,7 @@ import {
 import { ArenaIoRings } from "./arenaRing.ts";
 
 /**
+ * @internal
  * Self-test to validate that the arena header and IO rings are correctly configured.
  * This catches issues like out-of-sync header files early.
  */

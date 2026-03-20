@@ -10,7 +10,7 @@ import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

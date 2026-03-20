@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "std/assert";
 import randomSeed from "random-seed";
 import type { ArenaWasmExports } from "../../lib/evaluator/arenaEvaluator.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
   SABHEADER_HEADER_SIZE_U32,
@@ -761,6 +761,37 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
       }
     },
   );
+});
+
+Deno.test("ParallelArenaEvaluator - concurrent mixed work", async () => {
+  // Simplification of the previously separate parallelContinuationRepro test.
+  // Validates that the evaluator remains stable when processing both convergent
+  // and divergent work concurrently across multiple workers.
+  const evaluator = await ParallelArenaEvaluatorWasm.create(2, false, {
+    maxResubmits: 100,
+  });
+  try {
+    const divergent = parseSKI("(SII)(SII)");
+    const convergent = parseSKI("II");
+
+    const p1 = evaluator.reduceAsync(convergent);
+    const p2 = evaluator.reduceAsync(divergent, 50);
+    const p3 = evaluator.reduceAsync(divergent);
+
+    const results = await Promise.allSettled([p1, p2, p3]);
+
+    // Convergent work should always succeed
+    assert(results[0].status === "fulfilled");
+    assertEquals(
+      unparseSKI((results[0] as PromiseFulfilledResult<SKIExpression>).value),
+      "I",
+    );
+
+    // Divergent work may succeed or fail depending on step timing,
+    // but should not crash the evaluator or workers.
+  } finally {
+    evaluator.terminate();
+  }
 });
 
 Deno.test("ParallelArenaEvaluator - request hooks call the expected callbacks", async () => {

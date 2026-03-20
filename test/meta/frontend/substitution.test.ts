@@ -9,12 +9,12 @@ import {
 import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import {
   mkSystemFAbs,
-  mkSystemFApp,
   mkSystemFTAbs,
   mkSystemFTypeApp,
   mkSystemFVar,
   type SystemFTerm,
 } from "../../../lib/terms/systemF.ts";
+import { mkSystemFApp } from "../../util/ast.ts";
 import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";
 
 Deno.test("substitute", async (t) => {

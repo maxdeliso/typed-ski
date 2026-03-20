@@ -25,7 +25,7 @@ import {
   mkSystemFTypeApp,
   mkSystemFVar,
 } from "../../../lib/terms/systemF.ts";
-import { mkTypedAbs } from "../../../lib/types/typedLambda.ts";
+import { mkTypedAbs } from "../../util/ast.ts";
 import { mkUntypedAbs, mkVar } from "../../../lib/terms/lambda.ts";
 import { forall } from "../../../lib/types/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";

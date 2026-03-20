@@ -5,7 +5,7 @@ import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
 
 const UNPARSE_SOURCE_FILE = new URL(
   "../../lib/compiler/unparse.trip",

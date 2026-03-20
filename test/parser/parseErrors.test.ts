@@ -18,7 +18,7 @@ import {
 } from "../../lib/parser/parserState.ts";
 import { parseChain } from "../../lib/parser/chain.ts";
 import { parseAtomicTypedLambda } from "../../lib/parser/typedLambda.ts";
-import { createTypedApplication } from "../../lib/types/typedLambda.ts";
+import { createTypedApplication } from "../util/ast.ts";
 import { parseWithEOF } from "../../lib/parser/eof.ts";
 
 Deno.test("Parser Error Coverage", async (t) => {

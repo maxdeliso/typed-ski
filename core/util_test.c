@@ -67,7 +67,8 @@ static void test_dynamic_buffer_realloc_failure(void) {
 
   struct rlimit limited = old_limit;
   limited.rlim_cur = 64ULL * 1024 * 1024;
-  if (old_limit.rlim_max != RLIM_INFINITY && limited.rlim_cur > old_limit.rlim_max) {
+  if (old_limit.rlim_max != RLIM_INFINITY &&
+      limited.rlim_cur > old_limit.rlim_max) {
     limited.rlim_cur = old_limit.rlim_max;
   }
   if (limited.rlim_cur < 64ULL * 1024 * 1024) {

@@ -144,6 +144,7 @@ export function parseArrowTypeNoApp(
 }
 
 /**
+ * @internal
  * Parses a complete type from an input string.
  */
 export function parseType(input: string): [string, BaseType] {

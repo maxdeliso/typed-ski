@@ -1,6 +1,7 @@
 /**
+ * @internal
  * Parallel arena evaluator using Web Workers.
- *
+
  * This module orchestrates the creation of the Shared Memory environment,
  * spawns the worker pool, and manages the main thread's interaction with the
  * shared Core/WASM arena.
@@ -25,11 +26,15 @@ import {
 } from "./parallel/requestTracker.ts";
 import { WorkerManager } from "./parallel/workerManager.ts";
 
-// Re-export for external use
+/**
+ * @internal
+ * Re-export for external use
+ */
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
+/** @internal */
 export type { ArenaRingStatsSnapshot } from "./io/ringStats.ts";
 
-export interface ParallelArenaEvaluatorOptions {
+interface ParallelArenaEvaluatorOptions {
   /**
    * Maximum number of suspension/control-node resubmissions per request.
    *
@@ -41,6 +46,9 @@ export interface ParallelArenaEvaluatorOptions {
   maxResubmits?: number;
 }
 
+/**
+ * Parallel arena evaluator using Web Workers.
+ */
 export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   implements Evaluator {
   public readonly workers: Worker[] = [];
@@ -238,7 +246,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
    *
    * Notes:
    * - The number of reduction steps is specified per-request via `maxSteps`.
-   * - This is the primitive used by higher-level helpers (e.g. reduceAsync) and tooling (e.g. genForest).
+   * - This is the primitive used by higher-level helpers (e.g. reduceAsync).
    */
   async reduceArenaNodeIdAsync(
     arenaNodeId: number,
@@ -406,7 +414,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       shared: true,
     });
 
-    // NOTE: keep stdout clean for CLI tools (e.g. genForest) that stream JSONL.
+    // NOTE: keep stdout clean for CLI tools that stream JSONL.
     // If you want this, run with `--verbose` at the CLI layer instead.
 
     if (typeof SharedArrayBuffer === "undefined") {
@@ -453,7 +461,11 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       return result;
     })();
 
-    const workerUrl = new URL("./arenaWorker.ts", import.meta.url).href;
+    const isBrowser = typeof globalThis.document !== "undefined";
+    const workerUrl = isBrowser
+      ? "/dist/arenaWorker.js"
+      : new URL("./arenaWorker.ts", import.meta.url).href;
+
     const workers = await WorkerManager.spawnWorkers(
       workerCount,
       workerUrl,

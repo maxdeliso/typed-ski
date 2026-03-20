@@ -6,7 +6,7 @@ import { getNatObject } from "../../lib/nat.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
 import type { Evaluator } from "../../lib/evaluator/evaluator.ts";
 
 interface TripHarnessOptions {

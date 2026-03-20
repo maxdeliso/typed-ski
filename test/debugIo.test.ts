@@ -1,5 +1,5 @@
 import { assertEquals } from "std/assert";
-import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
 import { I, WriteOne } from "../lib/ski/terminal.ts";
 import { apply } from "../lib/ski/expression.ts";
 

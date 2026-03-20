@@ -1597,6 +1597,7 @@ function substituteTripLangType(
 }
 
 /**
+ * @internal
  * Generic non-recursive substitution engine over TripLang values.
  *
  * Traverses with an explicit stack, applying either replacement or rebuild functions
@@ -1645,6 +1646,7 @@ export function substitute<T extends TripLangValueType>(
 }
 
 /**
+ * @internal
  * Batched version of substituteTripLangTermDirect.
  * Performs multiple term substitutions in a single pass.
  */

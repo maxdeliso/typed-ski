@@ -30,6 +30,7 @@ export async function loadTripSourceFile(
   return source;
 }
 
+/** @internal */
 export function loadTripSourceFileSync(
   sourceLocation: TripSourceLocation,
 ): string {

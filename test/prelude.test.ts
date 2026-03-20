@@ -1,5 +1,5 @@
 import { assertEquals } from "std/assert";
-import { ParallelArenaEvaluatorWasm } from "../lib/evaluator/parallelArenaEvaluator.ts";
+import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { getBinObject } from "../lib/bin.ts";

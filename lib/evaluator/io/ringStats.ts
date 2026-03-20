@@ -7,6 +7,9 @@
  * @module
  */
 
+/**
+ * @internal
+ */
 export type ArenaRingStatsSnapshot = {
   submitOk: number;
   submitFull: number;
@@ -27,6 +30,7 @@ export type ArenaRingStatsSnapshot = {
 };
 
 /**
+ * @internal
  * Tracks statistics for ring buffer operations.
  */
 export class RingStats {

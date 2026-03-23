@@ -1,0 +1,23 @@
+module Test
+import Prelude List
+import Prelude U8
+import Prelude matchList
+import Prelude writeOne
+import Unparse Terminal
+import Unparse T_S
+import Unparse T_K
+import Unparse T_I
+import Unparse T_WriteOne
+import Unparse T_Byte
+import Unparse Comb
+import Unparse C_Term
+import Unparse C_App
+import Unparse unparseCombinator
+
+poly rec writeList = #R => \l : List => \k : R =>
+  matchList [U8] [R] l
+    k
+    (\h : U8 => \t : List => writeOne h [R] (\u : U8 => writeList [R] t k))
+
+export main
+poly main = writeList [U8] (__TRIP_EXPR__) #u8(0)

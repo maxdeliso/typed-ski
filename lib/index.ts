@@ -30,6 +30,7 @@ export { ParallelArenaEvaluatorWasm } from "./evaluator/parallelArenaEvaluator.t
 export { createArenaEvaluator } from "./evaluator/arenaEvaluator.ts";
 
 // Module provider exports
+export { getAvlObject } from "./avl.ts";
 export { getBinObject } from "./bin.ts";
 export { getNatObject } from "./nat.ts";
 export { getPreludeObject } from "./prelude.ts";
@@ -125,6 +126,13 @@ export { resolvePoly } from "./meta/frontend/compilation.ts";
 
 // Phase 1 Single-File Compiler exports
 export {
+  /** Runs the self-hosted compiler and verifies its output against the TypeScript compiler. */
+  bootstrappedCompile,
+  type BootstrappedCompileOptions,
+  BootstrappedCompilerError,
+  BootstrappedCompilerMismatchError,
+  /** Compiles a TripLang source string to the final linked combinator string. */
+  compileToCombinatorString,
   /** Compiles a single TripLang source string to a TripCObject. */
   compileToObjectFile,
   /** Compiles a single TripLang source string to a serialized .tripc object file. */

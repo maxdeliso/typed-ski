@@ -14,6 +14,8 @@ typedef struct {
 void db_init(DynamicBuffer *db);
 void db_free(DynamicBuffer *db);
 bool db_ensure(DynamicBuffer *db, size_t want);
+bool db_append(DynamicBuffer *db, char c);
+bool db_append_hex(DynamicBuffer *db, uint8_t byte);
 
 int parse_u32_arg(const char *text, uint32_t *out);
 int hex_digit(int c);

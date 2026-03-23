@@ -495,12 +495,12 @@ thanatos-check-asan-long-internal: build-native-internal
 thanatos-tsan-repl: build-native-internal
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_TSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -o bin/thanatos-tsan-repl \
-		core/arena.c core/thanatos.c core/ski_io.c core/session.c core/main.c
+		core/arena.c core/thanatos.c core/ski_io.c core/util.c core/session.c core/main.c
 
 thanatos-ubsan-repl: build-native-internal
 	mkdir -p bin
 	$(WRAPPED_CC) $(C_UBSAN_FLAGS) $(C_WARN_FLAGS) -pthread -std=c11 $(C_FEATURE_FLAGS) -o bin/thanatos-ubsan-repl \
-		core/arena.c core/thanatos.c core/ski_io.c core/session.c core/main.c
+		core/arena.c core/thanatos.c core/ski_io.c core/util.c core/session.c core/main.c
 
 format-internal:
 	nix $(NIX_FLAGS) run .#fmt

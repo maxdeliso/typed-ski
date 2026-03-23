@@ -63,28 +63,9 @@ static bool unparse_and_respond(ThanatosSession *s, uint32_t result,
   }
 }
 
-typedef struct {
-  uint8_t *buf;
-  size_t cap;
-  size_t len;
-  int error;
-} StdoutBuffer;
-
 static void daemon_stdout_handler(uint8_t byte, void *ctx) {
-  StdoutBuffer *sb = (StdoutBuffer *)ctx;
-  if (sb->error)
-    return;
-  if (sb->len >= sb->cap) {
-    size_t new_cap = sb->cap == 0 ? 1024 : sb->cap * 2;
-    uint8_t *new_buf = realloc(sb->buf, new_cap);
-    if (!new_buf) {
-      sb->error = 1;
-      return;
-    }
-    sb->buf = new_buf;
-    sb->cap = new_cap;
-  }
-  sb->buf[sb->len++] = byte;
+  DynamicBuffer *db = (DynamicBuffer *)ctx;
+  (void)db_append_hex(db, byte);
 }
 
 static int parse_one_path(const char **p_start, char *out, size_t max) {
@@ -240,38 +221,38 @@ static void handle_reduce_io(ThanatosSession *s, const char *line, size_t len) {
     return;
   }
 
-  StdoutBuffer sb = {NULL, 0, 0, 0};
-  thanatos_set_stdout_handler(daemon_stdout_handler, &sb);
+  DynamicBuffer hex_out;
+  db_init(&hex_out);
+  thanatos_set_stdout_handler(daemon_stdout_handler, &hex_out);
   uint32_t result = thanatos_reduce_to_normal_form(root);
   thanatos_set_stdout_handler(NULL, NULL);
 
-  if (sb.error) {
-    session_printf(s, "ERR stdout buffer allocation failed\n");
-    free(sb.buf);
-    session_fflush(s);
-    return;
-  }
-
   if (result == EMPTY) {
     session_printf(s, "ERR reduction error\n");
-    free(sb.buf);
+    db_free(&hex_out);
     session_fflush(s);
     return;
   }
 
   session_printf(s, "OK ");
-  if (sb.len == 0) {
+  if (hex_out.len == 0) {
     session_printf(s, "-");
   } else {
-    for (size_t i = 0; i < sb.len; i++)
-      session_printf(s, "%02x", sb.buf[i]);
+    /* hex_out already contains hex chars from db_append_hex */
+    if (!db_append(&hex_out, '\0')) {
+      session_printf(s, "ERR OOM for null terminator\n");
+      db_free(&hex_out);
+      session_fflush(s);
+      return;
+    }
+    session_printf(s, "%s", hex_out.ptr);
   }
   session_printf(s, " ");
 
   if (!unparse_and_respond(s, result, "")) {
     session_printf(s, "ERR response too large or OOM\n");
   }
-  free(sb.buf);
+  db_free(&hex_out);
   session_fflush(s);
 }
 

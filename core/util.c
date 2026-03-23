@@ -39,6 +39,22 @@ bool db_ensure(DynamicBuffer *db, size_t want) {
   return true;
 }
 
+bool db_append(DynamicBuffer *db, char c) {
+  if (!db_ensure(db, db->len + 1))
+    return false;
+  db->ptr[db->len++] = c;
+  return true;
+}
+
+bool db_append_hex(DynamicBuffer *db, uint8_t byte) {
+  if (!db_ensure(db, db->len + 2))
+    return false;
+  static const char hex[] = "0123456789abcdef";
+  db->ptr[db->len++] = hex[(byte >> 4) & 0xf];
+  db->ptr[db->len++] = hex[byte & 0xf];
+  return true;
+}
+
 int parse_u32_arg(const char *text, uint32_t *out) {
   uint64_t value = 0;
   if (text == NULL || out == NULL || *text == '\0')

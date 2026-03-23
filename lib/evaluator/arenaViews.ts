@@ -26,6 +26,10 @@ export interface ArenaViews {
   offsetNodeNextIdx: number;
   offsetNodeKind: number;
   offsetNodeSym: number;
+  kindView: Uint8Array;
+  symView: Uint8Array;
+  leftView: Uint32Array;
+  rightView: Uint32Array;
 }
 
 /**
@@ -86,6 +90,15 @@ function buildArenaViews(
   const offsetNodeKind = get64(SabHeaderField.OFFSET_NODE_KIND);
   const offsetNodeSym = get64(SabHeaderField.OFFSET_NODE_SYM);
 
+  const kindView = new Uint8Array(buffer, baseAddr + offsetNodeKind, capacity);
+  const symView = new Uint8Array(buffer, baseAddr + offsetNodeSym, capacity);
+  const leftView = new Uint32Array(buffer, baseAddr + offsetNodeLeft, capacity);
+  const rightView = new Uint32Array(
+    buffer,
+    baseAddr + offsetNodeRight,
+    capacity,
+  );
+
   return {
     buffer,
     baseAddr,
@@ -96,6 +109,10 @@ function buildArenaViews(
     offsetNodeNextIdx,
     offsetNodeKind,
     offsetNodeSym,
+    kindView,
+    symView,
+    leftView,
+    rightView,
   };
 }
 
@@ -167,24 +184,20 @@ export function getOrBuildArenaViews(
 
 export function getKind(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u8 = new Uint8Array(views.buffer);
-  return u8[views.baseAddr + views.offsetNodeKind + id]!;
+  return views.kindView[id]!;
 }
 
 export function getSym(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u8 = new Uint8Array(views.buffer);
-  return u8[views.baseAddr + views.offsetNodeSym + id]!;
+  return views.symView[id]!;
 }
 
 export function getLeft(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u32 = new Uint32Array(views.buffer);
-  return u32[(views.baseAddr + views.offsetNodeLeft + id * 4) >>> 2]!;
+  return views.leftView[id]!;
 }
 
 export function getRight(id: number, views: ArenaViews): number {
   if (id >= views.capacity) return -1;
-  const u32 = new Uint32Array(views.buffer);
-  return u32[(views.baseAddr + views.offsetNodeRight + id * 4) >>> 2]!;
+  return views.rightView[id]!;
 }

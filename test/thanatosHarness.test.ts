@@ -165,19 +165,28 @@ class ThanatosSession {
   private closed = false;
 
   /** Start the daemon. Call once. */
-  start(workers?: number): void {
+  start(workers?: number, env?: Record<string, string>): void {
     if (this.child != null) return;
     if (!thanatosAvailable()) throw new Error("thanatos binary not found");
     const w = workers ?? defaultWorkerCount();
     this.child = new Deno.Command(THANATOS_BIN, {
       args: [String(w)],
       cwd: PROJECT_ROOT,
+      env,
       stdin: "piped",
       stdout: "piped",
       stderr: "inherit",
     }).spawn();
     this.writer = this.child.stdin.getWriter();
     this.reader = this.child.stdout.getReader();
+  }
+
+  signal(signal: Deno.Signal): void {
+    if (this.child == null) {
+      throw new Error("ThanatosSession not started");
+    }
+    if (this.closed) throw new Error("ThanatosSession closed");
+    this.child.kill(signal);
   }
 
   /** Send one request line and return the response line. Must be called serially. */
@@ -526,6 +535,51 @@ async function runThanatosSnapshot(
   }
 }
 
+async function waitForTraceDump(
+  traceDir: string,
+  timeoutMs = 2000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const dumps: string[] = [];
+    for await (const entry of Deno.readDir(traceDir)) {
+      if (entry.isFile && entry.name.endsWith(".json")) {
+        dumps.push(join(traceDir, entry.name));
+      }
+    }
+    dumps.sort();
+    if (dumps.length > 0) {
+      return dumps[dumps.length - 1]!;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for thanatos trace dump in ${traceDir}`);
+}
+
+async function waitForTraceDumpCount(
+  traceDir: string,
+  expectedCount: number,
+  timeoutMs = 2000,
+): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const dumps: string[] = [];
+    for await (const entry of Deno.readDir(traceDir)) {
+      if (entry.isFile && entry.name.endsWith(".json")) {
+        dumps.push(join(traceDir, entry.name));
+      }
+    }
+    dumps.sort();
+    if (dumps.length >= expectedCount) {
+      return dumps;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    `timed out waiting for ${expectedCount} thanatos trace dumps in ${traceDir}`,
+  );
+}
+
 Deno.test({
   name: "session based IO - readOne echo",
   ignore: !thanatosAvailable(),
@@ -641,6 +695,149 @@ Deno.test({
       );
     } finally {
       await session.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "thanatos trace dump - SIGHUP writes JSON worker snapshot",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const traceDir = await Deno.makeTempDir();
+    const session = new ThanatosSession();
+    try {
+      session.start(1, {
+        THANATOS_TRACE_DIR: traceDir,
+        THANATOS_TRACE_TIMEOUT_MS: "200",
+      });
+      await session.ping();
+      const resultDag = await session.reduceDag(toDagWire(parseSKI("I K")));
+      assertEquals(unparseSKI(fromDagWire(resultDag)), "K");
+
+      session.signal("SIGHUP");
+      const dumpPath = await waitForTraceDump(traceDir);
+      const dump = JSON.parse(await Deno.readTextFile(dumpPath)) as {
+        dump_version: number;
+        epoch: number;
+        runtime: { worker_count: number };
+        workers: Array<{
+          worker_id: number;
+          complete: boolean;
+          recent_events: Array<{ kind: string }>;
+        }>;
+      };
+
+      assertEquals(dump.dump_version, 1);
+      assert(dump.epoch >= 1);
+      assertEquals(dump.runtime.worker_count, 1);
+      assertEquals(dump.workers.length, 1);
+      assertEquals(dump.workers[0]?.worker_id, 0);
+      assertEquals(dump.workers[0]?.complete, true);
+      assert(
+        (dump.workers[0]?.recent_events.length ?? 0) > 0,
+        `expected non-empty recent_events in ${dumpPath}`,
+      );
+    } finally {
+      await session.close();
+      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
+    }
+  },
+});
+
+Deno.test({
+  name: "thanatos trace dump - idle multi-worker snapshot is complete",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const traceDir = await Deno.makeTempDir();
+    const session = new ThanatosSession();
+    try {
+      session.start(2, {
+        THANATOS_TRACE_DIR: traceDir,
+        THANATOS_TRACE_TIMEOUT_MS: "200",
+      });
+      await session.ping();
+
+      session.signal("SIGHUP");
+      const dumpPath = await waitForTraceDump(traceDir);
+      const dump = JSON.parse(await Deno.readTextFile(dumpPath)) as {
+        runtime: { worker_count: number };
+        workers: Array<{
+          worker_id: number;
+          complete: boolean;
+          state: string;
+        }>;
+      };
+
+      assertEquals(dump.runtime.worker_count, 2);
+      assertEquals(dump.workers.length, 2);
+      assertEquals(
+        dump.workers.map((worker) => worker.worker_id),
+        [0, 1],
+      );
+      assertEquals(
+        dump.workers.map((worker) => worker.complete),
+        [true, true],
+      );
+      assertEquals(
+        dump.workers.map((worker) => worker.state),
+        ["idle", "idle"],
+      );
+    } finally {
+      await session.close();
+      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
+    }
+  },
+});
+
+Deno.test({
+  name: "thanatos trace dump - repeated SIGHUP increments epoch files",
+  ignore: !thanatosAvailable(),
+  fn: async () => {
+    const traceDir = await Deno.makeTempDir();
+    const session = new ThanatosSession();
+    try {
+      session.start(1, {
+        THANATOS_TRACE_DIR: traceDir,
+        THANATOS_TRACE_TIMEOUT_MS: "200",
+      });
+      await session.ping();
+      await session.reduceDag(toDagWire(parseSKI("I S")));
+
+      session.signal("SIGHUP");
+      await waitForTraceDump(traceDir);
+      session.signal("SIGHUP");
+
+      const dumpPaths = await waitForTraceDumpCount(traceDir, 2);
+      const dumps = await Promise.all(
+        dumpPaths.map(async (path) =>
+          JSON.parse(await Deno.readTextFile(path)) as {
+            epoch: number;
+            runtime: { worker_count: number };
+            workers: Array<{ complete: boolean }>;
+          }
+        ),
+      );
+      dumps.sort((a, b) => a.epoch - b.epoch);
+
+      assertEquals(
+        dumps.map((dump) => dump.epoch),
+        [1, 2],
+      );
+      assertEquals(
+        dumps.map((dump) => dump.runtime.worker_count),
+        [1, 1],
+      );
+      assertEquals(
+        dumps.map((dump) => dump.workers.length),
+        [1, 1],
+      );
+      assertEquals(
+        dumps.map((dump) => dump.workers[0]?.complete),
+        [true, true],
+      );
+    } finally {
+      await session.close();
+      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
     }
   },
 });

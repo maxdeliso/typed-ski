@@ -10,6 +10,10 @@ typedef struct {
    * one byte lazily for each blocked READ_ONE suspension and takes ownership of
    * the fd (it is closed by thanatos_shutdown). */
   int stdin_fd;
+  /** Optional directory for signal-triggered JSON trace dumps. NULL or empty disables tracing. */
+  const char *trace_dir;
+  /** Cooperative snapshot wait budget in milliseconds. */
+  uint32_t trace_timeout_ms;
 } ThanatosConfig;
 
 /* READ_ONE semantics now match JS/WASM more closely: if no byte is available

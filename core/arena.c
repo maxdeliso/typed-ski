@@ -259,7 +259,82 @@ typedef struct {
   uint8_t mode;
   uint8_t status;
   uint16_t reserved;
+  uint32_t req_id;
 } WorkerState;
+
+enum {
+  TRACE_RING_SIZE = 128,
+  TRACE_STACK_SNAPSHOT = 64,
+  TRACE_GRAPH_NODES = 48,
+  TRACE_SPINE_NODES = 16,
+  TRACE_GRAPH_BFS_LIMIT = 32,
+};
+
+typedef enum {
+  TRACE_EV_JOB_START = 1,
+  TRACE_EV_JOB_RESUME = 2,
+  TRACE_EV_SAFEPOINT = 3,
+  TRACE_EV_PARK = 4,
+  TRACE_EV_DONE = 5,
+  TRACE_EV_IO_WAIT = 6,
+  TRACE_EV_STEP_LIMIT = 7,
+} TraceEventKind;
+
+typedef struct {
+  uint64_t step;
+  uint32_t kind;
+  uint32_t a;
+  uint32_t b;
+  uint32_t c;
+  uint32_t req_id;
+} TraceEvent;
+
+typedef struct {
+  uint32_t node_id;
+  uint32_t kind;
+  uint32_t sym;
+  uint32_t left;
+  uint32_t right;
+} TraceGraphNode;
+
+typedef struct {
+  uint32_t worker_id;
+  uint32_t status;
+  uint32_t req_id;
+  uint32_t current_val;
+  uint32_t remaining_steps;
+  uint32_t mode;
+  uint32_t control_depth;
+  uint32_t control_base;
+  uint32_t control_count;
+  uint32_t event_count;
+  uint32_t graph_count;
+  uint64_t thread_id;
+  uint64_t step_counter;
+  Frame control_stack[TRACE_STACK_SNAPSHOT];
+  TraceEvent recent_events[TRACE_RING_SIZE];
+  TraceGraphNode focus_graph[TRACE_GRAPH_NODES];
+} WorkerTraceSnapshot;
+
+typedef struct {
+  atomic_uint live_status;
+  atomic_uint live_req_id;
+  atomic_uint live_current_val;
+  atomic_uint live_remaining_steps;
+  atomic_uint live_mode;
+  atomic_uint live_sp;
+  atomic_uint last_seen_epoch;
+  atomic_uint snapshot_epoch_done;
+  _Atomic uint64_t live_thread_id;
+  _Atomic uint64_t live_step_counter;
+  atomic_uint ring_head;
+  TraceEvent ring[TRACE_RING_SIZE];
+  WorkerTraceSnapshot snapshot;
+} WorkerTraceState;
+
+static WorkerTraceState WORKER_TRACE[MAX_WORKERS];
+static atomic_uint TRACE_REQUESTED_EPOCH;
+static uint32_t TRACE_WORKER_COUNT = 0;
 
 typedef struct {
   uint32_t current_val;
@@ -1488,6 +1563,561 @@ static inline Frame worker_pop_frame(ControlViews cv, uint32_t slice_id,
   return frames[--ws->sp];
 }
 
+#ifndef __wasm__
+static inline uint64_t trace_worker_thread_id(void) {
+#if defined(__linux__) && !defined(__wasm__)
+  return (uint64_t)syscall(SYS_gettid);
+#else
+  return 0;
+#endif
+}
+
+static const char *trace_event_kind_name(uint32_t kind) {
+  switch (kind) {
+  case TRACE_EV_JOB_START:
+    return "job_start";
+  case TRACE_EV_JOB_RESUME:
+    return "job_resume";
+  case TRACE_EV_SAFEPOINT:
+    return "safepoint";
+  case TRACE_EV_PARK:
+    return "park";
+  case TRACE_EV_DONE:
+    return "done";
+  case TRACE_EV_IO_WAIT:
+    return "io_wait";
+  case TRACE_EV_STEP_LIMIT:
+    return "step_limit";
+  default:
+    return "unknown";
+  }
+}
+
+static const char *trace_worker_status_name(uint32_t status) {
+  switch (status) {
+  case WORKER_RUNNING:
+    return "running";
+  case WORKER_YIELD_RETRY:
+    return "yield_retry";
+  case WORKER_IDLE:
+    return "idle";
+  default:
+    return "unknown";
+  }
+}
+
+static const char *trace_mode_name(uint32_t mode) {
+  switch (mode) {
+  case MODE_DESCEND:
+    return "descend";
+  case MODE_RETURN:
+    return "return";
+  default:
+    return "unknown";
+  }
+}
+
+static const char *trace_arena_kind_name(uint32_t kind) {
+  switch (kind) {
+  case ARENA_KIND_TERMINAL:
+    return "terminal";
+  case ARENA_KIND_NON_TERM:
+    return "app";
+  case ARENA_KIND_U8:
+    return "u8";
+  default:
+    return "unknown";
+  }
+}
+
+static const char *trace_arena_sym_name(uint32_t sym) {
+  switch (sym) {
+  case ARENA_SYM_S:
+    return "S";
+  case ARENA_SYM_K:
+    return "K";
+  case ARENA_SYM_I:
+    return "I";
+  case ARENA_SYM_READ_ONE:
+    return "READ_ONE";
+  case ARENA_SYM_WRITE_ONE:
+    return "WRITE_ONE";
+  case ARENA_SYM_B:
+    return "B";
+  case ARENA_SYM_C:
+    return "C";
+  case ARENA_SYM_SPRIME:
+    return "SPRIME";
+  case ARENA_SYM_BPRIME:
+    return "BPRIME";
+  case ARENA_SYM_CPRIME:
+    return "CPRIME";
+  case ARENA_SYM_EQ_U8:
+    return "EQ_U8";
+  case ARENA_SYM_LT_U8:
+    return "LT_U8";
+  case ARENA_SYM_DIV_U8:
+    return "DIV_U8";
+  case ARENA_SYM_MOD_U8:
+    return "MOD_U8";
+  case ARENA_SYM_ADD_U8:
+    return "ADD_U8";
+  case ARENA_SYM_SUB_U8:
+    return "SUB_U8";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+static inline WorkerTraceState *trace_state_for(uint32_t worker_id) {
+  if (worker_id >= MAX_WORKERS)
+    return NULL;
+  return &WORKER_TRACE[worker_id];
+}
+
+static inline void trace_publish_live(uint32_t worker_id, const WorkerState *ws,
+                                      uint64_t step_counter) {
+  WorkerTraceState *ts = trace_state_for(worker_id);
+  if (ts == NULL || ws == NULL)
+    return;
+  atomic_store_explicit(&ts->live_status, ws->status, memory_order_relaxed);
+  atomic_store_explicit(&ts->live_req_id, ws->req_id, memory_order_relaxed);
+  atomic_store_explicit(&ts->live_current_val, ws->current_val,
+                        memory_order_relaxed);
+  atomic_store_explicit(&ts->live_remaining_steps, ws->remaining_steps,
+                        memory_order_relaxed);
+  atomic_store_explicit(&ts->live_mode, ws->mode, memory_order_relaxed);
+  atomic_store_explicit(&ts->live_sp, ws->sp, memory_order_relaxed);
+  atomic_store_explicit(&ts->live_thread_id, trace_worker_thread_id(),
+                        memory_order_relaxed);
+  atomic_store_explicit(&ts->live_step_counter, step_counter,
+                        memory_order_relaxed);
+}
+
+static inline void trace_record_event(uint32_t worker_id, uint64_t step_counter,
+                                      uint32_t req_id, uint32_t kind,
+                                      uint32_t a, uint32_t b, uint32_t c) {
+  WorkerTraceState *ts = trace_state_for(worker_id);
+  if (ts == NULL)
+    return;
+  uint32_t head = atomic_load_explicit(&ts->ring_head, memory_order_relaxed);
+  TraceEvent *ev = &ts->ring[head % TRACE_RING_SIZE];
+  ev->step = step_counter;
+  ev->kind = kind;
+  ev->a = a;
+  ev->b = b;
+  ev->c = c;
+  ev->req_id = req_id;
+  atomic_store_explicit(&ts->ring_head, head + 1, memory_order_release);
+}
+
+static bool trace_graph_contains(const TraceGraphNode *out, uint32_t count,
+                                 uint32_t node_id) {
+  for (uint32_t i = 0; i < count; i++) {
+    if (out[i].node_id == node_id)
+      return true;
+  }
+  return false;
+}
+
+static bool trace_graph_append(TraceGraphNode *out, uint32_t *count,
+                               uint32_t node_id) {
+  if (node_id == EMPTY || is_control_ptr(node_id) || count == NULL ||
+      *count >= TRACE_GRAPH_NODES || trace_graph_contains(out, *count, node_id))
+    return false;
+
+  uint32_t cap = arena_capacity();
+  if (node_id >= cap)
+    return false;
+
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+  atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+  atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+  atomic_uint *rights = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
+
+  TraceGraphNode *node = &out[*count];
+  node->node_id = node_id;
+  node->kind = load_kind_pub(kinds, node_id);
+  node->sym = load_u8_payload(syms, node_id);
+  node->left = load_u32_payload(lefts, node_id);
+  node->right = load_u32_payload(rights, node_id);
+  (*count)++;
+  return true;
+}
+
+static uint32_t trace_capture_focus_graph(uint32_t focus,
+                                          TraceGraphNode *out) {
+  if (out == NULL || focus == EMPTY || is_control_ptr(focus))
+    return 0;
+
+  uint32_t count = 0;
+  uint32_t queue[TRACE_GRAPH_NODES];
+  uint32_t qhead = 0;
+  uint32_t qtail = 0;
+
+  if (trace_graph_append(out, &count, focus))
+    queue[qtail++] = focus;
+
+  uint32_t spine = focus;
+  for (uint32_t i = 0; i < TRACE_SPINE_NODES && qtail < TRACE_GRAPH_NODES; i++) {
+    uint32_t cap = arena_capacity();
+    if (spine == EMPTY || is_control_ptr(spine) || spine >= cap)
+      break;
+    if (kindOf(spine) != ARENA_KIND_NON_TERM)
+      break;
+    uint32_t fn = leftOf(spine);
+    if (trace_graph_append(out, &count, fn))
+      queue[qtail++] = fn;
+    spine = fn;
+  }
+
+  while (qhead < qtail && count < TRACE_GRAPH_BFS_LIMIT) {
+    uint32_t node_id = queue[qhead++];
+    uint32_t cap = arena_capacity();
+    if (node_id == EMPTY || is_control_ptr(node_id) || node_id >= cap)
+      continue;
+    if (kindOf(node_id) != ARENA_KIND_NON_TERM)
+      continue;
+    uint32_t l = leftOf(node_id);
+    uint32_t r = rightOf(node_id);
+    if (qtail < TRACE_GRAPH_NODES && trace_graph_append(out, &count, l))
+      queue[qtail++] = l;
+    if (qtail < TRACE_GRAPH_NODES && trace_graph_append(out, &count, r))
+      queue[qtail++] = r;
+  }
+
+  return count;
+}
+
+static uint32_t trace_copy_recent_events(WorkerTraceState *ts,
+                                         TraceEvent *out) {
+  if (ts == NULL || out == NULL)
+    return 0;
+  uint32_t head = atomic_load_explicit(&ts->ring_head, memory_order_acquire);
+  uint32_t count = head < TRACE_RING_SIZE ? head : TRACE_RING_SIZE;
+  uint32_t start = head > TRACE_RING_SIZE ? head - TRACE_RING_SIZE : 0;
+  for (uint32_t i = 0; i < count; i++) {
+    out[i] = ts->ring[(start + i) % TRACE_RING_SIZE];
+  }
+  return count;
+}
+
+static void trace_capture_snapshot(uint32_t worker_id, const WorkerState *ws,
+                                   uint64_t step_counter, uint32_t epoch,
+                                   bool live_only) {
+  WorkerTraceState *ts = trace_state_for(worker_id);
+  if (ts == NULL)
+    return;
+
+  WorkerTraceSnapshot *snap = &ts->snapshot;
+  memset(snap, 0, sizeof(*snap));
+  snap->worker_id = worker_id;
+
+  if (ws != NULL && !live_only) {
+    snap->status = ws->status;
+    snap->req_id = ws->req_id;
+    snap->current_val = ws->current_val;
+    snap->remaining_steps = ws->remaining_steps;
+    snap->mode = ws->mode;
+    snap->control_depth = ws->sp;
+    snap->step_counter = step_counter;
+    snap->thread_id = trace_worker_thread_id();
+
+    uint32_t base = (ws->sp > TRACE_STACK_SNAPSHOT) ? (ws->sp - TRACE_STACK_SNAPSHOT) : 0;
+    uint32_t count = ws->sp - base;
+    snap->control_base = base;
+    snap->control_count = count;
+    if (count > 0) {
+      memcpy(snap->control_stack, control_worker_frames(control_views(), worker_id) + base,
+             count * sizeof(Frame));
+    }
+  } else {
+    snap->status = atomic_load_explicit(&ts->live_status, memory_order_acquire);
+    snap->req_id = atomic_load_explicit(&ts->live_req_id, memory_order_acquire);
+    snap->current_val = atomic_load_explicit(&ts->live_current_val, memory_order_acquire);
+    snap->remaining_steps =
+        atomic_load_explicit(&ts->live_remaining_steps, memory_order_acquire);
+    snap->mode = atomic_load_explicit(&ts->live_mode, memory_order_acquire);
+    snap->control_depth = atomic_load_explicit(&ts->live_sp, memory_order_acquire);
+    snap->step_counter = atomic_load_explicit(&ts->live_step_counter, memory_order_acquire);
+    snap->thread_id = atomic_load_explicit(&ts->live_thread_id, memory_order_acquire);
+    snap->control_base = 0;
+    snap->control_count = 0;
+  }
+
+  snap->event_count = trace_copy_recent_events(ts, snap->recent_events);
+  snap->graph_count = trace_capture_focus_graph(snap->current_val, snap->focus_graph);
+
+  atomic_store_explicit(&ts->last_seen_epoch, epoch, memory_order_relaxed);
+  atomic_store_explicit(&ts->snapshot_epoch_done, epoch, memory_order_release);
+}
+
+static inline void trace_maybe_snapshot(uint32_t worker_id, WorkerState *ws,
+                                        uint64_t step_counter) {
+  WorkerTraceState *ts = trace_state_for(worker_id);
+  if (ts == NULL || ws == NULL)
+    return;
+  trace_publish_live(worker_id, ws, step_counter);
+  uint32_t epoch = atomic_load_explicit(&TRACE_REQUESTED_EPOCH, memory_order_acquire);
+  if (epoch == 0)
+    return;
+  uint32_t seen = atomic_load_explicit(&ts->last_seen_epoch, memory_order_acquire);
+  if (epoch == seen)
+    return;
+  trace_record_event(worker_id, step_counter, ws->req_id, TRACE_EV_SAFEPOINT,
+                     ws->current_val, ws->sp, ws->remaining_steps);
+  trace_capture_snapshot(worker_id, ws, step_counter, epoch, false);
+}
+
+void arena_trace_init(uint32_t worker_count) {
+  TRACE_WORKER_COUNT = worker_count > MAX_WORKERS ? MAX_WORKERS : worker_count;
+  atomic_store_explicit(&TRACE_REQUESTED_EPOCH, 0, memory_order_release);
+  memset(WORKER_TRACE, 0, sizeof(WORKER_TRACE));
+  for (uint32_t i = 0; i < MAX_WORKERS; i++) {
+    atomic_init(&WORKER_TRACE[i].live_status, WORKER_IDLE);
+    atomic_init(&WORKER_TRACE[i].live_req_id, 0);
+    atomic_init(&WORKER_TRACE[i].live_current_val, EMPTY);
+    atomic_init(&WORKER_TRACE[i].live_remaining_steps, 0);
+    atomic_init(&WORKER_TRACE[i].live_mode, MODE_DESCEND);
+    atomic_init(&WORKER_TRACE[i].live_sp, 0);
+    atomic_init(&WORKER_TRACE[i].last_seen_epoch, 0);
+    atomic_init(&WORKER_TRACE[i].snapshot_epoch_done, 0);
+    atomic_init(&WORKER_TRACE[i].live_thread_id, 0);
+    atomic_init(&WORKER_TRACE[i].live_step_counter, 0);
+    atomic_init(&WORKER_TRACE[i].ring_head, 0);
+  }
+}
+
+void arena_trace_request_epoch(uint32_t epoch) {
+  atomic_store_explicit(&TRACE_REQUESTED_EPOCH, epoch, memory_order_release);
+}
+
+void arena_trace_capture_idle_workers(uint32_t epoch, uint32_t worker_count) {
+  uint32_t limit = worker_count < TRACE_WORKER_COUNT ? worker_count : TRACE_WORKER_COUNT;
+  for (uint32_t i = 0; i < limit; i++) {
+    uint32_t status = atomic_load_explicit(&WORKER_TRACE[i].live_status, memory_order_acquire);
+    if (status != WORKER_RUNNING) {
+      trace_capture_snapshot(i, NULL, 0, epoch, true);
+    }
+  }
+}
+
+bool arena_trace_wait_for_epoch(uint32_t epoch, uint32_t worker_count,
+                                uint32_t timeout_ms) {
+  uint32_t limit = worker_count < TRACE_WORKER_COUNT ? worker_count : TRACE_WORKER_COUNT;
+  uint32_t waited_ms = 0;
+  while (true) {
+    bool all_done = true;
+    for (uint32_t i = 0; i < limit; i++) {
+      uint32_t status = atomic_load_explicit(&WORKER_TRACE[i].live_status, memory_order_acquire);
+      uint32_t done = atomic_load_explicit(&WORKER_TRACE[i].snapshot_epoch_done,
+                                           memory_order_acquire);
+      if (status == WORKER_RUNNING && done != epoch) {
+        all_done = false;
+        break;
+      }
+    }
+    if (all_done)
+      return true;
+    if (waited_ms >= timeout_ms)
+      return false;
+#if defined(__linux__) && !defined(__wasm__)
+    usleep(1000);
+#else
+    worker_cooperative_yield();
+#endif
+    waited_ms++;
+  }
+}
+
+static void trace_write_frames_json(FILE *out, const WorkerTraceSnapshot *snap) {
+  fprintf(out, "[");
+  for (uint32_t i = 0; i < snap->control_count; i++) {
+    const Frame *frame = &snap->control_stack[i];
+    if (i > 0)
+      fprintf(out, ",");
+    fprintf(out,
+            "{\"index\":%u,\"kind\":%u,\"submode\":%u,\"a\":%u,\"b\":%u}",
+            snap->control_base + i, frame->kind, frame->submode, frame->a,
+            frame->b);
+  }
+  fprintf(out, "]");
+}
+
+static void trace_write_events_json(FILE *out, const WorkerTraceSnapshot *snap) {
+  fprintf(out, "[");
+  for (uint32_t i = 0; i < snap->event_count; i++) {
+    const TraceEvent *ev = &snap->recent_events[i];
+    if (i > 0)
+      fprintf(out, ",");
+    fprintf(out,
+            "{\"step\":%llu,\"kind\":\"%s\",\"a\":%u,\"b\":%u,\"c\":%u,\"req_id\":%u}",
+            (unsigned long long)ev->step, trace_event_kind_name(ev->kind),
+            ev->a, ev->b, ev->c, ev->req_id);
+  }
+  fprintf(out, "]");
+}
+
+static void trace_write_graph_json(FILE *out, const WorkerTraceSnapshot *snap) {
+  fprintf(out, "[");
+  for (uint32_t i = 0; i < snap->graph_count; i++) {
+    const TraceGraphNode *node = &snap->focus_graph[i];
+    if (i > 0)
+      fprintf(out, ",");
+    fprintf(out,
+            "{\"node\":%u,\"kind\":\"%s\",\"left\":%u,\"right\":%u",
+            node->node_id, trace_arena_kind_name(node->kind), node->left,
+            node->right);
+    if (node->kind == ARENA_KIND_TERMINAL) {
+      fprintf(out, ",\"sym\":\"%s\"}", trace_arena_sym_name(node->sym));
+    } else if (node->kind == ARENA_KIND_U8) {
+      fprintf(out, ",\"u8\":%u}", node->sym);
+    } else {
+      fprintf(out, "}");
+    }
+  }
+  fprintf(out, "]");
+}
+
+bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
+                                 uint32_t worker_count, bool timed_out) {
+  if (path == NULL || path[0] == 0)
+    return false;
+  FILE *out = fopen(path, "w");
+  if (out == NULL)
+    return false;
+
+  uint32_t top = arena_top();
+  uint32_t capacity = arena_capacity();
+  unsigned long long total_nodes = arena_total_nodes();
+  unsigned long long total_steps = arena_total_steps();
+  unsigned long long total_cons_allocs = arena_total_cons_allocs();
+  unsigned long long total_cont_allocs = arena_total_cont_allocs();
+  unsigned long long total_susp_allocs = arena_total_susp_allocs();
+  unsigned long long duplicate_lost_allocs = arena_duplicate_lost_allocs();
+  unsigned long long hashcons_hits = arena_hashcons_hits();
+  unsigned long long hashcons_misses = arena_hashcons_misses();
+
+  fprintf(out,
+          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
+          epoch, timed_out ? "true" : "false", worker_count, top, capacity,
+          top, total_nodes, total_steps, total_cons_allocs, total_cont_allocs,
+          total_susp_allocs, duplicate_lost_allocs, hashcons_hits,
+          hashcons_misses);
+
+  uint32_t limit = worker_count < TRACE_WORKER_COUNT ? worker_count : TRACE_WORKER_COUNT;
+  for (uint32_t i = 0; i < limit; i++) {
+    WorkerTraceState *ts = &WORKER_TRACE[i];
+    uint32_t done_epoch = atomic_load_explicit(&ts->snapshot_epoch_done, memory_order_acquire);
+    if (done_epoch != epoch) {
+      uint32_t status = atomic_load_explicit(&ts->live_status, memory_order_acquire);
+      if (status != WORKER_RUNNING) {
+        trace_capture_snapshot(i, NULL, 0, epoch, true);
+        done_epoch = epoch;
+      }
+    }
+    WorkerTraceSnapshot live_fallback;
+    memset(&live_fallback, 0, sizeof(live_fallback));
+    const WorkerTraceSnapshot *snap = &ts->snapshot;
+    bool complete = (done_epoch == epoch);
+    if (!complete) {
+      live_fallback.worker_id = i;
+      live_fallback.status = atomic_load_explicit(&ts->live_status, memory_order_acquire);
+      live_fallback.req_id = atomic_load_explicit(&ts->live_req_id, memory_order_acquire);
+      live_fallback.current_val = atomic_load_explicit(&ts->live_current_val, memory_order_acquire);
+      live_fallback.remaining_steps = atomic_load_explicit(&ts->live_remaining_steps, memory_order_acquire);
+      live_fallback.mode = atomic_load_explicit(&ts->live_mode, memory_order_acquire);
+      live_fallback.control_depth = atomic_load_explicit(&ts->live_sp, memory_order_acquire);
+      live_fallback.thread_id = atomic_load_explicit(&ts->live_thread_id, memory_order_acquire);
+      live_fallback.step_counter = atomic_load_explicit(&ts->live_step_counter, memory_order_acquire);
+      snap = &live_fallback;
+    }
+    if (i > 0)
+      fprintf(out, ",");
+    fprintf(out,
+            "{\"worker_id\":%u,\"complete\":%s,\"thread_id\":%llu,\"state\":\"%s\",\"step_counter\":%llu,\"task_id\":%u,\"mode\":\"%s\",\"remaining_steps\":%u,\"control_depth\":%u,\"focus\":{",
+            i, complete ? "true" : "false", (unsigned long long)snap->thread_id,
+            trace_worker_status_name(snap->status),
+            (unsigned long long)snap->step_counter, snap->req_id,
+            trace_mode_name(snap->mode), snap->remaining_steps,
+            snap->control_depth);
+    if (snap->graph_count > 0) {
+      const TraceGraphNode *focus = &snap->focus_graph[0];
+      fprintf(out,
+              "\"node\":%u,\"kind\":\"%s\"",
+              focus->node_id, trace_arena_kind_name(focus->kind));
+      if (focus->kind == ARENA_KIND_TERMINAL) {
+        fprintf(out, ",\"sym\":\"%s\"",
+                trace_arena_sym_name(focus->sym));
+      } else if (focus->kind == ARENA_KIND_U8) {
+        fprintf(out, ",\"u8\":%u", focus->sym);
+      }
+    } else {
+      fprintf(out, "\"node\":%u", snap->current_val);
+    }
+    fprintf(out,
+            "},\"control_stack\":");
+    trace_write_frames_json(out, snap);
+    fprintf(out, ",\"recent_events\":");
+    trace_write_events_json(out, snap);
+    fprintf(out, ",\"focus_graph\":");
+    trace_write_graph_json(out, snap);
+    fprintf(out, "}");
+  }
+
+  fprintf(out, "],\"symbols\":{}}\n");
+  fclose(out);
+  return true;
+}
+
+#else
+static inline void trace_publish_live(uint32_t worker_id, const WorkerState *ws,
+                                      uint64_t step_counter) {
+  (void)worker_id;
+  (void)ws;
+  (void)step_counter;
+}
+static inline void trace_record_event(uint32_t worker_id, uint64_t step_counter,
+                                      uint32_t req_id, uint32_t kind,
+                                      uint32_t a, uint32_t b, uint32_t c) {
+  (void)worker_id;
+  (void)step_counter;
+  (void)req_id;
+  (void)kind;
+  (void)a;
+  (void)b;
+  (void)c;
+}
+static inline void trace_maybe_snapshot(uint32_t worker_id, WorkerState *ws,
+                                        uint64_t step_counter) {
+  (void)worker_id;
+  (void)ws;
+  (void)step_counter;
+}
+void arena_trace_init(uint32_t worker_count) { (void)worker_count; }
+void arena_trace_request_epoch(uint32_t epoch) { (void)epoch; }
+void arena_trace_capture_idle_workers(uint32_t epoch, uint32_t worker_count) {
+  (void)epoch;
+  (void)worker_count;
+}
+bool arena_trace_wait_for_epoch(uint32_t epoch, uint32_t worker_count,
+                                uint32_t timeout_ms) {
+  (void)epoch;
+  (void)worker_count;
+  (void)timeout_ms;
+  return true;
+}
+bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
+                                 uint32_t worker_count, bool timed_out) {
+  (void)path;
+  (void)epoch;
+  (void)worker_count;
+  (void)timed_out;
+  return false;
+}
+#endif
+
 /* Parking transfers ownership from the live Tier A slice to Tier B/Tier C. */
 static bool park_worker_state(uint32_t slice_id, WorkerState *ws,
                               SuspensionReason reason, uint32_t wait_token,
@@ -1869,7 +2499,7 @@ static bool maybe_park_io_wait(uint32_t slice_id, WorkerState *ws,
 static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                                   uint32_t *gas, SabHeader *h,
                                   bool yield_on_gas, bool yield_on_step_limit,
-                                  bool allow_retry) {
+                                  bool allow_retry, uint64_t *step_counter) {
   ControlViews cv = control_views();
   StepOutcome out = {RESULT_DONE, EMPTY};
 
@@ -1879,6 +2509,9 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
   atomic_uint *rights = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
 
   while (true) {
+    if (step_counter != NULL)
+      (*step_counter)++;
+    trace_maybe_snapshot(slice_id, ws, step_counter != NULL ? *step_counter : 0);
     atomic_fetch_add_explicit(&h->total_steps, 1, memory_order_relaxed);
     if (*gas == 0) {
       if (!yield_on_gas) {
@@ -2294,6 +2927,7 @@ uint32_t arenaKernelStep(uint32_t expr) {
       .mode = MODE_DESCEND,
       .status = WORKER_RUNNING,
       .reserved = 0,
+      .req_id = 0,
   };
 
   if (is_control_ptr(expr)) {
@@ -2303,8 +2937,9 @@ uint32_t arenaKernelStep(uint32_t expr) {
 
   while (true) {
     uint32_t gas = ARENA_STEP_GAS;
+    uint64_t sync_steps = 0;
     StepOutcome o = step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, h, false,
-                                   false, false);
+                                   false, false, &sync_steps);
     if (o.type == RESULT_YIELD)
       return o.val;
     return o.val;
@@ -2410,8 +3045,20 @@ void workerLoop(uint32_t worker_id) {
   Ring *cq = (Ring *)(ARENA_BASE_ADDR + h->offset_cq);
   uint32_t batch_gas = ARENA_STEP_GAS;
   const bool use_qsbr = (worker_id < MAX_WORKERS);
+  uint64_t worker_steps = 0;
+  uint32_t last_req_id = 0;
 
   while (true) {
+    WorkerState idle_ws = {
+        .current_val = EMPTY,
+        .sp = 0,
+        .remaining_steps = 0,
+        .mode = MODE_DESCEND,
+        .status = WORKER_IDLE,
+        .reserved = 0,
+        .req_id = last_req_id,
+    };
+    trace_publish_live(worker_id, &idle_ws, worker_steps);
     Sqe job;
     dequeue_blocking(sq, &job, sizeof(Sqe));
 
@@ -2433,7 +3080,11 @@ void workerLoop(uint32_t worker_id) {
         .mode = MODE_DESCEND,
         .status = WORKER_RUNNING,
         .reserved = 0,
+        .req_id = job.req_id,
     };
+
+    last_req_id = job.req_id;
+    trace_publish_live(worker_id, &ws, worker_steps);
 
     if (is_control_ptr(job.node_id)) {
       if (!resume_worker_state(worker_id, job.node_id, &ws)) {
@@ -2451,6 +3102,12 @@ void workerLoop(uint32_t worker_id) {
       ws.current_val = job.node_id;
     }
 
+    trace_publish_live(worker_id, &ws, worker_steps);
+    trace_record_event(worker_id, worker_steps, job.req_id,
+                       is_control_ptr(job.node_id) ? TRACE_EV_JOB_RESUME
+                                                   : TRACE_EV_JOB_START,
+                       job.node_id, job.max_steps, 0);
+
     while (true) {
       if (ws.remaining_steps == 0) {
         StepOutcome budget =
@@ -2464,7 +3121,8 @@ void workerLoop(uint32_t worker_id) {
       }
       uint32_t before = ws.current_val;
       uint32_t gas = batch_gas;
-      StepOutcome o = step_iterative(worker_id, &ws, &gas, h, true, true, true);
+      StepOutcome o = step_iterative(worker_id, &ws, &gas, h, true, true, true,
+                                   &worker_steps);
       if (o.type == RESULT_YIELD) {
         uint32_t reason = controlSuspensionReason(o.val);
         uint32_t event;
@@ -2475,6 +3133,12 @@ void workerLoop(uint32_t worker_id) {
         } else {
           event = CQ_EVENT_YIELD;
         }
+        trace_record_event(worker_id, worker_steps, job.req_id,
+                           event == CQ_EVENT_IO_WAIT
+                               ? TRACE_EV_IO_WAIT
+                               : (reason == SUSP_STEP_LIMIT ? TRACE_EV_STEP_LIMIT
+                                                            : TRACE_EV_PARK),
+                           o.val, reason, ws.current_val);
         Cqe res = {o.val, job.req_id, event};
         if (use_qsbr)
           atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
@@ -2483,6 +3147,8 @@ void workerLoop(uint32_t worker_id) {
         break;
       }
       if (o.val == before) {
+        trace_record_event(worker_id, worker_steps, job.req_id, TRACE_EV_DONE,
+                           o.val, before, 0);
         Cqe res = {o.val, job.req_id, CQ_EVENT_DONE};
         if (use_qsbr)
           atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,

@@ -57,6 +57,23 @@ static void test_dynamic_buffer(void) {
   assert(db.ptr == NULL);
   assert(db.len == 0);
   assert(db.cap == 0);
+
+  /* Test db_append and db_append_hex */
+  db_init(&db);
+  assert(db_append(&db, 'a'));
+  assert(db_append(&db, 'b'));
+  assert(db_append(&db, '\0'));
+  assert(db.len == 3);
+  assert(strcmp(db.ptr, "ab") == 0);
+
+  db.len = 0; /* Reuse buffer */
+  assert(db_append_hex(&db, 0x00));
+  assert(db_append_hex(&db, 0xab));
+  assert(db_append_hex(&db, 0xff));
+  assert(db_append(&db, '\0'));
+  assert(db.len == 7);
+  assert(strcmp(db.ptr, "00abff") == 0);
+  db_free(&db);
 }
 
 static void test_dynamic_buffer_realloc_failure(void) {

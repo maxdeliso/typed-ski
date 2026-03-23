@@ -32,6 +32,10 @@ Deno.test("arenaViews - coverage", async (t) => {
         offsetNodeNextIdx: 0,
         offsetNodeKind: 0,
         offsetNodeSym: 0,
+        kindView: new Uint8Array(10),
+        symView: new Uint8Array(10),
+        leftView: new Uint32Array(10),
+        rightView: new Uint32Array(10),
       } satisfies ArenaViews;
       expect(validateAndRebuildViews(dummyViews, undefined, {})).to.equal(
         dummyViews,
@@ -51,6 +55,10 @@ Deno.test("arenaViews - coverage", async (t) => {
       offsetNodeNextIdx: 0,
       offsetNodeKind: 0,
       offsetNodeSym: 0,
+      kindView: new Uint8Array(10),
+      symView: new Uint8Array(10),
+      leftView: new Uint32Array(10),
+      rightView: new Uint32Array(10),
     } satisfies ArenaViews;
     expect(validateAndRebuildViews(dummyViews, memory, {})).to.equal(
       dummyViews,
@@ -97,6 +105,10 @@ Deno.test("arenaViews - coverage", async (t) => {
       offsetNodeNextIdx: 0,
       offsetNodeKind: offsetKind,
       offsetNodeSym: offsetSym,
+      kindView: new Uint8Array(buf, offsetKind, capacity),
+      symView: new Uint8Array(buf, offsetSym, capacity),
+      leftView: new Uint32Array(buf, offsetLeft, capacity),
+      rightView: new Uint32Array(buf, offsetRight, capacity),
     };
 
     expect(getKind(10, views)).to.equal(-1);

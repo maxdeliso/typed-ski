@@ -1,7 +1,29 @@
 #include "thanatos.h"
+#include <dirent.h>
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include <unistd.h>
+
+enum {
+  TRACE_TEST_SOURCE_BRANCHY = 1000,
+  TRACE_TEST_PROC_BRANCHY_EXPENSIVE = 1001,
+  TRACE_TEST_PROC_BRANCHY_CHEAP = 1002,
+};
+
+typedef struct {
+  uint32_t node_id;
+  uint32_t max_steps;
+  TraceExecProvenance provenance;
+  atomic_bool done;
+  uint32_t result;
+} ReduceThreadCtx;
 
 static int parse_u32_arg(const char *text, uint32_t *out) {
   uint64_t value = 0;
@@ -42,6 +64,264 @@ static long long get_time_ns(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+static void *reduce_thread_main(void *arg) {
+  ReduceThreadCtx *ctx = (ReduceThreadCtx *)arg;
+  ctx->result = thanatos_reduce_with_provenance(
+      ctx->node_id, ctx->max_steps, ctx->provenance);
+  atomic_store_explicit(&ctx->done, true, memory_order_release);
+  return NULL;
+}
+
+static uint32_t build_identity_chain(uint32_t depth) {
+  uint32_t expr = allocTerminal(ARENA_SYM_K);
+  uint32_t i = allocTerminal(ARENA_SYM_I);
+  for (uint32_t n = 0; n < depth; n++) {
+    expr = allocCons(i, expr);
+  }
+  return expr;
+}
+
+static bool wait_for_trace_dump_path(const char *trace_dir, char *path_out,
+                                     size_t path_out_cap,
+                                     uint32_t expected_epoch,
+                                     uint32_t timeout_ms) {
+  if (trace_dir == NULL || path_out == NULL || path_out_cap == 0)
+    return false;
+  int n = snprintf(path_out, path_out_cap,
+                   "%s/thanatos-trace-pid%d-epoch%u.json", trace_dir,
+                   (int)getpid(), expected_epoch);
+  if (n < 0 || (size_t)n >= path_out_cap)
+    return false;
+  for (uint32_t waited = 0; waited < timeout_ms; waited++) {
+    if (access(path_out, F_OK) == 0)
+      return true;
+    usleep(1000);
+  }
+  return false;
+}
+
+static char *read_text_file(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (f == NULL)
+    return NULL;
+  if (fseek(f, 0, SEEK_END) != 0) {
+    fclose(f);
+    return NULL;
+  }
+  long len = ftell(f);
+  if (len < 0) {
+    fclose(f);
+    return NULL;
+  }
+  if (fseek(f, 0, SEEK_SET) != 0) {
+    fclose(f);
+    return NULL;
+  }
+  char *buf = malloc((size_t)len + 1);
+  if (buf == NULL) {
+    fclose(f);
+    return NULL;
+  }
+  if (len > 0 && fread(buf, 1, (size_t)len, f) != (size_t)len) {
+    free(buf);
+    fclose(f);
+    return NULL;
+  }
+  buf[len] = '\0';
+  fclose(f);
+  return buf;
+}
+
+static void remove_trace_dir_files(const char *trace_dir) {
+  DIR *dir = opendir(trace_dir);
+  if (dir == NULL)
+    return;
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+      continue;
+    char path[512];
+    int n = snprintf(path, sizeof(path), "%s/%s", trace_dir, entry->d_name);
+    if (n >= 0 && (size_t)n < sizeof(path))
+      unlink(path);
+  }
+  closedir(dir);
+  rmdir(trace_dir);
+}
+
+static int count_occurrences(const char *haystack, const char *needle) {
+  int count = 0;
+  size_t needle_len = strlen(needle);
+  if (needle_len == 0)
+    return 0;
+  const char *cursor = haystack;
+  while ((cursor = strstr(cursor, needle)) != NULL) {
+    count++;
+    cursor += needle_len;
+  }
+  return count;
+}
+
+static int run_trace_provenance_self_test(uint32_t arena_capacity) {
+  char trace_dir[] = "/tmp/thanatos-prov-XXXXXX";
+  if (mkdtemp(trace_dir) == NULL) {
+    fprintf(stderr, "trace provenance self-test: mkdtemp failed (errno=%d)\n",
+            errno);
+    return 1;
+  }
+
+  ThanatosConfig config = {
+      .num_workers = 2,
+      .arena_capacity = arena_capacity,
+      .stdin_fd = -1,
+      .trace_dir = trace_dir,
+      .trace_timeout_ms = 1000,
+  };
+  thanatos_init(config);
+  thanatos_start_threads(true);
+
+  if (!arena_trace_register_source(TRACE_TEST_SOURCE_BRANCHY,
+                                   "test/provenance/Branchy.trip", 1, 1, 20,
+                                   1) ||
+      !arena_trace_register_proc(TRACE_TEST_PROC_BRANCHY_EXPENSIVE,
+                                 "Branchy.expensive", TRACE_PHASE_LOWER,
+                                 TRACE_TEST_SOURCE_BRANCHY, 1) ||
+      !arena_trace_register_proc(TRACE_TEST_PROC_BRANCHY_CHEAP,
+                                 "Branchy.cheap", TRACE_PHASE_LOWER,
+                                 TRACE_TEST_SOURCE_BRANCHY, 1)) {
+    fprintf(stderr,
+            "trace provenance self-test: failed to register source/proc symbols\n");
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+
+  const uint32_t expensive_depth =
+      (arena_capacity > 32768u) ? (arena_capacity / 2u) : 16384u;
+  ReduceThreadCtx expensive = {
+      .node_id = build_identity_chain(expensive_depth),
+      .max_steps = 0xffffffffu,
+      .provenance = {
+          .phase_id = TRACE_PHASE_LOWER,
+          .proc_id = TRACE_TEST_PROC_BRANCHY_EXPENSIVE,
+          .source_id = TRACE_TEST_SOURCE_BRANCHY,
+          .block_id = 1,
+      },
+      .done = false,
+      .result = EMPTY,
+  };
+  ReduceThreadCtx cheap = {
+      .node_id =
+          allocCons(allocTerminal(ARENA_SYM_I), allocTerminal(ARENA_SYM_K)),
+      .max_steps = 0xffffffffu,
+      .provenance = {
+          .phase_id = TRACE_PHASE_LOWER,
+          .proc_id = TRACE_TEST_PROC_BRANCHY_CHEAP,
+          .source_id = TRACE_TEST_SOURCE_BRANCHY,
+          .block_id = 2,
+      },
+      .done = false,
+      .result = EMPTY,
+  };
+
+  pthread_t expensive_thread;
+  pthread_t cheap_thread;
+  if (pthread_create(&expensive_thread, NULL, reduce_thread_main, &expensive) !=
+      0) {
+    fprintf(stderr,
+            "trace provenance self-test: failed to start expensive thread\n");
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+
+  unsigned long long steps_before = arena_total_steps();
+  const unsigned long long target_delta = 512;
+  const long long deadline_ns = get_time_ns() + 2000000000LL;
+  while (!atomic_load_explicit(&expensive.done, memory_order_acquire) &&
+         arena_total_steps() < steps_before + target_delta &&
+         get_time_ns() < deadline_ns) {
+    usleep(1000);
+  }
+  if (atomic_load_explicit(&expensive.done, memory_order_acquire)) {
+    fprintf(stderr,
+            "trace provenance self-test: expensive path completed before trace capture\n");
+    pthread_join(expensive_thread, NULL);
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+
+  if (pthread_create(&cheap_thread, NULL, reduce_thread_main, &cheap) != 0) {
+    fprintf(stderr, "trace provenance self-test: failed to start cheap thread\n");
+    pthread_join(expensive_thread, NULL);
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+  pthread_join(cheap_thread, NULL);
+
+  if (raise(SIGHUP) != 0) {
+    fprintf(stderr, "trace provenance self-test: raise(SIGHUP) failed\n");
+    pthread_join(expensive_thread, NULL);
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+
+  char dump_path[512];
+  if (!wait_for_trace_dump_path(trace_dir, dump_path, sizeof(dump_path), 1,
+                                2000)) {
+    fprintf(stderr,
+            "trace provenance self-test: timed out waiting for trace dump\n");
+    pthread_join(expensive_thread, NULL);
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+
+  char *dump_json = read_text_file(dump_path);
+  if (dump_json == NULL) {
+    fprintf(stderr,
+            "trace provenance self-test: failed to read trace dump %s\n",
+            dump_path);
+    pthread_join(expensive_thread, NULL);
+    remove_trace_dir_files(trace_dir);
+    return 1;
+  }
+
+  const char *expensive_worker_pattern =
+      "\"phase_id\":6,\"proc_id\":1001,\"source_id\":1000,\"block_id\":1,\"focus\"";
+  const char *cheap_event_pattern =
+      "\"kind\":\"job_start\",\"phase_id\":6,\"proc_id\":1002,\"source_id\":1000,\"block_id\":2";
+  bool has_expensive_symbol =
+      strstr(dump_json, "\"name\":\"Branchy.expensive\"") != NULL;
+  bool has_cheap_symbol = strstr(dump_json, "\"name\":\"Branchy.cheap\"") !=
+                          NULL;
+  bool has_source_symbol =
+      strstr(dump_json, "\"file\":\"test/provenance/Branchy.trip\"") != NULL;
+  bool has_expensive_worker = strstr(dump_json, expensive_worker_pattern) !=
+                              NULL;
+  bool has_cheap_event = strstr(dump_json, cheap_event_pattern) != NULL;
+
+  printf("trace provenance self-test: dump=%s expensive-proc-occurrences=%d "
+         "cheap-proc-occurrences=%d\n",
+         dump_path, count_occurrences(dump_json, "\"proc_id\":1001"),
+         count_occurrences(dump_json, "\"proc_id\":1002"));
+
+  free(dump_json);
+
+  pthread_join(expensive_thread, NULL);
+  remove_trace_dir_files(trace_dir);
+
+  if (!has_expensive_symbol || !has_cheap_symbol || !has_source_symbol ||
+      !has_expensive_worker || !has_cheap_event) {
+    fprintf(stderr,
+            "trace provenance self-test: missing expected provenance evidence "
+            "(expensive_symbol=%d cheap_symbol=%d source_symbol=%d "
+            "expensive_worker=%d cheap_event=%d)\n",
+            has_expensive_symbol, has_cheap_symbol, has_source_symbol,
+            has_expensive_worker, has_cheap_event);
+    return 1;
+  }
+
+  return 0;
 }
 
 typedef struct {
@@ -148,10 +428,10 @@ int main(int argc, char **argv) {
   printf("Hash mixer: %s\n", arena_hash_mix_name());
   printf("Hash buckets: %s\n", arena_hash_bucket_name());
 
-  ThanatosConfig config = {.num_workers = num_threads,
-                           .arena_capacity = arena_capacity};
-  thanatos_init(config);
-  thanatos_start_threads(true);
+  if (run_trace_provenance_self_test(arena_capacity) != 0)
+    return 1;
+  reset();
+  thanatos_reset_stats();
 
   /* Smoke test: EQ_U8 5 5 -> True (K), EQ_U8 5 6 -> False (K I) */
   {

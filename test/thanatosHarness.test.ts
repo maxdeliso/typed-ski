@@ -67,16 +67,27 @@ async function runThanatosProcess(
 export function toDagWire(expr: SKIExpression): string {
   const order: SKIExpression[] = [];
   const visited = new Set<SKIExpression>();
-  function postorder(e: SKIExpression): void {
-    if (visited.has(e)) return;
-    if (e.kind === "non-terminal") {
-      postorder(e.lft);
-      postorder(e.rgt);
+  const stack: Array<{ node: SKIExpression; expanded: boolean }> = [{
+    node: expr,
+    expanded: false,
+  }];
+
+  while (stack.length > 0) {
+    const entry = stack.pop()!;
+    const node = entry.node;
+    if (visited.has(node)) continue;
+
+    if (node.kind !== "non-terminal" || entry.expanded) {
+      visited.add(node);
+      order.push(node);
+      continue;
     }
-    visited.add(e);
-    order.push(e);
+
+    stack.push({ node, expanded: true });
+    stack.push({ node: node.rgt, expanded: false });
+    stack.push({ node: node.lft, expanded: false });
   }
-  postorder(expr);
+
   const nodeToIndex = new Map<SKIExpression, number>();
   order.forEach((n, i) => nodeToIndex.set(n, i));
   const tokens: string[] = [];
@@ -155,8 +166,40 @@ export function fromDagWire(dagStr: string): SKIExpression {
   return nodes[nodes.length - 1]!;
 }
 
+export type ThanatosTraceExecProvenance = {
+  phaseId: number;
+  procId: number;
+  sourceId: number;
+  blockId: number;
+};
+
+export type ThanatosTraceSourceRegistration = {
+  sourceId: number;
+  file: string;
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+};
+
+export type ThanatosTraceProcRegistration = {
+  procId: number;
+  name: string;
+  phaseId: number;
+  primarySourceId: number;
+  arity: number;
+};
+
+function quoteSessionArg(value: string): string {
+  if (!/[\s"]/.test(value)) return value;
+  if (value.includes('"')) {
+    throw new Error(`session protocol does not support quotes in ${value}`);
+  }
+  return `"${value}"`;
+}
+
 /** Long-lived daemon session: one process, DAG protocol, serialized requests. */
-class ThanatosSession {
+export class ThanatosSession {
   private child: Deno.ChildProcess | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -229,7 +272,7 @@ class ThanatosSession {
       resolveNext = r;
     });
     const result = prev.then(() => this.request(line));
-    result.finally(() => resolveNext());
+    result.finally(() => resolveNext()).catch(() => {});
     return result;
   }
 
@@ -243,6 +286,20 @@ class ThanatosSession {
   async reduceDag(dag: string): Promise<string> {
     this.start();
     const resp = await this.serialRequest("REDUCE " + dag.trim());
+    if (resp.startsWith("OK ")) return resp.slice(3).trim();
+    if (resp === "OK") return "";
+    if (resp.startsWith("ERR ")) throw new Error("thanatos: " + resp.slice(4));
+    throw new Error("thanatos: unexpected " + resp);
+  }
+
+  async reduceDagWithTrace(
+    dag: string,
+    provenance: ThanatosTraceExecProvenance,
+  ): Promise<string> {
+    this.start();
+    const resp = await this.serialRequest(
+      `REDUCE_TRACE ${provenance.phaseId} ${provenance.procId} ${provenance.sourceId} ${provenance.blockId} ${dag.trim()}`,
+    );
     if (resp.startsWith("OK ")) return resp.slice(3).trim();
     if (resp === "OK") return "";
     if (resp.startsWith("ERR ")) throw new Error("thanatos: " + resp.slice(4));
@@ -301,6 +358,28 @@ class ThanatosSession {
       throw new Error("thanatos: unexpected " + resp);
     }
     return resp.slice(3).trim();
+  }
+
+  async registerTraceSource(
+    source: ThanatosTraceSourceRegistration,
+  ): Promise<void> {
+    this.start();
+    const resp = await this.serialRequest(
+      `TRACE_REGISTER_SOURCE ${source.sourceId} ${source.startLine} ${source.startCol} ${source.endLine} ${source.endCol} ${
+        quoteSessionArg(source.file)
+      }`,
+    );
+    if (resp !== "OK") throw new Error("thanatos: " + resp);
+  }
+
+  async registerTraceProc(proc: ThanatosTraceProcRegistration): Promise<void> {
+    this.start();
+    const resp = await this.serialRequest(
+      `TRACE_REGISTER_PROC ${proc.procId} ${proc.phaseId} ${proc.primarySourceId} ${proc.arity} ${
+        quoteSessionArg(proc.name)
+      }`,
+    );
+    if (resp !== "OK") throw new Error("thanatos: " + resp);
   }
 
   /** Reset the arena (clean slate). Starts daemon on first use if needed. */
@@ -535,7 +614,35 @@ async function runThanatosSnapshot(
   }
 }
 
-async function waitForTraceDump(
+function isTraceDumpSyntaxError(error: unknown): boolean {
+  return error instanceof SyntaxError;
+}
+
+export async function readTraceDumpJson<T>(
+  dumpPath: string,
+  timeoutMs = 2000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      return JSON.parse(await Deno.readTextFile(dumpPath)) as T;
+    } catch (error) {
+      if (
+        error instanceof Deno.errors.NotFound ||
+        isTraceDumpSyntaxError(error)
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error(
+    `timed out waiting for complete thanatos trace dump ${dumpPath}`,
+  );
+}
+
+export async function waitForTraceDump(
   traceDir: string,
   timeoutMs = 2000,
 ): Promise<string> {
@@ -549,14 +656,16 @@ async function waitForTraceDump(
     }
     dumps.sort();
     if (dumps.length > 0) {
-      return dumps[dumps.length - 1]!;
+      const latestDump = dumps[dumps.length - 1]!;
+      await readTraceDumpJson(latestDump, timeoutMs);
+      return latestDump;
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(`timed out waiting for thanatos trace dump in ${traceDir}`);
 }
 
-async function waitForTraceDumpCount(
+export async function waitForTraceDumpCount(
   traceDir: string,
   expectedCount: number,
   timeoutMs = 2000,
@@ -720,23 +829,57 @@ Deno.test({
         dump_version: number;
         epoch: number;
         runtime: { worker_count: number };
+        symbols: {
+          phases: Array<{ id: number; name: string }>;
+          procs: Array<{ id: number; name: string }>;
+          sources: Array<{ id: number; file: string }>;
+          frame_kinds: Array<{ id: number; name: string; fields: string[] }>;
+        };
         workers: Array<{
           worker_id: number;
           complete: boolean;
-          recent_events: Array<{ kind: string }>;
+          phase_id: number;
+          proc_id: number;
+          source_id: number;
+          recent_events: Array<{
+            kind: string;
+            phase_id: number;
+            proc_id: number;
+            source_id: number;
+          }>;
         }>;
       };
 
-      assertEquals(dump.dump_version, 1);
+      assertEquals(dump.dump_version, 2);
       assert(dump.epoch >= 1);
       assertEquals(dump.runtime.worker_count, 1);
       assertEquals(dump.workers.length, 1);
       assertEquals(dump.workers[0]?.worker_id, 0);
       assertEquals(dump.workers[0]?.complete, true);
+      assertEquals(dump.workers[0]?.phase_id, 1);
+      assertEquals(dump.workers[0]?.proc_id, 1);
+      assertEquals(dump.workers[0]?.source_id, 1);
       assert(
         (dump.workers[0]?.recent_events.length ?? 0) > 0,
         `expected non-empty recent_events in ${dumpPath}`,
       );
+      assertEquals(dump.workers[0]?.recent_events[0]?.phase_id, 2);
+      assertEquals(dump.workers[0]?.recent_events[0]?.proc_id, 3);
+      assertEquals(dump.workers[0]?.recent_events[0]?.source_id, 3);
+      assert(
+        dump.symbols.phases.some((phase) => phase.name === "DRIVER"),
+        `expected DRIVER phase symbol in ${dumpPath}`,
+      );
+      assert(
+        dump.symbols.procs.some((proc) => proc.name === "driver.REDUCE"),
+        `expected driver.REDUCE proc symbol in ${dumpPath}`,
+      );
+      assert(
+        dump.symbols.sources.some((source) => source.file === "core/session.c"),
+        `expected core/session.c source symbol in ${dumpPath}`,
+      );
+      assertEquals(dump.symbols.frame_kinds[0]?.name, "update");
+      assertEquals(dump.symbols.frame_kinds[0]?.fields, ["parent", "stage"]);
     } finally {
       await session.close();
       await Deno.remove(traceDir, { recursive: true }).catch(() => {});

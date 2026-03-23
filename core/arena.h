@@ -120,6 +120,42 @@ typedef enum {
   WORKER_IDLE = 3,
 } WorkerStatus;
 
+typedef enum {
+  TRACE_PHASE_UNKNOWN = 0,
+  TRACE_PHASE_RUNTIME = 1,
+  TRACE_PHASE_DRIVER = 2,
+  TRACE_PHASE_TOKENIZE = 3,
+  TRACE_PHASE_PARSE = 4,
+  TRACE_PHASE_ELABORATE = 5,
+  TRACE_PHASE_LOWER = 6,
+  TRACE_PHASE_FIND_MAIN = 7,
+  TRACE_PHASE_UNPARSE = 8,
+} TracePhaseId;
+
+typedef enum {
+  TRACE_SOURCE_UNKNOWN = 0,
+  TRACE_SOURCE_CORE_ARENA_C = 1,
+  TRACE_SOURCE_CORE_THANATOS_C = 2,
+  TRACE_SOURCE_CORE_SESSION_C = 3,
+} TraceBuiltinSourceId;
+
+typedef enum {
+  TRACE_PROC_UNKNOWN = 0,
+  TRACE_PROC_RUNTIME_WORKER_IDLE = 1,
+  TRACE_PROC_RUNTIME_REDUCE = 2,
+  TRACE_PROC_DRIVER_REDUCE = 3,
+  TRACE_PROC_DRIVER_REDUCE_IO = 4,
+  TRACE_PROC_DRIVER_REDUCE_FILE = 5,
+  TRACE_PROC_DRIVER_STEP = 6,
+} TraceBuiltinProcId;
+
+typedef struct {
+  uint32_t phase_id;
+  uint32_t proc_id;
+  uint32_t source_id;
+  uint32_t block_id;
+} TraceExecProvenance;
+
 typedef struct {
   uint8_t kind;
   uint8_t submode;
@@ -237,6 +273,17 @@ uint32_t controlSuspensionRemainingSteps(uint32_t ptr);
 
 /* Cooperative native trace dump support (no-op unless thanatos enables it). */
 void arena_trace_init(uint32_t worker_count);
+void arena_trace_set_exec_provenance(uint32_t worker_id,
+                                     TraceExecProvenance provenance);
+bool arena_trace_set_request_provenance(uint32_t req_id,
+                                        TraceExecProvenance provenance);
+void arena_trace_clear_request_provenance(uint32_t req_id);
+bool arena_trace_register_source(uint32_t source_id, const char *file,
+                                 uint32_t start_line, uint32_t start_col,
+                                 uint32_t end_line, uint32_t end_col);
+bool arena_trace_register_proc(uint32_t proc_id, const char *name,
+                               uint32_t phase_id, uint32_t primary_source_id,
+                               uint32_t arity);
 void arena_trace_request_epoch(uint32_t epoch);
 void arena_trace_capture_idle_workers(uint32_t epoch, uint32_t worker_count);
 bool arena_trace_wait_for_epoch(uint32_t epoch, uint32_t worker_count,

@@ -76,6 +76,16 @@ static PendingReq pending_reqs[MAX_PENDING_REQS];
 static IoWaitEntry io_wait_map[MAX_IO_WAIT];
 static uint32_t stdin_demand_count = 0;
 
+static inline TraceExecProvenance thanatos_default_provenance(void) {
+  TraceExecProvenance provenance = {
+      .phase_id = TRACE_PHASE_RUNTIME,
+      .proc_id = TRACE_PROC_RUNTIME_REDUCE,
+      .source_id = TRACE_SOURCE_CORE_THANATOS_C,
+      .block_id = 0,
+  };
+  return provenance;
+}
+
 /** Pump blocks on this when arena stdout ring is empty; dispatcher signals
  * after each CQE so pump wakes when there may be new stdout (no fixed sleep).
  */
@@ -425,6 +435,7 @@ void thanatos_init(ThanatosConfig config) {
   }
 
   initArena(config.arena_capacity);
+  arena_trace_init(config.num_workers);
 
   stdin_stream_fd = config.stdin_fd;
   stdin_demand_count = 0;
@@ -466,7 +477,6 @@ void thanatos_init(ThanatosConfig config) {
         int flags = fcntl(tracer_wakeup_pipe[1], F_GETFL, 0);
         if (flags >= 0)
           (void)fcntl(tracer_wakeup_pipe[1], F_SETFL, flags | O_NONBLOCK);
-        arena_trace_init(config.num_workers);
         install_tracer_signal_handler();
       }
     }
@@ -506,7 +516,8 @@ void thanatos_start_threads(bool enable_stdout_pump) {
   }
 }
 
-uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
+uint32_t thanatos_reduce_with_provenance(uint32_t node_id, uint32_t max_steps,
+                                         TraceExecProvenance provenance) {
   uint32_t req_id = atomic_fetch_add(&next_req_id, 1);
   uint32_t current_node = node_id;
 
@@ -525,6 +536,7 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
     }
   }
 
+  (void)arena_trace_set_request_provenance(req_id, provenance);
   while (hostSubmit(current_node, req_id, max_steps) != 0) {
     /* spin until submit succeeds */
   }
@@ -544,6 +556,7 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
         (controlSuspensionRemainingSteps(node) == 0);
 
     if (event == CQ_EVENT_DONE || step_budget_exhausted) {
+      arena_trace_clear_request_provenance(req_id);
       pending_reqs[slot].req_id = 0;
       pthread_mutex_unlock(&pending_reqs[slot].mutex);
       /* Drain any remaining arena stdout bytes before main prints the result
@@ -578,11 +591,17 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
       }
     } else {
       fprintf(stderr, "Thanatos: error for req_id %u\n", req_id);
+      arena_trace_clear_request_provenance(req_id);
       pending_reqs[slot].req_id = 0;
       pthread_mutex_unlock(&pending_reqs[slot].mutex);
       return EMPTY;
     }
   }
+}
+
+uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
+  return thanatos_reduce_with_provenance(node_id, max_steps,
+                                         thanatos_default_provenance());
 }
 
 uint32_t thanatos_reduce_to_normal_form(uint32_t node_id) {

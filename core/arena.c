@@ -13,6 +13,7 @@ void *memmove(void *dest, const void *src, size_t n) {
 #define IMPORT_MEMORY                                                          \
   __attribute__((import_module("env"), import_name("memory")))
 #else
+#include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -268,6 +269,10 @@ enum {
   TRACE_GRAPH_NODES = 48,
   TRACE_SPINE_NODES = 16,
   TRACE_GRAPH_BFS_LIMIT = 32,
+  TRACE_REQUEST_PROVENANCE_SLOTS = 2048,
+  TRACE_MAX_SOURCE_SYMBOLS = 128,
+  TRACE_MAX_PROC_SYMBOLS = 256,
+  TRACE_SYMBOL_NAME_BYTES = 128,
 };
 
 typedef enum {
@@ -287,6 +292,10 @@ typedef struct {
   uint32_t b;
   uint32_t c;
   uint32_t req_id;
+  uint32_t phase_id;
+  uint32_t proc_id;
+  uint32_t source_id;
+  uint32_t block_id;
 } TraceEvent;
 
 typedef struct {
@@ -309,6 +318,10 @@ typedef struct {
   uint32_t control_count;
   uint32_t event_count;
   uint32_t graph_count;
+  uint32_t phase_id;
+  uint32_t proc_id;
+  uint32_t source_id;
+  uint32_t block_id;
   uint64_t thread_id;
   uint64_t step_counter;
   Frame control_stack[TRACE_STACK_SNAPSHOT];
@@ -323,6 +336,10 @@ typedef struct {
   atomic_uint live_remaining_steps;
   atomic_uint live_mode;
   atomic_uint live_sp;
+  atomic_uint live_phase_id;
+  atomic_uint live_proc_id;
+  atomic_uint live_source_id;
+  atomic_uint live_block_id;
   atomic_uint last_seen_epoch;
   atomic_uint snapshot_epoch_done;
   _Atomic uint64_t live_thread_id;
@@ -332,9 +349,90 @@ typedef struct {
   WorkerTraceSnapshot snapshot;
 } WorkerTraceState;
 
+typedef struct {
+  atomic_uint req_id;
+  atomic_uint phase_id;
+  atomic_uint proc_id;
+  atomic_uint source_id;
+  atomic_uint block_id;
+} TraceRequestProvenance;
+
+typedef struct {
+  uint32_t id;
+  char file[TRACE_SYMBOL_NAME_BYTES];
+  uint32_t start_line;
+  uint32_t start_col;
+  uint32_t end_line;
+  uint32_t end_col;
+} TraceSourceSymbol;
+
+typedef struct {
+  uint32_t id;
+  char name[TRACE_SYMBOL_NAME_BYTES];
+  uint32_t phase_id;
+  uint32_t primary_source_id;
+  uint32_t arity;
+} TraceProcSymbol;
+
+typedef struct {
+  uint32_t id;
+  const char *name;
+} TracePhaseSymbol;
+
+typedef struct {
+  uint32_t id;
+  const char *name;
+  const char *field_a;
+  const char *field_b;
+} TraceFrameKindSymbol;
+
 static WorkerTraceState WORKER_TRACE[MAX_WORKERS];
+static TraceRequestProvenance TRACE_REQUEST_PROVENANCE[TRACE_REQUEST_PROVENANCE_SLOTS];
 static atomic_uint TRACE_REQUESTED_EPOCH;
 static uint32_t TRACE_WORKER_COUNT = 0;
+#ifndef __wasm__
+static pthread_mutex_t TRACE_SYMBOLS_MUTEX = PTHREAD_MUTEX_INITIALIZER;
+static TraceSourceSymbol TRACE_SOURCE_SYMBOLS[TRACE_MAX_SOURCE_SYMBOLS];
+static uint32_t TRACE_SOURCE_SYMBOL_COUNT = 0;
+static TraceProcSymbol TRACE_PROC_SYMBOLS[TRACE_MAX_PROC_SYMBOLS];
+static uint32_t TRACE_PROC_SYMBOL_COUNT = 0;
+#endif
+
+static const TracePhaseSymbol TRACE_PHASE_SYMBOLS[] = {
+    {TRACE_PHASE_UNKNOWN, "UNKNOWN"},
+    {TRACE_PHASE_RUNTIME, "RUNTIME"},
+    {TRACE_PHASE_DRIVER, "DRIVER"},
+    {TRACE_PHASE_TOKENIZE, "TOKENIZE"},
+    {TRACE_PHASE_PARSE, "PARSE"},
+    {TRACE_PHASE_ELABORATE, "ELABORATE"},
+    {TRACE_PHASE_LOWER, "LOWER"},
+    {TRACE_PHASE_FIND_MAIN, "FIND_MAIN"},
+    {TRACE_PHASE_UNPARSE, "UNPARSE"},
+};
+
+static const TraceFrameKindSymbol TRACE_FRAME_KIND_SYMBOLS[] = {
+    {FRAME_UPDATE, "update", "parent", "stage"},
+};
+
+static inline TraceExecProvenance trace_idle_provenance(void) {
+  TraceExecProvenance provenance = {
+      .phase_id = TRACE_PHASE_RUNTIME,
+      .proc_id = TRACE_PROC_RUNTIME_WORKER_IDLE,
+      .source_id = TRACE_SOURCE_CORE_ARENA_C,
+      .block_id = 0,
+  };
+  return provenance;
+}
+
+static inline TraceExecProvenance trace_default_request_provenance(void) {
+  TraceExecProvenance provenance = {
+      .phase_id = TRACE_PHASE_RUNTIME,
+      .proc_id = TRACE_PROC_RUNTIME_REDUCE,
+      .source_id = TRACE_SOURCE_CORE_THANATOS_C,
+      .block_id = 0,
+  };
+  return provenance;
+}
 
 typedef struct {
   uint32_t current_val;
@@ -1669,6 +1767,267 @@ static const char *trace_arena_sym_name(uint32_t sym) {
   }
 }
 
+static inline WorkerTraceState *trace_state_for(uint32_t worker_id);
+static TraceExecProvenance trace_lookup_request_provenance(uint32_t req_id);
+
+static inline void trace_copy_cstr(char *dst, size_t dst_cap, const char *src) {
+  if (dst == NULL || dst_cap == 0)
+    return;
+  if (src == NULL)
+    src = "";
+  size_t n = strnlen(src, dst_cap - 1);
+  memcpy(dst, src, n);
+  dst[n] = '\0';
+}
+
+static void trace_write_json_string(FILE *out, const char *s) {
+  if (out == NULL) {
+    return;
+  }
+  fputc('"', out);
+  if (s == NULL) {
+    fputc('"', out);
+    return;
+  }
+  for (const unsigned char *p = (const unsigned char *)s; *p != '\0'; p++) {
+    unsigned char ch = *p;
+    switch (ch) {
+    case '"':
+      fputs("\\\"", out);
+      break;
+    case '\\':
+      fputs("\\\\", out);
+      break;
+    case '\b':
+      fputs("\\b", out);
+      break;
+    case '\f':
+      fputs("\\f", out);
+      break;
+    case '\n':
+      fputs("\\n", out);
+      break;
+    case '\r':
+      fputs("\\r", out);
+      break;
+    case '\t':
+      fputs("\\t", out);
+      break;
+    default:
+      if (ch < 0x20) {
+        fprintf(out, "\\u%04x", (unsigned)ch);
+      } else {
+        fputc((int)ch, out);
+      }
+      break;
+    }
+  }
+  fputc('"', out);
+}
+
+static inline TraceExecProvenance trace_load_exec_provenance(const WorkerTraceState *ts) {
+  TraceExecProvenance provenance = {0, 0, 0, 0};
+  if (ts == NULL)
+    return provenance;
+  provenance.phase_id =
+      atomic_load_explicit(&ts->live_phase_id, memory_order_acquire);
+  provenance.proc_id =
+      atomic_load_explicit(&ts->live_proc_id, memory_order_acquire);
+  provenance.source_id =
+      atomic_load_explicit(&ts->live_source_id, memory_order_acquire);
+  provenance.block_id =
+      atomic_load_explicit(&ts->live_block_id, memory_order_acquire);
+  return provenance;
+}
+
+static inline uint32_t trace_request_provenance_slot(uint32_t req_id,
+                                                     uint32_t probe) {
+  return (req_id + probe) % TRACE_REQUEST_PROVENANCE_SLOTS;
+}
+
+static TraceExecProvenance trace_lookup_request_provenance(uint32_t req_id) {
+  if (req_id == 0)
+    return trace_idle_provenance();
+  for (uint32_t probe = 0; probe < TRACE_REQUEST_PROVENANCE_SLOTS; probe++) {
+    TraceRequestProvenance *slot =
+        &TRACE_REQUEST_PROVENANCE[trace_request_provenance_slot(req_id, probe)];
+    uint32_t seen_req_id =
+        atomic_load_explicit(&slot->req_id, memory_order_acquire);
+    if (seen_req_id == req_id) {
+      TraceExecProvenance provenance = {
+          .phase_id =
+              atomic_load_explicit(&slot->phase_id, memory_order_acquire),
+          .proc_id =
+              atomic_load_explicit(&slot->proc_id, memory_order_acquire),
+          .source_id =
+              atomic_load_explicit(&slot->source_id, memory_order_acquire),
+          .block_id =
+              atomic_load_explicit(&slot->block_id, memory_order_acquire),
+      };
+      return provenance;
+    }
+    if (seen_req_id == 0)
+      break;
+  }
+  return trace_default_request_provenance();
+}
+
+void arena_trace_set_exec_provenance(uint32_t worker_id,
+                                     TraceExecProvenance provenance) {
+  WorkerTraceState *ts = trace_state_for(worker_id);
+  if (ts == NULL)
+    return;
+  atomic_store_explicit(&ts->live_phase_id, provenance.phase_id,
+                        memory_order_relaxed);
+  atomic_store_explicit(&ts->live_proc_id, provenance.proc_id,
+                        memory_order_relaxed);
+  atomic_store_explicit(&ts->live_source_id, provenance.source_id,
+                        memory_order_relaxed);
+  atomic_store_explicit(&ts->live_block_id, provenance.block_id,
+                        memory_order_relaxed);
+}
+
+bool arena_trace_set_request_provenance(uint32_t req_id,
+                                        TraceExecProvenance provenance) {
+  if (req_id == 0)
+    return false;
+  for (uint32_t probe = 0; probe < TRACE_REQUEST_PROVENANCE_SLOTS; probe++) {
+    TraceRequestProvenance *slot =
+        &TRACE_REQUEST_PROVENANCE[trace_request_provenance_slot(req_id, probe)];
+    uint32_t seen_req_id =
+        atomic_load_explicit(&slot->req_id, memory_order_acquire);
+    if (seen_req_id != 0 && seen_req_id != req_id)
+      continue;
+    atomic_store_explicit(&slot->phase_id, provenance.phase_id,
+                          memory_order_relaxed);
+    atomic_store_explicit(&slot->proc_id, provenance.proc_id,
+                          memory_order_relaxed);
+    atomic_store_explicit(&slot->source_id, provenance.source_id,
+                          memory_order_relaxed);
+    atomic_store_explicit(&slot->block_id, provenance.block_id,
+                          memory_order_relaxed);
+    atomic_store_explicit(&slot->req_id, req_id, memory_order_release);
+    return true;
+  }
+  return false;
+}
+
+void arena_trace_clear_request_provenance(uint32_t req_id) {
+  if (req_id == 0)
+    return;
+  for (uint32_t probe = 0; probe < TRACE_REQUEST_PROVENANCE_SLOTS; probe++) {
+    TraceRequestProvenance *slot =
+        &TRACE_REQUEST_PROVENANCE[trace_request_provenance_slot(req_id, probe)];
+    uint32_t seen_req_id =
+        atomic_load_explicit(&slot->req_id, memory_order_acquire);
+    if (seen_req_id == req_id) {
+      atomic_store_explicit(&slot->req_id, 0, memory_order_release);
+      atomic_store_explicit(&slot->phase_id, 0, memory_order_relaxed);
+      atomic_store_explicit(&slot->proc_id, 0, memory_order_relaxed);
+      atomic_store_explicit(&slot->source_id, 0, memory_order_relaxed);
+      atomic_store_explicit(&slot->block_id, 0, memory_order_relaxed);
+      return;
+    }
+    if (seen_req_id == 0)
+      return;
+  }
+}
+
+bool arena_trace_register_source(uint32_t source_id, const char *file,
+                                 uint32_t start_line, uint32_t start_col,
+                                 uint32_t end_line, uint32_t end_col) {
+  if (source_id == TRACE_SOURCE_UNKNOWN || file == NULL)
+    return false;
+  pthread_mutex_lock(&TRACE_SYMBOLS_MUTEX);
+  for (uint32_t i = 0; i < TRACE_SOURCE_SYMBOL_COUNT; i++) {
+    TraceSourceSymbol *sym = &TRACE_SOURCE_SYMBOLS[i];
+    if (sym->id != source_id)
+      continue;
+    trace_copy_cstr(sym->file, sizeof(sym->file), file);
+    sym->start_line = start_line;
+    sym->start_col = start_col;
+    sym->end_line = end_line;
+    sym->end_col = end_col;
+    pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+    return true;
+  }
+  if (TRACE_SOURCE_SYMBOL_COUNT >= TRACE_MAX_SOURCE_SYMBOLS) {
+    pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+    return false;
+  }
+  TraceSourceSymbol *sym = &TRACE_SOURCE_SYMBOLS[TRACE_SOURCE_SYMBOL_COUNT++];
+  memset(sym, 0, sizeof(*sym));
+  sym->id = source_id;
+  trace_copy_cstr(sym->file, sizeof(sym->file), file);
+  sym->start_line = start_line;
+  sym->start_col = start_col;
+  sym->end_line = end_line;
+  sym->end_col = end_col;
+  pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+  return true;
+}
+
+bool arena_trace_register_proc(uint32_t proc_id, const char *name,
+                               uint32_t phase_id, uint32_t primary_source_id,
+                               uint32_t arity) {
+  if (proc_id == TRACE_PROC_UNKNOWN || name == NULL)
+    return false;
+  pthread_mutex_lock(&TRACE_SYMBOLS_MUTEX);
+  for (uint32_t i = 0; i < TRACE_PROC_SYMBOL_COUNT; i++) {
+    TraceProcSymbol *sym = &TRACE_PROC_SYMBOLS[i];
+    if (sym->id != proc_id)
+      continue;
+    trace_copy_cstr(sym->name, sizeof(sym->name), name);
+    sym->phase_id = phase_id;
+    sym->primary_source_id = primary_source_id;
+    sym->arity = arity;
+    pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+    return true;
+  }
+  if (TRACE_PROC_SYMBOL_COUNT >= TRACE_MAX_PROC_SYMBOLS) {
+    pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+    return false;
+  }
+  TraceProcSymbol *sym = &TRACE_PROC_SYMBOLS[TRACE_PROC_SYMBOL_COUNT++];
+  memset(sym, 0, sizeof(*sym));
+  sym->id = proc_id;
+  trace_copy_cstr(sym->name, sizeof(sym->name), name);
+  sym->phase_id = phase_id;
+  sym->primary_source_id = primary_source_id;
+  sym->arity = arity;
+  pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+  return true;
+}
+
+static void trace_register_builtin_symbols(void) {
+  (void)arena_trace_register_source(TRACE_SOURCE_CORE_ARENA_C, "core/arena.c",
+                                    1, 1, 0, 0);
+  (void)arena_trace_register_source(TRACE_SOURCE_CORE_THANATOS_C,
+                                    "core/thanatos.c", 1, 1, 0, 0);
+  (void)arena_trace_register_source(TRACE_SOURCE_CORE_SESSION_C,
+                                    "core/session.c", 1, 1, 0, 0);
+
+  (void)arena_trace_register_proc(TRACE_PROC_RUNTIME_WORKER_IDLE,
+                                  "runtime.worker_idle",
+                                  TRACE_PHASE_RUNTIME,
+                                  TRACE_SOURCE_CORE_ARENA_C, 0);
+  (void)arena_trace_register_proc(TRACE_PROC_RUNTIME_REDUCE, "runtime.reduce",
+                                  TRACE_PHASE_RUNTIME,
+                                  TRACE_SOURCE_CORE_THANATOS_C, 1);
+  (void)arena_trace_register_proc(TRACE_PROC_DRIVER_REDUCE, "driver.REDUCE",
+                                  TRACE_PHASE_DRIVER,
+                                  TRACE_SOURCE_CORE_SESSION_C, 1);
+  (void)arena_trace_register_proc(TRACE_PROC_DRIVER_REDUCE_IO,
+                                  "driver.REDUCE_IO", TRACE_PHASE_DRIVER,
+                                  TRACE_SOURCE_CORE_SESSION_C, 2);
+  (void)arena_trace_register_proc(TRACE_PROC_DRIVER_REDUCE_FILE,
+                                  "driver.REDUCE_FILE", TRACE_PHASE_DRIVER,
+                                  TRACE_SOURCE_CORE_SESSION_C, 3);
+  (void)arena_trace_register_proc(TRACE_PROC_DRIVER_STEP, "driver.STEP",
+                                  TRACE_PHASE_DRIVER,
+                                  TRACE_SOURCE_CORE_SESSION_C, 2);
+}
+
 static inline WorkerTraceState *trace_state_for(uint32_t worker_id) {
   if (worker_id >= MAX_WORKERS)
     return NULL;
@@ -1700,6 +2059,7 @@ static inline void trace_record_event(uint32_t worker_id, uint64_t step_counter,
   WorkerTraceState *ts = trace_state_for(worker_id);
   if (ts == NULL)
     return;
+  TraceExecProvenance provenance = trace_load_exec_provenance(ts);
   uint32_t head = atomic_load_explicit(&ts->ring_head, memory_order_relaxed);
   TraceEvent *ev = &ts->ring[head % TRACE_RING_SIZE];
   ev->step = step_counter;
@@ -1708,6 +2068,10 @@ static inline void trace_record_event(uint32_t worker_id, uint64_t step_counter,
   ev->b = b;
   ev->c = c;
   ev->req_id = req_id;
+  ev->phase_id = provenance.phase_id;
+  ev->proc_id = provenance.proc_id;
+  ev->source_id = provenance.source_id;
+  ev->block_id = provenance.block_id;
   atomic_store_explicit(&ts->ring_head, head + 1, memory_order_release);
 }
 
@@ -1809,10 +2173,15 @@ static void trace_capture_snapshot(uint32_t worker_id, const WorkerState *ws,
   WorkerTraceState *ts = trace_state_for(worker_id);
   if (ts == NULL)
     return;
+  TraceExecProvenance provenance = trace_load_exec_provenance(ts);
 
   WorkerTraceSnapshot *snap = &ts->snapshot;
   memset(snap, 0, sizeof(*snap));
   snap->worker_id = worker_id;
+  snap->phase_id = provenance.phase_id;
+  snap->proc_id = provenance.proc_id;
+  snap->source_id = provenance.source_id;
+  snap->block_id = provenance.block_id;
 
   if (ws != NULL && !live_only) {
     snap->status = ws->status;
@@ -1874,6 +2243,13 @@ void arena_trace_init(uint32_t worker_count) {
   TRACE_WORKER_COUNT = worker_count > MAX_WORKERS ? MAX_WORKERS : worker_count;
   atomic_store_explicit(&TRACE_REQUESTED_EPOCH, 0, memory_order_release);
   memset(WORKER_TRACE, 0, sizeof(WORKER_TRACE));
+  memset(TRACE_REQUEST_PROVENANCE, 0, sizeof(TRACE_REQUEST_PROVENANCE));
+  pthread_mutex_lock(&TRACE_SYMBOLS_MUTEX);
+  memset(TRACE_SOURCE_SYMBOLS, 0, sizeof(TRACE_SOURCE_SYMBOLS));
+  memset(TRACE_PROC_SYMBOLS, 0, sizeof(TRACE_PROC_SYMBOLS));
+  TRACE_SOURCE_SYMBOL_COUNT = 0;
+  TRACE_PROC_SYMBOL_COUNT = 0;
+  pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
   for (uint32_t i = 0; i < MAX_WORKERS; i++) {
     atomic_init(&WORKER_TRACE[i].live_status, WORKER_IDLE);
     atomic_init(&WORKER_TRACE[i].live_req_id, 0);
@@ -1881,12 +2257,17 @@ void arena_trace_init(uint32_t worker_count) {
     atomic_init(&WORKER_TRACE[i].live_remaining_steps, 0);
     atomic_init(&WORKER_TRACE[i].live_mode, MODE_DESCEND);
     atomic_init(&WORKER_TRACE[i].live_sp, 0);
+    atomic_init(&WORKER_TRACE[i].live_phase_id, TRACE_PHASE_RUNTIME);
+    atomic_init(&WORKER_TRACE[i].live_proc_id, TRACE_PROC_RUNTIME_WORKER_IDLE);
+    atomic_init(&WORKER_TRACE[i].live_source_id, TRACE_SOURCE_CORE_ARENA_C);
+    atomic_init(&WORKER_TRACE[i].live_block_id, 0);
     atomic_init(&WORKER_TRACE[i].last_seen_epoch, 0);
     atomic_init(&WORKER_TRACE[i].snapshot_epoch_done, 0);
     atomic_init(&WORKER_TRACE[i].live_thread_id, 0);
     atomic_init(&WORKER_TRACE[i].live_step_counter, 0);
     atomic_init(&WORKER_TRACE[i].ring_head, 0);
   }
+  trace_register_builtin_symbols();
 }
 
 void arena_trace_request_epoch(uint32_t epoch) {
@@ -1952,9 +2333,10 @@ static void trace_write_events_json(FILE *out, const WorkerTraceSnapshot *snap) 
     if (i > 0)
       fprintf(out, ",");
     fprintf(out,
-            "{\"step\":%llu,\"kind\":\"%s\",\"a\":%u,\"b\":%u,\"c\":%u,\"req_id\":%u}",
+            "{\"step\":%llu,\"kind\":\"%s\",\"phase_id\":%u,\"proc_id\":%u,\"source_id\":%u,\"block_id\":%u,\"a\":%u,\"b\":%u,\"c\":%u,\"req_id\":%u}",
             (unsigned long long)ev->step, trace_event_kind_name(ev->kind),
-            ev->a, ev->b, ev->c, ev->req_id);
+            ev->phase_id, ev->proc_id, ev->source_id, ev->block_id, ev->a,
+            ev->b, ev->c, ev->req_id);
   }
   fprintf(out, "]");
 }
@@ -1980,6 +2362,57 @@ static void trace_write_graph_json(FILE *out, const WorkerTraceSnapshot *snap) {
   fprintf(out, "]");
 }
 
+static void trace_write_symbols_json(FILE *out) {
+  fprintf(out, "{\"phases\":[");
+  for (uint32_t i = 0; i < sizeof(TRACE_PHASE_SYMBOLS) / sizeof(TRACE_PHASE_SYMBOLS[0]);
+       i++) {
+    if (i > 0)
+      fprintf(out, ",");
+    fprintf(out, "{\"id\":%u,\"name\":", TRACE_PHASE_SYMBOLS[i].id);
+    trace_write_json_string(out, TRACE_PHASE_SYMBOLS[i].name);
+    fprintf(out, "}");
+  }
+  fprintf(out, "],\"sources\":[");
+  fprintf(out,
+          "{\"id\":0,\"file\":\"<unknown>\",\"start_line\":0,\"start_col\":0,\"end_line\":0,\"end_col\":0}");
+  pthread_mutex_lock(&TRACE_SYMBOLS_MUTEX);
+  for (uint32_t i = 0; i < TRACE_SOURCE_SYMBOL_COUNT; i++) {
+    const TraceSourceSymbol *sym = &TRACE_SOURCE_SYMBOLS[i];
+    fprintf(out, ",{\"id\":%u,\"file\":", sym->id);
+    trace_write_json_string(out, sym->file);
+    fprintf(out,
+            ",\"start_line\":%u,\"start_col\":%u,\"end_line\":%u,\"end_col\":%u}",
+            sym->start_line, sym->start_col, sym->end_line, sym->end_col);
+  }
+  fprintf(out, "],\"procs\":[");
+  fprintf(out,
+          "{\"id\":0,\"name\":\"unknown\",\"phase_id\":0,\"primary_source_id\":0,\"arity\":0}");
+  for (uint32_t i = 0; i < TRACE_PROC_SYMBOL_COUNT; i++) {
+    const TraceProcSymbol *sym = &TRACE_PROC_SYMBOLS[i];
+    fprintf(out, ",{\"id\":%u,\"name\":", sym->id);
+    trace_write_json_string(out, sym->name);
+    fprintf(out,
+            ",\"phase_id\":%u,\"primary_source_id\":%u,\"arity\":%u}",
+            sym->phase_id, sym->primary_source_id, sym->arity);
+  }
+  pthread_mutex_unlock(&TRACE_SYMBOLS_MUTEX);
+  fprintf(out, "],\"frame_kinds\":[");
+  for (uint32_t i = 0;
+       i < sizeof(TRACE_FRAME_KIND_SYMBOLS) / sizeof(TRACE_FRAME_KIND_SYMBOLS[0]);
+       i++) {
+    if (i > 0)
+      fprintf(out, ",");
+    fprintf(out, "{\"id\":%u,\"name\":", TRACE_FRAME_KIND_SYMBOLS[i].id);
+    trace_write_json_string(out, TRACE_FRAME_KIND_SYMBOLS[i].name);
+    fprintf(out, ",\"fields\":[");
+    trace_write_json_string(out, TRACE_FRAME_KIND_SYMBOLS[i].field_a);
+    fprintf(out, ",");
+    trace_write_json_string(out, TRACE_FRAME_KIND_SYMBOLS[i].field_b);
+    fprintf(out, "]}");
+  }
+  fprintf(out, "]}");
+}
+
 bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
                                  uint32_t worker_count, bool timed_out) {
   if (path == NULL || path[0] == 0)
@@ -2000,7 +2433,7 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
   unsigned long long hashcons_misses = arena_hashcons_misses();
 
   fprintf(out,
-          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
+          "{\"dump_version\":2,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
           epoch, timed_out ? "true" : "false", worker_count, top, capacity,
           top, total_nodes, total_steps, total_cons_allocs, total_cont_allocs,
           total_susp_allocs, duplicate_lost_allocs, hashcons_hits,
@@ -2029,6 +2462,10 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
       live_fallback.remaining_steps = atomic_load_explicit(&ts->live_remaining_steps, memory_order_acquire);
       live_fallback.mode = atomic_load_explicit(&ts->live_mode, memory_order_acquire);
       live_fallback.control_depth = atomic_load_explicit(&ts->live_sp, memory_order_acquire);
+      live_fallback.phase_id = atomic_load_explicit(&ts->live_phase_id, memory_order_acquire);
+      live_fallback.proc_id = atomic_load_explicit(&ts->live_proc_id, memory_order_acquire);
+      live_fallback.source_id = atomic_load_explicit(&ts->live_source_id, memory_order_acquire);
+      live_fallback.block_id = atomic_load_explicit(&ts->live_block_id, memory_order_acquire);
       live_fallback.thread_id = atomic_load_explicit(&ts->live_thread_id, memory_order_acquire);
       live_fallback.step_counter = atomic_load_explicit(&ts->live_step_counter, memory_order_acquire);
       snap = &live_fallback;
@@ -2036,12 +2473,13 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
     if (i > 0)
       fprintf(out, ",");
     fprintf(out,
-            "{\"worker_id\":%u,\"complete\":%s,\"thread_id\":%llu,\"state\":\"%s\",\"step_counter\":%llu,\"task_id\":%u,\"mode\":\"%s\",\"remaining_steps\":%u,\"control_depth\":%u,\"focus\":{",
+            "{\"worker_id\":%u,\"complete\":%s,\"thread_id\":%llu,\"state\":\"%s\",\"step_counter\":%llu,\"task_id\":%u,\"mode\":\"%s\",\"remaining_steps\":%u,\"control_depth\":%u,\"phase_id\":%u,\"proc_id\":%u,\"source_id\":%u,\"block_id\":%u,\"focus\":{",
             i, complete ? "true" : "false", (unsigned long long)snap->thread_id,
             trace_worker_status_name(snap->status),
             (unsigned long long)snap->step_counter, snap->req_id,
             trace_mode_name(snap->mode), snap->remaining_steps,
-            snap->control_depth);
+            snap->control_depth, snap->phase_id, snap->proc_id,
+            snap->source_id, snap->block_id);
     if (snap->graph_count > 0) {
       const TraceGraphNode *focus = &snap->focus_graph[0];
       fprintf(out,
@@ -2066,7 +2504,9 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
     fprintf(out, "}");
   }
 
-  fprintf(out, "],\"symbols\":{}}\n");
+  fprintf(out, "],\"symbols\":");
+  trace_write_symbols_json(out);
+  fprintf(out, "}\n");
   fclose(out);
   return true;
 }
@@ -2095,7 +2535,44 @@ static inline void trace_maybe_snapshot(uint32_t worker_id, WorkerState *ws,
   (void)ws;
   (void)step_counter;
 }
+static TraceExecProvenance trace_lookup_request_provenance(uint32_t req_id) {
+  (void)req_id;
+  return trace_default_request_provenance();
+}
 void arena_trace_init(uint32_t worker_count) { (void)worker_count; }
+void arena_trace_set_exec_provenance(uint32_t worker_id,
+                                     TraceExecProvenance provenance) {
+  (void)worker_id;
+  (void)provenance;
+}
+bool arena_trace_set_request_provenance(uint32_t req_id,
+                                        TraceExecProvenance provenance) {
+  (void)req_id;
+  (void)provenance;
+  return false;
+}
+void arena_trace_clear_request_provenance(uint32_t req_id) { (void)req_id; }
+bool arena_trace_register_source(uint32_t source_id, const char *file,
+                                 uint32_t start_line, uint32_t start_col,
+                                 uint32_t end_line, uint32_t end_col) {
+  (void)source_id;
+  (void)file;
+  (void)start_line;
+  (void)start_col;
+  (void)end_line;
+  (void)end_col;
+  return false;
+}
+bool arena_trace_register_proc(uint32_t proc_id, const char *name,
+                               uint32_t phase_id, uint32_t primary_source_id,
+                               uint32_t arity) {
+  (void)proc_id;
+  (void)name;
+  (void)phase_id;
+  (void)primary_source_id;
+  (void)arity;
+  return false;
+}
 void arena_trace_request_epoch(uint32_t epoch) { (void)epoch; }
 void arena_trace_capture_idle_workers(uint32_t epoch, uint32_t worker_count) {
   (void)epoch;
@@ -3058,6 +3535,7 @@ void workerLoop(uint32_t worker_id) {
         .reserved = 0,
         .req_id = last_req_id,
     };
+    arena_trace_set_exec_provenance(worker_id, trace_idle_provenance());
     trace_publish_live(worker_id, &idle_ws, worker_steps);
     Sqe job;
     dequeue_blocking(sq, &job, sizeof(Sqe));
@@ -3084,6 +3562,8 @@ void workerLoop(uint32_t worker_id) {
     };
 
     last_req_id = job.req_id;
+    arena_trace_set_exec_provenance(worker_id,
+                                    trace_lookup_request_provenance(job.req_id));
     trace_publish_live(worker_id, &ws, worker_steps);
 
     if (is_control_ptr(job.node_id)) {

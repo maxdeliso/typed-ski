@@ -3,7 +3,6 @@ module Unparse
 import Prelude List
 import Prelude nil
 import Prelude cons
-import Prelude append
 import Prelude addU8
 import Prelude divU8
 import Prelude modU8
@@ -59,32 +58,47 @@ data Comb =
   | C_Term Terminal
   | C_App Comb Comb
 
-poly terminalBytes = \t : Terminal =>
+poly terminalBytesAcc = \t : Terminal => \acc : List U8 =>
   match t [List U8] {
-    | T_S => "S"
-    | T_K => "K"
-    | T_I => "I"
-    | T_B => "B"
-    | T_C => "C"
-    | T_SPrime => "P"
-    | T_BPrime => "Q"
-    | T_CPrime => "R"
-    | T_WriteOne => "."
-    | T_ReadOne => ","
-    | T_EqU8 => "E"
-    | T_LtU8 => "L"
-    | T_DivU8 => "D"
-    | T_ModU8 => "M"
-    | T_AddU8 => "A"
-    | T_SubU8 => "O"
-    | T_Byte b => append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
+    | T_S => cons [U8] #u8(83) acc
+    | T_K => cons [U8] #u8(75) acc
+    | T_I => cons [U8] #u8(73) acc
+    | T_B => cons [U8] #u8(66) acc
+    | T_C => cons [U8] #u8(67) acc
+    | T_SPrime => cons [U8] #u8(80) acc
+    | T_BPrime => cons [U8] #u8(81) acc
+    | T_CPrime => cons [U8] #u8(82) acc
+    | T_WriteOne => cons [U8] #u8(46) acc
+    | T_ReadOne => cons [U8] #u8(44) acc
+    | T_EqU8 => cons [U8] #u8(69) acc
+    | T_LtU8 => cons [U8] #u8(76) acc
+    | T_DivU8 => cons [U8] #u8(68) acc
+    | T_ModU8 => cons [U8] #u8(77) acc
+    | T_AddU8 => cons [U8] #u8(65) acc
+    | T_SubU8 => cons [U8] #u8(79) acc
+    | T_Byte b =>
+        cons [U8] #u8(35)
+          (cons [U8] #u8(117)
+            (cons [U8] #u8(56)
+              (cons [U8] #u8(40)
+                (u8ToDigitsAcc b (cons [U8] #u8(41) acc)))))
   }
 
+poly terminalBytes = \t : Terminal =>
+  terminalBytesAcc t (nil [U8])
+
 poly rec unparseCombinator = \c : Comb =>
+  unparseCombinatorAcc c (nil [U8])
+
+poly rec unparseCombinatorAcc = \c : Comb => \acc : List U8 =>
   match c [List U8] {
-    | C_Term t => terminalBytes t
+    | C_Term t => terminalBytesAcc t acc
     | C_App l r =>
-        append [U8] "(" (append [U8] (unparseCombinator l) (append [U8] " " (append [U8] (unparseCombinator r) ")")))
+        let withClose = cons [U8] #u8(41) acc in
+        let withRight = unparseCombinatorAcc r withClose in
+        let withSpace = cons [U8] #u8(32) withRight in
+        let withLeft = unparseCombinatorAcc l withSpace in
+        cons [U8] #u8(40) withLeft
   }
 
 poly digitToAscii = \d : U8 =>
@@ -93,15 +107,15 @@ poly digitToAscii = \d : U8 =>
 poly singletonU8 = \b : U8 =>
   cons [U8] b (nil [U8])
 
-poly u8ToDigits = \n : U8 =>
+poly u8ToDigitsAcc = \n : U8 => \acc : List U8 =>
   if [List U8] (ltU8 n #u8(10))
-    (\u : U8 => singletonU8 (digitToAscii n))
+    (\u : U8 => cons [U8] (digitToAscii n) acc)
     (\u : U8 =>
       if [List U8] (ltU8 n #u8(100))
         (\u : U8 =>
           cons [U8]
             (digitToAscii (divU8 n #u8(10)))
-            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
+            (cons [U8] (digitToAscii (modU8 n #u8(10))) acc))
         (\u : U8 =>
           let hundreds = divU8 n #u8(100) in
           let tens = modU8 (divU8 n #u8(10)) #u8(10) in
@@ -110,8 +124,11 @@ poly u8ToDigits = \n : U8 =>
             (digitToAscii hundreds)
             (cons [U8]
               (digitToAscii tens)
-              (singletonU8 (digitToAscii ones))))
+              (cons [U8] (digitToAscii ones) acc)))
     )
+
+poly u8ToDigits = \n : U8 =>
+  u8ToDigitsAcc n (nil [U8])
 
 poly terminalTag = \t : Terminal =>
   match t [U8] {

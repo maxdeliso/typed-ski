@@ -1,0 +1,167 @@
+module TelemetryTail
+
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Bool
+import Prelude if
+import Prelude U8
+import Prelude List
+import Prelude append
+import Prelude matchList
+import Prelude Pair
+import Prelude fst
+import Prelude snd
+import Lexer eqListU8
+import Prelude eqU8
+import Unparse Comb
+import Unparse unparseCombinator
+import Nat Nat
+import Nat zero
+import Nat succ
+import Nat pred
+import Nat gte
+import Nat add
+
+export phase5
+export phase6
+export phase6TextProfile
+export phase6TextProfileOutputBytes
+export phase6TextProfileParenBytes
+export phase6TextProfileSpaceBytes
+export phase6TextProfileByteLiterals
+export phase6TextProfileMaxDepth
+
+data Phase6TextProfile =
+  | MkPhase6TextProfile Nat Nat Nat Nat Nat Nat
+
+poly natMax = \a : Nat => \b : Nat =>
+  if [Nat] (gte a b)
+    (\u : U8 => a)
+    (\u : U8 => b)
+
+poly phase6TextProfileOutputBytesNat = \profile : Phase6TextProfile =>
+  match profile [Nat] {
+    | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth => outputBytes
+  }
+
+poly phase6TextProfileParenBytesNat = \profile : Phase6TextProfile =>
+  match profile [Nat] {
+    | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth => parenBytes
+  }
+
+poly phase6TextProfileSpaceBytesNat = \profile : Phase6TextProfile =>
+  match profile [Nat] {
+    | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth => spaceBytes
+  }
+
+poly phase6TextProfileByteLiteralsNat = \profile : Phase6TextProfile =>
+  match profile [Nat] {
+    | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth => byteLiterals
+  }
+
+poly phase6TextProfileMaxOpenDepthNat = \profile : Phase6TextProfile =>
+  match profile [Nat] {
+    | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth => maxOpenDepth
+  }
+
+poly rec phase6TextProfileAcc = \bytes : List U8 => \depth : Nat =>
+  matchList [U8] [Phase6TextProfile] bytes
+    (MkPhase6TextProfile zero zero zero zero depth depth)
+    (\h : U8 => \t : List U8 =>
+      if [Phase6TextProfile] (eqU8 h #u8(40))
+        (\u : U8 =>
+          let nextDepth = succ depth in
+          match (phase6TextProfileAcc t nextDepth) [Phase6TextProfile] {
+            | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth =>
+                MkPhase6TextProfile
+                  (succ outputBytes)
+                  (succ parenBytes)
+                  spaceBytes
+                  byteLiterals
+                  currentDepth
+                  (natMax nextDepth maxOpenDepth)
+          })
+        (\u : U8 =>
+          if [Phase6TextProfile] (eqU8 h #u8(41))
+            (\u : U8 =>
+              let nextDepth = pred depth in
+              match (phase6TextProfileAcc t nextDepth) [Phase6TextProfile] {
+                | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth =>
+                    MkPhase6TextProfile
+                      (succ outputBytes)
+                      (succ parenBytes)
+                      spaceBytes
+                      byteLiterals
+                      currentDepth
+                      maxOpenDepth
+              })
+            (\u : U8 =>
+              if [Phase6TextProfile] (eqU8 h #u8(32))
+                (\u : U8 =>
+                  match (phase6TextProfileAcc t depth) [Phase6TextProfile] {
+                    | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth =>
+                        MkPhase6TextProfile
+                          (succ outputBytes)
+                          parenBytes
+                          (succ spaceBytes)
+                          byteLiterals
+                          currentDepth
+                          maxOpenDepth
+                  })
+                (\u : U8 =>
+                  if [Phase6TextProfile] (eqU8 h #u8(35))
+                    (\u : U8 =>
+                      match (phase6TextProfileAcc t depth) [Phase6TextProfile] {
+                        | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth =>
+                            MkPhase6TextProfile
+                              (succ outputBytes)
+                              parenBytes
+                              spaceBytes
+                              (succ byteLiterals)
+                              currentDepth
+                              maxOpenDepth
+                      })
+                    (\u : U8 =>
+                      match (phase6TextProfileAcc t depth) [Phase6TextProfile] {
+                        | MkPhase6TextProfile outputBytes parenBytes spaceBytes byteLiterals currentDepth maxOpenDepth =>
+                            MkPhase6TextProfile
+                              (succ outputBytes)
+                              parenBytes
+                              spaceBytes
+                              byteLiterals
+                              currentDepth
+                              maxOpenDepth
+                      })))))
+
+poly rec phase5 = \results : List (Pair (List U8) Comb) =>
+  matchList [Pair (List U8) Comb] [Result (List U8) Comb] results
+    (Err [List U8] [Comb] "Missing main")
+    (\h : Pair (List U8) Comb => \t : List (Pair (List U8) Comb) =>
+      if [Result (List U8) Comb] (eqListU8 (fst [List U8] [Comb] h) "main")
+        (\u : U8 => Ok [List U8] [Comb] (snd [List U8] [Comb] h))
+        (\u : U8 => phase5 t))
+
+poly phase6 = \result : Result (List U8) Comb =>
+  match result [List U8] {
+    | Err e => append [U8] "ERR:" e
+    | Ok main => unparseCombinator main
+  }
+
+poly phase6TextProfile = \bytes : List U8 =>
+  phase6TextProfileAcc bytes zero
+
+poly phase6TextProfileOutputBytes = \profile : Phase6TextProfile =>
+  phase6TextProfileOutputBytesNat profile
+
+poly phase6TextProfileParenBytes = \profile : Phase6TextProfile =>
+  phase6TextProfileParenBytesNat profile
+
+poly phase6TextProfileSpaceBytes = \profile : Phase6TextProfile =>
+  phase6TextProfileSpaceBytesNat profile
+
+poly phase6TextProfileByteLiterals = \profile : Phase6TextProfile =>
+  phase6TextProfileByteLiteralsNat profile
+
+poly phase6TextProfileMaxDepth = \profile : Phase6TextProfile =>
+  succ (phase6TextProfileMaxOpenDepthNat profile)

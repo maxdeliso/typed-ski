@@ -3,6 +3,7 @@
 #include "ski_io.h"
 #include "thanatos.h"
 #include "util.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -28,6 +29,16 @@ static void session_printf(ThanatosSession *s, const char *fmt, ...) {
 }
 
 static void session_fflush(ThanatosSession *s) { fflush(s->stdout_stream); }
+
+static inline TraceExecProvenance session_reduce_provenance(uint32_t proc_id) {
+  TraceExecProvenance provenance = {
+      .phase_id = TRACE_PHASE_DRIVER,
+      .proc_id = proc_id,
+      .source_id = TRACE_SOURCE_CORE_SESSION_C,
+      .block_id = 0,
+  };
+  return provenance;
+}
 
 static bool command_matches(const char *line, size_t len, const char *command,
                             size_t command_len) {
@@ -99,6 +110,26 @@ static int parse_one_path(const char **p_start, char *out, size_t max) {
   return 1;
 }
 
+static bool parse_one_u32_token(const char **p_start, uint32_t *out) {
+  const char *start = *p_start;
+  while (*start == ' ' || *start == '\t')
+    start++;
+  if (*start == '\0')
+    return false;
+
+  errno = 0;
+  char *end = NULL;
+  unsigned long value = strtoul(start, &end, 10);
+  if (errno == ERANGE || end == start || value > 0xfffffffful)
+    return false;
+  if (*end != '\0' && *end != ' ' && *end != '\t')
+    return false;
+
+  *out = (uint32_t)value;
+  *p_start = end;
+  return true;
+}
+
 static void handle_quit(ThanatosSession *s) {
   session_printf(s, "OK\n");
   session_fflush(s);
@@ -157,7 +188,58 @@ static void handle_reduce(ThanatosSession *s, const char *payload, size_t len) {
     session_fflush(s);
     return;
   }
-  uint32_t result = thanatos_reduce_to_normal_form(root);
+  uint32_t result = thanatos_reduce_with_provenance(
+      root, MAX_STEPS, session_reduce_provenance(TRACE_PROC_DRIVER_REDUCE));
+  if (result == EMPTY) {
+    session_printf(s, "ERR reduction error\n");
+    session_fflush(s);
+    return;
+  }
+  if (!unparse_and_respond(s, result, "OK ")) {
+    session_printf(s, "ERR response too large or OOM\n");
+  }
+  session_fflush(s);
+}
+
+static void handle_reduce_trace(ThanatosSession *s, const char *line,
+                                size_t len) {
+  const char *p = line + (sizeof("REDUCE_TRACE") - 1);
+  TraceExecProvenance provenance = {0, 0, 0, 0};
+  if (!parse_one_u32_token(&p, &provenance.phase_id) ||
+      !parse_one_u32_token(&p, &provenance.proc_id) ||
+      !parse_one_u32_token(&p, &provenance.source_id) ||
+      !parse_one_u32_token(&p, &provenance.block_id)) {
+    session_printf(
+        s,
+        "ERR REDUCE_TRACE requires <phase_id> <proc_id> <source_id> "
+        "<block_id> <dag>\n");
+    session_fflush(s);
+    return;
+  }
+
+  while (*p == ' ' || *p == '\t')
+    p++;
+  const char *dag_payload = p;
+  size_t dag_len = (size_t)(line + len - dag_payload);
+  if (dag_len == 0) {
+    session_printf(
+        s,
+        "ERR REDUCE_TRACE requires <phase_id> <proc_id> <source_id> "
+        "<block_id> <dag>\n");
+    session_fflush(s);
+    return;
+  }
+
+  size_t end_idx = 0;
+  uint32_t root = parse_dag(dag_payload, dag_len, &end_idx);
+  if (root == EMPTY) {
+    session_printf(s, "ERR parse error\n");
+    session_fflush(s);
+    return;
+  }
+
+  uint32_t result =
+      thanatos_reduce_with_provenance(root, MAX_STEPS, provenance);
   if (result == EMPTY) {
     session_printf(s, "ERR reduction error\n");
     session_fflush(s);
@@ -224,7 +306,8 @@ static void handle_reduce_io(ThanatosSession *s, const char *line, size_t len) {
   DynamicBuffer hex_out;
   db_init(&hex_out);
   thanatos_set_stdout_handler(daemon_stdout_handler, &hex_out);
-  uint32_t result = thanatos_reduce_to_normal_form(root);
+  uint32_t result = thanatos_reduce_with_provenance(
+      root, MAX_STEPS, session_reduce_provenance(TRACE_PROC_DRIVER_REDUCE_IO));
   thanatos_set_stdout_handler(NULL, NULL);
 
   if (result == EMPTY) {
@@ -363,7 +446,9 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
    * within a process and the session layer must not overlap these reductions.
    */
   arena_set_io_mmap(in_map, in_size, out_map, max_out_size);
-  uint32_t result = thanatos_reduce_to_normal_form(root);
+  uint32_t result = thanatos_reduce_with_provenance(
+      root, MAX_STEPS,
+      session_reduce_provenance(TRACE_PROC_DRIVER_REDUCE_FILE));
   size_t written = arena_get_mmap_out_cursor();
   arena_set_io_mmap(NULL, 0, NULL, 0);
 
@@ -416,7 +501,8 @@ static void handle_step(ThanatosSession *s, const char *line, size_t len) {
     session_fflush(s);
     return;
   }
-  uint32_t result = thanatos_reduce(root, steps);
+  uint32_t result = thanatos_reduce_with_provenance(
+      root, steps, session_reduce_provenance(TRACE_PROC_DRIVER_STEP));
   if (result == EMPTY) {
     session_printf(s, "ERR reduction error\n");
     session_fflush(s);
@@ -425,6 +511,104 @@ static void handle_step(ThanatosSession *s, const char *line, size_t len) {
   if (!unparse_and_respond(s, result, "OK ")) {
     session_printf(s, "ERR response too large or OOM\n");
   }
+  session_fflush(s);
+}
+
+static void handle_trace_register_source(ThanatosSession *s, const char *line) {
+  const char *p = line + (sizeof("TRACE_REGISTER_SOURCE") - 1);
+  uint32_t source_id = 0;
+  uint32_t start_line = 0;
+  uint32_t start_col = 0;
+  uint32_t end_line = 0;
+  uint32_t end_col = 0;
+  char file[1024];
+
+  if (!parse_one_u32_token(&p, &source_id) ||
+      !parse_one_u32_token(&p, &start_line) ||
+      !parse_one_u32_token(&p, &start_col) ||
+      !parse_one_u32_token(&p, &end_line) ||
+      !parse_one_u32_token(&p, &end_col)) {
+    session_printf(
+        s,
+        "ERR TRACE_REGISTER_SOURCE requires <source_id> <start_line> "
+        "<start_col> <end_line> <end_col> <file>\n");
+    session_fflush(s);
+    return;
+  }
+
+  int path_rc = parse_one_path(&p, file, sizeof(file));
+  while (*p == ' ' || *p == '\t')
+    p++;
+  if (path_rc < 0) {
+    session_printf(s, "ERR path too long (max 1023 chars)\n");
+    session_fflush(s);
+    return;
+  }
+  if (path_rc == 0 || *p != '\0') {
+    session_printf(
+        s,
+        "ERR TRACE_REGISTER_SOURCE requires <source_id> <start_line> "
+        "<start_col> <end_line> <end_col> <file>\n");
+    session_fflush(s);
+    return;
+  }
+
+  if (!arena_trace_register_source(source_id, file, start_line, start_col,
+                                   end_line, end_col)) {
+    session_printf(s, "ERR trace source registration failed\n");
+    session_fflush(s);
+    return;
+  }
+
+  session_printf(s, "OK\n");
+  session_fflush(s);
+}
+
+static void handle_trace_register_proc(ThanatosSession *s, const char *line) {
+  const char *p = line + (sizeof("TRACE_REGISTER_PROC") - 1);
+  uint32_t proc_id = 0;
+  uint32_t phase_id = 0;
+  uint32_t primary_source_id = 0;
+  uint32_t arity = 0;
+  char name[1024];
+
+  if (!parse_one_u32_token(&p, &proc_id) ||
+      !parse_one_u32_token(&p, &phase_id) ||
+      !parse_one_u32_token(&p, &primary_source_id) ||
+      !parse_one_u32_token(&p, &arity)) {
+    session_printf(
+        s,
+        "ERR TRACE_REGISTER_PROC requires <proc_id> <phase_id> "
+        "<primary_source_id> <arity> <name>\n");
+    session_fflush(s);
+    return;
+  }
+
+  int path_rc = parse_one_path(&p, name, sizeof(name));
+  while (*p == ' ' || *p == '\t')
+    p++;
+  if (path_rc < 0) {
+    session_printf(s, "ERR path too long (max 1023 chars)\n");
+    session_fflush(s);
+    return;
+  }
+  if (path_rc == 0 || *p != '\0') {
+    session_printf(
+        s,
+        "ERR TRACE_REGISTER_PROC requires <proc_id> <phase_id> "
+        "<primary_source_id> <arity> <name>\n");
+    session_fflush(s);
+    return;
+  }
+
+  if (!arena_trace_register_proc(proc_id, name, phase_id, primary_source_id,
+                                 arity)) {
+    session_printf(s, "ERR trace proc registration failed\n");
+    session_fflush(s);
+    return;
+  }
+
+  session_printf(s, "OK\n");
   session_fflush(s);
 }
 
@@ -438,6 +622,15 @@ void thanatos_session_handle_line(ThanatosSession *s, const char *line,
     handle_reset(s);
   } else if (command_matches(line, len, "STATS", 5)) {
     handle_stats(s);
+  } else if (command_matches(line, len, "TRACE_REGISTER_SOURCE",
+                             sizeof("TRACE_REGISTER_SOURCE") - 1)) {
+    handle_trace_register_source(s, line);
+  } else if (command_matches(line, len, "TRACE_REGISTER_PROC",
+                             sizeof("TRACE_REGISTER_PROC") - 1)) {
+    handle_trace_register_proc(s, line);
+  } else if (command_matches(line, len, "REDUCE_TRACE",
+                             sizeof("REDUCE_TRACE") - 1)) {
+    handle_reduce_trace(s, line, len);
   } else if (command_matches(line, len, "REDUCE", 6)) {
     handle_reduce(s, line + 6, len - 6);
   } else if (command_matches(line, len, "REDUCE_IO", 9)) {

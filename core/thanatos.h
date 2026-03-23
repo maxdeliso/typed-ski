@@ -40,6 +40,10 @@ void thanatos_start_threads(bool enable_stdout_pump);
  * identical stdout. */
 uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps);
 
+/** Reduce with explicit trace provenance ownership for the request. */
+uint32_t thanatos_reduce_with_provenance(uint32_t node_id, uint32_t max_steps,
+                                         TraceExecProvenance provenance);
+
 /** Reduce to normal form (unbounded steps). Convenience for daemon REDUCE. */
 uint32_t thanatos_reduce_to_normal_form(uint32_t node_id);
 

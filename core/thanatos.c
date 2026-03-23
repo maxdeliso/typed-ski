@@ -1,5 +1,9 @@
 #include "thanatos.h"
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <signal.h>
+#include <string.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -7,6 +11,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #define MAX_PENDING_REQS 1024
 #define MAX_IO_WAIT 1024
@@ -37,6 +45,13 @@ static pthread_t stdout_thread;
 static pthread_t stdin_thread;
 static bool stdout_thread_started = false;
 static bool stdin_thread_started = false;
+static pthread_t tracer_thread;
+static bool tracer_thread_started = false;
+static bool tracer_enabled = false;
+static uint32_t tracer_timeout_ms = 1000;
+static char tracer_dir[PATH_MAX];
+static int tracer_wakeup_pipe[2] = {-1, -1};
+static volatile sig_atomic_t tracer_dump_epoch = 0;
 
 static pthread_mutex_t io_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t stdout_publish_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -77,6 +92,90 @@ static void must_pthread_create(pthread_t *thread, void *(*entry)(void *),
     fprintf(stderr, "Thanatos: pthread_create(%s) failed (rc=%d)\n", name, rc);
     abort();
   }
+}
+
+static void tracer_signal_handler(int signo) {
+  (void)signo;
+  tracer_dump_epoch++;
+  if (tracer_wakeup_pipe[1] >= 0) {
+    uint8_t byte = 1;
+    ssize_t ignored = write(tracer_wakeup_pipe[1], &byte, 1);
+    (void)ignored;
+  }
+}
+
+static void install_tracer_signal_handler(void) {
+  if (!tracer_enabled)
+    return;
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = tracer_signal_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  if (sigaction(SIGHUP, &sa, NULL) != 0) {
+    fprintf(stderr, "Thanatos: sigaction(SIGHUP) failed (errno=%d)\n", errno);
+    tracer_enabled = false;
+  }
+}
+
+static bool tracer_make_dump_path(uint32_t epoch, char *out, size_t out_cap) {
+  if (out == NULL || out_cap == 0)
+    return false;
+
+  char suffix[64];
+  int suffix_len = snprintf(suffix, sizeof(suffix),
+                            "/thanatos-trace-pid%d-epoch%u.json",
+                            (int)getpid(), epoch);
+  if (suffix_len < 0 || (size_t)suffix_len >= sizeof(suffix))
+    return false;
+
+  size_t dir_len = strnlen(tracer_dir, sizeof(tracer_dir));
+  size_t total_len = dir_len + (size_t)suffix_len;
+  if (dir_len == 0 || total_len + 1 > out_cap)
+    return false;
+
+  memcpy(out, tracer_dir, dir_len);
+  memcpy(out + dir_len, suffix, (size_t)suffix_len + 1);
+  return true;
+}
+
+static void *tracer_thread_main(void *arg) {
+  (void)arg;
+  uint32_t handled_epoch = 0;
+  while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
+    uint8_t buf[32];
+    ssize_t n = read(tracer_wakeup_pipe[0], buf, sizeof(buf));
+    if (n < 0) {
+      if (errno == EINTR)
+        continue;
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        usleep(1000);
+        continue;
+      }
+      break;
+    }
+    if (!atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire))
+      break;
+    uint32_t latest_epoch = (uint32_t)tracer_dump_epoch;
+    while (handled_epoch < latest_epoch) {
+      handled_epoch++;
+      arena_trace_request_epoch(handled_epoch);
+      arena_trace_capture_idle_workers(handled_epoch, num_workers_count);
+      bool complete = arena_trace_wait_for_epoch(handled_epoch, num_workers_count,
+                                                 tracer_timeout_ms);
+      char path[PATH_MAX];
+      if (tracer_make_dump_path(handled_epoch, path, sizeof(path)) &&
+          arena_trace_write_dump_json(path, handled_epoch, num_workers_count,
+                                      !complete)) {
+        fprintf(stderr, "Thanatos: trace dump epoch=%u %s %s\n", handled_epoch,
+                complete ? "complete" : "partial", path);
+      } else {
+        fprintf(stderr, "Thanatos: trace dump epoch=%u write failed\n",
+                handled_epoch);
+      }
+    }
+  }
+  return NULL;
 }
 
 static void wake_one_stdin_waiter(void) {
@@ -348,6 +447,31 @@ void thanatos_init(ThanatosConfig config) {
   atomic_store_explicit(&dispatcher_dropped, 0, memory_order_relaxed);
   pump_wakeup_pending = false;
 
+  tracer_enabled = (config.trace_dir != NULL && config.trace_dir[0] != '\0');
+  tracer_timeout_ms = (config.trace_timeout_ms == 0) ? 1000 : config.trace_timeout_ms;
+  tracer_dir[0] = '\0';
+  tracer_dump_epoch = 0;
+  tracer_thread_started = false;
+  if (tracer_enabled) {
+    size_t dir_len = strlen(config.trace_dir);
+    if (dir_len >= sizeof(tracer_dir)) {
+      fprintf(stderr, "Thanatos: trace dir too long\n");
+      tracer_enabled = false;
+    } else {
+      memcpy(tracer_dir, config.trace_dir, dir_len + 1);
+      if (pipe(tracer_wakeup_pipe) != 0) {
+        fprintf(stderr, "Thanatos: trace pipe init failed (errno=%d)\n", errno);
+        tracer_enabled = false;
+      } else {
+        int flags = fcntl(tracer_wakeup_pipe[1], F_GETFL, 0);
+        if (flags >= 0)
+          (void)fcntl(tracer_wakeup_pipe[1], F_SETFL, flags | O_NONBLOCK);
+        arena_trace_init(config.num_workers);
+        install_tracer_signal_handler();
+      }
+    }
+  }
+
   num_workers_count = config.num_workers;
   workers = malloc(sizeof(pthread_t) * num_workers_count);
 }
@@ -364,6 +488,10 @@ void thanatos_start_threads(bool enable_stdout_pump) {
 
   must_pthread_create(&dispatcher_thread, dispatcher_thread_main, NULL,
                       "dispatcher");
+  if (tracer_enabled) {
+    must_pthread_create(&tracer_thread, tracer_thread_main, NULL, "tracer");
+    tracer_thread_started = true;
+  }
   if (stdin_stream_fd >= 0) {
     must_pthread_create(&stdin_thread, stdin_thread_main, NULL, "stdin");
     stdin_thread_started = true;
@@ -521,6 +649,16 @@ void thanatos_shutdown(void) {
     }
     pthread_join(stdin_thread, NULL);
     stdin_thread_started = false;
+  }
+  if (tracer_thread_started) {
+    uint8_t byte = 0;
+    (void)write(tracer_wakeup_pipe[1], &byte, 1);
+    pthread_join(tracer_thread, NULL);
+    close(tracer_wakeup_pipe[0]);
+    close(tracer_wakeup_pipe[1]);
+    tracer_wakeup_pipe[0] = -1;
+    tracer_wakeup_pipe[1] = -1;
+    tracer_thread_started = false;
   }
   if (stdout_thread_started) {
     pthread_mutex_lock(&pump_mutex);

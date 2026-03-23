@@ -1,0 +1,4 @@
+module Main
+import Prelude id
+export main
+poly main = id

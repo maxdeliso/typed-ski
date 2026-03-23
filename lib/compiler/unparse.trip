@@ -4,11 +4,10 @@ import Prelude List
 import Prelude nil
 import Prelude cons
 import Prelude append
-import Prelude reverse
 import Prelude addU8
-import Prelude subU8
 import Prelude divU8
 import Prelude modU8
+import Prelude ltU8
 import Prelude U8
 
 export Terminal
@@ -88,13 +87,30 @@ poly rec unparseCombinator = \c : Comb =>
         append [U8] "(" (append [U8] (unparseCombinator l) (append [U8] " " (append [U8] (unparseCombinator r) ")")))
   }
 
-poly rec u8ToDigits = \n : U8 =>
+poly digitToAscii = \d : U8 =>
+  addU8 d #u8(48)
+
+poly singletonU8 = \b : U8 =>
+  cons [U8] b (nil [U8])
+
+poly u8ToDigits = \n : U8 =>
   if [List U8] (ltU8 n #u8(10))
-    (\u : U8 => cons [U8] (addU8 n #u8(48)) (nil [U8]))
+    (\u : U8 => singletonU8 (digitToAscii n))
     (\u : U8 =>
-      append [U8]
-        (u8ToDigits (divU8 n #u8(10)))
-        (cons [U8] (addU8 (modU8 n #u8(10)) #u8(48)) (nil [U8]))
+      if [List U8] (ltU8 n #u8(100))
+        (\u : U8 =>
+          cons [U8]
+            (digitToAscii (divU8 n #u8(10)))
+            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
+        (\u : U8 =>
+          let hundreds = divU8 n #u8(100) in
+          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+          let ones = modU8 n #u8(10) in
+          cons [U8]
+            (digitToAscii hundreds)
+            (cons [U8]
+              (digitToAscii tens)
+              (singletonU8 (digitToAscii ones))))
     )
 
 poly terminalTag = \t : Terminal =>

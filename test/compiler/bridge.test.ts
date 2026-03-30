@@ -10,6 +10,7 @@ import {
   fromDagWire,
   getThanatosSession,
   passthroughEvaluator,
+  thanatosAvailable,
   toDagWire,
 } from "../thanatosHarness.test.ts";
 
@@ -221,6 +222,7 @@ Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async (
 
 Deno.test({
   name: "Bridge rejects data declarations with too many constructors",
+  ignore: !thanatosAvailable(),
   fn: async () => {
     const source = await Deno.readTextFile(BRIDGE_SOURCE_FILE);
     assert.include(

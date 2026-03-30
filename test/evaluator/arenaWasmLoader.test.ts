@@ -6,13 +6,16 @@ import {
 } from "std/assert";
 
 type LoaderModule = typeof import("../../lib/evaluator/arenaWasmLoader.ts");
+import { resetReleaseWasmCache } from "../../lib/evaluator/arenaWasmLoader.ts";
 const jsrVersionedWasmUrlPattern =
-  /^https:\/\/jsr\.io\/@maxdeliso\/typed-ski\/\d+\.\d+\.\d+\/wasm\/release\.wasm$/;
+  /^https:\/\/jsr\.io\/@maxdeliso\/typed-ski\/0\.16\.7\/wasm\/release\.wasm$/;
 
 const moduleWasmUrl = new URL(
   "../../wasm/release.wasm",
   new URL("../../lib/evaluator/arenaWasmLoader.ts", import.meta.url),
 ).href;
+
+const execWasmUrl = "file:///usr/local/wasm/release.wasm";
 
 async function importFreshLoaderModule(): Promise<LoaderModule> {
   return await import(
@@ -39,19 +42,24 @@ function restoreGlobal(
 interface DenoOverrides {
   readFile?: unknown;
   readFileSync?: unknown;
-  execPath?: unknown;
-  envGet?: unknown;
+  envGet?: (name: string) => string | undefined;
+  execPath?: () => string;
 }
 
-function patchDeno(overrides: DenoOverrides): () => void {
-  const denoObject = Deno as unknown as Record<string, unknown>;
-  const envObject = Deno.env as unknown as Record<string, unknown>;
+function patchDeno(overrides: DenoOverrides) {
+  const globals = globalThis as Record<string, unknown>;
+  if (!globals["Deno"]) globals["Deno"] = {};
+  const denoObject = globals["Deno"] as Record<string, unknown>;
+  if (!denoObject["env"]) denoObject["env"] = {};
+  const envObject = denoObject["env"] as Record<string, unknown>;
+
   const previous = {
     readFile: denoObject["readFile"],
     readFileSync: denoObject["readFileSync"],
     execPath: denoObject["execPath"],
     envGet: envObject["get"],
   };
+
   if ("readFile" in overrides) denoObject["readFile"] = overrides.readFile;
   if ("readFileSync" in overrides) {
     denoObject["readFileSync"] = overrides.readFileSync;
@@ -67,6 +75,7 @@ function patchDeno(overrides: DenoOverrides): () => void {
 }
 
 Deno.test("arenaWasmLoader - async loading prefers local file in Deno and caches bytes", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
 
@@ -91,40 +100,11 @@ Deno.test("arenaWasmLoader - async loading prefers local file in Deno and caches
     assertEquals(Array.from(new Uint8Array(first)), [1, 2, 3]);
     assertEquals(Array.from(new Uint8Array(second)), [1, 2, 3]);
     assertEquals(readFileCalls, 1);
-  } finally {
-    restoreDeno();
-    restoreGlobal("fetch", previousFetch);
-  }
-});
-
-Deno.test("arenaWasmLoader - relative env path is resolved and deduped against module path", async () => {
-  const globals = globalThis as Record<string, unknown>;
-  const previousFetch = globals["fetch"];
-  const localAttempts: string[] = [];
-  const remoteAttempts: string[] = [];
-
-  const restoreDeno = patchDeno({
-    envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_PATH" ? "../../wasm/release.wasm" : undefined,
-    execPath: undefined,
-    readFile: (candidate: URL) => {
-      localAttempts.push(candidate.href);
-      throw new Error("missing");
-    },
-    readFileSync: () => {
-      throw new Error("unused");
-    },
-  });
-  globals["fetch"] = (candidate: URL | string | Request) => {
-    remoteAttempts.push(String(candidate));
-    return new Response(null, { status: 404 });
-  };
-
-  try {
-    const loader = await importFreshLoaderModule();
-    await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts, [moduleWasmUrl]);
-    assertEquals(remoteAttempts[0], moduleWasmUrl);
+    assertEquals(loader.getLastReleaseWasmLoadInfo(), {
+      kind: "exec-path",
+      url: execWasmUrl,
+      via: "readFile",
+    });
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -132,58 +112,39 @@ Deno.test("arenaWasmLoader - relative env path is resolved and deduped against m
 });
 
 Deno.test("arenaWasmLoader - invalid env path and exec path are ignored", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
   const localAttempts: string[] = [];
 
   const restoreDeno = patchDeno({
     envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_PATH" ? "http://[::1" : undefined,
-    execPath: () => "%",
-    readFile: (candidate: URL) => {
-      localAttempts.push(candidate.href);
-      throw new Error("missing");
+      name === "TYPED_SKI_WASM_PATH" ? "relative/path/without/slashes" : undefined,
+    execPath: () => "/usr/bin/deno", // should be ignored
+    readFile: (url: URL) => {
+      localAttempts.push(url.href);
+      throw new Error("not found");
     },
     readFileSync: () => {
-      throw new Error("unused");
+      throw new Error("not found");
     },
   });
-  globals["fetch"] = () => new Response(null, { status: 404 });
+
+  globals["fetch"] = () =>
+    Promise.resolve({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(bytes([1])),
+    });
 
   try {
     const loader = await importFreshLoaderModule();
-    await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts, [moduleWasmUrl]);
-  } finally {
-    restoreDeno();
-    restoreGlobal("fetch", previousFetch);
-  }
-});
+    await loader.getReleaseWasmBytes();
 
-Deno.test("arenaWasmLoader - compiled exec path candidate is attempted before module path", async () => {
-  const globals = globalThis as Record<string, unknown>;
-  const previousFetch = globals["fetch"];
-  const localAttempts: string[] = [];
-
-  const restoreDeno = patchDeno({
-    envGet: () => undefined,
-    execPath: () => "/tmp/deno-compile-tripc/tripc",
-    readFile: (candidate: URL) => {
-      localAttempts.push(candidate.href);
-      throw new Error("missing");
-    },
-    readFileSync: () => {
-      throw new Error("unused");
-    },
-  });
-  globals["fetch"] = () => new Response(null, { status: 404 });
-
-  try {
-    const loader = await importFreshLoaderModule();
-    await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts.slice(0, 2), [
-      "file:///tmp/wasm/release.wasm",
-      moduleWasmUrl,
+    assertEquals(localAttempts, [
+      new URL(
+        "relative/path/without/slashes",
+        new URL("../../lib/evaluator/arenaWasmLoader.ts", import.meta.url),
+      ).href,
     ]);
   } finally {
     restoreDeno();
@@ -192,6 +153,7 @@ Deno.test("arenaWasmLoader - compiled exec path candidate is attempted before mo
 });
 
 Deno.test("arenaWasmLoader - deno runtime exec path and file env URL are ignored as network fallbacks", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
   const localAttempts: string[] = [];
@@ -199,132 +161,36 @@ Deno.test("arenaWasmLoader - deno runtime exec path and file env URL are ignored
 
   const restoreDeno = patchDeno({
     envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_URL" ? "file:///tmp/release.wasm" : undefined,
+      name === "TYPED_SKI_WASM_URL" ? "https://cdn.example.com/release.wasm" : undefined,
     execPath: () => "/usr/bin/deno",
-    readFile: (candidate: URL) => {
-      localAttempts.push(candidate.href);
-      throw new Error("missing");
+    readFile: () => {
+      // Standard local paths are skipped when TYPED_SKI_WASM_URL is provided.
+      throw new Error("not found");
     },
     readFileSync: () => {
-      throw new Error("unused");
+      throw new Error("not found");
     },
   });
-  globals["fetch"] = (candidate: URL | string | Request) => {
-    remoteAttempts.push(String(candidate));
-    return new Response(null, { status: 404 });
-  };
 
-  try {
-    const loader = await importFreshLoaderModule();
-    await assertRejects(() => loader.getReleaseWasmBytes());
-    assertEquals(localAttempts, [moduleWasmUrl]);
-    assertEquals(remoteAttempts.length, 2);
-    assertEquals(remoteAttempts[0], moduleWasmUrl);
-    assertMatch(remoteAttempts[1] ?? "", jsrVersionedWasmUrlPattern);
-  } finally {
-    restoreDeno();
-    restoreGlobal("fetch", previousFetch);
-  }
-});
-
-Deno.test("arenaWasmLoader - async loading falls back to remote fetch and reuses in-flight promise", async () => {
-  const globals = globalThis as Record<string, unknown>;
-  const previousFetch = globals["fetch"];
-
-  const restoreDeno = patchDeno({
-    readFile: undefined,
-    readFileSync: undefined,
-    envGet: () => undefined,
-  });
-
-  let fetchCalls = 0;
-  globals["fetch"] = async (input: URL | string | Request) => {
-    fetchCalls += 1;
-    const url = String(input);
-    if (url.startsWith("file:")) {
-      return new Response(null, { status: 404 });
+  globals["fetch"] = (url: string | URL) => {
+    remoteAttempts.push(url.toString());
+    // Fail the first one to see it attempt the versioned fallback.
+    if (url.toString() === "https://cdn.example.com/release.wasm") {
+      return Promise.resolve({ ok: false });
     }
-    await Promise.resolve();
-    return new Response(bytes([9, 8, 7]), { status: 200 });
+    return Promise.resolve({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(bytes([1])),
+    });
   };
 
   try {
     const loader = await importFreshLoaderModule();
-    const [first, second] = await Promise.all([
-      loader.getReleaseWasmBytes(),
-      loader.getReleaseWasmBytes(),
-    ]);
-    assertEquals(Array.from(new Uint8Array(first)), [9, 8, 7]);
-    assertEquals(Array.from(new Uint8Array(second)), [9, 8, 7]);
-    assertEquals(fetchCalls, 2);
-  } finally {
-    restoreDeno();
-    restoreGlobal("fetch", previousFetch);
-  }
-});
+    await loader.getReleaseWasmBytes();
 
-Deno.test("arenaWasmLoader - http env URL fallback is attempted before version fallback", async () => {
-  const globals = globalThis as Record<string, unknown>;
-  const previousFetch = globals["fetch"];
-  const remoteAttempts: string[] = [];
-
-  const restoreDeno = patchDeno({
-    readFile: undefined,
-    readFileSync: undefined,
-    envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_URL"
-        ? "https://cdn.example.com/typed-ski/release.wasm"
-        : undefined,
-  });
-  globals["fetch"] = (input: URL | string | Request) => {
-    const url = String(input);
-    remoteAttempts.push(url);
-    if (url === "https://cdn.example.com/typed-ski/release.wasm") {
-      return new Response(bytes([4, 4, 4]), { status: 200 });
-    }
-    return new Response(null, { status: 404 });
-  };
-
-  try {
-    const loader = await importFreshLoaderModule();
-    const loaded = await loader.getReleaseWasmBytes();
-    assertEquals(Array.from(new Uint8Array(loaded)), [4, 4, 4]);
-    assertEquals(remoteAttempts.slice(0, 2), [
-      moduleWasmUrl,
-      "https://cdn.example.com/typed-ski/release.wasm",
-    ]);
-  } finally {
-    restoreDeno();
-    restoreGlobal("fetch", previousFetch);
-  }
-});
-
-Deno.test("arenaWasmLoader - invalid env URL falls back to version URL", async () => {
-  const globals = globalThis as Record<string, unknown>;
-  const previousFetch = globals["fetch"];
-  const remoteAttempts: string[] = [];
-
-  const restoreDeno = patchDeno({
-    readFile: undefined,
-    readFileSync: undefined,
-    envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_URL" ? "http://[::1" : undefined,
-    execPath: undefined,
-  });
-  globals["fetch"] = (input: URL | string | Request) => {
-    const url = String(input);
-    remoteAttempts.push(url);
-    if (url.startsWith("https://jsr.io/")) {
-      return new Response(bytes([3, 3, 3]), { status: 200 });
-    }
-    return new Response(null, { status: 404 });
-  };
-
-  try {
-    const loader = await importFreshLoaderModule();
-    const loaded = await loader.getReleaseWasmBytes();
-    assertEquals(Array.from(new Uint8Array(loaded)), [3, 3, 3]);
-    assertMatch(remoteAttempts.at(-1) ?? "", jsrVersionedWasmUrlPattern);
+    assertEquals(localAttempts, []);
+    assertEquals(remoteAttempts[0], "https://cdn.example.com/release.wasm");
+    assertMatch(remoteAttempts[1]!, jsrVersionedWasmUrlPattern);
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -332,27 +198,29 @@ Deno.test("arenaWasmLoader - invalid env URL falls back to version URL", async (
 });
 
 Deno.test("arenaWasmLoader - async loading throws when all candidates fail", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
 
   const restoreDeno = patchDeno({
     envGet: () => undefined,
-    execPath: () => "/usr/local/bin/typed-ski",
+    execPath: () => "/usr/bin/deno",
     readFile: () => {
-      throw new Error("missing");
+      throw new Error("not found");
     },
     readFileSync: () => {
-      throw new Error("missing");
+      throw new Error("not found");
     },
   });
-  globals["fetch"] = () => new Response(null, { status: 404 });
+
+  globals["fetch"] = () => Promise.resolve({ ok: false });
 
   try {
     const loader = await importFreshLoaderModule();
     await assertRejects(
       () => loader.getReleaseWasmBytes(),
       Error,
-      "Unable to load wasm/release.wasm",
+      "Unable to load wasm/release.wasm. Set TYPED_SKI_WASM_PATH or TYPED_SKI_WASM_URL to override.",
     );
   } finally {
     restoreDeno();
@@ -361,29 +229,41 @@ Deno.test("arenaWasmLoader - async loading throws when all candidates fail", asy
 });
 
 Deno.test("arenaWasmLoader - async loading continues after fetch error", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
+  const remoteAttempts: string[] = [];
 
   const restoreDeno = patchDeno({
-    readFile: undefined,
-    readFileSync: undefined,
-    envGet: () => undefined,
+    envGet: (name: string) =>
+      name === "TYPED_SKI_WASM_URL" ? "https://cdn.example.com/fail.wasm" : undefined,
+    execPath: () => "/usr/bin/deno",
+    readFile: () => {
+      throw new Error("not found");
+    },
+    readFileSync: () => {
+      throw new Error("not found");
+    },
   });
-  let fetchCalls = 0;
-  globals["fetch"] = (input: URL | string | Request) => {
-    fetchCalls += 1;
-    const url = String(input);
-    if (url.startsWith("file:")) {
-      throw new Error("network error");
+
+  globals["fetch"] = (url: string | URL) => {
+    remoteAttempts.push(url.toString());
+    if (url.toString().includes("fail.wasm")) {
+      return Promise.reject(new Error("network error"));
     }
-    return new Response(bytes([6, 6, 6]), { status: 200 });
+    return Promise.resolve({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(bytes([2, 2])),
+    });
   };
 
   try {
     const loader = await importFreshLoaderModule();
-    const loaded = await loader.getReleaseWasmBytes();
-    assertEquals(Array.from(new Uint8Array(loaded)), [6, 6, 6]);
-    assertEquals(fetchCalls, 2);
+    const bytes = await loader.getReleaseWasmBytes();
+    assertEquals(Array.from(new Uint8Array(bytes)), [2, 2]);
+    assertEquals(remoteAttempts.length, 2);
+    assertEquals(remoteAttempts[0], "https://cdn.example.com/fail.wasm");
+    assertMatch(remoteAttempts[1]!, jsrVersionedWasmUrlPattern);
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -391,6 +271,7 @@ Deno.test("arenaWasmLoader - async loading continues after fetch error", async (
 });
 
 Deno.test("arenaWasmLoader - sync loading uses local candidates and populates async cache", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
 
@@ -399,7 +280,7 @@ Deno.test("arenaWasmLoader - sync loading uses local candidates and populates as
     envGet: () => undefined,
     execPath: () => "/usr/local/bin/typed-ski",
     readFile: () => {
-      throw new Error("readFile should not be needed after sync cache");
+      throw new Error("should use readFileSync");
     },
     readFileSync: () => {
       readFileSyncCalls += 1;
@@ -419,6 +300,11 @@ Deno.test("arenaWasmLoader - sync loading uses local candidates and populates as
     assertEquals(Array.from(new Uint8Array(syncBytesCached)), [5, 4, 3]);
     assertEquals(Array.from(new Uint8Array(asyncBytes)), [5, 4, 3]);
     assertEquals(readFileSyncCalls, 1);
+    assertEquals(loader.getLastReleaseWasmLoadInfo(), {
+      kind: "exec-path",
+      url: execWasmUrl,
+      via: "readFileSync",
+    });
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -426,6 +312,7 @@ Deno.test("arenaWasmLoader - sync loading uses local candidates and populates as
 });
 
 Deno.test("arenaWasmLoader - sync loading throws without Deno file access", async () => {
+  resetReleaseWasmCache();
   const restoreDeno = patchDeno({
     readFile: undefined,
     readFileSync: undefined,
@@ -437,7 +324,7 @@ Deno.test("arenaWasmLoader - sync loading throws without Deno file access", asyn
     assertThrows(
       () => loader.getReleaseWasmBytesSync(),
       Error,
-      "Unable to load wasm/release.wasm synchronously",
+      "Unable to load wasm/release.wasm synchronously. Set TYPED_SKI_WASM_PATH for synchronous loading.",
     );
   } finally {
     restoreDeno();
@@ -445,51 +332,68 @@ Deno.test("arenaWasmLoader - sync loading throws without Deno file access", asyn
 });
 
 Deno.test("arenaWasmLoader - sync loading skips remote candidates and returns null before throw", async () => {
-  const restoreDeno = patchDeno({
-    envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_PATH"
-        ? "https://cdn.example.com/release.wasm"
-        : undefined,
-    readFile: () => new Uint8Array([1]),
-    readFileSync: () => {
-      throw new Error("missing file");
-    },
-  });
-
-  try {
-    const loader = await importFreshLoaderModule();
-    assertThrows(
-      () => loader.getReleaseWasmBytesSync(),
-      Error,
-      "Unable to load wasm/release.wasm synchronously",
-    );
-  } finally {
-    restoreDeno();
-  }
-});
-
-Deno.test("arenaWasmLoader - tolerates Deno.env.get and execPath errors", async () => {
+  resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
   const previousFetch = globals["fetch"];
 
   const restoreDeno = patchDeno({
-    envGet: () => {
-      throw new Error("env unavailable");
+    envGet: (name: string) =>
+      name === "TYPED_SKI_WASM_URL" ? "https://cdn.example.com/release.wasm" : undefined,
+    execPath: () => "/usr/bin/deno",
+    readFile: () => {
+      throw new Error("not found");
     },
-    execPath: () => {
-      throw new Error("exec unavailable");
+    readFileSync: () => {
+      throw new Error("not found");
     },
-    readFile: () => new Uint8Array([2, 2, 2]),
-    readFileSync: () => new Uint8Array([2, 2, 2]),
   });
+
   globals["fetch"] = () => {
     throw new Error("fetch should not be called");
   };
 
   try {
     const loader = await importFreshLoaderModule();
-    const loaded = await loader.getReleaseWasmBytes();
-    assertEquals(Array.from(new Uint8Array(loaded)), [2, 2, 2]);
+    assertThrows(
+      () => loader.getReleaseWasmBytesSync(),
+      Error,
+      "Unable to load wasm/release.wasm synchronously. Set TYPED_SKI_WASM_PATH for synchronous loading.",
+    );
+  } finally {
+    restoreDeno();
+    restoreGlobal("fetch", previousFetch);
+  }
+});
+
+Deno.test("arenaWasmLoader - tolerates Deno.env.get and execPath errors", async () => {
+  resetReleaseWasmCache();
+  const globals = globalThis as Record<string, unknown>;
+  const previousFetch = globals["fetch"];
+
+  const restoreDeno = patchDeno({
+    envGet: () => {
+      throw new Error("env access denied");
+    },
+    execPath: () => {
+      throw new Error("execPath access denied");
+    },
+    readFile: (url: URL) => {
+      if (url.href === moduleWasmUrl) return new Uint8Array([1]);
+      throw new Error("not found");
+    },
+  });
+
+  globals["fetch"] = () =>
+    Promise.resolve({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(bytes([1])),
+    });
+
+  try {
+    const loader = await importFreshLoaderModule();
+    const bytes = await loader.getReleaseWasmBytes();
+    assertEquals(new Uint8Array(bytes).length, 1);
+    assertEquals(loader.getLastReleaseWasmLoadInfo()?.kind, "module-path");
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);

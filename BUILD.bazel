@@ -1,0 +1,78 @@
+load("//bazel:workspace_command.bzl", "workspace_command")
+
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "thanatos",
+    actual = "//core:thanatos",
+)
+
+alias(
+    name = "release_wasm",
+    actual = "//wasm:release_wasm",
+)
+
+test_suite(
+    name = "native_tests",
+    tests = [
+        "//core:dag_codec_test",
+        "//core:session_test",
+        "//core:ski_io_test",
+        "//core:util_test",
+    ],
+)
+
+workspace_command(
+    name = "verify_version",
+    subcommand = "verify-version",
+)
+
+workspace_command(
+    name = "sync_generated",
+    subcommand = "sync-generated",
+)
+
+workspace_command(
+    name = "dist",
+    subcommand = "dist",
+)
+
+workspace_command(
+    name = "build",
+    subcommand = "build",
+)
+
+workspace_command(
+    name = "hephaestus_assets",
+    subcommand = "hephaestus-assets",
+)
+
+workspace_command(
+    name = "serve_hephaestus",
+    subcommand = "serve-hephaestus",
+)
+
+workspace_command(
+    name = "fmt_check",
+    subcommand = "fmt-check",
+)
+
+workspace_command(
+    name = "lint",
+    subcommand = "lint",
+)
+
+workspace_command(
+    name = "test",
+    subcommand = "test",
+)
+
+workspace_command(
+    name = "coverage",
+    subcommand = "coverage",
+)
+
+workspace_command(
+    name = "ci",
+    subcommand = "ci",
+)

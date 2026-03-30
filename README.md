@@ -6,23 +6,33 @@ An implementation of a parser, evaluator, printer, and visualizer for
 ## Project Dependencies
 
 - [TypeScript](https://www.typescriptlang.org/)
-- [Deno](https://deno.com/)
+- [Deno](https://deno.com/) as a bootstrap for the repo-pinned toolchain in
+  `deno.jsonc`
 - [C](https://en.wikipedia.org/wiki/C_(programming_language)) (compiled to
   WebAssembly)
-- [Nix](https://nixos.org/) (build orchestration)
+- [Bazelisk](https://github.com/bazelbuild/bazelisk), which downloads the
+  hermetic Zig-based C/C++ toolchain on first native build
 
 ## Quick Start
 
-This project uses a Makefile for common development tasks:
+This project uses Bazelisk for common development tasks:
 
 ```bash
-make setup  # Install necessary tools (Nix, configure experimental features)
-make build  # Compile all artifacts (WASM, TypeScript, dist files)
-make test   # Run the complete test suite (Core/WASM + Deno tests, linting, formatting)
+bazelisk build //:thanatos //:release_wasm
+bazelisk test //:native_tests
+bazelisk run //:build
+bazelisk run //:test
+bazelisk run //:coverage
+bazelisk run //:ci
+bazelisk run //:serve_hephaestus
 ```
 
-For detailed information about what each target does, see the
-[Makefile](Makefile) or run `make help`.
+The Bazel graph now includes hermetic native `thanatos` and `wasm/release.wasm`
+targets alongside the Deno-based build, lint, coverage, and packaging flows,
+without requiring WSL, Nix, or Visual Studio Build Tools on Windows.
+
+If Bazelisk is installed as `bazel` on your machine, the same commands work with
+`bazel` in place of `bazelisk`. The Bazel version is pinned in `.bazelversion`.
 
 ## Development Setup
 
@@ -42,21 +52,97 @@ The `.vscode/settings.json` file configures:
 
 ### Installation
 
-1. Install the Deno extension in VS Code
-2. Clone the repository
-3. Run `make setup` to install and configure Nix
-4. Open the project in VS Code - the workspace settings will automatically apply
+1. Install `Deno`
+2. Install `Bazelisk`
+3. Clone the repository
+4. Run `bazelisk build //:thanatos //:release_wasm`
+5. Run `bazelisk run //:build`
+6. Open the project in VS Code and install the Deno extension if you want IDE
+   support
+
+The required Deno toolchain version is pinned in `deno.jsonc` under
+`toolchain.deno`. Bazelisk commands use your installed Deno only as a bootstrap
+shim, then run the repo-pinned Deno version for the actual build/test command.
+If your system Deno does not match, the first Bazelisk run will install the
+exact pinned binary into a local toolchain cache. Set
+`TYPED_SKI_DENO_TOOLCHAIN_DIR` if you want that cache in a specific location.
+
+### Running Tests
+
+Run the portable test suite with:
+
+```bash
+bazelisk run //:test
+```
+
+Run the native C targets with:
+
+```bash
+bazelisk build //:thanatos //:release_wasm
+bazelisk test //:native_tests
+```
+
+Check which repo-pinned Deno version Bazelisk will use with:
+
+```bash
+bazelisk run //:verify_version
+```
+
+Other useful commands:
+
+- `bazelisk run //:build` builds generated metadata and distributable artifacts
+- `bazelisk run //:coverage` runs the portable tests with coverage output
+- `bazelisk run //:ci` runs the build, formatting, lint, tests, and coverage
+  flow after native Bazel targets have been built
+
+### Running Hephaestus
+
+Build the browser assets for the workbench with:
+
+```bash
+bazelisk run //:hephaestus_assets
+```
+
+Start the server with:
+
+```bash
+bazelisk run //:serve_hephaestus
+```
+
+Then open `http://127.0.0.1:8080/workbench.html`.
+
+To use a different port:
+
+```bash
+PORT=9000 bazelisk run //:serve_hephaestus
+```
+
+On PowerShell:
+
+```powershell
+$env:PORT = "9000"
+bazelisk run //:serve_hephaestus
+```
+
+Notes:
+
+- `//:serve_hephaestus` builds `dist/workbench.js`, `dist/webglForest.js`, and
+  `dist/arenaWorker.js` before starting the server.
+- `bazelisk build //:release_wasm` writes the hermetic wasm artifact to
+  `bazel-bin/wasm/release.wasm`. The Deno-side build flow stages that artifact
+  into `wasm/release.wasm` when present so browser and publish paths can use the
+  Bazel-built module.
 
 ## Artifacts
 
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
-- [Crates.io](https://crates.io/crates/typed-ski)
 
 ## Build System
 
-This project uses **Nix** for reproducible builds and version management. The
-build system orchestrates C → WASM → TypeScript builds with a single source of
-truth for versioning.
+This project uses **Bazel** as the primary build entrypoint. The supported
+workflow for this branch is Bazel plus Deno, with generated metadata, packaging,
+linting, coverage, and the portable test suite exposed through portable Bazel
+commands.
 
 ## Canonicalization
 
@@ -120,8 +206,8 @@ throughput and runtime stability for long-running workloads.
 
 ## CI/CD
 
-GitHub Actions use the Makefile targets for building and testing. See the
-workflow files in `.github/workflows/` for details.
+GitHub Actions use Bazel on both Ubuntu and native Windows. See the workflow
+files in `.github/workflows/` for details.
 
 ## Status
 

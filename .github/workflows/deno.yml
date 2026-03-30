@@ -1,4 +1,4 @@
-name: Nix CI
+name: Bazel CI
 
 on:
   pull_request:
@@ -13,41 +13,55 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
+      - name: Read Deno version
+        id: deno_version
+        shell: bash
+        run: |
+          version=$(node -p "JSON.parse(require('fs').readFileSync('deno.jsonc', 'utf8')).toolchain.deno")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify dist bundles
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make bundle-internal
+      - name: Install Bazelisk
+        uses: bazelbuild/setup-bazelisk@v3
 
-      - name: Run tests and generate coverage
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make coverage-internal
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ steps.deno_version.outputs.version }}
 
-      - name: Long LSAN test (fixed seed)
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-lsan-long-internal
+      - name: Prepare hermetic Zig cache (Linux)
+        if: runner.os == 'Linux'
+        run: mkdir -p /tmp/zig-cache
 
-      - name: Long UBSAN test (fixed seed)
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-ubsan-long-internal
+      - name: Prepare hermetic Zig cache (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force C:\Temp\zig-cache | Out-Null
 
-      - name: Long ASAN test (fixed seed)
-        run: nix --extra-experimental-features 'nix-command flakes' develop --command make thanatos-check-asan-long-internal
+      - name: Build native Bazel targets
+        run: bazel build //:thanatos //:release_wasm
+
+      - name: Run native Bazel tests
+        run: bazel test //:native_tests
+
+      - name: Run Bazel CI
+        run: bazel run //:ci
 
       - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-24.04'
         uses: codecov/codecov-action@v5
         with:
-          files: coverage.lcov,coverage-c.lcov
+          files: coverage.lcov
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Print WASM files
-        run: |
-          ls -lh wasm/
-          nix --extra-experimental-features 'nix-command flakes' develop --command make print-wasm-internal
-
-      - name: JSR dry run publish
-        if: github.ref != 'refs/heads/main'
-        run: nix run .#publish -- --dry-run

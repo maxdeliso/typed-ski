@@ -1,23 +1,23 @@
+#ifdef _WIN32
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif
+
 #include "arena.h"
+#include "host_platform.h"
 #include "session.h"
 #include "ski_io.h"
 #include "thanatos.h"
 #include "util.h"
-#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #define INITIAL_LINE_CAP 1024
 
-static uint32_t default_num_workers(void) {
-  long n = sysconf(_SC_NPROCESSORS_ONLN);
-  if (n > 0 && n <= 0xffffffffu)
-    return (uint32_t)n;
-  return 4;
-}
+static uint32_t default_num_workers(void) { return host_cpu_count(); }
 
 int main(int argc, char **argv) {
   uint32_t num_workers = default_num_workers();
@@ -64,19 +64,15 @@ int main(int argc, char **argv) {
     trace_timeout_ms = parsed;
   }
 
-  int runtime_stdin_fd = -1;
-  if (stdin_file) {
-    runtime_stdin_fd = open(stdin_file, O_RDONLY | O_NONBLOCK);
-    if (runtime_stdin_fd < 0) {
-      fprintf(stderr, "cannot open --stdin-file %s\n", stdin_file);
-      return 1;
-    }
+  if (stdin_file && !host_path_openable_for_read(stdin_file)) {
+    fprintf(stderr, "cannot open --stdin-file %s\n", stdin_file);
+    return 1;
   }
 
   ThanatosConfig config = {
       .num_workers = num_workers,
       .arena_capacity = arena_capacity,
-      .stdin_fd = runtime_stdin_fd,
+      .stdin_path = stdin_file,
       .trace_dir = trace_dir,
       .trace_timeout_ms = trace_timeout_ms,
   };
@@ -86,25 +82,23 @@ int main(int argc, char **argv) {
   ThanatosSession session;
   thanatos_session_init(&session, stdout);
 
-  char *line = NULL;
-  size_t line_cap = 0;
+  DynamicBuffer line;
+  db_init(&line);
   while (1) {
-    ssize_t nread = getline(&line, &line_cap, stdin);
-    if (nread <= 0)
+    size_t len = 0;
+    if (!db_read_line(stdin, &line, &len))
       break;
-    if (nread > 0 && line[nread - 1] == '\n')
-      line[--nread] = '\0';
-    size_t len = (size_t)nread;
-    while (len > 0 && (line[len - 1] == '\r' || line[len - 1] == ' ' ||
-                       line[len - 1] == '\t'))
+    while (len > 0 &&
+           (line.ptr[len - 1] == '\r' || line.ptr[len - 1] == ' ' ||
+            line.ptr[len - 1] == '\t'))
       len--;
     if (len == 0)
       continue;
 
-    thanatos_session_handle_line(&session, line, len);
+    thanatos_session_handle_line(&session, line.ptr, len);
   }
 
-  free(line);
+  db_free(&line);
   thanatos_session_free(&session);
   thanatos_shutdown();
   return 0;

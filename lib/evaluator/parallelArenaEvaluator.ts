@@ -13,7 +13,12 @@ import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { SabHeaderField } from "./arenaHeader.generated.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
-import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
+import {
+  formatReleaseWasmLoadInfo,
+  getLastReleaseWasmLoadInfo,
+  getReleaseWasmBytes,
+} from "./arenaWasmLoader.ts";
+export { formatReleaseWasmLoadInfo, getLastReleaseWasmLoadInfo };
 import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";
 import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
@@ -406,8 +411,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       );
     }
     const INITIAL_CAP = 1 << 20; // 1M nodes
-    const MAX_PAGES = 65536; // 4GB maximum
-    const INITIAL_ARENA_PAGES = 1024; // ~64MB
+    const MAX_PAGES = 65535; // Largest wasm32 memory max expressible by Zig's linker
+    const INITIAL_ARENA_PAGES = 257; // ~16MB
     const sharedMemory = new WebAssembly.Memory({
       initial: INITIAL_ARENA_PAGES,
       maximum: MAX_PAGES,

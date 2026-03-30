@@ -1,4 +1,11 @@
+#ifdef _WIN32
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif
+
 #include "arena.h"
+#include "host_platform.h"
 
 #ifdef __wasm__
 typedef __SIZE_TYPE__ size_t;
@@ -13,24 +20,16 @@ void *memmove(void *dest, const void *src, size_t n) {
 #define IMPORT_MEMORY                                                          \
   __attribute__((import_module("env"), import_name("memory")))
 #else
-#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#if defined(__linux__)
-#include <limits.h>
-#include <linux/futex.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#endif
 #endif
 
 static const uint32_t ARENA_MAGIC = 0x534B4941;
-static const uint32_t INITIAL_CAP = 1 << 24;
+static const uint32_t INITIAL_CAP = 1 << 20;
 /** Gas per kernel step / worker batch; bounds time per step. */
 static const uint32_t ARENA_STEP_GAS = 20000;
-static const uint32_t MAX_CAP = 1 << 27;
+static const uint32_t MAX_CAP = 1 << 24;
 static const uint32_t RING_ENTRIES = 1 << 16;
 static const uint32_t POISON_SEQ = 0xffffffff;
 
@@ -64,7 +63,13 @@ static uint32_t ARENA_MODE = 0;
 static atomic_uint GROW_COUNT = 0;
 /** Native only: actual mmap size reserved at init (layout uses uint64_t so no
  * overflow at MAX_CAP). */
+#ifdef __wasm__
+static size_t ARENA_RESERVED_BYTES __attribute__((unused)) = 0;
+static size_t ARENA_COMMITTED_BYTES __attribute__((unused)) = 0;
+#else
 static size_t ARENA_RESERVED_BYTES = 0;
+static size_t ARENA_COMMITTED_BYTES = 0;
+#endif
 
 #ifndef __wasm__
 /* Native mmap-backed file I/O is ambient arena state. The session layer treats
@@ -121,26 +126,21 @@ static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63u; }
 static inline uint64_t align64_u64(uint64_t x) {
   return (x + 63) & ~(uint64_t)63;
 }
+static inline void worker_cooperative_yield(void);
 
 static inline void sys_wait32(atomic_uint *ptr, uint32_t expected) {
 #ifdef __wasm__
   __builtin_wasm_memory_atomic_wait32((int *)ptr, (int)expected, -1);
-#elif defined(__linux__)
-  syscall(SYS_futex, ptr, FUTEX_WAIT_PRIVATE, expected, NULL, NULL, 0);
 #else
-
-  while (atomic_load_explicit(ptr, memory_order_acquire) == expected) {
-  }
+  host_wait_u32(ptr, expected);
 #endif
 }
 
 static inline void sys_notify(atomic_uint *ptr, uint32_t count) {
 #ifdef __wasm__
   __builtin_wasm_memory_atomic_notify((int *)ptr, count);
-#elif defined(__linux__)
-  syscall(SYS_futex, ptr, FUTEX_WAKE_PRIVATE, count, NULL, NULL, 0);
 #else
-
+  host_notify_u32(ptr, count);
 #endif
 }
 
@@ -332,9 +332,15 @@ typedef struct {
   WorkerTraceSnapshot snapshot;
 } WorkerTraceState;
 
+#ifdef __wasm__
+static WorkerTraceState WORKER_TRACE[MAX_WORKERS] __attribute__((unused));
+static atomic_uint TRACE_REQUESTED_EPOCH __attribute__((unused));
+static uint32_t TRACE_WORKER_COUNT __attribute__((unused)) = 0;
+#else
 static WorkerTraceState WORKER_TRACE[MAX_WORKERS];
 static atomic_uint TRACE_REQUESTED_EPOCH;
 static uint32_t TRACE_WORKER_COUNT = 0;
+#endif
 
 typedef struct {
   uint32_t current_val;
@@ -588,16 +594,22 @@ static void *allocate_raw_arena(uint32_t capacity) {
 
   SabLayout reserve_layout = calculate_layout(MAX_CAP);
   ARENA_RESERVED_BYTES = (size_t)reserve_layout.total_size;
+  ARENA_COMMITTED_BYTES = 0;
   fprintf(stderr,
           "Arena: reserving %zu bytes (active=%zu for capacity %u), "
           "sizeof(SabHeader)=%zu\n",
           ARENA_RESERVED_BYTES, (size_t)layout.total_size, capacity,
           sizeof(SabHeader));
-  ARENA_BASE_ADDR =
-      (uint8_t *)mmap(NULL, ARENA_RESERVED_BYTES, PROT_READ | PROT_WRITE,
-                      MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-  if (ARENA_BASE_ADDR == MAP_FAILED) {
-    perror("Arena: mmap failed");
+  ARENA_BASE_ADDR = (uint8_t *)host_reserve_memory(ARENA_RESERVED_BYTES);
+  if (ARENA_BASE_ADDR == NULL) {
+    perror("Arena: reserve failed");
+    return NULL;
+  }
+  if (!host_commit_memory(ARENA_BASE_ADDR, (size_t)layout.total_size,
+                          &ARENA_COMMITTED_BYTES)) {
+    fprintf(stderr, "Arena: initial commit failed\n");
+    host_release_memory(ARENA_BASE_ADDR, ARENA_RESERVED_BYTES);
+    ARENA_BASE_ADDR = NULL;
     return NULL;
   }
 #endif
@@ -1923,7 +1935,7 @@ bool arena_trace_wait_for_epoch(uint32_t epoch, uint32_t worker_count,
     if (waited_ms >= timeout_ms)
       return false;
 #if defined(__linux__) && !defined(__wasm__)
-    usleep(1000);
+    host_sleep_ms(1);
 #else
     worker_cooperative_yield();
 #endif
@@ -2223,9 +2235,9 @@ static inline void worker_cooperative_yield(void) {
   uint32_t observed = atomic_load_explicit(gate, memory_order_relaxed);
   __builtin_wasm_memory_atomic_wait32((int *)gate, (int)observed, 0);
 #elif defined(__linux__)
-  sched_yield();
+  host_yield();
 #else
-  (void)0;
+  host_yield();
 #endif
 }
 
@@ -2353,12 +2365,19 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   if (needed_end > current_bytes) {
     uint32_t extra = needed_end - current_bytes;
     uint32_t pages = (extra + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
-    if (__builtin_wasm_memory_grow(0, pages) == -1) {
+    size_t previous_pages = __builtin_wasm_memory_grow(0, pages);
+    if (previous_pages == (size_t)-1) {
       atomic_store_explicit(&h->resize_seq, POISON_SEQ, memory_order_release);
       __builtin_trap();
     }
   }
 #else
+
+  if (!host_commit_memory(ARENA_BASE_ADDR, (size_t)layout.total_size,
+                          &ARENA_COMMITTED_BYTES)) {
+    atomic_store_explicit(&h->resize_seq, POISON_SEQ, memory_order_release);
+    abort();
+  }
 
 #endif
 

@@ -1,5 +1,7 @@
 import { randExpression } from "@maxdeliso/typed-ski";
 import {
+  formatReleaseWasmLoadInfo,
+  getLastReleaseWasmLoadInfo,
   ParallelArenaEvaluatorWasm,
   ResubmissionLimitExceededError,
 } from "../lib/evaluator/parallelArenaEvaluator.ts";
@@ -500,7 +502,19 @@ async function loadWasm() {
     startMemoryLogging(evaluator);
 
     markUiDirty({ pending: true });
-    wasmStatus.textContent = "Ready";
+    const wasmLoadInfo = getLastReleaseWasmLoadInfo();
+    const wasmLoadSummary = formatReleaseWasmLoadInfo(wasmLoadInfo);
+    wasmStatus.textContent = `Ready (${wasmLoadSummary})`;
+    wasmStatus.title = wasmLoadInfo?.url ?? "";
+    if (wasmLoadInfo) {
+      addLog(`[WASM] Loaded via ${wasmLoadSummary}: ${wasmLoadInfo.url}`, true);
+      if (wasmLoadInfo.kind === "version-url") {
+        addLog(
+          "[WASM] Using the published JSR fallback artifact instead of a local wasm build.",
+          true,
+        );
+      }
+    }
     stats.startTime = Date.now();
 
     if (runBtn) runBtn.disabled = false;
@@ -513,6 +527,7 @@ async function loadWasm() {
     }
   } catch (error) {
     wasmStatus.textContent = "Error";
+    wasmStatus.title = "";
     console.error(error);
     hideLoading();
   }

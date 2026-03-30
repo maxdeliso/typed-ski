@@ -1,0 +1,130 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["arena.c"])
+
+config_setting(
+    name = "windows",
+    constraint_values = ["@platforms//os:windows"],
+)
+
+COMMON_COPTS = [
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Wstrict-prototypes",
+    "-Werror",
+]
+
+POSIX_PTHREAD_FLAGS = select({
+    ":windows": [],
+    "//conditions:default": ["-pthread"],
+})
+
+HOST_PLATFORM_SRCS = select({
+    ":windows": ["host_platform_windows.c"],
+    "//conditions:default": ["host_platform_posix.c"],
+})
+
+cc_library(
+    name = "util",
+    srcs = ["util.c"],
+    hdrs = ["util.h"],
+    copts = COMMON_COPTS,
+)
+
+cc_library(
+    name = "arena_runtime",
+    srcs = [
+        "arena.c",
+    ] + HOST_PLATFORM_SRCS,
+    hdrs = [
+        "arena.h",
+        "host_platform.h",
+    ],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+)
+
+cc_library(
+    name = "ski_io",
+    srcs = ["ski_io.c"],
+    hdrs = ["ski_io.h"],
+    copts = COMMON_COPTS,
+    deps = [
+        ":arena_runtime",
+        ":util",
+    ],
+)
+
+cc_library(
+    name = "thanatos_lib",
+    srcs = [
+        "session.c",
+        "thanatos.c",
+    ],
+    hdrs = [
+        "session.h",
+        "thanatos.h",
+    ],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    deps = [
+        ":arena_runtime",
+        ":ski_io",
+        ":util",
+    ],
+)
+
+cc_binary(
+    name = "thanatos",
+    srcs = ["main.c"],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS,
+    deps = [":thanatos_lib"],
+)
+
+cc_test(
+    name = "dag_codec_test",
+    srcs = ["dag_codec_test.c"],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS,
+    deps = [
+        ":arena_runtime",
+        ":ski_io",
+        ":util",
+    ],
+)
+
+cc_test(
+    name = "session_test",
+    srcs = ["session_test.c"],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS,
+    deps = [":thanatos_lib"],
+)
+
+cc_test(
+    name = "ski_io_test",
+    srcs = ["ski_io_test.c"],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS,
+    deps = [
+        ":thanatos_lib",
+    ],
+)
+
+cc_test(
+    name = "util_test",
+    srcs = ["util_test.c"],
+    copts = COMMON_COPTS,
+    deps = [":util"],
+)
+
+cc_binary(
+    name = "performance_test",
+    srcs = ["performance_test.c"],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS,
+    deps = [":thanatos_lib"],
+)

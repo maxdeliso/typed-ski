@@ -1,17 +1,79 @@
 #include "session.h"
 #include "arena.h"
+#include "host_platform.h"
 #include "ski_io.h"
 #include "thanatos.h"
 #include "util.h"
-#include <fcntl.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #define MAX_STEPS 0xffffffffu
+#define REDUCE_FILE_MAX_OUTPUT_BYTES (100ULL * 1024 * 1024 * 1024)
+#define REDUCE_FILE_MIN_OUTPUT_BYTES (64ULL * 1024)
+#define REDUCE_FILE_OUTPUT_GROWTH_FACTOR 8ULL
+
+static size_t reduce_file_output_floor(size_t input_size) {
+  if (input_size == 0) {
+    return REDUCE_FILE_MIN_OUTPUT_BYTES;
+  }
+  if (input_size > ((size_t)-1) / REDUCE_FILE_OUTPUT_GROWTH_FACTOR) {
+    return REDUCE_FILE_MAX_OUTPUT_BYTES;
+  }
+  size_t grown = input_size * REDUCE_FILE_OUTPUT_GROWTH_FACTOR;
+  if (grown < REDUCE_FILE_MIN_OUTPUT_BYTES) {
+    return REDUCE_FILE_MIN_OUTPUT_BYTES;
+  }
+  if (grown > REDUCE_FILE_MAX_OUTPUT_BYTES) {
+    return REDUCE_FILE_MAX_OUTPUT_BYTES;
+  }
+  return grown;
+}
+
+static HostFileMapResult open_reduce_file_output_mapping(const char *path,
+                                                         size_t input_size,
+                                                         HostFileMapping *map) {
+  static const size_t preferred_sizes[] = {
+      1ULL * 1024 * 1024 * 1024,
+      256ULL * 1024 * 1024,
+      64ULL * 1024 * 1024,
+      4ULL * 1024 * 1024,
+  };
+
+  size_t floor = reduce_file_output_floor(input_size);
+  size_t last_attempt = 0;
+  HostFileMapResult last_result = HOST_FILE_MAP_MAP_FAILED;
+
+  for (size_t i = 0; i < sizeof(preferred_sizes) / sizeof(preferred_sizes[0]);
+       i++) {
+    size_t size = preferred_sizes[i];
+    if (size < floor || size == last_attempt) {
+      continue;
+    }
+
+    HostFileMapResult result = host_map_output_file(path, size, map);
+    if (result == HOST_FILE_MAP_OK || result == HOST_FILE_MAP_OPEN_FAILED) {
+      return result;
+    }
+    if (result != HOST_FILE_MAP_MAP_FAILED &&
+        result != HOST_FILE_MAP_TRUNCATE_FAILED) {
+      return result;
+    }
+
+    last_attempt = size;
+    last_result = result;
+  }
+
+  if (floor != last_attempt) {
+    HostFileMapResult result = host_map_output_file(path, floor, map);
+    if (result == HOST_FILE_MAP_OK || result == HOST_FILE_MAP_OPEN_FAILED) {
+      return result;
+    }
+    last_result = result;
+  }
+
+  return last_result;
+}
 
 void thanatos_session_init(ThanatosSession *s, FILE *stdout_stream) {
   db_init(&s->out);
@@ -66,6 +128,58 @@ static bool unparse_and_respond(ThanatosSession *s, uint32_t result,
 static void daemon_stdout_handler(uint8_t byte, void *ctx) {
   DynamicBuffer *db = (DynamicBuffer *)ctx;
   (void)db_append_hex(db, byte);
+}
+
+typedef struct {
+  DynamicBuffer bytes;
+  bool ok;
+} BufferedFileOutput;
+
+static void buffered_file_output_handler(uint8_t byte, void *ctx) {
+  BufferedFileOutput *output = (BufferedFileOutput *)ctx;
+  if (!output->ok) {
+    return;
+  }
+  if (!db_append(&output->bytes, (char)byte)) {
+    output->ok = false;
+  }
+}
+
+static bool write_binary_file(const char *path, const char *data, size_t len) {
+#ifdef _WIN32
+  /* On Windows, use CreateFileW for better control and UTF-8 path support. */
+  wchar_t *wide_path = host_utf8_to_wide(path);
+  if (wide_path == NULL) {
+    return false;
+  }
+  HANDLE h = CreateFileW(wide_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                         FILE_ATTRIBUTE_NORMAL, NULL);
+  free(wide_path);
+  if (h == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  DWORD written = 0;
+  bool ok = true;
+  if (len > 0 && (!WriteFile(h, data, (DWORD)len, &written, NULL) ||
+                  written != (DWORD)len)) {
+    ok = false;
+  }
+  CloseHandle(h);
+  return ok;
+#else
+  FILE *fp = fopen(path, "wb");
+  if (fp == NULL) {
+    return false;
+  }
+  bool ok = true;
+  if (len > 0 && fwrite(data, 1, len, fp) != len) {
+    ok = false;
+  }
+  if (fclose(fp) != 0) {
+    ok = false;
+  }
+  return ok;
+#endif
 }
 
 static int parse_one_path(const char **p_start, char *out, size_t max) {
@@ -136,6 +250,12 @@ static void handle_stats(ThanatosSession *s) {
       (unsigned)top, (unsigned)capacity, total_nodes, total_steps, events,
       dropped, total_cons_allocs, total_cont_allocs, total_susp_allocs,
       duplicate_lost_allocs, hashcons_hits, hashcons_misses);
+  session_fflush(s);
+}
+
+static void handle_trace_dump(ThanatosSession *s) {
+  thanatos_request_trace_dump();
+  session_printf(s, "OK\n");
   session_fflush(s);
 }
 
@@ -286,98 +406,96 @@ static void handle_reduce_file(ThanatosSession *s, const char *line,
     return;
   }
 
-  int in_fd = open(in_str, O_RDONLY);
-  if (in_fd < 0) {
+  HostFileMapping input_map;
+  HostFileMapResult input_result = host_map_input_file(in_str, &input_map);
+  if (input_result == HOST_FILE_MAP_OPEN_FAILED) {
     session_printf(s, "ERR cannot open input file\n");
     session_fflush(s);
     return;
   }
-
-  uint8_t *in_map = NULL;
-  size_t in_size = 0;
-  struct stat st;
-  if (fstat(in_fd, &st) != 0) {
-    close(in_fd);
+  if (input_result == HOST_FILE_MAP_STAT_FAILED) {
     session_printf(s, "ERR cannot stat input file\n");
     session_fflush(s);
     return;
   }
-  if (st.st_size > 0) {
-    in_size = st.st_size;
-    in_map = mmap(NULL, in_size, PROT_READ, MAP_SHARED, in_fd, 0);
-    if (in_map == MAP_FAILED) {
-      close(in_fd);
-      session_printf(s, "ERR mmap input failed\n");
-      session_fflush(s);
-      return;
-    }
+  if (input_result == HOST_FILE_MAP_MAP_FAILED) {
+    session_printf(s, "ERR mmap input failed\n");
+    session_fflush(s);
+    return;
   }
 
-  int out_fd = open(out_str, O_RDWR | O_CREAT | O_TRUNC, 0666);
-  if (out_fd < 0) {
-    if (in_map)
-      munmap(in_map, in_size);
-    close(in_fd);
+  HostFileMapping output_map;
+  HostFileMapResult output_result =
+      open_reduce_file_output_mapping(out_str, input_map.size, &output_map);
+  bool use_buffered_output_fallback = false;
+  if (output_result == HOST_FILE_MAP_OPEN_FAILED) {
+    host_close_file_mapping(&input_map);
     session_printf(s, "ERR cannot open output file\n");
     session_fflush(s);
     return;
   }
-
-  size_t max_out_size = 100ULL * 1024 * 1024 * 1024;
-  if (ftruncate(out_fd, max_out_size) < 0) {
-    if (in_map)
-      munmap(in_map, in_size);
-    close(in_fd);
-    close(out_fd);
-    session_printf(s, "ERR ftruncate output failed\n");
-    session_fflush(s);
-    return;
-  }
-
-  uint8_t *out_map =
-      mmap(NULL, max_out_size, PROT_READ | PROT_WRITE, MAP_SHARED, out_fd, 0);
-  if (out_map == MAP_FAILED) {
-    if (in_map)
-      munmap(in_map, in_size);
-    close(in_fd);
-    close(out_fd);
-    session_printf(s, "ERR mmap output failed\n");
-    session_fflush(s);
-    return;
+  if (output_result != HOST_FILE_MAP_OK) {
+    use_buffered_output_fallback = true;
   }
 
   size_t end_idx = 0;
   uint32_t root = parse_dag(dag_payload, dag_len, &end_idx);
   if (root == EMPTY) {
-    if (in_map)
-      munmap(in_map, in_size);
-    munmap(out_map, max_out_size);
-    close(in_fd);
-    close(out_fd);
+    host_close_file_mapping(&input_map);
+    if (!use_buffered_output_fallback) {
+      host_close_file_mapping(&output_map);
+    }
     session_printf(s, "ERR parse error\n");
     session_fflush(s);
     return;
   }
 
-  /* File-backed arena I/O is process-global state; REDUCE_FILE is single-flight
-   * within a process and the session layer must not overlap these reductions.
-   */
-  arena_set_io_mmap(in_map, in_size, out_map, max_out_size);
-  uint32_t result = thanatos_reduce_to_normal_form(root);
-  size_t written = arena_get_mmap_out_cursor();
-  arena_set_io_mmap(NULL, 0, NULL, 0);
+  uint32_t result = EMPTY;
+  if (use_buffered_output_fallback) {
+    BufferedFileOutput captured;
+    db_init(&captured.bytes);
+    captured.ok = true;
 
-  if (in_map)
-    munmap(in_map, in_size);
-  close(in_fd);
+    /* File-backed input is still mmap-backed here; when output mapping is not
+     * available we fall back to the daemon's buffered stdout capture path.
+     */
+    arena_set_io_mmap((uint8_t *)input_map.data, input_map.size, NULL, 0);
+    thanatos_set_stdout_handler(buffered_file_output_handler, &captured);
+    result = thanatos_reduce_to_normal_form(root);
+    thanatos_set_stdout_handler(NULL, NULL);
+    arena_set_io_mmap(NULL, 0, NULL, 0);
+    host_close_file_mapping(&input_map);
 
-  if (written > 0)
-    msync(out_map, written, MS_SYNC);
-  munmap(out_map, max_out_size);
-  if (ftruncate(out_fd, written) < 0) {
-    fprintf(stderr, "warning: ftruncate failed to trim output\n");
+    if (result != EMPTY) {
+      if (!captured.ok || !write_binary_file(out_str, captured.bytes.ptr,
+                                             captured.bytes.len)) {
+        db_free(&captured.bytes);
+#ifdef _WIN32
+        session_printf(s, "ERR mmap output failed (win_err=%lu)\n", GetLastError());
+#else
+        session_printf(s, "ERR mmap output failed\n");
+#endif
+        session_fflush(s);
+        return;
+      }
+    }
+    db_free(&captured.bytes);
+  } else {
+    /* File-backed arena I/O is process-global state; REDUCE_FILE is
+     * single-flight within a process and the session layer must not overlap
+     * these reductions.
+     */
+    arena_set_io_mmap((uint8_t *)input_map.data, input_map.size,
+                      (uint8_t *)output_map.data, output_map.size);
+    result = thanatos_reduce_to_normal_form(root);
+    size_t written = arena_get_mmap_out_cursor();
+    arena_set_io_mmap(NULL, 0, NULL, 0);
+
+    host_close_file_mapping(&input_map);
+    if (!host_finish_output_file(&output_map, written)) {
+      fprintf(stderr, "warning: ftruncate failed to trim output\n");
+    }
   }
-  close(out_fd);
 
   if (result == EMPTY) {
     session_printf(s, "ERR reduction error\n");
@@ -438,6 +556,8 @@ void thanatos_session_handle_line(ThanatosSession *s, const char *line,
     handle_reset(s);
   } else if (command_matches(line, len, "STATS", 5)) {
     handle_stats(s);
+  } else if (command_matches(line, len, "TRACE_DUMP", 10)) {
+    handle_trace_dump(s);
   } else if (command_matches(line, len, "REDUCE", 6)) {
     handle_reduce(s, line + 6, len - 6);
   } else if (command_matches(line, len, "REDUCE_IO", 9)) {

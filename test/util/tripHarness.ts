@@ -74,7 +74,10 @@ export async function evaluateTripWithIo(
   const verbose = options.verbose ?? false;
   const skiExpression = await compileAndLink(source, options, verbose);
   const skiExpr = parseSKI(skiExpression);
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1, verbose);
+  const evaluator = options.evaluator instanceof ParallelArenaEvaluatorWasm
+    ? options.evaluator
+    : await ParallelArenaEvaluatorWasm.create(1, verbose);
+  const ownsEvaluator = evaluator !== options.evaluator;
 
   try {
     const resultPromise = evaluator.reduceAsync!(skiExpr, options.stepLimit);
@@ -84,9 +87,9 @@ export async function evaluateTripWithIo(
     const result = await resultPromise;
     const stdout = await evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
     return { result, stdout, evaluator };
-  } catch (err) {
-    evaluator.terminate();
-    throw err;
+  } finally {
+    if (ownsEvaluator) {
+      evaluator.terminate();
+    }
   }
-  // Note: Caller is responsible for terminating evaluator in TripIoResult
 }

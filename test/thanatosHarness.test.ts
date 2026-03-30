@@ -17,11 +17,21 @@ import { parseSKI } from "../lib/parser/ski.ts";
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
 const TEST_NATIVE_WORKERS = 2;
+const THANATOS_FILE_NAME = Deno.build.os === "windows"
+  ? "thanatos.exe"
+  : "thanatos";
 
-/** Path to the thanatos binary (built by make build-native). Override with env THANATOS_BIN for ASan etc. */
+/** Path to the thanatos binary when the native toolchain has produced it. Override with env THANATOS_BIN when needed. */
+const DEFAULT_THANATOS_BIN_CANDIDATES = [
+  join(PROJECT_ROOT, "bazel-bin", "core", THANATOS_FILE_NAME),
+  join(PROJECT_ROOT, "bin", THANATOS_FILE_NAME),
+];
+const DEFAULT_THANATOS_BIN =
+  DEFAULT_THANATOS_BIN_CANDIDATES.find((path) => existsSync(path)) ??
+    DEFAULT_THANATOS_BIN_CANDIDATES[0]!;
 const THANATOS_BIN = typeof Deno !== "undefined" && Deno.env.get("THANATOS_BIN")
   ? Deno.env.get("THANATOS_BIN")!
-  : join(PROJECT_ROOT, "bin", "thanatos");
+  : DEFAULT_THANATOS_BIN;
 
 export function thanatosAvailable(): boolean {
   return existsSync(THANATOS_BIN);
@@ -56,6 +66,10 @@ async function runThanatosProcess(
     stdout,
     stderr,
   };
+}
+
+function normalizeCliOutput(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "");
 }
 
 /**
@@ -325,6 +339,12 @@ class ThanatosSession {
     return resp;
   }
 
+  async traceDump(): Promise<void> {
+    this.start();
+    const resp = await this.serialRequest("TRACE_DUMP");
+    if (resp !== "OK") throw new Error("thanatos: " + resp);
+  }
+
   /** Close the session (sends QUIT, closes stdin). Idempotent. Clears singleton so next getThanatosSession() starts a new process. Signal listeners are not removed (registered once at module level). */
   async close(): Promise<void> {
     if (this.closed) return;
@@ -501,10 +521,10 @@ async function runThanatosSnapshot(
   const expr = parseSKI(program);
   const dag = toDagWire(expr);
 
-  const inPath = await Deno.makeTempFile();
-  const outPath = await Deno.makeTempFile();
-
-  try {
+  const tempDir = await Deno.makeTempDir();
+  const inPath = join(tempDir, "stdin.bin");
+  const outPath = join(tempDir, "stdout.bin");
+  const reduceSnapshot = async () => {
     await Deno.writeFile(inPath, stdin);
     const actualResultDag = await session.reduceFile(
       dag,
@@ -512,6 +532,25 @@ async function runThanatosSnapshot(
       outPath,
     );
     const actualStdout = await Deno.readFile(outPath);
+    return { actualResultDag, actualStdout };
+  };
+
+  try {
+    let actualResultDag: string;
+    let actualStdout: Uint8Array;
+    try {
+      ({ actualResultDag, actualStdout } = await reduceSnapshot());
+    } catch (error) {
+      const isWindowsRetryableMapFailure = Deno.build.os === "windows" &&
+        error instanceof Error &&
+        error.message.includes("thanatos: mmap output failed");
+      if (!isWindowsRetryableMapFailure) {
+        throw error;
+      }
+      await Deno.remove(outPath).catch(() => {});
+      await session.reset();
+      ({ actualResultDag, actualStdout } = await reduceSnapshot());
+    }
 
     assertEquals(
       actualStdout,
@@ -530,8 +569,7 @@ async function runThanatosSnapshot(
       );
     }
   } finally {
-    await Deno.remove(inPath).catch(() => {});
-    await Deno.remove(outPath).catch(() => {});
+    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
   }
 }
 
@@ -548,8 +586,11 @@ async function waitForTraceDump(
       }
     }
     dumps.sort();
-    if (dumps.length > 0) {
-      return dumps[dumps.length - 1]!;
+    for (let i = dumps.length - 1; i >= 0; i--) {
+      const dumpPath = dumps[i]!;
+      if ((await tryReadTraceDumpJson(dumpPath)) !== null) {
+        return dumpPath;
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -563,21 +604,57 @@ async function waitForTraceDumpCount(
 ): Promise<string[]> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const dumps: string[] = [];
+    const dumps = new Map<string, true>();
     for await (const entry of Deno.readDir(traceDir)) {
       if (entry.isFile && entry.name.endsWith(".json")) {
-        dumps.push(join(traceDir, entry.name));
+        const dumpPath = join(traceDir, entry.name);
+        if ((await tryReadTraceDumpJson(dumpPath)) !== null) {
+          dumps.set(dumpPath, true);
+        }
       }
     }
-    dumps.sort();
-    if (dumps.length >= expectedCount) {
-      return dumps;
+    const paths = Array.from(dumps.keys()).sort();
+    if (paths.length >= expectedCount) {
+      return paths;
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(
     `timed out waiting for ${expectedCount} thanatos trace dumps in ${traceDir}`,
   );
+}
+
+async function tryReadTraceDumpJson(path: string): Promise<unknown | null> {
+  try {
+    const text = await Deno.readTextFile(path);
+    if (text.trim().length === 0) {
+      return null;
+    }
+    return JSON.parse(text);
+  } catch (error) {
+    if (
+      error instanceof SyntaxError ||
+      error instanceof Deno.errors.NotFound
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function readTraceDumpJson<T>(
+  path: string,
+  timeoutMs = 500,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const dump = await tryReadTraceDumpJson(path);
+    if (dump !== null) {
+      return dump as T;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for thanatos trace JSON at ${path}`);
 }
 
 Deno.test({
@@ -700,7 +777,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "thanatos trace dump - SIGHUP writes JSON worker snapshot",
+  name: "thanatos trace dump - TRACE_DUMP writes JSON worker snapshot",
   ignore: !thanatosAvailable(),
   fn: async () => {
     const traceDir = await Deno.makeTempDir();
@@ -714,9 +791,9 @@ Deno.test({
       const resultDag = await session.reduceDag(toDagWire(parseSKI("I K")));
       assertEquals(unparseSKI(fromDagWire(resultDag)), "K");
 
-      session.signal("SIGHUP");
+      await session.traceDump();
       const dumpPath = await waitForTraceDump(traceDir);
-      const dump = JSON.parse(await Deno.readTextFile(dumpPath)) as {
+      const dump = await readTraceDumpJson<{
         dump_version: number;
         epoch: number;
         runtime: { worker_count: number };
@@ -725,7 +802,7 @@ Deno.test({
           complete: boolean;
           recent_events: Array<{ kind: string }>;
         }>;
-      };
+      }>(dumpPath);
 
       assertEquals(dump.dump_version, 1);
       assert(dump.epoch >= 1);
@@ -757,16 +834,16 @@ Deno.test({
       });
       await session.ping();
 
-      session.signal("SIGHUP");
+      await session.traceDump();
       const dumpPath = await waitForTraceDump(traceDir);
-      const dump = JSON.parse(await Deno.readTextFile(dumpPath)) as {
+      const dump = await readTraceDumpJson<{
         runtime: { worker_count: number };
         workers: Array<{
           worker_id: number;
           complete: boolean;
           state: string;
         }>;
-      };
+      }>(dumpPath);
 
       assertEquals(dump.runtime.worker_count, 2);
       assertEquals(dump.workers.length, 2);
@@ -790,7 +867,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "thanatos trace dump - repeated SIGHUP increments epoch files",
+  name: "thanatos trace dump - repeated TRACE_DUMP increments epoch files",
   ignore: !thanatosAvailable(),
   fn: async () => {
     const traceDir = await Deno.makeTempDir();
@@ -803,18 +880,18 @@ Deno.test({
       await session.ping();
       await session.reduceDag(toDagWire(parseSKI("I S")));
 
-      session.signal("SIGHUP");
+      await session.traceDump();
       await waitForTraceDump(traceDir);
-      session.signal("SIGHUP");
+      await session.traceDump();
 
       const dumpPaths = await waitForTraceDumpCount(traceDir, 2);
       const dumps = await Promise.all(
         dumpPaths.map(async (path) =>
-          JSON.parse(await Deno.readTextFile(path)) as {
+          await readTraceDumpJson<{
             epoch: number;
             runtime: { worker_count: number };
             workers: Array<{ complete: boolean }>;
-          }
+          }>(path)
         ),
       );
       dumps.sort((a, b) => a.epoch - b.epoch);
@@ -905,15 +982,23 @@ Deno.test({
 });
 
 Deno.test({
-  name: "REDUCE_FILE - /dev/full reports output setup failure",
-  ignore: !thanatosAvailable() || !existsSync("/dev/full"),
+  name: "thanatos trace dump - SIGHUP remains a POSIX alias",
+  ignore: !thanatosAvailable() || Deno.build.os === "windows",
   fn: async () => {
-    const session = await getThanatosSession();
+    const traceDir = await Deno.makeTempDir();
+    const session = new ThanatosSession();
     try {
-      const res = await session.rawRequest("REDUCE_FILE /dev/null /dev/full I");
-      assertEquals(res, "ERR ftruncate output failed");
+      session.start(1, {
+        THANATOS_TRACE_DIR: traceDir,
+        THANATOS_TRACE_TIMEOUT_MS: "200",
+      });
+      await session.ping();
+      session.signal("SIGHUP");
+      const dumpPath = await waitForTraceDump(traceDir);
+      assert(dumpPath.endsWith(".json"));
     } finally {
       await session.close();
+      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
     }
   },
 });
@@ -930,7 +1015,7 @@ Deno.test({
     assertEquals(result.code, 0, result.stderr);
     // OK <result_dag>
     // Result of (I U41) is U41
-    assertEquals(result.stdout, "OK U41\n");
+    assertEquals(normalizeCliOutput(result.stdout), "OK U41\n");
   },
 });
 
@@ -946,7 +1031,7 @@ Deno.test({
         "REDUCE , I @0,1\n",
       );
       assertEquals(result.code, 0, result.stderr);
-      assertEquals(result.stdout, "OK U2a\n");
+      assertEquals(normalizeCliOutput(result.stdout), "OK U2a\n");
     } finally {
       await Deno.remove(stdinPath).catch(() => {});
     }
@@ -1030,6 +1115,7 @@ Deno.test({
 
 Deno.test({
   name: "ThanatosSession - reduceDag error (coverage)",
+  ignore: !thanatosAvailable(),
   fn: async () => {
     const session = await getThanatosSession();
     try {

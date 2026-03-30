@@ -1,0 +1,8 @@
+load("//bazel:wasm_release.bzl", "wasm_release")
+
+package(default_visibility = ["//visibility:public"])
+
+wasm_release(
+    name = "release",
+    srcs = ["//core:arena.c"],
+)

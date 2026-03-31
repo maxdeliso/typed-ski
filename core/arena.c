@@ -23,6 +23,12 @@ void *memmove(void *dest, const void *src, size_t n) {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 #endif
 
 static const uint32_t ARENA_MAGIC = 0x534B4941;

@@ -28,6 +28,9 @@ _WASM_MAX_PAGES = 65535
 def _export_flags():
     return ["-Wl,--export=%s" % symbol for symbol in _WASM_EXPORTS]
 
+_ZIG_CACHE_PATH_LINUX = "/tmp/zig-cache"
+_ZIG_CACHE_PATH_WINDOWS = "C:/Temp/zig-cache"
+
 def wasm_release(name, srcs, visibility = None):
     flags = [
         "-O3",
@@ -47,12 +50,27 @@ def wasm_release(name, srcs, visibility = None):
     src_locations = " ".join(["$(location %s)" % src for src in srcs])
     flag_string = " ".join(flags)
 
+    # We explicitly set ZIG_LOCAL_CACHE_DIR and ZIG_GLOBAL_CACHE_DIR to avoid
+    # AppDataDirUnavailable errors in CI environments where the default cache
+    # locations (like $HOME/.cache or %APPDATA%) might not be writable or available.
+    cmd_bash = "export ZIG_LOCAL_CACHE_DIR={cache} && export ZIG_GLOBAL_CACHE_DIR={cache} && \"$(execpath @zig_sdk//:zig)\" cc {flags} -o \"$@\" {srcs}".format(
+        cache = _ZIG_CACHE_PATH_LINUX,
+        flags = flag_string,
+        srcs = src_locations,
+    )
+
+    cmd_bat = "set ZIG_LOCAL_CACHE_DIR={cache}&& set ZIG_GLOBAL_CACHE_DIR={cache}&& $(execpath @zig_sdk//:zig) cc {flags} -o $@ {srcs}".format(
+        cache = _ZIG_CACHE_PATH_WINDOWS,
+        flags = flag_string,
+        srcs = src_locations,
+    )
+
     native.genrule(
         name = name,
         srcs = srcs,
         outs = [name + ".wasm"],
-        cmd_bash = "\"$(execpath @zig_sdk//:zig)\" cc %s -o \"$@\" %s" % (flag_string, src_locations),
-        cmd_bat = "$(execpath @zig_sdk//:zig) cc %s -o $@ %s" % (flag_string, src_locations),
+        cmd_bash = cmd_bash,
+        cmd_bat = cmd_bat,
         tools = ["@zig_sdk//:zig"],
         visibility = visibility,
     )

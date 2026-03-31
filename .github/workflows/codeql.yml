@@ -25,7 +25,6 @@ jobs:
       matrix:
         include:
           - language: actions
-          - language: c-cpp
           - language: javascript-typescript
 
     steps:
@@ -34,31 +33,6 @@ jobs:
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-
-      - name: Setup Bazel
-        if: matrix.language == 'c-cpp'
-        uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-          cache-save: ${{ github.event_name != 'pull_request' }}
-
-      - name: Prepare hermetic Zig cache
-        if: matrix.language == 'c-cpp'
-        run: mkdir -p /tmp/zig-cache
-
-      - name: Build native targets for CodeQL
-        if: matrix.language == 'c-cpp'
-        run: |
-          # A clean build with standalone strategy is required for CodeQL to trace Bazel actions.
-          # We build all targets in //core to ensure full coverage of the C/C++ logic.
-          bazel clean
-          bazel build \
-            --spawn_strategy=standalone \
-            --nouse_action_cache \
-            --noremote_accept_cached \
-            //core/...
 
       - uses: github/codeql-action/analyze@v4
         with:

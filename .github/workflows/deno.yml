@@ -70,3 +70,7 @@ jobs:
           files: coverage.lcov
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: JSR dry run publish
+        if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
+        run: deno publish --dry-run

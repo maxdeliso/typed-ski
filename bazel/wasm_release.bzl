@@ -31,7 +31,7 @@ def _export_flags():
 _ZIG_CACHE_PATH_LINUX = "/tmp/zig-cache"
 _ZIG_CACHE_PATH_WINDOWS = "C:/Temp/zig-cache"
 
-def wasm_release(name, srcs, visibility = None):
+def wasm_release(name, srcs, hdrs = [], visibility = None):
     flags = [
         "-O3",
         "-DNDEBUG",
@@ -67,7 +67,7 @@ def wasm_release(name, srcs, visibility = None):
 
     native.genrule(
         name = name,
-        srcs = srcs,
+        srcs = srcs + hdrs,
         outs = [name + ".wasm"],
         cmd_bash = cmd_bash,
         cmd_bat = cmd_bat,

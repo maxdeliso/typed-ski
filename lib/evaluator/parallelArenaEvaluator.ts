@@ -303,9 +303,6 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         if (fullStreak < 512) {
           await new Promise<void>((r) => queueMicrotask(r));
         } else {
-          if (this.aborted) {
-            throw (this.abortError ?? new Error("Evaluator terminated"));
-          }
           const { promise, cancel } = sleep(0); // Try 0 first, it might yield but return faster than 1
           this.activeTimeouts.add(cancel);
           try {

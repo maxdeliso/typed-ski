@@ -241,7 +241,7 @@ void host_notify_u32(atomic_uint *ptr, uint32_t count) {
 
 void host_sleep_ms(uint32_t timeout_ms) { Sleep(timeout_ms); }
 
-void host_yield(void) { SwitchToThread(); }
+void host_yield(void) { Sleep(0); }
 
 uint32_t host_cpu_count(void) {
   static uint32_t count = 0;

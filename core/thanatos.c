@@ -203,7 +203,8 @@ static void wake_one_stdin_waiter(void) {
   if (arena_stdin_wait_try_dequeue(&woke_node)) {
     uint32_t woke_req = io_wait_remove(woke_node);
     if (woke_req != 0) {
-      while (hostSubmit(woke_node, woke_req, 0) != 0) { /* spin */
+      while (hostSubmit(woke_node, woke_req, 0) != 0) {
+        host_yield();
       }
     }
   }
@@ -214,7 +215,8 @@ static void wake_one_stdout_waiter(void) {
   if (arena_stdout_wait_try_dequeue(&woke_node)) {
     uint32_t woke_req = io_wait_remove(woke_node);
     if (woke_req != 0) {
-      while (hostSubmit(woke_node, woke_req, 0) != 0) { /* spin */
+      while (hostSubmit(woke_node, woke_req, 0) != 0) {
+        host_yield();
       }
     }
   }
@@ -445,8 +447,10 @@ void thanatos_init(ThanatosConfig config) {
     host_mutex_init(&stdout_publish_mutex);
     host_mutex_init(&stdin_demand_mutex);
     host_mutex_init(&pump_mutex);
+    host_mutex_init(&pending_req_mutex);
     host_cond_init(&stdin_demand_cvar);
     host_cond_init(&pump_cvar);
+    host_cond_init(&pending_req_cvar);
     runtime_sync_initialized = true;
   }
 
@@ -540,12 +544,16 @@ void thanatos_start_threads(bool enable_stdout_pump) {
   }
 }
 
+static HostMutex pending_req_mutex;
+static HostCond pending_req_cvar;
+
 uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
   uint32_t req_id = atomic_fetch_add(&next_req_id, 1);
   uint32_t current_node = node_id;
 
   int slot = -1;
   while (slot == -1) {
+    host_mutex_lock(&pending_req_mutex);
     for (int i = 0; i < MAX_PENDING_REQS; i++) {
       host_mutex_lock(&pending_reqs[i].mutex);
       if (pending_reqs[i].req_id == 0) {
@@ -557,10 +565,15 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
       }
       host_mutex_unlock(&pending_reqs[i].mutex);
     }
+    if (slot == -1) {
+      host_cond_wait(&pending_req_cvar, &pending_req_mutex);
+    }
+    host_mutex_unlock(&pending_req_mutex);
   }
 
   while (hostSubmit(current_node, req_id, max_steps) != 0) {
-    /* spin until submit succeeds */
+    /* yield until submit succeeds */
+    host_yield();
   }
 
   while (true) {
@@ -578,7 +591,10 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
         (controlSuspensionRemainingSteps(node) == 0);
 
     if (event == CQ_EVENT_DONE || step_budget_exhausted) {
+      host_mutex_lock(&pending_req_mutex);
       pending_reqs[slot].req_id = 0;
+      host_cond_signal(&pending_req_cvar);
+      host_mutex_unlock(&pending_req_mutex);
       host_mutex_unlock(&pending_reqs[slot].mutex);
       /* Drain any remaining arena stdout bytes before main prints the result
        * line. Publication is serialized with the pump to preserve FIFO order.
@@ -608,11 +624,14 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
       host_mutex_unlock(&pending_reqs[slot].mutex);
 
       while (hostSubmit(current_node, req_id, 0) != 0) {
-        /* spin until submit succeeds */
+        host_yield();
       }
     } else {
       fprintf(stderr, "Thanatos: error for req_id %u\n", req_id);
+      host_mutex_lock(&pending_req_mutex);
       pending_reqs[slot].req_id = 0;
+      host_cond_signal(&pending_req_cvar);
+      host_mutex_unlock(&pending_req_mutex);
       host_mutex_unlock(&pending_reqs[slot].mutex);
       return EMPTY;
     }
@@ -711,7 +730,9 @@ void thanatos_shutdown(void) {
   }
   if (runtime_sync_initialized) {
     host_mutex_destroy(&pump_mutex);
+    host_mutex_destroy(&pending_req_mutex);
     host_cond_destroy(&pump_cvar);
+    host_cond_destroy(&pending_req_cvar);
     host_mutex_destroy(&stdin_demand_mutex);
     host_cond_destroy(&stdin_demand_cvar);
     host_mutex_destroy(&stdout_publish_mutex);

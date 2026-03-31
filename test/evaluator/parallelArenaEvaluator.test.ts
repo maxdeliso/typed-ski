@@ -763,35 +763,42 @@ Deno.test("ParallelArenaEvaluator - fromArena validation", async (t) => {
   );
 });
 
-Deno.test("ParallelArenaEvaluator - concurrent mixed work", async () => {
-  // Simplification of the previously separate parallelContinuationRepro test.
-  // Validates that the evaluator remains stable when processing both convergent
-  // and divergent work concurrently across multiple workers.
-  const evaluator = await ParallelArenaEvaluatorWasm.create(2, false, {
-    maxResubmits: 100,
-  });
-  try {
-    const divergent = parseSKI("(SII)(SII)");
-    const convergent = parseSKI("II");
+Deno.test({
+  name: "ParallelArenaEvaluator - concurrent mixed work",
+  sanitizeOps: true,
+  sanitizeResources: true,
+  permissions: { read: true, write: true, env: true, run: true },
+  async fn() {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(2, false, {
+      maxResubmits: 100,
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
-    const p1 = evaluator.reduceAsync(convergent);
-    const p2 = evaluator.reduceAsync(divergent, 50);
-    const p3 = evaluator.reduceAsync(divergent);
+    try {
+      const divergent = parseSKI("(SII)(SII)");
+      const convergent = parseSKI("II");
 
-    const results = await Promise.allSettled([p1, p2, p3]);
+      const p1 = evaluator.reduceAsync(convergent);
+      const p2 = evaluator.reduceAsync(divergent, 50);
+      const p3 = evaluator.reduceAsync(divergent);
 
-    // Convergent work should always succeed
-    assert(results[0].status === "fulfilled");
-    assertEquals(
-      unparseSKI((results[0] as PromiseFulfilledResult<SKIExpression>).value),
-      "I",
-    );
+      const results = await Promise.allSettled([p1, p2, p3]);
 
-    // Divergent work may succeed or fail depending on step timing,
-    // but should not crash the evaluator or workers.
-  } finally {
-    evaluator.terminate();
-  }
+      // Convergent work should always succeed
+      assert(results[0].status === "fulfilled");
+      assertEquals(
+        unparseSKI((results[0] as PromiseFulfilledResult<SKIExpression>).value),
+        "I",
+      );
+
+      // Divergent work may succeed or fail depending on step timing,
+      // but should not crash the evaluator or workers.
+    } finally {
+      clearTimeout(timeout);
+      evaluator.terminate();
+    }
+  },
 });
 
 Deno.test("ParallelArenaEvaluator - request hooks call the expected callbacks", async () => {

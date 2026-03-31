@@ -85,6 +85,7 @@ cc_binary(
     srcs = ["main.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
+    linkstatic = 1,
     deps = [":thanatos_lib"],
 )
 
@@ -93,6 +94,7 @@ cc_test(
     srcs = ["dag_codec_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
+    linkstatic = 1,
     deps = [
         ":arena_runtime",
         ":ski_io",
@@ -105,6 +107,7 @@ cc_test(
     srcs = ["session_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
+    linkstatic = 1,
     deps = [":thanatos_lib"],
 )
 
@@ -113,6 +116,7 @@ cc_test(
     srcs = ["ski_io_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
+    linkstatic = 1,
     deps = [
         ":thanatos_lib",
     ],
@@ -122,6 +126,7 @@ cc_test(
     name = "util_test",
     srcs = ["util_test.c"],
     copts = COMMON_COPTS,
+    linkstatic = 1,
     deps = [":util"],
 )
 
@@ -130,5 +135,6 @@ cc_binary(
     srcs = ["performance_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
+    linkstatic = 1,
     deps = [":thanatos_lib"],
 )

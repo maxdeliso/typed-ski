@@ -6,7 +6,12 @@ import {
 } from "std/assert";
 
 type LoaderModule = typeof import("../../lib/evaluator/arenaWasmLoader.ts");
-import { resetReleaseWasmCache } from "../../lib/evaluator/arenaWasmLoader.ts";
+import {
+  formatReleaseWasmLoadInfo,
+  getLastReleaseWasmLoadInfo,
+  getReleaseWasmBytes,
+  resetReleaseWasmCache,
+} from "../../lib/evaluator/arenaWasmLoader.ts";
 import { VERSION } from "../../lib/shared/version.generated.ts";
 
 function escapeRegExp(input: string): string {
@@ -24,6 +29,7 @@ const moduleWasmUrl = new URL(
   new URL("../../lib/evaluator/arenaWasmLoader.ts", import.meta.url),
 ).href;
 
+const compiledWasmUrl = "file:///tmp/wasm/release.wasm";
 const execWasmUrl = "file:///usr/local/wasm/release.wasm";
 
 async function importFreshLoaderModule(): Promise<LoaderModule> {
@@ -120,6 +126,87 @@ Deno.test("arenaWasmLoader - async loading prefers local file in Deno and caches
   }
 });
 
+Deno.test("arenaWasmLoader - Windows absolute env paths normalize to file URLs", async () => {
+  resetReleaseWasmCache();
+  const globals = globalThis as Record<string, unknown>;
+  const previousFetch = globals["fetch"];
+  const localAttempts: string[] = [];
+
+  const restoreDeno = patchDeno({
+    envGet: (name: string) =>
+      name === "TYPED_SKI_WASM_PATH" ? "C:\\temp\\release.wasm" : undefined,
+    execPath: () => "/usr/bin/deno",
+    readFile: (url: URL) => {
+      localAttempts.push(url.href);
+      return new Uint8Array([9, 9]);
+    },
+    readFileSync: () => {
+      throw new Error("unused");
+    },
+  });
+  globals["fetch"] = () => {
+    throw new Error("fetch should not be called");
+  };
+
+  try {
+    const loader = await importFreshLoaderModule();
+    const loaded = await loader.getReleaseWasmBytes();
+    assertEquals(Array.from(new Uint8Array(loaded)), [9, 9]);
+    assertEquals(localAttempts, ["file:///C:/temp/release.wasm"]);
+    assertEquals(loader.getLastReleaseWasmLoadInfo(), {
+      kind: "env-path",
+      url: "file:///C:/temp/release.wasm",
+      via: "readFile",
+    });
+  } finally {
+    restoreDeno();
+    restoreGlobal("fetch", previousFetch);
+  }
+});
+
+Deno.test("arenaWasmLoader - compiled exec path falls back to module path", async () => {
+  resetReleaseWasmCache();
+  const globals = globalThis as Record<string, unknown>;
+  const previousFetch = globals["fetch"];
+  const localAttempts: string[] = [];
+
+  const restoreDeno = patchDeno({
+    envGet: () => undefined,
+    execPath: () => "/tmp/deno-compile-tripc/tripc",
+    readFile: (url: URL) => {
+      localAttempts.push(url.href);
+      if (url.href === compiledWasmUrl) {
+        throw new Error("missing compiled wasm");
+      }
+      if (url.href === moduleWasmUrl) {
+        return new Uint8Array([4, 4]);
+      }
+      throw new Error(`unexpected candidate: ${url.href}`);
+    },
+    readFileSync: () => {
+      throw new Error("unused");
+    },
+  });
+  globals["fetch"] = () => {
+    throw new Error("fetch should not be called");
+  };
+
+  try {
+    const loader = await importFreshLoaderModule();
+    const loaded = await loader.getReleaseWasmBytes();
+    assertEquals(Array.from(new Uint8Array(loaded)), [4, 4]);
+    assertEquals(localAttempts.slice(0, 2), [compiledWasmUrl, moduleWasmUrl]);
+    assertEquals(loader.getLastReleaseWasmLoadInfo(), {
+      kind: "module-path",
+      url: moduleWasmUrl,
+      via: "readFile",
+    });
+  } finally {
+    restoreDeno();
+    restoreGlobal("fetch", previousFetch);
+  }
+});
+
 Deno.test("arenaWasmLoader - invalid env path and exec path are ignored", async () => {
   resetReleaseWasmCache();
   const globals = globalThis as Record<string, unknown>;
@@ -204,6 +291,53 @@ Deno.test("arenaWasmLoader - deno runtime exec path and file env URL are ignored
     assertEquals(localAttempts, []);
     assertEquals(remoteAttempts[0], "https://cdn.example.com/release.wasm");
     assertMatch(remoteAttempts[1]!, jsrVersionedWasmUrlPattern);
+  } finally {
+    restoreDeno();
+    restoreGlobal("fetch", previousFetch);
+  }
+});
+
+Deno.test("arenaWasmLoader - env URL success bypasses local candidates", async () => {
+  resetReleaseWasmCache();
+  const globals = globalThis as Record<string, unknown>;
+  const previousFetch = globals["fetch"];
+  const localAttempts: string[] = [];
+  const remoteAttempts: string[] = [];
+
+  const restoreDeno = patchDeno({
+    envGet: (name: string) =>
+      name === "TYPED_SKI_WASM_URL"
+        ? "https://cdn.example.com/success.wasm"
+        : undefined,
+    execPath: () => "/tmp/deno-compile-tripc/tripc",
+    readFile: (url: URL) => {
+      localAttempts.push(url.href);
+      throw new Error("local file candidates should be skipped");
+    },
+    readFileSync: () => {
+      throw new Error("unused");
+    },
+  });
+
+  globals["fetch"] = (url: string | URL) => {
+    remoteAttempts.push(url.toString());
+    return Promise.resolve({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(bytes([7, 7, 7])),
+    });
+  };
+
+  try {
+    const loader = await importFreshLoaderModule();
+    const loaded = await loader.getReleaseWasmBytes();
+    assertEquals(Array.from(new Uint8Array(loaded)), [7, 7, 7]);
+    assertEquals(localAttempts, []);
+    assertEquals(remoteAttempts, ["https://cdn.example.com/success.wasm"]);
+    assertEquals(loader.getLastReleaseWasmLoadInfo(), {
+      kind: "env-url",
+      url: "https://cdn.example.com/success.wasm",
+      via: "fetch",
+    });
   } finally {
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
@@ -415,4 +549,102 @@ Deno.test("arenaWasmLoader - tolerates Deno.env.get and execPath errors", async 
     restoreDeno();
     restoreGlobal("fetch", previousFetch);
   }
+});
+
+Deno.test("arenaWasmLoader - resetReleaseWasmCache clears cached bytes and load info", async () => {
+  resetReleaseWasmCache();
+  const globals = globalThis as Record<string, unknown>;
+  const previousFetch = globals["fetch"];
+  let fetchCalls = 0;
+
+  const restoreDeno = patchDeno({
+    envGet: (name: string) =>
+      name === "TYPED_SKI_WASM_URL"
+        ? "https://cdn.example.com/cache.wasm"
+        : undefined,
+    execPath: () => "/usr/bin/deno",
+    readFile: () => {
+      throw new Error("local file candidates should be skipped");
+    },
+    readFileSync: () => {
+      throw new Error("unused");
+    },
+  });
+
+  globals["fetch"] = () => {
+    fetchCalls += 1;
+    const payload = fetchCalls === 1 ? [8] : [9];
+    return Promise.resolve({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(bytes(payload)),
+    });
+  };
+
+  try {
+    const first = await getReleaseWasmBytes();
+    const cached = await getReleaseWasmBytes();
+    assertEquals(Array.from(new Uint8Array(first)), [8]);
+    assertEquals(Array.from(new Uint8Array(cached)), [8]);
+    assertEquals(fetchCalls, 1);
+    assertEquals(getLastReleaseWasmLoadInfo(), {
+      kind: "env-url",
+      url: "https://cdn.example.com/cache.wasm",
+      via: "fetch",
+    });
+
+    resetReleaseWasmCache();
+    assertEquals(getLastReleaseWasmLoadInfo(), null);
+
+    const reloaded = await getReleaseWasmBytes();
+    assertEquals(Array.from(new Uint8Array(reloaded)), [9]);
+    assertEquals(fetchCalls, 2);
+  } finally {
+    resetReleaseWasmCache();
+    restoreDeno();
+    restoreGlobal("fetch", previousFetch);
+  }
+});
+
+Deno.test("arenaWasmLoader - formatReleaseWasmLoadInfo reports each source kind", () => {
+  assertEquals(formatReleaseWasmLoadInfo(null), "unknown");
+  assertEquals(
+    formatReleaseWasmLoadInfo({
+      kind: "env-path",
+      url: "file:///tmp/release.wasm",
+      via: "readFile",
+    }),
+    "env path (readFile)",
+  );
+  assertEquals(
+    formatReleaseWasmLoadInfo({
+      kind: "exec-path",
+      url: execWasmUrl,
+      via: "readFileSync",
+    }),
+    "compiled path (readFileSync)",
+  );
+  assertEquals(
+    formatReleaseWasmLoadInfo({
+      kind: "module-path",
+      url: moduleWasmUrl,
+      via: "readFile",
+    }),
+    "local path (readFile)",
+  );
+  assertEquals(
+    formatReleaseWasmLoadInfo({
+      kind: "env-url",
+      url: "https://cdn.example.com/release.wasm",
+      via: "fetch",
+    }),
+    "env URL fallback (fetch)",
+  );
+  assertEquals(
+    formatReleaseWasmLoadInfo({
+      kind: "version-url",
+      url: `https://jsr.io/@maxdeliso/typed-ski/${VERSION}/wasm/release.wasm`,
+      via: "fetch",
+    }),
+    "published JSR fallback (fetch)",
+  );
 });

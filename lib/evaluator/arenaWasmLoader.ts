@@ -144,6 +144,17 @@ function getWasmUrlFromEnv(
   importMetaUrl: string,
 ): ReleaseWasmCandidate | null {
   if (!env) return null;
+  if (/^(?:[a-zA-Z]:[\\/]|[\\/])/.test(env)) {
+    try {
+      const normalizedPath = env.replace(/\\/g, "/");
+      const urlStr = normalizedPath.startsWith("/")
+        ? `file://${normalizedPath}`
+        : `file:///${normalizedPath}`;
+      return { kind: "env-path", url: new URL(urlStr) };
+    } catch {
+      return null;
+    }
+  }
   try {
     return { kind: "env-path", url: new URL(env) };
   } catch {
@@ -153,19 +164,6 @@ function getWasmUrlFromEnv(
       const url = new URL(env, importMetaUrl);
       return { kind: "env-path", url };
     } catch {
-      // If that also fails, and it looks like an absolute path, try converting to file URL.
-      if (/^(?:[a-zA-Z]:|[\\/])/.test(env)) {
-        try {
-          // Replace backslashes with forward slashes for URL compatibility
-          const normalizedPath = env.replace(/\\/g, "/");
-          const urlStr = normalizedPath.startsWith("/")
-            ? `file://${normalizedPath}`
-            : `file:///${normalizedPath}`;
-          return { kind: "env-path", url: new URL(urlStr) };
-        } catch {
-          return null;
-        }
-      }
       return null;
     }
   }

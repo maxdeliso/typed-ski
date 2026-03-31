@@ -55,10 +55,13 @@ jobs:
         run: New-Item -ItemType Directory -Force C:\Temp\zig-cache | Out-Null
 
       - name: Build native Bazel targets
-        run: bazel build //:thanatos //:release_wasm
+        run: bazel build //:thanatos //:performance_test //:release_wasm
 
       - name: Run native Bazel tests
         run: bazel test //:native_tests
+
+      - name: Generate bounded perf stats
+        run: bazel run //:performance_test -- 8 67108864 512 5 1000 1775005854
 
       - name: Run Bazel CI
         run: bazel run //:ci

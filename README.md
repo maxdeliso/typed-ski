@@ -25,6 +25,7 @@ bazelisk run //:test
 bazelisk run //:coverage
 bazelisk run //:ci
 bazelisk run //:serve_hephaestus
+bazelisk run //:vs_project
 ```
 
 The Bazel graph now includes hermetic native `thanatos` and `wasm/release.wasm`
@@ -94,6 +95,54 @@ Other useful commands:
 - `bazelisk run //:coverage` runs the portable tests with coverage output
 - `bazelisk run //:ci` runs the build, formatting, lint, tests, and coverage
   flow after native Bazel targets have been built
+- `bazelisk run //:vs_project` writes `compile_commands.json`,
+  `CppProperties.json`, `.vs/tasks.vs.json`, `.vs/launch.vs.json`,
+  `typed-ski-thanatos.sln`, and `typed-ski-thanatos.vcxproj` for Visual Studio
+  workflows
+
+### Visual Studio
+
+To generate Visual Studio Open Folder metadata from the Bazel C targets, run:
+
+```powershell
+bazelisk run //:vs_project
+```
+
+Then open the repository directory in Visual Studio with **File > Open >
+Folder**. The generated metadata gives Visual Studio:
+
+- `CppProperties.json` for Bazel-derived include paths and defines
+- `.vs/tasks.vs.json` for Bazel build and test tasks
+- `.vs/launch.vs.json` with a starter `thanatos` debug configuration
+- `typed-ski-thanatos.sln` and `typed-ski-thanatos.vcxproj` for the classic
+  solution/project workflow, including one project for `thanatos` and one for
+  each native test target
+
+The launch configuration uses `gdb` (`type: "cppdbg"`). If `gdb.exe` is not on
+your `PATH`, edit `.vs/launch.vs.json` and set `miDebuggerPath` to your local
+GDB installation before starting a debug session.
+
+If you want the old-school Visual Studio debugger or profiler, open
+`typed-ski-native.sln`. The generated projects are Makefile-style C++ projects:
+Visual Studio invokes Bazel for build/rebuild/clean, and each startup project
+launches its Bazel-built binary directly. The generated solution includes:
+
+- `typed-ski-thanatos`
+- `typed-ski-dag-codec-test`
+- `typed-ski-performance-test`
+- `typed-ski-session-test`
+- `typed-ski-ski-io-test`
+- `typed-ski-util-test`
+
+The generated `typed-ski-performance-test` project includes a starter debugger
+argument preset tuned for faster iteration inside Visual Studio. Edit the
+project's Debugging properties if you want to switch back to a larger arena or
+workload.
+
+The generated Visual Studio metadata is local-only and gitignored, including
+`compile_commands.json`, `CppProperties.json`, `.vs/`, `typed-ski-native.sln`,
+`typed-ski-*.vcxproj`, `typed-ski-*.vcxproj.filters`, and
+`*.vcxproj.user`. Regenerate them at any time with `bazelisk run //:vs_project`.
 
 ### Running Hephaestus
 

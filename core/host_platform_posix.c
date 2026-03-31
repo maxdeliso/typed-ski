@@ -88,17 +88,24 @@ void host_thread_join(HostThread thread) { pthread_join(thread, NULL); }
 
 void *host_reserve_memory(size_t bytes) {
   void *ptr =
-      mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1,
-           0);
+      mmap(NULL, bytes, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   return ptr == MAP_FAILED ? NULL : ptr;
 }
 
-bool host_commit_memory(void *base, size_t bytes, size_t *committed_bytes) {
-  (void)base;
-  if (committed_bytes != NULL && *committed_bytes < bytes) {
-    *committed_bytes = bytes;
+bool host_commit_memory_range(void *base, size_t offset, size_t bytes) {
+  static size_t page_size = 0;
+  if (page_size == 0) {
+    long value = sysconf(_SC_PAGESIZE);
+    page_size = (value > 0) ? (size_t)value : 4096u;
   }
-  return true;
+  if (bytes == 0)
+    return true;
+
+  size_t rounded_offset = offset & ~(page_size - 1);
+  size_t prefix = offset - rounded_offset;
+  size_t rounded_bytes = (prefix + bytes + page_size - 1) & ~(page_size - 1);
+  uint8_t *commit_base = (uint8_t *)base + rounded_offset;
+  return mprotect(commit_base, rounded_bytes, PROT_READ | PROT_WRITE) == 0;
 }
 
 void host_release_memory(void *base, size_t bytes) {

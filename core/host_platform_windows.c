@@ -169,34 +169,25 @@ void *host_reserve_memory(size_t bytes) {
   return VirtualAlloc(NULL, bytes, MEM_RESERVE, PAGE_READWRITE);
 }
 
-bool host_commit_memory(void *base, size_t bytes, size_t *committed_bytes) {
+bool host_commit_memory_range(void *base, size_t offset, size_t bytes) {
   static size_t page_size = 0;
   if (page_size == 0) {
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     page_size = (size_t)info.dwPageSize;
   }
-  size_t current = committed_bytes == NULL ? 0 : *committed_bytes;
-  if (current >= bytes) {
+  if (bytes == 0) {
     return true;
   }
 
-  size_t target = (bytes + page_size - 1) & ~(page_size - 1);
-  size_t rounded_current = (current + page_size - 1) & ~(page_size - 1);
-  size_t delta = target - rounded_current;
-  if (delta == 0) {
-    if (committed_bytes != NULL) {
-      *committed_bytes = target;
-    }
-    return true;
-  }
+  size_t rounded_offset = offset & ~(page_size - 1);
+  size_t prefix = offset - rounded_offset;
+  size_t rounded_bytes = (prefix + bytes + page_size - 1) & ~(page_size - 1);
 
-  uint8_t *commit_base = (uint8_t *)base + rounded_current;
-  if (VirtualAlloc(commit_base, delta, MEM_COMMIT, PAGE_READWRITE) == NULL) {
+  uint8_t *commit_base = (uint8_t *)base + rounded_offset;
+  if (VirtualAlloc(commit_base, rounded_bytes, MEM_COMMIT, PAGE_READWRITE) ==
+      NULL) {
     return false;
-  }
-  if (committed_bytes != NULL) {
-    *committed_bytes = target;
   }
   return true;
 }
@@ -213,8 +204,12 @@ void host_wait_u32(atomic_uint *ptr, uint32_t expected) {
   uint32_t compare = expected;
   while (atomic_load_explicit(ptr, memory_order_acquire) == expected) {
     if (host_wait_on_address_fn != NULL) {
+      /* WaitOnAddress should wake on notify, but on Windows we occasionally
+       * observe progress-sensitive stalls where SQ/CQ waiters sleep forever.
+       * A short timeout makes the ring waits self-heal by rechecking the
+       * sequence counter periodically even if a wake is missed. */
       (void)host_wait_on_address_fn((volatile VOID *)ptr, &compare,
-                                    sizeof(compare), INFINITE);
+                                    sizeof(compare), 1);
     } else {
       SwitchToThread();
       Sleep(1);

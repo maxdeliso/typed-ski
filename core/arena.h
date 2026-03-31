@@ -148,6 +148,7 @@ typedef struct {
   uint64_t offset_node_kind;
   uint64_t offset_node_sym;
   uint64_t offset_buckets;
+  uint32_t max_capacity;
   atomic_uint capacity;
   uint32_t bucket_mask;
   atomic_uint resize_seq;
@@ -172,6 +173,7 @@ typedef struct {
 
 uint32_t initArena(uint32_t initial_capacity);
 uint32_t connectArena(uint32_t ptr_addr);
+uint32_t arena_max_capacity(void);
 void reset(void);
 /** Current allocation top (next node index) and capacity; for diagnostics. */
 uint32_t arena_top(void);
@@ -234,6 +236,7 @@ bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out);
 uint32_t controlSuspensionReason(uint32_t ptr);
 uint32_t controlSuspensionCurrentValue(uint32_t ptr);
 uint32_t controlSuspensionRemainingSteps(uint32_t ptr);
+void arena_debug_ring_occupancy(uint32_t *out_sq_count, uint32_t *out_cq_count);
 
 /* Cooperative native trace dump support (no-op unless thanatos enables it). */
 void arena_trace_init(uint32_t worker_count);

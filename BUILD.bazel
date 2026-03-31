@@ -8,6 +8,11 @@ alias(
 )
 
 alias(
+    name = "performance_test",
+    actual = "//core:performance_test",
+)
+
+alias(
     name = "release_wasm",
     actual = "//wasm:release",
 )
@@ -75,4 +80,9 @@ workspace_command(
 workspace_command(
     name = "ci",
     subcommand = "ci",
+)
+
+workspace_command(
+    name = "vs_project",
+    subcommand = "vs-project",
 )

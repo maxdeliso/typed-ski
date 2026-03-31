@@ -94,5 +94,5 @@
   "toolchain": {
     "deno": "2.7.9"
   },
-  "version": "0.16.8"
+  "version": "0.16.9"
 }

@@ -119,7 +119,9 @@ Deno.test("arenaWasmLoader - invalid env path and exec path are ignored", async 
 
   const restoreDeno = patchDeno({
     envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_PATH" ? "relative/path/without/slashes" : undefined,
+      name === "TYPED_SKI_WASM_PATH"
+        ? "relative/path/without/slashes"
+        : undefined,
     execPath: () => "/usr/bin/deno", // should be ignored
     readFile: (url: URL) => {
       localAttempts.push(url.href);
@@ -161,7 +163,9 @@ Deno.test("arenaWasmLoader - deno runtime exec path and file env URL are ignored
 
   const restoreDeno = patchDeno({
     envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_URL" ? "https://cdn.example.com/release.wasm" : undefined,
+      name === "TYPED_SKI_WASM_URL"
+        ? "https://cdn.example.com/release.wasm"
+        : undefined,
     execPath: () => "/usr/bin/deno",
     readFile: () => {
       // Standard local paths are skipped when TYPED_SKI_WASM_URL is provided.
@@ -236,7 +240,9 @@ Deno.test("arenaWasmLoader - async loading continues after fetch error", async (
 
   const restoreDeno = patchDeno({
     envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_URL" ? "https://cdn.example.com/fail.wasm" : undefined,
+      name === "TYPED_SKI_WASM_URL"
+        ? "https://cdn.example.com/fail.wasm"
+        : undefined,
     execPath: () => "/usr/bin/deno",
     readFile: () => {
       throw new Error("not found");
@@ -338,7 +344,9 @@ Deno.test("arenaWasmLoader - sync loading skips remote candidates and returns nu
 
   const restoreDeno = patchDeno({
     envGet: (name: string) =>
-      name === "TYPED_SKI_WASM_URL" ? "https://cdn.example.com/release.wasm" : undefined,
+      name === "TYPED_SKI_WASM_URL"
+        ? "https://cdn.example.com/release.wasm"
+        : undefined,
     execPath: () => "/usr/bin/deno",
     readFile: () => {
       throw new Error("not found");

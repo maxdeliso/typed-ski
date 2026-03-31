@@ -60,20 +60,18 @@ async function runCommand(command: string[], cwd = projectRoot): Promise<{
 }
 
 async function createTestFile(content: string): Promise<string> {
-  const tempFile = join(projectRoot, `test_integration_${Date.now()}.trip`);
-  await Deno.writeTextFile(tempFile, content);
-  return tempFile;
+  const tempDir = await Deno.makeTempDir();
+  const filePath = join(tempDir, "test.trip");
+  await Deno.writeTextFile(filePath, content);
+  return filePath;
 }
 
 async function cleanupTestFile(filePath: string): Promise<void> {
   try {
-    await Deno.remove(filePath);
-    const tripcFile = filePath.replace(/\.trip$/, ".tripc");
-    if (existsSync(tripcFile)) {
-      await Deno.remove(tripcFile);
-    }
+    const tempDir = dirname(filePath);
+    await Deno.remove(tempDir, { recursive: true });
   } catch {
-    // Ignore cleanup errors
+    // Ignore if doesn't exist
   }
 }
 

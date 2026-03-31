@@ -1,8 +1,8 @@
 /**
  * Version generation script
  *
- * This script reads the version from deno.jsonc and generates a static
- * version file that can be imported by the application code.
+ * This script reads the version from deno.jsonc and generates the static
+ * version metadata imported by lib/shared/version.ts.
  */
 
 const denoJson = await Deno.readTextFile("deno.jsonc");
@@ -23,4 +23,4 @@ export const VERSION = "${version}";
 
 await Deno.writeTextFile("lib/shared/version.generated.ts", content);
 
-console.log(`Successfully generated version file with version: ${version}`);
+console.log(`Successfully generated version metadata with version: ${version}`);

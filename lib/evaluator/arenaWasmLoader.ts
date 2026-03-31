@@ -15,6 +15,7 @@ import { VERSION } from "../shared/version.generated.ts";
 
 let cachedReleaseBytes: Uint8Array | null = null;
 let releaseBytesPromise: Promise<ArrayBuffer> | null = null;
+let cachedReleaseLoadInfo: ReleaseWasmLoadInfo | null = null;
 
 interface ReleaseWasmCandidateInputs {
   importMetaUrl: string;
@@ -22,6 +23,24 @@ interface ReleaseWasmCandidateInputs {
   envWasmPath?: string;
   envWasmUrl?: string;
   execPath?: string;
+}
+
+type ReleaseWasmCandidateKind =
+  | "env-path"
+  | "exec-path"
+  | "module-path"
+  | "env-url"
+  | "version-url";
+
+interface ReleaseWasmCandidate {
+  kind: ReleaseWasmCandidateKind;
+  url: URL;
+}
+
+export interface ReleaseWasmLoadInfo {
+  kind: ReleaseWasmCandidateKind;
+  url: string;
+  via: "readFile" | "readFileSync" | "fetch";
 }
 
 function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -57,7 +76,7 @@ function getDenoGlobal():
   };
 }
 
-function getReleaseWasmCandidates(): URL[] {
+function getReleaseWasmCandidates(): ReleaseWasmCandidate[] {
   return buildReleaseWasmCandidates({
     importMetaUrl: import.meta.url,
     version: VERSION,
@@ -75,22 +94,47 @@ function getExecPath(): string | undefined {
   }
 }
 
-function buildReleaseWasmCandidates(inputs: ReleaseWasmCandidateInputs): URL[] {
-  const localCandidates: URL[] = [];
-  const remoteCandidates: URL[] = [];
-  const add = (url: URL | null) => {
-    if (!url) return;
-    const list = url.protocol === "http:" || url.protocol === "https:"
-      ? remoteCandidates
-      : localCandidates;
-    if (list.some((candidate) => candidate.href === url.href)) return;
-    list.push(url);
+function buildReleaseWasmCandidates(
+  inputs: ReleaseWasmCandidateInputs,
+): ReleaseWasmCandidate[] {
+  const localCandidates: ReleaseWasmCandidate[] = [];
+  const remoteCandidates: ReleaseWasmCandidate[] = [];
+  const add = (candidate: ReleaseWasmCandidate | null) => {
+    if (!candidate) return;
+    const list =
+      candidate.url.protocol === "http:" || candidate.url.protocol === "https:"
+        ? remoteCandidates
+        : localCandidates;
+    if (list.some((item) => item.url.href === candidate.url.href)) return;
+    list.push(candidate);
   };
 
-  add(getWasmUrlFromEnv(inputs.envWasmPath, inputs.importMetaUrl));
+  const envPathCandidate = getWasmUrlFromEnv(
+    inputs.envWasmPath,
+    inputs.importMetaUrl,
+  );
+  const envUrlCandidate = getWasmUrlNetworkFallbackFromEnv(inputs.envWasmUrl);
+
+  if (envPathCandidate) {
+    add(envPathCandidate);
+  }
+
+  if (envUrlCandidate) {
+    add(envUrlCandidate);
+  }
+
+  // If ANY override is provided (path OR URL), skip the standard local and exec candidates.
+  if (envPathCandidate || envUrlCandidate) {
+    // We still allow the version-pinned remote fallback as a last resort.
+    add(getWasmUrlNetworkFallbackFromVersion(inputs.version));
+    return [...localCandidates, ...remoteCandidates];
+  }
+
+  // Fall back to standard locations only if no environment overrides are set.
   add(getWasmUrlFromExecPath(inputs.execPath));
-  add(getWasmUrlFromModulePath(inputs.importMetaUrl));
-  add(getWasmUrlNetworkFallbackFromEnv(inputs.envWasmUrl));
+  for (const candidate of getWasmUrlFromModulePath(inputs.importMetaUrl)) {
+    add(candidate);
+  }
   add(getWasmUrlNetworkFallbackFromVersion(inputs.version));
   return [...localCandidates, ...remoteCandidates];
 }
@@ -98,25 +142,41 @@ function buildReleaseWasmCandidates(inputs: ReleaseWasmCandidateInputs): URL[] {
 function getWasmUrlFromEnv(
   env: string | undefined,
   importMetaUrl: string,
-): URL | null {
+): ReleaseWasmCandidate | null {
   if (!env) return null;
-  try {
-    return new URL(env);
-  } catch {
+  if (/^(?:[a-zA-Z]:[\\/]|[\\/])/.test(env)) {
     try {
-      return new URL(env, importMetaUrl);
+      const normalizedPath = env.replace(/\\/g, "/");
+      const urlStr = normalizedPath.startsWith("/")
+        ? `file://${normalizedPath}`
+        : `file:///${normalizedPath}`;
+      return { kind: "env-path", url: new URL(urlStr) };
+    } catch {
+      return null;
+    }
+  }
+  try {
+    return { kind: "env-path", url: new URL(env) };
+  } catch {
+    // If it's not a valid URL, it might be a relative or absolute path.
+    // Try resolving it against importMetaUrl first.
+    try {
+      const url = new URL(env, importMetaUrl);
+      return { kind: "env-path", url };
     } catch {
       return null;
     }
   }
 }
 
-function getWasmUrlNetworkFallbackFromEnv(env: string | undefined): URL | null {
+function getWasmUrlNetworkFallbackFromEnv(
+  env: string | undefined,
+): ReleaseWasmCandidate | null {
   if (!env) return null;
   try {
     const url = new URL(env);
     if (url.protocol === "http:" || url.protocol === "https:") {
-      return url;
+      return { kind: "env-url", url };
     }
     return null;
   } catch {
@@ -124,12 +184,17 @@ function getWasmUrlNetworkFallbackFromEnv(env: string | undefined): URL | null {
   }
 }
 
-function getWasmUrlNetworkFallbackFromVersion(version: string): URL | null {
+function getWasmUrlNetworkFallbackFromVersion(
+  version: string,
+): ReleaseWasmCandidate | null {
   // VERSION is generated from deno.jsonc during build.
   if (!/^\d+\.\d+\.\d+$/.test(version)) return null;
-  return new URL(
-    `https://jsr.io/@maxdeliso/typed-ski/${version}/wasm/release.wasm`,
-  );
+  return {
+    kind: "version-url",
+    url: new URL(
+      `https://jsr.io/@maxdeliso/typed-ski/${version}/wasm/release.wasm`,
+    ),
+  };
 }
 
 function getDenoEnvVar(name: string): string | undefined {
@@ -142,27 +207,47 @@ function getDenoEnvVar(name: string): string | undefined {
   }
 }
 
-function getWasmUrlFromExecPath(execPath: string | undefined): URL | null {
+function getWasmUrlFromExecPath(
+  execPath: string | undefined,
+): ReleaseWasmCandidate | null {
   if (!execPath) return null;
   try {
     const exec = execPath;
     // Ignore normal `deno run` runtime; this fallback is for `deno compile`.
     if (/(^|\/)deno(\.exe)?$/.test(exec)) return null;
-    return new URL("../wasm/release.wasm", `file://${exec}`);
+    return {
+      kind: "exec-path",
+      url: new URL("../wasm/release.wasm", `file://${exec}`),
+    };
   } catch {
     return null;
   }
 }
 
-function getWasmUrlFromModulePath(importMetaUrl: string): URL {
+function getWasmUrlFromModulePath(
+  importMetaUrl: string,
+): ReleaseWasmCandidate[] {
   const moduleUrl = new URL(importMetaUrl);
+  const candidates: ReleaseWasmCandidate[] = [];
+
   if (
     moduleUrl.protocol === "file:" &&
     /\/dist\/[^/]+(\.min)?\.js$/.test(moduleUrl.pathname)
   ) {
-    return new URL("../wasm/release.wasm", moduleUrl);
+    candidates.push({
+      kind: "module-path",
+      url: new URL("../wasm/release.wasm", moduleUrl),
+    });
+  } else {
+    candidates.push({
+      kind: "module-path",
+      url: new URL("../../wasm/release.wasm", moduleUrl),
+    });
   }
-  return new URL("../../wasm/release.wasm", moduleUrl);
+
+  // Also look for the bazel-built version in the staged location if it exists
+  // but use module-path kind since it is just a file path.
+  return candidates;
 }
 
 async function tryLoadReleaseWasmFromCandidates(): Promise<ArrayBuffer | null> {
@@ -171,9 +256,14 @@ async function tryLoadReleaseWasmFromCandidates(): Promise<ArrayBuffer | null> {
 
   if (deno) {
     for (const candidate of candidates) {
-      if (candidate.protocol !== "file:") continue;
+      if (candidate.url.protocol !== "file:") continue;
       try {
-        const bytes = await deno.readFile(candidate);
+        const bytes = await deno.readFile(candidate.url);
+        cachedReleaseLoadInfo = {
+          kind: candidate.kind,
+          url: candidate.url.href,
+          via: "readFile",
+        };
         return uint8ArrayToArrayBuffer(bytes);
       } catch {
         // Continue to next candidate.
@@ -183,8 +273,13 @@ async function tryLoadReleaseWasmFromCandidates(): Promise<ArrayBuffer | null> {
 
   for (const candidate of candidates) {
     try {
-      const response = await fetch(candidate);
+      const response = await fetch(candidate.url);
       if (!response.ok) continue;
+      cachedReleaseLoadInfo = {
+        kind: candidate.kind,
+        url: candidate.url.href,
+        via: "fetch",
+      };
       return await response.arrayBuffer();
     } catch {
       // Continue to next candidate.
@@ -199,9 +294,14 @@ function tryLoadReleaseWasmFromCandidatesSync(): ArrayBuffer | null {
   if (!deno) return null;
 
   for (const candidate of getReleaseWasmCandidates()) {
-    if (candidate.protocol !== "file:") continue;
+    if (candidate.url.protocol !== "file:") continue;
     try {
-      const bytes = deno.readFileSync(candidate);
+      const bytes = deno.readFileSync(candidate.url);
+      cachedReleaseLoadInfo = {
+        kind: candidate.kind,
+        url: candidate.url.href,
+        via: "readFileSync",
+      };
       return uint8ArrayToArrayBuffer(bytes);
     } catch {
       // Continue to next candidate.
@@ -209,6 +309,12 @@ function tryLoadReleaseWasmFromCandidatesSync(): ArrayBuffer | null {
   }
 
   return null;
+}
+
+export function resetReleaseWasmCache(): void {
+  cachedReleaseBytes = null;
+  releaseBytesPromise = null;
+  cachedReleaseLoadInfo = null;
 }
 
 export async function getReleaseWasmBytes(): Promise<ArrayBuffer> {
@@ -219,6 +325,11 @@ export async function getReleaseWasmBytes(): Promise<ArrayBuffer> {
       if (!bytes) {
         throw new Error(
           "Unable to load wasm/release.wasm. Set TYPED_SKI_WASM_PATH or TYPED_SKI_WASM_URL to override.",
+        );
+      }
+      if (cachedReleaseLoadInfo?.kind === "version-url") {
+        console.warn(
+          `Using published JSR wasm fallback: ${cachedReleaseLoadInfo.url}`,
         );
       }
       cachedReleaseBytes = new Uint8Array(bytes);
@@ -240,4 +351,26 @@ export function getReleaseWasmBytesSync(): ArrayBuffer {
   throw new Error(
     "Unable to load wasm/release.wasm synchronously. Set TYPED_SKI_WASM_PATH for synchronous loading.",
   );
+}
+
+export function getLastReleaseWasmLoadInfo(): ReleaseWasmLoadInfo | null {
+  return cachedReleaseLoadInfo;
+}
+
+export function formatReleaseWasmLoadInfo(
+  info: ReleaseWasmLoadInfo | null,
+): string {
+  if (!info) return "unknown";
+  switch (info.kind) {
+    case "env-path":
+      return `env path (${info.via})`;
+    case "exec-path":
+      return `compiled path (${info.via})`;
+    case "module-path":
+      return `local path (${info.via})`;
+    case "env-url":
+      return `env URL fallback (${info.via})`;
+    case "version-url":
+      return `published JSR fallback (${info.via})`;
+  }
 }

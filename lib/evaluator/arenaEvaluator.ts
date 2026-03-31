@@ -376,12 +376,16 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
   /**
    * Instantiate a WASM arena evaluator with a fresh shared memory layout.
-   * Always allocates its own WebAssembly.Memory configured for 4GB max.
+   * Always allocates its own WebAssembly.Memory configured for the largest
+   * practical wasm32 shared-memory maximum.
    */
   static instantiateFromBytes(wasmBytes: BufferSource): ArenaEvaluatorWasm {
+    const MAX_PAGES = 65535;
     const wasmMemory = new WebAssembly.Memory({
-      initial: 256, // Start with 16MB (256 pages)
-      maximum: 65536, // Max 4GB (65536 pages)
+      // Bazel-built release.wasm now declares a 257-page shared-memory minimum,
+      // so the sync evaluator must allocate at least that much imported memory.
+      initial: 257,
+      maximum: MAX_PAGES,
       shared: true, // Enable SharedArrayBuffer support
     });
 

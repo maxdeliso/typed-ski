@@ -1,0 +1,4 @@
+.git
+.deno-cache
+coverage
+dist

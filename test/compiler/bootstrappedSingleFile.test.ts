@@ -1,7 +1,11 @@
 import { dirname, join } from "std/path";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
-import { getThanatosSession, toDagWire } from "../thanatosHarness.test.ts";
+import {
+  getThanatosSession,
+  thanatosAvailable,
+  toDagWire,
+} from "../thanatosHarness.test.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { lowerToSKI } from "../../lib/linker/moduleLinker.ts";
@@ -87,6 +91,7 @@ const PHASE_BUDGETS: Record<string, number> = {
 
 Deno.test({
   name: "Bootstrapped Single-File Compiler Telemetry",
+  ignore: !thanatosAvailable(),
   fn: async (t) => {
     const ps = await compileAndLinkCompiler();
     const session = await getThanatosSession();

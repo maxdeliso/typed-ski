@@ -1,3 +1,9 @@
+#ifdef _WIN32
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif
+
 #include "arena.h"
 #include "session.h"
 #include "ski_io.h"
@@ -6,7 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 static void assert_contains(const char *haystack, const char *needle) {
   assert(strstr(haystack, needle) != NULL);
@@ -49,6 +54,12 @@ static int read_one_byte_file(const char *path) {
   return byte;
 }
 
+static void read_stream_to_buffer(FILE *stream, char *out, size_t out_cap) {
+  rewind(stream);
+  size_t n = fread(out, 1, out_cap - 1, stream);
+  out[n] = '\0';
+}
+
 static void test_daemon_success_paths(void) {
   printf("test_daemon_success_paths...\n");
   reset();
@@ -69,7 +80,7 @@ static void test_daemon_success_paths(void) {
 
   char output[8192];
   memset(output, 0, sizeof(output));
-  FILE *mem = fmemopen(output, sizeof(output), "w");
+  FILE *mem = tmpfile();
   assert(mem != NULL);
 
   ThanatosSession s;
@@ -78,6 +89,7 @@ static void test_daemon_success_paths(void) {
   thanatos_session_handle_line(&s, "PING", 4);
   thanatos_session_handle_line(&s, "STATS", 5);
   thanatos_session_handle_line(&s, "RESET", 5);
+  thanatos_session_handle_line(&s, "TRACE_DUMP", 10);
 
   char command[2048];
   int n = snprintf(command, sizeof(command), "REDUCE %s", reduce_dag);
@@ -114,6 +126,7 @@ static void test_daemon_success_paths(void) {
   thanatos_session_handle_line(&s, command, (size_t)n);
 
   fflush(mem);
+  read_stream_to_buffer(mem, output, sizeof(output));
 
   char expected[256];
   assert_contains(output, "OK\n");
@@ -152,7 +165,7 @@ static void test_daemon_errors(void) {
 
   char output[16384];
   memset(output, 0, sizeof(output));
-  FILE *mem = fmemopen(output, sizeof(output), "w");
+  FILE *mem = tmpfile();
   assert(mem != NULL);
 
   ThanatosSession s;
@@ -198,13 +211,6 @@ static void test_daemon_errors(void) {
   assert(n > 0 && (size_t)n < sizeof(command));
   thanatos_session_handle_line(&s, command, (size_t)n);
 
-  if (access("/dev/full", F_OK) == 0) {
-    n = snprintf(command, sizeof(command), "REDUCE_FILE /dev/null /dev/full %s",
-                 identity_dag);
-    assert(n > 0 && (size_t)n < sizeof(command));
-    thanatos_session_handle_line(&s, command, (size_t)n);
-  }
-
   char long_path[1025];
   memset(long_path, 'a', sizeof(long_path) - 1);
   long_path[sizeof(long_path) - 1] = '\0';
@@ -220,6 +226,7 @@ static void test_daemon_errors(void) {
   thanatos_session_handle_line(&s, command, (size_t)n);
 
   fflush(mem);
+  read_stream_to_buffer(mem, output, sizeof(output));
 
   assert_contains(output, "ERR unknown command\n");
   assert_contains(output, "ERR REDUCE requires payload\n");
@@ -235,9 +242,6 @@ static void test_daemon_errors(void) {
   assert_contains(output, "ERR path too long (max 1023 chars)\n");
   assert_contains(output, "ERR STEP requires step_count and DAG payload\n");
   assert_contains(output, "ERR STEP requires DAG payload\n");
-  if (access("/dev/full", F_OK) == 0) {
-    assert_contains(output, "ERR ftruncate output failed\n");
-  }
 
   remove(input_path);
   remove(empty_input_path);
@@ -250,9 +254,10 @@ int main(void) {
   ThanatosConfig config = {
       .num_workers = 0,
       .arena_capacity = 0,
-      .stdin_fd = -1,
+      .stdin_path = NULL,
+      .trace_dir = NULL,
+      .trace_timeout_ms = 0,
   };
-  setenv("THANATOS_TRACE", "1", 1);
   thanatos_init(config);
   thanatos_start_threads(true);
   thanatos_start_threads(true);

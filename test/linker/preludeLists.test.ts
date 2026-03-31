@@ -7,7 +7,6 @@ import { loadInput } from "../util/fileLoader.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
 Deno.test("prelude scott lists support head/tail", async () => {
   const source = loadInput("preludeListHeadTail.trip", __dirname);
   const evaluator = await ParallelArenaEvaluatorWasm.create();
@@ -78,19 +77,19 @@ Deno.test({
   name: "trip harness evaluates IO programs",
   fn: async () => {
     const source = loadInput("echoOne.trip", __dirname);
-
-    const input = new Uint8Array([65]);
-    const { result, stdout, evaluator } = await evaluateTripWithIo(source, {
-      stdin: input,
-      stdoutMaxBytes: 1,
-    });
-
+    const evaluator = await ParallelArenaEvaluatorWasm.create();
     try {
+      const input = new Uint8Array([65]);
+      const { result, stdout } = await evaluateTripWithIo(source, {
+        stdin: input,
+        stdoutMaxBytes: 1,
+        evaluator,
+      });
       assertEquals(stdout.length, 1);
       assertEquals(stdout[0], 65);
       assertEquals((result as { value: number }).value, 65);
     } finally {
-      (evaluator as ParallelArenaEvaluatorWasm).terminate();
+      evaluator.terminate();
     }
   },
 });

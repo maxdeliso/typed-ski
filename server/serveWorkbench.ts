@@ -1,6 +1,13 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-env --allow-run
 
-import { join } from "std/path";
+import {
+  dirname,
+  fromFileUrl,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "std/path";
 
 /**
  * Simple HTTP server for WASM profiling demo
@@ -12,16 +19,13 @@ import { join } from "std/path";
 const PORT = parseInt(Deno.args[0] || "8080", 10);
 
 // Get project root (parent of server/)
-const serverFileUrl = import.meta.url;
-const serverDirUrl = new URL(".", serverFileUrl);
-const projectRootUrl = new URL("..", serverDirUrl);
-const projectRootPath = Deno.realPathSync(projectRootUrl.pathname);
-const projectRootPrefix = projectRootPath.endsWith("/")
-  ? projectRootPath
-  : `${projectRootPath}/`;
+const serverDirPath = dirname(fromFileUrl(import.meta.url));
+const projectRootPath = Deno.realPathSync(resolve(serverDirPath, ".."));
 
 function isWithinProjectRoot(path: string): boolean {
-  return path === projectRootPath || path.startsWith(projectRootPrefix);
+  const relPath = relative(projectRootPath, path);
+  return relPath === "" ||
+    (!relPath.startsWith("..") && relPath !== ".." && !isAbsolute(relPath));
 }
 
 // Base headers for SharedArrayBuffer support (reused across requests)
@@ -73,8 +77,7 @@ async function handler(req: Request): Promise<Response> {
   const localPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
 
   // Resolve to absolute path from project root
-  const fullPath = new URL(localPath, projectRootUrl);
-  const fullPathString = fullPath.pathname;
+  const fullPathString = resolve(projectRootPath, localPath);
 
   try {
     // Block path traversal attempts before touching the filesystem.
@@ -106,7 +109,8 @@ async function handler(req: Request): Promise<Response> {
           `Error: Pre-bundled JavaScript file not found for ${localPath}.\n` +
           `Expected at: ${jsPath}\n\n` +
           `The workbench now serves browser bundles from dist/. ` +
-          `Please run 'make bundle' or 'make start' to generate the necessary artifacts.`;
+          `Please run 'bazelisk run //:hephaestus_assets' ` +
+          `or 'bazelisk run //:serve_hephaestus' to generate the necessary artifacts.`;
 
         console.error(errorMsg);
         return new Response(errorMsg, {

@@ -5,11 +5,11 @@
 typedef struct {
   uint32_t num_workers;
   uint32_t arena_capacity;
-  /** Optional runtime stdin stream for READ_ONE (separate from program/SKI
-   * input). Pass -1 when no runtime stdin source is available. Thanatos reads
-   * one byte lazily for each blocked READ_ONE suspension and takes ownership of
-   * the fd (it is closed by thanatos_shutdown). */
-  int stdin_fd;
+  /** Optional runtime stdin path for READ_ONE (separate from program/SKI
+   * input). Pass NULL when no runtime stdin source is available. Thanatos reads
+   * one byte lazily for each blocked READ_ONE suspension and owns the opened
+   * handle for the lifetime of the runtime. */
+  const char *stdin_path;
   /** Optional directory for signal-triggered JSON trace dumps. NULL or empty disables tracing. */
   const char *trace_dir;
   /** Cooperative snapshot wait budget in milliseconds. */
@@ -17,7 +17,7 @@ typedef struct {
 } ThanatosConfig;
 
 /* READ_ONE semantics now match JS/WASM more closely: if no byte is available
- * yet, native waits until one arrives instead of failing. If stdin_fd == -1,
+ * yet, native waits until one arrives instead of failing. If stdin_path == NULL,
  * READ_ONE remains parked indefinitely. For regular files, EOF is treated as a
  * temporary condition so appending later bytes will wake pending reads. */
 
@@ -26,6 +26,7 @@ void thanatos_init(ThanatosConfig config);
 /** Set a callback for arena stdout bytes. If set, thanatos_reduce and the
  * pump will call this instead of putchar(). */
 void thanatos_set_stdout_handler(void (*handler)(uint8_t, void *), void *ctx);
+void thanatos_request_trace_dump(void);
 
 /** Start worker and dispatcher threads. If enable_stdout_pump is true, also
  * start the thread that forwards arena stdout to process stdout; set false

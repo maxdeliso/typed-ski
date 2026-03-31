@@ -125,7 +125,7 @@ static int test_deep_left_spine(void) {
 }
 
 int main(void) {
-  if (initArena(1u << 20) == 0) {
+  if (!initArena(1u << 20)) {
     fprintf(stderr, "FAIL: initArena\n");
     return 1;
   }
@@ -135,5 +135,7 @@ int main(void) {
   r |= test_malformed_refs();
   r |= test_deep_left_spine();
 
+  fflush(stdout);
+  fflush(stderr);
   return r ? 1 : 0;
 }

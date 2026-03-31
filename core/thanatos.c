@@ -1,16 +1,22 @@
+#ifdef _WIN32
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif
+
 #include "thanatos.h"
+#include "host_platform.h"
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
+#ifndef _WIN32
 #include <signal.h>
+#endif
 #include <string.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -24,8 +30,8 @@ typedef struct {
   uint32_t result_node;
   uint32_t event_kind;
   bool done;
-  pthread_cond_t cond;
-  pthread_mutex_t mutex;
+  HostCond cond;
+  HostMutex mutex;
 } PendingReq;
 
 typedef struct {
@@ -33,75 +39,76 @@ typedef struct {
   uint32_t req_id;
 } IoWaitEntry;
 
-static pthread_t *workers = NULL;
+static HostThread *workers = NULL;
 static uint32_t num_workers_count = 0;
 static atomic_uint next_req_id = 1;
 static atomic_bool is_thanatos_initialized = false;
 static int dispatcher_trace = 0;
 static atomic_ullong dispatcher_events = 0;
 static atomic_ullong dispatcher_dropped = 0;
-static pthread_t dispatcher_thread;
-static pthread_t stdout_thread;
-static pthread_t stdin_thread;
+static HostThread dispatcher_thread;
+static HostThread stdout_thread;
+static HostThread stdin_thread;
 static bool stdout_thread_started = false;
 static bool stdin_thread_started = false;
-static pthread_t tracer_thread;
+static HostThread tracer_thread;
 static bool tracer_thread_started = false;
 static bool tracer_enabled = false;
 static uint32_t tracer_timeout_ms = 1000;
 static char tracer_dir[PATH_MAX];
-static int tracer_wakeup_pipe[2] = {-1, -1};
-static volatile sig_atomic_t tracer_dump_epoch = 0;
+static HostEvent tracer_event;
+static bool tracer_event_initialized = false;
+static atomic_uint tracer_requested_epoch = 0;
+#ifndef _WIN32
+static volatile sig_atomic_t tracer_signal_epoch = 0;
+#endif
 
-static pthread_mutex_t io_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t stdout_publish_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t stdin_demand_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t stdin_demand_cvar = PTHREAD_COND_INITIALIZER;
+static HostMutex io_wait_mutex;
+static HostMutex stdout_publish_mutex;
+static HostMutex stdin_demand_mutex;
+static HostCond stdin_demand_cvar;
+static HostMutex pending_req_mutex;
+static HostCond pending_req_cvar;
+static bool runtime_sync_initialized = false;
 
 /** Optional runtime stdout handler; if NULL, uses putchar(). */
 static void (*stdout_handler)(uint8_t, void *) = NULL;
 static void *stdout_handler_ctx = NULL;
 
 void thanatos_set_stdout_handler(void (*handler)(uint8_t, void *), void *ctx) {
-  pthread_mutex_lock(&stdout_publish_mutex);
+  host_mutex_lock(&stdout_publish_mutex);
   stdout_handler = handler;
   stdout_handler_ctx = ctx;
-  pthread_mutex_unlock(&stdout_publish_mutex);
+  host_mutex_unlock(&stdout_publish_mutex);
 }
-
-/** Optional runtime stdin stream for READ_ONE (set from config at init). */
-static int stdin_stream_fd = -1;
 
 static PendingReq pending_reqs[MAX_PENDING_REQS];
 static IoWaitEntry io_wait_map[MAX_IO_WAIT];
 static uint32_t stdin_demand_count = 0;
+static bool runtime_stdin_available = false;
 
 /** Pump blocks on this when arena stdout ring is empty; dispatcher signals
  * after each CQE so pump wakes when there may be new stdout (no fixed sleep).
  */
-static pthread_mutex_t pump_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t pump_cvar = PTHREAD_COND_INITIALIZER;
+static HostMutex pump_mutex;
+static HostCond pump_cvar;
 static bool pump_wakeup_pending = false;
 
 static uint32_t io_wait_remove(uint32_t node_id);
 
-static void must_pthread_create(pthread_t *thread, void *(*entry)(void *),
-                                void *arg, const char *name) {
-  int rc = pthread_create(thread, NULL, entry, arg);
+static void must_thread_create(HostThread *thread, HostThreadFn entry, void *arg,
+                               const char *name) {
+  int rc = host_thread_create(thread, entry, arg);
   if (rc != 0) {
-    fprintf(stderr, "Thanatos: pthread_create(%s) failed (rc=%d)\n", name, rc);
+    fprintf(stderr, "Thanatos: thread_create(%s) failed (rc=%d)\n", name, rc);
     abort();
   }
 }
 
+#ifndef _WIN32
 static void tracer_signal_handler(int signo) {
   (void)signo;
-  tracer_dump_epoch++;
-  if (tracer_wakeup_pipe[1] >= 0) {
-    uint8_t byte = 1;
-    ssize_t ignored = write(tracer_wakeup_pipe[1], &byte, 1);
-    (void)ignored;
-  }
+  tracer_signal_epoch++;
 }
 
 static void install_tracer_signal_handler(void) {
@@ -117,6 +124,18 @@ static void install_tracer_signal_handler(void) {
     tracer_enabled = false;
   }
 }
+#else
+static void install_tracer_signal_handler(void) {}
+#endif
+
+void thanatos_request_trace_dump(void) {
+  if (!tracer_enabled)
+    return;
+  atomic_fetch_add_explicit(&tracer_requested_epoch, 1, memory_order_release);
+  if (tracer_event_initialized) {
+    host_event_notify(&tracer_event);
+  }
+}
 
 static bool tracer_make_dump_path(uint32_t epoch, char *out, size_t out_cap) {
   if (out == NULL || out_cap == 0)
@@ -124,8 +143,12 @@ static bool tracer_make_dump_path(uint32_t epoch, char *out, size_t out_cap) {
 
   char suffix[64];
   int suffix_len = snprintf(suffix, sizeof(suffix),
-                            "/thanatos-trace-pid%d-epoch%u.json",
-                            (int)getpid(), epoch);
+#ifdef _WIN32
+                            "\\thanatos-trace-pid%u-epoch%u.json",
+#else
+                            "/thanatos-trace-pid%u-epoch%u.json",
+#endif
+                            host_process_id(), epoch);
   if (suffix_len < 0 || (size_t)suffix_len >= sizeof(suffix))
     return false;
 
@@ -143,20 +166,19 @@ static void *tracer_thread_main(void *arg) {
   (void)arg;
   uint32_t handled_epoch = 0;
   while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
-    uint8_t buf[32];
-    ssize_t n = read(tracer_wakeup_pipe[0], buf, sizeof(buf));
-    if (n < 0) {
-      if (errno == EINTR)
-        continue;
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        usleep(1000);
-        continue;
-      }
-      break;
+    uint32_t latest_epoch =
+        atomic_load_explicit(&tracer_requested_epoch, memory_order_acquire);
+#ifndef _WIN32
+    if ((uint32_t)tracer_signal_epoch > latest_epoch) {
+      latest_epoch = (uint32_t)tracer_signal_epoch;
+    }
+#endif
+    if (handled_epoch >= latest_epoch) {
+      (void)host_event_wait(&tracer_event, 50);
+      continue;
     }
     if (!atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire))
       break;
-    uint32_t latest_epoch = (uint32_t)tracer_dump_epoch;
     while (handled_epoch < latest_epoch) {
       handled_epoch++;
       arena_trace_request_epoch(handled_epoch);
@@ -183,7 +205,8 @@ static void wake_one_stdin_waiter(void) {
   if (arena_stdin_wait_try_dequeue(&woke_node)) {
     uint32_t woke_req = io_wait_remove(woke_node);
     if (woke_req != 0) {
-      while (hostSubmit(woke_node, woke_req, 0) != 0) { /* spin */
+      while (hostSubmit(woke_node, woke_req, 0) != 0) {
+        host_yield();
       }
     }
   }
@@ -194,7 +217,8 @@ static void wake_one_stdout_waiter(void) {
   if (arena_stdout_wait_try_dequeue(&woke_node)) {
     uint32_t woke_req = io_wait_remove(woke_node);
     if (woke_req != 0) {
-      while (hostSubmit(woke_node, woke_req, 0) != 0) { /* spin */
+      while (hostSubmit(woke_node, woke_req, 0) != 0) {
+        host_yield();
       }
     }
   }
@@ -231,25 +255,21 @@ static void *worker_thread_main(void *arg) {
 }
 
 static bool read_stdin_byte_blocking(uint8_t *byte_out) {
-  if (byte_out == NULL || stdin_stream_fd < 0)
+  if (byte_out == NULL)
     return false;
   while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
-    ssize_t n = read(stdin_stream_fd, byte_out, 1);
-    if (n == 1)
+    int rc = host_runtime_input_read_byte(byte_out);
+    if (rc == 1)
       return true;
-    if (n == 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
-      usleep(1000);
+    if (rc == 0) {
+      host_sleep_ms(1);
       continue;
     }
-    if (errno == EINTR)
-      continue;
-    if (errno == EBADF &&
-        !atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
+    if (!atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
       return false;
     }
-    fprintf(stderr, "Thanatos: stdin read failed (errno=%d); retrying\n",
-            errno);
-    usleep(1000);
+    fprintf(stderr, "Thanatos: stdin read failed; retrying\n");
+    host_sleep_ms(1);
   }
   return false;
 }
@@ -257,18 +277,18 @@ static bool read_stdin_byte_blocking(uint8_t *byte_out) {
 static void *stdin_thread_main(void *arg) {
   (void)arg;
   while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
-    pthread_mutex_lock(&stdin_demand_mutex);
+    host_mutex_lock(&stdin_demand_mutex);
     while (
         atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire) &&
         stdin_demand_count == 0) {
-      pthread_cond_wait(&stdin_demand_cvar, &stdin_demand_mutex);
+      host_cond_wait(&stdin_demand_cvar, &stdin_demand_mutex);
     }
     if (!atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
-      pthread_mutex_unlock(&stdin_demand_mutex);
+      host_mutex_unlock(&stdin_demand_mutex);
       break;
     }
     stdin_demand_count--;
-    pthread_mutex_unlock(&stdin_demand_mutex);
+    host_mutex_unlock(&stdin_demand_mutex);
 
     uint8_t byte;
     if (!read_stdin_byte_blocking(&byte))
@@ -284,16 +304,16 @@ static bool io_wait_is_stdin(uint32_t node_id) {
 }
 
 static void io_wait_register(uint32_t node_id, uint32_t req_id) {
-  pthread_mutex_lock(&io_wait_mutex);
+  host_mutex_lock(&io_wait_mutex);
   for (int i = 0; i < MAX_IO_WAIT; i++) {
     if (io_wait_map[i].node_id == EMPTY) {
       io_wait_map[i].node_id = node_id;
       io_wait_map[i].req_id = req_id;
-      pthread_mutex_unlock(&io_wait_mutex);
+      host_mutex_unlock(&io_wait_mutex);
       return;
     }
   }
-  pthread_mutex_unlock(&io_wait_mutex);
+  host_mutex_unlock(&io_wait_mutex);
   fprintf(
       stderr,
       "Thanatos: IO wait map full (node_id=%u req_id=%u); aborting to avoid "
@@ -305,17 +325,17 @@ static void io_wait_register(uint32_t node_id, uint32_t req_id) {
 /** Look up req_id by node_id and remove the entry. Returns req_id or 0 if not
  * found. */
 static uint32_t io_wait_remove(uint32_t node_id) {
-  pthread_mutex_lock(&io_wait_mutex);
+  host_mutex_lock(&io_wait_mutex);
   for (int i = 0; i < MAX_IO_WAIT; i++) {
     if (io_wait_map[i].node_id == node_id) {
       uint32_t req_id = io_wait_map[i].req_id;
       io_wait_map[i].node_id = EMPTY;
       io_wait_map[i].req_id = 0;
-      pthread_mutex_unlock(&io_wait_mutex);
+      host_mutex_unlock(&io_wait_mutex);
       return req_id;
     }
   }
-  pthread_mutex_unlock(&io_wait_mutex);
+  host_mutex_unlock(&io_wait_mutex);
   return 0;
 }
 
@@ -353,17 +373,17 @@ dispatcher_thread_main(void *arg) {
 
     bool found = false;
     for (int i = 0; i < MAX_PENDING_REQS; i++) {
-      pthread_mutex_lock(&pending_reqs[i].mutex);
+      host_mutex_lock(&pending_reqs[i].mutex);
       if (pending_reqs[i].req_id == req_id && !pending_reqs[i].done) {
         pending_reqs[i].result_node = node;
         pending_reqs[i].event_kind = event;
         pending_reqs[i].done = true;
-        pthread_cond_signal(&pending_reqs[i].cond);
+        host_cond_signal(&pending_reqs[i].cond);
         found = true;
-        pthread_mutex_unlock(&pending_reqs[i].mutex);
+        host_mutex_unlock(&pending_reqs[i].mutex);
         break;
       }
-      pthread_mutex_unlock(&pending_reqs[i].mutex);
+      host_mutex_unlock(&pending_reqs[i].mutex);
     }
 
     if (!found) {
@@ -377,10 +397,10 @@ dispatcher_thread_main(void *arg) {
               req_id, event, node, dropped);
     }
     /* Wake stdout pump so it can drain if a worker just enqueued. */
-    pthread_mutex_lock(&pump_mutex);
+    host_mutex_lock(&pump_mutex);
     pump_wakeup_pending = true;
-    pthread_cond_signal(&pump_cvar);
-    pthread_mutex_unlock(&pump_mutex);
+    host_cond_signal(&pump_cvar);
+    host_mutex_unlock(&pump_mutex);
   }
   return NULL;
 }
@@ -391,25 +411,25 @@ static void *stdout_thread_main(void *arg) {
   (void)arg;
   while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
     bool published = false;
-    pthread_mutex_lock(&stdout_publish_mutex);
+    host_mutex_lock(&stdout_publish_mutex);
     published = publish_one_stdout_byte_locked();
     if (published)
       fflush(stdout);
-    pthread_mutex_unlock(&stdout_publish_mutex);
+    host_mutex_unlock(&stdout_publish_mutex);
     if (!published) {
-      pthread_mutex_lock(&pump_mutex);
+      host_mutex_lock(&pump_mutex);
       while (atomic_load_explicit(&is_thanatos_initialized,
                                   memory_order_acquire) &&
              !pump_wakeup_pending) {
-        pthread_cond_wait(&pump_cvar, &pump_mutex);
+        host_cond_wait(&pump_cvar, &pump_mutex);
       }
       pump_wakeup_pending = false;
-      pthread_mutex_unlock(&pump_mutex);
+      host_mutex_unlock(&pump_mutex);
     }
   }
-  pthread_mutex_lock(&stdout_publish_mutex);
+  host_mutex_lock(&stdout_publish_mutex);
   drain_stdout_locked();
-  pthread_mutex_unlock(&stdout_publish_mutex);
+  host_mutex_unlock(&stdout_publish_mutex);
   return NULL;
 }
 
@@ -419,21 +439,46 @@ void thanatos_init(ThanatosConfig config) {
 
   if (config.arena_capacity == 0)
     config.arena_capacity = 1 << 24;
-  if (config.num_workers == 0) {
-    long n = sysconf(_SC_NPROCESSORS_ONLN);
-    config.num_workers = (n > 0 && n <= 0xffffffffu) ? (uint32_t)n : 4;
+  if (config.num_workers == 0)
+    config.num_workers = host_cpu_count();
+
+  if (!initArena(config.arena_capacity)) {
+    fprintf(stderr, "Thanatos: initArena failed\n");
   }
 
-  initArena(config.arena_capacity);
+  if (!runtime_sync_initialized) {
+    host_mutex_init(&io_wait_mutex);
+    host_mutex_init(&stdout_publish_mutex);
+    host_mutex_init(&stdin_demand_mutex);
+    host_mutex_init(&pump_mutex);
+    host_mutex_init(&pending_req_mutex);
+    host_cond_init(&stdin_demand_cvar);
+    host_cond_init(&pump_cvar);
+    host_cond_init(&pending_req_cvar);
+    runtime_sync_initialized = true;
+  }
 
-  stdin_stream_fd = config.stdin_fd;
+  if (!tracer_event_initialized) {
+    host_event_init(&tracer_event);
+    tracer_event_initialized = true;
+  }
+
+  host_runtime_input_close();
+  runtime_stdin_available = false;
+  if (config.stdin_path != NULL && config.stdin_path[0] != '\0' &&
+      !host_runtime_input_open(config.stdin_path)) {
+    fprintf(stderr, "Thanatos: cannot open runtime stdin path %s\n",
+            config.stdin_path);
+  } else if (config.stdin_path != NULL && config.stdin_path[0] != '\0') {
+    runtime_stdin_available = true;
+  }
   stdin_demand_count = 0;
 
   for (int i = 0; i < MAX_PENDING_REQS; i++) {
     pending_reqs[i].req_id = 0;
     pending_reqs[i].done = false;
-    pthread_mutex_init(&pending_reqs[i].mutex, NULL);
-    pthread_cond_init(&pending_reqs[i].cond, NULL);
+    host_mutex_init(&pending_reqs[i].mutex);
+    host_cond_init(&pending_reqs[i].cond);
   }
   for (int i = 0; i < MAX_IO_WAIT; i++) {
     io_wait_map[i].node_id = EMPTY;
@@ -445,12 +490,17 @@ void thanatos_init(ThanatosConfig config) {
       (trace_env != NULL && trace_env[0] != '\0' && trace_env[0] != '0');
   atomic_store_explicit(&dispatcher_events, 0, memory_order_relaxed);
   atomic_store_explicit(&dispatcher_dropped, 0, memory_order_relaxed);
+  atomic_store_explicit(&next_req_id, 1, memory_order_release);
   pump_wakeup_pending = false;
 
   tracer_enabled = (config.trace_dir != NULL && config.trace_dir[0] != '\0');
-  tracer_timeout_ms = (config.trace_timeout_ms == 0) ? 1000 : config.trace_timeout_ms;
+  tracer_timeout_ms =
+      (config.trace_timeout_ms == 0) ? 1000 : config.trace_timeout_ms;
   tracer_dir[0] = '\0';
-  tracer_dump_epoch = 0;
+  atomic_store_explicit(&tracer_requested_epoch, 0, memory_order_release);
+#ifndef _WIN32
+  tracer_signal_epoch = 0;
+#endif
   tracer_thread_started = false;
   if (tracer_enabled) {
     size_t dir_len = strlen(config.trace_dir);
@@ -459,21 +509,13 @@ void thanatos_init(ThanatosConfig config) {
       tracer_enabled = false;
     } else {
       memcpy(tracer_dir, config.trace_dir, dir_len + 1);
-      if (pipe(tracer_wakeup_pipe) != 0) {
-        fprintf(stderr, "Thanatos: trace pipe init failed (errno=%d)\n", errno);
-        tracer_enabled = false;
-      } else {
-        int flags = fcntl(tracer_wakeup_pipe[1], F_GETFL, 0);
-        if (flags >= 0)
-          (void)fcntl(tracer_wakeup_pipe[1], F_SETFL, flags | O_NONBLOCK);
-        arena_trace_init(config.num_workers);
-        install_tracer_signal_handler();
-      }
+      arena_trace_init(config.num_workers);
+      install_tracer_signal_handler();
     }
   }
 
   num_workers_count = config.num_workers;
-  workers = malloc(sizeof(pthread_t) * num_workers_count);
+  workers = malloc(sizeof(HostThread) * num_workers_count);
 }
 
 void thanatos_start_threads(bool enable_stdout_pump) {
@@ -482,24 +524,24 @@ void thanatos_start_threads(bool enable_stdout_pump) {
   atomic_store_explicit(&is_thanatos_initialized, true, memory_order_release);
 
   for (uint32_t i = 0; i < num_workers_count; i++) {
-    must_pthread_create(&workers[i], worker_thread_main, (void *)(uintptr_t)i,
-                        "worker");
+    must_thread_create(&workers[i], worker_thread_main, (void *)(uintptr_t)i,
+                       "worker");
   }
 
-  must_pthread_create(&dispatcher_thread, dispatcher_thread_main, NULL,
-                      "dispatcher");
+  must_thread_create(&dispatcher_thread, dispatcher_thread_main, NULL,
+                     "dispatcher");
   if (tracer_enabled) {
-    must_pthread_create(&tracer_thread, tracer_thread_main, NULL, "tracer");
+    must_thread_create(&tracer_thread, tracer_thread_main, NULL, "tracer");
     tracer_thread_started = true;
   }
-  if (stdin_stream_fd >= 0) {
-    must_pthread_create(&stdin_thread, stdin_thread_main, NULL, "stdin");
+  if (runtime_stdin_available) {
+    must_thread_create(&stdin_thread, stdin_thread_main, NULL, "stdin");
     stdin_thread_started = true;
   } else {
     stdin_thread_started = false;
   }
   if (enable_stdout_pump) {
-    must_pthread_create(&stdout_thread, stdout_thread_main, NULL, "stdout");
+    must_thread_create(&stdout_thread, stdout_thread_main, NULL, "stdout");
     stdout_thread_started = true;
   } else {
     stdout_thread_started = false;
@@ -512,27 +554,33 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
 
   int slot = -1;
   while (slot == -1) {
+    host_mutex_lock(&pending_req_mutex);
     for (int i = 0; i < MAX_PENDING_REQS; i++) {
-      pthread_mutex_lock(&pending_reqs[i].mutex);
+      host_mutex_lock(&pending_reqs[i].mutex);
       if (pending_reqs[i].req_id == 0) {
         pending_reqs[i].req_id = req_id;
         pending_reqs[i].done = false;
         slot = i;
-        pthread_mutex_unlock(&pending_reqs[i].mutex);
+        host_mutex_unlock(&pending_reqs[i].mutex);
         break;
       }
-      pthread_mutex_unlock(&pending_reqs[i].mutex);
+      host_mutex_unlock(&pending_reqs[i].mutex);
     }
+    if (slot == -1) {
+      host_cond_wait(&pending_req_cvar, &pending_req_mutex);
+    }
+    host_mutex_unlock(&pending_req_mutex);
   }
 
   while (hostSubmit(current_node, req_id, max_steps) != 0) {
-    /* spin until submit succeeds */
+    /* yield until submit succeeds */
+    host_yield();
   }
 
   while (true) {
-    pthread_mutex_lock(&pending_reqs[slot].mutex);
+    host_mutex_lock(&pending_reqs[slot].mutex);
     while (!pending_reqs[slot].done) {
-      pthread_cond_wait(&pending_reqs[slot].cond, &pending_reqs[slot].mutex);
+      host_cond_wait(&pending_reqs[slot].cond, &pending_reqs[slot].mutex);
     }
 
     uint32_t node = pending_reqs[slot].result_node;
@@ -544,26 +592,29 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
         (controlSuspensionRemainingSteps(node) == 0);
 
     if (event == CQ_EVENT_DONE || step_budget_exhausted) {
+      host_mutex_lock(&pending_req_mutex);
       pending_reqs[slot].req_id = 0;
-      pthread_mutex_unlock(&pending_reqs[slot].mutex);
+      host_cond_signal(&pending_req_cvar);
+      host_mutex_unlock(&pending_req_mutex);
+      host_mutex_unlock(&pending_reqs[slot].mutex);
       /* Drain any remaining arena stdout bytes before main prints the result
        * line. Publication is serialized with the pump to preserve FIFO order.
        */
-      pthread_mutex_lock(&stdout_publish_mutex);
+      host_mutex_lock(&stdout_publish_mutex);
       drain_stdout_locked();
-      pthread_mutex_unlock(&stdout_publish_mutex);
+      host_mutex_unlock(&stdout_publish_mutex);
       return node;
     } else if (event == CQ_EVENT_IO_WAIT) {
       io_wait_register(node, req_id);
       bool is_stdin = io_wait_is_stdin(node);
       pending_reqs[slot].done = false;
-      pthread_mutex_unlock(&pending_reqs[slot].mutex);
+      host_mutex_unlock(&pending_reqs[slot].mutex);
       if (is_stdin) {
         if (stdin_thread_started) {
-          pthread_mutex_lock(&stdin_demand_mutex);
+          host_mutex_lock(&stdin_demand_mutex);
           stdin_demand_count++;
-          pthread_cond_signal(&stdin_demand_cvar);
-          pthread_mutex_unlock(&stdin_demand_mutex);
+          host_cond_signal(&stdin_demand_cvar);
+          host_mutex_unlock(&stdin_demand_mutex);
         }
       } else {
         /* Stdout wait: pump will dequeue from stdout_wait and resubmit. */
@@ -571,15 +622,18 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
     } else if (event == CQ_EVENT_YIELD) {
       current_node = node;
       pending_reqs[slot].done = false;
-      pthread_mutex_unlock(&pending_reqs[slot].mutex);
+      host_mutex_unlock(&pending_reqs[slot].mutex);
 
       while (hostSubmit(current_node, req_id, 0) != 0) {
-        /* spin until submit succeeds */
+        host_yield();
       }
     } else {
       fprintf(stderr, "Thanatos: error for req_id %u\n", req_id);
+      host_mutex_lock(&pending_req_mutex);
       pending_reqs[slot].req_id = 0;
-      pthread_mutex_unlock(&pending_reqs[slot].mutex);
+      host_cond_signal(&pending_req_cvar);
+      host_mutex_unlock(&pending_req_mutex);
+      host_mutex_unlock(&pending_reqs[slot].mutex);
       return EMPTY;
     }
   }
@@ -640,49 +694,52 @@ void thanatos_shutdown(void) {
   atomic_store_explicit(&is_thanatos_initialized, false, memory_order_release);
 
   if (stdin_thread_started) {
-    pthread_mutex_lock(&stdin_demand_mutex);
-    pthread_cond_signal(&stdin_demand_cvar);
-    pthread_mutex_unlock(&stdin_demand_mutex);
-    if (stdin_stream_fd >= 0) {
-      close(stdin_stream_fd);
-      stdin_stream_fd = -1;
-    }
-    pthread_join(stdin_thread, NULL);
+    host_mutex_lock(&stdin_demand_mutex);
+    host_cond_signal(&stdin_demand_cvar);
+    host_mutex_unlock(&stdin_demand_mutex);
+    host_runtime_input_close();
+    host_thread_join(stdin_thread);
     stdin_thread_started = false;
   }
   if (tracer_thread_started) {
-    uint8_t byte = 0;
-    (void)write(tracer_wakeup_pipe[1], &byte, 1);
-    pthread_join(tracer_thread, NULL);
-    close(tracer_wakeup_pipe[0]);
-    close(tracer_wakeup_pipe[1]);
-    tracer_wakeup_pipe[0] = -1;
-    tracer_wakeup_pipe[1] = -1;
+    host_event_notify(&tracer_event);
+    host_thread_join(tracer_thread);
     tracer_thread_started = false;
   }
   if (stdout_thread_started) {
-    pthread_mutex_lock(&pump_mutex);
+    host_mutex_lock(&pump_mutex);
     pump_wakeup_pending = true;
-    pthread_cond_signal(&pump_cvar);
-    pthread_mutex_unlock(&pump_mutex);
-    pthread_join(stdout_thread, NULL);
-    pthread_mutex_destroy(&pump_mutex);
-    pthread_cond_destroy(&pump_cvar);
+    host_cond_signal(&pump_cvar);
+    host_mutex_unlock(&pump_mutex);
+    host_thread_join(stdout_thread);
     stdout_thread_started = false;
   }
   /* Wake dispatcher from blocking CQ dequeue so it can exit */
   arena_cq_enqueue_shutdown_sentinel();
-  pthread_join(dispatcher_thread, NULL);
+  host_thread_join(dispatcher_thread);
   fprintf(stderr, "Dispatcher: stopped events=%llu dropped=%llu\n",
           atomic_load_explicit(&dispatcher_events, memory_order_relaxed),
           atomic_load_explicit(&dispatcher_dropped, memory_order_relaxed));
   for (int i = 0; i < MAX_PENDING_REQS; i++) {
-    pthread_mutex_destroy(&pending_reqs[i].mutex);
-    pthread_cond_destroy(&pending_reqs[i].cond);
+    host_mutex_destroy(&pending_reqs[i].mutex);
+    host_cond_destroy(&pending_reqs[i].cond);
   }
-  if (stdin_stream_fd >= 0) {
-    close(stdin_stream_fd);
-    stdin_stream_fd = -1;
+  host_runtime_input_close();
+  if (tracer_event_initialized) {
+    host_event_destroy(&tracer_event);
+    tracer_event_initialized = false;
+  }
+  if (runtime_sync_initialized) {
+    host_mutex_destroy(&pump_mutex);
+    host_mutex_destroy(&pending_req_mutex);
+    host_cond_destroy(&pump_cvar);
+    host_cond_destroy(&pending_req_cvar);
+    host_mutex_destroy(&stdin_demand_mutex);
+    host_cond_destroy(&stdin_demand_cvar);
+    host_mutex_destroy(&stdout_publish_mutex);
+    host_mutex_destroy(&io_wait_mutex);
+    runtime_sync_initialized = false;
   }
   free(workers);
+  workers = NULL;
 }

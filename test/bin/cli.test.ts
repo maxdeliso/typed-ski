@@ -15,6 +15,8 @@ import { existsSync } from "std/fs";
 
 const __dirname = dirname(fromFileUrl(import.meta.url));
 const projectRoot = join(__dirname, "../..");
+const compiledTripcName = Deno.build.os === "windows" ? "tripc.exe" : "tripc";
+const compiledTripcPath = join(projectRoot, "dist", compiledTripcName);
 
 // Import library functions for testing
 import {
@@ -525,7 +527,7 @@ poly id = #a => \\x:a => x`;
     });
 
     await t.step("Compiled Binary (dist/tripc)", async (t) => {
-      const binaryPath = join(projectRoot, "dist/tripc");
+      const binaryPath = compiledTripcPath;
 
       await t.step("file exists", () => {
         expect(existsSync(binaryPath)).to.be.true;
@@ -545,7 +547,7 @@ poly id = #a => \\x:a => x`;
       });
 
       await t.step("--version flag", async () => {
-        const command = ["./dist/tripc", "--version"];
+        const command = [compiledTripcPath, "--version"];
         const result = await runCommand(command);
 
         assertCommandSuccess(
@@ -557,7 +559,7 @@ poly id = #a => \\x:a => x`;
       });
 
       await t.step("--help flag", async () => {
-        const command = ["./dist/tripc", "--help"];
+        const command = [compiledTripcPath, "--help"];
         const result = await runCommand(command);
 
         assertCommandSuccess(
@@ -573,7 +575,7 @@ poly id = #a => \\x:a => x`;
         const testFile = await createTestFile(testContent);
 
         try {
-          const command = ["./dist/tripc", testFile];
+          const command = [compiledTripcPath, testFile];
           const result = await runCommand(command);
 
           assertCommandSuccess(
@@ -594,7 +596,7 @@ poly id = #a => \\x:a => x`;
         const testFile = await createTestFile(testContent);
 
         try {
-          const command = ["./dist/tripc", testFile, "--verbose"];
+          const command = [compiledTripcPath, testFile, "--verbose"];
           const result = await runCommand(command);
 
           assertCommandSuccess(

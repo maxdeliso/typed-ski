@@ -19,6 +19,12 @@
     ],
     "exclude": [
       "!wasm/release.wasm",
+      "**/BUILD.bazel",
+      "MODULE.bazel",
+      ".bazelignore",
+      ".bazelrc",
+      ".bazelversion",
+      "bazel/**",
       "codecov",
       "codecov.SHA256SUM",
       "codecov.SHA256SUM.sig"
@@ -85,5 +91,8 @@
     "coverage:lcov": "deno coverage coverage/ --exclude=test/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/ --exclude=test/"
   },
-  "version": "0.16.7"
+  "toolchain": {
+    "deno": "2.7.9"
+  },
+  "version": "0.16.8"
 }

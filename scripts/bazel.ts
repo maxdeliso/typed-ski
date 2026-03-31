@@ -29,9 +29,7 @@ const TEMP_ROOT = Deno.build.os === "windows"
 const DENO_DIR = Deno.env.get("TYPED_SKI_DENO_DIR") ??
   join(TEMP_ROOT, "typed-ski-deno-cache");
 const COMPILED_TRIPC_NAME = Deno.build.os === "windows" ? "tripc.exe" : "tripc";
-const BAZEL_RELEASE_WASM_CANDIDATES = [
-  join(PROJECT_ROOT, "bazel-bin", "wasm", "release.wasm"),
-];
+const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
 const DENO_TEST_BASE_ARGS = [
   DENO,
   "test",
@@ -70,6 +68,27 @@ Commands:
   coverage
   ci`);
   Deno.exit(1);
+}
+
+function getBazelWasmArtifactCandidates(): string[] {
+  const candidates = BAZEL_RELEASE_WASM_FILENAMES.map((filename) =>
+    join(PROJECT_ROOT, "bazel-bin", "wasm", filename)
+  );
+
+  try {
+    for (const entry of Deno.readDirSync(join(PROJECT_ROOT, "bazel-out"))) {
+      if (!entry.isDirectory) continue;
+      for (const filename of BAZEL_RELEASE_WASM_FILENAMES) {
+        candidates.push(
+          join(PROJECT_ROOT, "bazel-out", entry.name, "bin", "wasm", filename),
+        );
+      }
+    }
+  } catch {
+    // Ignore missing Bazel output roots and fall back to the default candidates.
+  }
+
+  return [...new Set(candidates)];
 }
 
 async function run(
@@ -153,6 +172,7 @@ async function buildDist(): Promise<void> {
 
 async function buildHephaestusAssets(): Promise<void> {
   await syncGenerated();
+  await stageBazelWasmArtifactIfPresent();
   await Deno.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
   await run([
     DENO,
@@ -184,7 +204,7 @@ async function buildHephaestusAssets(): Promise<void> {
 }
 
 function getBazelWasmArtifactUrl(): string | undefined {
-  for (const candidate of BAZEL_RELEASE_WASM_CANDIDATES) {
+  for (const candidate of getBazelWasmArtifactCandidates()) {
     try {
       const stat = Deno.statSync(candidate);
       if (stat.isFile) return toFileUrl(candidate).href;
@@ -193,6 +213,23 @@ function getBazelWasmArtifactUrl(): string | undefined {
     }
   }
   return undefined;
+}
+
+async function stageBazelWasmArtifactIfPresent(): Promise<void> {
+  const stagedPath = join(PROJECT_ROOT, "wasm", "release.wasm");
+  for (const candidate of getBazelWasmArtifactCandidates()) {
+    try {
+      const stat = await Deno.stat(candidate);
+      if (!stat.isFile) continue;
+      await Deno.mkdir(join(PROJECT_ROOT, "wasm"), { recursive: true });
+      const bytes = await Deno.readFile(candidate);
+      await Deno.remove(stagedPath).catch(() => {});
+      await Deno.writeFile(stagedPath, bytes);
+      return;
+    } catch {
+      // Ignore missing Bazel outputs and fall through to the next candidate.
+    }
+  }
 }
 
 async function serveHephaestus(): Promise<void> {
@@ -244,9 +281,12 @@ async function collectPortableTests(): Promise<string[]> {
 
 async function runPortableTests(withCoverage: boolean): Promise<void> {
   await syncGenerated();
+  await stageBazelWasmArtifactIfPresent();
   await buildDist();
   const wasmUrl = getBazelWasmArtifactUrl();
-  const env = wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
+  const env: Record<string, string> = wasmUrl
+    ? { TYPED_SKI_WASM_PATH: wasmUrl }
+    : {};
 
   const files = await collectPortableTests();
   if (files.length === 0) {
@@ -273,18 +313,22 @@ async function runPortableTests(withCoverage: boolean): Promise<void> {
 async function build(): Promise<void> {
   verifyVersion();
   await syncGenerated();
+  await stageBazelWasmArtifactIfPresent();
   await buildDist();
 }
 
 async function ci(): Promise<void> {
   verifyVersion();
   await syncGenerated();
+  await stageBazelWasmArtifactIfPresent();
   await buildDist();
   await formatCheck();
   await lint();
 
   const wasmUrl = getBazelWasmArtifactUrl();
-  const env = wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
+  const env: Record<string, string> = wasmUrl
+    ? { TYPED_SKI_WASM_PATH: wasmUrl }
+    : {};
 
   const files = await collectPortableTests();
   await run(denoTestArgs(files), { env });

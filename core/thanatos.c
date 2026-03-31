@@ -442,7 +442,9 @@ void thanatos_init(ThanatosConfig config) {
   if (config.num_workers == 0)
     config.num_workers = host_cpu_count();
 
-  initArena(config.arena_capacity);
+  if (!initArena(config.arena_capacity)) {
+    fprintf(stderr, "Thanatos: initArena failed\n");
+  }
 
   if (!runtime_sync_initialized) {
     host_mutex_init(&io_wait_mutex);

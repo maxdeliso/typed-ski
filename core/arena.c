@@ -608,7 +608,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
           sizeof(SabHeader));
   ARENA_BASE_ADDR = (uint8_t *)host_reserve_memory(ARENA_RESERVED_BYTES);
   if (ARENA_BASE_ADDR == NULL) {
-    perror("Arena: reserve failed");
+    fprintf(stderr, "Arena: reserve failed\n");
     return NULL;
   }
   if (!host_commit_memory(ARENA_BASE_ADDR, (size_t)layout.total_size,
@@ -716,8 +716,14 @@ uint32_t initArena(uint32_t initial_capacity) {
       (initial_capacity & (initial_capacity - 1)) != 0) {
     return 0;
   }
-  if (ARENA_BASE_ADDR != NULL)
+  if (ARENA_BASE_ADDR != NULL) {
+#ifdef __wasm__
     return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
+#else
+    uint32_t addr32 = (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
+    return addr32 > 2 ? addr32 : 3;
+#endif
+  }
   /* One-time QSBR init */
   static bool qsbr_inited = false;
   if (!qsbr_inited) {
@@ -727,9 +733,14 @@ uint32_t initArena(uint32_t initial_capacity) {
     qsbr_inited = true;
   }
   if (!allocate_raw_arena(initial_capacity))
-    return 1;
+    return 0;
   ARENA_MODE = 1;
+#ifdef __wasm__
   return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
+#else
+  uint32_t addr32 = (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
+  return addr32 > 2 ? addr32 : 3;
+#endif
 }
 
 uint32_t connectArena(uint32_t ptr_addr) {

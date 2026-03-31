@@ -9,9 +9,13 @@ type LoaderModule = typeof import("../../lib/evaluator/arenaWasmLoader.ts");
 import { resetReleaseWasmCache } from "../../lib/evaluator/arenaWasmLoader.ts";
 import { VERSION } from "../../lib/shared/version.generated.ts";
 
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const jsrVersionedWasmUrlPattern = new RegExp(
   `^https:\\/\\/jsr\\.io\\/@maxdeliso\\/typed-ski\\/${
-    VERSION.replace(/\./g, "\\.")
+    escapeRegExp(VERSION)
   }\\/wasm\\/release\\.wasm$`,
 );
 

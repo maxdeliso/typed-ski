@@ -244,6 +244,7 @@ async function collectPortableTests(): Promise<string[]> {
 
 async function runPortableTests(withCoverage: boolean): Promise<void> {
   await syncGenerated();
+  await buildDist();
   const wasmUrl = getBazelWasmArtifactUrl();
   const env = wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
 

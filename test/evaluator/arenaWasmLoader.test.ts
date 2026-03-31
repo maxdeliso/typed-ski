@@ -7,8 +7,13 @@ import {
 
 type LoaderModule = typeof import("../../lib/evaluator/arenaWasmLoader.ts");
 import { resetReleaseWasmCache } from "../../lib/evaluator/arenaWasmLoader.ts";
-const jsrVersionedWasmUrlPattern =
-  /^https:\/\/jsr\.io\/@maxdeliso\/typed-ski\/0\.16\.7\/wasm\/release\.wasm$/;
+import { VERSION } from "../../lib/shared/version.generated.ts";
+
+const jsrVersionedWasmUrlPattern = new RegExp(
+  `^https:\\/\\/jsr\\.io\\/@maxdeliso\\/typed-ski\\/${
+    VERSION.replace(/\./g, "\\.")
+  }\\/wasm\\/release\\.wasm$`,
+);
 
 const moduleWasmUrl = new URL(
   "../../wasm/release.wasm",

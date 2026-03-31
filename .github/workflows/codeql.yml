@@ -50,7 +50,15 @@ jobs:
 
       - name: Build native targets for CodeQL
         if: matrix.language == 'c-cpp'
-        run: bazel build //:thanatos //:release_wasm
+        run: |
+          # A clean build with standalone strategy is required for CodeQL to trace Bazel actions.
+          # We build all targets in //core to ensure full coverage of the C/C++ logic.
+          bazel clean
+          bazel build \
+            --spawn_strategy=standalone \
+            --nouse_action_cache \
+            --noremote_accept_cached \
+            //core/...
 
       - uses: github/codeql-action/analyze@v4
         with:

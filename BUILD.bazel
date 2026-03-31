@@ -9,7 +9,7 @@ alias(
 
 alias(
     name = "release_wasm",
-    actual = "//wasm:release_wasm",
+    actual = "//wasm:release",
 )
 
 test_suite(

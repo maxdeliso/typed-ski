@@ -67,6 +67,8 @@ static HostMutex io_wait_mutex;
 static HostMutex stdout_publish_mutex;
 static HostMutex stdin_demand_mutex;
 static HostCond stdin_demand_cvar;
+static HostMutex pending_req_mutex;
+static HostCond pending_req_cvar;
 static bool runtime_sync_initialized = false;
 
 /** Optional runtime stdout handler; if NULL, uses putchar(). */
@@ -543,9 +545,6 @@ void thanatos_start_threads(bool enable_stdout_pump) {
     stdout_thread_started = false;
   }
 }
-
-static HostMutex pending_req_mutex;
-static HostCond pending_req_cvar;
 
 uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
   uint32_t req_id = atomic_fetch_add(&next_req_id, 1);

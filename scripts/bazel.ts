@@ -17,7 +17,9 @@ type CommandName =
   | "serve-hephaestus"
   | "fmt-check"
   | "lint"
+  | "typecheck"
   | "test"
+  | "bazel-test-shard"
   | "coverage"
   | "ci"
   | "vs-project";
@@ -55,18 +57,56 @@ const DENO_TEST_BASE_ARGS = [
   "--allow-run",
   "--allow-env",
 ];
+const DENO_CHECK_BASE_ARGS = [DENO, "check"];
+const HARNESS_TRACE_TIMEOUT_MS = "200";
+const DIST_REQUIRED_TESTS = new Set([
+  "test/bin/cli.test.ts",
+]);
+const THANATOS_TEST_FILES = new Set([
+  "test/avl.test.ts",
+  "test/compiler/bootstrappedSingleFile.test.ts",
+  "test/compiler/bridge.test.ts",
+  "test/compiler/lexer.test.ts",
+  "test/compiler/parser.test.ts",
+  "test/linker/prelude.test.ts",
+  "test/thanatosHarness.test.ts",
+]);
+
+type ShardConfig = {
+  totalShards: number;
+  shardIndex: number;
+  statusFilePath?: string;
+};
+
+type ThanatosHarnessModule = typeof import("../test/thanatosHarness.ts");
+
+let thanatosHarnessPromise: Promise<ThanatosHarnessModule> | undefined;
+
+function loadThanatosHarness(): Promise<ThanatosHarnessModule> {
+  thanatosHarnessPromise ??= import("../test/thanatosHarness.ts");
+  return thanatosHarnessPromise;
+}
 
 function denoTestArgs(
   files: string[],
-  options: { coverage?: string } = {},
+  options: { coverage?: string; allowNet?: string[] } = {},
 ): string[] {
   const args = [...DENO_TEST_BASE_ARGS];
+  args.push("--no-check");
   args.push("--parallel");
+  if (options.allowNet && options.allowNet.length > 0) {
+    args.push(`--allow-net=${options.allowNet.join(",")}`);
+  }
   if (options.coverage) {
     args.push(`--coverage=${options.coverage}`);
+    args.push("--coverage-raw-data-only");
   }
   args.push(...files);
   return args;
+}
+
+function denoCheckArgs(files: string[]): string[] {
+  return [...DENO_CHECK_BASE_ARGS, ...files];
 }
 
 function usage(): never {
@@ -81,7 +121,9 @@ Commands:
   serve-hephaestus
   fmt-check
   lint
+  typecheck
   test
+  bazel-test-shard
   coverage
   ci
   vs-project`);
@@ -195,7 +237,8 @@ async function buildDist(): Promise<void> {
     "dist/tripc.node.js",
     "bin/tripc.ts",
   ]);
-  const compileTempDir = join(TEMP_ROOT, "typed-ski-build");
+  const compileTempDir = Deno.env.get("TYPED_SKI_BUILD_TEMP_DIR") ??
+    join(TEMP_ROOT, "typed-ski-build");
   const compileTempPath = join(compileTempDir, COMPILED_TRIPC_NAME);
   const finalBinaryPath = join(PROJECT_ROOT, "dist", COMPILED_TRIPC_NAME);
 
@@ -303,7 +346,7 @@ async function lint(): Promise<void> {
   await run([DENO, "lint"]);
 }
 
-async function collectPortableTests(): Promise<string[]> {
+async function collectTests(): Promise<string[]> {
   const testRoot = join(PROJECT_ROOT, "test");
   const files: string[] = [];
 
@@ -325,24 +368,171 @@ async function collectPortableTests(): Promise<string[]> {
   return files;
 }
 
-async function runPortableTests(withCoverage: boolean): Promise<void> {
-  await syncGenerated();
-  await stageBazelWasmArtifactIfPresent();
-  await buildDist();
-  const wasmUrl = getBazelWasmArtifactUrl();
-  const env: Record<string, string> = wasmUrl
-    ? { TYPED_SKI_WASM_PATH: wasmUrl }
-    : {};
-
-  const files = await collectPortableTests();
+async function typecheckTests(files: string[]): Promise<void> {
   if (files.length === 0) {
-    throw new Error("No portable test files were selected");
+    throw new Error("No test files were selected");
   }
+  console.log(`Type checking ${files.length} test files...`);
+  await run(denoCheckArgs(files));
+}
+
+function readShardConfig(): ShardConfig {
+  const totalText = Deno.env.get("TEST_TOTAL_SHARDS");
+  const indexText = Deno.env.get("TEST_SHARD_INDEX");
+  const statusFilePath = Deno.env.get("TEST_SHARD_STATUS_FILE") ?? undefined;
+
+  const totalShards = totalText ? Number(totalText) : 1;
+  const shardIndex = indexText ? Number(indexText) : 0;
+
+  if (!Number.isInteger(totalShards) || totalShards <= 0) {
+    throw new Error(
+      `Invalid TEST_TOTAL_SHARDS value: ${totalText ?? "<unset>"}`,
+    );
+  }
+  if (!Number.isInteger(shardIndex) || shardIndex < 0) {
+    throw new Error(
+      `Invalid TEST_SHARD_INDEX value: ${indexText ?? "<unset>"}`,
+    );
+  }
+  if (shardIndex >= totalShards) {
+    throw new Error(
+      `TEST_SHARD_INDEX (${shardIndex}) must be less than TEST_TOTAL_SHARDS (${totalShards})`,
+    );
+  }
+
+  return {
+    totalShards,
+    shardIndex,
+    statusFilePath,
+  };
+}
+
+function acknowledgeShardSupport(config: ShardConfig): void {
+  if (!config.statusFilePath) {
+    return;
+  }
+  Deno.writeTextFileSync(config.statusFilePath, "");
+}
+
+function selectShardFiles(files: string[], config: ShardConfig): string[] {
+  return files.filter((_, index) =>
+    index % config.totalShards === config.shardIndex
+  );
+}
+
+function needsDistArtifacts(files: string[]): boolean {
+  return files.some((file) => DIST_REQUIRED_TESTS.has(file));
+}
+
+function needsThanatosBroker(files: string[]): boolean {
+  return files.some((file) => THANATOS_TEST_FILES.has(file));
+}
+
+async function withThanatosTestBroker<T>(
+  callback: (
+    details: { allowNet: string[]; env: Record<string, string> },
+  ) => Promise<T>,
+): Promise<T> {
+  const thanatosHarness = await loadThanatosHarness();
+  if (!thanatosHarness.thanatosAvailable()) {
+    return await callback({ allowNet: [], env: {} });
+  }
+
+  const traceDir = await Deno.makeTempDir();
+  const broker = await thanatosHarness.startThanatosBatchBroker({
+    workers: thanatosHarness.defaultWorkerCount(),
+    env: {
+      THANATOS_TRACE_DIR: traceDir,
+      THANATOS_TRACE_TIMEOUT_MS: HARNESS_TRACE_TIMEOUT_MS,
+    },
+  });
+  try {
+    return await callback({
+      allowNet: [broker.allowNet],
+      env: broker.env,
+    });
+  } finally {
+    await broker.close();
+    await Deno.remove(traceDir, { recursive: true }).catch(() => {});
+  }
+}
+
+async function runSelectedTests(
+  files: string[],
+  env: Record<string, string>,
+  options: { coverage?: string } = {},
+): Promise<void> {
+  if (files.length === 0) {
+    console.log("No tests selected.");
+    return;
+  }
+
+  if (!needsThanatosBroker(files)) {
+    await run(
+      denoTestArgs(files, {
+        coverage: options.coverage,
+      }),
+      { env },
+    );
+    return;
+  }
+
+  await withThanatosTestBroker(async (broker) => {
+    await run(
+      denoTestArgs(files, {
+        coverage: options.coverage,
+        allowNet: broker.allowNet,
+      }),
+      {
+        env: {
+          ...env,
+          ...broker.env,
+        },
+      },
+    );
+  });
+}
+
+async function typecheck(): Promise<void> {
+  await syncGenerated();
+  const files = await collectTests();
+  await typecheckTests(files);
+}
+
+async function typecheckAndPrepareTestExecution(
+  files: string[],
+): Promise<Record<string, string>> {
+  await syncGenerated();
+  await typecheckTests(files);
+  return await prepareTestExecution(files);
+}
+
+async function prepareTestExecution(
+  files: string[],
+): Promise<Record<string, string>> {
+  await stageBazelWasmArtifactIfPresent();
+  if (
+    needsDistArtifacts(files) &&
+    Deno.env.get("TYPED_SKI_DIST_READY") !== "1"
+  ) {
+    await buildDist();
+  }
+  const explicitWasmPath = Deno.env.get("TYPED_SKI_WASM_PATH");
+  if (explicitWasmPath) {
+    return { TYPED_SKI_WASM_PATH: explicitWasmPath };
+  }
+  const wasmUrl = getBazelWasmArtifactUrl();
+  return wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
+}
+
+async function runTests(withCoverage: boolean): Promise<void> {
+  const files = await collectTests();
+  const env = await typecheckAndPrepareTestExecution(files);
 
   if (withCoverage) {
     await Deno.remove(join(PROJECT_ROOT, "coverage"), { recursive: true })
       .catch(() => {});
-    await run(denoTestArgs(files, { coverage: "coverage" }), { env });
+    await runSelectedTests(files, env, { coverage: "coverage" });
     await run([
       DENO,
       "coverage",
@@ -353,7 +543,28 @@ async function runPortableTests(withCoverage: boolean): Promise<void> {
     return;
   }
 
-  await run(denoTestArgs(files), { env });
+  await runSelectedTests(files, env);
+}
+
+async function runBazelShardTests(): Promise<void> {
+  const files = await collectTests();
+  const shard = readShardConfig();
+  acknowledgeShardSupport(shard);
+  const shardFiles = selectShardFiles(files, shard);
+
+  console.log(
+    `[Shard ${
+      shard.shardIndex + 1
+    }/${shard.totalShards}] Executing ${shardFiles.length} of ${files.length} test files...`,
+  );
+  if (shardFiles.length === 0) {
+    console.log("No tests assigned to this shard. Exiting cleanly.");
+    return;
+  }
+
+  console.log("Skipping test typecheck in shard run; use //:typecheck.");
+  const env = await prepareTestExecution(shardFiles);
+  await runSelectedTests(shardFiles, env);
 }
 
 async function build(): Promise<void> {
@@ -365,24 +576,15 @@ async function build(): Promise<void> {
 
 async function ci(): Promise<void> {
   verifyVersion();
-  await syncGenerated();
-  await stageBazelWasmArtifactIfPresent();
-  await buildDist();
   await formatCheck();
   await lint();
 
-  const wasmUrl = getBazelWasmArtifactUrl();
-  const env: Record<string, string> = wasmUrl
-    ? { TYPED_SKI_WASM_PATH: wasmUrl }
-    : {};
-
-  const files = await collectPortableTests();
-  await run(denoTestArgs(files), { env });
-
+  const files = await collectTests();
+  const env = await typecheckAndPrepareTestExecution(files);
   await Deno.remove(join(PROJECT_ROOT, "coverage"), { recursive: true }).catch(
     () => {},
   );
-  await run(denoTestArgs(files, { coverage: "coverage" }), { env });
+  await runSelectedTests(files, env, { coverage: "coverage" });
   await run([DENO, "coverage", "coverage", "--lcov", "--output=coverage.lcov"]);
 }
 
@@ -946,11 +1148,17 @@ switch (command) {
   case "lint":
     await lint();
     break;
+  case "typecheck":
+    await typecheck();
+    break;
   case "test":
-    await runPortableTests(false);
+    await runTests(false);
+    break;
+  case "bazel-test-shard":
+    await runBazelShardTests();
     break;
   case "coverage":
-    await runPortableTests(true);
+    await runTests(true);
     break;
   case "ci":
     await ci();

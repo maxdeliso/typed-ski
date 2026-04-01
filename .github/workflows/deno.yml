@@ -63,8 +63,24 @@ jobs:
       - name: Generate bounded perf stats
         run: bazel run //:performance_test -- 8 67108864 512 5 1000 1775005854
 
-      - name: Run Bazel CI
-        run: bazel run //:ci
+      - name: Run format check
+        run: bazel run //:fmt_check
+
+      - name: Run lint
+        run: bazel run //:lint
+
+      - name: Run typecheck
+        run: bazel run //:typecheck
+
+      - name: Build distributable artifacts
+        run: bazel run //:build
+
+      - name: Run sharded Deno tests
+        run: bazel test //:deno_tests --test_output=errors
+
+      - name: Generate coverage
+        if: matrix.os == 'ubuntu-24.04'
+        run: bazel run //:coverage
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04'

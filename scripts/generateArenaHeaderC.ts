@@ -12,9 +12,13 @@ function parseCStruct(source: string, structName: string) {
   );
   const match = source.match(structRegex);
   if (!match) throw new Error(`Could not find struct ${structName}`);
+  const body = match[1];
+  if (body === undefined) {
+    throw new Error(`Could not parse fields for struct ${structName}`);
+  }
 
   const fields: { name: string; u32Slots: number }[] = [];
-  const fieldLines = match[1].split(";");
+  const fieldLines = body.split(";");
   for (const line of fieldLines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -24,7 +28,7 @@ function parseCStruct(source: string, structName: string) {
     if (name && !name.startsWith("_pad")) {
       const cleanName = name.split("[")[0];
       if (cleanName) {
-        const type = parts[0];
+        const type = parts[0] ?? "";
         const is64 = type.includes("uint64_t") ||
           parts.some((p) => p.includes("uint64_t"));
         fields.push({
@@ -50,6 +54,7 @@ const totalU32 = u32Index;
 let enumContent = "";
 for (let i = 0; i < fields.length; i++) {
   const f = fields[i];
+  if (!f) continue;
   const constName = f.name.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase();
   enumContent += `  ${constName} = ${indexByField[i]!},\n`;
 }

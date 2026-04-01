@@ -1,6 +1,16 @@
 common --enable_platform_specific_config
 common --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+build --action_env=PATH
+test --test_timeout=60
+test --test_env=PATH
+test:linux --test_env=HOME
+test:windows --enable_runfiles
+test:windows --test_env=APPDATA
+test:windows --test_env=LOCALAPPDATA
+test:windows --test_env=TEMP
+test:windows --test_env=TMP
+test:windows --test_env=USERPROFILE
 
 build:linux --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
 build:linux --sandbox_add_mount_pair=/tmp

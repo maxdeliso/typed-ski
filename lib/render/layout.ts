@@ -90,6 +90,7 @@ export function buildLayoutFromAtoms(
 
   for (let i = 0; i < atomCount; i++) {
     const atomId = atoms[i];
+    if (atomId === undefined) continue;
     if (visited.has(atomId)) continue;
 
     // distribute atoms in a ring

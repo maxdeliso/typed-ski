@@ -6,500 +6,22 @@
 
 import { assert, assertEquals, assertRejects, assertThrows } from "std/assert";
 import { existsSync } from "std/fs";
-import { dirname, fromFileUrl, join } from "std/path";
-import type { Evaluator } from "../lib/evaluator/evaluator.ts";
-import type { SKIExpression } from "../lib/ski/expression.ts";
-import { apply, unparseSKI } from "../lib/ski/expression.ts";
-import { term } from "../lib/ski/terminal.ts";
-import type { SKITerminalSymbol } from "../lib/ski/terminal.ts";
+import { join } from "std/path";
 import { parseSKI } from "../lib/parser/ski.ts";
-
-const __dirname = dirname(fromFileUrl(import.meta.url));
-const PROJECT_ROOT = join(__dirname, "..");
-const TEST_NATIVE_WORKERS = 2;
-const THANATOS_FILE_NAME = Deno.build.os === "windows"
-  ? "thanatos.exe"
-  : "thanatos";
-
-/** Path to the thanatos binary when the native toolchain has produced it. Override with env THANATOS_BIN when needed. */
-const DEFAULT_THANATOS_BIN_CANDIDATES = [
-  join(PROJECT_ROOT, "bazel-bin", "core", THANATOS_FILE_NAME),
-  join(PROJECT_ROOT, "bin", THANATOS_FILE_NAME),
-];
-const DEFAULT_THANATOS_BIN =
-  DEFAULT_THANATOS_BIN_CANDIDATES.find((path) => existsSync(path)) ??
-    DEFAULT_THANATOS_BIN_CANDIDATES[0]!;
-const THANATOS_BIN = typeof Deno !== "undefined" && Deno.env.get("THANATOS_BIN")
-  ? Deno.env.get("THANATOS_BIN")!
-  : DEFAULT_THANATOS_BIN;
-
-export function thanatosAvailable(): boolean {
-  return existsSync(THANATOS_BIN);
-}
-
-async function runThanatosProcess(
-  args: string[],
-  input = "",
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  const child = new Deno.Command(THANATOS_BIN, {
-    args,
-    cwd: PROJECT_ROOT,
-    stdin: "piped",
-    stdout: "piped",
-    stderr: "piped",
-  }).spawn();
-
-  const writer = child.stdin.getWriter();
-  if (input.length > 0) {
-    await writer.write(new TextEncoder().encode(input));
-  }
-  await writer.close();
-
-  const [status, stdout, stderr] = await Promise.all([
-    child.status,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-
-  return {
-    code: status.code,
-    stdout,
-    stderr,
-  };
-}
-
-function normalizeCliOutput(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "");
-}
-
-/**
- * DAG wire format: terminals S K I B C P Q R , . E | Uxx | @L,R (space-separated, postorder).
- * Uses object identity (Map) for node indices: preserves sharing only when the AST already
- * has shared references. Does not do structural hash-consing; the C side preserves
- * sharing present in the imported wire but the TS encoder does not invent sharing.
- */
-export function toDagWire(expr: SKIExpression): string {
-  const order: SKIExpression[] = [];
-  const visited = new Set<SKIExpression>();
-  function postorder(e: SKIExpression): void {
-    if (visited.has(e)) return;
-    if (e.kind === "non-terminal") {
-      postorder(e.lft);
-      postorder(e.rgt);
-    }
-    visited.add(e);
-    order.push(e);
-  }
-  postorder(expr);
-  const nodeToIndex = new Map<SKIExpression, number>();
-  order.forEach((n, i) => nodeToIndex.set(n, i));
-  const tokens: string[] = [];
-  for (const n of order) {
-    if (n.kind === "terminal") {
-      tokens.push(n.sym);
-    } else if (n.kind === "u8") {
-      tokens.push("U" + n.value.toString(16).padStart(2, "0").toUpperCase());
-    } else {
-      tokens.push(
-        "@" + nodeToIndex.get(n.lft)! + "," + nodeToIndex.get(n.rgt)!,
-      );
-    }
-  }
-  return tokens.join(" ");
-}
-
-const DAG_TERMINAL_CHARS = new Set<string>([
-  "S",
-  "K",
-  "I",
-  "B",
-  "C",
-  "P",
-  "Q",
-  "R",
-  ",",
-  ".",
-  "E",
-  "L",
-  "D",
-  "M",
-  "A",
-  "O",
-]);
-
-function dagCharToSym(c: string): SKITerminalSymbol {
-  const s = c as SKITerminalSymbol;
-  if (!DAG_TERMINAL_CHARS.has(c)) throw new Error("invalid DAG terminal: " + c);
-  return s;
-}
-
-export function fromDagWire(dagStr: string): SKIExpression {
-  const tokens = dagStr.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) throw new Error("empty DAG");
-  const nodes: SKIExpression[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i]!;
-    if (t.length === 1 && DAG_TERMINAL_CHARS.has(t)) {
-      nodes.push(term(dagCharToSym(t)));
-    } else if (t.startsWith("#u8(") && t.endsWith(")")) {
-      const byte = parseInt(t.slice(4, -1), 10);
-      if (Number.isNaN(byte) || byte < 0 || byte > 255) {
-        throw new Error("invalid U8: " + t);
-      }
-      nodes.push({ kind: "u8", value: byte });
-    } else if (t.startsWith("U") && t.length === 3) {
-      const byte = parseInt(t.slice(1), 16);
-      if (Number.isNaN(byte) || byte < 0 || byte > 255) {
-        throw new Error("invalid U8: " + t);
-      }
-      nodes.push({ kind: "u8", value: byte });
-    } else if (t.startsWith("@")) {
-      const comma = t.indexOf(",", 1);
-      if (comma < 0) throw new Error("invalid app: " + t);
-      const L = parseInt(t.slice(1, comma), 10);
-      const R = parseInt(t.slice(comma + 1), 10);
-      if (L >= i || R >= i || L < 0 || R < 0) {
-        throw new Error("invalid app indices: " + t);
-      }
-      nodes.push(apply(nodes[L]!, nodes[R]!));
-    } else {
-      throw new Error("invalid DAG token: " + t);
-    }
-  }
-  return nodes[nodes.length - 1]!;
-}
-
-/** Long-lived daemon session: one process, DAG protocol, serialized requests. */
-class ThanatosSession {
-  private child: Deno.ChildProcess | null = null;
-  private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  private lineBuffer = new Uint8Array(0);
-  private pending: Promise<void> = Promise.resolve();
-  private closed = false;
-
-  /** Start the daemon. Call once. */
-  start(workers?: number, env?: Record<string, string>): void {
-    if (this.child != null) return;
-    if (!thanatosAvailable()) throw new Error("thanatos binary not found");
-    const w = workers ?? defaultWorkerCount();
-    this.child = new Deno.Command(THANATOS_BIN, {
-      args: [String(w)],
-      cwd: PROJECT_ROOT,
-      env,
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "inherit",
-    }).spawn();
-    this.writer = this.child.stdin.getWriter();
-    this.reader = this.child.stdout.getReader();
-  }
-
-  signal(signal: Deno.Signal): void {
-    if (this.child == null) {
-      throw new Error("ThanatosSession not started");
-    }
-    if (this.closed) throw new Error("ThanatosSession closed");
-    this.child.kill(signal);
-  }
-
-  /** Send one request line and return the response line. Must be called serially. */
-  private async request(line: string): Promise<string> {
-    if (this.writer == null || this.reader == null) {
-      throw new Error("ThanatosSession not started");
-    }
-    if (this.closed) throw new Error("ThanatosSession closed");
-
-    const encoder = new TextEncoder();
-    await this.writer.write(encoder.encode(line + "\n"));
-
-    const decoder = new TextDecoder();
-    while (true) {
-      const i = this.lineBuffer.indexOf(0x0a);
-      if (i >= 0) {
-        const resp = decoder.decode(this.lineBuffer.subarray(0, i)).replace(
-          /\r$/,
-          "",
-        );
-        this.lineBuffer = this.lineBuffer.subarray(i + 1);
-        return resp;
-      }
-      const { done, value } = await this.reader.read();
-      if (done) throw new Error("thanatos daemon stdout closed");
-      if (value && value.length > 0) {
-        const merged = new Uint8Array(this.lineBuffer.length + value.length);
-        merged.set(this.lineBuffer);
-        merged.set(value, this.lineBuffer.length);
-        this.lineBuffer = merged;
-      }
-    }
-  }
-
-  /** Serialized: run request after previous pending completes, return response. */
-  private serialRequest(line: string): Promise<string> {
-    const prev = this.pending;
-    let resolveNext!: () => void;
-    this.pending = new Promise<void>((r) => {
-      resolveNext = r;
-    });
-    const result = prev.then(() => this.request(line));
-    result.finally(() => resolveNext());
-    return result;
-  }
-
-  /** Raw request for error testing. Returns full response string (including ERR). */
-  async rawRequest(line: string): Promise<string> {
-    this.start();
-    return await this.serialRequest(line);
-  }
-
-  /** Reduce a DAG string to normal form; returns DAG string or throws on ERR. Starts daemon on first use if needed. */
-  async reduceDag(dag: string): Promise<string> {
-    this.start();
-    const resp = await this.serialRequest("REDUCE " + dag.trim());
-    if (resp.startsWith("OK ")) return resp.slice(3).trim();
-    if (resp === "OK") return "";
-    if (resp.startsWith("ERR ")) throw new Error("thanatos: " + resp.slice(4));
-    throw new Error("thanatos: unexpected " + resp);
-  }
-
-  /** Reduce a DAG with stdin data; returns { stdout, resultDag }. */
-  async reduceIo(
-    dag: string,
-    stdin: Uint8Array,
-  ): Promise<{ stdout: Uint8Array; resultDag: string }> {
-    this.start();
-    let stdinHex = Array.from(stdin).map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    if (stdinHex === "") stdinHex = "-";
-    // Protocol: REDUCE_IO <stdin_hex> <dag>
-    // Response: OK <stdout_hex> <result_dag>
-    const resp = await this.serialRequest(
-      "REDUCE_IO " + stdinHex + " " + dag.trim(),
-    );
-    if (!resp.startsWith("OK ")) {
-      if (resp.startsWith("ERR ")) {
-        throw new Error("thanatos: " + resp.slice(4));
-      }
-      throw new Error("thanatos: unexpected " + resp);
-    }
-    const parts = resp.slice(3).trim().split(/\s+/);
-    if (parts.length < 1) throw new Error("thanatos: missing result in OK");
-    const stdoutHex = parts[0]!;
-    const resultDag = parts.slice(1).join(" ");
-    let stdout: Uint8Array;
-    if (stdoutHex === "-") {
-      stdout = new Uint8Array(0);
-    } else {
-      stdout = new Uint8Array(
-        (stdoutHex.match(/.{1,2}/g) || []).map((byte) => parseInt(byte, 16)),
-      );
-    }
-    return { stdout, resultDag };
-  }
-
-  /** Reduce a DAG using zero-copy file mapping for I/O; returns resultDag. */
-  async reduceFile(
-    dag: string,
-    inPath: string,
-    outPath: string,
-  ): Promise<string> {
-    this.start();
-    const resp = await this.serialRequest(
-      "REDUCE_FILE " + inPath + " " + outPath + " " + dag.trim(),
-    );
-    if (!resp.startsWith("OK ")) {
-      if (resp.startsWith("ERR ")) {
-        throw new Error("thanatos: " + resp.slice(4));
-      }
-      throw new Error("thanatos: unexpected " + resp);
-    }
-    return resp.slice(3).trim();
-  }
-
-  /** Reset the arena (clean slate). Starts daemon on first use if needed. */
-  async reset(): Promise<void> {
-    this.start();
-    const resp = await this.serialRequest("RESET");
-    if (resp !== "OK") throw new Error("thanatos: " + resp);
-  }
-
-  /** Ping the daemon. Starts daemon on first use if needed. */
-  async ping(): Promise<void> {
-    this.start();
-    const resp = await this.serialRequest("PING");
-    if (resp !== "OK") throw new Error("thanatos: " + resp);
-  }
-
-  /** STATS: returns the full response line (e.g. "OK top=0 capacity=... events=... dropped=..."). */
-  async stats(): Promise<string> {
-    this.start();
-    const resp = await this.serialRequest("STATS");
-    if (!resp.startsWith("OK ")) throw new Error("thanatos: " + resp);
-    return resp;
-  }
-
-  async traceDump(): Promise<void> {
-    this.start();
-    const resp = await this.serialRequest("TRACE_DUMP");
-    if (resp !== "OK") throw new Error("thanatos: " + resp);
-  }
-
-  /** Close the session (sends QUIT, closes stdin). Idempotent. Clears singleton so next getThanatosSession() starts a new process. Signal listeners are not removed (registered once at module level). */
-  async close(): Promise<void> {
-    if (this.closed) return;
-    const child = this.child;
-    try {
-      if (this.writer != null && this.reader != null) {
-        await this.serialRequest("QUIT");
-      }
-    } catch {
-      // daemon may have exited; ignore
-    } finally {
-      this.closed = true;
-      try {
-        await this.writer?.close();
-      } catch {
-        // ignore
-      }
-      try {
-        await this.reader?.cancel();
-      } catch {
-        // ignore
-      }
-      this.child = null;
-      this.writer = null;
-      this.reader = null;
-      if (child != null) await child.status;
-      removeSignalListeners();
-      getSessionPromiseRef().current = null;
-    }
-  }
-}
-
-function defaultWorkerCount(): number {
-  const detected = typeof navigator !== "undefined" &&
-      navigator.hardwareConcurrency > 0
-    ? navigator.hardwareConcurrency
-    : 4;
-  return Math.max(TEST_NATIVE_WORKERS, Math.min(detected, 4));
-}
-
-/** Global key for the singleton so one process is shared across all test files. */
-const THANATOS_SESSION_KEY = "__thanatosSessionPromise";
-
-declare global {
-  interface GlobalThis {
-    [THANATOS_SESSION_KEY]?: Promise<ThanatosSession> | null;
-  }
-}
-
-function getSessionPromiseRef(): {
-  get current(): Promise<ThanatosSession> | null;
-  set current(v: Promise<ThanatosSession> | null);
-} {
-  return {
-    get current() {
-      return (globalThis as GlobalThis)[THANATOS_SESSION_KEY] ?? null;
-    },
-    set current(v: Promise<ThanatosSession> | null) {
-      (globalThis as GlobalThis)[THANATOS_SESSION_KEY] = v;
-    },
-  };
-}
-
-function onProcessSignal(): void {
-  console.error("[thanatos harness] process signal received, closing session");
-  const ref = getSessionPromiseRef();
-  const p = ref.current;
-  if (p === null) return;
-  ref.current = null;
-  p.then((s) => s.close()).catch(() => {});
-}
-
-let signalListenersRegistered = false;
-
-function ensureSignalListeners(): void {
-  if (signalListenersRegistered) return;
-  if (
-    typeof Deno !== "undefined" &&
-    typeof Deno.addSignalListener === "function"
-  ) {
-    Deno.addSignalListener("SIGINT", onProcessSignal);
-    Deno.addSignalListener("SIGTERM", onProcessSignal);
-    signalListenersRegistered = true;
-  }
-}
-
-function removeSignalListeners(): void {
-  if (!signalListenersRegistered) return;
-  if (
-    typeof Deno !== "undefined" &&
-    typeof Deno.removeSignalListener === "function"
-  ) {
-    try {
-      Deno.removeSignalListener("SIGINT", onProcessSignal);
-    } catch {
-      /* ignore */
-    }
-    try {
-      Deno.removeSignalListener("SIGTERM", onProcessSignal);
-    } catch {
-      /* ignore */
-    }
-    signalListenersRegistered = false;
-  }
-}
-
-/**
- * Return the singleton thanatos daemon session. Starts the process on first call;
- * all callers (across all test files) share the same process. Thread-safe: one init.
- * Registers SIGINT/SIGTERM once (module-level) to close the session on signal.
- */
-export function getThanatosSession(): Promise<ThanatosSession> {
-  if (!thanatosAvailable()) throw new Error("thanatos binary not found");
-  const ref = getSessionPromiseRef();
-  if (ref.current !== null) return ref.current;
-  ensureSignalListeners();
-  ref.current = Promise.resolve().then(() => {
-    const session = new ThanatosSession();
-    session.start(defaultWorkerCount());
-    return session;
-  });
-  return ref.current;
-}
-
-/**
- * Evaluator that does not reduce; for decoding already-normal forms from thanatos stdout.
- */
-export const passthroughEvaluator: Evaluator = {
-  stepOnce: (expr: SKIExpression) => ({ altered: false, expr }),
-  reduce: (expr: SKIExpression) => expr,
-  reduceAsync: (expr: SKIExpression) => Promise.resolve(expr),
-};
-
-/**
- * Run multiple surface-syntax expressions through the singleton thanatos daemon.
- * One process; for each expression: parse → DAG → one REDUCE request → wait for response
- * → decode. Serialized requests only (no protocol-level batching, pipelining, or
- * concurrent in-flight reductions). Returns one surface line per input line.
- */
-export async function runThanatosBatch(exprLines: string[]): Promise<string[]> {
-  if (exprLines.length === 0) return [];
-  const session = await getThanatosSession();
-  try {
-    const out: string[] = [];
-    for (const line of exprLines) {
-      const expr = parseSKI(line);
-      const dag = toDagWire(expr);
-      const resultDag = await session.reduceDag(dag);
-      out.push(unparseSKI(fromDagWire(resultDag)));
-    }
-    return out;
-  } finally {
-    await session.close();
-  }
-}
+import { unparseSKI } from "../lib/ski/expression.ts";
+import {
+  closeBatchThanatosSessions,
+  dagCharToSym,
+  defaultWorkerCount,
+  fromDagWire,
+  normalizeCliOutput,
+  PROJECT_ROOT,
+  runThanatosProcess,
+  thanatosAvailable,
+  toDagWire,
+  withBatchThanatosSession,
+} from "./thanatosHarness.ts";
+import type { ThanatosSession } from "./thanatosHarness.ts";
 
 /**
  * Internal helper for snapshot testing with a thanatos session.
@@ -657,348 +179,357 @@ async function readTraceDumpJson<T>(
   throw new Error(`timed out waiting for thanatos trace JSON at ${path}`);
 }
 
-Deno.test({
-  name: "session based IO - readOne echo",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      await runThanatosSnapshot("readOneEcho", session);
-    } finally {
-      await session.close();
-    }
-  },
-});
+const HARNESS_TRACE_TIMEOUT_MS = "200";
+const HARNESS_WORKERS = defaultWorkerCount();
+const HARNESS_WORKER_IDS = Array.from(
+  { length: HARNESS_WORKERS },
+  (_, workerId) => workerId,
+);
+const HARNESS_COMPLETE_STATES = Array(HARNESS_WORKERS).fill(true);
+const HARNESS_IDLE_STATES = Array(HARNESS_WORKERS).fill("idle");
+let harnessTraceDirPromise:
+  | Promise<
+    { path: string; owned: boolean }
+  >
+  | null = null;
 
-Deno.test({
-  name:
-    "native IO - multiple writeOne ABC preserves sequential order via session (streaming)",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      for (let i = 0; i < 32; i++) {
-        await runThanatosSnapshot("writeOneABC", session);
+async function getHarnessTraceDir(): Promise<string> {
+  if (harnessTraceDirPromise === null) {
+    harnessTraceDirPromise = Promise.resolve().then(async () => {
+      const externalTraceDir = Deno.env.get("THANATOS_TRACE_DIR");
+      if (externalTraceDir) {
+        return { path: externalTraceDir, owned: false };
       }
-    } finally {
-      await session.close();
+      return { path: await Deno.makeTempDir(), owned: true };
+    });
+  }
+  return (await harnessTraceDirPromise).path;
+}
+
+async function clearHarnessTraceDumps(traceDir: string): Promise<void> {
+  for await (const entry of Deno.readDir(traceDir)) {
+    if (entry.isFile && entry.name.endsWith(".json")) {
+      await Deno.remove(join(traceDir, entry.name)).catch(() => {});
     }
-  },
-});
+  }
+}
+
+async function prepareHarnessTraceDir(): Promise<string> {
+  const traceDir = await getHarnessTraceDir();
+  await clearHarnessTraceDumps(traceDir);
+  return traceDir;
+}
+
+async function cleanupHarnessTraceDir(): Promise<void> {
+  if (harnessTraceDirPromise === null) {
+    return;
+  }
+  const traceDir = await harnessTraceDirPromise;
+  harnessTraceDirPromise = null;
+  if (traceDir.owned) {
+    await Deno.remove(traceDir.path, { recursive: true }).catch(() => {});
+  }
+}
+
+async function withHarnessSession<T>(
+  callback: (session: ThanatosSession) => Promise<T>,
+): Promise<T> {
+  const traceDir = await getHarnessTraceDir();
+  return await withBatchThanatosSession(callback, {
+    key: "thanatosHarness",
+    workers: HARNESS_WORKERS,
+    env: {
+      THANATOS_TRACE_DIR: traceDir,
+      THANATOS_TRACE_TIMEOUT_MS: HARNESS_TRACE_TIMEOUT_MS,
+    },
+  });
+}
 
 Deno.test({
-  name: "native IO - readOne via session (streaming)",
+  name: "thanatos session suite",
   ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
+  fn: async (t) => {
     try {
-      await runThanatosSnapshot("readOneA", session);
-    } finally {
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "native IO - interleaved read/write echo via session",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      await runThanatosSnapshot("interleavedEcho", session);
-    } finally {
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "native IO - readOne echo via zero-copy mmap file session",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      await runThanatosSnapshot("readOneMmapS", session);
-    } finally {
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "RESET after several reductions then REDUCE",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      // Several REDUCEs to populate arena
-      const r1 = await session.reduceDag(toDagWire(parseSKI("I S")));
-      assertEquals(unparseSKI(fromDagWire(r1)), "S");
-      const r2 = await session.reduceDag(toDagWire(parseSKI("K S K")));
-      assertEquals(unparseSKI(fromDagWire(r2)), "S");
-      await session.reset();
-      // One more REDUCE after RESET proves arena was cleared and reducer still works
-      const r3 = await session.reduceDag(toDagWire(parseSKI("I K")));
-      assertEquals(unparseSKI(fromDagWire(r3)), "K");
-    } finally {
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "daemon PING RESET STATS QUIT",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      await session.ping();
-      await session.reset();
-      const statsLine = await session.stats();
-      assert(
-        statsLine.includes("top=") &&
-          statsLine.includes("capacity=") &&
-          statsLine.includes("total_nodes=") &&
-          statsLine.includes("total_steps=") &&
-          statsLine.includes("total_cons_allocs=") &&
-          statsLine.includes("total_cont_allocs=") &&
-          statsLine.includes("total_susp_allocs=") &&
-          statsLine.includes("duplicate_lost_allocs=") &&
-          statsLine.includes("hashcons_hits=") &&
-          statsLine.includes("hashcons_misses=") &&
-          statsLine.includes("events=") &&
-          statsLine.includes("dropped="),
-        "STATS missing expected fields: " + statsLine,
-      );
-    } finally {
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "thanatos trace dump - TRACE_DUMP writes JSON worker snapshot",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const traceDir = await Deno.makeTempDir();
-    const session = new ThanatosSession();
-    try {
-      session.start(1, {
-        THANATOS_TRACE_DIR: traceDir,
-        THANATOS_TRACE_TIMEOUT_MS: "200",
+      await t.step("session based IO - readOne echo", async () => {
+        await withHarnessSession(async (session) => {
+          await runThanatosSnapshot("readOneEcho", session);
+        });
       });
-      await session.ping();
-      const resultDag = await session.reduceDag(toDagWire(parseSKI("I K")));
-      assertEquals(unparseSKI(fromDagWire(resultDag)), "K");
 
-      await session.traceDump();
-      const dumpPath = await waitForTraceDump(traceDir);
-      const dump = await readTraceDumpJson<{
-        dump_version: number;
-        epoch: number;
-        runtime: { worker_count: number };
-        workers: Array<{
-          worker_id: number;
-          complete: boolean;
-          recent_events: Array<{ kind: string }>;
-        }>;
-      }>(dumpPath);
-
-      assertEquals(dump.dump_version, 1);
-      assert(dump.epoch >= 1);
-      assertEquals(dump.runtime.worker_count, 1);
-      assertEquals(dump.workers.length, 1);
-      assertEquals(dump.workers[0]?.worker_id, 0);
-      assertEquals(dump.workers[0]?.complete, true);
-      assert(
-        (dump.workers[0]?.recent_events.length ?? 0) > 0,
-        `expected non-empty recent_events in ${dumpPath}`,
+      await t.step(
+        "native IO - multiple writeOne ABC preserves sequential order via session (streaming)",
+        async () => {
+          await withHarnessSession(async (session) => {
+            for (let i = 0; i < 32; i++) {
+              await runThanatosSnapshot("writeOneABC", session);
+            }
+          });
+        },
       );
-    } finally {
-      await session.close();
-      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
-    }
-  },
-});
 
-Deno.test({
-  name: "thanatos trace dump - idle multi-worker snapshot is complete",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const traceDir = await Deno.makeTempDir();
-    const session = new ThanatosSession();
-    try {
-      session.start(2, {
-        THANATOS_TRACE_DIR: traceDir,
-        THANATOS_TRACE_TIMEOUT_MS: "200",
+      await t.step("native IO - readOne via session (streaming)", async () => {
+        await withHarnessSession(async (session) => {
+          await runThanatosSnapshot("readOneA", session);
+        });
       });
-      await session.ping();
 
-      await session.traceDump();
-      const dumpPath = await waitForTraceDump(traceDir);
-      const dump = await readTraceDumpJson<{
-        runtime: { worker_count: number };
-        workers: Array<{
-          worker_id: number;
-          complete: boolean;
-          state: string;
-        }>;
-      }>(dumpPath);
+      await t.step(
+        "native IO - interleaved read/write echo via session",
+        async () => {
+          await withHarnessSession(async (session) => {
+            await runThanatosSnapshot("interleavedEcho", session);
+          });
+        },
+      );
 
-      assertEquals(dump.runtime.worker_count, 2);
-      assertEquals(dump.workers.length, 2);
-      assertEquals(
-        dump.workers.map((worker) => worker.worker_id),
-        [0, 1],
+      await t.step(
+        "native IO - readOne echo via zero-copy mmap file session",
+        async () => {
+          await withHarnessSession(async (session) => {
+            await runThanatosSnapshot("readOneMmapS", session);
+          });
+        },
       );
-      assertEquals(
-        dump.workers.map((worker) => worker.complete),
-        [true, true],
-      );
-      assertEquals(
-        dump.workers.map((worker) => worker.state),
-        ["idle", "idle"],
-      );
-    } finally {
-      await session.close();
-      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
-    }
-  },
-});
 
-Deno.test({
-  name: "thanatos trace dump - repeated TRACE_DUMP increments epoch files",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const traceDir = await Deno.makeTempDir();
-    const session = new ThanatosSession();
-    try {
-      session.start(1, {
-        THANATOS_TRACE_DIR: traceDir,
-        THANATOS_TRACE_TIMEOUT_MS: "200",
+      await t.step("RESET after several reductions then REDUCE", async () => {
+        await withHarnessSession(async (session) => {
+          const r1 = await session.reduceDag(toDagWire(parseSKI("I S")));
+          assertEquals(unparseSKI(fromDagWire(r1)), "S");
+          const r2 = await session.reduceDag(toDagWire(parseSKI("K S K")));
+          assertEquals(unparseSKI(fromDagWire(r2)), "S");
+          await session.reset();
+          const r3 = await session.reduceDag(toDagWire(parseSKI("I K")));
+          assertEquals(unparseSKI(fromDagWire(r3)), "K");
+        });
       });
-      await session.ping();
-      await session.reduceDag(toDagWire(parseSKI("I S")));
 
-      await session.traceDump();
-      await waitForTraceDump(traceDir);
-      await session.traceDump();
-
-      const dumpPaths = await waitForTraceDumpCount(traceDir, 2);
-      const dumps = await Promise.all(
-        dumpPaths.map(async (path) =>
-          await readTraceDumpJson<{
-            epoch: number;
-            runtime: { worker_count: number };
-            workers: Array<{ complete: boolean }>;
-          }>(path)
-        ),
-      );
-      dumps.sort((a, b) => a.epoch - b.epoch);
-
-      assertEquals(
-        dumps.map((dump) => dump.epoch),
-        [1, 2],
-      );
-      assertEquals(
-        dumps.map((dump) => dump.runtime.worker_count),
-        [1, 1],
-      );
-      assertEquals(
-        dumps.map((dump) => dump.workers.length),
-        [1, 1],
-      );
-      assertEquals(
-        dumps.map((dump) => dump.workers[0]?.complete),
-        [true, true],
-      );
-    } finally {
-      await session.close();
-      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
-    }
-  },
-});
-
-Deno.test({
-  name: "REDUCE_FILE - rejects path > 1023 chars",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      const longPath = "a".repeat(1024);
-      const res = await session.rawRequest(`REDUCE_FILE ${longPath} out.bin I`);
-      assertEquals(res, "ERR path too long (max 1023 chars)");
-
-      const res2 = await session.rawRequest(
-        `REDUCE_FILE in.bin "${longPath}" I`,
-      );
-      assertEquals(res2, "ERR path too long (max 1023 chars)");
-    } finally {
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "REDUCE_FILE - rejects missing input file",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    const outPath = await Deno.makeTempFile();
-    try {
-      const res = await session.rawRequest(
-        `REDUCE_FILE missing-input.bin "${outPath}" I`,
-      );
-      assertEquals(res, "ERR cannot open input file");
-    } finally {
-      await Deno.remove(outPath).catch(() => {});
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "REDUCE_FILE - empty input file fails with EOF-backed reduction error",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    const inPath = await Deno.makeTempFile();
-    const outPath = await Deno.makeTempFile();
-    try {
-      const dag = toDagWire(parseSKI(", (C . I) I"));
-      await Deno.writeFile(inPath, new Uint8Array(0));
-      await assertRejects(
-        () => session.reduceFile(dag, inPath, outPath),
-        Error,
-        "thanatos: reduction error",
-      );
-      assertEquals((await Deno.stat(outPath)).size, 0);
-    } finally {
-      await Deno.remove(inPath).catch(() => {});
-      await Deno.remove(outPath).catch(() => {});
-      await session.close();
-    }
-  },
-});
-
-Deno.test({
-  name: "thanatos trace dump - SIGHUP remains a POSIX alias",
-  ignore: !thanatosAvailable() || Deno.build.os === "windows",
-  fn: async () => {
-    const traceDir = await Deno.makeTempDir();
-    const session = new ThanatosSession();
-    try {
-      session.start(1, {
-        THANATOS_TRACE_DIR: traceDir,
-        THANATOS_TRACE_TIMEOUT_MS: "200",
+      await t.step("daemon PING RESET STATS QUIT", async () => {
+        await withHarnessSession(async (session) => {
+          await session.ping();
+          await session.reset();
+          const statsLine = await session.stats();
+          assert(
+            statsLine.includes("top=") &&
+              statsLine.includes("capacity=") &&
+              statsLine.includes("total_nodes=") &&
+              statsLine.includes("total_steps=") &&
+              statsLine.includes("total_cons_allocs=") &&
+              statsLine.includes("total_cont_allocs=") &&
+              statsLine.includes("total_susp_allocs=") &&
+              statsLine.includes("duplicate_lost_allocs=") &&
+              statsLine.includes("hashcons_hits=") &&
+              statsLine.includes("hashcons_misses=") &&
+              statsLine.includes("events=") &&
+              statsLine.includes("dropped="),
+            "STATS missing expected fields: " + statsLine,
+          );
+        });
       });
-      await session.ping();
-      session.signal("SIGHUP");
-      const dumpPath = await waitForTraceDump(traceDir);
-      assert(dumpPath.endsWith(".json"));
+
+      await t.step(
+        "thanatos trace dump - TRACE_DUMP writes JSON worker snapshot",
+        async () => {
+          const traceDir = await prepareHarnessTraceDir();
+          await withHarnessSession(async (session) => {
+            await session.ping();
+            const resultDag = await session.reduceDag(
+              toDagWire(parseSKI("I K")),
+            );
+            assertEquals(unparseSKI(fromDagWire(resultDag)), "K");
+
+            await session.traceDump();
+            const dumpPath = await waitForTraceDump(traceDir);
+            const dump = await readTraceDumpJson<{
+              dump_version: number;
+              epoch: number;
+              runtime: { worker_count: number };
+              workers: Array<{
+                worker_id: number;
+                complete: boolean;
+                recent_events: Array<{ kind: string }>;
+              }>;
+            }>(dumpPath);
+
+            assertEquals(dump.dump_version, 1);
+            assert(dump.epoch >= 1);
+            assertEquals(dump.runtime.worker_count, HARNESS_WORKERS);
+            assertEquals(dump.workers.length, HARNESS_WORKERS);
+            assertEquals(
+              dump.workers.map((worker) => worker.worker_id),
+              HARNESS_WORKER_IDS,
+            );
+            assertEquals(
+              dump.workers.map((worker) => worker.complete),
+              HARNESS_COMPLETE_STATES,
+            );
+            assert(
+              dump.workers.some((worker) => worker.recent_events.length > 0),
+              `expected non-empty recent_events in ${dumpPath}`,
+            );
+          });
+        },
+      );
+
+      await t.step(
+        "thanatos trace dump - idle multi-worker snapshot is complete",
+        async () => {
+          const traceDir = await prepareHarnessTraceDir();
+          await withHarnessSession(async (session) => {
+            await session.ping();
+
+            await session.traceDump();
+            const dumpPath = await waitForTraceDump(traceDir);
+            const dump = await readTraceDumpJson<{
+              runtime: { worker_count: number };
+              workers: Array<{
+                worker_id: number;
+                complete: boolean;
+                state: string;
+              }>;
+            }>(dumpPath);
+
+            assertEquals(dump.runtime.worker_count, HARNESS_WORKERS);
+            assertEquals(dump.workers.length, HARNESS_WORKERS);
+            assertEquals(
+              dump.workers.map((worker) => worker.worker_id),
+              HARNESS_WORKER_IDS,
+            );
+            assertEquals(
+              dump.workers.map((worker) => worker.complete),
+              HARNESS_COMPLETE_STATES,
+            );
+            assertEquals(
+              dump.workers.map((worker) => worker.state),
+              HARNESS_IDLE_STATES,
+            );
+          });
+        },
+      );
+
+      await t.step(
+        "thanatos trace dump - repeated TRACE_DUMP increments epoch files",
+        async () => {
+          const traceDir = await prepareHarnessTraceDir();
+          await withHarnessSession(async (session) => {
+            await session.ping();
+            await session.reduceDag(toDagWire(parseSKI("I S")));
+
+            await session.traceDump();
+            await waitForTraceDump(traceDir);
+            await session.traceDump();
+
+            const dumpPaths = await waitForTraceDumpCount(traceDir, 2);
+            const dumps = await Promise.all(
+              dumpPaths.map(async (path) =>
+                await readTraceDumpJson<{
+                  epoch: number;
+                  runtime: { worker_count: number };
+                  workers: Array<{ complete: boolean }>;
+                }>(path)
+              ),
+            );
+            dumps.sort((a, b) => a.epoch - b.epoch);
+
+            const epochs = dumps.map((dump) => dump.epoch);
+            assertEquals(epochs.length, 2);
+            assertEquals(epochs[1], (epochs[0] ?? 0) + 1);
+            assertEquals(
+              dumps.map((dump) => dump.runtime.worker_count),
+              [HARNESS_WORKERS, HARNESS_WORKERS],
+            );
+            assertEquals(
+              dumps.map((dump) => dump.workers.length),
+              [HARNESS_WORKERS, HARNESS_WORKERS],
+            );
+            assertEquals(
+              dumps.map((dump) =>
+                dump.workers.every((worker) => worker.complete)
+              ),
+              [true, true],
+            );
+          });
+        },
+      );
+
+      await t.step("REDUCE_FILE - rejects path > 1023 chars", async () => {
+        await withHarnessSession(async (session) => {
+          const longPath = "a".repeat(1024);
+          const res = await session.rawRequest(
+            `REDUCE_FILE ${longPath} out.bin I`,
+          );
+          assertEquals(res, "ERR path too long (max 1023 chars)");
+
+          const res2 = await session.rawRequest(
+            `REDUCE_FILE in.bin "${longPath}" I`,
+          );
+          assertEquals(res2, "ERR path too long (max 1023 chars)");
+        });
+      });
+
+      await t.step("REDUCE_FILE - rejects missing input file", async () => {
+        const outPath = await Deno.makeTempFile();
+        try {
+          await withHarnessSession(async (session) => {
+            const res = await session.rawRequest(
+              `REDUCE_FILE missing-input.bin "${outPath}" I`,
+            );
+            assertEquals(res, "ERR cannot open input file");
+          });
+        } finally {
+          await Deno.remove(outPath).catch(() => {});
+        }
+      });
+
+      await t.step(
+        "REDUCE_FILE - empty input file fails with EOF-backed reduction error",
+        async () => {
+          const inPath = await Deno.makeTempFile();
+          const outPath = await Deno.makeTempFile();
+          try {
+            await withHarnessSession(async (session) => {
+              const dag = toDagWire(parseSKI(", (C . I) I"));
+              await Deno.writeFile(inPath, new Uint8Array(0));
+              await assertRejects(
+                () => session.reduceFile(dag, inPath, outPath),
+                Error,
+                "thanatos: reduction error",
+              );
+              assertEquals((await Deno.stat(outPath)).size, 0);
+            });
+          } finally {
+            await Deno.remove(inPath).catch(() => {});
+            await Deno.remove(outPath).catch(() => {});
+          }
+        },
+      );
+
+      if (Deno.build.os !== "windows") {
+        await t.step(
+          "thanatos trace dump - SIGHUP remains a POSIX alias",
+          async () => {
+            const traceDir = await prepareHarnessTraceDir();
+            await withHarnessSession(async (session) => {
+              await session.ping();
+              session.signal("SIGHUP");
+              const dumpPath = await waitForTraceDump(traceDir);
+              assert(dumpPath.endsWith(".json"));
+            });
+          },
+        );
+      }
+
+      await t.step("ThanatosSession - reduceDag error (coverage)", async () => {
+        await withHarnessSession(async (session) => {
+          await assertRejects(
+            () => session.reduceDag("INVALID"),
+            Error,
+            "thanatos: parse error",
+          );
+        });
+      });
     } finally {
-      await session.close();
-      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
+      await closeBatchThanatosSessions();
+      await cleanupHarnessTraceDir();
     }
   },
 });
@@ -1110,22 +641,5 @@ Deno.test({
       Error,
       "invalid DAG terminal: ?",
     );
-  },
-});
-
-Deno.test({
-  name: "ThanatosSession - reduceDag error (coverage)",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const session = await getThanatosSession();
-    try {
-      await assertRejects(
-        () => session.reduceDag("INVALID"),
-        Error,
-        "thanatos: parse error",
-      );
-    } finally {
-      await session.close();
-    }
   },
 });

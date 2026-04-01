@@ -1,6 +1,41 @@
+load("//bazel:deno_dist.bzl", "deno_dist")
+load("//bazel:deno_sharded_test.bzl", "deno_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
 
 package(default_visibility = ["//visibility:public"])
+
+DENO_TEST_DATA = glob(
+    [
+        "*.json",
+        "*.jsonc",
+        "*.md",
+        "bin/**",
+        "compiler/**",
+        "lib/**",
+        "scripts/**",
+        "server/**",
+        "test/**",
+    ],
+    exclude = [
+        "coverage/**",
+        "dist/**",
+    ],
+)
+
+DENO_DIST_DATA = glob(
+    [
+        "*.json",
+        "*.jsonc",
+        "bin/**",
+        "compiler/**",
+        "lib/**",
+        "scripts/**",
+    ],
+    exclude = [
+        "coverage/**",
+        "dist/**",
+    ],
+)
 
 alias(
     name = "thanatos",
@@ -25,6 +60,20 @@ test_suite(
         "//core:ski_io_test",
         "//core:util_test",
     ],
+)
+
+deno_dist(
+    name = "dist_artifacts",
+    data = DENO_DIST_DATA,
+)
+
+deno_sharded_test(
+    name = "deno_tests",
+    data = DENO_TEST_DATA,
+    dist = ":dist_artifacts",
+    shard_count = 8,
+    thanatos = "//core:thanatos",
+    wasm = "//wasm:release",
 )
 
 workspace_command(
@@ -65,6 +114,11 @@ workspace_command(
 workspace_command(
     name = "lint",
     subcommand = "lint",
+)
+
+workspace_command(
+    name = "typecheck",
+    subcommand = "typecheck",
 )
 
 workspace_command(

@@ -2,8 +2,9 @@
  * Unit tests for the bootstrapped lexer (lib/compiler/lexer.trip)
  *
  * Tests are organized bottom-up, testing each function in the order
- * they appear in the lexer module. Each test runs its own thanatos
- * process to avoid long-running single batches.
+ * they appear in the lexer module. Thanatos-backed cases share the
+ * batch-scoped harness session so we keep startup costs down while
+ * still resetting the arena between logical test runs.
  */
 
 import { assert } from "chai";
@@ -20,13 +21,14 @@ import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import {
+  closeBatchThanatosSessions,
   fromDagWire,
-  getThanatosSession,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
   toDagWire,
-} from "../thanatosHarness.test.ts";
+  withBatchThanatosSession,
+} from "../thanatosHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEXER_SOURCE_FILE = new URL(
@@ -71,144 +73,140 @@ async function compileAndValidateTestProgram(
 }
 
 Deno.test({
-  name: "Lexer - isSpace structure validation",
+  name: "Lexer thanatos suite",
   ignore: !thanatosAvailable(),
-  fn: async () => {
-    const program = await compileAndValidateTestProgram("testIsSpace.trip");
-    const lines = await runThanatosBatch([unparseSKI(program)]);
-    const line = lines[0];
-    assert.isNotEmpty(line, "thanatos should return a result");
-    assert.equal(
-      await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
-      false,
-      "isSpace structure validation",
-    );
-  },
-});
+  fn: async (t) => {
+    try {
+      await t.step("Lexer - isSpace structure validation", async () => {
+        const program = await compileAndValidateTestProgram("testIsSpace.trip");
+        const lines = await runThanatosBatch([unparseSKI(program)]);
+        const line = lines[0];
+        assert.isNotEmpty(line, "thanatos should return a result");
+        assert.equal(
+          await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
+          false,
+          "isSpace structure validation",
+        );
+      });
 
-Deno.test({
-  name: "Lexer - isSpace character codes",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const lexerObj = await getLexerObject();
-    const preludeObj = await getPreludeObjectCached();
+      await t.step("Lexer - isSpace character codes", async () => {
+        const lexerObj = await getLexerObject();
+        const preludeObj = await getPreludeObjectCached();
 
-    const testCases: Array<[number, boolean]> = [
-      [32, true],
-      [10, true],
-      [13, true],
-      [9, true],
-      [0, false],
-      [65, false],
-      [97, false],
-      [48, false],
-    ];
-    const inputs: string[] = [];
-    for (const [charCode] of testCases) {
-      const testSource = `module Test
+        const testCases: Array<[number, boolean]> = [
+          [32, true],
+          [10, true],
+          [13, true],
+          [9, true],
+          [0, false],
+          [65, false],
+          [97, false],
+          [48, false],
+        ];
+        const inputs: string[] = [];
+        for (const [charCode] of testCases) {
+          const testSource = `module Test
 import Lexer isSpaceU8
 import Prelude Bool
 export main
 poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 `;
-      const testObj = compileToObjectFile(testSource);
-      const skiExpression = linkModules([
-        { name: "Prelude", object: preludeObj },
-        { name: "Lexer", object: lexerObj },
-        { name: "Test", object: testObj },
-      ]);
-      inputs.push(unparseSKI(parseSKI(skiExpression)));
-    }
+          const testObj = compileToObjectFile(testSource);
+          const skiExpression = linkModules([
+            { name: "Prelude", object: preludeObj },
+            { name: "Lexer", object: lexerObj },
+            { name: "Test", object: testObj },
+          ]);
+          inputs.push(unparseSKI(parseSKI(skiExpression)));
+        }
 
-    const results = await runThanatosBatch(inputs);
-    assert.equal(results.length, inputs.length);
-    for (let i = 0; i < testCases.length; i++) {
-      const tc = testCases[i];
-      if (tc === undefined) continue;
-      const [charCode, expected] = tc;
-      const line = results[i] ?? "";
-      assert.isNotEmpty(
-        line,
-        `thanatos should return result for isSpace(${charCode})`,
+        const results = await runThanatosBatch(inputs);
+        assert.equal(results.length, inputs.length);
+        for (let i = 0; i < testCases.length; i++) {
+          const tc = testCases[i];
+          if (tc === undefined) continue;
+          const [charCode, expected] = tc;
+          const line = results[i] ?? "";
+          assert.isNotEmpty(
+            line,
+            `thanatos should return result for isSpace(${charCode})`,
+          );
+          const decoded = await UnChurchNumber(
+            parseSKI(line),
+            passthroughEvaluator,
+          );
+          assert.equal(
+            decoded,
+            expected ? 1n : 0n,
+            `isSpace(${charCode}) should be ${expected} (got ${decoded}n)`,
+          );
+        }
+      });
+
+      await t.step(
+        'Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF',
+        async () => {
+          const lexerObj = await getLexerObject();
+          const preludeObj = await getPreludeObjectCached();
+
+          const testObj = await loadTripModuleObject(
+            join(__dirname, "inputs", "testTokenize1Space2.trip"),
+          );
+          const skiExpression = linkModules([
+            { name: "Prelude", object: preludeObj },
+            { name: "Lexer", object: lexerObj },
+            { name: "Test", object: testObj },
+          ]);
+          const input = unparseSKI(parseSKI(skiExpression));
+
+          const lines = await runThanatosBatch([input]);
+          const line = lines[0];
+          assert.isNotEmpty(line, "thanatos should return a result");
+          assert.isTrue(
+            await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
+            'tokenize "1 2" should yield T_Nat "1", T_Nat "2", T_EOF',
+          );
+        },
       );
-      const decoded = await UnChurchNumber(
-        parseSKI(line),
-        passthroughEvaluator,
-      );
-      assert.equal(
-        decoded,
-        expected ? 1n : 0n,
-        `isSpace(${charCode}) should be ${expected} (got ${decoded}n)`,
-      );
-    }
-  },
-});
 
-Deno.test({
-  name: 'Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF',
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const lexerObj = await getLexerObject();
-    const preludeObj = await getPreludeObjectCached();
-
-    const testObj = await loadTripModuleObject(
-      join(__dirname, "inputs", "testTokenize1Space2.trip"),
-    );
-    const skiExpression = linkModules([
-      { name: "Prelude", object: preludeObj },
-      { name: "Lexer", object: lexerObj },
-      { name: "Test", object: testObj },
-    ]);
-    const input = unparseSKI(parseSKI(skiExpression));
-
-    const lines = await runThanatosBatch([input]);
-    const line = lines[0];
-    assert.isNotEmpty(line, "thanatos should return a result");
-    assert.isTrue(
-      await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
-      'tokenize "1 2" should yield T_Nat "1", T_Nat "2", T_EOF',
-    );
-  },
-});
-
-Deno.test({
-  name: "Lexer - structural validations",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const structuralTests = [
-      {
-        file: "testLexIdentVsKw.trip",
-        msg: "Expected `abc` => T_Ident and `poly` => T_KwPoly",
-      },
-      {
-        file: "testLexNat.trip",
-        msg: "Expected `123` => T_Nat 123 followed by T_EOF",
-      },
-      {
-        file: "testLexArrows.trip",
-        msg: "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
-      },
-      {
-        file: "testLexCoreKeywords.trip",
-        msg: "Expected let/match/in to tokenize as dedicated keyword tokens",
-      },
-      {
-        file: "testLexRecKeyword.trip",
-        msg: "Expected `rec` in source text to tokenize as T_KwRec",
-      },
-    ];
-    const session = await getThanatosSession();
-    try {
-      for (const tc of structuralTests) {
-        const program = await compileAndValidateTestProgram(tc.file);
-        const dag = toDagWire(program);
-        const resultDag = await session.reduceDag(dag);
-        const resultExpr = fromDagWire(resultDag);
-        const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
-        assert.isTrue(ok, tc.msg);
-      }
+      await t.step("Lexer - structural validations", async () => {
+        const structuralTests = [
+          {
+            file: "testLexIdentVsKw.trip",
+            msg: "Expected `abc` => T_Ident and `poly` => T_KwPoly",
+          },
+          {
+            file: "testLexNat.trip",
+            msg: "Expected `123` => T_Nat 123 followed by T_EOF",
+          },
+          {
+            file: "testLexArrows.trip",
+            msg:
+              "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
+          },
+          {
+            file: "testLexCoreKeywords.trip",
+            msg:
+              "Expected let/match/in to tokenize as dedicated keyword tokens",
+          },
+          {
+            file: "testLexRecKeyword.trip",
+            msg: "Expected `rec` in source text to tokenize as T_KwRec",
+          },
+        ];
+        await withBatchThanatosSession(async (session) => {
+          for (const tc of structuralTests) {
+            const program = await compileAndValidateTestProgram(tc.file);
+            const dag = toDagWire(program);
+            const resultDag = await session.reduceDag(dag);
+            const resultExpr = fromDagWire(resultDag);
+            const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
+            assert.isTrue(ok, tc.msg);
+          }
+        });
+      });
     } finally {
-      await session.close();
+      await closeBatchThanatosSessions();
     }
   },
 });

@@ -772,8 +772,6 @@ Deno.test({
     const evaluator = await ParallelArenaEvaluatorWasm.create(2, false, {
       maxResubmits: 100,
     });
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
 
     try {
       const divergent = parseSKI("(SII)(SII)");
@@ -795,7 +793,6 @@ Deno.test({
       // Divergent work may succeed or fail depending on step timing,
       // but should not crash the evaluator or workers.
     } finally {
-      clearTimeout(timeout);
       evaluator.terminate();
     }
   },

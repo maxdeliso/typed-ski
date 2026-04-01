@@ -86,13 +86,15 @@
     "bundle:tripc:node": "deno bundle --platform=browser -o dist/tripc.node.js bin/tripc.ts",
     "compile:tripc": "deno compile --allow-read --allow-write --output dist/tripc bin/tripc.ts",
     "dist": "mkdir -p dist && deno task bundle:tripc && deno task bundle:tripc:minified && deno task bundle:tripc:node && deno task compile:tripc",
-    "test": "deno test --allow-read --allow-write --allow-run --allow-env --parallel test/",
-    "test:coverage": "rm -rf coverage && deno test --allow-read --allow-write --allow-run --allow-env --parallel --coverage=coverage/ test/",
+    "typecheck:test": "deno check test/",
+    "test:run": "deno test --no-check --allow-read --allow-write --allow-run --allow-env --parallel test/",
+    "test": "deno task typecheck:test && deno task test:run",
+    "test:coverage": "rm -rf coverage && deno task typecheck:test && deno test --no-check --allow-read --allow-write --allow-run --allow-env --parallel --coverage=coverage/ test/",
     "coverage:lcov": "deno coverage coverage/ --exclude=test/ --lcov --output=coverage.lcov",
     "coverage:report": "deno coverage coverage/ --exclude=test/"
   },
   "toolchain": {
-    "deno": "2.7.9"
+    "deno": "2.7.10"
   },
   "version": "0.16.9"
 }

@@ -7,12 +7,13 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import {
+  closeBatchThanatosSessions,
   fromDagWire,
-  getThanatosSession,
   passthroughEvaluator,
   thanatosAvailable,
   toDagWire,
-} from "../thanatosHarness.test.ts";
+  withBatchThanatosSession,
+} from "../thanatosHarness.ts";
 
 const LEXER_SOURCE_FILE = new URL(
   "../../lib/compiler/lexer.trip",
@@ -178,14 +179,11 @@ async function runBridgeHarness(source: string): Promise<boolean> {
     { name: "Test", object: testObject },
   ]);
   const expr = parseSKI(linked);
-  const session = await getThanatosSession();
-  try {
+  return await withBatchThanatosSession(async (session) => {
     const resultDag = await session.reduceDag(toDagWire(expr));
     const resultExpr = fromDagWire(resultDag);
     return await UnChurchBoolean(resultExpr, passthroughEvaluator);
-  } finally {
-    await session.close();
-  }
+  });
 }
 
 Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async () => {
@@ -224,16 +222,20 @@ Deno.test({
   name: "Bridge rejects data declarations with too many constructors",
   ignore: !thanatosAvailable(),
   fn: async () => {
-    const source = await Deno.readTextFile(BRIDGE_SOURCE_FILE);
-    assert.include(
-      source,
-      "checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)",
-      "Expected D_Data elaboration to use checkedLengthU8 before populating the data environment",
-    );
-    const ok = await runBridgeHarness(makeCheckedLengthOverflowHarness());
-    assert.isTrue(
-      ok,
-      "Expected checkedLengthU8 to reject constructor-count overflow at #u8(255)",
-    );
+    try {
+      const source = await Deno.readTextFile(BRIDGE_SOURCE_FILE);
+      assert.include(
+        source,
+        "checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)",
+        "Expected D_Data elaboration to use checkedLengthU8 before populating the data environment",
+      );
+      const ok = await runBridgeHarness(makeCheckedLengthOverflowHarness());
+      assert.isTrue(
+        ok,
+        "Expected checkedLengthU8 to reject constructor-count overflow at #u8(255)",
+      );
+    } finally {
+      await closeBatchThanatosSessions();
+    }
   },
 });

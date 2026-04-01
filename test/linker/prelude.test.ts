@@ -11,10 +11,11 @@ import { getNatObject } from "../../lib/nat.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import {
+  closeBatchThanatosSessions,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
-} from "../thanatosHarness.test.ts";
+} from "../thanatosHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -91,19 +92,23 @@ Deno.test({
   name: "links prelude arithmetic cases (thanatos)",
   ignore: !thanatosAvailable(),
   fn: async () => {
-    const results = await runArithmeticBatchThanatos();
-    assertEquals(results.get("basic"), 6n, "mul two three should equal 6");
-    assertEquals(results.get("simple"), 2n, "add one one should equal 2");
-    assertEquals(
-      results.get("multiplication"),
-      6n,
-      "mul two three should equal 6",
-    );
-    assertEquals(
-      results.get("complex"),
-      10n,
-      "Complex arithmetic should equal 10",
-    );
+    try {
+      const results = await runArithmeticBatchThanatos();
+      assertEquals(results.get("basic"), 6n, "mul two three should equal 6");
+      assertEquals(results.get("simple"), 2n, "add one one should equal 2");
+      assertEquals(
+        results.get("multiplication"),
+        6n,
+        "mul two three should equal 6",
+      );
+      assertEquals(
+        results.get("complex"),
+        10n,
+        "Complex arithmetic should equal 10",
+      );
+    } finally {
+      await closeBatchThanatosSessions();
+    }
   },
 });
 

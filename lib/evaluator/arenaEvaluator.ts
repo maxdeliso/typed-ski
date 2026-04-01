@@ -62,6 +62,8 @@ const terminalCache = new WeakMap<
   }
 >();
 
+const DEFAULT_WASM_ARENA_MAX_CAPACITY = 1 << 20;
+
 /**
  * Convert an SKI expression to an arena node ID.
  * Shared utility function used by both ArenaEvaluatorWasm and arenaWorker.
@@ -456,6 +458,14 @@ export class ArenaEvaluatorWasm implements Evaluator {
       instance as unknown as ArenaWasmExports,
       memory,
     );
+    if (instance.initArena) {
+      const result = instance.initArena(DEFAULT_WASM_ARENA_MAX_CAPACITY);
+      if (result === 0) {
+        throw new Error(
+          `initArena failed for capacity ${DEFAULT_WASM_ARENA_MAX_CAPACITY}`,
+        );
+      }
+    }
     evaluator.reset();
     return evaluator;
   }

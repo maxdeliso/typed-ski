@@ -523,8 +523,13 @@ static inline ControlViews control_views(void) {
 
 /** Order: term_cache -> nodes -> buckets. Nodes never move on grow(). Uses
  * 64-bit for offset_buckets/total_size to avoid overflow at large capacity. */
-static SabLayout calculate_layout(uint32_t capacity) {
+static SabLayout calculate_layout(uint32_t capacity, uint32_t max_capacity) {
   SabLayout l;
+  uint32_t reserve_capacity = max_capacity;
+  if (reserve_capacity < capacity)
+    reserve_capacity = capacity;
+  if (reserve_capacity > MAX_CAP)
+    reserve_capacity = MAX_CAP;
   l.offset_sq = align64(sizeof(SabHeader));
   l.offset_cq = align64(l.offset_sq + ring_bytes(RING_ENTRIES, sizeof(Sqe)));
   l.offset_stdin = align64(l.offset_cq + ring_bytes(RING_ENTRIES, sizeof(Cqe)));
@@ -536,19 +541,22 @@ static SabLayout calculate_layout(uint32_t capacity) {
       align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
   l.control_bytes = total_control_bytes();
   l.offset_term_cache = align64(l.offset_control + l.control_bytes);
-  /* Invariant offsets: partition the reserved MAX_CAP space immediately. */
+  /* Invariant offsets: partition the reserved max-capacity space immediately. */
   l.offset_node_left =
       (uint64_t)align64(l.offset_term_cache + TERM_CACHE_LEN * 4);
-  l.offset_node_right = align64_u64(l.offset_node_left + (uint64_t)MAX_CAP * 4);
+  l.offset_node_right =
+      align64_u64(l.offset_node_left + (uint64_t)reserve_capacity * 4);
   l.offset_node_hash32 =
-      align64_u64(l.offset_node_right + (uint64_t)MAX_CAP * 4);
+      align64_u64(l.offset_node_right + (uint64_t)reserve_capacity * 4);
   l.offset_node_next_idx =
-      align64_u64(l.offset_node_hash32 + (uint64_t)MAX_CAP * 4);
+      align64_u64(l.offset_node_hash32 + (uint64_t)reserve_capacity * 4);
   l.offset_node_kind =
-      align64_u64(l.offset_node_next_idx + (uint64_t)MAX_CAP * 4);
-  l.offset_node_sym = align64_u64(l.offset_node_kind + (uint64_t)MAX_CAP * 1);
+      align64_u64(l.offset_node_next_idx + (uint64_t)reserve_capacity * 4);
+  l.offset_node_sym =
+      align64_u64(l.offset_node_kind + (uint64_t)reserve_capacity * 1);
   /* Buckets follow the node arrays. */
-  l.offset_buckets = align64_u64(l.offset_node_sym + (uint64_t)MAX_CAP * 1);
+  l.offset_buckets =
+      align64_u64(l.offset_node_sym + (uint64_t)reserve_capacity * 1);
   l.total_size = l.offset_buckets + (uint64_t)capacity * 4;
   return l;
 }
@@ -635,7 +643,7 @@ static bool commit_arena_capacity_ranges(const SabLayout *layout,
 
 static void *allocate_raw_arena(uint32_t initial_capacity,
                                 uint32_t max_capacity) {
-  SabLayout layout = calculate_layout(initial_capacity);
+  SabLayout layout = calculate_layout(initial_capacity, max_capacity);
 #ifdef __wasm__
   uint32_t pages_needed =
       (uint32_t)((layout.total_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE);
@@ -645,7 +653,7 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   ARENA_BASE_ADDR = (uint8_t *)((uintptr_t)old_pages * WASM_PAGE_SIZE);
 #else
 
-  SabLayout reserve_layout = calculate_layout(max_capacity);
+  SabLayout reserve_layout = calculate_layout(max_capacity, max_capacity);
   ARENA_RESERVED_BYTES = (size_t)reserve_layout.total_size;
   fprintf(stderr,
           "Arena: reserving %zu bytes (active=%zu initial=%u max=%u), "
@@ -2409,7 +2417,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   /* Cap so we never write past the actual mmap (defense-in-depth). */
   if (ARENA_RESERVED_BYTES > 0) {
     while (new_cap > old_cap) {
-      SabLayout probe = calculate_layout(new_cap);
+      SabLayout probe = calculate_layout(new_cap, max_cap);
       if ((size_t)probe.total_size <= ARENA_RESERVED_BYTES)
         break;
       new_cap--;
@@ -2429,7 +2437,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   (void)grow_num;
 #endif
 
-  SabLayout layout = calculate_layout(new_cap);
+  SabLayout layout = calculate_layout(new_cap, max_cap);
 
 #ifdef __wasm__
   uint32_t current_bytes = __builtin_wasm_memory_size(0) * WASM_PAGE_SIZE;
@@ -3290,7 +3298,7 @@ uint32_t debugGetArenaBaseAddr(void) {
 }
 uint32_t getArenaMode(void) { return ARENA_MODE; }
 uint32_t debugCalculateArenaSize(uint32_t capacity) {
-  uint64_t size = calculate_layout(capacity).total_size;
+  uint64_t size = calculate_layout(capacity, capacity).total_size;
   return (uint32_t)(size > (uint64_t)(uint32_t)-1 ? (uint32_t)-1 : size);
 }
 uint32_t debugLockState(void) {

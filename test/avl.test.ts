@@ -9,6 +9,7 @@ import { getBinObject } from "../lib/bin.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
+import type { TripCObject } from "../lib/compiler/objectFile.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
 import {
@@ -164,20 +165,36 @@ const AVL_CASES: AvlCase[] = [
   },
 ];
 
-const preludeObjectPromise = getPreludeObject();
-const binObjectPromise = getBinObject();
-const natObjectPromise = getNatObject();
-const avlObjectPromise = getAvlObject();
+let preludeObjectPromise: Promise<TripCObject> | undefined;
+let binObjectPromise: Promise<TripCObject> | undefined;
+let natObjectPromise: Promise<TripCObject> | undefined;
+let avlObjectPromise: Promise<TripCObject> | undefined;
+
+function getPreludeObjectCached(): Promise<TripCObject> {
+  return preludeObjectPromise ??= getPreludeObject();
+}
+
+function getBinObjectCached(): Promise<TripCObject> {
+  return binObjectPromise ??= getBinObject();
+}
+
+function getNatObjectCached(): Promise<TripCObject> {
+  return natObjectPromise ??= getNatObject();
+}
+
+function getAvlObjectCached(): Promise<TripCObject> {
+  return avlObjectPromise ??= getAvlObject();
+}
 
 async function buildTestExpression(
   source: string,
   moduleName: string,
 ): Promise<SKIExpression> {
   const [preludeObject, binObject, natObject, avlObject] = await Promise.all([
-    preludeObjectPromise,
-    binObjectPromise,
-    natObjectPromise,
-    avlObjectPromise,
+    getPreludeObjectCached(),
+    getBinObjectCached(),
+    getNatObjectCached(),
+    getAvlObjectCached(),
   ]);
   const serialized = compileToObjectFileString(source);
   const testObject = deserializeTripCObject(serialized);

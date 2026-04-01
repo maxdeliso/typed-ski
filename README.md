@@ -141,8 +141,8 @@ workload.
 
 The generated Visual Studio metadata is local-only and gitignored, including
 `compile_commands.json`, `CppProperties.json`, `.vs/`, `typed-ski-native.sln`,
-`typed-ski-*.vcxproj`, `typed-ski-*.vcxproj.filters`, and
-`*.vcxproj.user`. Regenerate them at any time with `bazelisk run //:vs_project`.
+`typed-ski-*.vcxproj`, `typed-ski-*.vcxproj.filters`, and `*.vcxproj.user`.
+Regenerate them at any time with `bazelisk run //:vs_project`.
 
 ### Running Hephaestus
 

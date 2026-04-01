@@ -431,7 +431,9 @@ function renderPositionalTemplate(template: string, values: string[]): string {
   });
 }
 
-async function collectCoreFiles(): Promise<{ sources: string[]; headers: string[] }> {
+async function collectCoreFiles(): Promise<
+  { sources: string[]; headers: string[] }
+> {
   const coreDir = join(PROJECT_ROOT, "core");
   const sources: string[] = [];
   const headers: string[] = [];
@@ -564,7 +566,9 @@ function buildVcxproj(
   const sourceItems = target.sourceFiles.map((file) =>
     `    <ClCompile Include="${xmlEscape(file)}" />`
   ).join("\n");
-  const headerItems = headers.map((file) => `    <ClInclude Include="${xmlEscape(file)}" />`).join("\n");
+  const headerItems = headers.map((file) =>
+    `    <ClInclude Include="${xmlEscape(file)}" />`
+  ).join("\n");
   return renderPositionalTemplate(template, [
     xmlEscape(projectGuid),
     xmlEscape(target.projectName.replaceAll("-", "_")),
@@ -586,12 +590,19 @@ function buildVcxproj(
   ]);
 }
 
-function buildVcxprojFilters(target: VisualStudioNativeTarget, headers: string[]): string {
+function buildVcxprojFilters(
+  target: VisualStudioNativeTarget,
+  headers: string[],
+): string {
   const sourceItems = target.sourceFiles.map((file) =>
-    `    <ClCompile Include="${xmlEscape(file)}"><Filter>Source Files</Filter></ClCompile>`
+    `    <ClCompile Include="${
+      xmlEscape(file)
+    }"><Filter>Source Files</Filter></ClCompile>`
   ).join("\n");
   const headerItems = headers.map((file) =>
-    `    <ClInclude Include="${xmlEscape(file)}"><Filter>Header Files</Filter></ClInclude>`
+    `    <ClInclude Include="${
+      xmlEscape(file)
+    }"><Filter>Header Files</Filter></ClInclude>`
   ).join("\n");
 
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -613,7 +624,9 @@ ${headerItems}
 }
 
 function buildSolution(
-  projects: Array<{ projectName: string; projectFileBase: string; projectGuid: string }>,
+  projects: Array<
+    { projectName: string; projectFileBase: string; projectGuid: string }
+  >,
 ): string {
   const projectEntries = projects.map((project) =>
     `Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "${project.projectName}", "${project.projectFileBase}.vcxproj", "${project.projectGuid}"
@@ -701,16 +714,20 @@ async function generateVisualStudioProject(): Promise<void> {
         continue;
       }
 
-      if ((arg === "-I" || arg === "-isystem" || arg === "-iquote" ||
-        arg === "/I") && index + 1 < args.length) {
+      if (
+        (arg === "-I" || arg === "-isystem" || arg === "-iquote" ||
+          arg === "/I") && index + 1 < args.length
+      ) {
         includeDirs.push(resolveActionPath(args[index + 1]!));
         index += 1;
         continue;
       }
 
-      if ((arg.startsWith("-I") || arg.startsWith("-isystem") ||
-        arg.startsWith("-iquote")) &&
-        !["-I", "-isystem", "-iquote"].includes(arg)) {
+      if (
+        (arg.startsWith("-I") || arg.startsWith("-isystem") ||
+          arg.startsWith("-iquote")) &&
+        !["-I", "-isystem", "-iquote"].includes(arg)
+      ) {
         const prefix = arg.startsWith("-isystem")
           ? "-isystem"
           : arg.startsWith("-iquote")
@@ -764,7 +781,9 @@ async function generateVisualStudioProject(): Promise<void> {
       ]),
       defines: dedupe(defines),
       intelliSenseMode: "windows-clang-x64",
-      compilerPath: compilerPath ? toWorkspaceOrAbsolutePath(compilerPath) : undefined,
+      compilerPath: compilerPath
+        ? toWorkspaceOrAbsolutePath(compilerPath)
+        : undefined,
     }],
   };
 
@@ -839,7 +858,9 @@ async function generateVisualStudioProject(): Promise<void> {
     projectGuid: string;
   }> = [];
   for (const [index, target] of VISUAL_STUDIO_NATIVE_TARGETS.entries()) {
-    const projectGuid = `{A0C107C5-4E25-4B7D-9201-B7B1A41E3${(0x1b + index).toString(16).toUpperCase().padStart(2, "0")}}`;
+    const projectGuid = `{A0C107C5-4E25-4B7D-9201-B7B1A41E3${
+      (0x1b + index).toString(16).toUpperCase().padStart(2, "0")
+    }}`;
     const outputPath = join(
       bazelBin,
       "core",
@@ -888,7 +909,9 @@ async function generateVisualStudioProject(): Promise<void> {
     console.log(`  ${target.projectFileBase}.vcxproj.filters`);
   }
   console.log("");
-  console.log("Open the repo with Visual Studio's Open Folder workflow or the generated .sln.");
+  console.log(
+    "Open the repo with Visual Studio's Open Folder workflow or the generated .sln.",
+  );
   console.log(
     "If gdb.exe is not on PATH, edit .vs/launch.vs.json and set miDebuggerPath.",
   );

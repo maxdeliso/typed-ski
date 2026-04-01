@@ -6,7 +6,6 @@ package(default_visibility = ["//visibility:public"])
 
 DENO_TEST_DATA = glob(
     [
-        "*.json",
         "*.jsonc",
         "*.md",
         "bin/**",
@@ -24,7 +23,6 @@ DENO_TEST_DATA = glob(
 
 DENO_DIST_DATA = glob(
     [
-        "*.json",
         "*.jsonc",
         "bin/**",
         "compiler/**",

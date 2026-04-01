@@ -510,7 +510,7 @@ Deno.test({
             const traceDir = await prepareHarnessTraceDir();
             await withHarnessSession(async (session) => {
               await session.ping();
-              session.signal("SIGHUP");
+              await session.signal("SIGHUP");
               const dumpPath = await waitForTraceDump(traceDir);
               assert(dumpPath.endsWith(".json"));
             });

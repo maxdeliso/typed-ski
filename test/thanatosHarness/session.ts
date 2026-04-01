@@ -53,7 +53,7 @@ type BrokerResponse =
 
 export interface ThanatosSession {
   start(workers?: number, env?: Record<string, string>): void;
-  signal(signal: Deno.Signal): void;
+  signal(signal: Deno.Signal): Promise<void>;
   rawRequest(line: string): Promise<string>;
   reduceDag(dag: string): Promise<string>;
   reduceIo(
@@ -106,12 +106,13 @@ class DirectThanatosSession implements ThanatosSession {
     this.reader = this.child.stdout.getReader();
   }
 
-  signal(signal: Deno.Signal): void {
+  signal(signal: Deno.Signal): Promise<void> {
     if (this.child == null) {
       throw new Error("ThanatosSession not started");
     }
     if (this.closed) throw new Error("ThanatosSession closed");
     this.child.kill(signal);
+    return Promise.resolve();
   }
 
   private async request(line: string): Promise<string> {
@@ -284,9 +285,9 @@ class BrokerThanatosSession implements ThanatosSession {
     // The batch runner owns the broker-backed Thanatos session.
   }
 
-  signal(signal: Deno.Signal): void {
+  async signal(signal: Deno.Signal): Promise<void> {
     this.ensureOpen();
-    void this.request<void>({ op: "signal", signal }).catch(() => {});
+    await this.request<void>({ op: "signal", signal });
   }
 
   private ensureOpen(): void {

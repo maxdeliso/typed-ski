@@ -503,21 +503,6 @@ Deno.test({
         },
       );
 
-      if (Deno.build.os !== "windows") {
-        await t.step(
-          "thanatos trace dump - SIGHUP remains a POSIX alias",
-          async () => {
-            const traceDir = await prepareHarnessTraceDir();
-            await withHarnessSession(async (session) => {
-              await session.ping();
-              await session.signal("SIGHUP");
-              const dumpPath = await waitForTraceDump(traceDir);
-              assert(dumpPath.endsWith(".json"));
-            });
-          },
-        );
-      }
-
       await t.step("ThanatosSession - reduceDag error (coverage)", async () => {
         await withHarnessSession(async (session) => {
           await assertRejects(

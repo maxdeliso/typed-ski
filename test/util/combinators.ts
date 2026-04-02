@@ -10,7 +10,6 @@ export const Plus = applyMany(B, S, apply(B, B));
 
 export const Zero = apply(K, I);
 export const Snd = Zero;
-export const False = Zero;
 
 export const True = K;
 export const Fst = True;

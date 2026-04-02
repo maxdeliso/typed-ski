@@ -18,6 +18,7 @@ import {
   getLastReleaseWasmLoadInfo,
   getReleaseWasmBytes,
 } from "./arenaWasmLoader.ts";
+/** @internal */
 export { formatReleaseWasmLoadInfo, getLastReleaseWasmLoadInfo };
 import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";

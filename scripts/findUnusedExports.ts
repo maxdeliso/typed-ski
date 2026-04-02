@@ -10,6 +10,10 @@ const project = new Project({
 const dirs = ["lib", "bin", "test", "server"];
 const files: string[] = [];
 
+function normalizeFilePath(path: string): string {
+  return path.replaceAll("\\", "/");
+}
+
 function findFiles(dir: string, depth = 0) {
   try {
     for (const entry of Deno.readDirSync(dir)) {
@@ -20,7 +24,7 @@ function findFiles(dir: string, depth = 0) {
           entry.name.endsWith(".tsx") ||
           (dir.startsWith("server") && entry.name.endsWith(".js"))
         ) {
-          files.push(fullPath);
+          files.push(normalizeFilePath(fullPath));
         }
       } else if (entry.isDirectory) {
         findFiles(fullPath, depth + 1);
@@ -52,7 +56,9 @@ const PROD_ROOTS = [
   "server/serveWorkbench.ts",
   "server/webglForest.ts",
 ];
-const TEST_ROOTS = files.filter((f) => f.startsWith("test/"));
+const TEST_ROOTS = files.filter((f) =>
+  f.startsWith("test/") && f.endsWith(".test.ts")
+);
 
 function isInternal(node: Node): boolean {
   let current: Node | undefined = node;
@@ -148,6 +154,7 @@ const stats = {
   missingInternalTag: [] as string[],
   wellBehavedInternal: [] as string[],
   publicApi: [] as string[],
+  prodInternalExport: [] as string[],
   serverOnly: [] as string[],
 };
 
@@ -165,7 +172,8 @@ for (const sourceFile of project.getSourceFiles()) {
 
       const isExportedFromRoot = PROD_ROOTS.some((root) => {
         const sf = project.getSourceFile(root);
-        return sf?.getExportedDeclarations().has(name);
+        const exportedDecls = sf?.getExportedDeclarations().get(name) ?? [];
+        return exportedDecls.some((exportedDecl) => exportedDecl === decl);
       });
 
       if (!isProd && !isTest) {
@@ -184,7 +192,11 @@ for (const sourceFile of project.getSourceFiles()) {
           stats.wellBehavedInternal.push(location);
         }
       } else if (isProd && !tagged) {
-        stats.publicApi.push(location);
+        if (isExportedFromRoot) {
+          stats.publicApi.push(location);
+        } else {
+          stats.prodInternalExport.push(location);
+        }
       } else if (!isProd && isTest) {
         if (tagged || filePath.startsWith("test/")) {
           stats.wellBehavedInternal.push(location);
@@ -204,7 +216,7 @@ console.log("\n=== REACHABILITY REPORT ===\n");
 
 const totallyDead = unique(stats.totallyDead);
 if (totallyDead.length > 0) {
-  console.log("TOTALLY UNREACHABLE (Safe to delete):");
+  console.log("UNREACHABLE FROM CONFIGURED ROOTS (Candidate delete):");
   totallyDead.forEach((e) => console.log(`  - ${e}`));
   console.log("");
 }
@@ -230,8 +242,18 @@ if (server.length > 0) {
   console.log("");
 }
 
+const prodInternal = unique(stats.prodInternalExport);
+if (prodInternal.length > 0) {
+  console.log(
+    "PROD-REACHABLE INTERNAL EXPORTS (Not part of configured root API):",
+  );
+  prodInternal.forEach((e) => console.log(`  - ${e}`));
+  console.log("");
+}
+
 console.log(`SUMMARY:
   - Public API Symbols:    ${unique(stats.publicApi).length}
+  - Prod Internal Exports: ${unique(stats.prodInternalExport).length}
   - Well-behaved Internals: ${unique(stats.wellBehavedInternal).length}
   - Issues Found:          ${
   totallyDead.length + leaked.length + missing.length

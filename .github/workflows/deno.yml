@@ -55,13 +55,33 @@ jobs:
         run: New-Item -ItemType Directory -Force C:\Temp\zig-cache | Out-Null
 
       - name: Build native Bazel targets
-        run: bazel build //:thanatos //:release_wasm
+        run: bazel build //:thanatos //:performance_test //:release_wasm
 
       - name: Run native Bazel tests
         run: bazel test //:native_tests
 
-      - name: Run Bazel CI
-        run: bazel run //:ci
+      - name: Generate bounded perf stats
+        run: bazel run //:performance_test -- 8 67108864 512 5 1000 1775005854
+
+      - name: Run format check
+        run: bazel run //:fmt_check
+
+      - name: Run lint
+        run: bazel run //:lint
+
+      - name: Run typecheck
+        run: bazel run //:typecheck
+
+      - name: Build distributable artifacts
+        run: bazel run //:build
+
+      - name: Run sharded Deno tests
+        if: matrix.os != 'ubuntu-24.04'
+        run: bazel test //:deno_tests --test_output=errors
+
+      - name: Generate coverage
+        if: matrix.os == 'ubuntu-24.04'
+        run: bazel run //:coverage
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04'

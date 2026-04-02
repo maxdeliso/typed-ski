@@ -20,11 +20,13 @@ This project uses Bazelisk for common development tasks:
 ```bash
 bazelisk build //:thanatos //:release_wasm
 bazelisk test //:native_tests
+bazelisk test //:deno_tests
 bazelisk run //:build
 bazelisk run //:test
 bazelisk run //:coverage
 bazelisk run //:ci
 bazelisk run //:serve_hephaestus
+bazelisk run //:vs_project
 ```
 
 The Bazel graph now includes hermetic native `thanatos` and `wasm/release.wasm`
@@ -69,11 +71,21 @@ exact pinned binary into a local toolchain cache. Set
 
 ### Running Tests
 
-Run the portable test suite with:
+Run the test suite with:
+
+```bash
+bazelisk test //:deno_tests
+```
+
+For a local single-process workspace run of the same Deno suite, you can still
+use:
 
 ```bash
 bazelisk run //:test
 ```
+
+On Windows, pass `--enable_runfiles` to `bazelisk test //:deno_tests` if your
+Bazel setup does not expose a runfiles tree by default.
 
 Run the native C targets with:
 
@@ -91,9 +103,58 @@ bazelisk run //:verify_version
 Other useful commands:
 
 - `bazelisk run //:build` builds generated metadata and distributable artifacts
-- `bazelisk run //:coverage` runs the portable tests with coverage output
-- `bazelisk run //:ci` runs the build, formatting, lint, tests, and coverage
-  flow after native Bazel targets have been built
+- `bazelisk run //:typecheck` runs Deno type checking over the test suite
+- `bazelisk run //:coverage` runs the tests with coverage output
+- `bazelisk run //:ci` runs formatting, lint, type checking, build, and a single
+  coverage-producing local test pass
+- `bazelisk run //:vs_project` writes `compile_commands.json`,
+  `CppProperties.json`, `.vs/tasks.vs.json`, `.vs/launch.vs.json`,
+  `typed-ski-thanatos.sln`, and `typed-ski-thanatos.vcxproj` for Visual Studio
+  workflows
+
+### Visual Studio
+
+To generate Visual Studio Open Folder metadata from the Bazel C targets, run:
+
+```powershell
+bazelisk run //:vs_project
+```
+
+Then open the repository directory in Visual Studio with **File > Open >
+Folder**. The generated metadata gives Visual Studio:
+
+- `CppProperties.json` for Bazel-derived include paths and defines
+- `.vs/tasks.vs.json` for Bazel build and test tasks
+- `.vs/launch.vs.json` with a starter `thanatos` debug configuration
+- `typed-ski-thanatos.sln` and `typed-ski-thanatos.vcxproj` for the classic
+  solution/project workflow, including one project for `thanatos` and one for
+  each native test target
+
+The launch configuration uses `gdb` (`type: "cppdbg"`). If `gdb.exe` is not on
+your `PATH`, edit `.vs/launch.vs.json` and set `miDebuggerPath` to your local
+GDB installation before starting a debug session.
+
+If you want the old-school Visual Studio debugger or profiler, open
+`typed-ski-native.sln`. The generated projects are Makefile-style C++ projects:
+Visual Studio invokes Bazel for build/rebuild/clean, and each startup project
+launches its Bazel-built binary directly. The generated solution includes:
+
+- `typed-ski-thanatos`
+- `typed-ski-dag-codec-test`
+- `typed-ski-performance-test`
+- `typed-ski-session-test`
+- `typed-ski-ski-io-test`
+- `typed-ski-util-test`
+
+The generated `typed-ski-performance-test` project includes a starter debugger
+argument preset tuned for faster iteration inside Visual Studio. Edit the
+project's Debugging properties if you want to switch back to a larger arena or
+workload.
+
+The generated Visual Studio metadata is local-only and gitignored, including
+`compile_commands.json`, `CppProperties.json`, `.vs/`, `typed-ski-native.sln`,
+`typed-ski-*.vcxproj`, `typed-ski-*.vcxproj.filters`, and `*.vcxproj.user`.
+Regenerate them at any time with `bazelisk run //:vs_project`.
 
 ### Running Hephaestus
 
@@ -141,8 +202,7 @@ Notes:
 
 This project uses **Bazel** as the primary build entrypoint. The supported
 workflow for this branch is Bazel plus Deno, with generated metadata, packaging,
-linting, coverage, and the portable test suite exposed through portable Bazel
-commands.
+linting, coverage, and the test suite exposed through Bazel commands.
 
 ## Canonicalization
 
@@ -206,8 +266,10 @@ throughput and runtime stability for long-running workloads.
 
 ## CI/CD
 
-GitHub Actions use Bazel on both Ubuntu and native Windows. See the workflow
-files in `.github/workflows/` for details.
+GitHub Actions use Bazel on both Ubuntu and native Windows. Native C targets run
+through ordinary Bazel build/test steps, and the Deno suite runs through the
+sharded `//:deno_tests` Bazel test target so each shard owns its own Thanatos
+session. See the workflow files in `.github/workflows/` for details.
 
 ## Status
 

@@ -72,7 +72,8 @@ export function applyWorldMobiusTranslation(buf: Float32Array, v: Vec3) {
   const negV: Vec3 = [-v[0], -v[1], -v[2]];
   // stride is 3 (x,y,z)
   for (let i = 0; i < buf.length; i += 3) {
-    const p: Vec3 = [buf[i], buf[i + 1], buf[i + 2]];
+    if (i + 2 >= buf.length) break;
+    const p: Vec3 = [buf[i]!, buf[i + 1]!, buf[i + 2]!];
     if (v3Dot(p, p) >= 1.0) continue;
     const p2 = mobiusAdd(p, negV);
     buf[i] = p2[0];
@@ -83,7 +84,8 @@ export function applyWorldMobiusTranslation(buf: Float32Array, v: Vec3) {
 
 export function applyWorldRotation(buf: Float32Array, qInv: Quat) {
   for (let i = 0; i < buf.length; i += 3) {
-    const p: Vec3 = [buf[i], buf[i + 1], buf[i + 2]];
+    if (i + 2 >= buf.length) break;
+    const p: Vec3 = [buf[i]!, buf[i + 1]!, buf[i + 2]!];
     const p2 = v3RotateByQuat(p, qInv);
     buf[i] = p2[0];
     buf[i + 1] = p2[1];

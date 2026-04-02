@@ -4,8 +4,8 @@ import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
+import { toDagWire } from "../../lib/ski/dagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
-import { toDagWire } from "../thanatosHarness.test.ts";
 
 const LEXER_SOURCE_FILE = new URL(
   "../../lib/compiler/lexer.trip",

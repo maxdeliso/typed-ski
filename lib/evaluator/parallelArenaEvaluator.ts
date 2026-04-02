@@ -18,6 +18,7 @@ import {
   getLastReleaseWasmLoadInfo,
   getReleaseWasmBytes,
 } from "./arenaWasmLoader.ts";
+/** @internal */
 export { formatReleaseWasmLoadInfo, getLastReleaseWasmLoadInfo };
 import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";
@@ -407,7 +408,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
         `maxResubmits must be an integer >= 0, got ${options.maxResubmits}`,
       );
     }
-    const INITIAL_CAP = 1 << 20; // 1M nodes
+    const MAX_ARENA_CAPACITY = 1 << 20; // 1M nodes
     const MAX_PAGES = 65535; // Largest wasm32 memory max expressible by Zig's linker
     const INITIAL_ARENA_PAGES = 257; // ~16MB
     const sharedMemory = new WebAssembly.Memory({
@@ -446,18 +447,10 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
 
     const arenaPointer = (() => {
       const init = validated.exports.initArena!;
-      const result = init(INITIAL_CAP);
-      // initArena return codes:
-      // - 0: Invalid capacity (not power of 2, or out of valid range)
-      // - 1: Out of memory (OOM)
-      // - 2: Bounds check failure (allocation logic error)
-      // - Any other value: Success (returns the arena header address)
+      const result = init(MAX_ARENA_CAPACITY);
       if (result === 0) {
-        throw new Error("initArena failed: invalid capacity or parameters");
-      }
-      if (result === 1 || result === 2) {
         throw new Error(
-          `initArena failed with code ${result} (likely OOM or bounds failure)`,
+          `initArena failed for capacity ${MAX_ARENA_CAPACITY}`,
         );
       }
       return result;

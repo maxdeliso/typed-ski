@@ -1,11 +1,12 @@
 import { dirname, join } from "std/path";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import { toDagWire } from "../../lib/ski/dagWire.ts";
 import {
-  getThanatosSession,
+  closeBatchThanatosSessions,
   thanatosAvailable,
-  toDagWire,
-} from "../thanatosHarness.test.ts";
+  withBatchThanatosSession,
+} from "../thanatosHarness.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { lowerToSKI } from "../../lib/linker/moduleLinker.ts";
@@ -93,183 +94,162 @@ Deno.test({
   name: "Bootstrapped Single-File Compiler Telemetry",
   ignore: !thanatosAvailable(),
   fn: async (t) => {
-    const ps = await compileAndLinkCompiler();
-    const session = await getThanatosSession();
-
     try {
-      const nil = parseSKI(lowerToSKI(ps.terms.get("Prelude.nil")!));
-      const cons = parseSKI(lowerToSKI(ps.terms.get("Prelude.cons")!));
+      const ps = await compileAndLinkCompiler();
+      await withBatchThanatosSession(async (session) => {
+        const nil = parseSKI(lowerToSKI(ps.terms.get("Prelude.nil")!));
+        const cons = parseSKI(lowerToSKI(ps.terms.get("Prelude.cons")!));
 
-      const phases = [
-        {
-          name: "phase1",
-          term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase1")!)),
-        },
-        {
-          name: "phase2",
-          term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase2")!)),
-        },
-        {
-          name: "phase3",
-          term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase3")!)),
-        },
-        {
-          name: "phase4",
-          term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase4")!)),
-        },
-      ];
+        const phases = [
+          {
+            name: "phase1",
+            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase1")!)),
+          },
+          {
+            name: "phase2",
+            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase2")!)),
+          },
+          {
+            name: "phase3",
+            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase3")!)),
+          },
+          {
+            name: "phase4",
+            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase4")!)),
+          },
+        ];
 
-      const runTestForFile = async (filePath: string) => {
-        const sourceText = await Deno.readTextFile(filePath);
-        const sourceBytes = new TextEncoder().encode(sourceText);
-        let currentDag = toDagWire(encodeListU8(sourceBytes, nil, cons));
+        const runTestForFile = async (filePath: string) => {
+          const sourceText = await Deno.readTextFile(filePath);
+          const sourceBytes = new TextEncoder().encode(sourceText);
+          let currentDag = toDagWire(encodeListU8(sourceBytes, nil, cons));
 
-        const metrics: PhaseMetric[] = [];
-        const PHASE_TIMEOUT_MS = 30000;
+          const metrics: PhaseMetric[] = [];
 
-        await session.reset();
+          await session.reset();
 
-        for (const phase of phases) {
-          const ok = await t.step(`Phase: ${phase.name}`, async () => {
-            await session.reset();
-            const startTime = performance.now();
+          for (const phase of phases) {
+            const ok = await t.step(`Phase: ${phase.name}`, async () => {
+              await session.reset();
+              const startTime = performance.now();
 
-            const phaseDag = toDagWire(phase.term);
-            const combinedDag = combineDagWires(phaseDag, currentDag);
+              const phaseDag = toDagWire(phase.term);
+              const combinedDag = combineDagWires(phaseDag, currentDag);
 
-            let resultDag;
-            let timeoutId;
-            try {
-              const timeoutPromise = new Promise((_, reject) => {
-                timeoutId = setTimeout(
-                  () =>
-                    reject(
-                      new Error(
-                        `Timeout: Phase ${phase.name} exceeded ${
-                          PHASE_TIMEOUT_MS / 1000
-                        }s`,
-                      ),
-                    ),
-                  PHASE_TIMEOUT_MS,
+              let resultDag;
+              try {
+                resultDag = await session.reduceDag(combinedDag);
+              } catch (e) {
+                const endTime = performance.now();
+                const elapsedMs = endTime - startTime;
+                console.error(
+                  `\n[FATAL] Phase ${phase.name} failed after ${
+                    elapsedMs.toFixed(2)
+                  }ms`,
                 );
+                console.error(`Error: ${(e as Error).message}`);
+                throw e;
+              }
+
+              const endTime = performance.now();
+              const statsLine = await session.stats();
+              const topMatch = statsLine.match(/top=(\d+)/);
+              const nodesMatch = statsLine.match(/total_nodes=(\d+)/);
+              const stepsMatch = statsLine.match(/total_steps=(\d+)/);
+              const consMatch = statsLine.match(/total_cons_allocs=(\d+)/);
+              const contMatch = statsLine.match(/total_cont_allocs=(\d+)/);
+              const suspMatch = statsLine.match(/total_susp_allocs=(\d+)/);
+              const duplicateMatch = statsLine.match(
+                /duplicate_lost_allocs=(\d+)/,
+              );
+              const hashconsHitsMatch = statsLine.match(/hashcons_hits=(\d+)/);
+              const hashconsMissesMatch = statsLine.match(
+                /hashcons_misses=(\d+)/,
+              );
+
+              const arenaTop = topMatch ? parseInt(topMatch[1]!, 10) : 0;
+              const totalNodeCount = nodesMatch
+                ? parseInt(nodesMatch[1]!, 10)
+                : 0;
+              const totalSteps = stepsMatch ? parseInt(stepsMatch[1]!, 10) : 0;
+              const totalConsAllocs = consMatch
+                ? parseInt(consMatch[1]!, 10)
+                : 0;
+              const totalContAllocs = contMatch
+                ? parseInt(contMatch[1]!, 10)
+                : 0;
+              const totalSuspAllocs = suspMatch
+                ? parseInt(suspMatch[1]!, 10)
+                : 0;
+              const duplicateLostAllocs = duplicateMatch
+                ? parseInt(duplicateMatch[1]!, 10)
+                : 0;
+              const hashconsHits = hashconsHitsMatch
+                ? parseInt(hashconsHitsMatch[1]!, 10)
+                : 0;
+              const hashconsMisses = hashconsMissesMatch
+                ? parseInt(hashconsMissesMatch[1]!, 10)
+                : 0;
+
+              const uniqueNodeCount =
+                resultDag.split(" ").filter(Boolean).length;
+              const elapsedMs = endTime - startTime;
+
+              metrics.push({
+                phase: phase.name,
+                uniqueNodeCount,
+                totalNodeCount,
+                totalConsAllocs,
+                totalContAllocs,
+                totalSuspAllocs,
+                duplicateLostAllocs,
+                hashconsHits,
+                hashconsMisses,
+                totalSteps,
+                arenaTop,
+                elapsedMs,
               });
 
-              resultDag = await Promise.race([
-                session.reduceDag(combinedDag),
-                timeoutPromise,
-              ]) as string;
-              clearTimeout(timeoutId);
-            } catch (e) {
-              if (timeoutId) clearTimeout(timeoutId);
-              const endTime = performance.now();
-              const elapsedMs = endTime - startTime;
-              console.error(
-                `\n[FATAL] Phase ${phase.name} failed after ${
+              const duplicationFactor = uniqueNodeCount > 0
+                ? (totalNodeCount / uniqueNodeCount).toFixed(2)
+                : "0.00";
+              const hashconsHitRate = (hashconsHits + hashconsMisses) > 0
+                ? (
+                  (hashconsHits / (hashconsHits + hashconsMisses)) * 100
+                ).toFixed(2)
+                : "0.00";
+              console.log(
+                `[${phase.name}] Unique: ${uniqueNodeCount}, Total: ${totalNodeCount}, Duplication: ${duplicationFactor}x, Cons: ${totalConsAllocs}, Cont: ${totalContAllocs}, Susp: ${totalSuspAllocs}, DupLost: ${duplicateLostAllocs}, HashHits: ${hashconsHits}, HashMisses: ${hashconsMisses}, HitRate: ${hashconsHitRate}%, Steps: ${totalSteps}, Time: ${
                   elapsedMs.toFixed(2)
                 }ms`,
               );
-              if ((e as Error).message.includes("Timeout")) {
-                console.error(
-                  `!!! BLOWUP DETECTED IN PHASE: ${phase.name} !!!`,
-                );
-                console.error(`Reason: Execution exceeded 30s budget.`);
-              } else {
-                console.error(`Error: ${(e as Error).message}`);
-              }
-              throw e;
-            }
 
-            const endTime = performance.now();
-            const statsLine = await session.stats();
-            const topMatch = statsLine.match(/top=(\d+)/);
-            const nodesMatch = statsLine.match(/total_nodes=(\d+)/);
-            const stepsMatch = statsLine.match(/total_steps=(\d+)/);
-            const consMatch = statsLine.match(/total_cons_allocs=(\d+)/);
-            const contMatch = statsLine.match(/total_cont_allocs=(\d+)/);
-            const suspMatch = statsLine.match(/total_susp_allocs=(\d+)/);
-            const duplicateMatch = statsLine.match(
-              /duplicate_lost_allocs=(\d+)/,
-            );
-            const hashconsHitsMatch = statsLine.match(/hashcons_hits=(\d+)/);
-            const hashconsMissesMatch = statsLine.match(
-              /hashcons_misses=(\d+)/,
-            );
-
-            const arenaTop = topMatch ? parseInt(topMatch[1]!, 10) : 0;
-            const totalNodeCount = nodesMatch
-              ? parseInt(nodesMatch[1]!, 10)
-              : 0;
-            const totalSteps = stepsMatch ? parseInt(stepsMatch[1]!, 10) : 0;
-            const totalConsAllocs = consMatch ? parseInt(consMatch[1]!, 10) : 0;
-            const totalContAllocs = contMatch ? parseInt(contMatch[1]!, 10) : 0;
-            const totalSuspAllocs = suspMatch ? parseInt(suspMatch[1]!, 10) : 0;
-            const duplicateLostAllocs = duplicateMatch
-              ? parseInt(duplicateMatch[1]!, 10)
-              : 0;
-            const hashconsHits = hashconsHitsMatch
-              ? parseInt(hashconsHitsMatch[1]!, 10)
-              : 0;
-            const hashconsMisses = hashconsMissesMatch
-              ? parseInt(hashconsMissesMatch[1]!, 10)
-              : 0;
-
-            const uniqueNodeCount = resultDag.split(" ").filter(Boolean).length;
-            const elapsedMs = endTime - startTime;
-
-            metrics.push({
-              phase: phase.name,
-              uniqueNodeCount,
-              totalNodeCount,
-              totalConsAllocs,
-              totalContAllocs,
-              totalSuspAllocs,
-              duplicateLostAllocs,
-              hashconsHits,
-              hashconsMisses,
-              totalSteps,
-              arenaTop,
-              elapsedMs,
-            });
-
-            const duplicationFactor = uniqueNodeCount > 0
-              ? (totalNodeCount / uniqueNodeCount).toFixed(2)
-              : "0.00";
-            const hashconsHitRate = (hashconsHits + hashconsMisses) > 0
-              ? (
-                (hashconsHits / (hashconsHits + hashconsMisses)) * 100
-              ).toFixed(2)
-              : "0.00";
-            console.log(
-              `[${phase.name}] Unique: ${uniqueNodeCount}, Total: ${totalNodeCount}, Duplication: ${duplicationFactor}x, Cons: ${totalConsAllocs}, Cont: ${totalContAllocs}, Susp: ${totalSuspAllocs}, DupLost: ${duplicateLostAllocs}, HashHits: ${hashconsHits}, HashMisses: ${hashconsMisses}, HitRate: ${hashconsHitRate}%, Steps: ${totalSteps}, Time: ${
-                elapsedMs.toFixed(2)
-              }ms`,
-            );
-
-            const budget = PHASE_BUDGETS[phase.name];
-            if (budget !== undefined && uniqueNodeCount > budget) {
-              throw new Error(`[bootstrapped budget exceeded]
+              const budget = PHASE_BUDGETS[phase.name];
+              if (budget !== undefined && uniqueNodeCount > budget) {
+                throw new Error(`[bootstrapped budget exceeded]
 file: ${filePath}
 phase: ${phase.name}
 unique_nodes: ${uniqueNodeCount}
 budget: ${budget}
 elapsed_ms: ${elapsedMs.toFixed(2)}`);
-            }
+              }
 
-            currentDag = resultDag;
-            await session.reset();
-          });
+              currentDag = resultDag;
+              await session.reset();
+            });
 
-          if (!ok) break;
-        }
+            if (!ok) break;
+          }
 
-        return metrics;
-      };
+          return metrics;
+        };
 
-      await runTestForFile(
-        join(PROJECT_ROOT, "test", "compiler", "inputs", "small.trip"),
-      );
+        await runTestForFile(
+          join(PROJECT_ROOT, "test", "compiler", "inputs", "small.trip"),
+        );
+      });
     } finally {
-      await session.close();
+      await closeBatchThanatosSessions();
     }
   },
 });

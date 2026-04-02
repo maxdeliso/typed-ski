@@ -108,7 +108,7 @@ int host_thread_create(HostThread *thread, HostThreadFn fn, void *arg);
 void host_thread_join(HostThread thread);
 
 void *host_reserve_memory(size_t bytes);
-bool host_commit_memory(void *base, size_t bytes, size_t *committed_bytes);
+bool host_commit_memory_range(void *base, size_t offset, size_t bytes);
 void host_release_memory(void *base, size_t bytes);
 
 void host_wait_u32(atomic_uint *ptr, uint32_t expected);

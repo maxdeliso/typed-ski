@@ -75,8 +75,9 @@ async function compileToObjectFile(
  */
 async function main(): Promise<void> {
   const args = Deno.args;
+  const [inputArg, outputArg] = args;
 
-  if (args.length === 0) {
+  if (!inputArg) {
     console.error(
       "Usage: deno run --allow-read --allow-write compiler/main.ts <input.trip> [output.tripc]",
     );
@@ -91,8 +92,8 @@ async function main(): Promise<void> {
     Deno.exit(1);
   }
 
-  const inputPath = resolve(args[0]);
-  const outputPath = args[1] ? resolve(args[1]) : undefined;
+  const inputPath = resolve(inputArg);
+  const outputPath = outputArg ? resolve(outputArg) : undefined;
 
   // Validate input file exists and has .trip extension
   try {

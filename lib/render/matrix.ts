@@ -99,17 +99,17 @@ export function getGeodesicPoint(A: Vec3, B: Vec3, t: number): Vec3 {
 
 // Simple unrolled mat mul
 export function mat4Mul(out: Float32Array, a: Float32Array, b: Float32Array) {
-  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
-  const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
-  const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
-  const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+  const a00 = a[0]!, a01 = a[1]!, a02 = a[2]!, a03 = a[3]!;
+  const a10 = a[4]!, a11 = a[5]!, a12 = a[6]!, a13 = a[7]!;
+  const a20 = a[8]!, a21 = a[9]!, a22 = a[10]!, a23 = a[11]!;
+  const a30 = a[12]!, a31 = a[13]!, a32 = a[14]!, a33 = a[15]!;
   let b0, b1, b2, b3;
 
   for (let i = 0; i < 4; i++) {
-    b0 = b[i * 4 + 0];
-    b1 = b[i * 4 + 1];
-    b2 = b[i * 4 + 2];
-    b3 = b[i * 4 + 3];
+    b0 = b[i * 4 + 0]!;
+    b1 = b[i * 4 + 1]!;
+    b2 = b[i * 4 + 2]!;
+    b3 = b[i * 4 + 3]!;
     out[i * 4 + 0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
     out[i * 4 + 1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
     out[i * 4 + 2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;

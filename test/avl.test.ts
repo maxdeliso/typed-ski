@@ -9,39 +9,192 @@ import { getBinObject } from "../lib/bin.ts";
 import { getNatObject } from "../lib/nat.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
+import type { TripCObject } from "../lib/compiler/objectFile.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
-import { unparseSKI } from "../lib/ski/expression.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
+import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
 import {
+  closeBatchThanatosSessions,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
-} from "./thanatosHarness.test.ts";
+  withBatchThanatosSession,
+} from "./thanatosHarness.ts";
+
+type AvlCase = {
+  name: string;
+  moduleName: string;
+  loadSource: () => Promise<string>;
+  expected: bigint;
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INPUT_DIR = join(__dirname, "inputs", "avl");
 
-type AvlCase = { name: string; fileName: string };
+function loadInput(fileName: string): Promise<string> {
+  return Deno.readTextFile(join(INPUT_DIR, fileName));
+}
+
+function buildAvlBinBoolProbeSource(mainExpression: string): string {
+  return `module AvlBinBoolProbe
+
+import Nat Nat
+import Nat zero
+import Nat succ
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Bin lteBin
+import Avl Avl
+import Avl empty
+import Avl insert
+import Avl lookup
+import Avl size
+
+export main
+
+poly boolToNat = \\b : Bool => b [Nat] (succ zero) zero
+
+poly maybeBoolToNat = \\m : Maybe Bool =>
+  match m [Nat] {
+    | None => zero
+    | Some b => boolToNat b
+  }
+
+poly main =
+  let k1 = B1 BZ in
+  let k2 = B0 (B1 BZ) in
+  let k3 = B1 (B1 BZ) in
+  let t0 = empty [Bin] [Bool] in
+  let t1 = insert [Bin] [Bool] lteBin k2 false t0 in
+  let t2 = insert [Bin] [Bool] lteBin k1 true t1 in
+  let t3 = insert [Bin] [Bool] lteBin k3 true t2 in
+  let t4 = insert [Bin] [Bool] lteBin k2 true t3 in
+  ${mainExpression}
+`;
+}
 
 const AVL_CASES: AvlCase[] = [
-  { name: "AvlNatTreeTest", fileName: "AvlNatTreeTest.trip" },
-  { name: "AvlBinBoolTreeTest", fileName: "AvlBinBoolTreeTest.trip" },
-  { name: "AvlInsertTraversalTest", fileName: "AvlInsertTraversalTest.trip" },
-  { name: "AvlDeleteTraversalTest", fileName: "AvlDeleteTraversalTest.trip" },
+  {
+    name: "AvlNatTreeTest",
+    moduleName: "AvlNatTreeTest",
+    loadSource: () => loadInput("AvlNatTreeTest.trip"),
+    expected: 12n,
+  },
+  {
+    name: "AvlBinBoolTreeTest beforeReplace",
+    moduleName: "AvlBinBoolProbe",
+    loadSource: () =>
+      Promise.resolve(
+        buildAvlBinBoolProbeSource(
+          "maybeBoolToNat (lookup [Bin] [Bool] lteBin k2 t3)",
+        ),
+      ),
+    expected: 0n,
+  },
+  {
+    name: "AvlBinBoolTreeTest afterReplace",
+    moduleName: "AvlBinBoolProbe",
+    loadSource: () =>
+      Promise.resolve(
+        buildAvlBinBoolProbeSource(
+          "maybeBoolToNat (lookup [Bin] [Bool] lteBin k2 t4)",
+        ),
+      ),
+    expected: 1n,
+  },
+  {
+    name: "AvlBinBoolTreeTest gotK1",
+    moduleName: "AvlBinBoolProbe",
+    loadSource: () =>
+      Promise.resolve(
+        buildAvlBinBoolProbeSource(
+          "maybeBoolToNat (lookup [Bin] [Bool] lteBin k1 t4)",
+        ),
+      ),
+    expected: 1n,
+  },
+  {
+    name: "AvlBinBoolTreeTest missing",
+    moduleName: "AvlBinBoolProbe",
+    loadSource: () =>
+      Promise.resolve(
+        buildAvlBinBoolProbeSource(
+          "maybeBoolToNat (lookup [Bin] [Bool] lteBin BZ t4)",
+        ),
+      ),
+    expected: 0n,
+  },
+  {
+    name: "AvlBinBoolTreeTest sizeBefore",
+    moduleName: "AvlBinBoolProbe",
+    loadSource: () =>
+      Promise.resolve(
+        buildAvlBinBoolProbeSource("size [Bin] [Bool] t3"),
+      ),
+    expected: 3n,
+  },
+  {
+    name: "AvlBinBoolTreeTest sizeAfter",
+    moduleName: "AvlBinBoolProbe",
+    loadSource: () =>
+      Promise.resolve(
+        buildAvlBinBoolProbeSource("size [Bin] [Bool] t4"),
+      ),
+    expected: 4n,
+  },
+  {
+    name: "AvlInsertTraversalTest",
+    moduleName: "AvlInsertTraversalTest",
+    loadSource: () => loadInput("AvlInsertTraversalTest.trip"),
+    expected: 321n,
+  },
+  {
+    name: "AvlDeleteTraversalTest",
+    moduleName: "AvlDeleteTraversalTest",
+    loadSource: () => loadInput("AvlDeleteTraversalTest.trip"),
+    expected: 36n,
+  },
 ];
 
-async function loadInput(fileName: string): Promise<string> {
-  return await Deno.readTextFile(join(INPUT_DIR, fileName));
+let preludeObjectPromise: Promise<TripCObject> | undefined;
+let binObjectPromise: Promise<TripCObject> | undefined;
+let natObjectPromise: Promise<TripCObject> | undefined;
+let avlObjectPromise: Promise<TripCObject> | undefined;
+
+function getPreludeObjectCached(): Promise<TripCObject> {
+  return preludeObjectPromise ??= getPreludeObject();
+}
+
+function getBinObjectCached(): Promise<TripCObject> {
+  return binObjectPromise ??= getBinObject();
+}
+
+function getNatObjectCached(): Promise<TripCObject> {
+  return natObjectPromise ??= getNatObject();
+}
+
+function getAvlObjectCached(): Promise<TripCObject> {
+  return avlObjectPromise ??= getAvlObject();
 }
 
 async function buildTestExpression(
   source: string,
   moduleName: string,
 ): Promise<SKIExpression> {
-  const preludeObject = await getPreludeObject();
-  const binObject = await getBinObject();
-  const natObject = await getNatObject();
-  const avlObject = await getAvlObject();
+  const [preludeObject, binObject, natObject, avlObject] = await Promise.all([
+    getPreludeObjectCached(),
+    getBinObjectCached(),
+    getNatObjectCached(),
+    getAvlObjectCached(),
+  ]);
   const serialized = compileToObjectFileString(source);
   const testObject = deserializeTripCObject(serialized);
 
@@ -56,51 +209,35 @@ async function buildTestExpression(
   return parseSKI(skiExpression);
 }
 
-/**
- * Run the same AVL test cases via thanatos batch mode: build all expressions,
- * run one batch (one process, all lines on stdin), then decode results.
- */
-async function evaluateTestModulesBatchThanatos(
-  modules: Array<{ name: string; fileName: string }>,
-): Promise<Map<string, bigint>> {
-  const inputs: string[] = [];
-  for (const { name, fileName } of modules) {
-    const source = await loadInput(fileName);
-    const expr = await buildTestExpression(source, name);
-    inputs.push(unparseSKI(expr));
-  }
-  const lines = await runThanatosBatch(inputs);
-  const results = new Map<string, bigint>();
-  for (let i = 0; i < modules.length; i++) {
-    const name = modules[i]!.name;
-    const line = lines[i] ?? "";
-    if (line === "") {
-      results.set(name, 0n);
-      continue;
-    }
-    try {
-      const parsed = parseSKI(line);
-      results.set(name, await UnChurchNumber(parsed, passthroughEvaluator));
-    } catch {
-      results.set(name, 0n);
-    }
-  }
-  return results;
+async function evaluateTestModuleThanatos(
+  testCase: AvlCase,
+): Promise<bigint> {
+  const source = await testCase.loadSource();
+  const expr = await buildTestExpression(source, testCase.moduleName);
+  return await withBatchThanatosSession(async (session) => {
+    const resultDag = await session.reduceDag(toDagWire(expr));
+    return await UnChurchNumber(
+      fromDagWire(resultDag),
+      passthroughEvaluator,
+    );
+  });
 }
 
 Deno.test("thanatosHarness runThanatosBatch empty input", async () => {
   assertEquals(await runThanatosBatch([]), []);
 });
 
-Deno.test({
-  name: "Avl module tests (batched, thanatos)",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    const results = await evaluateTestModulesBatchThanatos(AVL_CASES);
-
-    assertEquals(results.get("AvlNatTreeTest"), 12n);
-    assertEquals(results.get("AvlBinBoolTreeTest"), 9n);
-    assertEquals(results.get("AvlInsertTraversalTest"), 321n);
-    assertEquals(results.get("AvlDeleteTraversalTest"), 36n);
-  },
-});
+for (const testCase of AVL_CASES) {
+  Deno.test({
+    name: `AVL module ${testCase.name} (thanatos)`,
+    ignore: !thanatosAvailable(),
+    fn: async () => {
+      try {
+        const actual = await evaluateTestModuleThanatos(testCase);
+        assertEquals(actual, testCase.expected);
+      } finally {
+        await closeBatchThanatosSessions();
+      }
+    },
+  });
+}

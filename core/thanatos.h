@@ -4,6 +4,8 @@
 #include "arena.h"
 typedef struct {
   uint32_t num_workers;
+  /** Logical arena ceiling. Native starts at a small initial capacity and
+   * grows toward this limit on demand. */
   uint32_t arena_capacity;
   /** Optional runtime stdin path for READ_ONE (separate from program/SKI
    * input). Pass NULL when no runtime stdin source is available. Thanatos reads
@@ -57,6 +59,7 @@ void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
                         unsigned long long *out_hashcons_misses,
                         unsigned long long *out_events,
                         unsigned long long *out_dropped);
+void thanatos_debug_pending_requests(uint32_t *out_active, uint32_t *out_done);
 
 /** Reset daemon-level counters that are reported by STATS but not owned by the
  * arena (e.g. dispatcher events/dropped). */

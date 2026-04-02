@@ -2,6 +2,16 @@ node_modules/
 build/
 .vscode/*
 !.vscode/settings.json
+.vs/
+CppProperties.json
+compile_commands.json
+typed-ski-thanatos.sln
+typed-ski-thanatos.vcxproj
+typed-ski-thanatos.vcxproj.filters
+typed-ski-native.sln
+typed-ski-*.vcxproj
+typed-ski-*.vcxproj.filters
+*.vcxproj.user
 package-lock.json
 package.json
 bazel-bin

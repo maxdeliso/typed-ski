@@ -311,6 +311,7 @@ function tryLoadReleaseWasmFromCandidatesSync(): ArrayBuffer | null {
   return null;
 }
 
+/** @internal */
 export function resetReleaseWasmCache(): void {
   cachedReleaseBytes = null;
   releaseBytesPromise = null;
@@ -353,10 +354,12 @@ export function getReleaseWasmBytesSync(): ArrayBuffer {
   );
 }
 
+/** @internal */
 export function getLastReleaseWasmLoadInfo(): ReleaseWasmLoadInfo | null {
   return cachedReleaseLoadInfo;
 }
 
+/** @internal */
 export function formatReleaseWasmLoadInfo(
   info: ReleaseWasmLoadInfo | null,
 ): string {

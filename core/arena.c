@@ -35,7 +35,7 @@ static const uint32_t ARENA_MAGIC = 0x534B4941;
 static const uint32_t INITIAL_CAP = 1 << 20;
 /** Gas per kernel step / worker batch; bounds time per step. */
 static const uint32_t ARENA_STEP_GAS = 20000;
-static const uint32_t MAX_CAP = 1 << 24;
+static const uint32_t MAX_CAP = 1 << 26;
 static const uint32_t RING_ENTRIES = 1 << 16;
 static const uint32_t POISON_SEQ = 0xffffffff;
 
@@ -69,12 +69,8 @@ static uint32_t ARENA_MODE = 0;
 static atomic_uint GROW_COUNT = 0;
 /** Native only: actual mmap size reserved at init (layout uses uint64_t so no
  * overflow at MAX_CAP). */
-#ifdef __wasm__
-static size_t ARENA_RESERVED_BYTES __attribute__((unused)) = 0;
-static size_t ARENA_COMMITTED_BYTES __attribute__((unused)) = 0;
-#else
+#ifndef __wasm__
 static size_t ARENA_RESERVED_BYTES = 0;
-static size_t ARENA_COMMITTED_BYTES = 0;
 #endif
 
 #ifndef __wasm__
@@ -527,8 +523,13 @@ static inline ControlViews control_views(void) {
 
 /** Order: term_cache -> nodes -> buckets. Nodes never move on grow(). Uses
  * 64-bit for offset_buckets/total_size to avoid overflow at large capacity. */
-static SabLayout calculate_layout(uint32_t capacity) {
+static SabLayout calculate_layout(uint32_t capacity, uint32_t max_capacity) {
   SabLayout l;
+  uint32_t reserve_capacity = max_capacity;
+  if (reserve_capacity < capacity)
+    reserve_capacity = capacity;
+  if (reserve_capacity > MAX_CAP)
+    reserve_capacity = MAX_CAP;
   l.offset_sq = align64(sizeof(SabHeader));
   l.offset_cq = align64(l.offset_sq + ring_bytes(RING_ENTRIES, sizeof(Sqe)));
   l.offset_stdin = align64(l.offset_cq + ring_bytes(RING_ENTRIES, sizeof(Cqe)));
@@ -540,19 +541,22 @@ static SabLayout calculate_layout(uint32_t capacity) {
       align64(l.offset_stdout_wait + ring_bytes(RING_ENTRIES, 4));
   l.control_bytes = total_control_bytes();
   l.offset_term_cache = align64(l.offset_control + l.control_bytes);
-  /* Invariant offsets: partition the reserved MAX_CAP space immediately. */
+  /* Invariant offsets: partition the reserved max-capacity space immediately. */
   l.offset_node_left =
       (uint64_t)align64(l.offset_term_cache + TERM_CACHE_LEN * 4);
-  l.offset_node_right = align64_u64(l.offset_node_left + (uint64_t)MAX_CAP * 4);
+  l.offset_node_right =
+      align64_u64(l.offset_node_left + (uint64_t)reserve_capacity * 4);
   l.offset_node_hash32 =
-      align64_u64(l.offset_node_right + (uint64_t)MAX_CAP * 4);
+      align64_u64(l.offset_node_right + (uint64_t)reserve_capacity * 4);
   l.offset_node_next_idx =
-      align64_u64(l.offset_node_hash32 + (uint64_t)MAX_CAP * 4);
+      align64_u64(l.offset_node_hash32 + (uint64_t)reserve_capacity * 4);
   l.offset_node_kind =
-      align64_u64(l.offset_node_next_idx + (uint64_t)MAX_CAP * 4);
-  l.offset_node_sym = align64_u64(l.offset_node_kind + (uint64_t)MAX_CAP * 1);
+      align64_u64(l.offset_node_next_idx + (uint64_t)reserve_capacity * 4);
+  l.offset_node_sym =
+      align64_u64(l.offset_node_kind + (uint64_t)reserve_capacity * 1);
   /* Buckets follow the node arrays. */
-  l.offset_buckets = align64_u64(l.offset_node_sym + (uint64_t)MAX_CAP * 1);
+  l.offset_buckets =
+      align64_u64(l.offset_node_sym + (uint64_t)reserve_capacity * 1);
   l.total_size = l.offset_buckets + (uint64_t)capacity * 4;
   return l;
 }
@@ -587,8 +591,59 @@ static void control_init_at(SabHeader *h) {
   }
 }
 
-static void *allocate_raw_arena(uint32_t capacity) {
-  SabLayout layout = calculate_layout(capacity);
+static uint64_t active_layout_bytes(const SabLayout *layout,
+                                    uint32_t capacity) {
+  return layout->offset_node_left + (uint64_t)capacity * 22u;
+}
+
+#ifndef __wasm__
+static bool commit_arena_range(uint64_t offset, uint64_t bytes) {
+  if (bytes == 0)
+    return true;
+  if (offset > (uint64_t)SIZE_MAX || bytes > (uint64_t)SIZE_MAX ||
+      offset + bytes > (uint64_t)SIZE_MAX) {
+    return false;
+  }
+  return host_commit_memory_range(ARENA_BASE_ADDR, (size_t)offset,
+                                  (size_t)bytes);
+}
+
+static bool commit_arena_capacity_ranges(const SabLayout *layout,
+                                         uint32_t start_index,
+                                         uint32_t end_index,
+                                         bool include_prefix) {
+  uint64_t count = (end_index > start_index) ? (uint64_t)(end_index - start_index)
+                                             : 0;
+  if (include_prefix &&
+      !commit_arena_range(0, (uint64_t)layout->offset_node_left)) {
+    return false;
+  }
+  if (count == 0)
+    return true;
+
+  uint64_t start = (uint64_t)start_index;
+  if (!commit_arena_range(layout->offset_node_left + start * 4u, count * 4u))
+    return false;
+  if (!commit_arena_range(layout->offset_node_right + start * 4u, count * 4u))
+    return false;
+  if (!commit_arena_range(layout->offset_node_hash32 + start * 4u, count * 4u))
+    return false;
+  if (!commit_arena_range(layout->offset_node_next_idx + start * 4u,
+                          count * 4u))
+    return false;
+  if (!commit_arena_range(layout->offset_node_kind + start, count))
+    return false;
+  if (!commit_arena_range(layout->offset_node_sym + start, count))
+    return false;
+  if (!commit_arena_range(layout->offset_buckets + start * 4u, count * 4u))
+    return false;
+  return true;
+}
+#endif
+
+static void *allocate_raw_arena(uint32_t initial_capacity,
+                                uint32_t max_capacity) {
+  SabLayout layout = calculate_layout(initial_capacity, max_capacity);
 #ifdef __wasm__
   uint32_t pages_needed =
       (uint32_t)((layout.total_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE);
@@ -598,21 +653,20 @@ static void *allocate_raw_arena(uint32_t capacity) {
   ARENA_BASE_ADDR = (uint8_t *)((uintptr_t)old_pages * WASM_PAGE_SIZE);
 #else
 
-  SabLayout reserve_layout = calculate_layout(MAX_CAP);
+  SabLayout reserve_layout = calculate_layout(max_capacity, max_capacity);
   ARENA_RESERVED_BYTES = (size_t)reserve_layout.total_size;
-  ARENA_COMMITTED_BYTES = 0;
   fprintf(stderr,
-          "Arena: reserving %zu bytes (active=%zu for capacity %u), "
+          "Arena: reserving %zu bytes (active=%zu initial=%u max=%u), "
           "sizeof(SabHeader)=%zu\n",
-          ARENA_RESERVED_BYTES, (size_t)layout.total_size, capacity,
+          ARENA_RESERVED_BYTES, (size_t)active_layout_bytes(&layout, initial_capacity),
+          initial_capacity, max_capacity,
           sizeof(SabHeader));
   ARENA_BASE_ADDR = (uint8_t *)host_reserve_memory(ARENA_RESERVED_BYTES);
   if (ARENA_BASE_ADDR == NULL) {
     fprintf(stderr, "Arena: reserve failed\n");
     return NULL;
   }
-  if (!host_commit_memory(ARENA_BASE_ADDR, (size_t)layout.total_size,
-                          &ARENA_COMMITTED_BYTES)) {
+  if (!commit_arena_capacity_ranges(&layout, 0, initial_capacity, true)) {
     fprintf(stderr, "Arena: initial commit failed\n");
     host_release_memory(ARENA_BASE_ADDR, ARENA_RESERVED_BYTES);
     ARENA_BASE_ADDR = NULL;
@@ -640,6 +694,7 @@ static void *allocate_raw_arena(uint32_t capacity) {
   h->offset_node_kind = layout.offset_node_kind;
   h->offset_node_sym = layout.offset_node_sym;
   h->offset_buckets = layout.offset_buckets;
+  h->max_capacity = max_capacity;
 
   /* Layout sanity assertions. */
   ARENA_ASSERT(h->offset_node_left < h->offset_node_right);
@@ -654,8 +709,8 @@ static void *allocate_raw_arena(uint32_t capacity) {
   }
 #endif
 
-  atomic_init(&h->capacity, capacity);
-  h->bucket_mask = capacity - 1;
+  atomic_init(&h->capacity, initial_capacity);
+  h->bucket_mask = initial_capacity - 1;
   atomic_init(&h->resize_seq, 0);
   atomic_init(&h->top, 0);
 
@@ -671,15 +726,15 @@ static void *allocate_raw_arena(uint32_t capacity) {
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_init(&cache[i], EMPTY);
 
-  memset(ARENA_BASE_ADDR + h->offset_node_left, 0, capacity * 4);
-  memset(ARENA_BASE_ADDR + h->offset_node_right, 0, capacity * 4);
-  memset(ARENA_BASE_ADDR + h->offset_node_hash32, 0, capacity * 4);
-  memset(ARENA_BASE_ADDR + h->offset_node_next_idx, 0, capacity * 4);
-  memset(ARENA_BASE_ADDR + h->offset_node_kind, 0, capacity * 1);
-  memset(ARENA_BASE_ADDR + h->offset_node_sym, 0, capacity * 1);
+  memset(ARENA_BASE_ADDR + h->offset_node_left, 0, initial_capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_right, 0, initial_capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_hash32, 0, initial_capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_next_idx, 0, initial_capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_kind, 0, initial_capacity * 1);
+  memset(ARENA_BASE_ADDR + h->offset_node_sym, 0, initial_capacity * 1);
 
   atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
-  for (uint32_t i = 0; i < capacity; i++)
+  for (uint32_t i = 0; i < initial_capacity; i++)
     atomic_init(&buckets[i], EMPTY);
 
   for (uint32_t u = 0; u < 256; u++)
@@ -707,7 +762,7 @@ static inline void ensure_arena(void) {
     abort();
 #endif
   }
-  allocate_raw_arena(INITIAL_CAP);
+  allocate_raw_arena(INITIAL_CAP, MAX_CAP);
   ARENA_MODE = 0;
 }
 
@@ -732,8 +787,12 @@ uint32_t initArena(uint32_t initial_capacity) {
       atomic_init(&WORKER_EPOCHS[i], 0);
     qsbr_inited = true;
   }
-  if (!allocate_raw_arena(initial_capacity))
-    return 0;
+  {
+    uint32_t starting_capacity =
+        (initial_capacity < INITIAL_CAP) ? initial_capacity : INITIAL_CAP;
+    if (!allocate_raw_arena(starting_capacity, initial_capacity))
+      return 0;
+  }
   ARENA_MODE = 1;
 #ifdef __wasm__
   return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
@@ -760,6 +819,8 @@ uint32_t connectArena(uint32_t ptr_addr) {
     atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_relaxed);
   return 1;
 }
+
+uint32_t arena_max_capacity(void) { return MAX_CAP; }
 
 void reset(void) {
   ensure_arena();
@@ -2332,8 +2393,11 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   }
 
   uint32_t old_cap = atomic_load_explicit(&h->capacity, memory_order_relaxed);
+  uint32_t max_cap = h->max_capacity;
+  if (max_cap == 0 || max_cap > MAX_CAP)
+    max_cap = MAX_CAP;
 
-  if (old_cap >= MAX_CAP ||
+  if (old_cap >= max_cap ||
       (old_cap * 2) <=
           atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
     atomic_fetch_add_explicit(&h->resize_seq, 1, memory_order_release);
@@ -2347,13 +2411,13 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   uint32_t old_top = atomic_load_explicit(&h->top, memory_order_acquire);
 
   uint32_t new_cap = old_cap * 2;
-  if (new_cap > MAX_CAP)
-    new_cap = MAX_CAP;
+  if (new_cap > max_cap)
+    new_cap = max_cap;
 #ifndef __wasm__
   /* Cap so we never write past the actual mmap (defense-in-depth). */
   if (ARENA_RESERVED_BYTES > 0) {
     while (new_cap > old_cap) {
-      SabLayout probe = calculate_layout(new_cap);
+      SabLayout probe = calculate_layout(new_cap, max_cap);
       if ((size_t)probe.total_size <= ARENA_RESERVED_BYTES)
         break;
       new_cap--;
@@ -2373,7 +2437,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   (void)grow_num;
 #endif
 
-  SabLayout layout = calculate_layout(new_cap);
+  SabLayout layout = calculate_layout(new_cap, max_cap);
 
 #ifdef __wasm__
   uint32_t current_bytes = __builtin_wasm_memory_size(0) * WASM_PAGE_SIZE;
@@ -2390,8 +2454,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   }
 #else
 
-  if (!host_commit_memory(ARENA_BASE_ADDR, (size_t)layout.total_size,
-                          &ARENA_COMMITTED_BYTES)) {
+  if (!commit_arena_capacity_ranges(&layout, old_cap, new_cap, false)) {
     atomic_store_explicit(&h->resize_seq, POISON_SEQ, memory_order_release);
     abort();
   }
@@ -2416,6 +2479,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   h->offset_node_kind = layout.offset_node_kind;
   h->offset_node_sym = layout.offset_node_sym;
   h->offset_buckets = layout.offset_buckets;
+  h->max_capacity = max_cap;
 
   /* Layout sanity assertions. */
   ARENA_ASSERT(h->offset_node_left < h->offset_node_right);
@@ -3074,6 +3138,30 @@ bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out) {
                      node_id_out, 4);
 }
 
+void arena_debug_ring_occupancy(uint32_t *out_sq_count, uint32_t *out_cq_count) {
+  ensure_arena();
+  if (out_sq_count)
+    *out_sq_count = 0;
+  if (out_cq_count)
+    *out_cq_count = 0;
+  if (ARENA_BASE_ADDR == NULL)
+    return;
+
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  Ring *sq = (Ring *)(ARENA_BASE_ADDR + h->offset_sq);
+  Ring *cq = (Ring *)(ARENA_BASE_ADDR + h->offset_cq);
+  if (out_sq_count) {
+    uint32_t head = atomic_load_explicit(&sq->head, memory_order_acquire);
+    uint32_t tail = atomic_load_explicit(&sq->tail, memory_order_acquire);
+    *out_sq_count = tail - head;
+  }
+  if (out_cq_count) {
+    uint32_t head = atomic_load_explicit(&cq->head, memory_order_acquire);
+    uint32_t tail = atomic_load_explicit(&cq->tail, memory_order_acquire);
+    *out_cq_count = tail - head;
+  }
+}
+
 void workerLoop(uint32_t worker_id) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
@@ -3210,7 +3298,7 @@ uint32_t debugGetArenaBaseAddr(void) {
 }
 uint32_t getArenaMode(void) { return ARENA_MODE; }
 uint32_t debugCalculateArenaSize(uint32_t capacity) {
-  uint64_t size = calculate_layout(capacity).total_size;
+  uint64_t size = calculate_layout(capacity, capacity).total_size;
   return (uint32_t)(size > (uint64_t)(uint32_t)-1 ? (uint32_t)-1 : size);
 }
 uint32_t debugLockState(void) {

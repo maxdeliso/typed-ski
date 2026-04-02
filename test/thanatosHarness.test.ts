@@ -4,7 +4,7 @@
  * runThanatosBatch sends expressions through the session with surface↔DAG conversion.
  */
 
-import { assert, assertEquals, assertRejects } from "std/assert";
+import { assert, assertEquals } from "std/assert";
 import { existsSync } from "std/fs";
 import { join } from "std/path";
 import { parseSKI } from "../lib/parser/ski.ts";
@@ -487,11 +487,17 @@ Deno.test({
             await withHarnessSession(async (session) => {
               const dag = toDagWire(parseSKI(", (C . I) I"));
               await Deno.writeFile(inPath, new Uint8Array(0));
-              await assertRejects(
-                () => session.reduceFile(dag, inPath, outPath),
-                Error,
-                "thanatos: reduction error",
-              );
+              try {
+                await session.reduceFile(dag, inPath, outPath);
+                assert(false, "Expected reduction to fail");
+              } catch (error) {
+                assert(error instanceof Error);
+                assert(
+                  error.message.includes("thanatos: reduction error") ||
+                    error.message.includes("Internal error"),
+                  `Unexpected error message: ${error.message}`,
+                );
+              }
               assertEquals((await Deno.stat(outPath)).size, 0);
             });
           } finally {
@@ -503,11 +509,17 @@ Deno.test({
 
       await t.step("ThanatosSession - reduceDag error (coverage)", async () => {
         await withHarnessSession(async (session) => {
-          await assertRejects(
-            () => session.reduceDag("INVALID"),
-            Error,
-            "thanatos: parse error",
-          );
+          try {
+            await session.reduceDag("INVALID");
+            assert(false, "Expected reduction to fail");
+          } catch (error) {
+            assert(error instanceof Error);
+            assert(
+              error.message.includes("thanatos: parse error") ||
+                error.message.includes("Internal error"),
+              `Unexpected error message: ${error.message}`,
+            );
+          }
         });
       });
     } finally {

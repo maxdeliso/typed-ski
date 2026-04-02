@@ -59,7 +59,9 @@ export function toDagWire(expr: SKIExpression): string {
   return tokens.join(" ");
 }
 
-export const DAG_TERMINAL_CHARS: Set<string> = new Set<string>(DAG_TERMINAL_SYMBOLS);
+export const DAG_TERMINAL_CHARS: Set<string> = new Set<string>(
+  DAG_TERMINAL_SYMBOLS,
+);
 
 export function dagCharToSym(char: string): SKITerminalSymbol {
   const symbol = char as SKITerminalSymbol;

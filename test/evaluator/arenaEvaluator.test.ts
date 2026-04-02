@@ -706,30 +706,33 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.step("fromInstance throws when required export is not a function", () => {
-    const invalidExports = {
-      reset: 1,
-      allocTerminal: () => 0,
-      allocCons: () => 0,
-      allocU8: () => 0,
-      arenaKernelStep: () => 0,
-      reduce: () => 0,
-      kindOf: () => 0,
-      symOf: () => 0,
-      leftOf: () => 0,
-      rightOf: () => 0,
-    } as unknown as ArenaWasmExports;
+  await t.step(
+    "fromInstance throws when required export is not a function",
+    () => {
+      const invalidExports = {
+        reset: 1,
+        allocTerminal: () => 0,
+        allocCons: () => 0,
+        allocU8: () => 0,
+        arenaKernelStep: () => 0,
+        reduce: () => 0,
+        kindOf: () => 0,
+        symOf: () => 0,
+        leftOf: () => 0,
+        rightOf: () => 0,
+      } as unknown as ArenaWasmExports;
 
-    assertThrows(
-      () =>
-        ArenaEvaluatorWasm.fromInstance(
-          invalidExports,
-          new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-        ),
-      TypeError,
-      "WASM export `reset` is missing or not a function",
-    );
-  });
+      assertThrows(
+        () =>
+          ArenaEvaluatorWasm.fromInstance(
+            invalidExports,
+            new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
+          ),
+        TypeError,
+        "WASM export `reset` is missing or not a function",
+      );
+    },
+  );
 
   await t.step("fromInstance throws when initArena returns zero", () => {
     const invalidExports = {
@@ -869,28 +872,31 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     assertEquals(allocTerminalCalls, 32);
   });
 
-  await t.step("getArenaNode falls back to export lookups when views are unavailable", () => {
-    const evaluator = new TestArenaEvaluator(
-      {
-        reset: () => {},
-        allocTerminal: () => 0,
-        allocCons: () => 0,
-        allocU8: () => 0,
-        arenaKernelStep: () => 0,
-        reduce: () => 0,
-        kindOf: () => ArenaKind.Terminal,
-        symOf: () => ArenaSym.I,
-        leftOf: () => 0,
-        rightOf: () => 0,
-      },
-      new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-    );
+  await t.step(
+    "getArenaNode falls back to export lookups when views are unavailable",
+    () => {
+      const evaluator = new TestArenaEvaluator(
+        {
+          reset: () => {},
+          allocTerminal: () => 0,
+          allocCons: () => 0,
+          allocU8: () => 0,
+          arenaKernelStep: () => 0,
+          reduce: () => 0,
+          kindOf: () => ArenaKind.Terminal,
+          symOf: () => ArenaSym.I,
+          leftOf: () => 0,
+          rightOf: () => 0,
+        },
+        new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
+      );
 
-    assertEquals(
-      evaluator.getArenaNode(3, null),
-      { id: 3, kind: "terminal", sym: "I" },
-    );
-  });
+      assertEquals(
+        evaluator.getArenaNode(3, null),
+        { id: 3, kind: "terminal", sym: "I" },
+      );
+    },
+  );
 
   await t.step("getArenaNode falls back when id exceeds view capacity", () => {
     const evaluator = new TestArenaEvaluator(
@@ -916,30 +922,34 @@ Deno.test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.step("instantiateFromBytes accepts multiple BufferSource shapes", () => {
-    const bytes = Deno.readFileSync(
-      new URL("../../wasm/release.wasm", import.meta.url),
-    );
-    const exactArrayBuffer = bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    );
-    const dataView = new DataView(
-      bytes.buffer,
-      bytes.byteOffset,
-      bytes.byteLength,
-    );
+  await t.step(
+    "instantiateFromBytes accepts multiple BufferSource shapes",
+    () => {
+      const bytes = Deno.readFileSync(
+        new URL("../../wasm/release.wasm", import.meta.url),
+      );
+      const exactArrayBuffer = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      );
+      const dataView = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
+      );
 
-    assert(
-      ArenaEvaluatorWasm.instantiateFromBytes(bytes) instanceof ArenaEvaluatorWasm,
-    );
-    assert(
-      ArenaEvaluatorWasm.instantiateFromBytes(exactArrayBuffer) instanceof
-        ArenaEvaluatorWasm,
-    );
-    assert(
-      ArenaEvaluatorWasm.instantiateFromBytes(dataView) instanceof
-        ArenaEvaluatorWasm,
-    );
-  });
+      assert(
+        ArenaEvaluatorWasm.instantiateFromBytes(bytes) instanceof
+          ArenaEvaluatorWasm,
+      );
+      assert(
+        ArenaEvaluatorWasm.instantiateFromBytes(exactArrayBuffer) instanceof
+          ArenaEvaluatorWasm,
+      );
+      assert(
+        ArenaEvaluatorWasm.instantiateFromBytes(dataView) instanceof
+          ArenaEvaluatorWasm,
+      );
+    },
+  );
 });

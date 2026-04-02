@@ -3,7 +3,10 @@ import { existsSync } from "std/fs";
 import { dirname, fromFileUrl, join } from "std/path";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
-import { passthroughEvaluator, runThanatosBatch } from "./thanatosHarness/batch.ts";
+import {
+  passthroughEvaluator,
+  runThanatosBatch,
+} from "./thanatosHarness/batch.ts";
 import {
   defaultWorkerCount,
   thanatosAvailable,
@@ -78,7 +81,7 @@ function mockBrokerTransport() {
           port: 43123,
           transport: "tcp",
         },
-        shutdown: async () => {
+        shutdown: () => {
           shutdownCalls++;
         },
         finished,
@@ -126,7 +129,8 @@ Deno.test("thanatos harness helpers cover U8 DAG and passthrough evaluator", asy
 });
 
 Deno.test({
-  name: "thanatos harness direct session covers reduceIo, batching, and shared state",
+  name:
+    "thanatos harness direct session covers reduceIo, batching, and shared state",
   ignore: !thanatosAvailable(),
   fn: async () => {
     const snapshot = await loadThanatosSnapshot("readOneA");
@@ -233,12 +237,17 @@ Deno.test({
       assertEquals(await brokerSession.rawRequest("PING"), "OK");
       assertEquals(
         unparseSKI(
-          fromDagWire(await brokerSession.reduceDag(toDagWire(parseSKI("I K")))),
+          fromDagWire(
+            await brokerSession.reduceDag(toDagWire(parseSKI("I K"))),
+          ),
         ),
         "K",
       );
 
-      const reduceIoResult = await brokerSession.reduceIo(snapshot.dag, snapshot.stdin);
+      const reduceIoResult = await brokerSession.reduceIo(
+        snapshot.dag,
+        snapshot.stdin,
+      );
       assertEquals(reduceIoResult.stdout, snapshot.stdout);
       assertEquals(
         unparseSKI(fromDagWire(reduceIoResult.resultDag)),
@@ -300,7 +309,9 @@ Deno.test({
         "not-the-right-token",
       );
       try {
-        const session = await getThanatosSession({ key: "thanatos-unit-broker-bad-token" });
+        const session = await getThanatosSession({
+          key: "thanatos-unit-broker-bad-token",
+        });
         await assertRejects(
           () => session.ping(),
           Error,

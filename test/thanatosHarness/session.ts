@@ -8,6 +8,7 @@ import {
 const THANATOS_BATCH_BROKER_URL_ENV = "THANATOS_BATCH_BROKER_URL";
 const THANATOS_BATCH_BROKER_TOKEN_ENV = "THANATOS_BATCH_BROKER_TOKEN";
 const THANATOS_BATCH_BROKER_TOKEN_HEADER = "x-thanatos-batch-token";
+const THANATOS_BATCH_BROKER_INTERNAL_ERROR = "Internal error";
 
 export type BatchThanatosSessionOptions = {
   key?: string;
@@ -473,8 +474,11 @@ async function handleBrokerRequest(
     );
     return jsonResponse(response);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return jsonResponse({ ok: false, error: message });
+    console.error("[thanatos harness] broker request failed", error);
+    return jsonResponse({
+      ok: false,
+      error: THANATOS_BATCH_BROKER_INTERNAL_ERROR,
+    });
   }
 }
 

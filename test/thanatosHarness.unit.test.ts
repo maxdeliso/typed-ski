@@ -120,7 +120,9 @@ Deno.test("thanatos harness helpers cover U8 DAG and passthrough evaluator", asy
   assertEquals(stepped.altered, false);
   assertEquals(stepped.expr, expr);
   assertEquals(passthroughEvaluator.reduce(expr), expr);
-  assertEquals(await passthroughEvaluator.reduceAsync(expr), expr);
+  const reduceAsync = passthroughEvaluator.reduceAsync;
+  assert(reduceAsync);
+  assertEquals(await reduceAsync(expr), expr);
 });
 
 Deno.test({
@@ -222,7 +224,7 @@ Deno.test({
         error?: string;
       };
       assertEquals(malformedBody.ok, false);
-      assert(malformedBody.error !== undefined);
+      assertEquals(malformedBody.error, "Internal error");
 
       const brokerSession = await getThanatosSession({
         key: "thanatos-unit-broker",
@@ -266,7 +268,7 @@ Deno.test({
       await assertRejects(
         () => brokerSession.reduceDag("INVALID"),
         Error,
-        "thanatos: parse error",
+        "Internal error",
       );
 
       await brokerSession.close();

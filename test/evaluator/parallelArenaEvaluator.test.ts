@@ -28,6 +28,10 @@ function overrideEvaluatorExports(
   });
 }
 
+const ParallelArenaEvaluatorInternals = ParallelArenaEvaluatorWasm as unknown as {
+  validateSabExports: (exports: ArenaWasmExports) => unknown;
+};
+
 Deno.test("ParallelArenaEvaluator - creation and shared memory", async (t) => {
   await t.step("creates evaluator with shared memory", async () => {
     const errors: string[] = [];
@@ -992,6 +996,262 @@ Deno.test("ParallelArenaEvaluator - more error paths (coverage)", async (t) => {
       () => evaluator.reduceAsync(I),
       Error,
       "Evaluator terminated",
+    );
+  });
+
+  await t.step("terminate cancels tracked timeout callbacks", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    try {
+      let cancelled = false;
+      const activeTimeouts = (evaluator as unknown as {
+        activeTimeouts: Set<() => void>;
+      }).activeTimeouts;
+      activeTimeouts.add(() => {
+        cancelled = true;
+      });
+
+      evaluator.terminate();
+      assert(cancelled, "terminate should invoke active timeout cancel hooks");
+    } finally {
+      evaluator.terminate();
+    }
+  });
+
+  await t.step("reduceArenaNodeIdAsync returns stashed completions early", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    try {
+      const requestTracker = (evaluator as unknown as {
+        requestTracker: {
+          createRequest: (workerCount: number, expr?: SKIExpression) => number;
+          getStashedCompletion: (reqId: number) => number | undefined;
+        };
+      }).requestTracker;
+      const completionPoller = (evaluator as unknown as {
+        completionPoller: {
+          start: (pull: () => bigint) => void;
+        };
+      }).completionPoller;
+
+      let startCalled = false;
+      const originalCreateRequest = requestTracker.createRequest.bind(requestTracker);
+      const originalGetStashedCompletion = requestTracker.getStashedCompletion.bind(
+        requestTracker,
+      );
+      const originalStart = completionPoller.start.bind(completionPoller);
+
+      requestTracker.createRequest = () => 4242;
+      requestTracker.getStashedCompletion = (reqId: number) =>
+        reqId === 4242 ? 99 : undefined;
+      completionPoller.start = () => {
+        startCalled = true;
+      };
+
+      try {
+        assertEquals(await evaluator.reduceArenaNodeIdAsync(7), 99);
+        assert(startCalled, "completion poller should still be started");
+      } finally {
+        requestTracker.createRequest = originalCreateRequest;
+        requestTracker.getStashedCompletion = originalGetStashedCompletion;
+        completionPoller.start = originalStart;
+      }
+    } finally {
+      evaluator.terminate();
+    }
+  });
+
+  await t.step("reduceArenaNodeIdAsync surfaces aborts while queue is full", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const originalExports = evaluator.$;
+    try {
+      const ringStats = (evaluator as unknown as {
+        ringStats: { recordSubmitFull: () => void };
+        aborted: boolean;
+        abortError: Error | null;
+      });
+      const originalRecordSubmitFull = ringStats.ringStats.recordSubmitFull.bind(
+        ringStats.ringStats,
+      );
+
+      overrideEvaluatorExports(evaluator, {
+        ...originalExports,
+        hostSubmit: () => 1,
+      } as ArenaWasmExports);
+
+      ringStats.ringStats.recordSubmitFull = () => {
+        originalRecordSubmitFull();
+        ringStats.aborted = true;
+        ringStats.abortError = new Error("abort during submit retry");
+      };
+
+      await assertRejects(
+        () => evaluator.reduceArenaNodeIdAsync(1),
+        Error,
+        "abort during submit retry",
+      );
+
+      ringStats.ringStats.recordSubmitFull = originalRecordSubmitFull;
+    } finally {
+      overrideEvaluatorExports(evaluator, originalExports);
+      evaluator.terminate();
+    }
+  });
+
+  await t.step("reduceArenaNodeIdAsync surfaces aborts after macrotask backoff", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const originalExports = evaluator.$;
+    try {
+      overrideEvaluatorExports(evaluator, {
+        ...originalExports,
+        hostSubmit: () => 1,
+      } as ArenaWasmExports);
+
+      const internals = evaluator as unknown as {
+        aborted: boolean;
+        abortError: Error | null;
+        activeTimeouts: Set<() => void> & {
+          add: (value: () => void) => Set<() => void>;
+        };
+      };
+      const originalAdd = internals.activeTimeouts.add.bind(internals.activeTimeouts);
+
+      internals.activeTimeouts.add = ((cancel: () => void) => {
+        internals.aborted = true;
+        internals.abortError = new Error("abort after timeout backoff");
+        return originalAdd(cancel);
+      }) as typeof internals.activeTimeouts.add;
+
+      try {
+        await assertRejects(
+          () => evaluator.reduceArenaNodeIdAsync(1),
+          Error,
+          "abort after timeout backoff",
+        );
+      } finally {
+        internals.activeTimeouts.add = originalAdd;
+      }
+    } finally {
+      overrideEvaluatorExports(evaluator, originalExports);
+      evaluator.terminate();
+    }
+  });
+
+  await t.step("getRingStatsSnapshot handles missing arena base address", async () => {
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const originalExports = evaluator.$;
+    try {
+      overrideEvaluatorExports(evaluator, {
+        ...originalExports,
+        debugGetArenaBaseAddr: undefined,
+      } as ArenaWasmExports);
+
+      const snapshot = evaluator.getRingStatsSnapshot();
+      assertEquals(snapshot.totalNodes, 0);
+      assertEquals(snapshot.totalSteps, 0);
+    } finally {
+      overrideEvaluatorExports(evaluator, originalExports);
+      evaluator.terminate();
+    }
+  });
+
+  await t.step("validateSabExports rejects missing SAB helpers", () => {
+    assertThrows(
+      () =>
+        ParallelArenaEvaluatorInternals.validateSabExports({
+          reset: () => {},
+          allocTerminal: () => 0,
+          allocCons: () => 0,
+          allocU8: () => 0,
+          arenaKernelStep: () => 0,
+          reduce: () => 0,
+          kindOf: () => 0,
+          symOf: () => 0,
+          leftOf: () => 0,
+          rightOf: () => 0,
+        } as ArenaWasmExports),
+      Error,
+      "initArena export is required but missing",
+    );
+
+    assertThrows(
+      () =>
+        ParallelArenaEvaluatorInternals.validateSabExports({
+          reset: () => {},
+          allocTerminal: () => 0,
+          allocCons: () => 0,
+          allocU8: () => 0,
+          arenaKernelStep: () => 0,
+          reduce: () => 0,
+          kindOf: () => 0,
+          symOf: () => 0,
+          leftOf: () => 0,
+          rightOf: () => 0,
+          initArena: () => 1,
+        } as ArenaWasmExports),
+      Error,
+      "connectArena export is required but missing",
+    );
+
+    assertThrows(
+      () =>
+        ParallelArenaEvaluatorInternals.validateSabExports({
+          reset: () => {},
+          allocTerminal: () => 0,
+          allocCons: () => 0,
+          allocU8: () => 0,
+          arenaKernelStep: () => 0,
+          reduce: () => 0,
+          kindOf: () => 0,
+          symOf: () => 0,
+          leftOf: () => 0,
+          rightOf: () => 0,
+          initArena: () => 1,
+          connectArena: () => 1,
+        } as ArenaWasmExports),
+      Error,
+      "debugLockState export is required but missing",
+    );
+
+    assertThrows(
+      () =>
+        ParallelArenaEvaluatorInternals.validateSabExports({
+          reset: () => {},
+          allocTerminal: () => 0,
+          allocCons: () => 0,
+          allocU8: () => 0,
+          arenaKernelStep: () => 0,
+          reduce: () => 0,
+          kindOf: () => 0,
+          symOf: () => 0,
+          leftOf: () => 0,
+          rightOf: () => 0,
+          initArena: () => 1,
+          connectArena: () => 1,
+          debugLockState: () => 0,
+        } as ArenaWasmExports),
+      Error,
+      "getArenaMode export is required but missing",
+    );
+
+    assertThrows(
+      () =>
+        ParallelArenaEvaluatorInternals.validateSabExports({
+          reset: () => {},
+          allocTerminal: () => 0,
+          allocCons: () => 0,
+          allocU8: () => 0,
+          arenaKernelStep: () => 0,
+          reduce: () => 0,
+          kindOf: () => 0,
+          symOf: () => 0,
+          leftOf: () => 0,
+          rightOf: () => 0,
+          initArena: () => 1,
+          connectArena: () => 1,
+          debugLockState: () => 0,
+          getArenaMode: () => 1,
+        } as ArenaWasmExports),
+      Error,
+      "debugGetArenaBaseAddr export is required but missing",
     );
   });
 });

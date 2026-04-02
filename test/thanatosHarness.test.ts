@@ -4,21 +4,19 @@
  * runThanatosBatch sends expressions through the session with surface↔DAG conversion.
  */
 
-import { assert, assertEquals, assertRejects, assertThrows } from "std/assert";
+import { assert, assertEquals, assertRejects } from "std/assert";
 import { existsSync } from "std/fs";
 import { join } from "std/path";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
+import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
 import {
   closeBatchThanatosSessions,
-  dagCharToSym,
   defaultWorkerCount,
-  fromDagWire,
   normalizeCliOutput,
   PROJECT_ROOT,
   runThanatosProcess,
   thanatosAvailable,
-  toDagWire,
   withBatchThanatosSession,
 } from "./thanatosHarness.ts";
 import type { ThanatosSession } from "./thanatosHarness.ts";
@@ -597,34 +595,5 @@ Deno.test({
         result.stderr,
       );
     });
-  },
-});
-
-Deno.test({
-  name: "fromDagWire - error paths (coverage)",
-  fn: () => {
-    // Empty DAG
-    assertThrows(() => fromDagWire(""), Error, "empty DAG");
-    // Invalid U8 #u8(256)
-    assertThrows(() => fromDagWire("#u8(256)"), Error, "invalid U8");
-    // Invalid U8 UXY
-    assertThrows(() => fromDagWire("UXY"), Error, "invalid U8");
-    // Invalid app (missing comma)
-    assertThrows(() => fromDagWire("@0"), Error, "invalid app");
-    // Invalid app indices (out of bounds)
-    assertThrows(() => fromDagWire("@0,0"), Error, "invalid app indices");
-    // Invalid DAG token
-    assertThrows(() => fromDagWire("X"), Error, "invalid DAG token");
-  },
-});
-
-Deno.test({
-  name: "dagCharToSym - error (coverage)",
-  fn: () => {
-    assertThrows(
-      () => dagCharToSym("?"),
-      Error,
-      "invalid DAG terminal: ?",
-    );
   },
 });

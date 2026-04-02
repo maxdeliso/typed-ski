@@ -18,15 +18,14 @@ import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
+import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import {
   closeBatchThanatosSessions,
-  fromDagWire,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
-  toDagWire,
   withBatchThanatosSession,
 } from "../thanatosHarness.ts";
 

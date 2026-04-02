@@ -1,10 +1,10 @@
 import { dirname, join } from "std/path";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import { toDagWire } from "../../lib/ski/dagWire.ts";
 import {
   closeBatchThanatosSessions,
   thanatosAvailable,
-  toDagWire,
   withBatchThanatosSession,
 } from "../thanatosHarness.ts";
 import { apply } from "../../lib/ski/expression.ts";

@@ -12,13 +12,12 @@ import { getPreludeObject } from "../lib/prelude.ts";
 import type { TripCObject } from "../lib/compiler/objectFile.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
+import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
 import {
   closeBatchThanatosSessions,
-  fromDagWire,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
-  toDagWire,
   withBatchThanatosSession,
 } from "./thanatosHarness.ts";
 

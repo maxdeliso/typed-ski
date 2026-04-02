@@ -11,12 +11,6 @@ export {
   thanatosAvailable,
 } from "./thanatosHarness/config.ts";
 export {
-  DAG_TERMINAL_CHARS,
-  dagCharToSym,
-  fromDagWire,
-  toDagWire,
-} from "./thanatosHarness/dagWire.ts";
-export {
   normalizeCliOutput,
   runThanatosProcess,
 } from "./thanatosHarness/process.ts";

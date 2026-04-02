@@ -41,6 +41,12 @@ export {
   /** Unparses an SKI expression into a string representation. */
   unparseSKI,
 } from "./ski/expression.ts";
+export {
+  DAG_TERMINAL_CHARS,
+  dagCharToSym,
+  fromDagWire,
+  toDagWire,
+} from "./ski/dagWire.ts";
 
 // Parser exports
 /** Parses a string representation of an SKI expression into its AST. */

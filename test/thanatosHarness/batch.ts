@@ -1,8 +1,8 @@
 import type { Evaluator } from "../../lib/evaluator/evaluator.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
+import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { fromDagWire, toDagWire } from "./dagWire.ts";
 import { withBatchThanatosSession } from "./session.ts";
 
 export const passthroughEvaluator: Evaluator = {

@@ -5,13 +5,12 @@ import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
+import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import {
   closeBatchThanatosSessions,
-  fromDagWire,
   passthroughEvaluator,
   thanatosAvailable,
-  toDagWire,
   withBatchThanatosSession,
 } from "../thanatosHarness.ts";
 

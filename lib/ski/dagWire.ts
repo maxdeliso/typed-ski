@@ -1,10 +1,28 @@
-import type { SKIExpression } from "../../lib/ski/expression.ts";
-import { apply } from "../../lib/ski/expression.ts";
-import { term } from "../../lib/ski/terminal.ts";
-import type { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
+import type { SKIExpression } from "./expression.ts";
+import { apply } from "./expression.ts";
+import { SKITerminalSymbol, term } from "./terminal.ts";
+
+const DAG_TERMINAL_SYMBOLS = [
+  SKITerminalSymbol.S,
+  SKITerminalSymbol.K,
+  SKITerminalSymbol.I,
+  SKITerminalSymbol.B,
+  SKITerminalSymbol.C,
+  SKITerminalSymbol.SPrime,
+  SKITerminalSymbol.BPrime,
+  SKITerminalSymbol.CPrime,
+  SKITerminalSymbol.ReadOne,
+  SKITerminalSymbol.WriteOne,
+  SKITerminalSymbol.EqU8,
+  SKITerminalSymbol.LtU8,
+  SKITerminalSymbol.DivU8,
+  SKITerminalSymbol.ModU8,
+  SKITerminalSymbol.AddU8,
+  SKITerminalSymbol.SubU8,
+] as const;
 
 /**
- * DAG wire format: terminals S K I B C P Q R , . E | Uxx | @L,R
+ * DAG wire format: terminals S K I B C P Q R , . E L D M A O | Uxx | @L,R
  * (space-separated, postorder).
  */
 export function toDagWire(expr: SKIExpression): string {
@@ -41,24 +59,7 @@ export function toDagWire(expr: SKIExpression): string {
   return tokens.join(" ");
 }
 
-export const DAG_TERMINAL_CHARS = new Set<string>([
-  "S",
-  "K",
-  "I",
-  "B",
-  "C",
-  "P",
-  "Q",
-  "R",
-  ",",
-  ".",
-  "E",
-  "L",
-  "D",
-  "M",
-  "A",
-  "O",
-]);
+export const DAG_TERMINAL_CHARS = new Set<string>(DAG_TERMINAL_SYMBOLS);
 
 export function dagCharToSym(char: string): SKITerminalSymbol {
   const symbol = char as SKITerminalSymbol;

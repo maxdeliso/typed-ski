@@ -3,6 +3,7 @@ import { existsSync } from "std/fs";
 import { dirname, fromFileUrl, join } from "std/path";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
+import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
 import {
   passthroughEvaluator,
   runThanatosBatch,
@@ -11,7 +12,6 @@ import {
   defaultWorkerCount,
   thanatosAvailable,
 } from "./thanatosHarness/config.ts";
-import { fromDagWire, toDagWire } from "./thanatosHarness/dagWire.ts";
 import {
   closeBatchThanatosSessions,
   getBatchBrokerEnvVarNames,
@@ -188,7 +188,6 @@ Deno.test({
     const outputPath = join(tempDir, "stdout.bin");
     const traceDir = await Deno.makeTempDir();
 
-    let clearBrokerEnv = () => {};
     let brokerUrl = "";
     let brokerToken = "";
     try {
@@ -201,9 +200,16 @@ Deno.test({
       });
       brokerUrl = started.env[envVarNames.url]!;
       brokerToken = started.env[envVarNames.token]!;
-      clearBrokerEnv = setBrokerEnv(brokerUrl, brokerToken);
+      const broker = { url: brokerUrl, token: brokerToken };
 
-      assert(usingThanatosBatchBroker());
+      {
+        const clearBrokerEnv = setBrokerEnv(brokerUrl, brokerToken);
+        try {
+          assert(usingThanatosBatchBroker());
+        } finally {
+          clearBrokerEnv();
+        }
+      }
 
       const methodNotAllowed = await fetch(brokerUrl, { method: "GET" });
       assertEquals(methodNotAllowed.status, 405);
@@ -232,6 +238,7 @@ Deno.test({
 
       const brokerSession = await getThanatosSession({
         key: "thanatos-unit-broker",
+        broker,
       });
       brokerSession.start(99, { IGNORED: "1" });
       assertEquals(await brokerSession.rawRequest("PING"), "OK");
@@ -271,8 +278,15 @@ Deno.test({
       assert((await brokerSession.stats()).startsWith("OK "));
       await brokerSession.traceDump();
 
-      await closeBatchThanatosSessions();
-      await brokerSession.ping();
+      {
+        const clearBrokerEnv = setBrokerEnv(brokerUrl, brokerToken);
+        try {
+          await closeBatchThanatosSessions();
+          await brokerSession.ping();
+        } finally {
+          clearBrokerEnv();
+        }
+      }
 
       await assertRejects(
         () => brokerSession.reduceDag("INVALID"),
@@ -287,12 +301,10 @@ Deno.test({
         "ThanatosSession closed",
       );
 
-      clearBrokerEnv();
       await started.close();
       await closeBatchThanatosSessions();
       assertEquals(transport.shutdownCalls, 1);
     } finally {
-      clearBrokerEnv();
       Deno.env.delete(envVarNames.url);
       Deno.env.delete(envVarNames.token);
       await closeBatchThanatosSessions();
@@ -304,13 +316,13 @@ Deno.test({
     const secondTransport = mockBrokerTransport();
     try {
       const started = await startThanatosBatchBroker({ workers: 1 });
-      const badBrokerEnv = setBrokerEnv(
-        started.env[envVarNames.url]!,
-        "not-the-right-token",
-      );
       try {
         const session = await getThanatosSession({
           key: "thanatos-unit-broker-bad-token",
+          broker: {
+            url: started.env[envVarNames.url]!,
+            token: "not-the-right-token",
+          },
         });
         await assertRejects(
           () => session.ping(),
@@ -318,7 +330,6 @@ Deno.test({
           "thanatos broker request failed with status 403",
         );
       } finally {
-        badBrokerEnv();
         await started.close();
         await closeBatchThanatosSessions();
       }

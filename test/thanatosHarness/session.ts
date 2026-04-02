@@ -14,6 +14,7 @@ export type BatchThanatosSessionOptions = {
   key?: string;
   workers?: number;
   env?: Record<string, string>;
+  broker?: BatchBrokerConfig;
   resetBefore?: boolean;
   resetAfter?: boolean;
 };
@@ -412,6 +413,12 @@ function brokerConfigFromEnv(): BatchBrokerConfig | null {
   return { url, token };
 }
 
+function resolveBrokerConfig(
+  options: BatchThanatosSessionOptions = {},
+): BatchBrokerConfig | null {
+  return options.broker ?? brokerConfigFromEnv();
+}
+
 async function handleBrokerRequest(
   request: Request,
   session: DirectThanatosSession,
@@ -553,9 +560,12 @@ function getSessionRegistry(): Map<string, SharedSessionState> {
 }
 
 function sessionRegistryKey(options: BatchThanatosSessionOptions = {}): string {
-  const broker = brokerConfigFromEnv();
+  const broker = resolveBrokerConfig(options);
   if (broker) {
-    return `broker:${broker.url}`;
+    return JSON.stringify({
+      brokerUrl: broker.url,
+      brokerToken: broker.token,
+    });
   }
   const envEntries = Object.entries(options.env ?? {}).sort(([left], [right]) =>
     left.localeCompare(right)
@@ -579,7 +589,7 @@ function getSharedSessionState(
     return existing;
   }
 
-  const broker = brokerConfigFromEnv();
+  const broker = resolveBrokerConfig(options);
   if (broker) {
     const state: SharedSessionState = {
       sessionPromise: Promise.resolve(

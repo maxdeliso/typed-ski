@@ -1,11 +1,10 @@
 import { assert } from "chai";
 import { dirname, fromFileUrl, join } from "std/path";
+import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
 import {
   closeBatchThanatosSessions,
-  fromDagWire,
   passthroughEvaluator,
   thanatosAvailable,
-  toDagWire,
   withBatchThanatosSession,
 } from "../thanatosHarness.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";

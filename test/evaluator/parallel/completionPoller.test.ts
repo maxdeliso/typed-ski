@@ -1,4 +1,5 @@
-import { assert, assertEquals } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import type { ArenaWasmExports } from "../../../lib/evaluator/arenaEvaluator.ts";
 import type { IoManager } from "../../../lib/evaluator/io/ioManager.ts";
 import type { RingStats } from "../../../lib/evaluator/io/ringStats.ts";
@@ -59,7 +60,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
-Deno.test("CompletionPoller - clean completion still resolves request", async () => {
+test("CompletionPoller - clean completion still resolves request", async () => {
   const tracker = new RequestTracker({}, 8);
   const fakeExports = {} as ArenaWasmExports;
 
@@ -77,10 +78,14 @@ Deno.test("CompletionPoller - clean completion still resolves request", async ()
   const completionSeen = deferred<void>();
 
   let resolvedNode: number | null = null;
-  tracker.markPending(reqId, (nodeId) => {
-    resolvedNode = nodeId;
-    completionSeen.resolve();
-  }, () => {});
+  tracker.markPending(
+    reqId,
+    (nodeId) => {
+      resolvedNode = nodeId;
+      completionSeen.resolve();
+    },
+    () => {},
+  );
 
   let pulled = false;
   poller.start(() => {
@@ -95,11 +100,11 @@ Deno.test("CompletionPoller - clean completion still resolves request", async ()
   aborted = true;
   poller.stop();
 
-  assertEquals(resolvedNode, 200);
-  assertEquals(tracker.isPending(reqId), false);
+  assert.strictEqual(resolvedNode, 200);
+  assert.strictEqual(tracker.isPending(reqId), false);
 });
 
-Deno.test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", async () => {
+test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", async () => {
   const tracker = new RequestTracker({}, 8);
   let ioWaitRegistered: { nodeId: number; reqId: number } | null = null;
   const ioWaitSeen = deferred<void>();
@@ -138,8 +143,8 @@ Deno.test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", asy
     leftOf: (_id: number): number => 0,
     rightOf: (_id: number): number => 0,
     hostSubmit: (nodeId: number, reqId: number, _maxSteps: number): number => {
-      assertEquals(nodeId, makeControlPtr(77));
-      assertEquals(reqId, 1);
+      assert.strictEqual(nodeId, makeControlPtr(77));
+      assert.strictEqual(reqId, 1);
       return 0;
     },
   } as unknown as ArenaWasmExports;
@@ -154,7 +159,11 @@ Deno.test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", asy
   );
 
   const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, () => {});
+  tracker.markPending(
+    reqId,
+    () => {},
+    () => {},
+  );
 
   poller.start(
     (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
@@ -163,12 +172,15 @@ Deno.test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", asy
   aborted = true;
   poller.stop();
 
-  assertEquals(ioWaitRegistered, { nodeId: makeControlPtr(77), reqId: 1 });
-  assertEquals(ioWaitHandledCount, 1);
-  assertEquals(tracker.isPending(1), true);
+  assert.deepStrictEqual(ioWaitRegistered, {
+    nodeId: makeControlPtr(77),
+    reqId: 1,
+  });
+  assert.strictEqual(ioWaitHandledCount, 1);
+  assert.strictEqual(tracker.isPending(1), true);
 });
 
-Deno.test("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
+test("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
   const tracker = new RequestTracker({}, 8);
   const errorSeen = deferred<void>();
   let capturedError: Error | null = null;
@@ -196,10 +208,14 @@ Deno.test("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
   );
 
   const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, (err) => {
-    capturedError = err;
-    errorSeen.resolve();
-  });
+  tracker.markPending(
+    reqId,
+    () => {},
+    (err) => {
+      capturedError = err;
+      errorSeen.resolve();
+    },
+  );
 
   poller.start(
     (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
@@ -208,12 +224,12 @@ Deno.test("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
   aborted = true;
   poller.stop();
 
-  assert(capturedError !== null);
+  assert.ok(capturedError !== null);
   const err = capturedError as Error;
-  assert(err.message.includes("Worker reported error event"));
+  assert.ok(err.message.includes("Worker reported error event"));
 });
 
-Deno.test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
+test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   const tracker = new RequestTracker({}, 8);
   const resubmits: number[] = [];
   const yieldSeen = deferred<void>();
@@ -246,7 +262,11 @@ Deno.test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   );
 
   const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, () => {});
+  tracker.markPending(
+    reqId,
+    () => {},
+    () => {},
+  );
 
   poller.start(
     (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
@@ -255,11 +275,11 @@ Deno.test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   aborted = true;
   poller.stop();
 
-  assertEquals(resubmits, [makeControlPtr(99)]);
-  assertEquals(tracker.getResubmitCount(reqId), 1);
+  assert.deepStrictEqual(resubmits, [makeControlPtr(99)]);
+  assert.strictEqual(tracker.getResubmitCount(reqId), 1);
 });
 
-Deno.test("CompletionPoller - hibernation when no work pending", async () => {
+test("CompletionPoller - hibernation when no work pending", async () => {
   const tracker = new RequestTracker({}, 8);
   let pullCount = 0;
   const fakeExports = {
@@ -293,10 +313,10 @@ Deno.test("CompletionPoller - hibernation when no work pending", async () => {
   // if (this.requestTracker.getTotalPending() === 0) { ... hibernate ... continue; }
   // packed = pull();
   // So if it hibernate, it doesn't pull.
-  assertEquals(pullCount, 0);
+  assert.strictEqual(pullCount, 0);
 });
 
-Deno.test("CompletionPoller - submitSuspension busy-waits on full queue", async () => {
+test("CompletionPoller - submitSuspension busy-waits on full queue", async () => {
   const tracker = new RequestTracker({}, 8);
   const ioManager = new IoManagerStub();
   ioManager.shouldHandle = true;
@@ -336,7 +356,11 @@ Deno.test("CompletionPoller - submitSuspension busy-waits on full queue", async 
   );
 
   const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, () => {});
+  tracker.markPending(
+    reqId,
+    () => {},
+    () => {},
+  );
 
   poller.start(
     (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
@@ -345,10 +369,10 @@ Deno.test("CompletionPoller - submitSuspension busy-waits on full queue", async 
   aborted = true;
   poller.stop();
 
-  assertEquals(submits, 3);
+  assert.strictEqual(submits, 3);
 });
 
-Deno.test("CompletionPoller - resubmitSuspension busy-waits on full queue", async () => {
+test("CompletionPoller - resubmitSuspension busy-waits on full queue", async () => {
   const tracker = new RequestTracker({}, 8);
   const yieldSeen = deferred<void>();
   let submits = 0;
@@ -386,7 +410,11 @@ Deno.test("CompletionPoller - resubmitSuspension busy-waits on full queue", asyn
   );
 
   const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, () => {});
+  tracker.markPending(
+    reqId,
+    () => {},
+    () => {},
+  );
 
   poller.start(
     (fakeExports as unknown as { hostPullV2: () => bigint }).hostPullV2,
@@ -395,10 +423,10 @@ Deno.test("CompletionPoller - resubmitSuspension busy-waits on full queue", asyn
   aborted = true;
   poller.stop();
 
-  assertEquals(submits, 3);
+  assert.strictEqual(submits, 3);
 });
 
-Deno.test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
+test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
   const fakeExports = {} as ArenaWasmExports;
@@ -413,7 +441,11 @@ Deno.test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
 
   // Keep at least one request pending so the poller does not hibernate.
   const reqId = tracker.createRequest(1);
-  tracker.markPending(reqId, () => {}, () => {});
+  tracker.markPending(
+    reqId,
+    () => {},
+    () => {},
+  );
 
   poller.start(() => -1n);
 
@@ -425,13 +457,13 @@ Deno.test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
   aborted = true;
   poller.stop();
 
-  assert(
+  assert.ok(
     ringStats.pullEmptyCount > 512,
     `Expected more than 512 empty pulls, got ${ringStats.pullEmptyCount}`,
   );
 });
 
-Deno.test("CompletionPoller - completion is stashed when resolver is not pending", async () => {
+test("CompletionPoller - completion is stashed when resolver is not pending", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
   const fakeExports = {} as ArenaWasmExports;
@@ -447,7 +479,11 @@ Deno.test("CompletionPoller - completion is stashed when resolver is not pending
 
   const reqId = tracker.createRequest(1);
   const keepAliveReqId = tracker.createRequest(1);
-  tracker.markPending(keepAliveReqId, () => {}, () => {});
+  tracker.markPending(
+    keepAliveReqId,
+    () => {},
+    () => {},
+  );
 
   let pulled = false;
   poller.start(() => {
@@ -466,11 +502,11 @@ Deno.test("CompletionPoller - completion is stashed when resolver is not pending
   aborted = true;
   poller.stop();
 
-  assertEquals(ringStats.completionStashedCount, 1);
-  assertEquals(tracker.getStashedCompletion(reqId), 100);
+  assert.strictEqual(ringStats.completionStashedCount, 1);
+  assert.strictEqual(tracker.getStashedCompletion(reqId), 100);
 });
 
-Deno.test("CompletionPoller - maybeYield drains long completion bursts", async () => {
+test("CompletionPoller - maybeYield drains long completion bursts", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
   const fakeExports = {} as ArenaWasmExports;
@@ -488,7 +524,11 @@ Deno.test("CompletionPoller - maybeYield drains long completion bursts", async (
     const totalRequests = 5000;
     for (let i = 0; i < totalRequests; i++) {
       const reqId = tracker.createRequest(1);
-      tracker.markPending(reqId, () => {}, () => {});
+      tracker.markPending(
+        reqId,
+        () => {},
+        () => {},
+      );
     }
 
     let pullCount = 0;
@@ -505,7 +545,7 @@ Deno.test("CompletionPoller - maybeYield drains long completion bursts", async (
       if (tracker.getTotalPending() === 0) break;
     }
 
-    assertEquals(tracker.getTotalPending(), 0);
+    assert.strictEqual(tracker.getTotalPending(), 0);
   } finally {
     aborted = true;
     poller.stop();

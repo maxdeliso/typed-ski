@@ -54,8 +54,7 @@ const ALL_RANDOM_TERMINAL_SYMBOLS = Object.values(
 
 const PURE_RANDOM_TERMINAL_SYMBOLS = ALL_RANDOM_TERMINAL_SYMBOLS.filter(
   (sym) =>
-    sym !== SKITerminalSymbol.ReadOne &&
-    sym !== SKITerminalSymbol.WriteOne,
+    sym !== SKITerminalSymbol.ReadOne && sym !== SKITerminalSymbol.WriteOne,
 );
 
 interface RandTerminalOptions {

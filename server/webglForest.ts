@@ -327,7 +327,7 @@ export function initWebglForestViewer(deps: ViewerDeps) {
     } else if (dragButton === 1 || dragButton === 2) {
       const canvasRect = deps.canvas.getBoundingClientRect();
       const rotSensitivity = 0.3;
-      const dZ = -dx / canvasRect.width * rotSensitivity * 360;
+      const dZ = (-dx / canvasRect.width) * rotSensitivity * 360;
       turn(dZ);
     }
 

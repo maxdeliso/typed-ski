@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 import { mkVar } from "../../lib/terms/lambda.ts";
 import {
   createTypedApplication,
@@ -18,24 +19,25 @@ import {
   typesLitEq,
 } from "../../lib/types/types.ts";
 
-Deno.test("Parser Tests", async (t) => {
-  await t.step("parseType", async (t) => {
-    await t.step("parses a simple variable type", () => {
+test("Parser Tests", async (t) => {
+  await t.test("parseType", async (t) => {
+    await t.test("parses a simple variable type", () => {
       const src = "a";
       const [lit, ty] = parseType(src);
       expect(lit).to.equal(src);
       expect(typesLitEq(ty, mkTypeVariable("a"))).to.equal(true);
     });
 
-    await t.step("parses the type a->b", () => {
+    await t.test("parses the type a->b", () => {
       const src = "a->b";
       const [lit, ty] = parseType(src);
       expect(lit).to.equal(src);
-      expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
-        .to.equal(true);
+      expect(
+        typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))),
+      ).to.equal(true);
     });
 
-    await t.step("parses the type a->b->c", () => {
+    await t.test("parses the type a->b->c", () => {
       const src = "a->b->c";
       const [lit, ty] = parseType(src);
       const expected = arrow(
@@ -46,7 +48,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses (a->b)->a->b", () => {
+    await t.test("parses (a->b)->a->b", () => {
       const src = "(a->b)->a->b";
       const [lit, ty] = parseType(src);
       const expected = arrow(
@@ -57,7 +59,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses a->b->a->b", () => {
+    await t.test("parses a->b->a->b", () => {
       const src = "a->b->a->b";
       const [lit, ty] = parseType(src);
       const expected = arrows(
@@ -70,7 +72,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses nested-parentheses arrow type", () => {
+    await t.test("parses nested-parentheses arrow type", () => {
       const src = "((a->b)->c)->d";
       const [lit, ty] = parseType(src);
       const expected = arrow(
@@ -84,7 +86,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("skips excess whitespace in types", () => {
+    await t.test("skips excess whitespace in types", () => {
       const src = "   a   ->    b   ";
       const [lit, ty] = parseType(src);
       const expected = arrow(mkTypeVariable("a"), mkTypeVariable("b"));
@@ -92,18 +94,15 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses type applications", () => {
+    await t.test("parses type applications", () => {
       const src = "List Nat";
       const [lit, ty] = parseType(src);
-      const expected = typeApp(
-        mkTypeVariable("List"),
-        mkTypeVariable("Nat"),
-      );
+      const expected = typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"));
       expect(lit).to.equal("List Nat");
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("parses nested type applications", () => {
+    await t.test("parses nested type applications", () => {
       const src = "Result ParseError (Pair A (List Nat))";
       const [lit, ty] = parseType(src);
       const listNat = typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"));
@@ -119,7 +118,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("application binds tighter than arrows", () => {
+    await t.test("application binds tighter than arrows", () => {
       const src = "List Nat -> Bool";
       const [lit, ty] = parseType(src);
       const expected = arrow(
@@ -131,8 +130,8 @@ Deno.test("Parser Tests", async (t) => {
     });
   });
 
-  await t.step("parseArrowTypeNoApp", async (t) => {
-    await t.step("parses a simple type variable", () => {
+  await t.test("parseArrowTypeNoApp", async (t) => {
+    await t.test("parses a simple type variable", () => {
       const src = "a";
       const state = createParserState(src);
       const [lit, ty, finalState] = parseArrowTypeNoApp(state);
@@ -141,17 +140,18 @@ Deno.test("Parser Tests", async (t) => {
       expect(finalState.idx).to.equal(src.length);
     });
 
-    await t.step("parses simple arrow type", () => {
+    await t.test("parses simple arrow type", () => {
       const src = "a->b";
       const state = createParserState(src);
       const [lit, ty, finalState] = parseArrowTypeNoApp(state);
       expect(lit).to.equal(src);
-      expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
-        .to.equal(true);
+      expect(
+        typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))),
+      ).to.equal(true);
       expect(finalState.idx).to.equal(src.length);
     });
 
-    await t.step("parses multiple arrows", () => {
+    await t.test("parses multiple arrows", () => {
       const src = "a->b->c";
       const state = createParserState(src);
       const [lit, ty, finalState] = parseArrowTypeNoApp(state);
@@ -164,7 +164,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(finalState.idx).to.equal(src.length);
     });
 
-    await t.step("parses parenthesized types", () => {
+    await t.test("parses parenthesized types", () => {
       const src = "(a->b)->c";
       const state = createParserState(src);
       const [lit, ty, finalState] = parseArrowTypeNoApp(state);
@@ -177,7 +177,7 @@ Deno.test("Parser Tests", async (t) => {
       expect(finalState.idx).to.equal(src.length);
     });
 
-    await t.step("does not parse type applications", () => {
+    await t.test("does not parse type applications", () => {
       const src = "List Nat";
       const state = createParserState(src);
       const [lit, ty, finalState] = parseArrowTypeNoApp(state);
@@ -190,16 +190,17 @@ Deno.test("Parser Tests", async (t) => {
       expect(remaining).to.equal("Nat");
     });
 
-    await t.step("skips whitespace", () => {
+    await t.test("skips whitespace", () => {
       const src = "   a   ->    b   ";
       const state = createParserState(src);
       const [lit, ty, _finalState] = parseArrowTypeNoApp(state);
       expect(lit).to.equal("a->b");
-      expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))))
-        .to.equal(true);
+      expect(
+        typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("b"))),
+      ).to.equal(true);
     });
 
-    await t.step("handles nested parentheses", () => {
+    await t.test("handles nested parentheses", () => {
       const src = "((a->b)->c)->d";
       const state = createParserState(src);
       const [lit, ty, finalState] = parseArrowTypeNoApp(state);
@@ -216,9 +217,9 @@ Deno.test("Parser Tests", async (t) => {
     });
   });
 
-  await t.step("parseTypedLambda", async (t) => {
-    await t.step("successful parsing", async (t) => {
-      await t.step("single term application", () => {
+  await t.test("parseTypedLambda", async (t) => {
+    await t.test("successful parsing", async (t) => {
+      await t.test("single term application", () => {
         const src = "x y";
         const [lit, term] = parseTypedLambda(src);
         const expected = createTypedApplication(mkVar("x"), mkVar("y"));
@@ -226,7 +227,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("juxtaposed terms", () => {
+      await t.test("juxtaposed terms", () => {
         const src = "x z (y z)";
         const [lit, term] = parseTypedLambda(src);
         const expected = createTypedApplication(
@@ -237,7 +238,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("\\x:a=>x x", () => {
+      await t.test("\\x:a=>x x", () => {
         const src = "\\x:a=>x x";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
@@ -249,7 +250,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("combinator K", () => {
+      await t.test("combinator K", () => {
         const src = "\\x:a=>\\y:b=>x";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
@@ -261,7 +262,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("combinator S", () => {
+      await t.test("combinator S", () => {
         const src = "\\x:a->b->c=>\\y:a->b=>\\z:a=>x z (y z)";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
@@ -284,7 +285,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("parenthesised whole abstraction", () => {
+      await t.test("parenthesised whole abstraction", () => {
         const src = "(\\x:a=>x)";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs("x", mkTypeVariable("a"), mkVar("x"));
@@ -292,7 +293,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("nested parentheses in type annotation", () => {
+      await t.test("nested parentheses in type annotation", () => {
         const src = "\\x:(a->b)->c=>x";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs(
@@ -307,7 +308,7 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("skips extra whitespace", () => {
+      await t.test("skips extra whitespace", () => {
         const src = "  \\   x  :  a   =>   x   ";
         const [lit, term] = parseTypedLambda(src);
         const expected = mkTypedAbs("x", mkTypeVariable("a"), mkVar("x"));
@@ -315,66 +316,42 @@ Deno.test("Parser Tests", async (t) => {
         expect(typedTermsLitEq(term, expected)).to.equal(true);
       });
 
-      await t.step("parses nat literal", () => {
+      await t.test("parses nat literal", () => {
         const src = "42";
         const [lit, term] = parseTypedLambda(src);
         expect(lit).to.equal("42");
-        expect(typedTermsLitEq(term, makeTypedBinNumeral(42n))).to.equal(
-          true,
-        );
+        expect(typedTermsLitEq(term, makeTypedBinNumeral(42n))).to.equal(true);
       });
     });
 
-    await t.step("error cases", async (t) => {
-      const shouldThrow = (
-        src: string,
-        msg?: RegExp,
-      ) =>
-      () => {
+    await t.test("error cases", async (t) => {
+      const shouldThrow = (src: string, msg?: RegExp) => () => {
         expect(() => parseTypedLambda(src)).to.throw(ParseError, msg);
       };
 
-      await t.step(
-        "missing variable",
-        shouldThrow("\\:a->b=>x", /identifier/),
-      );
+      await t.test("missing variable", shouldThrow("\\:a->b=>x", /identifier/));
 
-      await t.step(
-        "incomplete type",
-        shouldThrow("\\x:a->=>x", /identifier/),
-      );
+      await t.test("incomplete type", shouldThrow("\\x:a->=>x", /identifier/));
 
-      await t.step("missing term", shouldThrow("\\x:a->b=>", /term/));
+      await t.test("missing term", shouldThrow("\\x:a->b=>", /term/));
 
-      await t.step(
-        "unmatched left parenthesis",
-        shouldThrow("(\\x:a=>x"),
-      );
+      await t.test("unmatched left parenthesis", shouldThrow("(\\x:a=>x"));
 
-      await t.step(
-        "extra right parenthesis",
-        shouldThrow("\\x:a=>x))"),
-      );
+      await t.test("extra right parenthesis", shouldThrow("\\x:a=>x))"));
 
-      await t.step(
+      await t.test(
         "incomplete lambda abstraction",
         shouldThrow("\\x:a->b=>", /term/),
       );
 
-      await t.step(
-        "incomplete type annotation",
-        shouldThrow("\\x:a->=>x"),
-      );
+      await t.test("incomplete type annotation", shouldThrow("\\x:a->=>x"));
 
-      await t.step(
+      await t.test(
         "rejects purely numeric identifiers in lambda bindings",
-        shouldThrow(
-          "\\123:a=>x",
-          /not a valid identifier.*purely numeric/,
-        ),
+        shouldThrow("\\123:a=>x", /not a valid identifier.*purely numeric/),
       );
 
-      await t.step(
+      await t.test(
         "rejects non-ASCII bytes",
         shouldThrow("λx:a.x", /non-ASCII byte/),
       );

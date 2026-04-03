@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
@@ -9,13 +10,10 @@ import {
   mkSystemFVar,
 } from "../../lib/terms/systemF.ts";
 import type { SystemFTerm } from "../../lib/terms/systemF.ts";
-import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
-import { createTypedApplication } from "../util/ast.ts";
 import { arrow, mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 import { apply } from "../../lib/ski/expression.ts";
 import { I, K, S } from "../../lib/ski/terminal.ts";
 import { loadInput } from "../util/fileLoader.ts";
-import { makeTypedBinNumeral } from "../../lib/types/binLiteral.ts";
 import { requiredAt } from "../util/required.ts";
 import { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
 import { unparseSystemFType } from "../../lib/parser/systemFType.ts";
@@ -37,8 +35,8 @@ const expectSystemFVar = (t: SystemFTerm) => {
   return t as Extract<SystemFTerm, { kind: "systemF-var" }>;
 };
 
-Deno.test("parseTripLang", async (t) => {
-  await t.step("parses polymorphic definitions", () => {
+test("parseTripLang", async (t) => {
+  await t.test("parses polymorphic definitions", () => {
     const input = loadInput("polyId.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -61,7 +59,7 @@ Deno.test("parseTripLang", async (t) => {
     });
   });
 
-  await t.step("parses recursive polymorphic definitions", () => {
+  await t.test("parses recursive polymorphic definitions", () => {
     const input = loadInput("polyRec.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -82,7 +80,7 @@ Deno.test("parseTripLang", async (t) => {
     });
   });
 
-  await t.step("parses typed definitions with explicit types", () => {
+  await t.test("parses poly definitions with explicit types", () => {
     const input = loadInput("typedInc.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -91,47 +89,24 @@ Deno.test("parseTripLang", async (t) => {
       name: "TypedInc",
     });
     expect(term).to.deep.equal({
-      kind: "typed",
+      kind: "poly",
       name: "inc",
       type: arrow(
         { kind: "type-var", typeName: "Int" },
         { kind: "type-var", typeName: "Int" },
       ),
-      term: {
-        kind: "typed-lambda-abstraction",
-        varName: "x",
-        ty: { kind: "type-var", typeName: "Int" },
-        body: createTypedApplication(
-          createTypedApplication(mkVar("plus"), mkVar("x")),
-          makeTypedBinNumeral(1n),
+      term: mkSystemFAbs(
+        "x",
+        { kind: "type-var", typeName: "Int" },
+        createSystemFApplication(
+          createSystemFApplication(mkSystemFVar("plus"), mkSystemFVar("x")),
+          mkSystemFVar("__trip_u8_1"),
         ),
-      },
+      ),
     });
   });
 
-  await t.step("parses untyped definitions", () => {
-    const input = loadInput("untypedDouble.trip", __dirname);
-    const [moduleDecl, term] = parseTripLang(input).terms;
-
-    expect(moduleDecl).to.deep.equal({
-      kind: "module",
-      name: "UntypedDouble",
-    });
-    expect(term).to.deep.equal({
-      kind: "untyped",
-      name: "double",
-      term: {
-        kind: "lambda-abs",
-        name: "x",
-        body: createApplication(
-          mkVar("x"),
-          mkVar("x"),
-        ),
-      },
-    });
-  });
-
-  await t.step("parses complex combinator definitions", () => {
+  await t.test("parses complex combinator definitions", () => {
     const input = loadInput("combinatorY.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -140,43 +115,19 @@ Deno.test("parseTripLang", async (t) => {
       name: "CombinatorY",
     });
     expect(term).to.deep.equal({
-      "kind": "combinator",
-      "name": "Y",
-      "term": apply(
+      kind: "combinator",
+      name: "Y",
+      term: apply(
+        apply(S, apply(K, apply(apply(S, I), I))),
         apply(
-          S,
-          apply(
-            K,
-            apply(
-              apply(S, I),
-              I,
-            ),
-          ),
-        ),
-        apply(
-          apply(
-            S,
-            apply(
-              apply(
-                S,
-                apply(K, S),
-              ),
-              K,
-            ),
-          ),
-          apply(
-            K,
-            apply(
-              apply(S, I),
-              I,
-            ),
-          ),
+          apply(S, apply(apply(S, apply(K, S)), K)),
+          apply(K, apply(apply(S, I), I)),
         ),
       ),
     });
   });
 
-  await t.step("parses type definitions correctly", () => {
+  await t.test("parses type definitions correctly", () => {
     const input = loadInput("typeNat.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -196,15 +147,12 @@ Deno.test("parseTripLang", async (t) => {
       type: {
         kind: "forall",
         typeVar: "X",
-        body: arrow(
-          arrow(X, X),
-          arrow(X, X),
-        ),
+        body: arrow(arrow(X, X), arrow(X, X)),
       },
     });
   });
 
-  await t.step("parses data definitions", () => {
+  await t.test("parses data definitions", () => {
     const input = loadInput("dataMaybe.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -226,7 +174,7 @@ Deno.test("parseTripLang", async (t) => {
     });
   });
 
-  await t.step(
+  await t.test(
     "parses data definitions with leading pipe and type-application field types",
     // Parser must: (1) accept optional leading | and whitespace before the first
     // constructor (data T = \n  | C1); (2) skip whitespace before field types so
@@ -252,9 +200,7 @@ data Token =
           { name: "T_LParen", fields: [] },
           {
             name: "T_Keyword",
-            fields: [
-              typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
-            ],
+            fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
           },
           { name: "T_EOF", fields: [] },
         ],
@@ -262,7 +208,7 @@ data Token =
     },
   );
 
-  await t.step("parses lib/compiler/lexer.trip Token ADT", () => {
+  await t.test("parses lib/compiler/lexer.trip Token ADT", () => {
     const lexerPath = join(
       __dirname,
       "..",
@@ -347,8 +293,6 @@ data Token =
       "T_KwModule",
       "T_KwImport",
       "T_KwExport",
-      "T_KwTyped",
-      "T_KwUntyped",
       "T_KwCombinator",
       "T_KwType",
       "T_KwData",
@@ -366,15 +310,12 @@ data Token =
     const expectedData = ["Token"] as const;
 
     // Lexer imports reverse from Prelude; only locally defined polys listed
-    const expectedPoly = [
-      "tokenizeAcc",
-      "tokenize",
-    ] as const;
+    const expectedPoly = ["tokenizeAcc", "tokenize"] as const;
 
     for (const { name, ref } of expectedImports) {
       expect(
-        program.terms.some((t) =>
-          t.kind === "import" && t.name === name && t.ref === ref
+        program.terms.some(
+          (t) => t.kind === "import" && t.name === name && t.ref === ref,
         ),
         `expected import ${name} ${ref}`,
       ).to.equal(true);
@@ -422,7 +363,7 @@ data Token =
     ]);
   });
 
-  await t.step("parses multiple definitions", () => {
+  await t.test("parses multiple definitions", () => {
     const input = loadInput("church.trip", __dirname);
     const program = parseTripLang(input);
     const typeVar = (name: string) => ({
@@ -455,51 +396,36 @@ data Token =
           kind: "combinator",
           name: "complex",
           term: apply(
+            apply(S, apply(K, apply(apply(S, I), I))),
             apply(
-              S,
-              apply(
-                K,
-                apply(
-                  apply(S, I),
-                  I,
-                ),
-              ),
-            ),
-            apply(
-              apply(
-                S,
-                apply(
-                  apply(S, apply(K, S)),
-                  K,
-                ),
-              ),
-              apply(
-                K,
-                apply(apply(S, I), I),
-              ),
+              apply(S, apply(apply(S, apply(K, S)), K)),
+              apply(K, apply(apply(S, I), I)),
             ),
           ),
         },
         {
-          kind: "typed",
+          kind: "poly",
           name: "two",
           type: typeVar("Nat"),
-          term: createTypedApplication(
-            mkVar("succ"),
-            createTypedApplication(mkVar("succ"), mkVar("zero")),
+          term: createSystemFApplication(
+            mkSystemFVar("succ"),
+            createSystemFApplication(
+              mkSystemFVar("succ"),
+              mkSystemFVar("zero"),
+            ),
           ),
         },
         {
-          kind: "typed",
+          kind: "poly",
           name: "main",
           type: typeVar("Nat"),
-          term: mkVar("two"),
+          term: mkSystemFVar("two"),
         },
       ],
     });
   });
 
-  await t.step("parses poly definition with explicit type annotation", () => {
+  await t.test("parses poly definition with explicit type annotation", () => {
     const input = loadInput("polyWithType.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
     expect(moduleDecl).to.deep.equal({
@@ -528,8 +454,8 @@ data Token =
     });
   });
 
-  await t.step(
-    "parses typed definition without explicit type annotation",
+  await t.test(
+    "parses poly definition without explicit type annotation",
     () => {
       const input = loadInput("typedNoType.trip", __dirname);
       const [moduleDecl, term] = parseTripLang(input).terms;
@@ -538,20 +464,33 @@ data Token =
         name: "TypedNoType",
       });
       expect(term).to.deep.equal({
-        kind: "typed",
+        kind: "poly",
         name: "id",
         type: undefined,
-        term: {
-          kind: "typed-lambda-abstraction",
-          varName: "x",
-          ty: { kind: "type-var", typeName: "Int" },
-          body: { kind: "lambda-var", name: "x" },
-        },
+        term: mkSystemFAbs(
+          "x",
+          { kind: "type-var", typeName: "Int" },
+          mkSystemFVar("x"),
+        ),
       });
     },
   );
 
-  await t.step("parses module definition", () => {
+  await t.test("rejects legacy typed definitions", () => {
+    const input = "module Legacy\ntyped id = \\x:Int => x";
+    expect(() => parseTripLang(input)).to.throw(
+      "expected definition keyword, found typed",
+    );
+  });
+
+  await t.test("rejects legacy untyped definitions", () => {
+    const input = "module Legacy\nuntyped id = \\x => x";
+    expect(() => parseTripLang(input)).to.throw(
+      "expected definition keyword, found untyped",
+    );
+  });
+
+  await t.test("parses module definition", () => {
     const input = "module MyModule";
     const [term] = parseTripLang(input).terms;
     expect(term).to.deep.equal({
@@ -560,7 +499,7 @@ data Token =
     });
   });
 
-  await t.step("parses import definition", () => {
+  await t.test("parses import definition", () => {
     const input = "import Foo bar";
     const [term] = parseTripLang(input).terms;
     expect(term).to.deep.equal({
@@ -570,7 +509,7 @@ data Token =
     });
   });
 
-  await t.step("parses export definition", () => {
+  await t.test("parses export definition", () => {
     const input = "export Baz";
     const [term] = parseTripLang(input).terms;
     expect(term).to.deep.equal({
@@ -579,7 +518,7 @@ data Token =
     });
   });
 
-  await t.step(
+  await t.test(
     "parses combined module/import/export definitions from file",
     () => {
       const input = loadInput("moduleCombo.trip", __dirname);
@@ -595,21 +534,19 @@ data Token =
     },
   );
 
-  await t.step("rejects module names containing dots", () => {
+  await t.test("rejects module names containing dots", () => {
     const input = "module My.Module";
-    expect(() => parseTripLang(input)).to.throw(
-      "expected an identifier",
-    );
+    expect(() => parseTripLang(input)).to.throw("expected an identifier");
   });
 
-  await t.step("rejects opaque without type keyword", () => {
+  await t.test("rejects opaque without type keyword", () => {
     const input = "opaque something somethingElse";
     expect(() => parseTripLang(input)).to.throw(
       "opaque must be followed by type and a type name",
     );
   });
 
-  await t.step("rejects native without type annotation", () => {
+  await t.test("rejects native without type annotation", () => {
     const input = "native myNative = something";
     expect(() => parseTripLang(input)).to.throw(
       "native requires a type annotation",
@@ -617,8 +554,8 @@ data Token =
   });
 });
 
-Deno.test("parse single poly", async (t) => {
-  await t.step("parses single poly", () => {
+test("parse single poly", async (t) => {
+  await t.test("parses single poly", () => {
     const input = 'poly foo = "foo"';
     const result = parseTripLang(input);
 

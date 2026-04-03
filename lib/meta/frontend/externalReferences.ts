@@ -34,10 +34,9 @@ const refCache = new WeakMap<
  * @param td the TripLang value to analyze (System F term, typed/untyped lambda, SKI expression, or type)
  * @returns a pair of Maps: [freeTermRefs, freeTypeRefs], each mapping the referenced name to its node
  */
-export function externalReferences(td: TripLangValueType): [
-  Map<string, TripLangValueType>,
-  Map<string, BaseType>,
-] {
+export function externalReferences(
+  td: TripLangValueType,
+): [Map<string, TripLangValueType>, Map<string, BaseType>] {
   // Check cache first
   const cached = refCache.get(td);
   if (cached) {
@@ -77,9 +76,7 @@ function collectIterative(
   const stack: {
     term: TripLangValueType;
     bound: Map<string, TripLangValueType>;
-  }[] = [
-    { term: root, bound: new Map() },
-  ];
+  }[] = [{ term: root, bound: new Map() }];
 
   while (stack.length > 0) {
     let { term, bound } = stack.pop()!;

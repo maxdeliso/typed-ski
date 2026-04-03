@@ -116,9 +116,7 @@ function parseAtomicOrParens(
   }
 }
 
-function parseParens(
-  state: ParserState,
-): [string, SKIExpression, ParserState] {
+function parseParens(state: ParserState): [string, SKIExpression, ParserState] {
   const stateAfterLP = matchLP(state);
   const [innerLit, innerExpr, stateAfterChain] = parseSeq(stateAfterLP);
   const stateAfterRP = matchRP(stateAfterChain);

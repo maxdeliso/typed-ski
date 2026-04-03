@@ -1,4 +1,5 @@
-import { assertEquals } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
 import { compileToObjectFile } from "../lib/compiler/singleFileCompiler.ts";
 import { getBinObject } from "../lib/bin.ts";
@@ -35,7 +36,7 @@ async function runTripWithParallelEvaluator(
   return { result: resultExpr, stdout, evaluator };
 }
 
-Deno.test("IO Integration - Hello World", async () => {
+test("IO Integration - Hello World", async () => {
   const source = `
 module Main
 import Prelude writeOne
@@ -54,13 +55,13 @@ poly main =
   const { stdout, evaluator } = await runTripWithParallelEvaluator(source);
   try {
     const decoder = new TextDecoder();
-    assertEquals(decoder.decode(stdout), "A");
+    assert.deepStrictEqual(decoder.decode(stdout), "A");
   } finally {
     evaluator.terminate();
   }
 });
 
-Deno.test("IO Integration - ReadLine and StrLen", async () => {
+test("IO Integration - ReadLine and StrLen", async () => {
   const source = `
 module Main
 import Prelude readOne
@@ -103,7 +104,7 @@ poly main =
 
   try {
     const len = await UnChurchNumber(result, evaluator);
-    assertEquals(len, 4n);
+    assert.deepStrictEqual(len, 4n);
   } finally {
     evaluator.terminate();
   }

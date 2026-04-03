@@ -1,4 +1,5 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -43,18 +44,9 @@ const COMPILER_SOURCE_FILE = new URL(
   "../../lib/compiler/index.trip",
   import.meta.url,
 );
-const AVL_SOURCE_FILE = new URL(
-  "../../lib/avl.trip",
-  import.meta.url,
-);
-const BIN_SOURCE_FILE = new URL(
-  "../../lib/bin.trip",
-  import.meta.url,
-);
-const NAT_SOURCE_FILE = new URL(
-  "../../lib/nat.trip",
-  import.meta.url,
-);
+const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
+const BIN_SOURCE_FILE = new URL("../../lib/bin.trip", import.meta.url);
+const NAT_SOURCE_FILE = new URL("../../lib/nat.trip", import.meta.url);
 
 interface CompilerModules {
   prelude: TripCObject;
@@ -216,10 +208,8 @@ function countDagNodes(dag: string): number {
   return dag.length === 0 ? 0 : count + 1;
 }
 
-Deno.test({
-  name: "Self-hosted compileToComb links a data/match elaboration harness",
-  fn: async () => {
-    const source = `module M
+test("Self-hosted compileToComb links a data/match elaboration harness", async () => {
+  const source = `module M
 export main
 data List = Nil | Cons h t
 poly main = match Cons 1 Nil {
@@ -227,20 +217,15 @@ poly main = match Cons 1 Nil {
   | Cons h t => h
 }
 `;
-    const dag = toDagWire(
-      await buildCompilerHarnessExpression(
-        makeParityHarness(source, "#u8(1)"),
-      ),
-    );
-    assert.notInclude(
-      dag,
-      "undefined",
-      "Expected the self-hosted compiler harness DAG to be well-formed",
-    );
-    assert.isAtMost(
-      countDagNodes(dag),
-      1 << 21,
-      "Expected the self-hosted compiler data/match harness to stay within the DAG size budget",
-    );
-  },
+  const dag = toDagWire(
+    await buildCompilerHarnessExpression(makeParityHarness(source, "#u8(1)")),
+  );
+  assert.ok(
+    !dag.includes("undefined"),
+    "Expected the self-hosted compiler harness DAG to be well-formed",
+  );
+  assert.ok(
+    countDagNodes(dag) <= 1 << 21,
+    "Expected the self-hosted compiler data/match harness to stay within the DAG size budget",
+  );
 });

@@ -52,8 +52,6 @@ import Lexer T_KwMatch
 import Lexer T_KwModule
 import Lexer T_KwImport
 import Lexer T_KwExport
-import Lexer T_KwTyped
-import Lexer T_KwUntyped
 import Lexer T_KwCombinator
 import Lexer T_KwType
 import Lexer T_KwData
@@ -72,8 +70,6 @@ export E_Nat
 export E_Match
 export DefKind
 export K_Poly
-export K_Typed
-export K_Untyped
 export K_Combinator
 export Decl
 export D_Module
@@ -113,8 +109,6 @@ export kwMatchTag
 export kwModuleTag
 export kwImportTag
 export kwExportTag
-export kwTypedTag
-export kwUntypedTag
 export kwCombinatorTag
 export kwTypeTag
 export kwDataTag
@@ -163,8 +157,6 @@ data Expr =
 
 data DefKind =
   | K_Poly
-  | K_Typed
-  | K_Untyped
   | K_Combinator
 
 data Decl =
@@ -257,12 +249,6 @@ poly kwImportTag =
 
 poly kwExportTag =
   tokenTag T_KwExport
-
-poly kwTypedTag =
-  tokenTag T_KwTyped
-
-poly kwUntypedTag =
-  tokenTag T_KwUntyped
 
 poly kwCombinatorTag =
   tokenTag T_KwCombinator
@@ -890,18 +876,9 @@ poly parseDecl = \toks : List Token =>
                                 ))
                             (\u : U8 =>
                               if [Result ParseError (Pair Decl (List Token))]
-                                (eqU8 tag kwTypedTag)
-                                (\u : U8 => parseNamedDef K_Typed false t)
-                                (\u : U8 =>
-                                  if [Result ParseError (Pair Decl (List Token))]
-                                    (eqU8 tag kwUntypedTag)
-                                    (\u : U8 => parseNamedDef K_Untyped false t)
-                                    (\u : U8 =>
-                                      if [Result ParseError (Pair Decl (List Token))]
-                                        (eqU8 tag kwCombinatorTag)
-                                        (\u : U8 => parseNamedDef K_Combinator false t)
-                                        (\u : U8 => Err [ParseError] [Pair Decl (List Token)] parseError)
-                                    ))
+                                (eqU8 tag kwCombinatorTag)
+                                (\u : U8 => parseNamedDef K_Combinator false t)
+                                (\u : U8 => Err [ParseError] [Pair Decl (List Token)] parseError)
                             ))
                     ))
             ))

@@ -13,6 +13,8 @@ poly one = succ zero
 
 poly two = succ one
 
+poly five = succ (succ (succ two))
+
 poly BZ = zero
 poly B0 = \n:Nat => mul two n
 poly B1 = \n:Nat => succ (mul two n)
@@ -68,4 +70,4 @@ poly rec fact : Nat -> Nat =
       [Nat] (isZero n) one
         (mul n (fact (pred n)))
 
-untyped main = fact 5
+poly main : Nat = fact five

@@ -24,7 +24,8 @@ function formatTermForError(term: unknown): string {
   if (term && typeof term === "object") {
     const maybeTerm = term as { kind?: unknown; name?: unknown };
     if (
-      typeof maybeTerm.kind === "string" && typeof maybeTerm.name === "string"
+      typeof maybeTerm.kind === "string" &&
+      typeof maybeTerm.name === "string"
     ) {
       return `${maybeTerm.kind} ${maybeTerm.name}`;
     }

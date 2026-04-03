@@ -1,12 +1,19 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env -S node --experimental-transform-types
 
-import { join, relative, toFileUrl } from "std/path";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
+import * as os from "node:os";
+import * as process from "node:process";
+import { spawn, spawnSync } from "node:child_process";
+
 import {
-  assertCurrentDenoVersion,
+  assertCurrentNodeVersion,
   getRepoVersion,
-  getRequiredDenoVersion,
+  getRequiredNodeVersion,
   PROJECT_ROOT,
-} from "./repoDeno.ts";
+} from "./repoNode.ts";
 
 type CommandName =
   | "verify-version"
@@ -40,37 +47,32 @@ type AqueryResponse = {
   actions?: AqueryAction[];
 };
 
-const DENO = Deno.execPath();
-const TEMP_ROOT = Deno.build.os === "windows"
-  ? Deno.env.get("LOCALAPPDATA") ?? Deno.env.get("TEMP") ??
-    Deno.env.get("TMP") ?? "."
-  : Deno.env.get("TMPDIR") ?? "/tmp";
-const DENO_DIR = Deno.env.get("TYPED_SKI_DENO_DIR") ??
-  join(TEMP_ROOT, "typed-ski-deno-cache");
-const COMPILED_TRIPC_NAME = Deno.build.os === "windows" ? "tripc.exe" : "tripc";
-const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
-const DENO_TEST_BASE_ARGS = [
-  DENO,
+const NODE = process.execPath;
+const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
+const NODE_TRANSFORM_TYPES_ARG = "--experimental-transform-types";
+const NODE_TEST_GLOBAL_SETUP_PATH = join(
+  PROJECT_ROOT,
   "test",
-  "--allow-read",
-  "--allow-write",
-  "--allow-run",
-  "--allow-env",
-];
-const DENO_CHECK_BASE_ARGS = [DENO, "check"];
-const HARNESS_TRACE_TIMEOUT_MS = "200";
-const DIST_REQUIRED_TESTS = new Set([
-  "test/bin/cli.test.ts",
-]);
-const THANATOS_TEST_FILES = new Set([
-  "test/avl.test.ts",
-  "test/compiler/bootstrappedSingleFile.test.ts",
-  "test/compiler/bridge.test.ts",
-  "test/compiler/lexer.test.ts",
-  "test/compiler/parser.test.ts",
-  "test/linker/prelude.test.ts",
-  "test/thanatosHarness.test.ts",
-]);
+  "globalSetup.ts",
+);
+const TEMP_ROOT =
+  process.platform === "win32"
+    ? (process.env["LOCALAPPDATA"] ??
+      process.env["TEMP"] ??
+      process.env["TMP"] ??
+      ".")
+    : (process.env["TMPDIR"] ?? "/tmp");
+
+const COMPILED_TRIPC_NAME =
+  process.platform === "win32" ? "tripc.cmd" : "tripc";
+const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
+const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
+const FAST_TEST_TIMEOUT_MS = 30_000;
+const FAST_TEST_RERUN_FAILURES_PATH = join(
+  PROJECT_ROOT,
+  ".tmp",
+  "node-test-rerun-failures.json",
+);
 
 type ShardConfig = {
   totalShards: number;
@@ -78,39 +80,49 @@ type ShardConfig = {
   statusFilePath?: string;
 };
 
-type ThanatosHarnessModule = typeof import("../test/thanatosHarness.ts");
-
-let thanatosHarnessPromise: Promise<ThanatosHarnessModule> | undefined;
-
-function loadThanatosHarness(): Promise<ThanatosHarnessModule> {
-  thanatosHarnessPromise ??= import("../test/thanatosHarness.ts");
-  return thanatosHarnessPromise;
-}
-
-function denoTestArgs(
+function nodeTestArgs(
   files: string[],
-  options: { coverage?: string; allowNet?: string[] } = {},
+  options: {
+    coverage?: boolean;
+    extraArgs?: string[];
+    coverageReporterDestination?: string;
+    rerunFailuresPath?: string;
+    shard?: ShardConfig;
+    updateSnapshots?: boolean;
+  } = {},
 ): string[] {
-  const args = [...DENO_TEST_BASE_ARGS];
-  args.push("--no-check");
-  args.push("--parallel");
-  if (options.allowNet && options.allowNet.length > 0) {
-    args.push(`--allow-net=${options.allowNet.join(",")}`);
-  }
+  const args = ["--test"];
+  args.push("--experimental-test-module-mocks");
+  args.push("--test-global-setup", NODE_TEST_GLOBAL_SETUP_PATH);
   if (options.coverage) {
-    args.push(`--coverage=${options.coverage}`);
-    args.push("--coverage-raw-data-only");
+    args.push("--experimental-test-coverage");
+    if (options.coverageReporterDestination) {
+      args.push("--test-reporter=lcov");
+      args.push(
+        `--test-reporter-destination=${options.coverageReporterDestination}`,
+      );
+    }
+  }
+  if (options.rerunFailuresPath) {
+    args.push(`--test-rerun-failures=${options.rerunFailuresPath}`);
+  }
+  if (options.shard) {
+    args.push(
+      `--test-shard=${options.shard.shardIndex + 1}/${options.shard.totalShards}`,
+    );
+  }
+  if (options.updateSnapshots) {
+    args.push("--test-update-snapshots");
+  }
+  if (options.extraArgs?.length) {
+    args.push(...options.extraArgs);
   }
   args.push(...files);
   return args;
 }
 
-function denoCheckArgs(files: string[]): string[] {
-  return [...DENO_CHECK_BASE_ARGS, ...files];
-}
-
 function usage(): never {
-  console.error(`Usage: deno run -A scripts/bazel.ts <command>
+  console.error(`Usage: node --experimental-transform-types scripts/bazel.ts <command>
 
 Commands:
   verify-version
@@ -127,21 +139,32 @@ Commands:
   coverage
   ci
   vs-project`);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 function getBazelWasmArtifactCandidates(): string[] {
   const candidates = BAZEL_RELEASE_WASM_FILENAMES.map((filename) =>
-    join(PROJECT_ROOT, "bazel-bin", "wasm", filename)
+    join(PROJECT_ROOT, "bazel-bin", "wasm", filename),
   );
 
   try {
-    for (const entry of Deno.readDirSync(join(PROJECT_ROOT, "bazel-out"))) {
-      if (!entry.isDirectory) continue;
-      for (const filename of BAZEL_RELEASE_WASM_FILENAMES) {
-        candidates.push(
-          join(PROJECT_ROOT, "bazel-out", entry.name, "bin", "wasm", filename),
-        );
+    if (fs.existsSync(join(PROJECT_ROOT, "bazel-out"))) {
+      for (const entry of fs.readdirSync(join(PROJECT_ROOT, "bazel-out"), {
+        withFileTypes: true,
+      })) {
+        if (!entry.isDirectory()) continue;
+        for (const filename of BAZEL_RELEASE_WASM_FILENAMES) {
+          candidates.push(
+            join(
+              PROJECT_ROOT,
+              "bazel-out",
+              entry.name,
+              "bin",
+              "wasm",
+              filename,
+            ),
+          );
+        }
       }
     }
   } catch {
@@ -151,154 +174,237 @@ function getBazelWasmArtifactCandidates(): string[] {
   return [...new Set(candidates)];
 }
 
-async function run(
-  args: string[],
-  options: Deno.CommandOptions = {},
-): Promise<void> {
-  const { env: extraEnv, ...rest } = options;
-  const command = new Deno.Command(
-    args[0]!,
-    {
-      args: args.slice(1),
-      cwd: PROJECT_ROOT,
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-      env: {
-        ...Deno.env.toObject(),
-        DENO_DIR,
-        ...extraEnv,
+async function run(args: string[], options: any = {}): Promise<void> {
+  const { env: extraEnv, timeoutMs, ...rest } = options;
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.platform === "win32" && args[0]!.includes(" ")
+        ? `"${args[0]!}"`
+        : args[0]!,
+      args.slice(1),
+      {
+        cwd: PROJECT_ROOT,
+        stdio: "inherit",
+        shell: process.platform === "win32",
+        env: {
+          ...process.env,
+          ...extraEnv,
+        },
+        ...rest,
       },
-      ...rest,
-    },
-  );
-  const { code } = await command.output();
-  if (code !== 0) {
-    throw new Error(`Command failed with exit code ${code}: ${args.join(" ")}`);
-  }
+    );
+
+    let didTimeout = false;
+    const timeoutId =
+      typeof timeoutMs === "number" && timeoutMs > 0
+        ? setTimeout(() => {
+            didTimeout = true;
+            if (process.platform === "win32" && child.pid) {
+              spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"]);
+            } else {
+              child.kill("SIGKILL");
+            }
+          }, timeoutMs)
+        : null;
+
+    child.on("close", (code) => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      if (didTimeout) {
+        reject(
+          new Error(
+            `Command timed out after ${timeoutMs}ms: ${args.join(" ")}`,
+          ),
+        );
+        return;
+      }
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new Error(`Command failed with exit code ${code}: ${args.join(" ")}`),
+        );
+      }
+    });
+
+    child.on("error", (err) => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      reject(err);
+    });
+  });
 }
 
-async function runCapture(
-  args: string[],
-  options: Deno.CommandOptions = {},
-): Promise<string> {
+async function runCapture(args: string[], options: any = {}): Promise<string> {
   const { env: extraEnv, ...rest } = options;
-  const command = new Deno.Command(
-    args[0]!,
-    {
-      args: args.slice(1),
-      cwd: PROJECT_ROOT,
-      stdin: "null",
-      stdout: "piped",
-      stderr: "inherit",
-      env: {
-        ...Deno.env.toObject(),
-        DENO_DIR,
-        ...extraEnv,
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.platform === "win32" && args[0]!.includes(" ")
+        ? `"${args[0]!}"`
+        : args[0]!,
+      args.slice(1),
+      {
+        cwd: PROJECT_ROOT,
+        stdio: ["ignore", "piped", "inherit"],
+        shell: process.platform === "win32",
+        env: {
+          ...process.env,
+          ...extraEnv,
+        },
+        ...rest,
       },
-      ...rest,
-    },
-  );
-  const { code, stdout } = await command.output();
-  if (code !== 0) {
-    throw new Error(`Command failed with exit code ${code}: ${args.join(" ")}`);
-  }
-  return new TextDecoder().decode(stdout).trim();
+    );
+
+    let stdout = "";
+    child.stdout!.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(
+          new Error(`Command failed with exit code ${code}: ${args.join(" ")}`),
+        );
+      }
+    });
+
+    child.on("error", (err) => {
+      reject(err);
+    });
+  });
 }
 
 function verifyVersion(): void {
   const version = getRepoVersion();
-  const denoVersion = getRequiredDenoVersion();
-  console.log(`Version in deno.jsonc: ${version}`);
-  console.log(`Required Deno version: ${denoVersion}`);
+  const nodeVersion = getRequiredNodeVersion();
+  console.log(`Version in package.json: ${version}`);
+  console.log(`Required Node version: ${nodeVersion}`);
 }
 
 async function syncGenerated(): Promise<void> {
-  await run([DENO, "run", "-A", "scripts/generateVersion.ts"]);
-  await run([DENO, "run", "-A", "scripts/generateArenaHeaderC.ts"]);
+  await run([NODE, NODE_TRANSFORM_TYPES_ARG, "scripts/generateVersion.ts"]);
+  await run([
+    NODE,
+    NODE_TRANSFORM_TYPES_ARG,
+    "scripts/generateArenaHeaderC.ts",
+  ]);
 }
 
-async function buildDist(): Promise<void> {
-  await Deno.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
-  await run([DENO, "bundle", "-o", "dist/tripc.js", "bin/tripc.ts"]);
+export async function buildDist(): Promise<void> {
+  await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
   await run([
-    DENO,
-    "bundle",
+    NPX,
+    "--yes",
+    "esbuild",
+    "bin/tripc.ts",
+    "--bundle",
+    "--outfile=dist/tripc.js",
+    "--format=esm",
+    "--platform=node",
+  ]);
+  await run([
+    NPX,
+    "--yes",
+    "esbuild",
+    "bin/tripc.ts",
+    "--bundle",
     "--minify",
-    "-o",
-    "dist/tripc.min.js",
-    "bin/tripc.ts",
+    "--outfile=dist/tripc.min.js",
+    "--format=esm",
+    "--platform=node",
   ]);
   await run([
-    DENO,
-    "bundle",
-    "--platform=browser",
-    "-o",
-    "dist/tripc.node.js",
+    NPX,
+    "--yes",
+    "esbuild",
     "bin/tripc.ts",
+    "--bundle",
+    "--outfile=dist/tripc.node.js",
+    "--format=esm",
+    "--platform=node",
   ]);
-  const compileTempDir = Deno.env.get("TYPED_SKI_BUILD_TEMP_DIR") ??
-    join(TEMP_ROOT, "typed-ski-build");
-  const compileTempPath = join(compileTempDir, COMPILED_TRIPC_NAME);
-  const finalBinaryPath = join(PROJECT_ROOT, "dist", COMPILED_TRIPC_NAME);
+  await run([
+    NPX,
+    "--yes",
+    "esbuild",
+    "lib/evaluator/arenaWorker.ts",
+    "--bundle",
+    "--outfile=dist/arenaWorker.js",
+    "--format=esm",
+    "--platform=node",
+  ]);
 
-  await Deno.mkdir(compileTempDir, { recursive: true });
-  await run([
-    DENO,
-    "compile",
-    "--allow-read",
-    "--allow-write",
-    "--output",
-    compileTempPath,
-    "bin/tripc.ts",
-  ]);
-  const compiledBinary = await Deno.readFile(compileTempPath);
-  await Deno.writeFile(finalBinaryPath, compiledBinary);
-  if (Deno.build.os !== "windows") {
-    await Deno.chmod(finalBinaryPath, 0o755).catch(() => {});
+  const compileTempDir =
+    process.env["TYPED_SKI_BUILD_TEMP_DIR"] ??
+    join(TEMP_ROOT, "typed-ski-build");
+  await fsp.mkdir(compileTempDir, { recursive: true });
+  const wrapperPath = join(PROJECT_ROOT, "dist", COMPILED_TRIPC_NAME);
+  if (process.platform === "win32") {
+    await fsp.writeFile(
+      wrapperPath,
+      '@echo off\r\nsetlocal\r\nnode "%~dp0tripc.node.js" %*\r\n',
+      "utf8",
+    );
+  } else {
+    await fsp.writeFile(
+      wrapperPath,
+      '#!/usr/bin/env sh\nDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec node "$DIR/tripc.node.js" "$@"\n',
+      "utf8",
+    );
+    await fsp.chmod(wrapperPath, 0o755);
   }
+  console.warn(
+    `Created ${COMPILED_TRIPC_NAME} as a Node launcher shim for dist/tripc.node.js.`,
+  );
 }
 
 async function buildHephaestusAssets(): Promise<void> {
   await syncGenerated();
   await stageBazelWasmArtifactIfPresent();
-  await Deno.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
+  await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
   await run([
-    DENO,
-    "bundle",
-    "--no-check",
-    "--platform=browser",
-    "-o",
-    "dist/workbench.js",
+    NPX,
+    "--yes",
+    "esbuild",
     "server/workbench.js",
+    "--bundle",
+    "--outfile=dist/workbench.js",
+    "--format=esm",
+    "--platform=browser",
   ]);
   await run([
-    DENO,
-    "bundle",
-    "--no-check",
-    "--platform=browser",
-    "-o",
-    "dist/webglForest.js",
+    NPX,
+    "--yes",
+    "esbuild",
     "server/webglForest.ts",
+    "--bundle",
+    "--outfile=dist/webglForest.js",
+    "--format=esm",
+    "--platform=browser",
   ]);
   await run([
-    DENO,
-    "bundle",
-    "--no-check",
-    "--platform=browser",
-    "-o",
-    "dist/arenaWorker.js",
+    NPX,
+    "--yes",
+    "esbuild",
     "lib/evaluator/arenaWorker.ts",
+    "--bundle",
+    "--outfile=dist/arenaWorker.js",
+    "--format=esm",
+    "--platform=browser",
   ]);
 }
 
 function getBazelWasmArtifactUrl(): string | undefined {
   for (const candidate of getBazelWasmArtifactCandidates()) {
     try {
-      const stat = Deno.statSync(candidate);
-      if (stat.isFile) return toFileUrl(candidate).href;
+      const stat = fs.statSync(candidate);
+      if (stat.isFile()) return pathToFileURL(candidate).href;
     } catch {
-      // Ignore missing Bazel outputs and fall through to the next candidate.
+      // Ignore missing Bazel outputs.
     }
   }
   return undefined;
@@ -308,42 +414,33 @@ async function stageBazelWasmArtifactIfPresent(): Promise<void> {
   const stagedPath = join(PROJECT_ROOT, "wasm", "release.wasm");
   for (const candidate of getBazelWasmArtifactCandidates()) {
     try {
-      const stat = await Deno.stat(candidate);
-      if (!stat.isFile) continue;
-      await Deno.mkdir(join(PROJECT_ROOT, "wasm"), { recursive: true });
-      const bytes = await Deno.readFile(candidate);
-      await Deno.remove(stagedPath).catch(() => {});
-      await Deno.writeFile(stagedPath, bytes);
+      const stat = await fsp.stat(candidate);
+      if (!stat.isFile()) continue;
+      await fsp.mkdir(join(PROJECT_ROOT, "wasm"), { recursive: true });
+      const bytes = await fsp.readFile(candidate);
+      await fsp.rm(stagedPath, { force: true }).catch(() => {});
+      await fsp.writeFile(stagedPath, bytes);
       return;
     } catch {
-      // Ignore missing Bazel outputs and fall through to the next candidate.
+      // Ignore missing Bazel outputs.
     }
   }
 }
 
 async function serveHephaestus(): Promise<void> {
   await buildHephaestusAssets();
-  const port = Deno.env.get("PORT") ?? "8080";
-  await run([
-    DENO,
-    "run",
-    "-c",
-    "server/deno.json",
-    "--allow-net",
-    "--allow-read",
-    "--allow-env",
-    "--allow-run",
-    "server/serveWorkbench.ts",
-    port,
-  ]);
+  const port = process.env["PORT"] ?? "8080";
+  await run([NODE, NODE_TRANSFORM_TYPES_ARG, "server/serveWorkbench.ts", port]);
 }
 
 async function formatCheck(): Promise<void> {
-  await run([DENO, "fmt", "--check"]);
+  console.log("Format check using npx prettier --check .");
+  await run([NPX, "--yes", "prettier", "--check", "."]);
 }
 
 async function lint(): Promise<void> {
-  await run([DENO, "lint"]);
+  console.log("Lint using npx eslint .");
+  await run([NPX, "--yes", "eslint", "."]);
 }
 
 async function collectTests(): Promise<string[]> {
@@ -351,13 +448,14 @@ async function collectTests(): Promise<string[]> {
   const files: string[] = [];
 
   async function walk(dir: string): Promise<void> {
-    for await (const entry of Deno.readDir(dir)) {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
       const fullPath = join(dir, entry.name);
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         await walk(fullPath);
         continue;
       }
-      if (!entry.isFile || !entry.name.endsWith(".test.ts")) continue;
+      if (!entry.isFile() || !entry.name.endsWith(".test.ts")) continue;
       const relPath = relative(PROJECT_ROOT, fullPath).replaceAll("\\", "/");
       files.push(relPath);
     }
@@ -368,18 +466,34 @@ async function collectTests(): Promise<string[]> {
   return files;
 }
 
-async function typecheckTests(files: string[]): Promise<void> {
-  if (files.length === 0) {
-    throw new Error("No test files were selected");
+function filterTests(files: string[], patterns: string[]): string[] {
+  if (patterns.length === 0) {
+    return files;
   }
-  console.log(`Type checking ${files.length} test files...`);
-  await run(denoCheckArgs(files));
+
+  const normalizedPatterns = patterns.map((pattern) =>
+    pattern.replaceAll("\\", "/").trim(),
+  );
+  return files.filter((file) =>
+    normalizedPatterns.some((pattern) => file.includes(pattern)),
+  );
+}
+
+function readNodeTestArgs(args: string[]): string[] {
+  return args
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0 && arg !== "--" && arg.startsWith("-"));
+}
+
+async function typecheckTests(files: string[]): Promise<void> {
+  console.log(`Type checking project...`);
+  await run(["npx", "tsc", "--noEmit"]);
 }
 
 function readShardConfig(): ShardConfig {
-  const totalText = Deno.env.get("TEST_TOTAL_SHARDS");
-  const indexText = Deno.env.get("TEST_SHARD_INDEX");
-  const statusFilePath = Deno.env.get("TEST_SHARD_STATUS_FILE") ?? undefined;
+  const totalText = process.env["TEST_TOTAL_SHARDS"];
+  const indexText = process.env["TEST_SHARD_INDEX"];
+  const statusFilePath = process.env["TEST_SHARD_STATUS_FILE"] ?? undefined;
 
   const totalShards = totalText ? Number(totalText) : 1;
   const shardIndex = indexText ? Number(indexText) : 0;
@@ -400,97 +514,63 @@ function readShardConfig(): ShardConfig {
     );
   }
 
-  return {
-    totalShards,
-    shardIndex,
-    statusFilePath,
-  };
+  return { totalShards, shardIndex, statusFilePath };
 }
 
 function acknowledgeShardSupport(config: ShardConfig): void {
-  if (!config.statusFilePath) {
-    return;
+  if (config.statusFilePath) {
+    fs.writeFileSync(config.statusFilePath, "", "utf8");
   }
-  Deno.writeTextFileSync(config.statusFilePath, "");
-}
-
-function selectShardFiles(files: string[], config: ShardConfig): string[] {
-  return files.filter((_, index) =>
-    index % config.totalShards === config.shardIndex
-  );
 }
 
 function needsDistArtifacts(files: string[]): boolean {
   return files.some((file) => DIST_REQUIRED_TESTS.has(file));
 }
 
-function needsThanatosBroker(files: string[]): boolean {
-  return files.some((file) => THANATOS_TEST_FILES.has(file));
-}
-
-async function withThanatosTestBroker<T>(
-  callback: (
-    details: { allowNet: string[]; env: Record<string, string> },
-  ) => Promise<T>,
-): Promise<T> {
-  const thanatosHarness = await loadThanatosHarness();
-  if (!thanatosHarness.thanatosAvailable()) {
-    return await callback({ allowNet: [], env: {} });
-  }
-
-  const traceDir = await Deno.makeTempDir();
-  const broker = await thanatosHarness.startThanatosBatchBroker({
-    workers: thanatosHarness.defaultWorkerCount(),
-    env: {
-      THANATOS_TRACE_DIR: traceDir,
-      THANATOS_TRACE_TIMEOUT_MS: HARNESS_TRACE_TIMEOUT_MS,
-    },
-  });
-  try {
-    return await callback({
-      allowNet: [broker.allowNet],
-      env: broker.env,
-    });
-  } finally {
-    await broker.close();
-    await Deno.remove(traceDir, { recursive: true }).catch(() => {});
-  }
-}
-
 async function runSelectedTests(
   files: string[],
   env: Record<string, string>,
-  options: { coverage?: string } = {},
+  options: {
+    coverage?: boolean;
+    timeoutMs?: number;
+    nodeArgs?: string[];
+    coverageReporterDestination?: string;
+    rerunFailuresPath?: string;
+    shard?: ShardConfig;
+  } = {},
 ): Promise<void> {
   if (files.length === 0) {
     console.log("No tests selected.");
     return;
   }
 
-  if (!needsThanatosBroker(files)) {
-    await run(
-      denoTestArgs(files, {
-        coverage: options.coverage,
-      }),
-      { env },
-    );
-    return;
+  if (options.coverageReporterDestination) {
+    await fsp.mkdir(dirname(options.coverageReporterDestination), {
+      recursive: true,
+    });
+    await fsp
+      .rm(options.coverageReporterDestination, { force: true })
+      .catch(() => {});
   }
 
-  await withThanatosTestBroker(async (broker) => {
-    await run(
-      denoTestArgs(files, {
+  await run(
+    [
+      NODE,
+      NODE_TRANSFORM_TYPES_ARG,
+      ...nodeTestArgs(files, {
         coverage: options.coverage,
-        allowNet: broker.allowNet,
+        extraArgs: options.nodeArgs,
+        coverageReporterDestination: options.coverageReporterDestination,
+        rerunFailuresPath: options.rerunFailuresPath,
+        shard: options.shard,
+        updateSnapshots: process.env["TYPED_SKI_UPDATE_SNAPSHOTS"] === "1",
       }),
-      {
-        env: {
-          ...env,
-          ...broker.env,
-        },
-      },
-    );
-  });
+    ],
+    {
+      env,
+      timeoutMs: options.timeoutMs,
+    },
+  );
 }
 
 async function typecheck(): Promise<void> {
@@ -513,11 +593,11 @@ async function prepareTestExecution(
   await stageBazelWasmArtifactIfPresent();
   if (
     needsDistArtifacts(files) &&
-    Deno.env.get("TYPED_SKI_DIST_READY") !== "1"
+    process.env["TYPED_SKI_DIST_READY"] !== "1"
   ) {
     await buildDist();
   }
-  const explicitWasmPath = Deno.env.get("TYPED_SKI_WASM_PATH");
+  const explicitWasmPath = process.env["TYPED_SKI_WASM_PATH"];
   if (explicitWasmPath) {
     return { TYPED_SKI_WASM_PATH: explicitWasmPath };
   }
@@ -525,46 +605,50 @@ async function prepareTestExecution(
   return wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
 }
 
-async function runTests(withCoverage: boolean): Promise<void> {
+function getBazelCoverageOutputFile(): string | undefined {
+  const coverageOutput = process.env["COVERAGE_OUTPUT_FILE"]?.trim();
+  return coverageOutput && coverageOutput.length > 0
+    ? coverageOutput
+    : undefined;
+}
+
+export async function runTests(
+  withCoverage: boolean,
+  args: string[] = [],
+): Promise<void> {
   const files = await collectTests();
   const env = await typecheckAndPrepareTestExecution(files);
+  const nodeArgs = readNodeTestArgs(args);
 
   if (withCoverage) {
-    await Deno.remove(join(PROJECT_ROOT, "coverage"), { recursive: true })
+    await fsp
+      .rm(join(PROJECT_ROOT, "coverage"), { recursive: true, force: true })
       .catch(() => {});
-    await runSelectedTests(files, env, { coverage: "coverage" });
-    await run([
-      DENO,
-      "coverage",
-      "coverage",
-      "--lcov",
-      "--output=coverage.lcov",
-    ]);
+    await runSelectedTests(files, env, { coverage: true, nodeArgs });
     return;
   }
 
-  await runSelectedTests(files, env);
+  await runSelectedTests(files, env, { nodeArgs });
 }
 
-async function runBazelShardTests(): Promise<void> {
+export async function runBazelShardTests(args: string[] = []): Promise<void> {
   const files = await collectTests();
   const shard = readShardConfig();
   acknowledgeShardSupport(shard);
-  const shardFiles = selectShardFiles(files, shard);
+  const nodeArgs = readNodeTestArgs(args);
+  const coverageReporterDestination = getBazelCoverageOutputFile();
 
   console.log(
-    `[Shard ${
-      shard.shardIndex + 1
-    }/${shard.totalShards}] Executing ${shardFiles.length} of ${files.length} test files...`,
+    `[Shard ${shard.shardIndex + 1}/${shard.totalShards}] Executing Node's built-in sharding across ${files.length} test files...`,
   );
-  if (shardFiles.length === 0) {
-    console.log("No tests assigned to this shard. Exiting cleanly.");
-    return;
-  }
-
   console.log("Skipping test typecheck in shard run; use //:typecheck.");
-  const env = await prepareTestExecution(shardFiles);
-  await runSelectedTests(shardFiles, env);
+  const env = await prepareTestExecution(files);
+  await runSelectedTests(files, env, {
+    coverage: coverageReporterDestination !== undefined,
+    nodeArgs,
+    coverageReporterDestination,
+    shard,
+  });
 }
 
 async function build(): Promise<void> {
@@ -581,24 +665,23 @@ async function ci(): Promise<void> {
 
   const files = await collectTests();
   const env = await typecheckAndPrepareTestExecution(files);
-  await Deno.remove(join(PROJECT_ROOT, "coverage"), { recursive: true }).catch(
-    () => {},
-  );
-  await runSelectedTests(files, env, { coverage: "coverage" });
-  await run([DENO, "coverage", "coverage", "--lcov", "--output=coverage.lcov"]);
+  await fsp
+    .rm(join(PROJECT_ROOT, "coverage"), { recursive: true, force: true })
+    .catch(() => {});
+  await runSelectedTests(files, env, { coverage: true });
 }
 
 function escapeForJsonPath(value: string): string {
-  return value.replaceAll("/", "\\");
+  return value.replaceAll("/", "\\\\");
 }
 
 function toWorkspaceOrAbsolutePath(path: string): string {
   const rel = relative(PROJECT_ROOT, path);
   if (!rel.startsWith("..") && rel !== "") {
-    return "${workspaceRoot}\\" + escapeForJsonPath(rel);
+    return "\\${workspaceRoot}\\\\" + escapeForJsonPath(rel);
   }
   if (path === PROJECT_ROOT) {
-    return "${workspaceRoot}";
+    return "\\${workspaceRoot}";
   }
   return escapeForJsonPath(path);
 }
@@ -633,19 +716,21 @@ function renderPositionalTemplate(template: string, values: string[]): string {
   });
 }
 
-async function collectCoreFiles(): Promise<
-  { sources: string[]; headers: string[] }
-> {
+async function collectCoreFiles(): Promise<{
+  sources: string[];
+  headers: string[];
+}> {
   const coreDir = join(PROJECT_ROOT, "core");
   const sources: string[] = [];
   const headers: string[] = [];
 
-  for await (const entry of Deno.readDir(coreDir)) {
-    if (!entry.isFile) continue;
+  const entries = await fsp.readdir(coreDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
     if (entry.name.endsWith(".c")) {
-      sources.push(`core\\${entry.name}`);
+      sources.push(`core\\\\${entry.name}`);
     } else if (entry.name.endsWith(".h")) {
-      headers.push(`core\\${entry.name}`);
+      headers.push(`core\\\\${entry.name}`);
     }
   }
 
@@ -670,13 +755,13 @@ const VISUAL_STUDIO_NATIVE_TARGETS: VisualStudioNativeTarget[] = [
     projectFileBase: "typed-ski-thanatos",
     outputName: "thanatos.exe",
     sourceFiles: [
-      "core\\arena.c",
-      "core\\host_platform_windows.c",
-      "core\\main.c",
-      "core\\session.c",
-      "core\\ski_io.c",
-      "core\\thanatos.c",
-      "core\\util.c",
+      "core\\\\arena.c",
+      "core\\\\host_platform_windows.c",
+      "core\\\\main.c",
+      "core\\\\session.c",
+      "core\\\\ski_io.c",
+      "core\\\\thanatos.c",
+      "core\\\\util.c",
     ],
   },
   {
@@ -685,11 +770,11 @@ const VISUAL_STUDIO_NATIVE_TARGETS: VisualStudioNativeTarget[] = [
     projectFileBase: "typed-ski-dag-codec-test",
     outputName: "dag_codec_test.exe",
     sourceFiles: [
-      "core\\arena.c",
-      "core\\dag_codec_test.c",
-      "core\\host_platform_windows.c",
-      "core\\ski_io.c",
-      "core\\util.c",
+      "core\\\\arena.c",
+      "core\\\\dag_codec_test.c",
+      "core\\\\host_platform_windows.c",
+      "core\\\\ski_io.c",
+      "core\\\\util.c",
     ],
   },
   {
@@ -698,13 +783,13 @@ const VISUAL_STUDIO_NATIVE_TARGETS: VisualStudioNativeTarget[] = [
     projectFileBase: "typed-ski-session-test",
     outputName: "session_test.exe",
     sourceFiles: [
-      "core\\arena.c",
-      "core\\host_platform_windows.c",
-      "core\\session.c",
-      "core\\session_test.c",
-      "core\\ski_io.c",
-      "core\\thanatos.c",
-      "core\\util.c",
+      "core\\\\arena.c",
+      "core\\\\host_platform_windows.c",
+      "core\\\\session.c",
+      "core\\\\session_test.c",
+      "core\\\\ski_io.c",
+      "core\\\\thanatos.c",
+      "core\\\\util.c",
     ],
   },
   {
@@ -714,13 +799,13 @@ const VISUAL_STUDIO_NATIVE_TARGETS: VisualStudioNativeTarget[] = [
     outputName: "performance_test.exe",
     debuggerArgs: "8 67108864 256 5 4294967295",
     sourceFiles: [
-      "core\\arena.c",
-      "core\\host_platform_windows.c",
-      "core\\performance_test.c",
-      "core\\session.c",
-      "core\\ski_io.c",
-      "core\\thanatos.c",
-      "core\\util.c",
+      "core\\\\arena.c",
+      "core\\\\host_platform_windows.c",
+      "core\\\\performance_test.c",
+      "core\\\\session.c",
+      "core\\\\ski_io.c",
+      "core\\\\thanatos.c",
+      "core\\\\util.c",
     ],
   },
   {
@@ -729,13 +814,13 @@ const VISUAL_STUDIO_NATIVE_TARGETS: VisualStudioNativeTarget[] = [
     projectFileBase: "typed-ski-ski-io-test",
     outputName: "ski_io_test.exe",
     sourceFiles: [
-      "core\\arena.c",
-      "core\\host_platform_windows.c",
-      "core\\session.c",
-      "core\\ski_io.c",
-      "core\\ski_io_test.c",
-      "core\\thanatos.c",
-      "core\\util.c",
+      "core\\\\arena.c",
+      "core\\\\host_platform_windows.c",
+      "core\\\\session.c",
+      "core\\\\ski_io.c",
+      "core\\\\ski_io_test.c",
+      "core\\\\thanatos.c",
+      "core\\\\util.c",
     ],
   },
   {
@@ -743,10 +828,7 @@ const VISUAL_STUDIO_NATIVE_TARGETS: VisualStudioNativeTarget[] = [
     projectName: "typed-ski-util-test",
     projectFileBase: "typed-ski-util-test",
     outputName: "util_test.exe",
-    sourceFiles: [
-      "core\\util.c",
-      "core\\util_test.c",
-    ],
+    sourceFiles: ["core\\\\util.c", "core\\\\util_test.c"],
   },
 ];
 
@@ -762,15 +844,14 @@ function buildVcxproj(
   const joinedIncludes = dedupe(includeDirs).map(xmlEscape).join(";");
   const joinedDefines = dedupe(defines).map(xmlEscape).join(";");
   const makeCommand = `bazelisk build ${target.bazelLabel}`;
-  const rebuildCommand =
-    `cmd /c "bazelisk clean && bazelisk build ${target.bazelLabel}"`;
+  const rebuildCommand = `cmd /c "bazelisk clean && bazelisk build ${target.bazelLabel}"`;
   const cleanCommand = "bazelisk clean";
-  const sourceItems = target.sourceFiles.map((file) =>
-    `    <ClCompile Include="${xmlEscape(file)}" />`
-  ).join("\n");
-  const headerItems = headers.map((file) =>
-    `    <ClInclude Include="${xmlEscape(file)}" />`
-  ).join("\n");
+  const sourceItems = target.sourceFiles
+    .map((file) => `    <ClCompile Include="${xmlEscape(file)}" />`)
+    .join("\n");
+  const headerItems = headers
+    .map((file) => `    <ClInclude Include="${xmlEscape(file)}" />`)
+    .join("\n");
   return renderPositionalTemplate(template, [
     xmlEscape(projectGuid),
     xmlEscape(target.projectName.replaceAll("-", "_")),
@@ -796,16 +877,18 @@ function buildVcxprojFilters(
   target: VisualStudioNativeTarget,
   headers: string[],
 ): string {
-  const sourceItems = target.sourceFiles.map((file) =>
-    `    <ClCompile Include="${
-      xmlEscape(file)
-    }"><Filter>Source Files</Filter></ClCompile>`
-  ).join("\n");
-  const headerItems = headers.map((file) =>
-    `    <ClInclude Include="${
-      xmlEscape(file)
-    }"><Filter>Header Files</Filter></ClInclude>`
-  ).join("\n");
+  const sourceItems = target.sourceFiles
+    .map(
+      (file) =>
+        `    <ClCompile Include="${xmlEscape(file)}"><Filter>Source Files</Filter></ClCompile>`,
+    )
+    .join("\n");
+  const headerItems = headers
+    .map(
+      (file) =>
+        `    <ClInclude Include="${xmlEscape(file)}"><Filter>Header Files</Filter></ClInclude>`,
+    )
+    .join("\n");
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
@@ -826,20 +909,28 @@ ${headerItems}
 }
 
 function buildSolution(
-  projects: Array<
-    { projectName: string; projectFileBase: string; projectGuid: string }
-  >,
+  projects: Array<{
+    projectName: string;
+    projectFileBase: string;
+    projectGuid: string;
+  }>,
 ): string {
-  const projectEntries = projects.map((project) =>
-    `Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "${project.projectName}", "${project.projectFileBase}.vcxproj", "${project.projectGuid}"
-EndProject`
-  ).join("\n");
-  const projectConfigs = projects.map((project) =>
-    `\t\t${project.projectGuid}.Debug|x64.ActiveCfg = Debug|x64
+  const projectEntries = projects
+    .map(
+      (
+        project,
+      ) => `Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "${project.projectName}", "${project.projectFileBase}.vcxproj", "${project.projectGuid}"
+EndProject`,
+    )
+    .join("\n");
+  const projectConfigs = projects
+    .map(
+      (project) => `\t\t${project.projectGuid}.Debug|x64.ActiveCfg = Debug|x64
 \t\t${project.projectGuid}.Debug|x64.Build.0 = Debug|x64
 \t\t${project.projectGuid}.Release|x64.ActiveCfg = Release|x64
-\t\t${project.projectGuid}.Release|x64.Build.0 = Release|x64`
-  ).join("\n");
+\t\t${project.projectGuid}.Release|x64.Build.0 = Release|x64`,
+    )
+    .join("\n");
 
   return `Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
@@ -862,7 +953,7 @@ EndGlobal
 }
 
 async function generateVisualStudioProject(): Promise<void> {
-  const bazel = Deno.build.os === "windows" ? "bazelisk.exe" : "bazelisk";
+  const bazel = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
   const executionRoot = await runCapture([bazel, "info", "execution_root"]);
   const bazelBin = await runCapture([bazel, "info", "bazel-bin"]);
   const aqueryOutput = await runCapture([
@@ -872,8 +963,9 @@ async function generateVisualStudioProject(): Promise<void> {
     "--output=jsonproto",
   ]);
   const aquery = JSON.parse(aqueryOutput) as AqueryResponse;
-  const vcxprojTemplate = await Deno.readTextFile(
+  const vcxprojTemplate = await fsp.readFile(
     join(PROJECT_ROOT, "scripts", "templates", "vcxproj.xml.tpl"),
+    "utf8",
   );
   const { headers } = await collectCoreFiles();
 
@@ -882,15 +974,9 @@ async function generateVisualStudioProject(): Promise<void> {
   );
 
   function resolveActionPath(path: string): string {
-    if (/^[A-Za-z]:[\\/]/.test(path) || path.startsWith("/")) {
-      return path;
-    }
-    if (path === "." || path === "") {
-      return PROJECT_ROOT;
-    }
-    if (path.startsWith("external/")) {
-      return join(executionRoot, path);
-    }
+    if (/^[A-Za-z]:[\\/]/.test(path) || path.startsWith("/")) return path;
+    if (path === "." || path === "") return PROJECT_ROOT;
+    if (path.startsWith("external/")) return join(executionRoot, path);
     return join(PROJECT_ROOT, path);
   }
 
@@ -909,42 +995,41 @@ async function generateVisualStudioProject(): Promise<void> {
 
     for (let index = 1; index < args.length; index += 1) {
       const arg = args[index]!;
-
       if (arg === "-c" && index + 1 < args.length) {
         sourcePath = resolveActionPath(args[index + 1]!);
         index += 1;
         continue;
       }
-
       if (
-        (arg === "-I" || arg === "-isystem" || arg === "-iquote" ||
-          arg === "/I") && index + 1 < args.length
+        (arg === "-I" ||
+          arg === "-isystem" ||
+          arg === "-iquote" ||
+          arg === "/I") &&
+        index + 1 < args.length
       ) {
         includeDirs.push(resolveActionPath(args[index + 1]!));
         index += 1;
         continue;
       }
-
       if (
-        (arg.startsWith("-I") || arg.startsWith("-isystem") ||
+        (arg.startsWith("-I") ||
+          arg.startsWith("-isystem") ||
           arg.startsWith("-iquote")) &&
         !["-I", "-isystem", "-iquote"].includes(arg)
       ) {
         const prefix = arg.startsWith("-isystem")
           ? "-isystem"
           : arg.startsWith("-iquote")
-          ? "-iquote"
-          : "-I";
+            ? "-iquote"
+            : "-I";
         includeDirs.push(resolveActionPath(arg.slice(prefix.length)));
         continue;
       }
-
       if (arg === "-D" && index + 1 < args.length) {
         defines.push(args[index + 1]!);
         index += 1;
         continue;
       }
-
       if (arg.startsWith("-D") && arg.length > 2) {
         defines.push(arg.slice(2));
       }
@@ -975,18 +1060,20 @@ async function generateVisualStudioProject(): Promise<void> {
   });
 
   const cppProperties = {
-    configurations: [{
-      name: "Bazel-x64-Debug",
-      includePath: dedupe([
-        "${workspaceRoot}\\**",
-        ...includeDirs.map(toWorkspaceOrAbsolutePath),
-      ]),
-      defines: dedupe(defines),
-      intelliSenseMode: "windows-clang-x64",
-      compilerPath: compilerPath
-        ? toWorkspaceOrAbsolutePath(compilerPath)
-        : undefined,
-    }],
+    configurations: [
+      {
+        name: "Bazel-x64-Debug",
+        includePath: dedupe([
+          "${workspaceRoot}\\\\**",
+          ...includeDirs.map(toWorkspaceOrAbsolutePath),
+        ]),
+        defines: dedupe(defines),
+        intelliSenseMode: "windows-clang-x64",
+        compilerPath: compilerPath
+          ? toWorkspaceOrAbsolutePath(compilerPath)
+          : undefined,
+      },
+    ],
   };
 
   const tasksVs = {
@@ -1019,55 +1106,51 @@ async function generateVisualStudioProject(): Promise<void> {
   const thanatosExe = join(
     bazelBin,
     "core",
-    Deno.build.os === "windows" ? "thanatos.exe" : "thanatos",
+    process.platform === "win32" ? "thanatos.exe" : "thanatos",
   );
   const slnPath = join(PROJECT_ROOT, "typed-ski-native.sln");
   const launchVs = {
     version: "0.2.1",
     defaults: {},
-    configurations: [{
-      type: "cppdbg",
-      name: "thanatos (Bazel)",
-      project: toWorkspaceOrAbsolutePath(thanatosExe),
-      cwd: "${workspaceRoot}",
-      program: toWorkspaceOrAbsolutePath(thanatosExe),
-      MIMode: "gdb",
-      externalConsole: true,
-    }],
+    configurations: [
+      {
+        type: "cppdbg",
+        name: "thanatos (Bazel)",
+        project: toWorkspaceOrAbsolutePath(thanatosExe),
+        cwd: "${workspaceRoot}",
+        program: toWorkspaceOrAbsolutePath(thanatosExe),
+        MIMode: "gdb",
+        externalConsole: true,
+      },
+    ],
   };
 
-  const cleanCppProperties = JSON.parse(JSON.stringify(cppProperties));
-  await Deno.mkdir(join(PROJECT_ROOT, ".vs"), { recursive: true });
-  await Deno.writeTextFile(
+  await fsp.mkdir(join(PROJECT_ROOT, ".vs"), { recursive: true });
+  await fsp.writeFile(
     join(PROJECT_ROOT, "compile_commands.json"),
     JSON.stringify(normalizedCompileCommands, null, 2) + "\n",
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(PROJECT_ROOT, "CppProperties.json"),
-    JSON.stringify(cleanCppProperties, null, 2) + "\n",
+    JSON.stringify(cppProperties, null, 2) + "\n",
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(PROJECT_ROOT, ".vs", "tasks.vs.json"),
     JSON.stringify(tasksVs, null, 2) + "\n",
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(PROJECT_ROOT, ".vs", "launch.vs.json"),
     JSON.stringify(launchVs, null, 2) + "\n",
   );
+
   const solutionProjects: Array<{
     projectName: string;
     projectFileBase: string;
     projectGuid: string;
   }> = [];
   for (const [index, target] of VISUAL_STUDIO_NATIVE_TARGETS.entries()) {
-    const projectGuid = `{A0C107C5-4E25-4B7D-9201-B7B1A41E3${
-      (0x1b + index).toString(16).toUpperCase().padStart(2, "0")
-    }}`;
-    const outputPath = join(
-      bazelBin,
-      "core",
-      target.outputName,
-    );
+    const projectGuid = `{A0C107C5-4E25-4B7D-9201-B7B1A41E3${(0x1b + index).toString(16).toUpperCase().padStart(2, "0")}}`;
+    const outputPath = join(bazelBin, "core", target.outputName);
     const vcxprojPath = join(PROJECT_ROOT, `${target.projectFileBase}.vcxproj`);
     const vcxprojFiltersPath = join(
       PROJECT_ROOT,
@@ -1083,22 +1166,18 @@ async function generateVisualStudioProject(): Promise<void> {
       headers,
     );
 
-    await Deno.writeTextFile(vcxprojPath, vcxprojContent);
-    await Deno.writeTextFile(
+    await fsp.writeFile(vcxprojPath, vcxprojContent);
+    await fsp.writeFile(
       vcxprojFiltersPath,
       buildVcxprojFilters(target, headers),
     );
-
     solutionProjects.push({
       projectName: target.projectName,
       projectFileBase: target.projectFileBase,
       projectGuid,
     });
   }
-  await Deno.writeTextFile(
-    slnPath,
-    buildSolution(solutionProjects),
-  );
+  await fsp.writeFile(slnPath, buildSolution(solutionProjects));
 
   console.log("Wrote Visual Studio metadata:");
   console.log("  compile_commands.json");
@@ -1119,53 +1198,65 @@ async function generateVisualStudioProject(): Promise<void> {
   );
 }
 
-const command = Deno.args[0] as CommandName | undefined;
-if (!command) usage();
-assertCurrentDenoVersion();
+export async function main(
+  argv: string[] = process.argv.slice(2),
+): Promise<void> {
+  const [command, ...args] = argv;
+  if (!command) usage();
+  assertCurrentNodeVersion();
 
-switch (command) {
-  case "verify-version":
-    verifyVersion();
-    break;
-  case "sync-generated":
-    await syncGenerated();
-    break;
-  case "dist":
-    await buildDist();
-    break;
-  case "build":
-    await build();
-    break;
-  case "hephaestus-assets":
-    await buildHephaestusAssets();
-    break;
-  case "serve-hephaestus":
-    await serveHephaestus();
-    break;
-  case "fmt-check":
-    await formatCheck();
-    break;
-  case "lint":
-    await lint();
-    break;
-  case "typecheck":
-    await typecheck();
-    break;
-  case "test":
-    await runTests(false);
-    break;
-  case "bazel-test-shard":
-    await runBazelShardTests();
-    break;
-  case "coverage":
-    await runTests(true);
-    break;
-  case "ci":
-    await ci();
-    break;
-  case "vs-project":
-    await generateVisualStudioProject();
-    break;
-  default:
-    usage();
+  switch (command as CommandName) {
+    case "verify-version":
+      verifyVersion();
+      break;
+    case "sync-generated":
+      await syncGenerated();
+      break;
+    case "dist":
+      await buildDist();
+      break;
+    case "build":
+      await build();
+      break;
+    case "hephaestus-assets":
+      await buildHephaestusAssets();
+      break;
+    case "serve-hephaestus":
+      await serveHephaestus();
+      break;
+    case "fmt-check":
+      await formatCheck();
+      break;
+    case "lint":
+      await lint();
+      break;
+    case "typecheck":
+      await typecheck();
+      break;
+    case "test":
+      await runTests(false, args);
+      break;
+    case "bazel-test-shard":
+      await runBazelShardTests(args);
+      break;
+    case "coverage":
+      await runTests(true, args);
+      break;
+    case "ci":
+      await ci();
+      break;
+    case "vs-project":
+      await generateVisualStudioProject();
+      break;
+    default:
+      usage();
+  }
+}
+
+const isMain =
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  await main();
 }

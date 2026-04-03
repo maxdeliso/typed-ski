@@ -3,7 +3,7 @@
  *
  * This module provides the main parser for TripLang programs, supporting
  * module definitions, imports/exports, and term/type definitions across
- * System F, typed/untyped lambda calculus, SKI combinators, and base types.
+ * System F, SKI combinators, and base types.
  *
  * Import/Export Syntax:
  * - Import: "import <module> <symbol>" (e.g., "import Prelude zero")
@@ -40,14 +40,10 @@ import {
   OPAQUE,
   POLY,
   TYPE,
-  TYPED,
-  UNTYPED,
 } from "./definition.ts";
 
 import { ParseError } from "./parseError.ts";
 import { parseSystemFTerm } from "./systemFTerm.ts";
-import { parseArrowType, parseTypedLambdaInternal } from "./typedLambda.ts";
-import { parseUntypedLambdaInternal } from "./untyped.ts";
 import { parseSKIDelimited } from "./ski.ts";
 import { parseWithEOF } from "./eof.ts";
 import { parseArrowTypeNoApp } from "./type.ts";
@@ -60,8 +56,6 @@ import { parseSystemFType } from "./systemFType.ts";
 import type { BaseType } from "../types/types.ts";
 import { mkTypeVariable } from "../types/types.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
-import type { TypedLambda } from "../types/typedLambda.ts";
-import type { UntypedLambda } from "../terms/lambda.ts";
 import type { SKIExpression } from "../ski/expression.ts";
 import { EQUALS, PIPE } from "./consts.ts";
 
@@ -146,12 +140,15 @@ function parseDataDefinition(
     );
   }
 
-  return [{
-    kind: "data",
-    name,
-    typeParams,
-    constructors,
-  }, currentState];
+  return [
+    {
+      kind: "data",
+      name,
+      typeParams,
+      constructors,
+    },
+    currentState,
+  ];
 }
 
 function parseTripLangDefinition(
@@ -159,12 +156,7 @@ function parseTripLangDefinition(
 ): [TripLangTerm, ParserState] {
   let currentState: ParserState;
   let type: BaseType | undefined;
-  let term:
-    | SystemFTerm
-    | TypedLambda
-    | UntypedLambda
-    | SKIExpression
-    | BaseType;
+  let term: SystemFTerm | SKIExpression | BaseType;
   let finalState: ParserState;
   let isRecursive = false;
 
@@ -212,10 +204,7 @@ function parseTripLangDefinition(
         withParserState(currentState, "native requires a type annotation"),
       );
     }
-    return [
-      { kind: NATIVE, name, type },
-      skipWhitespace(currentState),
-    ];
+    return [{ kind: NATIVE, name, type }, skipWhitespace(currentState)];
   }
 
   if (kind === POLY) {
@@ -251,12 +240,7 @@ function parseTripLangDefinition(
 
   currentState = skipWhitespace(stateAfterName);
 
-  if (kind === TYPED) {
-    [type, currentState] = parseOptionalTypeAnnotation(
-      currentState,
-      parseArrowType,
-    );
-  } else if (kind === POLY) {
+  if (kind === POLY) {
     [type, currentState] = parseOptionalTypeAnnotation(
       currentState,
       parseSystemFType,
@@ -270,28 +254,17 @@ function parseTripLangDefinition(
   switch (kind) {
     case POLY: {
       const [, systemFTerm, finalState] = parseSystemFTerm(currentState);
-      return [{
-        kind: POLY,
-        name,
-        ...(isRecursive ? { rec: true } : {}),
-        type,
-        term: systemFTerm,
-      }, skipWhitespace(finalState)];
+      return [
+        {
+          kind: POLY,
+          name,
+          ...(isRecursive ? { rec: true } : {}),
+          type,
+          term: systemFTerm,
+        },
+        skipWhitespace(finalState),
+      ];
     }
-
-    case TYPED: {
-      const [, typedTerm, finalState] = parseTypedLambdaInternal(currentState);
-      return [{
-        kind: TYPED,
-        name,
-        type,
-        term: typedTerm,
-      }, skipWhitespace(finalState)];
-    }
-
-    case UNTYPED:
-      [, term, finalState] = parseUntypedLambdaInternal(currentState);
-      return [{ kind: UNTYPED, name, term }, skipWhitespace(finalState)];
 
     case COMBINATOR:
       [term, finalState] = parseSKIUntilLineEnd(currentState);
@@ -311,7 +284,7 @@ function parseTripLangDefinition(
 /**
  * Parses a TripLang program source string into a `TripLangProgram` AST.
  *
- * Supports module, import/export, and term/type definitions across System F, typed/untyped lambda, SKI, and base types.
+ * Supports module, import/export, and top-level poly/combinator/type/data definitions.
  *
  * @param input the program source
  * @returns the parsed program

@@ -1,21 +1,22 @@
-import { assertEquals, assertStrictEquals } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 
 import { externalReferences } from "../../../lib/meta/frontend/externalReferences.ts";
 import type { TripLangValueType } from "../../../lib/meta/trip.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 import { makeNatLiteralIdentifier } from "../../../lib/consts/natNames.ts";
 
-Deno.test("externalReferences edge cases (coverage)", async (t) => {
-  await t.step("ignores nat literal identifiers in systemF-var", () => {
+test("externalReferences edge cases (coverage)", async (t) => {
+  await t.test("ignores nat literal identifiers in systemF-var", () => {
     const lit = makeNatLiteralIdentifier(42n);
     const term: TripLangValueType = { kind: "systemF-var", name: lit };
 
     const [termRefs, typeRefs] = externalReferences(term);
-    assertEquals(Array.from(termRefs.keys()), []);
-    assertEquals(Array.from(typeRefs.keys()), []);
+    assert.deepStrictEqual(Array.from(termRefs.keys()), []);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step("tracks bindings correctly for systemF-let", () => {
+  await t.test("tracks bindings correctly for systemF-let", () => {
     // let x = y in x  -> external refs: y only
     const term: TripLangValueType = {
       kind: "systemF-let",
@@ -24,11 +25,11 @@ Deno.test("externalReferences edge cases (coverage)", async (t) => {
       body: { kind: "systemF-var", name: "x" },
     };
     const [termRefs, typeRefs] = externalReferences(term);
-    assertEquals(Array.from(termRefs.keys()).sort(), ["y"]);
-    assertEquals(Array.from(typeRefs.keys()), []);
+    assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), ["y"]);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step(
+  await t.test(
     "collects refs from typed-lambda-abstraction (ty + body)",
     () => {
       const term: TripLangValueType = {
@@ -43,12 +44,12 @@ Deno.test("externalReferences edge cases (coverage)", async (t) => {
       };
 
       const [termRefs, typeRefs] = externalReferences(term);
-      assertEquals(Array.from(termRefs.keys()).sort(), ["f"]);
-      assertEquals(Array.from(typeRefs.keys()).sort(), ["A"]);
+      assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), ["f"]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), ["A"]);
     },
   );
 
-  await t.step("collects refs inside BaseType type-app and forall", () => {
+  await t.test("collects refs inside BaseType type-app and forall", () => {
     const ty: TripLangValueType = {
       kind: "forall",
       typeVar: "A",
@@ -60,20 +61,20 @@ Deno.test("externalReferences edge cases (coverage)", async (t) => {
     };
 
     const [_termRefs, typeRefs] = externalReferences(ty);
-    assertEquals(Array.from(typeRefs.keys()).sort(), ["List"]);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), ["List"]);
   });
 
-  await t.step("ignores SKI terminal nodes", () => {
+  await t.test("ignores SKI terminal nodes", () => {
     const ski: TripLangValueType = {
       kind: "terminal",
       sym: SKITerminalSymbol.S,
     };
     const [termRefs, typeRefs] = externalReferences(ski);
-    assertEquals(Array.from(termRefs.keys()), []);
-    assertEquals(Array.from(typeRefs.keys()), []);
+    assert.deepStrictEqual(Array.from(termRefs.keys()), []);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step(
+  await t.test(
     "memoizes results (same tuple identity on repeated calls)",
     () => {
       const term: TripLangValueType = {
@@ -83,10 +84,10 @@ Deno.test("externalReferences edge cases (coverage)", async (t) => {
       };
       const r1 = externalReferences(term);
       const r2 = externalReferences(term);
-      assertStrictEquals(r1, r2);
+      assert.strictEqual(r1, r2);
       // and the maps themselves should be referentially identical
-      assertStrictEquals(r1[0], r2[0]);
-      assertStrictEquals(r1[1], r2[1]);
+      assert.strictEqual(r1[0], r2[0]);
+      assert.strictEqual(r1[1], r2[1]);
     },
   );
 });

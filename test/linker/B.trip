@@ -4,4 +4,4 @@ import A addA
 
 export main
 
-typed main = \x:Int => addA x x
+poly main = \x:Int => addA x x

@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { typelessApp } from "../util/ast.ts";
@@ -10,9 +11,9 @@ import {
   typesLitEq,
 } from "../../lib/types/types.ts";
 
-Deno.test("Type inference utilities", async (t) => {
-  await t.step("substituteType", async (t) => {
-    await t.step("replaces a variable with another type", () => {
+test("Type inference utilities", async (t) => {
+  await t.test("substituteType", async (t) => {
+    await t.test("replaces a variable with another type", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const c = mkTypeVariable("c");
@@ -27,7 +28,7 @@ Deno.test("Type inference utilities", async (t) => {
       expect(typesLitEq(r3, arrow(b, c))).to.equal(true);
     });
 
-    await t.step("handles substitutions in complex arrows", () => {
+    await t.test("handles substitutions in complex arrows", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const c = mkTypeVariable("c");
@@ -38,7 +39,7 @@ Deno.test("Type inference utilities", async (t) => {
       expect(typesLitEq(out, arrow(arrow(c, b), c))).to.equal(true);
     });
 
-    await t.step("handles deeply nested substitutions", () => {
+    await t.test("handles deeply nested substitutions", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
 
@@ -48,7 +49,7 @@ Deno.test("Type inference utilities", async (t) => {
       expect(typesLitEq(out, arrow(arrow(b, b), arrow(b, b)))).to.equal(true);
     });
 
-    await t.step("handles substitutions in type applications", () => {
+    await t.test("handles substitutions in type applications", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const listA = typeApp(mkTypeVariable("List"), a);
@@ -59,13 +60,10 @@ Deno.test("Type inference utilities", async (t) => {
       );
     });
 
-    await t.step("substitutes in both fn and arg of nested type-app", () => {
+    await t.test("substitutes in both fn and arg of nested type-app", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
-      const resultAB = typeApp(
-        typeApp(mkTypeVariable("Result"), a),
-        b,
-      );
+      const resultAB = typeApp(typeApp(mkTypeVariable("Result"), a), b);
       const out = substituteType(resultAB, a, mkTypeVariable("Err"));
       const expected = typeApp(
         typeApp(mkTypeVariable("Result"), mkTypeVariable("Err")),
@@ -82,8 +80,8 @@ Deno.test("Type inference utilities", async (t) => {
     });
   });
 
-  await t.step("unify", async (t) => {
-    await t.step("unifies type applications by components", () => {
+  await t.test("unify", async (t) => {
+    await t.test("unifies type applications by components", () => {
       const a = mkTypeVariable("A");
       const b = mkTypeVariable("B");
       const c = mkTypeVariable("C");
@@ -95,12 +93,13 @@ Deno.test("Type inference utilities", async (t) => {
 
       const boundB = ctx.get("B");
       const boundC = ctx.get("C");
-      const ok = (boundB !== undefined && typesLitEq(boundB, c)) ||
+      const ok =
+        (boundB !== undefined && typesLitEq(boundB, c)) ||
         (boundC !== undefined && typesLitEq(boundC, b));
       expect(ok).to.equal(true);
     });
 
-    await t.step("rejects occurs check in type applications", () => {
+    await t.test("rejects occurs check in type applications", () => {
       const a = mkTypeVariable("A");
       const b = mkTypeVariable("B");
       expect(() => unify(a, typeApp(a, b), new Map())).to.throw(
@@ -108,7 +107,7 @@ Deno.test("Type inference utilities", async (t) => {
       );
     });
 
-    await t.step("unifies nested type-apps by components", () => {
+    await t.test("unifies nested type-apps by components", () => {
       const resultAB = typeApp(
         typeApp(mkTypeVariable("Result"), mkTypeVariable("E1")),
         mkTypeVariable("T1"),
@@ -130,7 +129,7 @@ Deno.test("Type inference utilities", async (t) => {
       );
     });
 
-    await t.step("occurs check in type-app arg is rejected", () => {
+    await t.test("occurs check in type-app arg is rejected", () => {
       const a = mkTypeVariable("X");
       const nested = typeApp(
         mkTypeVariable("F"),
@@ -140,15 +139,15 @@ Deno.test("Type inference utilities", async (t) => {
     });
   });
 
-  await t.step("inferType", async (t) => {
-    await t.step("infers type for a simple identity function", () => {
+  await t.test("inferType", async (t) => {
+    await t.test("infers type for a simple identity function", () => {
       const id = mkUntypedAbs("x", mkVar("x"));
       const [, ty] = inferType(id);
 
       expect(ty.kind).to.equal("non-terminal");
     });
 
-    await t.step("infers arrow type with matching ends", () => {
+    await t.test("infers arrow type with matching ends", () => {
       const id = mkUntypedAbs("x", mkVar("x"));
       const [, ty] = inferType(id);
 
@@ -161,7 +160,7 @@ Deno.test("Type inference utilities", async (t) => {
       }
     });
 
-    await t.step("infers type of the application combinator", () => {
+    await t.test("infers type of the application combinator", () => {
       const appComb = mkUntypedAbs(
         "f",
         mkUntypedAbs("x", typelessApp(mkVar("f"), mkVar("x"))),
@@ -171,7 +170,7 @@ Deno.test("Type inference utilities", async (t) => {
       expect(ty.kind).to.equal("non-terminal");
     });
 
-    await t.step("handles a more complex term (K combinator)", () => {
+    await t.test("handles a more complex term (K combinator)", () => {
       const kComb = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
       const [, ty] = inferType(kComb);
 

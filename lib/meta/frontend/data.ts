@@ -31,11 +31,7 @@ import {
 
 const RESULT_TYPE_BASE = "R";
 
-function ensureUnique(
-  items: string[],
-  label: string,
-  dataName: string,
-): void {
+function ensureUnique(items: string[], label: string, dataName: string): void {
   const seen = new Set<string>();
   for (const item of items) {
     if (seen.has(item)) {
@@ -63,13 +59,10 @@ function mkCaseType(fields: BaseType[], resultType: BaseType): BaseType {
   return fields.length === 0 ? resultType : arrows(...fields, resultType);
 }
 
-function mkScottType(
-  data: DataDefinition,
-  resultTypeName: string,
-): BaseType {
+function mkScottType(data: DataDefinition, resultTypeName: string): BaseType {
   const resultType = mkTypeVariable(resultTypeName);
   const caseTypes = data.constructors.map((ctor) =>
-    mkCaseType(ctor.fields, resultType)
+    mkCaseType(ctor.fields, resultType),
   );
 
   let body: BaseType = resultType;
@@ -91,12 +84,12 @@ function mkConstructorTerm(
 ): SystemFTerm {
   const resultType = mkTypeVariable(resultTypeName);
   const caseTypes = data.constructors.map((ctor) =>
-    mkCaseType(ctor.fields, resultType)
+    mkCaseType(ctor.fields, resultType),
   );
 
   const ctor = data.constructors[ctorIndex]!;
-  const fieldNames = ctor.fields.map((_, i) =>
-    `__${ctor.name.toLowerCase()}_${i}`
+  const fieldNames = ctor.fields.map(
+    (_, i) => `__${ctor.name.toLowerCase()}_${i}`,
   );
   const caseNames = data.constructors.map((_, i) => `__case${i}`);
 

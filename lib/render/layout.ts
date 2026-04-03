@@ -132,7 +132,7 @@ export function buildLayoutFromAtoms(
         const mySlice = totalArc * weightRatio;
 
         // center the branch within its slice
-        const branchAngle = currentAngle + (mySlice / 2);
+        const branchAngle = currentAngle + mySlice / 2;
 
         const nextTx = applyHyperbolicStep(
           curr.pos,

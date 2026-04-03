@@ -1,3 +1,0 @@
-module UntypedDouble
-
-untyped double = \x => x x

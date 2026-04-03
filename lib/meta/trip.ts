@@ -25,8 +25,7 @@ export interface TripLangProgram {
  */
 export type TripLangTerm =
   | PolyDefinition
-  | TypedDefinition
-  | UntypedDefinition
+  | LambdaDefinition
   | CombinatorDefinition
   | TypeDefinition
   | DataDefinition
@@ -55,17 +54,9 @@ export interface PolyDefinition {
   term: SystemFTerm;
 }
 
-/** A simply-typed lambda term definition. */
-export interface TypedDefinition {
-  kind: "typed";
-  name: string;
-  type?: BaseType;
-  term: TypedLambda;
-}
-
-/** An untyped lambda term definition. */
-interface UntypedDefinition {
-  kind: "untyped";
+/** Internal erased lambda stage used during lowering/linking. */
+export interface LambdaDefinition {
+  kind: "lambda";
   name: string;
   term: UntypedLambda;
 }

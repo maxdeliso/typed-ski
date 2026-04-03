@@ -45,11 +45,14 @@ export const normalizeTy = (
       const newMapping = new Map(mapping);
       newMapping.set(ty.typeVar, newVar.typeName);
       const [bodyType, bodyMapping] = normalizeTy(ty.body, newMapping, vars);
-      return [{
-        kind: "forall",
-        typeVar: newVar.typeName,
-        body: bodyType,
-      }, bodyMapping];
+      return [
+        {
+          kind: "forall",
+          typeVar: newVar.typeName,
+          body: bodyType,
+        },
+        bodyMapping,
+      ];
     }
   }
 };

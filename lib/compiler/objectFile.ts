@@ -68,11 +68,9 @@ function canonicalizeForSerialization(value: unknown): unknown {
 
   if (value && typeof value === "object") {
     const canonical: Record<string, unknown> = {};
-    for (
-      const [key, entry] of sortedRecordEntries(
-        value as Record<string, unknown>,
-      )
-    ) {
+    for (const [key, entry] of sortedRecordEntries(
+      value as Record<string, unknown>,
+    )) {
       canonical[key] = canonicalizeForSerialization(entry);
     }
     return canonical;
@@ -128,9 +126,7 @@ export function deserializeTripCObject(json: string): TripCObject {
     }
 
     if (!Array.isArray(parsed.dataDefinitions)) {
-      throw new Error(
-        "Invalid object file: dataDefinitions must be an array",
-      );
+      throw new Error("Invalid object file: dataDefinitions must be an array");
     }
 
     // Validate imports structure
@@ -157,9 +153,8 @@ export function deserializeTripCObject(json: string): TripCObject {
         );
       }
 
-      for (
-        const typeParam of (dataDef as { typeParams: unknown[] }).typeParams
-      ) {
+      for (const typeParam of (dataDef as { typeParams: unknown[] })
+        .typeParams) {
         if (typeof typeParam !== "string") {
           throw new Error(
             "Invalid object file: data definition typeParams must be strings",
@@ -167,9 +162,8 @@ export function deserializeTripCObject(json: string): TripCObject {
         }
       }
 
-      for (
-        const ctor of (dataDef as { constructors: unknown[] }).constructors
-      ) {
+      for (const ctor of (dataDef as { constructors: unknown[] })
+        .constructors) {
         if (
           !ctor ||
           typeof ctor !== "object" ||

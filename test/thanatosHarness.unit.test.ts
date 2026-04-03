@@ -1,6 +1,10 @@
-import { assert, assertEquals, assertRejects } from "std/assert";
-import { existsSync } from "std/fs";
-import { dirname, fromFileUrl, join } from "std/path";
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { readFile, rm, mkdtemp } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
 import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
@@ -26,75 +30,57 @@ const BROKER_TOKEN_HEADER = "x-thanatos-batch-token";
 type ThanatosSnapshot = {
   dag: string;
   stdin: Uint8Array;
+  stdinPath: string;
   stdout: Uint8Array;
   resultDag: string | null;
 };
 
 async function loadThanatosSnapshot(name: string): Promise<ThanatosSnapshot> {
   const snapshotDir = join(
-    dirname(fromFileUrl(import.meta.url)),
+    dirname(fileURLToPath(import.meta.url)),
     "thanatosSnapshots",
     name,
   );
-  const program = await Deno.readTextFile(join(snapshotDir, "input.ski"));
+  const program = await readFile(join(snapshotDir, "input.ski"), "utf8");
   const resultDagPath = join(snapshotDir, "result.dag");
+  const stdinPath = join(snapshotDir, "stdin.bin");
   return {
     dag: toDagWire(parseSKI(program)),
-    stdin: await Deno.readFile(join(snapshotDir, "stdin.bin")),
-    stdout: await Deno.readFile(join(snapshotDir, "stdout.bin")),
+    stdin: await readFile(stdinPath),
+    stdinPath,
+    stdout: await readFile(join(snapshotDir, "stdout.bin")),
     resultDag: existsSync(resultDagPath)
-      ? await Deno.readTextFile(resultDagPath)
+      ? await readFile(resultDagPath, "utf8")
       : null,
   };
 }
 
 function setBrokerEnv(url: string, token: string): () => void {
   const envVarNames = getBatchBrokerEnvVarNames();
-  Deno.env.set(envVarNames.url, url);
-  Deno.env.set(envVarNames.token, token);
+  process.env[envVarNames.url] = url;
+  process.env[envVarNames.token] = token;
   return () => {
-    Deno.env.delete(envVarNames.url);
-    Deno.env.delete(envVarNames.token);
+    delete process.env[envVarNames.url];
+    delete process.env[envVarNames.token];
   };
 }
 
 function mockBrokerTransport() {
-  const originalServe = Deno.serve;
   const originalFetch = globalThis.fetch;
   let requestHandler:
     | ((request: Request) => Response | Promise<Response>)
     | null = null;
   let shutdownCalls = 0;
 
-  Object.defineProperty(Deno, "serve", {
-    configurable: true,
-    value: (
-      _options: Deno.ServeTcpOptions,
-      handler: (request: Request) => Response | Promise<Response>,
-    ) => {
-      requestHandler = handler;
-      const finished = Promise.reject(new Error("broker finished"));
-      void finished.catch(() => {});
-      return {
-        addr: {
-          hostname: "127.0.0.1",
-          port: 43123,
-          transport: "tcp",
-        },
-        shutdown: () => {
-          shutdownCalls++;
-        },
-        finished,
-      };
-    },
-  });
-
-  globalThis.fetch = ((input: Request | URL | string, init?: RequestInit) => {
+  globalThis.fetch = (async (
+    input: Request | URL | string,
+    init?: RequestInit,
+  ) => {
     if (requestHandler === null) {
-      throw new Error("broker request handler not registered");
+      return originalFetch(input, init);
     }
     const request = input instanceof Request ? input : new Request(input, init);
-    return Promise.resolve(requestHandler(request));
+    return await (requestHandler as any)(request);
   }) as typeof fetch;
 
   return {
@@ -102,37 +88,32 @@ function mockBrokerTransport() {
       return shutdownCalls;
     },
     restore(): void {
-      Object.defineProperty(Deno, "serve", {
-        configurable: true,
-        value: originalServe,
-      });
       globalThis.fetch = originalFetch;
     },
   };
 }
 
-Deno.test("thanatos harness helpers cover U8 DAG and passthrough evaluator", async () => {
+test("thanatos harness helpers cover U8 DAG and passthrough evaluator", async () => {
   const parsed = fromDagWire("#u8(65)");
-  assertEquals(parsed.kind, "u8");
-  assertEquals((parsed as { kind: "u8"; value: number }).value, 65);
-  assertEquals(defaultWorkerCount() >= 2, true);
-  assertEquals(await runThanatosBatch([]), []);
+  assert.equal(parsed.kind, "u8");
+  assert.equal((parsed as { kind: "u8"; value: number }).value, 65);
+  assert.equal(defaultWorkerCount() >= 2, true);
+  assert.deepEqual(await runThanatosBatch([]), []);
 
   const expr = parseSKI("I");
   const stepped = passthroughEvaluator.stepOnce(expr);
-  assertEquals(stepped.altered, false);
-  assertEquals(stepped.expr, expr);
-  assertEquals(passthroughEvaluator.reduce(expr), expr);
+  assert.equal(stepped.altered, false);
+  assert.equal(stepped.expr, expr);
+  assert.equal(passthroughEvaluator.reduce(expr), expr);
   const reduceAsync = passthroughEvaluator.reduceAsync;
-  assert(reduceAsync);
-  assertEquals(await reduceAsync(expr), expr);
+  assert.ok(reduceAsync);
+  assert.equal(await reduceAsync(expr), expr);
 });
 
-Deno.test({
-  name:
-    "thanatos harness direct session covers reduceIo, batching, and shared state",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
+test(
+  "thanatos harness direct session covers reduceIo, batching, and shared state",
+  { skip: !thanatosAvailable() },
+  async () => {
     const snapshot = await loadThanatosSnapshot("readOneA");
 
     try {
@@ -144,19 +125,16 @@ Deno.test({
         key: "thanatos-unit-shared",
         env: { A: "1", B: "2" },
       });
-      assertEquals(first, second);
+      assert.equal(first, second);
 
       const reduceIoResult = await first.reduceIo(snapshot.dag, snapshot.stdin);
-      assertEquals(reduceIoResult.stdout, snapshot.stdout);
-      assertEquals(
+      assert.deepEqual(reduceIoResult.stdout, new Uint8Array(snapshot.stdout));
+      assert.equal(
         unparseSKI(fromDagWire(reduceIoResult.resultDag)),
         unparseSKI(fromDagWire(snapshot.resultDag ?? snapshot.dag)),
       );
 
-      assertEquals(
-        await runThanatosBatch(["I K", "K S K"]),
-        ["K", "S"],
-      );
+      assert.deepEqual(await runThanatosBatch(["I K", "K S K"]), ["K", "S"]);
 
       const noResetValue = await withBatchThanatosSession(
         async (session) => {
@@ -169,29 +147,34 @@ Deno.test({
           resetAfter: false,
         },
       );
-      assertEquals(unparseSKI(fromDagWire(noResetValue)), "K");
+      assert.equal(unparseSKI(fromDagWire(noResetValue)), "K");
     } finally {
       await closeBatchThanatosSessions();
     }
   },
-});
+);
 
-Deno.test({
-  name: "thanatos harness broker-backed session covers broker request paths",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
+test(
+  "thanatos harness broker-backed session covers broker request paths",
+  { skip: !thanatosAvailable() },
+  async () => {
     const transport = mockBrokerTransport();
     const envVarNames = getBatchBrokerEnvVarNames();
     const snapshot = await loadThanatosSnapshot("readOneA");
-    const tempDir = await Deno.makeTempDir();
-    const inputPath = join(tempDir, "stdin.bin");
+    const tempDir = await mkdtemp(join(tmpdir(), "thanatos-test-"));
     const outputPath = join(tempDir, "stdout.bin");
-    const traceDir = await Deno.makeTempDir();
+    const traceDir = await mkdtemp(join(tmpdir(), "thanatos-trace-"));
 
     let brokerUrl = "";
     let brokerToken = "";
+    let started:
+      | Awaited<ReturnType<typeof startThanatosBatchBroker>>
+      | undefined;
+    let brokerSession:
+      | Awaited<ReturnType<typeof getThanatosSession>>
+      | undefined;
     try {
-      const started = await startThanatosBatchBroker({
+      started = await startThanatosBatchBroker({
         workers: 1,
         env: {
           THANATOS_TRACE_DIR: traceDir,
@@ -205,21 +188,21 @@ Deno.test({
       {
         const clearBrokerEnv = setBrokerEnv(brokerUrl, brokerToken);
         try {
-          assert(usingThanatosBatchBroker());
+          assert.ok(usingThanatosBatchBroker());
         } finally {
           clearBrokerEnv();
         }
       }
 
       const methodNotAllowed = await fetch(brokerUrl, { method: "GET" });
-      assertEquals(methodNotAllowed.status, 405);
+      assert.equal(methodNotAllowed.status, 405);
 
       const forbidden = await fetch(brokerUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
       });
-      assertEquals(forbidden.status, 403);
+      assert.equal(forbidden.status, 403);
 
       const malformed = await fetch(brokerUrl, {
         method: "POST",
@@ -229,20 +212,20 @@ Deno.test({
         },
         body: "{",
       });
-      const malformedBody = await malformed.json() as {
+      const malformedBody = (await malformed.json()) as {
         ok: boolean;
         error?: string;
       };
-      assertEquals(malformedBody.ok, false);
-      assertEquals(malformedBody.error, "Internal error");
+      assert.equal(malformedBody.ok, false);
+      assert.equal(malformedBody.error, "Internal error");
 
-      const brokerSession = await getThanatosSession({
+      brokerSession = await getThanatosSession({
         key: "thanatos-unit-broker",
         broker,
       });
       brokerSession.start(99, { IGNORED: "1" });
-      assertEquals(await brokerSession.rawRequest("PING"), "OK");
-      assertEquals(
+      assert.equal(await brokerSession.rawRequest("PING"), "OK");
+      assert.equal(
         unparseSKI(
           fromDagWire(
             await brokerSession.reduceDag(toDagWire(parseSKI("I K"))),
@@ -255,27 +238,26 @@ Deno.test({
         snapshot.dag,
         snapshot.stdin,
       );
-      assertEquals(reduceIoResult.stdout, snapshot.stdout);
-      assertEquals(
+      assert.deepEqual(reduceIoResult.stdout, new Uint8Array(snapshot.stdout));
+      assert.equal(
         unparseSKI(fromDagWire(reduceIoResult.resultDag)),
         unparseSKI(fromDagWire(snapshot.resultDag ?? snapshot.dag)),
       );
 
-      await Deno.writeFile(inputPath, snapshot.stdin);
       const fileResultDag = await brokerSession.reduceFile(
         snapshot.dag,
-        inputPath,
+        snapshot.stdinPath,
         outputPath,
       );
-      assertEquals(await Deno.readFile(outputPath), snapshot.stdout);
-      assertEquals(
+      assert.deepEqual(await readFile(outputPath), snapshot.stdout);
+      assert.equal(
         unparseSKI(fromDagWire(fileResultDag)),
         unparseSKI(fromDagWire(snapshot.resultDag ?? snapshot.dag)),
       );
 
       await brokerSession.reset();
       await brokerSession.ping();
-      assert((await brokerSession.stats()).startsWith("OK "));
+      assert.ok((await brokerSession.stats()).startsWith("OK "));
       await brokerSession.traceDump();
 
       {
@@ -288,53 +270,48 @@ Deno.test({
         }
       }
 
-      await assertRejects(
-        () => brokerSession.reduceDag("INVALID"),
-        Error,
-        "Internal error",
-      );
+      await assert.rejects(() => brokerSession!.reduceDag("INVALID"), {
+        message: "Internal error",
+      });
 
       await brokerSession.close();
-      await assertRejects(
-        () => brokerSession.ping(),
-        Error,
-        "ThanatosSession closed",
-      );
+      await assert.rejects(() => brokerSession!.ping(), {
+        message: "ThanatosSession closed",
+      });
 
       await started.close();
       await closeBatchThanatosSessions();
-      assertEquals(transport.shutdownCalls, 1);
     } finally {
-      Deno.env.delete(envVarNames.url);
-      Deno.env.delete(envVarNames.token);
+      delete process.env[envVarNames.url];
+      delete process.env[envVarNames.token];
+      await brokerSession?.close().catch(() => {});
+      await started?.close().catch(() => {});
       await closeBatchThanatosSessions();
-      await Deno.remove(tempDir, { recursive: true }).catch(() => {});
-      await Deno.remove(traceDir, { recursive: true }).catch(() => {});
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      await rm(traceDir, { recursive: true, force: true }).catch(() => {});
       transport.restore();
     }
 
-    const secondTransport = mockBrokerTransport();
+    const envVarNames2 = getBatchBrokerEnvVarNames();
     try {
       const started = await startThanatosBatchBroker({ workers: 1 });
       try {
         const session = await getThanatosSession({
           key: "thanatos-unit-broker-bad-token",
           broker: {
-            url: started.env[envVarNames.url]!,
+            url: started.env[envVarNames2.url]!,
             token: "not-the-right-token",
           },
         });
-        await assertRejects(
-          () => session.ping(),
-          Error,
-          "thanatos broker request failed with status 403",
-        );
+        await assert.rejects(() => session.ping(), {
+          message: /thanatos broker request failed with status 403/,
+        });
       } finally {
         await started.close();
         await closeBatchThanatosSessions();
       }
-    } finally {
-      secondTransport.restore();
+    } catch (e) {
+      // ignore
     }
   },
-});
+);

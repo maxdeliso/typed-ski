@@ -1,0 +1,5 @@
+module Invalid
+
+export main
+
+poly main = \x:Int => \y:Int => x + y

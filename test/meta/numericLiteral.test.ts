@@ -1,4 +1,5 @@
-import { assertEquals } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
@@ -8,22 +9,22 @@ export main
 poly main = 3
 `;
 
-Deno.test("numeric literals desugar to nat literal vars", async (t) => {
-  await t.step("parsed main = 3 is nat literal var", () => {
+test("numeric literals desugar to nat literal vars", async (t) => {
+  await t.test("parsed main = 3 is nat literal var", () => {
     const program = parseTripLang(SOURCE_WITH_NAT_LITERAL);
     const mainDef = program.terms.find(
       (t): t is TripLangTerm => t.kind === "poly" && t.name === "main",
     );
-    assertEquals(mainDef !== undefined, true);
+    assert.deepStrictEqual(mainDef !== undefined, true);
     if (mainDef?.kind === "poly") {
-      assertEquals(mainDef.term.kind, "systemF-var");
+      assert.deepStrictEqual(mainDef.term.kind, "systemF-var");
       if (mainDef.term.kind === "systemF-var") {
-        assertEquals(mainDef.term.name, "__trip_u8_3");
+        assert.deepStrictEqual(mainDef.term.name, "__trip_u8_3");
       }
     }
   });
 
-  await t.step("no Nat requirement for literals", () => {
-    assertEquals(true, true);
+  await t.test("no Nat requirement for literals", () => {
+    assert.deepStrictEqual(true, true);
   });
 });

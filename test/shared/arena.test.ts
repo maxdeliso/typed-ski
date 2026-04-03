@@ -1,4 +1,5 @@
-import { assert, assertEquals } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 
 import {
   CONTROL_PTR_BIT,
@@ -8,16 +9,16 @@ import {
   makeControlPtr,
 } from "../../lib/shared/arena.ts";
 
-Deno.test("control pointer helpers classify and decode pointers", () => {
+test("control pointer helpers classify and decode pointers", () => {
   const valuePtr = 0x12345678;
   const controlPtr = makeControlPtr(valuePtr);
 
-  assertEquals(controlPtr, (valuePtr | CONTROL_PTR_BIT) >>> 0);
+  assert.deepStrictEqual(controlPtr, (valuePtr | CONTROL_PTR_BIT) >>> 0);
 
-  assert(isValuePtr(valuePtr));
-  assertEquals(isControlPtr(valuePtr), false);
+  assert.ok(isValuePtr(valuePtr));
+  assert.deepStrictEqual(isControlPtr(valuePtr), false);
 
-  assert(isControlPtr(controlPtr));
-  assertEquals(isValuePtr(controlPtr), false);
-  assertEquals(controlIndex(controlPtr), valuePtr);
+  assert.ok(isControlPtr(controlPtr));
+  assert.deepStrictEqual(isValuePtr(controlPtr), false);
+  assert.deepStrictEqual(controlIndex(controlPtr), valuePtr);
 });

@@ -1,0 +1,30 @@
+{
+  "dataDefinitions": [],
+  "definitions": {
+    "helper": {
+      "kind": "poly",
+      "name": "helper",
+      "term": {
+        "body": {
+          "body": {
+            "kind": "systemF-var",
+            "name": "x"
+          },
+          "kind": "systemF-abs",
+          "name": "x",
+          "typeAnnotation": {
+            "kind": "type-var",
+            "typeName": "X"
+          }
+        },
+        "kind": "systemF-type-abs",
+        "typeVar": "X"
+      }
+    }
+  },
+  "exports": [
+    "helper"
+  ],
+  "imports": [],
+  "module": "Helper"
+}

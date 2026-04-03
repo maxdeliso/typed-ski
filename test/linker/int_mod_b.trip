@@ -1,0 +1,5 @@
+module ModuleB
+
+export main
+
+poly main = #X => \x: X => x

@@ -31,6 +31,8 @@ import {
   type RequestTrackerHooks,
 } from "./parallel/requestTracker.ts";
 import { WorkerManager } from "./parallel/workerManager.ts";
+import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 /**
  * @internal
@@ -38,6 +40,14 @@ import { WorkerManager } from "./parallel/workerManager.ts";
  */
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
 /** @internal */
+
+function resolveArenaWorkerUrl(): string {
+  const explicitWorkerPath = process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"];
+  if (explicitWorkerPath) {
+    return pathToFileURL(explicitWorkerPath).href;
+  }
+  return new URL("../../dist/arenaWorker.js", import.meta.url).href;
+}
 export type { ArenaRingStatsSnapshot } from "./io/ringStats.ts";
 
 interface ParallelArenaEvaluatorOptions {
@@ -55,9 +65,11 @@ interface ParallelArenaEvaluatorOptions {
 /**
  * Parallel arena evaluator using Web Workers.
  */
-export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
-  implements Evaluator {
-  public readonly workers: Worker[] = [];
+export class ParallelArenaEvaluatorWasm
+  extends ArenaEvaluatorWasm
+  implements Evaluator
+{
+  public readonly workers: any[] = [];
 
   /**
    * Optional instrumentation hooks (used by `server/workbench.js`).
@@ -142,11 +154,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     const maxResubmits = options.maxResubmits ?? DEFAULT_MAX_RESUBMITS;
     this.requestTracker = new RequestTracker(hooks, maxResubmits);
     this.ringStats = new RingStats();
-    this.ioManager = new IoManager(
-      exports,
-      memory,
-      () => this.aborted,
-    );
+    this.ioManager = new IoManager(exports, memory, () => this.aborted);
     this.completionPoller = new CompletionPoller(
       this.requestTracker,
       this.ioManager,
@@ -296,7 +304,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       while (rc === 1) {
         this.ringStats.recordSubmitFull();
         if (this.aborted) {
-          throw (this.abortError ?? new Error("Evaluator terminated"));
+          throw this.abortError ?? new Error("Evaluator terminated");
         }
         // Avoid a tight microtask spin if workers are blocked (e.g. CQ full / no progress).
         // Back off to a macrotask so we don't peg a CPU core.
@@ -312,7 +320,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
             this.activeTimeouts.delete(cancel);
           }
           if (this.aborted) {
-            throw (this.abortError ?? new Error("Evaluator terminated"));
+            throw this.abortError ?? new Error("Evaluator terminated");
           }
         }
         // retry also includes maxSteps
@@ -336,20 +344,14 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     }
   }
 
-  private static validateSabExports(
-    exports: ArenaWasmExports,
-  ): {
+  private static validateSabExports(exports: ArenaWasmExports): {
     exports: ArenaWasmExports;
     connectArena: (ptr: number) => number;
     debugLockState: () => number;
     getArenaMode: () => number;
     debugGetArenaBaseAddr: () => number;
   } {
-    const {
-      debugLockState,
-      getArenaMode,
-      debugGetArenaBaseAddr,
-    } = exports;
+    const { debugLockState, getArenaMode, debugGetArenaBaseAddr } = exports;
 
     if (!exports.initArena || typeof exports.initArena !== "function") {
       throw new Error(
@@ -357,9 +359,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       );
     }
     if (!exports.connectArena || typeof exports.connectArena !== "function") {
-      throw new Error(
-        "connectArena export is required but missing.",
-      );
+      throw new Error("connectArena export is required but missing.");
     }
     if (!debugLockState || typeof debugLockState !== "function") {
       throw new Error("debugLockState export is required but missing");
@@ -367,13 +367,8 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     if (!getArenaMode || typeof getArenaMode !== "function") {
       throw new Error("getArenaMode export is required but missing");
     }
-    if (
-      !debugGetArenaBaseAddr ||
-      typeof debugGetArenaBaseAddr !== "function"
-    ) {
-      throw new Error(
-        "debugGetArenaBaseAddr export is required but missing",
-      );
+    if (!debugGetArenaBaseAddr || typeof debugGetArenaBaseAddr !== "function") {
+      throw new Error("debugGetArenaBaseAddr export is required but missing");
     }
 
     return {
@@ -386,13 +381,13 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
   }
 
   static async create(
-    workerCount = navigator.hardwareConcurrency || 4,
+    workerCount = globalThis.navigator?.hardwareConcurrency ?? 4,
     verbose = false,
     options: ParallelArenaEvaluatorOptions = {},
   ): Promise<ParallelArenaEvaluatorWasm> {
     if (verbose) {
       console.error(
-        `[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: ${workerCount}, navigator.hardwareConcurrency: ${navigator.hardwareConcurrency}`,
+        `[DEBUG] ParallelArenaEvaluatorWasm.create called with workerCount: ${workerCount}, navigator.hardwareConcurrency: ${globalThis.navigator?.hardwareConcurrency ?? "unavailable"}`,
       );
     }
     if (workerCount < 1) {
@@ -449,9 +444,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
       const init = validated.exports.initArena!;
       const result = init(MAX_ARENA_CAPACITY);
       if (result === 0) {
-        throw new Error(
-          `initArena failed for capacity ${MAX_ARENA_CAPACITY}`,
-        );
+        throw new Error(`initArena failed for capacity ${MAX_ARENA_CAPACITY}`);
       }
       return result;
     })();
@@ -459,7 +452,7 @@ export class ParallelArenaEvaluatorWasm extends ArenaEvaluatorWasm
     const isBrowser = typeof globalThis.document !== "undefined";
     const workerUrl = isBrowser
       ? "/dist/arenaWorker.js"
-      : new URL("./arenaWorker.ts", import.meta.url).href;
+      : resolveArenaWorkerUrl();
 
     const workers = await WorkerManager.spawnWorkers(
       workerCount,

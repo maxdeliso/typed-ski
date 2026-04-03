@@ -11,15 +11,18 @@ def _workspace_command_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
         ctx.attr._windows_constraint[platform_common.ConstraintValueInfo],
     )
+    node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
+    node_path = node_toolchain.nodeinfo.target_tool_path
+    
     extension = ".bat" if is_windows else ".sh"
     launcher = ctx.actions.declare_file(ctx.label.name + extension)
     args = [ctx.attr.subcommand] + ctx.attr.command_args
 
     if is_windows:
         command = " ".join(
-            [_batch_quote("deno"), _batch_quote("run"), _batch_quote("-A"), _batch_quote("scripts/withRepoDeno.ts"), _batch_quote("run"), _batch_quote("-A"), _batch_quote("scripts/bazel.ts")] +
+            [_batch_quote(node_path), _batch_quote("--experimental-transform-types"), _batch_quote("scripts/bazel.ts")] +
             [_batch_quote(arg) for arg in args]
-        )
+        ) + " %*"
         content = "\r\n".join([
             "@echo off",
             "setlocal",
@@ -34,9 +37,9 @@ def _workspace_command_impl(ctx):
         ])
     else:
         command = " ".join(
-            [_shell_quote("deno"), _shell_quote("run"), _shell_quote("-A"), _shell_quote("scripts/withRepoDeno.ts"), _shell_quote("run"), _shell_quote("-A"), _shell_quote("scripts/bazel.ts")] +
+            [_shell_quote(node_path), _shell_quote("--experimental-transform-types"), _shell_quote("scripts/bazel.ts")] +
             [_shell_quote(arg) for arg in args]
-        )
+        ) + " \"$@\""
         content = "\n".join([
             "#!/usr/bin/env bash",
             "set -euo pipefail",
@@ -50,7 +53,10 @@ def _workspace_command_impl(ctx):
         ])
 
     ctx.actions.write(launcher, content, is_executable = True)
-    return [DefaultInfo(executable = launcher)]
+    
+    runfiles = ctx.runfiles(files = [node_toolchain.nodeinfo.node])
+    
+    return [DefaultInfo(executable = launcher, runfiles = runfiles)]
 
 workspace_command = rule(
     implementation = _workspace_command_impl,
@@ -62,4 +68,5 @@ workspace_command = rule(
         ),
     },
     executable = True,
+    toolchains = ["@rules_nodejs//nodejs:toolchain_type"],
 )

@@ -21,7 +21,8 @@ function depthToColor(depth: number, t: number): [number, number, number] {
   const hue = Math.min(240, (d / maxDepth) * 240);
 
   // convert hsl(hue, 80%, 60%) to rgb: simplified conversion for brevity
-  const s = 0.8, l = 0.6;
+  const s = 0.8,
+    l = 0.6;
   const k = (n: number) => (n + hue / 30) % 12;
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) =>

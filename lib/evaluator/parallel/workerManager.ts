@@ -6,6 +6,13 @@
  * @module
  */
 
+import { isNode } from "../../shared/platform.ts";
+
+let WorkerClass: any;
+if (typeof globalThis.Worker !== "undefined") {
+  WorkerClass = globalThis.Worker;
+}
+
 type WorkerConnectCompleteMessage = {
   type: "connectArenaComplete";
   error?: string;
@@ -49,30 +56,66 @@ export class WorkerManager {
     verbose = false,
   ): Promise<Worker[]> {
     if (verbose) console.error(`[DEBUG] Spawning ${workerCount} workers`);
-    const workers: Worker[] = [];
+    const workers: any[] = [];
     const initPromises: Promise<void>[] = [];
+
+    if (isNode && !WorkerClass) {
+      const { Worker: NodeWorker } = await import("node:worker_threads");
+      WorkerClass = NodeWorker;
+    }
+
+    if (!WorkerClass) {
+      throw new Error("Worker is not supported in this environment");
+    }
 
     // Spawn workers and wait for ready
     for (let i = 0; i < workerCount; i++) {
-      const worker = new Worker(workerUrl, {
-        type: "module",
-      });
+      let worker: any;
+      if (isNode) {
+        // Node worker needs to be spawned with specific options to support TS if needed,
+        // or just point to the entry point.
+        // If workerUrl is a file:// URL, we need to convert it.
+        let actualUrl = workerUrl;
+        if (actualUrl.startsWith("file://")) {
+          const { fileURLToPath } = await import("node:url");
+          actualUrl = fileURLToPath(actualUrl);
+        }
+
+        // We assume arenaWorker.ts has been compiled or is being run directly
+        // through Node's TypeScript support.
+        // Node's Worker can execute TypeScript directly in Node 25, but this
+        // repo still needs transform support for enums and parameter properties.
+        worker = new WorkerClass(actualUrl, {
+          workerData: { memory: sharedMemory, workerId: i },
+          execArgv: ["--experimental-transform-types"],
+          type: "module",
+        });
+
+        // Node workers use a different event system by default (EventEmitter),
+        // but modern Node supports addEventListener on Worker.
+      } else {
+        worker = new WorkerClass(workerUrl, {
+          type: "module",
+        });
+      }
 
       initPromises.push(
-        // We only need the readiness barrier; discard the payload to keep initPromises typed as Promise<void>[].
         this.waitForWorkerMessage(worker, "ready").then(() => undefined),
       );
-      worker.postMessage({
-        type: "init",
-        memory: sharedMemory,
-        workerId: i,
-      });
+
+      if (!isNode) {
+        worker.postMessage({
+          type: "init",
+          memory: sharedMemory,
+          workerId: i,
+        });
+      }
 
       workers.push(worker);
     }
 
     await Promise.all(initPromises);
-    return workers;
+    return workers as unknown as Worker[];
   }
 
   /**
@@ -118,12 +161,15 @@ export class WorkerManager {
     onOOM: (err: Error) => void,
   ): void {
     for (const w of workers) {
-      w.addEventListener("error", (e) => {
-        const err = e.error instanceof Error
-          ? e.error
-          : new Error(e.message || "Worker error");
+      const errorHandler = (e: any) => {
+        const err = isNode
+          ? e
+          : e.error instanceof Error
+            ? e.error
+            : new Error(e.message || "Worker error");
         // Only abort all if this is an OOM/memory error
-        const isOOM = err.message?.includes("out of memory") ||
+        const isOOM =
+          err.message?.includes("out of memory") ||
           err.message?.includes("memory") ||
           err.message?.includes("unreachable") ||
           err.name === "RuntimeError";
@@ -133,12 +179,21 @@ export class WorkerManager {
           // For non-OOM errors, just log and continue
           console.error("Worker error (non-fatal):", err);
         }
-      });
-      // Some environments surface failed structured-clone / message errors separately.
-      // These are not fatal - just log and continue.
-      w.addEventListener("messageerror", () => {
-        console.error("Worker messageerror (non-fatal)");
-      });
+      };
+
+      if (isNode) {
+        (w as any).on("error", errorHandler);
+        (w as any).on("messageerror", () => {
+          console.error("Worker messageerror (non-fatal)");
+        });
+      } else {
+        w.addEventListener("error", errorHandler);
+        // Some environments surface failed structured-clone / message errors separately.
+        // These are not fatal - just log and continue.
+        w.addEventListener("messageerror", () => {
+          console.error("Worker messageerror (non-fatal)");
+        });
+      }
     }
   }
 
@@ -152,25 +207,33 @@ export class WorkerManager {
   /**
    * Waits for a specific message type from a worker.
    */
-  private static waitForWorkerMessage<
-    T extends WorkerToMainMessage["type"],
-  >(
-    worker: Worker,
+  private static waitForWorkerMessage<T extends WorkerToMainMessage["type"]>(
+    worker: any,
     messageType: T,
   ): Promise<Extract<WorkerToMainMessage, { type: T }>> {
     return new Promise((resolve, reject) => {
       const cleanup = () => {
-        worker.removeEventListener("message", onMessage);
-        worker.removeEventListener("error", onError);
+        if (isNode) {
+          worker.off("message", onMessage);
+          worker.off("error", onError);
+        } else {
+          worker.removeEventListener("message", onMessage);
+          worker.removeEventListener("error", onError);
+        }
       };
 
-      const onError = (err: ErrorEvent) => {
+      const onError = (e: any) => {
         cleanup();
-        reject(err.error instanceof Error ? err.error : new Error(err.message));
+        const err = isNode
+          ? e
+          : e.error instanceof Error
+            ? e.error
+            : new Error(e.message || "Worker error");
+        reject(err);
       };
 
-      const onMessage = (e: MessageEvent<WorkerToMainMessage>) => {
-        const data = e.data;
+      const onMessage = (e: any) => {
+        const data = isNode ? e : e.data;
         if (!data) return;
         if (data.type === messageType) {
           cleanup();
@@ -180,8 +243,30 @@ export class WorkerManager {
           reject(new Error(data.error ?? "Worker error during handshake"));
         }
       };
-      worker.addEventListener("message", onMessage);
-      worker.addEventListener("error", onError);
+
+      if (isNode) {
+        if (typeof worker.on !== "function") {
+          console.error("[DEBUG] worker.on is not a function!", {
+            isNode,
+            workerType: typeof worker,
+            constructorName: worker.constructor?.name,
+            keys: Object.keys(worker),
+          });
+        }
+        worker.on("message", onMessage);
+        worker.on("error", onError);
+      } else {
+        if (typeof worker.addEventListener !== "function") {
+          console.error("[DEBUG] worker.addEventListener is not a function!", {
+            isNode,
+            workerType: typeof worker,
+            constructorName: worker.constructor?.name,
+            keys: Object.keys(worker),
+          });
+        }
+        worker.addEventListener("message", onMessage);
+        worker.addEventListener("error", onError);
+      }
     });
   }
 }

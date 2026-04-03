@@ -1,11 +1,14 @@
-load("//bazel:deno_dist.bzl", "deno_dist")
-load("//bazel:deno_sharded_test.bzl", "deno_sharded_test")
+load("//bazel:node_dist.bzl", "node_dist")
+load("//bazel:node_sharded_test.bzl", "node_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
 
 package(default_visibility = ["//visibility:public"])
 
-DENO_TEST_DATA = glob(
+NODE_TEST_DATA = glob(
     [
+        "package.json",
+        "tsconfig.json",
+        "jsr.json",
         "*.jsonc",
         "*.md",
         "bin/**",
@@ -19,10 +22,14 @@ DENO_TEST_DATA = glob(
         "coverage/**",
         "dist/**",
     ],
+    allow_empty = True,
 )
 
-DENO_DIST_DATA = glob(
+NODE_DIST_DATA = glob(
     [
+        "package.json",
+        "tsconfig.json",
+        "jsr.json",
         "*.jsonc",
         "bin/**",
         "compiler/**",
@@ -33,6 +40,7 @@ DENO_DIST_DATA = glob(
         "coverage/**",
         "dist/**",
     ],
+    allow_empty = True,
 )
 
 alias(
@@ -60,14 +68,14 @@ test_suite(
     ],
 )
 
-deno_dist(
+node_dist(
     name = "dist_artifacts",
-    data = DENO_DIST_DATA,
+    data = NODE_DIST_DATA,
 )
 
-deno_sharded_test(
-    name = "deno_tests",
-    data = DENO_TEST_DATA,
+node_sharded_test(
+    name = "node_tests",
+    data = NODE_TEST_DATA,
     dist = ":dist_artifacts",
     shard_count = 8,
     thanatos = "//core:thanatos",

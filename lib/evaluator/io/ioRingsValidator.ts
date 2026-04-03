@@ -41,7 +41,8 @@ export function validateIoRingsConfiguration(
   const offsetStdinWait = headerView[SabHeaderField.OFFSET_STDIN_WAIT];
 
   if (
-    offsetStdin === undefined || offsetStdout === undefined ||
+    offsetStdin === undefined ||
+    offsetStdout === undefined ||
     offsetStdinWait === undefined
   ) {
     throw new Error(
@@ -54,7 +55,8 @@ export function validateIoRingsConfiguration(
   // Verify offsets are within buffer bounds
   const bufferEnd = buffer.byteLength;
   if (
-    offsetStdin >= bufferEnd || offsetStdout >= bufferEnd ||
+    offsetStdin >= bufferEnd ||
+    offsetStdout >= bufferEnd ||
     offsetStdinWait >= bufferEnd
   ) {
     throw new Error(
@@ -76,14 +78,8 @@ export function validateIoRingsConfiguration(
 
   // Try to construct the ring views - this will catch alignment and construction issues
   try {
-    new ArenaIoRings(
-      buffer,
-      baseAddr,
-      SABHEADER_HEADER_SIZE_U32,
-    );
+    new ArenaIoRings(buffer, baseAddr, SABHEADER_HEADER_SIZE_U32);
   } catch (_e) {
-    throw new Error(
-      `failed to construct ring views: ${(_e as Error).message}`,
-    );
+    throw new Error(`failed to construct ring views: ${(_e as Error).message}`);
   }
 }

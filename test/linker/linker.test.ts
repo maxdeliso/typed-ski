@@ -1,3 +1,4 @@
+import { test } from "node:test";
 /**
  * Tests for the TripLang Linker (Phase 2)
  *
@@ -9,8 +10,8 @@
  * - Multi-file linking
  */
 
-import { expect } from "chai";
-import { dirname } from "node:path";
+import { expect } from "../util/assertions.ts";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   deserializeTripCObject,
@@ -33,12 +34,12 @@ import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
 import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
+import { readFile } from "node:fs/promises";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-type TestTripCObject =
-  & Omit<TripCObject, "dataDefinitions">
-  & Partial<Pick<TripCObject, "dataDefinitions">>;
+type TestTripCObject = Omit<TripCObject, "dataDefinitions"> &
+  Partial<Pick<TripCObject, "dataDefinitions">>;
 
 function withDataDefinitions(object: TestTripCObject): TripCObject {
   return {
@@ -65,38 +66,19 @@ function linkModules(
 }
 
 /**
- * Helper function to compile a .trip file to .tripc format.
- * Uses optional outputTripc so linker tests can write to linker_*.tripc (distinct from cli_*).
+ * Linker tests use committed .tripc fixtures so they do not need to mutate
+ * the shared fixture directory under Bazel runfiles.
  */
 async function compileTripFile(
   tripFileName: string,
   outputTripc?: string,
 ): Promise<string> {
-  const out = outputTripc ?? tripFileName.replace(".trip", ".tripc");
-  const tripcPath = `${__dirname}/${out}`;
-
-  const compileCommand = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "--allow-read",
-      "--allow-write",
-      "../../bin/tripc.ts",
-      tripFileName,
-      out,
-    ],
-    cwd: __dirname,
-  });
-
-  const { code } = await compileCommand.output();
-  if (code !== 0) {
-    throw new Error(`Failed to compile ${tripFileName}`);
-  }
-
-  return await Deno.readTextFile(tripcPath);
+  const fixtureName = outputTripc ?? tripFileName.replace(".trip", ".tripc");
+  return await readFile(join(__dirname, fixtureName), "utf8");
 }
 
-Deno.test("TripLang Linker", async (t) => {
-  await t.step("loads modules correctly", async () => {
+test("TripLang Linker", async (t) => {
+  await t.test("loads modules correctly", async () => {
     // Load a compiled module (linker_ prefix for parallel-safe distinct names)
     const aContent = await compileTripFile(
       "ALinkerTest.trip",
@@ -112,7 +94,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(loadedModule.defs.has("addA")).to.be.true;
   });
 
-  await t.step("creates program space from multiple modules", async () => {
+  await t.test("creates program space from multiple modules", async () => {
     // Load multiple modules (linker_ prefix for parallel-safe distinct names)
     const aContent = await compileTripFile(
       "ALinkerTest.trip",
@@ -123,10 +105,7 @@ Deno.test("TripLang Linker", async (t) => {
     const aObject = deserializeTripCObject(aContent);
     const bObject = deserializeTripCObject(bContent);
 
-    const loadedModules = [
-      loadModule(aObject, "A"),
-      loadModule(bObject, "B"),
-    ];
+    const loadedModules = [loadModule(aObject, "A"), loadModule(bObject, "B")];
 
     const programSpace = createProgramSpace(loadedModules);
 
@@ -140,7 +119,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(programSpace.modules.get("B")?.exports.has("main")).to.be.true;
   });
 
-  await t.step("finds main function in program space", async () => {
+  await t.test("finds main function in program space", async () => {
     // Load modules and create program space - use only one module to avoid ambiguous exports
     const aContent = await compileTripFile("A.trip", "linker_A.tripc");
     const aObject = deserializeTripCObject(aContent);
@@ -154,7 +133,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(mainFunction!.kind).to.equal("poly");
   });
 
-  await t.step("resolves cross-module dependencies (simplified)", async () => {
+  await t.test("resolves cross-module dependencies (simplified)", async () => {
     // Load modules and create program space - use only one module to avoid ambiguous exports
     const aContent = await compileTripFile("A.trip", "linker_A.tripc");
     const aObject = deserializeTripCObject(aContent);
@@ -171,7 +150,7 @@ Deno.test("TripLang Linker", async (t) => {
     );
   });
 
-  await t.step(
+  await t.test(
     "pre-lowers poly rec definitions during resolution",
     async () => {
       const fileName = "linkerRec.trip";
@@ -185,12 +164,12 @@ Deno.test("TripLang Linker", async (t) => {
       const loopDef = resolvedSpace.modules.get("Rec")?.defs.get("loop");
       const mainDef = resolvedSpace.modules.get("Rec")?.defs.get("main");
 
-      expect(loopDef?.kind).to.equal("untyped");
-      expect(mainDef?.kind).to.equal("untyped");
+      expect(loopDef?.kind).to.equal("lambda");
+      expect(mainDef?.kind).to.equal("lambda");
     },
   );
 
-  await t.step("ignores self-recursion during resolution", async () => {
+  await t.test("ignores self-recursion during resolution", async () => {
     const fileName = "linkerRecOnly.trip";
     const tripcName = "linkerRecOnly.tripc";
 
@@ -201,10 +180,10 @@ Deno.test("TripLang Linker", async (t) => {
     const resolvedSpace = resolveCrossModuleDependencies(programSpace);
     const mainDef = resolvedSpace.modules.get("RecOnly")?.defs.get("main");
 
-    expect(mainDef?.kind).to.equal("untyped");
+    expect(mainDef?.kind).to.equal("lambda");
   });
 
-  await t.step("resolves mutual recursion in SCC", () => {
+  await t.test("resolves mutual recursion in SCC", () => {
     const moduleWithMutualRecursion = {
       module: "MutualRecModule",
       exports: ["main"],
@@ -231,10 +210,12 @@ Deno.test("TripLang Linker", async (t) => {
       },
     };
 
-    const modules = [{
-      name: "MutualRecModule",
-      object: moduleWithMutualRecursion,
-    }];
+    const modules = [
+      {
+        name: "MutualRecModule",
+        object: moduleWithMutualRecursion,
+      },
+    ];
     const programSpace = createProgramSpace(
       modules.map((m) => loadModule(m.object, m.name)),
     );
@@ -253,7 +234,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step(
+  await t.test(
     "fixpoint iteration loop exercises newDef and newHash computation",
     () => {
       // Use mutual recursion that cannot be resolved (a -> b, b -> a). This
@@ -305,71 +286,68 @@ Deno.test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.step(
-    "cross-module mutual recursion resolution outcome",
-    () => {
-      // Original cross-module scenario: ModuleA.a -> ModuleB.b, ModuleB.b -> ModuleA.a.
-      // Assert whatever the linker currently does (success or exception).
-      const moduleA = {
-        module: "ModuleA",
-        exports: ["a"],
-        imports: [{ name: "b", from: "ModuleB" }],
-        definitions: {
-          a: {
-            kind: "poly" as const,
-            name: "a",
-            term: { kind: "systemF-var" as const, name: "b" },
-          },
+  await t.test("cross-module mutual recursion resolution outcome", () => {
+    // Original cross-module scenario: ModuleA.a -> ModuleB.b, ModuleB.b -> ModuleA.a.
+    // Assert whatever the linker currently does (success or exception).
+    const moduleA = {
+      module: "ModuleA",
+      exports: ["a"],
+      imports: [{ name: "b", from: "ModuleB" }],
+      definitions: {
+        a: {
+          kind: "poly" as const,
+          name: "a",
+          term: { kind: "systemF-var" as const, name: "b" },
         },
-      };
+      },
+    };
 
-      const moduleB = {
-        module: "ModuleB",
-        exports: ["b"],
-        imports: [{ name: "a", from: "ModuleA" }],
-        definitions: {
-          b: {
-            kind: "poly" as const,
-            name: "b",
-            term: { kind: "systemF-var" as const, name: "a" },
-          },
+    const moduleB = {
+      module: "ModuleB",
+      exports: ["b"],
+      imports: [{ name: "a", from: "ModuleA" }],
+      definitions: {
+        b: {
+          kind: "poly" as const,
+          name: "b",
+          term: { kind: "systemF-var" as const, name: "a" },
         },
-      };
+      },
+    };
 
-      const modules = [
-        { name: "ModuleA", object: moduleA },
-        { name: "ModuleB", object: moduleB },
-      ];
-      const programSpace = createProgramSpace(
-        modules.map((m) => loadModule(m.object, m.name)),
-      );
+    const modules = [
+      { name: "ModuleA", object: moduleA },
+      { name: "ModuleB", object: moduleB },
+    ];
+    const programSpace = createProgramSpace(
+      modules.map((m) => loadModule(m.object, m.name)),
+    );
 
-      let caughtMessage: string | null = null;
-      try {
-        const resolved = resolveCrossModuleDependencies(programSpace);
-        const defA = resolved.modules.get("ModuleA")?.defs.get("a");
-        const defB = resolved.modules.get("ModuleB")?.defs.get("b");
-        expect(defA).to.not.be.undefined;
-        expect(defB).to.not.be.undefined;
-        expect(defA!.kind).to.equal("untyped");
-        expect(defB!.kind).to.equal("untyped");
-      } catch (error) {
-        caughtMessage = (error as Error).message;
-      } finally {
-        if (caughtMessage !== null) {
-          expect(
-            caughtMessage.includes("Circular dependency") ||
-              caughtMessage.includes("Too many iterations"),
-          ).to.equal(
-            true,
-            `cross-module mutual recursion threw with: ${caughtMessage}`,
-          );
-        }
+    let caughtMessage: string | null = null;
+    try {
+      const resolved = resolveCrossModuleDependencies(programSpace);
+      const defA = resolved.modules.get("ModuleA")?.defs.get("a");
+      const defB = resolved.modules.get("ModuleB")?.defs.get("b");
+      expect(defA).to.not.be.undefined;
+      expect(defB).to.not.be.undefined;
+      expect(defA!.kind).to.equal("lambda");
+      expect(defB!.kind).to.equal("lambda");
+    } catch (error) {
+      caughtMessage = (error as Error).message;
+    } finally {
+      if (caughtMessage !== null) {
+        expect(
+          caughtMessage.includes("Circular dependency") ||
+            caughtMessage.includes("Too many iterations"),
+        ).to.equal(
+          true,
+          `cross-module mutual recursion threw with: ${caughtMessage}`,
+        );
       }
-    },
-  );
+    }
+  });
 
-  await t.step("simple linking finds main and lowers to SKI", async () => {
+  await t.test("simple linking finds main and lowers to SKI", async () => {
     // Test with complex module that has main
     const complexContent = await compileTripFile(
       "complex.trip",
@@ -385,7 +363,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(result.length).to.be.greaterThan(0);
   });
 
-  await t.step("simple linking with complex expression", async () => {
+  await t.test("simple linking with complex expression", async () => {
     // Test with complex module
     const complexContent = await compileTripFile(
       "complex.trip",
@@ -402,7 +380,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(() => parseSKI(result)).to.not.throw();
   });
 
-  await t.step("simple linking with multiple modules", async () => {
+  await t.test("simple linking with multiple modules", async () => {
     // Test with multiple modules - use different modules to avoid ambiguous exports
     const complexContent = await compileTripFile(
       "complex.trip",
@@ -436,7 +414,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(result.length).to.be.greaterThan(0);
   });
 
-  await t.step("handles missing main function gracefully", () => {
+  await t.test("handles missing main function gracefully", () => {
     // Create a module without main
     const moduleWithoutMain = {
       module: "NoMain",
@@ -465,7 +443,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step("produces identity combinator for simple function", async () => {
+  await t.test("produces identity combinator for simple function", async () => {
     // Test with a simple identity function - use existing complex module
     const complexContent = await compileTripFile(
       "complex.trip",
@@ -481,7 +459,7 @@ Deno.test("TripLang Linker", async (t) => {
     expect(result.length).to.be.greaterThan(0);
   });
 
-  await t.step("handles verbose output correctly", async () => {
+  await t.test("handles verbose output correctly", async () => {
     // Capture console.error output
     const originalConsoleError = console.error;
     const errorMessages: string[] = [];
@@ -510,7 +488,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step(
+  await t.test(
     "verbose logs definition value when export has external refs",
     () => {
       // Single module with local data types Foo, Bar and type T = Foo -> Bar. Resolution does not
@@ -572,7 +550,7 @@ Deno.test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.step("detects duplicate exports across modules", () => {
+  await t.test("detects duplicate exports across modules", () => {
     const module1 = {
       module: "Module1",
       exports: ["main"],
@@ -617,7 +595,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step("sorts ambiguous export module names deterministically", () => {
+  await t.test("sorts ambiguous export module names deterministically", () => {
     const alpha = {
       module: "Alpha",
       exports: ["util"],
@@ -646,10 +624,13 @@ Deno.test("TripLang Linker", async (t) => {
 
     let caughtMessage: string | null = null;
     try {
-      linkModules([
-        { name: "Zeta", object: zeta },
-        { name: "Alpha", object: alpha },
-      ], false);
+      linkModules(
+        [
+          { name: "Zeta", object: zeta },
+          { name: "Alpha", object: alpha },
+        ],
+        false,
+      );
       expect.fail("Should have thrown an error for duplicate exports");
     } catch (error) {
       caughtMessage = (error as Error).message;
@@ -660,51 +641,45 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step(
-    "detects duplicate local definitions within a module",
-    () => {
-      // Test the duplicate definition validation by creating a module with multiple definitions
-      // and then manually adding a duplicate to the defs Map after loadModule
-      const moduleWithMultipleDefs = {
-        module: "DuplicateModule",
-        exports: ["main", "helper"],
-        imports: [],
-        definitions: {
-          main: {
-            kind: "combinator" as const,
-            name: "main",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
-          },
-          helper: {
-            kind: "combinator" as const,
-            name: "helper",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.K },
-          },
+  await t.test("detects duplicate local definitions within a module", () => {
+    // Test the duplicate definition validation by creating a module with multiple definitions
+    // and then manually adding a duplicate to the defs Map after loadModule
+    const moduleWithMultipleDefs = {
+      module: "DuplicateModule",
+      exports: ["main", "helper"],
+      imports: [],
+      definitions: {
+        main: {
+          kind: "combinator" as const,
+          name: "main",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
         },
-      };
+        helper: {
+          kind: "combinator" as const,
+          name: "helper",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.K },
+        },
+      },
+    };
 
-      const loadedModule = loadModule(
-        moduleWithMultipleDefs,
-        "DuplicateModule",
-      );
+    const loadedModule = loadModule(moduleWithMultipleDefs, "DuplicateModule");
 
-      // The duplicate detection logic iterates over module.defs entries
-      // Since Maps can't have duplicate keys, we need to test this differently
-      // Let's test that the validation logic works by ensuring it doesn't throw
-      // when there are no duplicates
+    // The duplicate detection logic iterates over module.defs entries
+    // Since Maps can't have duplicate keys, we need to test this differently
+    // Let's test that the validation logic works by ensuring it doesn't throw
+    // when there are no duplicates
 
-      expect(loadedModule.defs.size).to.equal(2);
-      expect(loadedModule.defs.has("main")).to.be.true;
-      expect(loadedModule.defs.has("helper")).to.be.true;
+    expect(loadedModule.defs.size).to.equal(2);
+    expect(loadedModule.defs.has("main")).to.be.true;
+    expect(loadedModule.defs.has("helper")).to.be.true;
 
-      // The validation should pass without errors
-      const programSpace = createProgramSpace([loadedModule]);
-      expect(programSpace.modules.size).to.equal(1);
-      expect(programSpace.modules.get("DuplicateModule")).to.not.be.undefined;
-    },
-  );
+    // The validation should pass without errors
+    const programSpace = createProgramSpace([loadedModule]);
+    expect(programSpace.modules.size).to.equal(1);
+    expect(programSpace.modules.get("DuplicateModule")).to.not.be.undefined;
+  });
 
-  await t.step("detects missing imported modules", () => {
+  await t.test("detects missing imported modules", () => {
     const moduleWithMissingImport = {
       module: "ImportModule",
       exports: ["main"],
@@ -730,7 +705,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step("detects imports of non-exported symbols", () => {
+  await t.test("detects imports of non-exported symbols", () => {
     const module1 = {
       module: "Module1",
       exports: ["exported"],
@@ -781,7 +756,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step("handles multiple main functions correctly", () => {
+  await t.test("handles multiple main functions correctly", () => {
     const module1 = {
       module: "Module1",
       exports: ["main"],
@@ -823,7 +798,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step("term substitution does not rename type binders", () => {
+  await t.test("term substitution does not rename type binders", () => {
     // Test that term substitution doesn't rename type binders in systemF-type-abs and forall
     // This tests the fix for cross-namespace capture avoidance
 
@@ -880,7 +855,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step("type substitution correctly renames type binders", () => {
+  await t.test("type substitution correctly renames type binders", () => {
     // Test that type substitution DOES rename type binders when needed
     // This ensures our fix only affects term substitution, not type substitution
 
@@ -916,10 +891,12 @@ Deno.test("TripLang Linker", async (t) => {
       },
     };
 
-    const modules = [{
-      name: "TypeSubModule",
-      object: moduleWithTypeSubstitution,
-    }];
+    const modules = [
+      {
+        name: "TypeSubModule",
+        object: moduleWithTypeSubstitution,
+      },
+    ];
 
     let caughtMessage: string | null = null;
     try {
@@ -933,14 +910,15 @@ Deno.test("TripLang Linker", async (t) => {
       caughtMessage = (error as Error).message;
     } finally {
       expect(caughtMessage).to.not.be.null;
-      expect(caughtMessage!).to.satisfy((m: string) =>
-        m.includes("Symbol 'X' is not defined") ||
-        m.includes("Symbol 'g' is not defined")
+      expect(caughtMessage!).to.satisfy(
+        (m: string) =>
+          m.includes("Symbol 'X' is not defined") ||
+          m.includes("Symbol 'g' is not defined"),
       );
     }
   });
 
-  await t.step("local mutual recursion resolves in one SCC", () => {
+  await t.test("local mutual recursion resolves in one SCC", () => {
     // Test that local mutual recursion (f = g; g = f) resolves in one SCC to a fixpoint
 
     const moduleWithMutualRecursion = {
@@ -969,10 +947,12 @@ Deno.test("TripLang Linker", async (t) => {
       },
     };
 
-    const modules = [{
-      name: "MutualRecModule",
-      object: moduleWithMutualRecursion,
-    }];
+    const modules = [
+      {
+        name: "MutualRecModule",
+        object: moduleWithMutualRecursion,
+      },
+    ];
 
     let caughtMessage: string | null = null;
     try {
@@ -990,72 +970,69 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step(
-    "cross-module ambiguity error provides clear fix hints",
-    () => {
-      // Test that ambiguous exports provide helpful error messages with fix hints
+  await t.test("cross-module ambiguity error provides clear fix hints", () => {
+    // Test that ambiguous exports provide helpful error messages with fix hints
 
-      const module1 = {
-        module: "Utils1",
-        exports: ["util"],
-        imports: [],
-        definitions: {
-          util: {
-            kind: "combinator" as const,
-            name: "util",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
-          },
+    const module1 = {
+      module: "Utils1",
+      exports: ["util"],
+      imports: [],
+      definitions: {
+        util: {
+          kind: "combinator" as const,
+          name: "util",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
         },
-      };
+      },
+    };
 
-      const module2 = {
-        module: "Utils2",
-        exports: ["util"],
-        imports: [],
-        definitions: {
-          util: {
-            kind: "combinator" as const,
-            name: "util",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.K },
-          },
+    const module2 = {
+      module: "Utils2",
+      exports: ["util"],
+      imports: [],
+      definitions: {
+        util: {
+          kind: "combinator" as const,
+          name: "util",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.K },
         },
-      };
+      },
+    };
 
-      const module3 = {
-        module: "Consumer",
-        exports: ["main"],
-        imports: [{ name: "util", from: "Utils1" }], // Import without qualification
-        definitions: {
-          main: {
-            kind: "combinator" as const,
-            name: "main",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
-          },
+    const module3 = {
+      module: "Consumer",
+      exports: ["main"],
+      imports: [{ name: "util", from: "Utils1" }], // Import without qualification
+      definitions: {
+        main: {
+          kind: "combinator" as const,
+          name: "main",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
         },
-      };
+      },
+    };
 
-      const modules = [
-        { name: "Utils1", object: module1 },
-        { name: "Utils2", object: module2 },
-        { name: "Consumer", object: module3 },
-      ];
+    const modules = [
+      { name: "Utils1", object: module1 },
+      { name: "Utils2", object: module2 },
+      { name: "Consumer", object: module3 },
+    ];
 
-      let caughtMessage: string | null = null;
-      try {
-        linkModules(modules, false);
-        expect.fail("Should have thrown an error for ambiguous exports");
-      } catch (error) {
-        caughtMessage = (error as Error).message;
-      } finally {
-        expect(caughtMessage).to.not.be.null;
-        expect(caughtMessage!).to.include("Ambiguous export 'util'");
-        expect(caughtMessage!).to.include("Utils1, Utils2");
-        expect(caughtMessage!).to.include("Use qualified imports");
-      }
-    },
-  );
+    let caughtMessage: string | null = null;
+    try {
+      linkModules(modules, false);
+      expect.fail("Should have thrown an error for ambiguous exports");
+    } catch (error) {
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.include("Ambiguous export 'util'");
+      expect(caughtMessage!).to.include("Utils1, Utils2");
+      expect(caughtMessage!).to.include("Use qualified imports");
+    }
+  });
 
-  await t.step("unresolved symbols show term vs type distinction", () => {
+  await t.test("unresolved symbols show term vs type distinction", () => {
     // Test that error messages clearly distinguish between term and type symbols
 
     const moduleWithUnresolved = {
@@ -1075,10 +1052,12 @@ Deno.test("TripLang Linker", async (t) => {
       },
     };
 
-    const modules = [{
-      name: "UnresolvedModule",
-      object: moduleWithUnresolved,
-    }];
+    const modules = [
+      {
+        name: "UnresolvedModule",
+        object: moduleWithUnresolved,
+      },
+    ];
 
     try {
       linkModules(modules, false);
@@ -1090,7 +1069,7 @@ Deno.test("TripLang Linker", async (t) => {
     }
   });
 
-  await t.step(
+  await t.test(
     "deduplication prevents quadratic churn in iterative resolution",
     () => {
       // Test that the Set-based deduplication prevents quadratic behavior
@@ -1137,9 +1116,9 @@ Deno.test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.step("lowerToSKI matches bracketLambda output", () => {
+  await t.test("lowerToSKI matches bracketLambda output", () => {
     const term: _TripLangTerm = {
-      kind: "untyped",
+      kind: "lambda",
       name: "id",
       term: mkUntypedAbs("x", mkVar("x")),
     };
@@ -1148,61 +1127,60 @@ Deno.test("TripLang Linker", async (t) => {
     expect(lowerResult).to.equal(directResult);
   });
 
-  await t.step(
-    "type edges use programSpace.types.has() for robustness",
-    () => {
-      // Test that type edges correctly check programSpace.types.has() rather than module.defs.has()
-      // This prevents type edges from pointing to terms when names are overloaded
+  await t.test("type edges use programSpace.types.has() for robustness", () => {
+    // Test that type edges correctly check programSpace.types.has() rather than module.defs.has()
+    // This prevents type edges from pointing to terms when names are overloaded
 
-      const moduleWithOverloadedNames = {
-        module: "OverloadedModule",
-        exports: ["T", "main"],
-        imports: [],
-        definitions: {
-          // T as a type
-          T: {
-            kind: "type" as const,
-            name: "T",
-            type: { kind: "type-var" as const, typeName: "X" },
-          },
-          // T as a term (same name, different kind)
-          T_term: {
-            kind: "combinator" as const,
-            name: "T",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
-          },
-          main: {
-            kind: "combinator" as const,
-            name: "main",
-            term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
-          },
+    const moduleWithOverloadedNames = {
+      module: "OverloadedModule",
+      exports: ["T", "main"],
+      imports: [],
+      definitions: {
+        // T as a type
+        T: {
+          kind: "type" as const,
+          name: "T",
+          type: { kind: "type-var" as const, typeName: "X" },
         },
-      };
+        // T as a term (same name, different kind)
+        T_term: {
+          kind: "combinator" as const,
+          name: "T",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+        },
+        main: {
+          kind: "combinator" as const,
+          name: "main",
+          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
+        },
+      },
+    };
 
-      const modules = [{
+    const modules = [
+      {
         name: "OverloadedModule",
         object: moduleWithOverloadedNames,
-      }];
+      },
+    ];
 
-      let caughtMessage: string | null = null;
-      try {
-        // This should work correctly - type references should go to the type definition
-        // and term references should go to the term definition
-        const result = linkModules(modules, false);
-        expect(result).to.be.a("string");
-        expect(result.length).to.be.greaterThan(0);
-      } catch (error) {
-        // If it fails due to unresolved type 'X', that's expected since we're testing
-        // that type edges correctly use programSpace.types.has()
-        caughtMessage = (error as Error).message;
-      } finally {
-        expect(caughtMessage).to.not.be.null;
-        expect(caughtMessage!).to.include("Symbol 'X' is not defined");
-      }
-    },
-  );
+    let caughtMessage: string | null = null;
+    try {
+      // This should work correctly - type references should go to the type definition
+      // and term references should go to the term definition
+      const result = linkModules(modules, false);
+      expect(result).to.be.a("string");
+      expect(result.length).to.be.greaterThan(0);
+    } catch (error) {
+      // If it fails due to unresolved type 'X', that's expected since we're testing
+      // that type edges correctly use programSpace.types.has()
+      caughtMessage = (error as Error).message;
+    } finally {
+      expect(caughtMessage).to.not.be.null;
+      expect(caughtMessage!).to.include("Symbol 'X' is not defined");
+    }
+  });
 
-  await t.step(
+  await t.test(
     "createProgramSpace: export listed but definition missing",
     () => {
       // This hits inferImportKind()'s failure path via buildEnvironments():
@@ -1241,7 +1219,7 @@ Deno.test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "resolveCrossModuleDependencies: getModuleInfo missing module",
     () => {
       // Create a valid program space, then inject a bogus qualified name into the
@@ -1276,7 +1254,7 @@ Deno.test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.step("findMainFunction: exported main is a type (error)", () => {
+  await t.test("findMainFunction: exported main is a type (error)", () => {
     const mod = {
       module: "TypeMain",
       exports: ["main"],
@@ -1296,7 +1274,7 @@ Deno.test("TripLang Linker", async (t) => {
     );
   });
 
-  await t.step(
+  await t.test(
     "findMainFunction: multiple candidates when bypassing export validation",
     () => {
       // validateExports prevents this in linkModules(), so call findMainFunction directly
@@ -1309,11 +1287,14 @@ Deno.test("TripLang Linker", async (t) => {
               name: "A",
               object: {} as never,
               defs: new Map([
-                ["main", {
-                  kind: "combinator",
-                  name: "main",
-                  term: { kind: "terminal", sym: SKITerminalSymbol.I },
-                }],
+                [
+                  "main",
+                  {
+                    kind: "combinator",
+                    name: "main",
+                    term: { kind: "terminal", sym: SKITerminalSymbol.I },
+                  },
+                ],
               ]),
               exports: new Set(["main"]),
               imports: [],
@@ -1325,11 +1306,14 @@ Deno.test("TripLang Linker", async (t) => {
               name: "B",
               object: {} as never,
               defs: new Map([
-                ["main", {
-                  kind: "combinator",
-                  name: "main",
-                  term: { kind: "terminal", sym: SKITerminalSymbol.K },
-                }],
+                [
+                  "main",
+                  {
+                    kind: "combinator",
+                    name: "main",
+                    term: { kind: "terminal", sym: SKITerminalSymbol.K },
+                  },
+                ],
               ]),
               exports: new Set(["main"]),
               imports: [],
@@ -1348,7 +1332,7 @@ Deno.test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "term resolution: imported ref present in env but missing in global index",
     () => {
       // This drives the 'pendingRefs' path so replacements.size=0 and we converge with
@@ -1395,11 +1379,11 @@ Deno.test("TripLang Linker", async (t) => {
         | _TripLangTerm
         | undefined;
 
-      expect(main?.kind).to.equal("untyped"); // pre-lowered
-      if (main?.kind !== "untyped") {
-        throw new Error(`Expected kind 'untyped', got '${main?.kind}'`);
+      expect(main?.kind).to.equal("lambda"); // pre-lowered
+      if (main?.kind !== "lambda") {
+        throw new Error(`Expected kind 'lambda', got '${main?.kind}'`);
       }
-      // Narrowed to UntypedDefinition
+      // Narrowed to LambdaDefinition
       const term = main.term;
 
       // With correct topological order, x is resolved even if we delete the initial global entry

@@ -28,19 +28,14 @@ export function elaborateTerms(
   };
 }
 
-function elaborateTerm(
-  term: TripLangTerm,
-  syms: SymbolTable,
-): TripLangTerm {
+function elaborateTerm(term: TripLangTerm, syms: SymbolTable): TripLangTerm {
   switch (term.kind) {
     case "poly":
       return {
         ...term,
         term: elaborateSystemF(term.term, syms),
       };
-    case "typed":
-      return term;
-    case "untyped":
+    case "lambda":
       return term;
     case "combinator":
       return term;
@@ -216,8 +211,8 @@ function elaborateMatch(
     seenConstructors.add(arm.constructorName);
   }
 
-  const missing = Array.from(expectedConstructors).filter((ctor) =>
-    !seenConstructors.has(ctor)
+  const missing = Array.from(expectedConstructors).filter(
+    (ctor) => !seenConstructors.has(ctor),
   );
   if (missing.length > 0) {
     throw new CompilationError(

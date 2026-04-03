@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import {
   defaultWorkerCount,
   PROJECT_ROOT,
@@ -39,7 +42,7 @@ type BatchBrokerConfig = {
 };
 
 type BrokerRequest =
-  | { op: "signal"; signal: Deno.Signal }
+  | { op: "signal"; signal: string }
   | { op: "rawRequest"; line: string }
   | { op: "reduceDag"; dag: string }
   | { op: "reduceIo"; dag: string; stdinHex: string }
@@ -55,7 +58,7 @@ type BrokerResponse =
 
 export interface ThanatosSession {
   start(workers?: number, env?: Record<string, string>): void;
-  signal(signal: Deno.Signal): Promise<void>;
+  signal(signal: string): Promise<void>;
   rawRequest(line: string): Promise<string>;
   reduceDag(dag: string): Promise<string>;
   reduceIo(
@@ -71,7 +74,8 @@ export interface ThanatosSession {
 }
 
 function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0"))
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
 
@@ -85,9 +89,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 class DirectThanatosSession implements ThanatosSession {
-  private child: Deno.ChildProcess | null = null;
-  private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  private child: any = null;
   private lineBuffer = new Uint8Array(0);
   private pending: Promise<void> = Promise.resolve();
   private closed = false;
@@ -96,53 +98,68 @@ class DirectThanatosSession implements ThanatosSession {
     if (this.child != null) return;
     if (!thanatosAvailable()) throw new Error("thanatos binary not found");
     const workerCount = workers ?? defaultWorkerCount();
-    this.child = new Deno.Command(THANATOS_BIN, {
-      args: [String(workerCount)],
+
+    this.child = spawn(THANATOS_BIN, [String(workerCount)], {
       cwd: PROJECT_ROOT,
-      env,
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "inherit",
-    }).spawn();
-    this.writer = this.child.stdin.getWriter();
-    this.reader = this.child.stdout.getReader();
+      env: { ...process.env, ...env },
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+
+    this.child.stdout.on("data", (data: Uint8Array) => {
+      const merged = new Uint8Array(this.lineBuffer.length + data.length);
+      merged.set(this.lineBuffer);
+      merged.set(data, this.lineBuffer.length);
+      this.lineBuffer = merged;
+    });
+
+    this.child.on("error", (err: Error) => {
+      console.error("thanatos child process error:", err);
+    });
   }
 
-  signal(signal: Deno.Signal): Promise<void> {
+  async signal(signal: string): Promise<void> {
     if (this.child == null) {
       throw new Error("ThanatosSession not started");
     }
     if (this.closed) throw new Error("ThanatosSession closed");
-    this.child.kill(signal);
+    this.child.kill(signal as any);
     return Promise.resolve();
   }
 
   private async request(line: string): Promise<string> {
-    if (this.writer == null || this.reader == null) {
+    if (
+      this.child == null ||
+      this.child.stdin == null ||
+      this.child.stdout == null
+    ) {
       throw new Error("ThanatosSession not started");
     }
     if (this.closed) throw new Error("ThanatosSession closed");
 
-    const encoder = new TextEncoder();
-    await this.writer.write(encoder.encode(line + "\n"));
+    this.child.stdin.write(line + "\n");
 
     const decoder = new TextDecoder();
     while (true) {
       const newlineIndex = this.lineBuffer.indexOf(0x0a);
       if (newlineIndex >= 0) {
-        const response = decoder.decode(
-          this.lineBuffer.subarray(0, newlineIndex),
-        ).replace(/\r$/, "");
+        const response = decoder
+          .decode(this.lineBuffer.subarray(0, newlineIndex))
+          .replace(/\r$/, "");
         this.lineBuffer = this.lineBuffer.subarray(newlineIndex + 1);
         return response;
       }
-      const { done, value } = await this.reader.read();
-      if (done) throw new Error("thanatos daemon stdout closed");
-      if (value && value.length > 0) {
-        const merged = new Uint8Array(this.lineBuffer.length + value.length);
-        merged.set(this.lineBuffer);
-        merged.set(value, this.lineBuffer.length);
-        this.lineBuffer = merged;
+
+      // Wait for more data
+      await new Promise((resolve) => {
+        const onData = () => {
+          this.child.stdout.removeListener("data", onData);
+          resolve(null);
+        };
+        this.child.stdout.on("data", onData);
+      });
+
+      if (this.child.killed || this.child.exitCode !== null) {
+        throw new Error("thanatos daemon exited");
       }
     }
   }
@@ -244,33 +261,17 @@ class DirectThanatosSession implements ThanatosSession {
     if (this.closed) return;
     const child = this.child;
     try {
-      if (this.writer != null && this.reader != null) {
+      if (this.child != null && this.child.stdin != null) {
         await this.serialRequest("QUIT");
       }
     } catch {
       // daemon may have exited; ignore
     } finally {
       this.closed = true;
-      try {
-        await this.writer?.close();
-      } catch {
-        // ignore
-      }
-      try {
-        await this.reader?.cancel();
-      } catch {
-        // ignore
+      if (child != null) {
+        child.kill();
       }
       this.child = null;
-      this.writer = null;
-      this.reader = null;
-      if (child != null) {
-        await child.status.catch(() => ({
-          success: false,
-          code: 1,
-          signal: 0,
-        }));
-      }
     }
   }
 }
@@ -287,7 +288,7 @@ class BrokerThanatosSession implements ThanatosSession {
     // The batch runner owns the broker-backed Thanatos session.
   }
 
-  async signal(signal: Deno.Signal): Promise<void> {
+  async signal(signal: string): Promise<void> {
     this.ensureOpen();
     await this.request<void>({ op: "signal", signal });
   }
@@ -308,12 +309,26 @@ class BrokerThanatosSession implements ThanatosSession {
       },
       body: JSON.stringify(payload),
     });
+    let body: BrokerResponse | null = null;
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      try {
+        body = (await response.json()) as BrokerResponse;
+      } catch {
+        body = null;
+      }
+    }
     if (!response.ok) {
+      if (body !== null && !body.ok) {
+        throw new Error(body.error);
+      }
       throw new Error(
         `thanatos broker request failed with status ${response.status}`,
       );
     }
-    const body = await response.json() as BrokerResponse;
+    if (body === null) {
+      throw new Error("thanatos broker returned invalid JSON");
+    }
     if (!body.ok) {
       throw new Error(body.error);
     }
@@ -394,19 +409,9 @@ async function withTailLock<T>(
   }
 }
 
-function jsonResponse(body: BrokerResponse, init: ResponseInit = {}): Response {
-  return new Response(JSON.stringify(body), {
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
-}
-
 function brokerConfigFromEnv(): BatchBrokerConfig | null {
-  if (typeof Deno === "undefined") {
-    return null;
-  }
-  const url = Deno.env.get(THANATOS_BATCH_BROKER_URL_ENV);
-  const token = Deno.env.get(THANATOS_BATCH_BROKER_TOKEN_ENV);
+  const url = process.env[THANATOS_BATCH_BROKER_URL_ENV];
+  const token = process.env[THANATOS_BATCH_BROKER_TOKEN_ENV];
   if (!url || !token) {
     return null;
   }
@@ -420,20 +425,28 @@ function resolveBrokerConfig(
 }
 
 async function handleBrokerRequest(
-  request: Request,
+  req: any,
+  res: any,
   session: DirectThanatosSession,
   token: string,
   lock: TailLock,
-): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
+): Promise<void> {
+  if (req.method !== "POST") {
+    res.writeHead(405).end("Method Not Allowed");
+    return;
   }
-  if (request.headers.get(THANATOS_BATCH_BROKER_TOKEN_HEADER) !== token) {
-    return new Response("Forbidden", { status: 403 });
+  if (req.headers[THANATOS_BATCH_BROKER_TOKEN_HEADER.toLowerCase()] !== token) {
+    res.writeHead(403).end("Forbidden");
+    return;
+  }
+
+  let body = "";
+  for await (const chunk of req) {
+    body += chunk;
   }
 
   try {
-    const payload = await request.json() as BrokerRequest;
+    const payload = JSON.parse(body) as BrokerRequest;
     const response = await withTailLock(
       lock,
       async (): Promise<BrokerResponse> => {
@@ -479,13 +492,17 @@ async function handleBrokerRequest(
         }
       },
     );
-    return jsonResponse(response);
+    res
+      .writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify(response));
   } catch (error) {
     console.error("[thanatos harness] broker request failed", error);
-    return jsonResponse({
-      ok: false,
-      error: THANATOS_BATCH_BROKER_INTERNAL_ERROR,
-    });
+    res.writeHead(500, { "content-type": "application/json" }).end(
+      JSON.stringify({
+        ok: false,
+        error: THANATOS_BATCH_BROKER_INTERNAL_ERROR,
+      }),
+    );
   }
 }
 
@@ -514,48 +531,44 @@ export function startThanatosBatchBroker(
   session.start(options.workers ?? defaultWorkerCount(), options.env);
 
   const lock: TailLock = { tail: Promise.resolve() };
-  const token = crypto.randomUUID();
-  const server = Deno.serve(
-    {
-      hostname: "127.0.0.1",
-      port: 0,
-      onListen: () => {},
-    },
-    (request) => handleBrokerRequest(request, session, token, lock),
+  const token = randomUUID();
+  const server = createServer((req, res) =>
+    handleBrokerRequest(req, res, session, token, lock),
   );
-  const addr = server.addr as Deno.NetAddr;
-  const brokerUrl = `http://127.0.0.1:${addr.port}`;
 
-  return Promise.resolve({
-    allowNet: `127.0.0.1:${addr.port}`,
-    env: {
-      ...(options.env ?? {}),
-      [THANATOS_BATCH_BROKER_URL_ENV]: brokerUrl,
-      [THANATOS_BATCH_BROKER_TOKEN_ENV]: token,
-    },
-    close: async () => {
-      await server.shutdown();
-      await server.finished.catch(() => {});
-      await session.close().catch(() => {});
-    },
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address() as any;
+      const brokerUrl = `http://127.0.0.1:${addr.port}`;
+
+      resolve({
+        allowNet: `127.0.0.1:${addr.port}`,
+        env: {
+          ...(options.env ?? {}),
+          [THANATOS_BATCH_BROKER_URL_ENV]: brokerUrl,
+          [THANATOS_BATCH_BROKER_TOKEN_ENV]: token,
+        },
+        close: async () => {
+          await new Promise((r) => server.close(() => r(null)));
+          await session.close().catch(() => {});
+        },
+      });
+    });
   });
 }
 
 const THANATOS_SESSION_REGISTRY_KEY = "__thanatosSessionRegistry";
 
 declare global {
-  interface GlobalThis {
-    [THANATOS_SESSION_REGISTRY_KEY]?: Map<string, SharedSessionState>;
-  }
+  var __thanatosSessionRegistry: Map<string, SharedSessionState> | undefined;
 }
 
 function getSessionRegistry(): Map<string, SharedSessionState> {
-  const existing = (globalThis as GlobalThis)[THANATOS_SESSION_REGISTRY_KEY];
-  if (existing) {
-    return existing;
+  if (globalThis.__thanatosSessionRegistry) {
+    return globalThis.__thanatosSessionRegistry;
   }
   const created = new Map<string, SharedSessionState>();
-  (globalThis as GlobalThis)[THANATOS_SESSION_REGISTRY_KEY] = created;
+  globalThis.__thanatosSessionRegistry = created;
   return created;
 }
 
@@ -568,7 +581,7 @@ function sessionRegistryKey(options: BatchThanatosSessionOptions = {}): string {
     });
   }
   const envEntries = Object.entries(options.env ?? {}).sort(([left], [right]) =>
-    left.localeCompare(right)
+    left.localeCompare(right),
   );
   return JSON.stringify({
     key: options.key ?? "",
@@ -633,34 +646,24 @@ let signalListenersRegistered = false;
 
 function ensureSignalListeners(): void {
   if (signalListenersRegistered) return;
-  if (
-    typeof Deno !== "undefined" &&
-    typeof Deno.addSignalListener === "function"
-  ) {
-    Deno.addSignalListener("SIGINT", onProcessSignal);
-    Deno.addSignalListener("SIGTERM", onProcessSignal);
-    signalListenersRegistered = true;
-  }
+  process.on("SIGINT", onProcessSignal);
+  process.on("SIGTERM", onProcessSignal);
+  signalListenersRegistered = true;
 }
 
 function removeSignalListeners(): void {
   if (!signalListenersRegistered) return;
-  if (
-    typeof Deno !== "undefined" &&
-    typeof Deno.removeSignalListener === "function"
-  ) {
-    try {
-      Deno.removeSignalListener("SIGINT", onProcessSignal);
-    } catch {
-      /* ignore */
-    }
-    try {
-      Deno.removeSignalListener("SIGTERM", onProcessSignal);
-    } catch {
-      /* ignore */
-    }
-    signalListenersRegistered = false;
+  try {
+    process.off("SIGINT", onProcessSignal);
+  } catch {
+    /* ignore */
   }
+  try {
+    process.off("SIGTERM", onProcessSignal);
+  } catch {
+    /* ignore */
+  }
+  signalListenersRegistered = false;
 }
 
 export function getThanatosSession(

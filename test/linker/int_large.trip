@@ -1,0 +1,5 @@
+module Large
+
+export main
+
+poly main = #X => \x: X => \y: X => \z: X => \w: X => \v: X => \u: X => \t: X => \s: X => \r: X => \q: X => x

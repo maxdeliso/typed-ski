@@ -27,8 +27,14 @@ export function quatConj(q: Quat): Quat {
 }
 
 export function quatMul(a: Quat, b: Quat): Quat {
-  const ax = a[0], ay = a[1], az = a[2], aw = a[3];
-  const bx = b[0], by = b[1], bz = b[2], bw = b[3];
+  const ax = a[0],
+    ay = a[1],
+    az = a[2],
+    aw = a[3];
+  const bx = b[0],
+    by = b[1],
+    bz = b[2],
+    bw = b[3];
   return [
     aw * bx + ax * bw + ay * bz - az * by,
     aw * by - ax * bz + ay * bw + az * bx,
@@ -99,10 +105,22 @@ export function getGeodesicPoint(A: Vec3, B: Vec3, t: number): Vec3 {
 
 // Simple unrolled mat mul
 export function mat4Mul(out: Float32Array, a: Float32Array, b: Float32Array) {
-  const a00 = a[0]!, a01 = a[1]!, a02 = a[2]!, a03 = a[3]!;
-  const a10 = a[4]!, a11 = a[5]!, a12 = a[6]!, a13 = a[7]!;
-  const a20 = a[8]!, a21 = a[9]!, a22 = a[10]!, a23 = a[11]!;
-  const a30 = a[12]!, a31 = a[13]!, a32 = a[14]!, a33 = a[15]!;
+  const a00 = a[0]!,
+    a01 = a[1]!,
+    a02 = a[2]!,
+    a03 = a[3]!;
+  const a10 = a[4]!,
+    a11 = a[5]!,
+    a12 = a[6]!,
+    a13 = a[7]!;
+  const a20 = a[8]!,
+    a21 = a[9]!,
+    a22 = a[10]!,
+    a23 = a[11]!;
+  const a30 = a[12]!,
+    a31 = a[13]!,
+    a32 = a[14]!,
+    a33 = a[15]!;
   let b0, b1, b2, b3;
 
   for (let i = 0; i < 4; i++) {
@@ -132,7 +150,7 @@ export function mat4Perspective(
   out[5] = f;
   out[10] = (far + near) * nf;
   out[11] = -1;
-  out[14] = (2 * far * near) * nf;
+  out[14] = 2 * far * near * nf;
   return out;
 }
 

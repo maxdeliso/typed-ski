@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { hrtime } from "node:process";
 import randomSeed from "random-seed";
 
@@ -5,11 +6,11 @@ import type { SKIExpression } from "../lib/ski/expression.ts";
 import { arenaEvaluator } from "../lib/evaluator/skiEvaluator.ts";
 import { randExpression } from "../lib/ski/generator.ts";
 
-Deno.test("evaluator performance", async (t) => {
+test("evaluator performance", async (t) => {
   const S = 128; // symbol count in each generated expression
   const N = 2048; // number of reductions to perform
 
-  await t.step(
+  await t.test(
     "is estimated by measuring the rate of reductions (excluding tree generation)",
     () => {
       const seed = hrtime.bigint().toString();

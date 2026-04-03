@@ -59,8 +59,11 @@ export const typedTermsLitEq = (a: TypedLambda, b: TypedLambda): boolean => {
     a.kind === "typed-lambda-abstraction" &&
     b.kind === "typed-lambda-abstraction"
   ) {
-    return typesLitEq(a.ty, b.ty) && a.varName === b.varName &&
-      typedTermsLitEq(a.body, b.body);
+    return (
+      typesLitEq(a.ty, b.ty) &&
+      a.varName === b.varName &&
+      typedTermsLitEq(a.body, b.body)
+    );
   } else if (a.kind === "non-terminal" && b.kind === "non-terminal") {
     return typedTermsLitEq(a.lft, b.lft) && typedTermsLitEq(a.rgt, b.rgt);
   } else {

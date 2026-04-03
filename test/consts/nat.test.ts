@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 import {
   makeUntypedBinNumeral,
   makeUntypedChurchNumeral,
@@ -6,8 +7,8 @@ import {
 } from "../../lib/consts/nat.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 
-Deno.test("nat constants utilities - coverage", async (t) => {
-  await t.step("makeUntypedChurchNumeral edge cases", () => {
+test("nat constants utilities - coverage", async (t) => {
+  await t.test("makeUntypedChurchNumeral edge cases", () => {
     expect(() => makeUntypedChurchNumeral(-1n)).to.throw(
       RangeError,
       "Nat literals must be non-negative",
@@ -24,7 +25,7 @@ Deno.test("nat constants utilities - coverage", async (t) => {
     expect(church2.kind).to.equal("non-terminal");
   });
 
-  await t.step("makeUntypedBinNumeral edge cases", () => {
+  await t.test("makeUntypedBinNumeral edge cases", () => {
     expect(() => makeUntypedBinNumeral(-1n)).to.throw(
       RangeError,
       "Nat literals must be non-negative",
@@ -40,7 +41,7 @@ Deno.test("nat constants utilities - coverage", async (t) => {
     expect(bin2.kind).to.equal("non-terminal");
   });
 
-  await t.step("terminalToLambda unknown terminal", () => {
+  await t.test("terminalToLambda unknown terminal", () => {
     // SPrime is not handled by terminalToLambda
     const expr = { kind: "terminal" as const, sym: SKITerminalSymbol.SPrime };
     expect(() => skiToUntyped(expr)).to.throw("Unknown SKI terminal: P");

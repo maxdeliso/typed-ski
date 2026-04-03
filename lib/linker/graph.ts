@@ -22,15 +22,15 @@ function sortedNodes<Node>(values: Iterable<Node>): Node[] {
 
 type TarjanWorkFrame<Node> =
   | {
-    node: Node;
-    phase: "enter";
-  }
+      node: Node;
+      phase: "enter";
+    }
   | {
-    node: Node;
-    phase: "process";
-    deps: Node[];
-    depIndex: number;
-  };
+      node: Node;
+      phase: "process";
+      deps: Node[];
+      depIndex: number;
+    };
 
 /**
  * Tarjan's algorithm for finding strongly connected components (iterative).
@@ -106,7 +106,8 @@ export function tarjanSCC<Node>(graph: DirectedGraph<Node>): Node[][] {
         const nodeLow = lowlink.get(work.node);
         const nodeIndex = index.get(work.node);
         if (
-          nodeLow !== undefined && nodeIndex !== undefined &&
+          nodeLow !== undefined &&
+          nodeIndex !== undefined &&
           nodeLow === nodeIndex
         ) {
           const scc: Node[] = [];

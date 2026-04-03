@@ -75,9 +75,8 @@ export function parseAtomicTypedLambda(
     const stateAfterColon = matchCh(stateAfterVar, COLON);
     const [typeLit, ty, stateAfterType] = parseArrowType(stateAfterColon);
     const stateAfterArrow = matchFatArrow(stateAfterType);
-    const [bodyLit, bodyTerm, stateAfterBody] = parseTypedLambdaInternal(
-      stateAfterArrow,
-    );
+    const [bodyLit, bodyTerm, stateAfterBody] =
+      parseTypedLambdaInternal(stateAfterArrow);
     return [
       `${BACKSLASH}${varLit}${COLON}${typeLit}${FAT_ARROW}${bodyLit}`,
       mkTypedAbs(varLit, ty, bodyTerm),
@@ -86,9 +85,8 @@ export function parseAtomicTypedLambda(
   } else if (peeked === LEFT_PAREN) {
     // Parse a parenthesized term.
     const stateAfterLP = matchLP(s);
-    const [innerLit, innerTerm, stateAfterInner] = parseTypedLambdaInternal(
-      stateAfterLP,
-    );
+    const [innerLit, innerTerm, stateAfterInner] =
+      parseTypedLambdaInternal(stateAfterLP);
     const stateAfterRP = matchRP(stateAfterInner);
     return [`${LEFT_PAREN}${innerLit}${RIGHT_PAREN}`, innerTerm, stateAfterRP];
   } else if (isDigit(peeked)) {
@@ -140,18 +138,22 @@ export function unparseTypedLambda(expr: TypedLambda): string {
       return expr.name;
     }
     case "typed-lambda-abstraction": {
-      return BACKSLASH +
+      return (
+        BACKSLASH +
         expr.varName +
         COLON +
         unparseType(expr.ty) +
         FAT_ARROW +
-        unparseTypedLambda(expr.body);
+        unparseTypedLambda(expr.body)
+      );
     }
     case "non-terminal": {
-      return LEFT_PAREN +
+      return (
+        LEFT_PAREN +
         unparseTypedLambda(expr.lft) +
         unparseTypedLambda(expr.rgt) +
-        RIGHT_PAREN;
+        RIGHT_PAREN
+      );
     }
     default:
       throw new Error("Unknown term kind");

@@ -1,4 +1,5 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import { assert } from "../../util/assertions.ts";
 import {
   alphaRenameTypeBinder,
   freeTermVars,
@@ -17,8 +18,8 @@ import {
 import { mkSystemFApp } from "../../util/ast.ts";
 import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";
 
-Deno.test("substitute", async (t) => {
-  await t.step("should throw on invalid type", () => {
+test("substitute", async (t) => {
+  await t.test("should throw on invalid type", () => {
     const type = { kind: "invalid" } as unknown;
 
     assert.throws(
@@ -42,7 +43,7 @@ Deno.test("substitute", async (t) => {
     );
   });
 
-  await t.step("should substitute a variable with a term", () => {
+  await t.test("should substitute a variable with a term", () => {
     const varTerm = mkSystemFVar("x");
     const replacement = mkSystemFVar("y");
 
@@ -58,7 +59,7 @@ Deno.test("substitute", async (t) => {
     assert.deepEqual(result, replacement);
   });
 
-  await t.step("should substitute within a term abstraction", () => {
+  await t.test("should substitute within a term abstraction", () => {
     const absTerm = mkSystemFAbs(
       "x",
       { kind: "type-var", typeName: "T" },
@@ -68,7 +69,7 @@ Deno.test("substitute", async (t) => {
 
     const result = substitute<SystemFTerm>(
       absTerm,
-      (n) => n.kind === "systemF-abs" ? [n.body] : [],
+      (n) => (n.kind === "systemF-abs" ? [n.body] : []),
       (n) => n.kind === "systemF-var" && n.name === "x",
       () => replacement,
       (n) => n.kind === "systemF-abs",
@@ -86,13 +87,13 @@ Deno.test("substitute", async (t) => {
     );
   });
 
-  await t.step("should substitute within a type abstraction", () => {
+  await t.test("should substitute within a type abstraction", () => {
     const typeAbs = mkSystemFTAbs("X", mkSystemFVar("x"));
     const replacement = mkSystemFVar("y");
 
     const result = substitute<SystemFTerm>(
       typeAbs,
-      (n) => n.kind === "systemF-type-abs" ? [n.body] : [],
+      (n) => (n.kind === "systemF-type-abs" ? [n.body] : []),
       (n) => n.kind === "systemF-var" && n.name === "x",
       () => replacement,
       (n) => n.kind === "systemF-type-abs",
@@ -107,7 +108,7 @@ Deno.test("substitute", async (t) => {
     assert.deepEqual(result, mkSystemFTAbs("X", replacement));
   });
 
-  await t.step("should substitute within a type application", () => {
+  await t.test("should substitute within a type application", () => {
     const typeApp = mkSystemFTypeApp(mkSystemFVar("x"), {
       kind: "type-var",
       typeName: "T",
@@ -116,7 +117,7 @@ Deno.test("substitute", async (t) => {
 
     const result = substitute<SystemFTerm>(
       typeApp,
-      (n) => n.kind === "systemF-type-app" ? [n.term] : [],
+      (n) => (n.kind === "systemF-type-app" ? [n.term] : []),
       (n) => n.kind === "systemF-var" && n.name === "x",
       () => replacement,
       (n) => n.kind === "systemF-type-app",
@@ -134,13 +135,9 @@ Deno.test("substitute", async (t) => {
     );
   });
 
-  await t.step("should handle nested term substitution", () => {
+  await t.test("should handle nested term substitution", () => {
     const nestedTerm = mkSystemFApp(
-      mkSystemFAbs(
-        "x",
-        { kind: "type-var", typeName: "T" },
-        mkSystemFVar("x"),
-      ),
+      mkSystemFAbs("x", { kind: "type-var", typeName: "T" }, mkSystemFVar("x")),
       mkSystemFVar("y"),
     );
     const replacement = mkSystemFVar("z");
@@ -167,11 +164,7 @@ Deno.test("substitute", async (t) => {
     );
 
     const expected = mkSystemFApp(
-      mkSystemFAbs(
-        "x",
-        { kind: "type-var", typeName: "T" },
-        mkSystemFVar("x"),
-      ),
+      mkSystemFAbs("x", { kind: "type-var", typeName: "T" }, mkSystemFVar("x")),
       replacement,
     );
 
@@ -179,21 +172,21 @@ Deno.test("substitute", async (t) => {
   });
 });
 
-Deno.test("substitution type-app helpers", async (t) => {
-  await t.step("freeTermVars ignores type-app in annotations", () => {
+test("substitution type-app helpers", async (t) => {
+  await t.test("freeTermVars ignores type-app in annotations", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
     const term = mkSystemFAbs("x", listA, mkSystemFVar("x"));
     const result = freeTermVars(term);
     assert.deepEqual(Array.from(result), []);
   });
 
-  await t.step("freeTypeVars collects vars in type-app", () => {
+  await t.test("freeTypeVars collects vars in type-app", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
     const result = freeTypeVars(listA);
     assert.deepEqual(Array.from(result).sort(), ["A", "List"]);
   });
 
-  await t.step("alphaRenameTypeBinder rewrites type-app", () => {
+  await t.test("alphaRenameTypeBinder rewrites type-app", () => {
     const pairAB = typeApp(
       typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
       mkTypeVariable("B"),
@@ -208,13 +201,9 @@ Deno.test("substitution type-app helpers", async (t) => {
     );
   });
 
-  await t.step("substituteTypeHygienic replaces vars in type-app", () => {
+  await t.test("substituteTypeHygienic replaces vars in type-app", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
-    const result = substituteTypeHygienic(
-      listA,
-      "A",
-      mkTypeVariable("Nat"),
-    );
+    const result = substituteTypeHygienic(listA, "A", mkTypeVariable("Nat"));
     assert.deepEqual(
       result,
       typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),

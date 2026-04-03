@@ -129,14 +129,16 @@ export interface BootstrappedCompileOptions {
 }
 
 export class BootstrappedCompilerError extends Error {
-  constructor(message: string, public override readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public override readonly cause?: unknown,
+  ) {
     super(message);
     this.name = "BootstrappedCompilerError";
   }
 }
 
-export class BootstrappedCompilerMismatchError
-  extends BootstrappedCompilerError {
+export class BootstrappedCompilerMismatchError extends BootstrappedCompilerError {
   constructor(
     public readonly expected: string,
     public readonly actual: string,
@@ -347,7 +349,8 @@ async function runHarness(source: string, workers = 1): Promise<string> {
     let finished = false;
     let failure: unknown;
 
-    const reduction = evaluator.reduceAsync(expression)
+    const reduction = evaluator
+      .reduceAsync(expression)
       .then(() => {
         finished = true;
       })

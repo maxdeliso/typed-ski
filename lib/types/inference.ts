@@ -188,9 +188,9 @@ export const unify = (
     } else {
       // You cannot unify a universal type with a non–universal type.
       throw new TypeError(
-        `cannot unify universal type ${
-          unparseType(t1)
-        } with non-universal type ${unparseType(t2)}`,
+        `cannot unify universal type ${unparseType(
+          t1,
+        )} with non-universal type ${unparseType(t2)}`,
       );
     }
   }
@@ -255,11 +255,7 @@ const attachTypes = (untyped: UntypedLambda, types: Context): TypedLambda => {
       if (ty === undefined) {
         throw new TypeError("missing type for term: " + untyped.name);
       }
-      return mkTypedAbs(
-        untyped.name,
-        ty,
-        attachTypes(untyped.body, types),
-      );
+      return mkTypedAbs(untyped.name, ty, attachTypes(untyped.body, types));
     }
     case "non-terminal":
       return createTypedApplication(
@@ -273,9 +269,7 @@ const attachTypes = (untyped: UntypedLambda, types: Context): TypedLambda => {
  * Runs a simplified version of Algorithm W over the given untyped term.
  * Returns a pair of the typed term and its inferred type.
  */
-export const inferType = (
-  term: UntypedLambda,
-): [TypedLambda, BaseType] => {
+export const inferType = (term: UntypedLambda): [TypedLambda, BaseType] => {
   const initialState: InferenceState = {
     varBindings: emptyContext(),
     constraints: emptyContext(),

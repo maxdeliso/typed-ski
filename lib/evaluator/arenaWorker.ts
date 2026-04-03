@@ -6,6 +6,7 @@
 
 import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import type { ArenaWasmExports } from "./arenaEvaluator.ts";
+import { isNode } from "../shared/platform.ts";
 
 interface InitMessage {
   type: "init";
@@ -30,12 +31,12 @@ async function init(msg: InitMessage) {
   });
   wasmExports = instance.exports as unknown as ArenaWasmExports;
 
-  self.postMessage({ type: "ready", workerId: msg.workerId });
+  postMessage({ type: "ready", workerId: msg.workerId });
 }
 
 function handleConnectArena(msg: ConnectArenaMessage) {
   if (!wasmExports || typeof wasmExports.connectArena !== "function") {
-    self.postMessage({
+    postMessage({
       type: "connectArenaComplete",
       error: "connectArena export missing",
     });
@@ -43,26 +44,18 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
   try {
     const rc = wasmExports.connectArena(msg.arenaPointer);
-    // Return codes from connectArena (see core/arena.c):
-    // 1 = Success
-    // 0 = Error: null pointer
-    // 2 = Error: header out of bounds
-    // 3 = Error: invalid capacity
-    // 4 = Error: Arena data out of bounds
-    // 5 = Error: Invalid Magic / Corrupted Header
-    // 6 = Error: Misaligned address
     if (rc === 1) {
-      self.postMessage({ type: "connectArenaComplete" });
+      postMessage({ type: "connectArenaComplete" });
       // Enter the blocking worker loop; never returns.
       wasmExports.workerLoop?.(0);
     } else {
-      self.postMessage({
+      postMessage({
         type: "connectArenaComplete",
         error: `connectArena failed with code ${rc}`,
       });
     }
   } catch (err) {
-    self.postMessage({
+    postMessage({
       type: "connectArenaComplete",
       error: `connectArena threw an error: ${
         err instanceof Error ? err.message : String(err)
@@ -71,12 +64,37 @@ function handleConnectArena(msg: ConnectArenaMessage) {
   }
 }
 
-self.onmessage = (e) => {
-  if (e.data.type === "init") {
-    init(e.data).catch((err) => {
-      self.postMessage({ type: "error", error: err.message });
+let nodeParentPort: any = null;
+
+if (isNode) {
+  const { workerData, parentPort } = await import("node:worker_threads");
+  nodeParentPort = parentPort;
+  if (workerData) {
+    init({ type: "init", ...workerData }).catch((err) => {
+      nodeParentPort?.postMessage({ type: "error", error: err.message });
     });
-  } else if (e.data.type === "connectArena") {
-    handleConnectArena(e.data as ConnectArenaMessage);
   }
-};
+  nodeParentPort?.on("message", (msg: any) => {
+    if (msg.type === "connectArena") {
+      handleConnectArena(msg);
+    }
+  });
+} else {
+  self.onmessage = (e) => {
+    if (e.data.type === "init") {
+      init(e.data).catch((err) => {
+        self.postMessage({ type: "error", error: err.message });
+      });
+    } else if (e.data.type === "connectArena") {
+      handleConnectArena(e.data as ConnectArenaMessage);
+    }
+  };
+}
+
+function postMessage(data: any) {
+  if (isNode) {
+    nodeParentPort?.postMessage(data);
+  } else {
+    (self as any).postMessage(data);
+  }
+}

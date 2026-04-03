@@ -1,5 +1,8 @@
-import { assertEquals } from "std/assert";
-import { fromFileUrl } from "std/path";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { serializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { getNatObject } from "../../lib/nat.ts";
@@ -12,22 +15,23 @@ import {
   runFreshCompilerCorpusBuild,
 } from "./freshCompilerCorpusBuild.ts";
 
-const DENO_CONFIG_FILE = new URL("../../deno.jsonc", import.meta.url);
 const decoder = new TextDecoder();
 
 async function runFreshCompilerCorpusBuildInSubprocess(): Promise<Uint8Array> {
-  const proc = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "--config",
-      fromFileUrl(DENO_CONFIG_FILE),
-      "--allow-read",
-      fromFileUrl(new URL("./freshCompilerCorpusBuild.ts", import.meta.url)),
+  const {
+    status: code,
+    stdout,
+    stderr,
+  } = spawnSync(
+    process.execPath,
+    [
+      "--experimental-transform-types",
+      fileURLToPath(new URL("./freshCompilerCorpusBuild.ts", import.meta.url)),
     ],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const { code, stdout, stderr } = await proc.output();
+    {
+      maxBuffer: 32 * 1024 * 1024,
+    },
+  );
   if (code !== 0) {
     throw new Error(
       `subprocess oracle build failed: ${decoder.decode(stderr)}`,
@@ -45,45 +49,46 @@ function getBaselineRun(): Promise<DeterminismRun> {
   return baselineRunPromise;
 }
 
-Deno.test("fresh compiler corpus builds emit byte-identical SKI and object output", async () => {
+test("fresh compiler corpus builds emit byte-identical SKI and object output", async () => {
   const baseline = await getBaselineRun();
   const current = await runFreshCompilerCorpusBuild();
 
-  assertEquals(
+  assert.deepStrictEqual(
     Array.from(current.finalBytes),
     Array.from(baseline.finalBytes),
   );
-  assertEquals(current.finalOutputs, baseline.finalOutputs);
-  assertEquals(
+  assert.deepStrictEqual(current.finalOutputs, baseline.finalOutputs);
+  assert.deepStrictEqual(
     Array.from(current.objectBytes.lexer),
     Array.from(baseline.objectBytes.lexer),
   );
-  assertEquals(
+  assert.deepStrictEqual(
     Array.from(current.objectBytes.parser),
     Array.from(baseline.objectBytes.parser),
   );
-  assertEquals(
+  assert.deepStrictEqual(
     Array.from(current.objectBytes.bin),
     Array.from(baseline.objectBytes.bin),
   );
 });
 
-Deno.test("fresh compiler corpus subprocess build matches the in-process baseline", async () => {
-  const baseline = decoder.decode(
-    (await getBaselineRun()).finalBytes,
-  );
+test("fresh compiler corpus subprocess build matches the in-process baseline", async () => {
+  const baseline = decoder.decode((await getBaselineRun()).finalBytes);
   const subprocessRun = decoder.decode(
     await runFreshCompilerCorpusBuildInSubprocess(),
   );
 
-  assertEquals(subprocessRun, baseline);
+  assert.strictEqual(subprocessRun, baseline);
 });
 
-Deno.test("compileToObjectFile normalizes imported module metadata order", async () => {
+test("compileToObjectFile normalizes imported module metadata order", async () => {
   const prelude = await getPreludeObject();
   const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);
-  const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
+  const parserSource = await readFile(
+    fileURLToPath(PARSER_SOURCE_FILE),
+    "utf8",
+  );
 
   const ordered = serializeTripCObject(
     compileToObjectFile(parserSource, {
@@ -96,5 +101,5 @@ Deno.test("compileToObjectFile normalizes imported module metadata order", async
     }),
   );
 
-  assertEquals(reversed, ordered);
+  assert.strictEqual(reversed, ordered);
 });

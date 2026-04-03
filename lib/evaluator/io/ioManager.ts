@@ -37,13 +37,11 @@ const BUSY_WAIT_THRESHOLD = 512;
  * Manages IO operations (stdin/stdout) and suspension wake-ups.
  */
 export class IoManager {
-  private ioRingsCache:
-    | {
-      buffer: ArrayBuffer | SharedArrayBuffer;
-      baseAddr: number;
-      rings: ArenaIoRings;
-    }
-    | null = null;
+  private ioRingsCache: {
+    buffer: ArrayBuffer | SharedArrayBuffer;
+    baseAddr: number;
+    rings: ArenaIoRings;
+  } | null = null;
   private readonly ioWait = new Map<number, number>();
   private readonly pendingWaiters: number[] = [];
   private pendingWakeBudgetStdin = 0;
@@ -261,10 +259,7 @@ export class IoManager {
     this.ioRingsCache = null;
   }
 
-  private async submitSuspension(
-    nodeId: number,
-    reqId: number,
-  ): Promise<void> {
+  private async submitSuspension(nodeId: number, reqId: number): Promise<void> {
     const ex = this.exports as unknown as {
       hostSubmit?: (nodeId: number, reqId: number, maxSteps: number) => number;
     };

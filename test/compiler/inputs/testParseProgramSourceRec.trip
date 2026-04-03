@@ -15,8 +15,6 @@ import Lexer eqListU8
 import Parser parseProgram
 import Parser DefKind
 import Parser K_Poly
-import Parser K_Typed
-import Parser K_Untyped
 import Parser K_Combinator
 import Parser Decl
 import Parser D_Module
@@ -35,29 +33,11 @@ poly eqDefKind = \a : DefKind => \b : DefKind =>
     | K_Poly =>
       match b [Bool] {
         | K_Poly => true
-        | K_Typed => false
-        | K_Untyped => false
-        | K_Combinator => false
-      }
-    | K_Typed =>
-      match b [Bool] {
-        | K_Poly => false
-        | K_Typed => true
-        | K_Untyped => false
-        | K_Combinator => false
-      }
-    | K_Untyped =>
-      match b [Bool] {
-        | K_Poly => false
-        | K_Typed => false
-        | K_Untyped => true
         | K_Combinator => false
       }
     | K_Combinator =>
       match b [Bool] {
         | K_Poly => false
-        | K_Typed => false
-        | K_Untyped => false
         | K_Combinator => true
       }
   }

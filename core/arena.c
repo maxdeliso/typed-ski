@@ -32,7 +32,7 @@ void *memmove(void *dest, const void *src, size_t n) {
 #endif
 
 static const uint32_t ARENA_MAGIC = 0x534B4941;
-static const uint32_t INITIAL_CAP = 1 << 20;
+static const uint32_t INITIAL_CAP = 1 << 16;
 /** Gas per kernel step / worker batch; bounds time per step. */
 static const uint32_t ARENA_STEP_GAS = 20000;
 static const uint32_t MAX_CAP = 1 << 26;

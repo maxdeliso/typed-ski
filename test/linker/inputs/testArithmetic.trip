@@ -1,0 +1,13 @@
+module Test
+
+import Nat zero
+import Nat succ
+import Nat add
+import Nat Nat
+
+export main
+
+poly two = succ (succ zero)
+poly three = succ two
+
+poly main = add two three

@@ -116,9 +116,8 @@ export function peekArrow(state: ParserState): [boolean, ParserState] {
 export function matchArrow(state: ParserState): ParserState {
   const [isArrow, newState] = peekArrow(state);
   if (!isArrow) {
-    const next = newState.idx < newState.buf.length
-      ? newState.buf[newState.idx]
-      : "EOF";
+    const next =
+      newState.idx < newState.buf.length ? newState.buf[newState.idx] : "EOF";
     throw new ParseError(
       withParserState(newState, `expected '->' but found '${next}'`),
     );
@@ -138,9 +137,8 @@ export function peekFatArrow(state: ParserState): [boolean, ParserState] {
 export function matchFatArrow(state: ParserState): ParserState {
   const [isArrow, newState] = peekFatArrow(state);
   if (!isArrow) {
-    const next = newState.idx < newState.buf.length
-      ? newState.buf[newState.idx]
-      : "EOF";
+    const next =
+      newState.idx < newState.buf.length ? newState.buf[newState.idx] : "EOF";
     throw new ParseError(
       withParserState(newState, `expected '=>' but found '${next}'`),
     );
@@ -241,6 +239,6 @@ export function isAtDefinitionKeywordLine(state: ParserState): boolean {
   const lines = nextChars.split("\n");
   const firstLine = lines[0]!.trim();
   return DEFINITION_KEYWORDS.some((keyword: string) =>
-    firstLine.startsWith(keyword)
+    firstLine.startsWith(keyword),
   );
 }

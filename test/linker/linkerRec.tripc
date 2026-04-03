@@ -1,0 +1,76 @@
+{
+  "dataDefinitions": [],
+  "definitions": {
+    "Nat": {
+      "kind": "type",
+      "name": "Nat",
+      "type": {
+        "body": {
+          "kind": "non-terminal",
+          "lft": {
+            "kind": "non-terminal",
+            "lft": {
+              "kind": "type-var",
+              "typeName": "X"
+            },
+            "rgt": {
+              "kind": "type-var",
+              "typeName": "X"
+            }
+          },
+          "rgt": {
+            "kind": "non-terminal",
+            "lft": {
+              "kind": "type-var",
+              "typeName": "X"
+            },
+            "rgt": {
+              "kind": "type-var",
+              "typeName": "X"
+            }
+          }
+        },
+        "kind": "forall",
+        "typeVar": "X"
+      }
+    },
+    "loop": {
+      "kind": "poly",
+      "name": "loop",
+      "rec": true,
+      "term": {
+        "body": {
+          "kind": "non-terminal",
+          "lft": {
+            "kind": "systemF-var",
+            "name": "loop"
+          },
+          "rgt": {
+            "kind": "systemF-var",
+            "name": "n"
+          }
+        },
+        "kind": "systemF-abs",
+        "name": "n",
+        "typeAnnotation": {
+          "kind": "type-var",
+          "typeName": "Nat"
+        }
+      }
+    },
+    "main": {
+      "kind": "poly",
+      "name": "main",
+      "term": {
+        "kind": "systemF-var",
+        "name": "loop"
+      }
+    }
+  },
+  "exports": [
+    "loop",
+    "main"
+  ],
+  "imports": [],
+  "module": "Rec"
+}

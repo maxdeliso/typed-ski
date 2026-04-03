@@ -84,14 +84,14 @@ function findDataDefinitionForImportedSymbol(
   importedDataDefinitions: ReadonlyArray<DataDefinition>,
   importedSymbol: string,
 ): DataDefinition | undefined {
-  const direct = importedDataDefinitions.find((dataDef) =>
-    dataDef.name === importedSymbol
+  const direct = importedDataDefinitions.find(
+    (dataDef) => dataDef.name === importedSymbol,
   );
   if (direct) {
     return direct;
   }
   return importedDataDefinitions.find((dataDef) =>
-    dataDef.constructors.some((ctor) => ctor.name === importedSymbol)
+    dataDef.constructors.some((ctor) => ctor.name === importedSymbol),
   );
 }
 
@@ -128,8 +128,8 @@ function indexImportedConstructors(
       dataMap.set(dataDef.name, cloneDataDefinition(dataDef));
     }
 
-    const ctorIndex = dataDef.constructors.findIndex((ctor) =>
-      ctor.name === term.ref
+    const ctorIndex = dataDef.constructors.findIndex(
+      (ctor) => ctor.name === term.ref,
     );
     if (ctorIndex < 0) {
       continue;
@@ -180,8 +180,7 @@ export function indexSymbols(
   for (const term of program.terms) {
     switch (term.kind) {
       case "poly":
-      case "typed":
-      case "untyped":
+      case "lambda":
       case "combinator":
       case "native":
         {
@@ -268,8 +267,7 @@ export function extractDefinitionValue(
 ): TripLangValueType | undefined {
   switch (tt.kind) {
     case "poly":
-    case "typed":
-    case "untyped":
+    case "lambda":
     case "combinator":
       return tt.term;
     case "native":

@@ -140,8 +140,8 @@ export class CompletionPoller {
       // Prevent main-thread saturation under load by time-slicing CQ drains.
       // Microtask yielding is not sufficient to guarantee rendering; prefer rAF when available.
       const nowMs = () =>
-        (typeof performance !== "undefined" &&
-            typeof performance.now === "function")
+        typeof performance !== "undefined" &&
+        typeof performance.now === "function"
           ? performance.now()
           : Date.now();
       const yieldToRenderer = async () => {
@@ -150,7 +150,7 @@ export class CompletionPoller {
           await new Promise<void>((r) => requestAnimationFrame(() => r()));
           return;
         }
-        // Non-browser (tests/deno): yield back to the macrotask queue.
+        // Yield back to the macrotask queue.
         if (this.aborted()) return;
         const { promise, cancel } = sleep(0);
         this.activeTimeouts.add(cancel);
@@ -231,10 +231,10 @@ export class CompletionPoller {
         const low = Number(packed & 0xffffffffn) >>> 0;
         const eventKind = low >>> 30;
         const rawNodeId = low & 0x3fffffff;
-        const nodeId = eventKind === CQ_EVENT_YIELD ||
-            eventKind === CQ_EVENT_IO_WAIT
-          ? makeControlPtr(rawNodeId)
-          : rawNodeId;
+        const nodeId =
+          eventKind === CQ_EVENT_YIELD || eventKind === CQ_EVENT_IO_WAIT
+            ? makeControlPtr(rawNodeId)
+            : rawNodeId;
 
         if (eventKind === CQ_EVENT_ERROR) {
           this.requestTracker.markError(
@@ -248,8 +248,8 @@ export class CompletionPoller {
 
         // If the worker yielded, resubmit to continue.
         // (Do not resolve the promise yet; the job is still in-flight.)
-        const isTypedYield = eventKind === CQ_EVENT_YIELD ||
-          eventKind === CQ_EVENT_IO_WAIT;
+        const isTypedYield =
+          eventKind === CQ_EVENT_YIELD || eventKind === CQ_EVENT_IO_WAIT;
         if (isTypedYield) {
           // If the caller already gave up / was aborted, drop the yielded work.
           if (!this.requestTracker.isPending(reqId)) continue;
@@ -364,10 +364,7 @@ export class CompletionPoller {
     }
   }
 
-  private async submitSuspension(
-    nodeId: number,
-    reqId: number,
-  ): Promise<void> {
+  private async submitSuspension(nodeId: number, reqId: number): Promise<void> {
     const ex = this.exports as unknown as {
       hostSubmit: (nodeId: number, reqId: number, maxSteps: number) => number;
     };

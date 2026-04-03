@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import {
   mkSystemFAbs,
@@ -38,9 +39,9 @@ const binSystemFContext = () => {
   return ctx;
 };
 
-Deno.test("System F type-checker and helpers", async (t) => {
-  await t.step("positive cases", async (t) => {
-    await t.step(
+test("System F type-checker and helpers", async (t) => {
+  await t.test("positive cases", async (t) => {
+    await t.test(
       "typecheck wrapper uses emptySystemFContext(undefined)",
       () => {
         // Regression coverage: ensure the exported `typecheck()` wrapper is exercised
@@ -64,7 +65,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       },
     );
 
-    await t.step("polymorphic identity", () => {
+    await t.test("polymorphic identity", () => {
       const id: SystemFTerm = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
@@ -83,7 +84,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       }
     });
 
-    await t.step("K combinator", () => {
+    await t.test("K combinator", () => {
       const K: SystemFTerm = mkSystemFTAbs(
         "X",
         mkSystemFTAbs(
@@ -100,7 +101,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect(unparseType(ty)).to.match(/#X->.*#Y->.*X->\(Y->X\)/);
     });
 
-    await t.step("type application", () => {
+    await t.test("type application", () => {
       const id = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
@@ -125,7 +126,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       if (ty.kind === "type-var") expect(ty.typeName).to.equal("A");
     });
 
-    await t.step("S combinator", () => {
+    await t.test("S combinator", () => {
       const S: SystemFTerm = mkSystemFTAbs(
         "A",
         mkSystemFTAbs(
@@ -155,20 +156,22 @@ Deno.test("System F type-checker and helpers", async (t) => {
         ),
       );
       const [ty] = typecheckSystemF(emptySystemFContext(), S);
-      expect(unparseType(ty))
-        .to.equal("#A->#B->#C->((A->(B->C))->((A->B)->(A->C)))");
+      expect(unparseType(ty)).to.equal(
+        "#A->#B->#C->((A->(B->C))->((A->B)->(A->C)))",
+      );
     });
   });
 
   /* ──────────────────────────  negative cases  ────────────────────────── */
-  await t.step("negative cases", async (t) => {
-    await t.step("unbound variable", () => {
+  await t.test("negative cases", async (t) => {
+    await t.test("unbound variable", () => {
       const term = mkSystemFVar("a");
-      expect(() => typecheckSystemF(emptySystemFContext(), term))
-        .to.throw(/unknown variable/);
+      expect(() => typecheckSystemF(emptySystemFContext(), term)).to.throw(
+        /unknown variable/,
+      );
     });
 
-    await t.step("apply non-arrow", () => {
+    await t.test("apply non-arrow", () => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
@@ -187,11 +190,12 @@ Deno.test("System F type-checker and helpers", async (t) => {
         })(),
       };
       const term = mkSystemFApp(mkSystemFVar("a"), mkSystemFVar("b"));
-      expect(() => typecheckSystemF(ctx, term))
-        .to.throw(/expected an arrow type/);
+      expect(() => typecheckSystemF(ctx, term)).to.throw(
+        /expected an arrow type/,
+      );
     });
 
-    await t.step("type-apply non-universal", () => {
+    await t.test("type-apply non-universal", () => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
@@ -202,11 +206,10 @@ Deno.test("System F type-checker and helpers", async (t) => {
         })(),
       };
       const term = mkSystemFTypeApp(mkSystemFVar("a"), mkTypeVariable("B"));
-      expect(() => typecheckSystemF(ctx, term))
-        .to.throw(/universal type/);
+      expect(() => typecheckSystemF(ctx, term)).to.throw(/universal type/);
     });
 
-    await t.step("argument type mismatch", () => {
+    await t.test("argument type mismatch", () => {
       const f = mkSystemFAbs("x", mkTypeVariable("A"), mkSystemFVar("x"));
       let ctx = emptySystemFContext();
       ctx = {
@@ -226,21 +229,23 @@ Deno.test("System F type-checker and helpers", async (t) => {
         })(),
       };
       const term = mkSystemFApp(f, mkSystemFVar("a"));
-      expect(() => typecheckSystemF(ctx, term))
-        .to.throw(/function argument type mismatch/);
+      expect(() => typecheckSystemF(ctx, term)).to.throw(
+        /function argument type mismatch/,
+      );
     });
 
-    await t.step("self-application of non-arrow", () => {
+    await t.test("self-application of non-arrow", () => {
       const term = mkSystemFAbs(
         "x",
         mkTypeVariable("X"),
         mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("x")),
       );
-      expect(() => typecheckSystemF(emptySystemFContext(), term))
-        .to.throw(/expected an arrow type/);
+      expect(() => typecheckSystemF(emptySystemFContext(), term)).to.throw(
+        /expected an arrow type/,
+      );
     });
 
-    await t.step(
+    await t.test(
       "function argument type mismatch with non-equivalent forall types",
       () => {
         // Create a function expecting #X->X->X
@@ -283,12 +288,13 @@ Deno.test("System F type-checker and helpers", async (t) => {
         };
         const term = mkSystemFApp(f, arg);
         // This should trigger the normalization path (both are forall) but fail after normalization
-        expect(() => typecheckSystemF(ctx, term))
-          .to.throw(/function argument type mismatch/);
+        expect(() => typecheckSystemF(ctx, term)).to.throw(
+          /function argument type mismatch/,
+        );
       },
     );
 
-    await t.step(
+    await t.test(
       "match expression must be elaborated before typechecking",
       () => {
         const matchTerm: SystemFTerm = {
@@ -303,14 +309,15 @@ Deno.test("System F type-checker and helpers", async (t) => {
             },
           ],
         };
-        expect(() => typecheckSystemF(emptySystemFContext(), matchTerm))
-          .to.throw(/match must be elaborated before typechecking/);
+        expect(() =>
+          typecheckSystemF(emptySystemFContext(), matchTerm),
+        ).to.throw(/match must be elaborated before typechecking/);
       },
     );
   });
 
   /* ─────────────────  parser / pretty-printer round-trip  ──────────────── */
-  await t.step("integration with parser & printer", () => {
+  await t.test("integration with parser & printer", () => {
     const src = "#X=> \\x: X => x";
     const [lit, term] = parseSystemF(src);
     const [ty] = typecheckSystemF(emptySystemFContext(), term);
@@ -318,8 +325,8 @@ Deno.test("System F type-checker and helpers", async (t) => {
     expect(lit.replace(/\s+/g, "")).to.equal(src.replace(/\s+/g, ""));
   });
 
-  await t.step("let bindings", async (t) => {
-    await t.step(
+  await t.test("let bindings", async (t) => {
+    await t.test(
       "unannotated let typechecks (infers U8 for nat literal < 256)",
       () => {
         const [_, term] = parseSystemF("let x = 1 in x");
@@ -329,22 +336,23 @@ Deno.test("System F type-checker and helpers", async (t) => {
       },
     );
 
-    await t.step("annotated let with correct type typechecks", () => {
+    await t.test("annotated let with correct type typechecks", () => {
       const [_, term] = parseSystemF("let x : U8 = 1 in x");
       expect(term.kind).to.equal("non-terminal");
       const [ty] = typecheckSystemF(binSystemFContext(), term);
       expect(unparseType(ty)).to.match(/U8/);
     });
 
-    await t.step("annotated let with incorrect type fails typecheck", () => {
+    await t.test("annotated let with incorrect type fails typecheck", () => {
       const [_, term] = parseSystemF("let x : Bool = 1 in x");
       expect(term.kind).to.equal("non-terminal");
-      expect(() => typecheckSystemF(binSystemFContext(), term))
-        .to.throw(/function argument type mismatch/);
+      expect(() => typecheckSystemF(binSystemFContext(), term)).to.throw(
+        /function argument type mismatch/,
+      );
     });
   });
 
-  await t.step("reduceLets", async (t) => {
+  await t.test("reduceLets", async (t) => {
     const hasSystemFLet = (term: SystemFTerm): boolean => {
       if (term.kind === "systemF-let") return true;
       switch (term.kind) {
@@ -368,7 +376,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       }
     };
 
-    await t.step("expands unannotated let to App(Abs(...), value)", () => {
+    await t.test("expands unannotated let to App(Abs(...), value)", () => {
       const [_, term] = parseSystemF("let x = 1 in x");
       expect(term.kind).to.equal("systemF-let");
 
@@ -391,7 +399,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect(unparseType(ty)).to.match(/U8/);
     });
 
-    await t.step("expands nested lets and preserves type", () => {
+    await t.test("expands nested lets and preserves type", () => {
       const [_, term] = parseSystemF("let x = 1 in let y = 2 in x");
       expect(term.kind).to.equal("systemF-let");
 
@@ -404,7 +412,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect(unparseType(tyReduced)).to.match(/U8/);
     });
 
-    await t.step("preserves type through reduceLets (let x = 1 in x)", () => {
+    await t.test("preserves type through reduceLets (let x = 1 in x)", () => {
       const [_, term] = parseSystemF("let x = 1 in x");
       const reduced = reduceLets(binSystemFContext(), term);
       const [tyOrig] = typecheckSystemF(binSystemFContext(), term);
@@ -412,19 +420,15 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect(unparseType(tyRed)).to.equal(unparseType(tyOrig));
     });
 
-    await t.step("traverses systemF-var (identity)", () => {
+    await t.test("traverses systemF-var (identity)", () => {
       const term = mkSystemFVar("x");
       const reduced = reduceLets(emptySystemFContext(), term);
       expect(reduced).to.deep.equal(term);
       expect(reduced.kind).to.equal("systemF-var");
     });
 
-    await t.step("traverses systemF-abs (recurses body)", () => {
-      const term = mkSystemFAbs(
-        "y",
-        mkTypeVariable("Bin"),
-        mkSystemFVar("y"),
-      );
+    await t.test("traverses systemF-abs (recurses body)", () => {
+      const term = mkSystemFAbs("y", mkTypeVariable("Bin"), mkSystemFVar("y"));
       const reduced = reduceLets(emptySystemFContext(), term);
       expect(reduced.kind).to.equal("systemF-abs");
       expect((reduced as { name: string }).name).to.equal("y");
@@ -433,7 +437,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       );
     });
 
-    await t.step("traverses systemF-type-abs (recurses body)", () => {
+    await t.test("traverses systemF-type-abs (recurses body)", () => {
       const term = mkSystemFTAbs("X", mkSystemFVar("x"));
       const reduced = reduceLets(emptySystemFContext(), term);
       expect(reduced.kind).to.equal("systemF-type-abs");
@@ -443,7 +447,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       );
     });
 
-    await t.step("traverses systemF-type-app (recurses term)", () => {
+    await t.test("traverses systemF-type-app (recurses term)", () => {
       const id = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
@@ -454,11 +458,12 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect((reduced as { term: SystemFTerm }).term.kind).to.equal(
         "systemF-type-abs",
       );
-      expect((reduced as { typeArg: { typeName: string } }).typeArg.typeName).to
-        .equal("Nat");
+      expect(
+        (reduced as { typeArg: { typeName: string } }).typeArg.typeName,
+      ).to.equal("Nat");
     });
 
-    await t.step("traverses non-terminal (recurses lft and rgt)", () => {
+    await t.test("traverses non-terminal (recurses lft and rgt)", () => {
       const term = mkSystemFApp(mkSystemFVar("f"), mkSystemFVar("x"));
       const reduced = reduceLets(emptySystemFContext(), term);
       expect(reduced.kind).to.equal("non-terminal");
@@ -466,7 +471,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       expect((reduced as { rgt: { name: string } }).rgt.name).to.equal("x");
     });
 
-    await t.step(
+    await t.test(
       "traverses systemF-match (recurses scrutinee and arm bodies)",
       () => {
         const term: SystemFTerm = {
@@ -483,12 +488,15 @@ Deno.test("System F type-checker and helpers", async (t) => {
         };
         const reduced = reduceLets(emptySystemFContext(), term);
         expect(reduced.kind).to.equal("systemF-match");
-        expect((reduced as { scrutinee: { name: string } }).scrutinee.name).to
-          .equal("m");
+        expect(
+          (reduced as { scrutinee: { name: string } }).scrutinee.name,
+        ).to.equal("m");
         const arm = requiredAt(
-          (reduced as {
-            arms: Array<{ constructorName: string; body: { name: string } }>;
-          }).arms,
+          (
+            reduced as {
+              arms: Array<{ constructorName: string; body: { name: string } }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
@@ -497,7 +505,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       },
     );
 
-    await t.step("let whose value is systemF-abs exercises abs branch", () => {
+    await t.test("let whose value is systemF-abs exercises abs branch", () => {
       const bodyUsesLet = parseSystemF("let x = (\\y : Bin => y) in x")[1];
       expect(bodyUsesLet.kind).to.equal("systemF-let");
       const value = (bodyUsesLet as { value: SystemFTerm }).value;
@@ -509,8 +517,8 @@ Deno.test("System F type-checker and helpers", async (t) => {
     });
   });
 
-  await t.step("eraseSystemF", async (t) => {
-    await t.step("erases simple polymorphic id", () => {
+  await t.test("eraseSystemF", async (t) => {
+    await t.test("erases simple polymorphic id", () => {
       const term = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
@@ -523,7 +531,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       }
     });
 
-    await t.step("erases nested type applications", () => {
+    await t.test("erases nested type applications", () => {
       const poly = mkSystemFTAbs(
         "X",
         mkSystemFTAbs(
@@ -551,8 +559,8 @@ Deno.test("System F type-checker and helpers", async (t) => {
     });
   });
 
-  await t.step("typechecker misc edge-cases", async (t) => {
-    await t.step("nested type abstractions (K)", () => {
+  await t.test("typechecker misc edge-cases", async (t) => {
+    await t.test("nested type abstractions (K)", () => {
       const term = mkSystemFTAbs(
         "X",
         mkSystemFTAbs(
@@ -569,7 +577,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       if (ty.kind === "forall") expect(ty.body.kind).to.equal("forall");
     });
 
-    await t.step("type-checks under non-empty context", () => {
+    await t.test("type-checks under non-empty context", () => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
@@ -593,7 +601,7 @@ Deno.test("System F type-checker and helpers", async (t) => {
       if (ty.kind === "type-var") expect(ty.typeName).to.equal("B");
     });
 
-    await t.step("combined term & type application", () => {
+    await t.test("combined term & type application", () => {
       const polyId = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),

@@ -1,7 +1,8 @@
-import { assertEquals, assertRejects } from "std/assert";
-import { expect } from "chai";
+import assert from "node:assert/strict";
+import { expect } from "./assertions.ts";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { test } from "node:test";
 import { evaluateTrip, evaluateTripWithIo } from "./tripHarness.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { loadInput } from "./fileLoader.ts";
@@ -13,8 +14,8 @@ const linkerTestDir = fileURLToPath(
   new URL("../linker/", import.meta.url).href,
 );
 
-Deno.test("TripHarness", async (t) => {
-  await t.step("includeNat flag allows using Nat module", async () => {
+test("TripHarness", async (t) => {
+  await t.test("includeNat flag allows using Nat module", async () => {
     const source = loadInput("includeNat.trip", __dirname);
 
     const result = await evaluateTrip(source, {
@@ -27,7 +28,7 @@ Deno.test("TripHarness", async (t) => {
   });
 });
 
-Deno.test("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async () => {
+test("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async () => {
   const source = loadInput("echoOne.trip", linkerTestDir);
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
 
@@ -39,34 +40,33 @@ Deno.test("TripHarness evaluateTripWithIo reuses provided parallel evaluator", a
       evaluator,
     });
 
-    assertEquals(stdout.length, 1);
-    assertEquals(stdout[0], 65);
-    assertEquals((result as { value: number }).value, 65);
+    assert.equal(stdout.length, 1);
+    assert.equal(stdout[0], 65);
+    assert.equal((result as { value: number }).value, 65);
 
-    const reused = await evaluator.reduceAsync!(parseSKI("I"));
-    assertEquals(reused.kind, "terminal");
+    const reused = (await evaluator.reduceAsync(parseSKI("I"))) as any;
+    assert.equal(reused.kind, "terminal");
     if (reused.kind !== "terminal") {
       throw new Error(`expected terminal result, got ${reused.kind}`);
     }
-    assertEquals(reused.sym, "I");
+    assert.equal(reused.sym, "I");
   } finally {
     evaluator.terminate();
   }
 });
 
-Deno.test("TripHarness evaluateTripWithIo auto-created evaluator is terminated after use", async () => {
+test("TripHarness evaluateTripWithIo auto-created evaluator is terminated after use", async () => {
   const source = loadInput("literalMain.trip", linkerTestDir);
   const { result, stdout, evaluator } = await evaluateTripWithIo(source, {
     stdin: new Uint8Array(),
     stdoutMaxBytes: 1,
   });
 
-  assertEquals(await UnChurchNumber(result), 13n);
-  assertEquals(stdout.length, 0);
+  assert.equal(await UnChurchNumber(result), 13n);
+  assert.equal(stdout.length, 0);
 
-  await assertRejects(
+  await assert.rejects(
     () => (evaluator as ParallelArenaEvaluatorWasm).reduceAsync!(parseSKI("I")),
-    Error,
-    "Evaluator terminated",
+    { message: "Evaluator terminated" },
   );
 });

@@ -335,7 +335,9 @@ poly id = #a => \\x:a => x`;
         "version.generated.ts",
       );
       const generatedVersion = await readFile(generatedVersionPath, "utf-8");
-      expect(generatedVersion).to.include(`export const VERSION = "${version}";`);
+      expect(generatedVersion).to.include(
+        `export const VERSION = "${version}";`,
+      );
     });
   });
 

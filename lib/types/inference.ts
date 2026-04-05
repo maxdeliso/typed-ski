@@ -276,7 +276,6 @@ export const inferType = (term: UntypedLambda): [TypedLambda, BaseType] => {
   };
 
   const result = algorithmW(term, varSource(), initialState);
-  // eslint-disable-next-line prefer-const
   let { type, state } = result;
 
   // Apply substitutions from constraints to the type

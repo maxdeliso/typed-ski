@@ -80,7 +80,15 @@ jobs:
         if: matrix.os == 'ubuntu-24.04'
         run: |
           bazel coverage //:node_tests --test_output=errors
-          cp bazel-out/_coverage/_target_coverage.dat coverage.lcov
+          # Bazel places the combined coverage report in bazel-out/_coverage/_coverage_report.dat
+          # but we'll use find to be robust across Bazel versions/configurations.
+          REPORT=$(find bazel-out/_coverage -name "*.dat" | head -n 1)
+          if [[ -n "$REPORT" ]]; then
+            cp "$REPORT" coverage.lcov
+          else
+            echo "No coverage report found"
+            exit 1
+          fi
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04'

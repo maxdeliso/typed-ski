@@ -452,23 +452,47 @@ async function lint(): Promise<void> {
 async function collectTests(): Promise<string[]> {
   const testRoot = join(PROJECT_ROOT, "test");
   const files: string[] = [];
+  console.log(`Collecting tests from ${testRoot}...`);
 
   async function walk(dir: string): Promise<void> {
-    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    let entries;
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      console.error(`Error reading directory ${dir}: ${err}`);
+      return;
+    }
+
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(fullPath);
-        continue;
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+
+      if (entry.isSymbolicLink()) {
+        try {
+          const s = await fsp.stat(fullPath);
+          isDir = s.isDirectory();
+          isFile = s.isFile();
+        } catch {
+          continue;
+        }
       }
-      if (!entry.isFile() || !entry.name.endsWith(".test.ts")) continue;
-      const relPath = relative(PROJECT_ROOT, fullPath).replaceAll("\\", "/");
-      files.push(relPath);
+
+      if (isDir) {
+        await walk(fullPath);
+      } else if (isFile && entry.name.endsWith(".test.ts")) {
+        const relPath = relative(PROJECT_ROOT, fullPath).replaceAll("\\", "/");
+        files.push(relPath);
+      }
     }
   }
 
   await walk(testRoot);
   files.sort();
+  console.log(`Found ${files.length} test files.`);
+  if (files.length > 0) {
+    console.log(`Sample test paths: ${files.slice(0, 3).join(", ")}`);
+  }
   return files;
 }
 
@@ -525,7 +549,10 @@ function readShardConfig(): ShardConfig {
 
 function acknowledgeShardSupport(config: ShardConfig): void {
   if (config.statusFilePath) {
+    console.log(`Acknowledging sharding support via ${config.statusFilePath}`);
     fs.writeFileSync(config.statusFilePath, "", "utf8");
+  } else {
+    console.log("No shard status file path provided by environment.");
   }
 }
 
@@ -596,18 +623,32 @@ async function typecheckAndPrepareTestExecution(
 async function prepareTestExecution(
   files: string[],
 ): Promise<Record<string, string>> {
+  console.log("Preparing test execution environment...");
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("TYPED_SKI_")) {
+      console.log(`[env] ${key}: ${process.env[key]}`);
+    }
+  }
   await stageBazelWasmArtifactIfPresent();
   if (
     needsDistArtifacts(files) &&
     process.env["TYPED_SKI_DIST_READY"] !== "1"
   ) {
+    console.log("Building distribution artifacts for tests...");
     await buildDist();
   }
+
   const explicitWasmPath = process.env["TYPED_SKI_WASM_PATH"];
   if (explicitWasmPath) {
+    console.log(`Using explicit WASM path: ${explicitWasmPath}`);
     return { TYPED_SKI_WASM_PATH: explicitWasmPath };
   }
   const wasmUrl = getBazelWasmArtifactUrl();
+  if (wasmUrl) {
+    console.log(`Using detected WASM URL: ${wasmUrl}`);
+  } else {
+    console.log("No WASM artifact found.");
+  }
   return wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
 }
 

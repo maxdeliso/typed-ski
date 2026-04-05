@@ -12,7 +12,8 @@ type PackageJson = {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const PROJECT_ROOT = resolve(join(__dirname, ".."));
+export const PROJECT_ROOT = join(__dirname, "..");
+console.log(`[repoNode] PROJECT_ROOT: ${PROJECT_ROOT}`);
 const PACKAGE_JSON_PATH = join(PROJECT_ROOT, "package.json");
 
 function readPackageJson(): PackageJson {

@@ -37,6 +37,8 @@ cc_library(
     srcs = ["util.c"],
     hdrs = ["util.h"],
     copts = COMMON_COPTS,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
 )
 
 cc_library(
@@ -49,6 +51,8 @@ cc_library(
         "host_platform.h",
     ],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
 )
 
 cc_library(
@@ -56,6 +60,8 @@ cc_library(
     srcs = ["ski_io.c"],
     hdrs = ["ski_io.h"],
     copts = COMMON_COPTS,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
     deps = [
         ":arena_runtime",
         ":util",
@@ -73,6 +79,8 @@ cc_library(
         "thanatos.h",
     ],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
     deps = [
         ":arena_runtime",
         ":ski_io",
@@ -86,7 +94,10 @@ cc_binary(
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
-    deps = [":thanatos_lib"],
+    tags = ["no-coverage"],
+    features = ["-coverage"],
+    deps = [
+":thanatos_lib"],
 )
 
 cc_test(
@@ -95,6 +106,8 @@ cc_test(
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
     deps = [
         ":arena_runtime",
         ":ski_io",
@@ -108,7 +121,10 @@ cc_test(
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
-    deps = [":thanatos_lib"],
+    tags = ["no-coverage"],
+    features = ["-coverage"],
+    deps = [
+":thanatos_lib"],
 )
 
 cc_test(
@@ -117,6 +133,8 @@ cc_test(
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
     deps = [
         ":thanatos_lib",
     ],
@@ -127,7 +145,10 @@ cc_test(
     srcs = ["util_test.c"],
     copts = COMMON_COPTS,
     linkstatic = 1,
-    deps = [":util"],
+    tags = ["no-coverage"],
+    features = ["-coverage"],
+    deps = [
+":util"],
 )
 
 cc_binary(
@@ -136,5 +157,8 @@ cc_binary(
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
-    deps = [":thanatos_lib"],
+    tags = ["no-coverage"],
+    features = ["-coverage"],
+    deps = [
+":thanatos_lib"],
 )

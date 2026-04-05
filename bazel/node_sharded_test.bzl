@@ -47,7 +47,7 @@ def _node_sharded_test_impl(ctx):
 
     if is_windows:
         node_bin = node_path.replace("/", "\\")
-        command = "\"%NODE_BIN%\" \"--experimental-transform-types\" \"scripts/bazel.ts\" \"bazel-test-shard\" %*"
+        command = "\"%NODE_BIN%\" \"--experimental-transform-types\" \"--preserve-symlinks\" \"scripts/bazel.ts\" \"bazel-test-shard\" %*"
         content = "\r\n".join([
             "@echo off",
             "setlocal",
@@ -89,7 +89,7 @@ def _node_sharded_test_impl(ctx):
         ])
     else:
         node_bin = _shell_dquote_literal(node_path)
-        command = "\"$node_bin\" --experimental-transform-types scripts/bazel.ts bazel-test-shard \"$@\""
+        command = "\"$node_bin\" --experimental-transform-types --preserve-symlinks scripts/bazel.ts bazel-test-shard \"$@\""
         content = "\n".join([
             "#!/usr/bin/env bash",
             "set -euo pipefail",

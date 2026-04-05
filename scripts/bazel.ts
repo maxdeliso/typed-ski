@@ -1296,7 +1296,7 @@ export async function main(
 
 const isMain =
   process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
   await main();

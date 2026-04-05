@@ -30,6 +30,9 @@
   "engines": {
     "node": "25.x"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": []
+  },
   "scripts": {
     "tripc": "node --experimental-transform-types bin/tripc.ts",
     "bundle:tripc": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.js --format=esm --platform=node",

@@ -1,8 +1,11 @@
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
+load("@npm//:defs.bzl", "npm_link_all_packages")
 
 package(default_visibility = ["//visibility:public"])
+
+npm_link_all_packages(name = "node_modules")
 
 NODE_TEST_DATA = glob(
     [
@@ -75,9 +78,11 @@ node_dist(
 
 node_sharded_test(
     name = "node_tests",
-    data = NODE_TEST_DATA,
+    data = NODE_TEST_DATA + [":node_modules"],
     dist = ":dist_artifacts",
     shard_count = 8,
+    size = "large",
+    timeout = "long",
     thanatos = "//core:thanatos",
     wasm = "//wasm:release",
 )

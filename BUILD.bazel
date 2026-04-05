@@ -128,21 +128,7 @@ workspace_command(
 )
 
 workspace_command(
-    name = "test",
-    subcommand = "test",
-)
-
-workspace_command(
-    name = "coverage",
-    subcommand = "coverage",
-)
-
-workspace_command(
-    name = "ci",
-    subcommand = "ci",
-)
-
-workspace_command(
     name = "vs_project",
     subcommand = "vs-project",
 )
+

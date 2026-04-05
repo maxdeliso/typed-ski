@@ -27,8 +27,6 @@ type CommandName =
   | "typecheck"
   | "test"
   | "bazel-test-shard"
-  | "coverage"
-  | "ci"
   | "vs-project";
 
 type AqueryTarget = {
@@ -136,8 +134,6 @@ Commands:
   typecheck
   test
   bazel-test-shard
-  coverage
-  ci
   vs-project`);
   process.exit(1);
 }
@@ -1238,12 +1234,6 @@ export async function main(
       break;
     case "bazel-test-shard":
       await runBazelShardTests(args);
-      break;
-    case "coverage":
-      await runTests(true, args);
-      break;
-    case "ci":
-      await ci();
       break;
     case "vs-project":
       await generateVisualStudioProject();

@@ -72,12 +72,15 @@ jobs:
       - name: Build distributable artifacts
         run: bazel run //:dist
 
-      - name: Run sharded Node tests
+      - name: Run Node tests (Windows)
+        if: matrix.os == 'windows-2025'
         run: bazel test //:node_tests --test_output=errors
 
-      - name: Generate coverage
+      - name: Run Node tests and collect coverage (Ubuntu)
         if: matrix.os == 'ubuntu-24.04'
-        run: bazel run //:coverage
+        run: |
+          bazel coverage //:node_tests --test_output=errors
+          cp bazel-out/_coverage/_target_coverage.dat coverage.lcov
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04'

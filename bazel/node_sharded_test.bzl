@@ -82,6 +82,7 @@ def _node_sharded_test_impl(ctx):
             "set \"TYPED_SKI_ARENA_WORKER_JS_PATH=%RUNFILES_ROOT%\\" + arena_worker_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_BIN_PATH=%RUNFILES_ROOT%\\" + dist_bin_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_READY=1\"",
+            "if not \"%TEST_SHARD_STATUS_FILE%\"==\"\" type nul > \"%TEST_SHARD_STATUS_FILE%\"",
             command,
             "exit /b %ERRORLEVEL%",
             "",
@@ -123,6 +124,7 @@ def _node_sharded_test_impl(ctx):
             "export TYPED_SKI_ARENA_WORKER_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(arena_worker_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_BIN_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_bin_rootpath) + "\"",
             "export TYPED_SKI_DIST_READY=1",
+            "[[ -n \"${TEST_SHARD_STATUS_FILE:-}\" ]] && touch \"$TEST_SHARD_STATUS_FILE\"",
             command,
             "",
         ])

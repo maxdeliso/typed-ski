@@ -63,6 +63,12 @@ const TEMP_ROOT =
 
 const COMPILED_TRIPC_NAME =
   process.platform === "win32" ? "tripc.cmd" : "tripc";
+
+async function ensureNpmCache(): Promise<string> {
+  const cacheDir = join(PROJECT_ROOT, ".tmp", "npm-cache");
+  await fsp.mkdir(cacheDir, { recursive: true });
+  return cacheDir;
+}
 const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
 const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
 const FAST_TEST_TIMEOUT_MS = 30_000;
@@ -172,6 +178,7 @@ function getBazelWasmArtifactCandidates(): string[] {
 
 async function run(args: string[], options: any = {}): Promise<void> {
   const { env: extraEnv, timeoutMs, ...rest } = options;
+  const npmCache = await ensureNpmCache();
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.platform === "win32" && args[0]!.includes(" ")
@@ -184,6 +191,7 @@ async function run(args: string[], options: any = {}): Promise<void> {
         shell: process.platform === "win32",
         env: {
           ...process.env,
+          npm_config_cache: npmCache,
           ...extraEnv,
         },
         ...rest,
@@ -235,6 +243,7 @@ async function run(args: string[], options: any = {}): Promise<void> {
 
 async function runCapture(args: string[], options: any = {}): Promise<string> {
   const { env: extraEnv, ...rest } = options;
+  const npmCache = await ensureNpmCache();
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.platform === "win32" && args[0]!.includes(" ")
@@ -247,6 +256,7 @@ async function runCapture(args: string[], options: any = {}): Promise<string> {
         shell: process.platform === "win32",
         env: {
           ...process.env,
+          npm_config_cache: npmCache,
           ...extraEnv,
         },
         ...rest,

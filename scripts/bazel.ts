@@ -101,6 +101,12 @@ function nodeTestArgs(
   if (options.coverage) {
     args.push("--experimental-test-coverage");
     if (options.coverageReporterDestination) {
+      // When specifying a coverage reporter destination, Node.js disables the default
+      // reporter. We must explicitly add a reporter to stdout to ensure test output
+      // remains visible in CI logs.
+      const stdoutReporter = process.stdout.isTTY ? "spec" : "tap";
+      args.push(`--test-reporter=${stdoutReporter}`);
+      args.push("--test-reporter-destination=stdout");
       args.push("--test-reporter=lcov");
       args.push(
         `--test-reporter-destination=${options.coverageReporterDestination}`,

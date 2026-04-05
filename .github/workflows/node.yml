@@ -95,6 +95,14 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-test-logs-${{ matrix.os }}
+          path: bazel-testlogs/
+          if-no-files-found: ignore
+
       - name: Setup Deno (for JSR dry run)
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
         uses: denoland/setup-deno@v2

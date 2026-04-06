@@ -46,6 +46,7 @@ type AqueryResponse = {
 };
 
 const NODE = process.execPath;
+const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
 const NODE_TRANSFORM_TYPES_ARG = "--experimental-transform-types";
 const NODE_TEST_GLOBAL_SETUP_PATH = join(
@@ -311,6 +312,8 @@ async function syncGenerated(): Promise<void> {
     NODE_TRANSFORM_TYPES_ARG,
     "scripts/generateArenaHeaderC.ts",
   ]);
+  await run([NPX, "--yes", "pnpm", "install", "--lockfile-only"]);
+  await run([NPM, "install", "--package-lock-only"]);
 }
 
 export async function buildDist(): Promise<void> {

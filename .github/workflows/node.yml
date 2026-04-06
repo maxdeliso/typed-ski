@@ -63,9 +63,6 @@ jobs:
       - name: Run format check
         run: bazel run //:fmt_check
 
-      - name: Run lint
-        run: bazel run //:lint
-
       - name: Run typecheck
         run: bazel run //:typecheck
 

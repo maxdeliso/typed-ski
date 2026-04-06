@@ -365,7 +365,6 @@ async function main(): Promise<void> {
   }
 }
 
-// @ts-ignore: import.meta.main is available in Node 25 and Deno
-if (import.meta.main) {
+if ((import.meta as any).main) {
   await main();
 }

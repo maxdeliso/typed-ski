@@ -52,7 +52,7 @@ export const VERSION = "${version}";
       },
       compilerOptions: {
         strict: true,
-        lib: ["dom"],
+        lib: ["ESNext", "dom"],
         types: ["@types/node"],
       },
       imports: {

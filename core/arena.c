@@ -254,6 +254,19 @@ typedef struct {
   uint8_t padding[14];
 } __attribute__((aligned(32))) ArenaNode;
 
+enum {
+  /*
+   * Per-capacity arrays in the active layout:
+   * u32: left, right, hash32, next_idx, link, buckets
+   * u8: kind, sym
+   */
+  ACTIVE_LAYOUT_U32_ARRAY_COUNT = 6,
+  ACTIVE_LAYOUT_U8_ARRAY_COUNT = 2,
+  ACTIVE_LAYOUT_BYTES_PER_CAPACITY_SLOT =
+      (int)(sizeof(atomic_uint) * ACTIVE_LAYOUT_U32_ARRAY_COUNT +
+            sizeof(atomic_uchar) * ACTIVE_LAYOUT_U8_ARRAY_COUNT),
+};
+
 typedef struct {
   uint32_t current_val;
   uint32_t sp;
@@ -604,7 +617,8 @@ static void control_init_at(SabHeader *h) {
 
 static uint64_t active_layout_bytes(const SabLayout *layout,
                                     uint32_t capacity) {
-  return layout->offset_node_left + (uint64_t)capacity * 26u;
+  return layout->offset_node_left +
+         (uint64_t)capacity * ACTIVE_LAYOUT_BYTES_PER_CAPACITY_SLOT;
 }
 
 #ifndef __wasm__

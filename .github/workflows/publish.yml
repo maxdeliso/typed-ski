@@ -48,7 +48,7 @@ jobs:
         run: bazel run //:build
 
       - name: Run test suite
-        run: bazel run //:test
+        run: bazel test //:node_tests --test_output=errors
 
       - name: Setup Deno (for JSR publish)
         uses: denoland/setup-deno@v2

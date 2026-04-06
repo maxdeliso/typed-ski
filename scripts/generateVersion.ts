@@ -56,9 +56,9 @@ export const VERSION = "${version}";
         types: ["@types/node"],
       },
       imports: {
-        "@types/node": "npm:@types/node@^25.0.10",
+        "@types/node": "npm:@types/node@^25.5.2",
         "random-seed": "npm:random-seed@0.3.0",
-        "ts-morph": "npm:ts-morph@^25.0.0",
+        "ts-morph": "npm:ts-morph@^27.0.2",
       },
     };
 

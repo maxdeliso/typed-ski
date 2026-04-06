@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -31,7 +31,9 @@
     "node": "25.x"
   },
   "pnpm": {
-    "onlyBuiltDependencies": []
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "scripts": {
     "tripc": "node --experimental-transform-types bin/tripc.ts",
@@ -44,17 +46,17 @@
   },
   "dependencies": {
     "random-seed": "0.3.0",
-    "ts-morph": "^25.0.0"
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
-    "@types/node": "^22.0.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.2",
     "@types/random-seed": "^0.3.5",
-    "esbuild": "^0.24.0",
-    "eslint": "^9.39.4",
+    "esbuild": "^0.25.0",
+    "eslint": "^10.2.0",
     "globals": "^17.4.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.0"
   }
 }

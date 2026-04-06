@@ -1300,10 +1300,6 @@ export async function main(
   }
 }
 
-const isMain =
-  process.argv[1] !== undefined &&
-  fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
-
-if (isMain) {
+if (import.meta.main) {
   await main();
 }

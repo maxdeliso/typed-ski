@@ -119,11 +119,7 @@ function writeFully(bytes: Uint8Array): void {
   process.stdout.write(bytes);
 }
 
-const isMain =
-  process.argv[1] &&
-  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
-
-if (isMain) {
+if (import.meta.main) {
   const { finalBytes } = await runFreshCompilerCorpusBuild();
   writeFully(finalBytes);
 }

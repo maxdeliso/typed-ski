@@ -120,11 +120,6 @@ async function main(): Promise<void> {
   await compileToObjectFile(inputPath, outputPath);
 }
 
-const isMain =
-  process.argv[1] &&
-  (fileURLToPath(import.meta.url) === resolve(process.argv[1]) ||
-    process.argv[1].endsWith("compiler/main.ts"));
-
-if (isMain) {
+if (import.meta.main) {
   await main();
 }

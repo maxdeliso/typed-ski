@@ -365,11 +365,6 @@ async function main(): Promise<void> {
   }
 }
 
-const isMain =
-  process.argv[1] &&
-  (fileURLToPath(import.meta.url) === resolve(process.argv[1]) ||
-    process.argv[1].endsWith("bin/tripc.ts"));
-
-if (isMain) {
+if (import.meta.main) {
   await main();
 }

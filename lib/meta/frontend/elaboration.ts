@@ -36,7 +36,6 @@ function elaborateTerm(term: TripLangTerm, syms: SymbolTable): TripLangTerm {
         term: elaborateSystemF(term.term, syms),
       };
     case "lambda":
-      return term;
     case "combinator":
       return term;
     case "native":

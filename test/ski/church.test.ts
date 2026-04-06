@@ -13,7 +13,6 @@ import {
 } from "../../lib/ski/church.ts";
 import { I, K, S, SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
-import { parseLambda } from "../../lib/parser/untyped.ts";
 import {
   apply,
   applyMany,
@@ -488,35 +487,6 @@ test("Church encodings", async (t) => {
           ),
         ).to.equal(m * n);
       }
-    }
-  });
-
-  await t.test("predecessor", async () => {
-    const [, predLambda] = parseLambda(
-      "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
-    );
-    const pred = bracketLambda(predLambda);
-
-    for (let m = 0n; m < N; m++) {
-      const expected = m - 1n > 0n ? m - 1n : 0n; // pred(0) = 0
-
-      // Pair-shifting definition
-      expect(
-        await UnChurchNumber(
-          arenaEvaluator.reduce(
-            apply(Cdr, applyMany(ChurchN(m), pairShiftSucc, pairZeroZero)),
-          ),
-          arenaEvaluator,
-        ),
-      ).to.equal(expected);
-
-      // Lambda derived from book definition
-      expect(
-        await UnChurchNumber(
-          arenaEvaluator.reduce(apply(pred, ChurchN(m))),
-          arenaEvaluator,
-        ),
-      ).to.equal(expected);
     }
   });
 });

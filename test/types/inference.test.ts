@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import { expect } from "../util/assertions.ts";
 
-import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
-import { typelessApp } from "../util/ast.ts";
+import { untypedAbs, mkVar, untypedApp } from "../../lib/terms/lambda.ts";
+
 import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
 import {
   arrow,
@@ -141,14 +141,14 @@ test("Type inference utilities", async (t) => {
 
   await t.test("inferType", async (t) => {
     await t.test("infers type for a simple identity function", () => {
-      const id = mkUntypedAbs("x", mkVar("x"));
+      const id = untypedAbs("x", mkVar("x"));
       const [, ty] = inferType(id);
 
       expect(ty.kind).to.equal("non-terminal");
     });
 
     await t.test("infers arrow type with matching ends", () => {
-      const id = mkUntypedAbs("x", mkVar("x"));
+      const id = untypedAbs("x", mkVar("x"));
       const [, ty] = inferType(id);
 
       if (
@@ -161,9 +161,9 @@ test("Type inference utilities", async (t) => {
     });
 
     await t.test("infers type of the application combinator", () => {
-      const appComb = mkUntypedAbs(
+      const appComb = untypedAbs(
         "f",
-        mkUntypedAbs("x", typelessApp(mkVar("f"), mkVar("x"))),
+        untypedAbs("x", untypedApp(mkVar("f"), mkVar("x"))),
       );
       const [, ty] = inferType(appComb);
 
@@ -171,7 +171,7 @@ test("Type inference utilities", async (t) => {
     });
 
     await t.test("handles a more complex term (K combinator)", () => {
-      const kComb = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
+      const kComb = untypedAbs("x", untypedAbs("y", mkVar("x")));
       const [, ty] = inferType(kComb);
 
       expect(ty.kind).to.equal("non-terminal");

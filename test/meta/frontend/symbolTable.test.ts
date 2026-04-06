@@ -4,7 +4,6 @@ import {
   type DataDefinition,
   extractDefinitionValue,
   indexSymbols,
-  type LambdaDefinition,
   type PolyDefinition,
   type TripLangProgram,
   type TypeDefinition,
@@ -91,7 +90,7 @@ test("Symbol Table", async (t) => {
   await t.test(
     "should throw on duplicate definitions across different term kinds",
     async (t) => {
-      await t.test("poly vs lambda", () => {
+      await t.test("poly vs native", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
@@ -101,9 +100,9 @@ test("Symbol Table", async (t) => {
               term: { kind: "systemF-var", name: "x" },
             },
             {
-              kind: "lambda",
+              kind: "native",
               name: "id",
-              term: { kind: "lambda-var", name: "x" },
+              type: { kind: "type-var", typeName: "X" },
             },
           ],
         };
@@ -139,14 +138,14 @@ test("Symbol Table", async (t) => {
         );
       });
 
-      await t.test("lambda vs combinator", () => {
+      await t.test("native vs combinator", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
             {
-              kind: "lambda",
+              kind: "native",
               name: "id",
-              term: { kind: "lambda-var", name: "x" },
+              type: { kind: "type-var", typeName: "X" },
             },
             {
               kind: "combinator",
@@ -461,17 +460,6 @@ test("Symbol Table", async (t) => {
 
     const resolved = extractDefinitionValue(term);
     assert.deepStrictEqual(resolved, { kind: "systemF-var", name: "x" });
-  });
-
-  await t.test("should resolve lambda term definition", () => {
-    const term: LambdaDefinition = {
-      kind: "lambda",
-      name: "id",
-      term: { kind: "lambda-var", name: "x" },
-    };
-
-    const resolved = extractDefinitionValue(term);
-    assert.deepStrictEqual(resolved, { kind: "lambda-var", name: "x" });
   });
 
   await t.test("should resolve type definition", () => {

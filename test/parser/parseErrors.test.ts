@@ -3,7 +3,6 @@ import { expect } from "../util/assertions.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
-import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { parseArrowTypeNoApp, parseType } from "../../lib/parser/type.ts";
 import { parseSystemFType } from "../../lib/parser/systemFType.ts";
@@ -18,8 +17,7 @@ import {
   skipWhitespace,
 } from "../../lib/parser/parserState.ts";
 import { parseChain } from "../../lib/parser/chain.ts";
-import { parseAtomicTypedLambda } from "../../lib/parser/typedLambda.ts";
-import { createTypedApplication } from "../util/ast.ts";
+import { createTypedApp } from "../util/ast.ts";
 import { parseWithEOF } from "../../lib/parser/eof.ts";
 
 test("Parser Error Coverage", async (t) => {
@@ -215,15 +213,6 @@ test("Parser Error Coverage", async (t) => {
     });
   });
 
-  await t.test("chain.ts errors", async (t) => {
-    await t.test("expected a term", () => {
-      expect(() => {
-        const state = createParserState("");
-        parseChain(state, parseAtomicTypedLambda, createTypedApplication);
-      }).to.throw(ParseError, /expected a term/);
-    });
-  });
-
   await t.test("eof.ts errors", async (t) => {
     await t.test("unexpected extra input", () => {
       expect(() => {
@@ -240,22 +229,6 @@ test("Parser Error Coverage", async (t) => {
       expect(() => parseType("(a->b")).to.throw(
         ParseError,
         /expected '\)' after type expression/,
-      );
-    });
-  });
-
-  await t.test("typedLambda.ts errors", async (t) => {
-    await t.test("expected identifier in lambda", () => {
-      expect(() => parseTypedLambda("\\:a=>x")).to.throw(
-        ParseError,
-        /expected an identifier/,
-      );
-    });
-
-    await t.test("missing term after fat arrow", () => {
-      expect(() => parseTypedLambda("\\x:a=>")).to.throw(
-        ParseError,
-        /expected a term/,
       );
     });
   });

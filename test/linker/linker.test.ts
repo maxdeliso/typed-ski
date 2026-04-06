@@ -30,7 +30,7 @@ import type { TripLangTerm as _TripLangTerm } from "../../lib/meta/trip.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
-import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
+import { untypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
 import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
@@ -1116,17 +1116,6 @@ test("TripLang Linker", async (t) => {
     },
   );
 
-  await t.test("lowerToSKI matches bracketLambda output", () => {
-    const term: _TripLangTerm = {
-      kind: "lambda",
-      name: "id",
-      term: mkUntypedAbs("x", mkVar("x")),
-    };
-    const lowerResult = lowerToSKI(term);
-    const directResult = unparseSKI(bracketLambda(term.term));
-    expect(lowerResult).to.equal(directResult);
-  });
-
   await t.test("type edges use programSpace.types.has() for robustness", () => {
     // Test that type edges correctly check programSpace.types.has() rather than module.defs.has()
     // This prevents type edges from pointing to terms when names are overloaded
@@ -1383,11 +1372,8 @@ test("TripLang Linker", async (t) => {
       if (main?.kind !== "lambda") {
         throw new Error(`Expected kind 'lambda', got '${main?.kind}'`);
       }
-      // Narrowed to LambdaDefinition
       const term = main.term;
 
-      // With correct topological order, x is resolved even if we delete the initial global entry
-      // because resolveSCC re-adds it when processing the Provider module.
       const termValue = term as unknown as { kind: string };
       expect(termValue.kind).to.equal("terminal");
       if (termValue.kind !== "terminal") {

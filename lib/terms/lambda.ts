@@ -2,8 +2,7 @@
  * Untyped lambda calculus term representation and utilities.
  *
  * This module defines the AST types for untyped lambda calculus terms,
- * including variables, abstractions, and applications. It provides
- * pretty-printing and utility functions for working with untyped lambda terms.
+ * including variables, abstractions, and applications.
  *
  * @module
  */
@@ -44,7 +43,7 @@ interface UntypedLambdaAbs {
  * @param body the body of the abstraction
  * @returns a new lambda abstraction node
  */
-export const mkUntypedAbs = (
+export const untypedAbs = (
   name: string,
   body: UntypedLambda,
 ): UntypedLambda => ({
@@ -74,7 +73,7 @@ export type UntypedLambda = LambdaVar | UntypedLambdaAbs | UntypedApplication;
  * @param right the argument term
  * @returns a new application node
  */
-export const createApplication = (
+export const untypedApp = (
   left: UntypedLambda,
   right: UntypedLambda,
 ): UntypedLambda => ({

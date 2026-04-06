@@ -12,8 +12,8 @@ import type {
   TripCObject,
 } from "../compiler/objectFile.ts";
 import type { TripLangTerm, TripLangValueType } from "../meta/trip.ts";
-import type { SystemFTerm } from "../terms/systemF.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
+import type { SystemFTerm } from "../terms/systemF.ts";
 import { externalReferences } from "../meta/frontend/externalReferences.ts";
 import { extractDefinitionValue } from "../meta/frontend/symbolTable.ts";
 import { lower } from "../meta/frontend/termLevel.ts";
@@ -744,7 +744,7 @@ function substituteDependencies(
             resolvedDefinition,
             targetType,
           );
-          // FIX: Only mark as changed if substitution actually happened
+          // Only mark as changed if substitution actually happened
           if (resolvedDefinition !== oldDef) {
             changed = true;
             // Check for new external references after substitution
@@ -987,7 +987,8 @@ export function resolveCrossModuleDependencies(
   clearModuleInfoCache();
   const resolvedPS = shallowCopyProgramSpace(programSpace);
   const exportIndex = buildExportIndex(resolvedPS);
-  // Pre-lower poly/native terms to avoid recursive inlining loops and resolve intrinsics.
+  // Pre-lower poly/native terms so recursive resolution happens over erased lambdas
+  // and intrinsics resolve to executable combinators.
   for (const moduleName of sortedModuleNames(resolvedPS)) {
     const module = resolvedPS.modules.get(moduleName)!;
     for (const [name, def] of sortedModuleDefs(module)) {

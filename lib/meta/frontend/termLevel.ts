@@ -9,8 +9,8 @@
  */
 import { bracketLambda, eraseSystemF } from "../../index.ts";
 import {
-  createApplication,
-  mkUntypedAbs,
+  untypedApp,
+  untypedAbs,
   mkVar,
   type UntypedLambda,
 } from "../../terms/lambda.ts";
@@ -44,19 +44,19 @@ function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {
 
   // The Z-Combinator logic
   // 1. x x
-  const xx = createApplication(mkVar(xName), mkVar(xName));
+  const xx = untypedApp(mkVar(xName), mkVar(xName));
   // 2. x x v
-  const xxv = createApplication(xx, mkVar(vName));
+  const xxv = untypedApp(xx, mkVar(vName));
   // 3. \v. x x v  (Delay thunk)
-  const delayed = mkUntypedAbs(vName, xxv);
+  const delayed = untypedAbs(vName, xxv);
   // 4. f (\v. x x v)
-  const fDelayed = createApplication(mkVar(fName), delayed);
+  const fDelayed = untypedApp(mkVar(fName), delayed);
   // 5. \x. f (\v. x x v)
-  const inner = mkUntypedAbs(xName, fDelayed);
+  const inner = untypedAbs(xName, fDelayed);
 
-  const z = mkUntypedAbs(fName, createApplication(inner, inner));
-  const recFn = mkUntypedAbs(name, body);
-  return createApplication(z, recFn);
+  const z = untypedAbs(fName, untypedApp(inner, inner));
+  const recFn = untypedAbs(name, body);
+  return untypedApp(z, recFn);
 }
 
 export function termLevel(dt: TripLangTerm): number {
@@ -91,13 +91,14 @@ export function lower(dt: TripLangTerm): TripLangTerm {
         term: lowered,
       };
     }
+
     case "lambda": {
-      const erased = bracketLambda(dt.term);
+      const final = bracketLambda(dt.term);
 
       return {
         kind: "combinator",
         name: dt.name,
-        term: erased,
+        term: final,
       };
     }
 

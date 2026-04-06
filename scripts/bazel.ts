@@ -96,10 +96,17 @@ function nodeTestArgs(
   } = {},
 ): string[] {
   const args = ["--test"];
+  args.push("--enable-source-maps");
   args.push("--experimental-test-module-mocks");
   args.push("--test-global-setup", NODE_TEST_GLOBAL_SETUP_PATH);
+  args.push("--preserve-symlinks");
+
   if (options.coverage) {
     args.push("--experimental-test-coverage");
+    args.push("--test-coverage-include=lib/**");
+    args.push("--test-coverage-include=compiler/**");
+    args.push("--test-coverage-include=bin/**");
+
     if (options.coverageReporterDestination) {
       // When specifying a coverage reporter destination, Node.js disables the default
       // reporter. We must explicitly add a reporter to stdout to ensure test output

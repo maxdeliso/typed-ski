@@ -3,8 +3,8 @@
  */
 export * from "./natNames.ts";
 import {
-  createApplication,
-  mkUntypedAbs,
+  untypedApp,
+  untypedAbs,
   mkVar,
   type UntypedLambda,
 } from "../terms/lambda.ts";
@@ -12,23 +12,23 @@ import type { SKIExpression } from "../ski/expression.ts";
 import { ChurchN } from "../ski/church.ts";
 import { SKITerminalSymbol } from "../ski/terminal.ts";
 
-const lambdaS = mkUntypedAbs(
+const lambdaS = untypedAbs(
   "x",
-  mkUntypedAbs(
+  untypedAbs(
     "y",
-    mkUntypedAbs(
+    untypedAbs(
       "z",
-      createApplication(
-        createApplication(mkVar("x"), mkVar("z")),
-        createApplication(mkVar("y"), mkVar("z")),
+      untypedApp(
+        untypedApp(mkVar("x"), mkVar("z")),
+        untypedApp(mkVar("y"), mkVar("z")),
       ),
     ),
   ),
 );
 
-const lambdaK = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
+const lambdaK = untypedAbs("x", untypedAbs("y", mkVar("x")));
 
-const lambdaI = mkUntypedAbs("x", mkVar("x"));
+const lambdaI = untypedAbs("x", mkVar("x"));
 
 const terminalToLambda = (sym: SKITerminalSymbol): UntypedLambda => {
   switch (sym) {
@@ -50,7 +50,7 @@ export const skiToUntyped = (expr: SKIExpression): UntypedLambda => {
   if (expr.kind === "u8") {
     throw new Error("U8 literals cannot be converted to untyped lambda");
   }
-  return createApplication(skiToUntyped(expr.lft), skiToUntyped(expr.rgt));
+  return untypedApp(skiToUntyped(expr.lft), skiToUntyped(expr.rgt));
 };
 
 export const makeUntypedChurchNumeral = (value: bigint): UntypedLambda => {
@@ -77,7 +77,7 @@ export const makeUntypedBinNumeral = (value: bigint): UntypedLambda => {
   let term: UntypedLambda = mkVar("BZ");
   for (let i = bits.length - 1; i >= 0; i--) {
     const ctor = bits[i] === 0 ? "B0" : "B1";
-    term = createApplication(mkVar(ctor), term);
+    term = untypedApp(mkVar(ctor), term);
   }
   return term;
 };

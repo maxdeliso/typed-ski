@@ -8,7 +8,6 @@
  * @module
  */
 import type {
-  LambdaDefinition,
   PolyDefinition,
   SymbolTable,
   TripLangProgram,
@@ -382,47 +381,4 @@ export function resolvePoly(
   const term = findTerm(prog.program, id);
   assertKind(term, "poly");
   return term;
-}
-
-/**
- * Resolves a definition to the internal lambda stage, lowering recursive poly
- * references through the fixpoint encoding so the result is executable.
- */
-export function resolveLambda(
-  prog: TypecheckedProgramWithTypes,
-  id: string,
-): LambdaDefinition {
-  const term = findTerm(prog.program, id);
-  const lambda =
-    term.kind === "lambda"
-      ? term
-      : term.kind === "poly"
-        ? lower(term)
-        : undefined;
-
-  if (!lambda || lambda.kind !== "lambda") {
-    throw new CompilationError(
-      `Expected term '${id}' to resolve to kind 'lambda', got '${term.kind}'`,
-      "resolve",
-      { term },
-    );
-  }
-
-  const symbols = indexSymbolsImpl(prog.program);
-  const importedSymbols = collectImportedSymbols(prog.program);
-  const resolved = resolveExternalTermReferences(
-    lambda,
-    symbols,
-    importedSymbols,
-  );
-
-  if (resolved.kind !== "lambda") {
-    throw new CompilationError(
-      `Expected resolved term '${id}' to be of kind 'lambda', got '${resolved.kind}'`,
-      "resolve",
-      { term: resolved },
-    );
-  }
-
-  return resolved;
 }

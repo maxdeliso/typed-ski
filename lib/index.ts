@@ -45,33 +45,14 @@ export {
 // Parser exports
 /** Parses a string representation of an SKI expression into its AST. */
 export { parseSKI } from "./parser/ski.ts";
-/** Parses a string representation of an untyped lambda expression into its AST. */
-export { parseLambda } from "./parser/untyped.ts";
+
 /** Parses a string representation of a System F term into its AST. */
 export { parseSystemF } from "./parser/systemFTerm.ts";
-/** Parses a string representation of a typed lambda expression into its AST. */
-export { parseTypedLambda } from "./parser/typedLambda.ts";
-
-// Lambda terms exports
-export { type UntypedLambda } from "./terms/lambda.ts";
-/** Unparses an untyped lambda expression into a string representation. */
-export { unparseUntypedLambda } from "./parser/untyped.ts";
 
 // System F exports
 export { type SystemFTerm } from "./terms/systemF.ts";
 /** Unparses a System F term into a string representation. */
 export { unparseSystemF } from "./parser/systemFTerm.ts";
-
-// Typed Lambda exports
-export {
-  /** Converts a typed lambda expression into an untyped lambda expression by removing type annotations. */
-  eraseTypedLambda,
-  /** Performs type checking on a typed lambda expression to ensure type correctness. */
-  typecheckTypedLambda as typecheckTyped,
-  type TypedLambda,
-} from "./types/typedLambda.ts";
-/** Unparses a typed lambda expression into a string representation. */
-export { unparseTypedLambda } from "./parser/typedLambda.ts";
 
 // System F type exports
 export {
@@ -101,7 +82,6 @@ export { parseTripLang } from "./parser/tripLang.ts";
 export { compile } from "./meta/frontend.ts";
 export {
   type DataDefinition,
-  type LambdaDefinition,
   type PolyDefinition,
   type TripLangProgram,
   type TripLangTerm,
@@ -122,7 +102,7 @@ export {
   resolveExternalTermReferences,
 } from "./meta/frontend/substitution.ts";
 /** Resolves polymorphic definitions in a TripLang program. */
-export { resolveLambda, resolvePoly } from "./meta/frontend/compilation.ts";
+export { resolvePoly } from "./meta/frontend/compilation.ts";
 
 // Phase 1 Single-File Compiler exports
 export {

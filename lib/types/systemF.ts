@@ -14,11 +14,7 @@ import {
   makeUntypedChurchNumeral,
   parseNatLiteralIdentifier,
 } from "../consts/nat.ts";
-import {
-  createApplication,
-  mkUntypedAbs,
-  type UntypedLambda,
-} from "../terms/lambda.ts";
+import { untypedApp, untypedAbs, type UntypedLambda } from "../terms/lambda.ts";
 import { mkSystemFAbs, type SystemFTerm } from "../terms/systemF.ts";
 import { normalize } from "./normalization.ts";
 
@@ -351,7 +347,7 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
       return { kind: "lambda-var", name: term.name };
     }
     case "systemF-abs":
-      return mkUntypedAbs(term.name, eraseSystemF(term.body));
+      return untypedAbs(term.name, eraseSystemF(term.body));
     case "systemF-type-abs":
       return eraseSystemF(term.body);
     case "systemF-type-app":
@@ -359,11 +355,11 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
     case "systemF-match":
       throw new TypeError("match must be elaborated before erasure");
     case "systemF-let":
-      return createApplication(
-        mkUntypedAbs(term.name, eraseSystemF(term.body)),
+      return untypedApp(
+        untypedAbs(term.name, eraseSystemF(term.body)),
         eraseSystemF(term.value),
       );
     default:
-      return createApplication(eraseSystemF(term.lft), eraseSystemF(term.rgt));
+      return untypedApp(eraseSystemF(term.lft), eraseSystemF(term.rgt));
   }
 };

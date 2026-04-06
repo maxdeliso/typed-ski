@@ -7,10 +7,21 @@
  * @module
  */
 import { unparseSKI } from "../../index.ts";
-import { unparseUntypedLambda } from "../../parser/untyped.ts";
 import { unparseSystemF } from "../../parser/systemFTerm.ts";
 import { unparseType } from "../../parser/type.ts";
 import type { TripLangProgram, TripLangTerm } from "../trip.ts";
+import type { UntypedLambda } from "../../terms/lambda.ts";
+
+function unparseUntypedLambda(term: UntypedLambda): string {
+  switch (term.kind) {
+    case "lambda-var":
+      return term.name;
+    case "lambda-abs":
+      return `\\${term.name}=>${unparseUntypedLambda(term.body)}`;
+    case "non-terminal":
+      return `(${unparseUntypedLambda(term.lft)} ${unparseUntypedLambda(term.rgt)})`;
+  }
+}
 
 /**
  * @internal

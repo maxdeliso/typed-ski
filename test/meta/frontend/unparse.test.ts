@@ -6,7 +6,6 @@ import {
 } from "../../../lib/meta/frontend/unparse.ts";
 import { parseTripLang } from "../../../lib/parser/tripLang.ts";
 import { requiredAt } from "../../util/required.ts";
-import { mkUntypedAbs, mkVar } from "../../../lib/terms/lambda.ts";
 
 test("unparseTerm", async (t) => {
   await t.test("should unparse a poly definition", () => {
@@ -34,15 +33,6 @@ test("unparseTerm", async (t) => {
     const dataTerm = requiredAt(program.terms, 1, "expected data definition");
     const result = unparseTerm(dataTerm);
     assert.equal(result, "data Maybe = None | Some T");
-  });
-
-  await t.test("should unparse an internal lambda definition", () => {
-    const result = unparseTerm({
-      kind: "lambda",
-      name: "id",
-      term: mkUntypedAbs("x", mkVar("x")),
-    });
-    assert.equal(result, "lambda id = \\x=>x");
   });
 
   await t.test("should unparse a combinator definition", () => {

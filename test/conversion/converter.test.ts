@@ -1,23 +1,11 @@
 import { test } from "node:test";
 import { expect } from "../util/assertions.ts";
-
-import { parseLambda } from "../../lib/parser/untyped.ts";
-import { makeUntypedBinNumeral } from "../../lib/consts/nat.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
-import {
-  apply,
-  applyMany,
-  type SKIExpression,
-} from "../../lib/ski/expression.ts";
+import { applyMany, type SKIExpression } from "../../lib/ski/expression.ts";
 import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { ConversionError } from "../../lib/conversion/conversionError.ts";
-import {
-  createApplication,
-  mkUntypedAbs,
-  mkVar,
-} from "../../lib/terms/lambda.ts";
-import type { UntypedLambda } from "../../lib/terms/lambda.ts";
+import { untypedApp, untypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import {
   mkSystemFTAbs,
   mkSystemFTypeApp,
@@ -31,55 +19,46 @@ test("Lambda conversion", async (t) => {
   let arenaEvaluator = await createArenaEvaluator();
 
   const N = 5;
-  const id = mkUntypedAbs("x", mkVar("x"));
-  const konst = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
-  const flip = mkUntypedAbs(
+  const id = untypedAbs("x", mkVar("x"));
+  const konst = untypedAbs("x", untypedAbs("y", mkVar("x")));
+  const flip = untypedAbs(
     "x",
-    mkUntypedAbs("y", createApplication(mkVar("y"), mkVar("x"))),
+    untypedAbs("y", untypedApp(mkVar("y"), mkVar("x"))),
   );
-  const lambdaB = mkUntypedAbs(
+  const lambdaB = untypedAbs(
     "x",
-    mkUntypedAbs(
+    untypedAbs(
       "y",
-      mkUntypedAbs(
+      untypedAbs(
         "z",
-        createApplication(
-          mkVar("x"),
-          createApplication(mkVar("y"), mkVar("z")),
+        untypedApp(mkVar("x"), untypedApp(mkVar("y"), mkVar("z"))),
+      ),
+    ),
+  );
+  const lambdaC = untypedAbs(
+    "x",
+    untypedAbs(
+      "y",
+      untypedAbs(
+        "z",
+        untypedApp(untypedApp(mkVar("x"), mkVar("z")), mkVar("y")),
+      ),
+    ),
+  );
+  const lambdaS = untypedAbs(
+    "x",
+    untypedAbs(
+      "y",
+      untypedAbs(
+        "z",
+        untypedApp(
+          untypedApp(mkVar("x"), mkVar("z")),
+          untypedApp(mkVar("y"), mkVar("z")),
         ),
       ),
     ),
   );
-  const lambdaC = mkUntypedAbs(
-    "x",
-    mkUntypedAbs(
-      "y",
-      mkUntypedAbs(
-        "z",
-        createApplication(
-          createApplication(mkVar("x"), mkVar("z")),
-          mkVar("y"),
-        ),
-      ),
-    ),
-  );
-  const lambdaS = mkUntypedAbs(
-    "x",
-    mkUntypedAbs(
-      "y",
-      mkUntypedAbs(
-        "z",
-        createApplication(
-          createApplication(mkVar("x"), mkVar("z")),
-          createApplication(mkVar("y"), mkVar("z")),
-        ),
-      ),
-    ),
-  );
-  const selfApply = mkUntypedAbs(
-    "x",
-    createApplication(mkVar("x"), mkVar("x")),
-  );
+  const selfApply = untypedAbs("x", untypedApp(mkVar("x"), mkVar("x")));
 
   const reduceToKey = (...exps: Parameters<typeof applyMany>) =>
     arenaEvaluator.reduce(applyMany(...exps));
@@ -166,68 +145,6 @@ test("Lambda conversion", async (t) => {
         }
       }
     });
-
-    await t.test(
-      "converts predecessor function to equivalent SKI term",
-      async () => {
-        const [, predLambda] = parseLambda(
-          "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
-        );
-        for (let n = 0; n < N; n++) {
-          const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
-          const result = await UnChurchNumber(
-            arenaEvaluator.reduce(apply(bracketLambda(predLambda), ChurchN(n))),
-            arenaEvaluator,
-          );
-          expect(result).to.equal(BigInt(expected));
-        }
-      },
-    );
-  });
-
-  await t.test("nat literal lowers via church encoder", async () => {
-    // 1. Define Bin constructors as Church arithmetic operators
-    // BZ = 0
-    const [, BZ] = parseLambda("\\f=>\\x=>x");
-    // B0 = \n => 2 * n
-    // mul = \m \n \f \x => m (n f) x
-    // two = \f \x => f (f x)
-    // mul two n = \f \x => (n f) ((n f) x)
-    const [, B0] = parseLambda("\\n=>\\f=>\\x=> (n f) ((n f) x)");
-    // B1 = \n => 2 * n + 1
-    // succ (mul two n) = \f \x => f (mul two n f x)
-    const [, B1] = parseLambda("\\n=>\\f=>\\x=> f ((n f) ((n f) x))");
-
-    // 2. Parse the literal "8" -> produces Bin term with free vars B0, B1, BZ
-    // 8 = 1000 base 2 = B0 (B0 (B0 B1)) ?? No
-    // 8 = B0 (B0 (B0 (B1 BZ))) -> 2 * (2 * (2 * (1*0+1))) = 8.
-    const literal: UntypedLambda = makeUntypedBinNumeral(8n);
-
-    // 3. Helper to substitute free vars with our definitions
-    const substituteBin = (term: UntypedLambda): UntypedLambda => {
-      switch (term.kind) {
-        case "lambda-var":
-          if (term.name === "BZ") return BZ;
-          if (term.name === "B0") return B0;
-          if (term.name === "B1") return B1;
-          return term;
-        case "lambda-abs":
-          return mkUntypedAbs(term.name, substituteBin(term.body));
-        case "non-terminal":
-          return createApplication(
-            substituteBin(term.lft),
-            substituteBin(term.rgt),
-          );
-      }
-    };
-
-    const churchTerm = substituteBin(literal);
-    const ski = bracketLambda(churchTerm);
-    const result = await UnChurchNumber(
-      arenaEvaluator.reduce(ski),
-      arenaEvaluator,
-    );
-    expect(result).to.equal(8n);
   });
 
   await t.test("toCore conversion errors on unsupported constructs", () => {

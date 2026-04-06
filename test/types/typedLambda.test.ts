@@ -7,7 +7,7 @@ import {
   emptyContext,
   typecheckTypedLambda,
 } from "../../lib/types/typedLambda.ts";
-import { createTypedApplication, mkTypedAbs } from "../util/ast.ts";
+import { createTypedApp, mkTypedAbs } from "../util/ast.ts";
 import {
   arrow,
   arrows,
@@ -66,9 +66,9 @@ test("typed λ-calculus type-checker", async (t) => {
           mkTypedAbs(
             "z",
             mkTypeVariable("a"),
-            createTypedApplication(
-              createTypedApplication(mkVar("x"), mkVar("z")),
-              createTypedApplication(mkVar("y"), mkVar("z")),
+            createTypedApp(
+              createTypedApp(mkVar("x"), mkVar("z")),
+              createTypedApp(mkVar("y"), mkVar("z")),
             ),
           ),
         ),

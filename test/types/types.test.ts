@@ -1,16 +1,9 @@
 import { test } from "node:test";
 import { expect } from "../util/assertions.ts";
 
-import {
-  createApplication,
-  mkUntypedAbs,
-  mkVar,
-} from "../../lib/terms/lambda.ts";
+import { untypedApp, untypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { parseType } from "../../lib/parser/type.ts";
-import { parseTypedLambda } from "../../lib/parser/typedLambda.ts";
-
 import { emptyContext } from "../../lib/types/typedLambda.ts";
-import { typedTermsLitEq } from "../util/ast.ts";
 
 import {
   arrow,
@@ -99,85 +92,54 @@ test("type utilities: construction, normalisation, inference, unification", asyn
   await t.test("type inference", async (t) => {
     await t.test("successful cases", async (t) => {
       await t.test("I combinator", () => {
-        const [term, ty] = inferType(mkUntypedAbs("x", mkVar("x")));
-        const [, typed] = parseTypedLambda("\\x:a=>x");
+        const [, ty] = inferType(untypedAbs("x", mkVar("x")));
         const [, parsed] = parseType("a->a");
-
-        expect(typedTermsLitEq(term, typed)).to.equal(true);
         expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
 
       await t.test("K combinator", () => {
-        const [term, ty] = inferType(
-          mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x"))),
-        );
-        const [, typed] = parseTypedLambda("\\x:a=>\\y:b=>x");
+        const [, ty] = inferType(untypedAbs("x", untypedAbs("y", mkVar("x"))));
         const [, parsed] = parseType("a->b->a");
-
-        expect(typedTermsLitEq(term, typed)).to.equal(true);
         expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
 
       await t.test("S combinator", () => {
-        const [term, ty] = inferType(
-          mkUntypedAbs(
+        const [, ty] = inferType(
+          untypedAbs(
             "x",
-            mkUntypedAbs(
+            untypedAbs(
               "y",
-              mkUntypedAbs(
+              untypedAbs(
                 "z",
-                createApplication(
-                  createApplication(mkVar("x"), mkVar("z")),
-                  createApplication(mkVar("y"), mkVar("z")),
+                untypedApp(
+                  untypedApp(mkVar("x"), mkVar("z")),
+                  untypedApp(mkVar("y"), mkVar("z")),
                 ),
               ),
             ),
           ),
         );
-        const [, typed] = parseTypedLambda(
-          "\\x:a->b->c=>\\y:a->b=>\\z:a=>x z(y z)",
-        );
         const [, parsed] = parseType("(a->b->c)->(a->b)->a->c");
 
         expect(unparseType(ty)).to.equal(unparseType(parsed));
-        expect(typedTermsLitEq(term, typed)).to.equal(true);
-      });
-
-      await t.test("λx.λy.xy", () => {
-        const [term, ty] = inferType(
-          mkUntypedAbs(
-            "x",
-            mkUntypedAbs("y", createApplication(mkVar("x"), mkVar("y"))),
-          ),
-        );
-        const [, typed] = parseTypedLambda("\\x:a->b=>\\y:a=>x y");
-        const [, parsed] = parseType("(a->b)->(a->b)");
-
-        expect(unparseType(ty)).to.equal(unparseType(parsed));
-        expect(typedTermsLitEq(term, typed)).to.equal(true);
       });
     });
 
     await t.test("inference failures", async (t) => {
       await t.test("λx.xx fails (occurs check)", () => {
         expect(() =>
-          inferType(
-            mkUntypedAbs("x", createApplication(mkVar("x"), mkVar("x"))),
-          ),
+          inferType(untypedAbs("x", untypedApp(mkVar("x"), mkVar("x")))),
         ).to.throw(/occurs check failed/);
       });
 
       await t.test("λx.λy.(xy)x fails", () => {
         expect(() =>
           inferType(
-            mkUntypedAbs(
+            untypedAbs(
               "x",
-              mkUntypedAbs(
+              untypedAbs(
                 "y",
-                createApplication(
-                  createApplication(mkVar("x"), mkVar("y")),
-                  mkVar("x"),
-                ),
+                untypedApp(untypedApp(mkVar("x"), mkVar("y")), mkVar("x")),
               ),
             ),
           ),

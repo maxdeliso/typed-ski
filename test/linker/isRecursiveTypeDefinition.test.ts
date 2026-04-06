@@ -2,18 +2,18 @@ import { test } from "node:test";
 import { expect } from "../util/assertions.ts";
 import { isRecursiveTypeDefinition } from "../../lib/linker/moduleLinker.ts";
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
-import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
+import { I } from "../../lib/ski/terminal.ts";
 
 test("isRecursiveTypeDefinition", async (t) => {
   await t.test("returns false for non-type definitions", () => {
     // Arc 1: typeDef.kind !== "type"
-    const lambdaDef: TripLangTerm = {
-      kind: "lambda",
+    const combinatorDef: TripLangTerm = {
+      kind: "combinator",
       name: "id",
-      term: mkUntypedAbs("x", mkVar("x")),
+      term: I,
     };
 
-    expect(isRecursiveTypeDefinition(lambdaDef)).to.be.false;
+    expect(isRecursiveTypeDefinition(combinatorDef)).to.be.false;
   });
 
   await t.test("returns false when definition value extraction fails", () => {

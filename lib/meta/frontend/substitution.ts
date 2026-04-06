@@ -1536,8 +1536,8 @@ function substituteTripLangType(
           : current.type,
         term: substituteTypeHygienic(current.term, typeRef, replacement),
       };
-    case "data":
     case "lambda":
+    case "data":
     case "combinator":
     case "native":
     case "module":
@@ -1718,7 +1718,6 @@ export function substituteTripLangTypeDirect(
       };
     }
     case "data":
-    case "lambda":
     case "combinator":
     case "native":
     case "module":

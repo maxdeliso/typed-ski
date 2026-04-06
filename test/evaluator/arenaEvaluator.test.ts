@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { expect } from "../util/assertions.ts";
 import {
   ArenaEvaluatorWasm,
@@ -22,7 +21,7 @@ import {
 } from "../../lib/ski/expression.ts";
 import { EqU8 } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
-import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
+import { untypedApp, mkVar } from "../../lib/terms/lambda.ts";
 
 const arenaEval = await createArenaEvaluator();
 
@@ -99,8 +98,8 @@ test("eqU8 intrinsic - reduce to True/False", async (t) => {
   await t.test(
     "bracketLambda(eqU8 __trip_u8_65 __trip_u8_65) reduces to K",
     () => {
-      const term = createApplication(
-        createApplication(mkVar("eqU8"), mkVar("__trip_u8_65")),
+      const term = untypedApp(
+        untypedApp(mkVar("eqU8"), mkVar("__trip_u8_65")),
         mkVar("__trip_u8_65"),
       );
       const ski = bracketLambda(term);

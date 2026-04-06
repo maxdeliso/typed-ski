@@ -9,11 +9,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import {
   bracketLambda,
+  compileToCombinatorString,
   compile,
   eraseSystemF,
   externalReferences,
   indexSymbols,
   ParallelArenaEvaluatorWasm,
+  parseSKI,
   parseSystemF,
   parseTripLang,
   resolveExternalProgramReferences,
@@ -26,10 +28,7 @@ import {
 
 import type { BaseType } from "../../lib/types/types.ts";
 
-import {
-  resolveLambda,
-  resolvePoly,
-} from "../../lib/meta/frontend/compilation.ts";
+import { resolvePoly } from "../../lib/meta/frontend/compilation.ts";
 import { elaborateTerms } from "../../lib/meta/frontend/elaboration.ts";
 
 function isSystemFTerm(term: unknown): term is SystemFTerm {
@@ -169,8 +168,14 @@ test("TripLang → System F compiler integration", async (t) => {
       assert.deepEqual(Array.from(typeRefs.keys()).sort(), ["Nat"]);
 
       const compiled = compile(src);
-      const mainLambda = resolveLambda(compiled, "main");
-      const mainSki = bracketLambda(mainLambda.term);
+      const mains = compiled.program.terms.filter(
+        (term) => term.name == "main",
+      );
+      assert.equal(mains.length, 1);
+      const mainSki = parseSKI(
+        await compileToCombinatorString(`${src}\nexport main`),
+      );
+
       assert.equal(
         await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
         120n,

@@ -21,7 +21,6 @@ import {
   mkSystemFVar,
 } from "../../../lib/terms/systemF.ts";
 import { mkTypedAbs } from "../../util/ast.ts";
-import { mkUntypedAbs, mkVar } from "../../../lib/terms/lambda.ts";
 import { forall } from "../../../lib/types/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";
 import { K } from "../../../lib/ski/terminal.ts";
@@ -425,21 +424,25 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       },
     );
 
-    await t.test("substitutes lambda term", () => {
-      // Lambda IR: λx => y. Substitute y := z.
+    await t.test("substitutes poly term", () => {
+      // System F term: \x:A => y. Substitute y := z.
       const current: TripLangTerm = {
-        kind: "lambda",
+        kind: "poly",
         name: "f",
-        term: mkUntypedAbs("x", mkVar("y")),
+        term: mkSystemFAbs(
+          "x",
+          { kind: "type-var", typeName: "A" },
+          mkSystemFVar("y"),
+        ),
       };
 
       const substitutions = new Map<string, TripLangTerm>([
         [
           "y",
           {
-            kind: "lambda",
+            kind: "poly",
             name: "y",
-            term: mkVar("z"),
+            term: mkSystemFVar("z"),
           },
         ],
       ]);
@@ -450,16 +453,16 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
         current,
         "should return new object when substitution occurs",
       );
-      assert.deepStrictEqual(result.kind, "lambda");
-      if (result.kind !== "lambda") throw new Error("expected lambda");
+      assert.deepStrictEqual(result.kind, "poly");
+      if (result.kind !== "poly") throw new Error("expected poly");
       assert.deepStrictEqual(result.name, "f");
-      assert.deepStrictEqual(result.term.kind, "lambda-abs");
-      if (result.term.kind !== "lambda-abs") {
-        throw new Error("expected lambda-abs");
+      assert.deepStrictEqual(result.term.kind, "systemF-abs");
+      if (result.term.kind !== "systemF-abs") {
+        throw new Error("expected systemF-abs");
       }
-      assert.deepStrictEqual(result.term.body.kind, "lambda-var");
-      if (result.term.body.kind !== "lambda-var") {
-        throw new Error("expected lambda-var");
+      assert.deepStrictEqual(result.term.body.kind, "systemF-var");
+      if (result.term.body.kind !== "systemF-var") {
+        throw new Error("expected systemF-var");
       }
       assert.deepStrictEqual(
         result.term.body.name,

@@ -6,7 +6,7 @@
  *
  * @module
  */
-import { mkUntypedAbs } from "../terms/lambda.ts";
+import { untypedAbs } from "../terms/lambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import { unparseType } from "../parser/type.ts";
 import { TypeError } from "./typeError.ts";
@@ -189,7 +189,7 @@ export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
     case "lambda-var":
       return t;
     case "typed-lambda-abstraction":
-      return mkUntypedAbs(t.varName, eraseTypedLambda(t.body));
+      return untypedAbs(t.varName, eraseTypedLambda(t.body));
     case "non-terminal":
       return {
         kind: "non-terminal",

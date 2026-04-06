@@ -3,7 +3,3 @@ export const isNode =
   process.versions != null &&
   process.versions.node != null;
 
-export const isBrowser =
-  typeof window !== "undefined" && typeof window.document !== "undefined";
-
-export const isDeno = typeof (globalThis as any).Deno !== "undefined";

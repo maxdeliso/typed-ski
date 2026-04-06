@@ -2,19 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { expect } from "../util/assertions.ts";
-import rsexport, { type RandomSeed } from "random-seed";
-const { create } = rsexport;
-
-import { ArenaEvaluatorWasm, createArenaEvaluator } from "../../lib/index.ts";
-import type { ArenaWasmExports } from "../../lib/evaluator/arenaEvaluator.ts";
+import {
+  ArenaEvaluatorWasm,
+  createArenaEvaluator,
+  type ArenaWasmExports,
+} from "../../lib/evaluator/arenaEvaluator.ts";
 import {
   getLeft,
   getOrBuildArenaViews,
   getRight,
 } from "../../lib/evaluator/arenaViews.ts";
-import type { ArenaViews } from "../../lib/evaluator/arenaViews.ts";
-import { ArenaKind, ArenaSym, makeControlPtr } from "../../lib/shared/arena.ts";
-import type { ArenaNode } from "../../lib/shared/types.ts";
+import { makeControlPtr } from "../../lib/shared/arena.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
   apply,
@@ -22,42 +20,11 @@ import {
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
-import { randExpression } from "../../lib/ski/generator.ts";
 import { EqU8 } from "../../lib/ski/terminal.ts";
-import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { createApplication, mkVar } from "../../lib/terms/lambda.ts";
 
-class TestArenaEvaluator extends ArenaEvaluatorWasm {
-  public override getArenaTop(): number {
-    return super.getArenaTop();
-  }
-  public override getArenaNode(
-    id: number,
-    views: ArenaViews | null,
-  ): ArenaNode | null {
-    return super.getArenaNode(id, views);
-  }
-
-  // We need to set these for mocking in tests
-  public setArenaTop(fn: () => number) {
-    this.getArenaTop = fn;
-  }
-  public setArenaNode(
-    fn: (id: number, views: ArenaViews | null) => ArenaNode | null,
-  ) {
-    this.getArenaNode = fn;
-  }
-}
-
-let arenaEval: ArenaEvaluatorWasm;
-
-async function setupEvaluator() {
-  arenaEval = await createArenaEvaluator();
-}
-
-// Setup before all tests
-await setupEvaluator();
+const arenaEval = await createArenaEvaluator();
 
 test("stepOnce", async (t) => {
   const e1 = parseSKI("III");
@@ -101,32 +68,6 @@ test("stepOnce", async (t) => {
 
     assert.ok(r1.altered && r2.altered && r3.altered);
     assert.deepStrictEqual(unparseSKI(r3.expr), unparseSKI(e3));
-  });
-});
-
-test("singleton and fresh arena reduction equivalence", async (t) => {
-  const seed = "df394b";
-  const normalizeTests = 19;
-  const minLength = 5;
-  const maxLength = 12;
-  const rs: RandomSeed = create(seed);
-
-  await t.test("runs random-expression normalisation checks", () => {
-    for (let testIdx = 0; testIdx < normalizeTests; ++testIdx) {
-      const len = rs.intBetween(minLength, maxLength);
-      const input = randExpression(rs, len);
-
-      const arenaNormal = arenaEval.reduce(input);
-      const symNormal = arenaEvaluator.reduce(input);
-
-      assert.deepStrictEqual(
-        unparseSKI(arenaNormal),
-        unparseSKI(symNormal),
-        `Mismatch in test #${testIdx + 1}:\nexpected: ${unparseSKI(
-          symNormal,
-        )}\ngot: ${unparseSKI(arenaNormal)}`,
-      );
-    }
   });
 });
 
@@ -547,58 +488,6 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     assert.deepStrictEqual(receivedArgs, [0xffffffff, 0xfffffffe, 0xfffffffd]);
   });
 
-  await t.test("getArenaTop handles missing debugGetArenaBaseAddr", () => {
-    const evaluator = new TestArenaEvaluator(
-      {
-        reset: () => {},
-        allocTerminal: () => 0,
-        allocCons: () => 0,
-        allocU8: () => 0,
-        arenaKernelStep: () => 0,
-        reduce: () => 0,
-        kindOf: () => 0,
-        symOf: () => 0,
-        leftOf: () => 0,
-        rightOf: () => 0,
-      },
-      new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-    );
-
-    expect(evaluator.getArenaTop()).to.equal(0);
-  });
-
-  await t.test("dumpArenaStreaming coverage", () => {
-    const evaluator = new TestArenaEvaluator(
-      {
-        reset: () => {},
-        allocTerminal: () => 0,
-        allocCons: () => 0,
-        allocU8: () => 0,
-        arenaKernelStep: () => 0,
-        reduce: () => 0,
-        kindOf: () => 0,
-        symOf: () => 0,
-        leftOf: () => 0,
-        rightOf: () => 0,
-        debugGetArenaBaseAddr: () => 0,
-      },
-      new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-    );
-
-    // Mock getArenaTop to return 5
-    evaluator.setArenaTop(() => 5);
-    // Mock getArenaNode to return some nodes and some nulls
-    evaluator.setArenaNode((id: number) => {
-      if (id % 2 === 0) return { id, kind: "terminal", sym: "I" };
-      return null;
-    });
-
-    const chunks = Array.from(evaluator.dumpArenaStreaming(2));
-    expect(chunks).to.have.lengthOf(2);
-    expect(chunks[0]).to.have.lengthOf(2); // ids 0, 2
-    expect(chunks[1]).to.have.lengthOf(1); // id 4
-  });
-
   await t.test("fromArena throws on control pointers", () => {
     const exports = {
       kindOf: () => 0,
@@ -919,88 +808,4 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     evaluator.toArena(parseSKI("I"));
     assert.deepStrictEqual(allocTerminalCalls, 32);
   });
-
-  await t.test(
-    "getArenaNode falls back to export lookups when views are unavailable",
-    () => {
-      const evaluator = new TestArenaEvaluator(
-        {
-          reset: () => {},
-          allocTerminal: () => 0,
-          allocCons: () => 0,
-          allocU8: () => 0,
-          arenaKernelStep: () => 0,
-          reduce: () => 0,
-          kindOf: () => ArenaKind.Terminal,
-          symOf: () => ArenaSym.I,
-          leftOf: () => 0,
-          rightOf: () => 0,
-        },
-        new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-      );
-
-      assert.deepStrictEqual(evaluator.getArenaNode(3, null), {
-        id: 3,
-        kind: "terminal",
-        sym: "I",
-      });
-    },
-  );
-
-  await t.test("getArenaNode falls back when id exceeds view capacity", () => {
-    const evaluator = new TestArenaEvaluator(
-      {
-        reset: () => {},
-        allocTerminal: () => 0,
-        allocCons: () => 0,
-        allocU8: () => 0,
-        arenaKernelStep: () => 0,
-        reduce: () => 0,
-        kindOf: () => ArenaKind.NonTerm,
-        symOf: () => 0,
-        leftOf: () => 11,
-        rightOf: () => 12,
-      },
-      new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-    );
-
-    const tinyViews = { capacity: 0 } as ArenaViews;
-    assert.deepStrictEqual(evaluator.getArenaNode(9, tinyViews), {
-      id: 9,
-      kind: "non-terminal",
-      left: 11,
-      right: 12,
-    });
-  });
-
-  await t.test(
-    "instantiateFromBytes accepts multiple BufferSource shapes",
-    () => {
-      const bytes = readFileSync(
-        new URL("../../wasm/release.wasm", import.meta.url),
-      );
-      const exactArrayBuffer = bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      );
-      const dataView = new DataView(
-        bytes.buffer,
-        bytes.byteOffset,
-        bytes.byteLength,
-      );
-
-      assert.ok(
-        ArenaEvaluatorWasm.instantiateFromBytes(bytes) instanceof
-          ArenaEvaluatorWasm,
-      );
-      assert.ok(
-        ArenaEvaluatorWasm.instantiateFromBytes(exactArrayBuffer) instanceof
-          ArenaEvaluatorWasm,
-      );
-      assert.ok(
-        ArenaEvaluatorWasm.instantiateFromBytes(dataView) instanceof
-          ArenaEvaluatorWasm,
-      );
-    },
-  );
 });

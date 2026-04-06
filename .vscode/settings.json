@@ -1,5 +1,5 @@
 {
-  "deno.enable": false,
-  "typescript.preferences.includePackageJsonAutoImports": "off",
-  "typescript.suggest.autoImports": false
+  "js/ts.preferences.includePackageJsonAutoImports": "off",
+  "js/ts.suggest.autoImports": false,
+  "git.ignoreLimitWarning": true
 }

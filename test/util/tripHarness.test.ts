@@ -16,15 +16,20 @@ const linkerTestDir = fileURLToPath(
 
 test("TripHarness", async (t) => {
   await t.test("includeNat flag allows using Nat module", async () => {
-    const source = loadInput("includeNat.trip", __dirname);
+    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    try {
+      const source = loadInput("includeNat.trip", __dirname);
 
-    const result = await evaluateTrip(source, {
-      includeNat: true,
-      includeBin: true,
-    });
-    const number = await UnChurchNumber(result);
+      const result = await evaluateTrip(source, evaluator, {
+        includeNat: true,
+        includeBin: true,
+      });
+      const number = await UnChurchNumber(result, evaluator);
 
-    expect(number).to.equal(2n);
+      expect(number).to.equal(2n);
+    } finally {
+      evaluator.terminate();
+    }
   });
 });
 
@@ -34,10 +39,9 @@ test("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async 
 
   try {
     const input = new Uint8Array([65]);
-    const { result, stdout } = await evaluateTripWithIo(source, {
+    const { result, stdout } = await evaluateTripWithIo(source, evaluator, {
       stdin: input,
       stdoutMaxBytes: 1,
-      evaluator,
     });
 
     assert.equal(stdout.length, 1);
@@ -53,20 +57,4 @@ test("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async 
   } finally {
     evaluator.terminate();
   }
-});
-
-test("TripHarness evaluateTripWithIo auto-created evaluator is terminated after use", async () => {
-  const source = loadInput("literalMain.trip", linkerTestDir);
-  const { result, stdout, evaluator } = await evaluateTripWithIo(source, {
-    stdin: new Uint8Array(),
-    stdoutMaxBytes: 1,
-  });
-
-  assert.equal(await UnChurchNumber(result), 13n);
-  assert.equal(stdout.length, 0);
-
-  await assert.rejects(
-    () => (evaluator as ParallelArenaEvaluatorWasm).reduceAsync!(parseSKI("I")),
-    { message: "Evaluator terminated" },
-  );
 });

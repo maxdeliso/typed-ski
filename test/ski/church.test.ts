@@ -4,7 +4,6 @@ import { Car, Cdr, F, Fst, Plus, Snd } from "../util/combinators.ts";
 
 import { B, False, Succ, True, V, Zero } from "../../lib/consts/combinators.ts";
 
-import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { findFactors, findPerfectPower } from "../util/math.ts";
 import {
   ChurchB,
@@ -20,6 +19,7 @@ import {
   applyMany,
   type SKIExpression,
 } from "../../lib/ski/expression.ts";
+import { createArenaEvaluator } from "../../lib/index.ts";
 
 // isZero ≡ F True (KF)
 const IsZero = applyMany(F, True, apply(K, False));
@@ -37,6 +37,8 @@ const pairShiftSucc = applyMany(
 const pairZeroZero = applyMany(V, ChurchN(0), ChurchN(0));
 
 test("Church numeral optimization functions", async (t) => {
+  const arenaEvaluator = await createArenaEvaluator();
+
   await t.test("findPerfectPower", () => {
     // Test perfect powers
     // Note: Algorithm prefers smallest exponent b, so 16 = 4^2 (b=2) over 16 = 2^4 (b=4)
@@ -145,7 +147,10 @@ test("Church numeral optimization functions", async (t) => {
 
     for (const n of testCases) {
       const church = ChurchN(n);
-      const decoded = await UnChurchNumber(arenaEvaluator.reduce(church));
+      const decoded = await UnChurchNumber(
+        arenaEvaluator.reduce(church),
+        arenaEvaluator,
+      );
       expect(decoded).to.equal(
         BigInt(n),
         `ChurchN(${n}) should decode to ${BigInt(n)}, but got ${decoded}`,
@@ -201,33 +206,51 @@ test("Church numeral optimization functions", async (t) => {
     const church3 = ChurchN(10);
 
     // All should decode to the same value
-    expect(await UnChurchNumber(arenaEvaluator.reduce(church1))).to.equal(10n);
-    expect(await UnChurchNumber(arenaEvaluator.reduce(church2))).to.equal(10n);
-    expect(await UnChurchNumber(arenaEvaluator.reduce(church3))).to.equal(10n);
+    expect(
+      await UnChurchNumber(arenaEvaluator.reduce(church1), arenaEvaluator),
+    ).to.equal(10n);
+    expect(
+      await UnChurchNumber(arenaEvaluator.reduce(church2), arenaEvaluator),
+    ).to.equal(10n);
+    expect(
+      await UnChurchNumber(arenaEvaluator.reduce(church3), arenaEvaluator),
+    ).to.equal(10n);
   });
 
   await t.test("optimization strategy verification", async () => {
     // Verify that perfect powers use exponentiation
     // 9 = 3^2 should use application (exponentiation)
     const church9 = ChurchN(9);
-    const decoded9 = await UnChurchNumber(arenaEvaluator.reduce(church9));
+    const decoded9 = await UnChurchNumber(
+      arenaEvaluator.reduce(church9),
+      arenaEvaluator,
+    );
     expect(decoded9).to.equal(9n);
 
     // Verify that composites use composition
     // 18 = 2 * 9 should use composition (B combinator)
     const church18 = ChurchN(18);
-    const decoded18 = await UnChurchNumber(arenaEvaluator.reduce(church18));
+    const decoded18 = await UnChurchNumber(
+      arenaEvaluator.reduce(church18),
+      arenaEvaluator,
+    );
     expect(decoded18).to.equal(18n);
 
     // Verify that primes use successor
     // 19 is prime, so should use Succ(18)
     const church19 = ChurchN(19);
-    const decoded19 = await UnChurchNumber(arenaEvaluator.reduce(church19));
+    const decoded19 = await UnChurchNumber(
+      arenaEvaluator.reduce(church19),
+      arenaEvaluator,
+    );
     expect(decoded19).to.equal(19n);
 
     // Verify that 64 = 2^6 uses exponentiation
     const church64 = ChurchN(64);
-    const decoded64 = await UnChurchNumber(arenaEvaluator.reduce(church64));
+    const decoded64 = await UnChurchNumber(
+      arenaEvaluator.reduce(church64),
+      arenaEvaluator,
+    );
     expect(decoded64).to.equal(64n);
   });
 
@@ -248,7 +271,7 @@ test("Church numeral optimization functions", async (t) => {
     async () => {
       // K is a function, but when applied to one arg it returns another function.
       // If we just pass K as a Church numeral, UnChurchNumber might fail gracefully.
-      const result = await UnChurchNumber(K);
+      const result = await UnChurchNumber(K, arenaEvaluator);
       expect(result).to.equal(0n);
     },
   );
@@ -260,7 +283,7 @@ test("Church numeral optimization functions", async (t) => {
         kind: "terminal" as const,
         sym: SKITerminalSymbol.ReadOne,
       };
-      const result = await UnChurchNumber(readOneExpr);
+      const result = await UnChurchNumber(readOneExpr, arenaEvaluator);
       expect(result).to.equal(0n);
     },
   );
@@ -273,9 +296,15 @@ test("Church numeral optimization functions", async (t) => {
     const BPrime = { kind: "terminal" as const, sym: SKITerminalSymbol.BPrime };
     const CPrime = { kind: "terminal" as const, sym: SKITerminalSymbol.CPrime };
 
-    expect(await UnChurchNumber(applyMany(SPrime, I, I, I))).to.be.a("bigint");
-    expect(await UnChurchNumber(applyMany(BPrime, I, I, I))).to.be.a("bigint");
-    expect(await UnChurchNumber(applyMany(CPrime, I, I, I))).to.be.a("bigint");
+    expect(
+      await UnChurchNumber(applyMany(SPrime, I, I, I), arenaEvaluator),
+    ).to.be.a("bigint");
+    expect(
+      await UnChurchNumber(applyMany(BPrime, I, I, I), arenaEvaluator),
+    ).to.be.a("bigint");
+    expect(
+      await UnChurchNumber(applyMany(CPrime, I, I, I), arenaEvaluator),
+    ).to.be.a("bigint");
   });
 
   await t.test("findPerfectPower edge cases", () => {
@@ -301,22 +330,28 @@ test("Church numeral optimization functions", async (t) => {
       // A "church numeral" that returns something else
       // λf.λx.K
       const invalidChurch = apply(K, K);
-      expect(await UnChurchNumber(invalidChurch)).to.equal(0n);
+      expect(await UnChurchNumber(invalidChurch, arenaEvaluator)).to.equal(0n);
     },
   );
 });
 
 test("Church encodings", async (t) => {
   const N = 5;
+  const arenaEvaluator = await createArenaEvaluator();
 
   await t.test("succ / basic arithmetic", async (t) => {
     await t.test("0 + 1 = 1", async () => {
-      expect(await UnChurchNumber(apply(Succ, ChurchN(0)))).to.equal(1n);
+      expect(
+        await UnChurchNumber(apply(Succ, ChurchN(0)), arenaEvaluator),
+      ).to.equal(1n);
     });
 
     await t.test("1 + 1 = 2", async () => {
       expect(
-        await UnChurchNumber(arenaEvaluator.reduce(apply(Succ, ChurchN(1)))),
+        await UnChurchNumber(
+          arenaEvaluator.reduce(apply(Succ, ChurchN(1))),
+          arenaEvaluator,
+        ),
       ).to.equal(2n);
     });
   });
@@ -333,6 +368,7 @@ test("Church encodings", async (t) => {
             arenaEvaluator.reduce(
               applyMany(ChurchB(p), ChurchB(q), ChurchB(p)),
             ),
+            arenaEvaluator,
           ),
         ).to.equal(conj);
 
@@ -342,6 +378,7 @@ test("Church encodings", async (t) => {
             arenaEvaluator.reduce(
               applyMany(ChurchB(p), ChurchB(p), ChurchB(q)),
             ),
+            arenaEvaluator,
           ),
         ).to.equal(dis);
       }
@@ -352,24 +389,28 @@ test("Church encodings", async (t) => {
     expect(
       await UnChurchNumber(
         arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Fst)),
+        arenaEvaluator,
       ),
     ).to.equal(0n);
 
     expect(
       await UnChurchNumber(
         arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Snd)),
+        arenaEvaluator,
       ),
     ).to.equal(1n);
 
     expect(
       await UnChurchNumber(
         arenaEvaluator.reduce(apply(Car, applyMany(V, ChurchN(0), ChurchN(1)))),
+        arenaEvaluator,
       ),
     ).to.equal(0n);
 
     expect(
       await UnChurchNumber(
         arenaEvaluator.reduce(apply(Cdr, applyMany(V, ChurchN(0), ChurchN(1)))),
+        arenaEvaluator,
       ),
     ).to.equal(1n);
   });
@@ -379,32 +420,43 @@ test("Church encodings", async (t) => {
     expect(
       await UnChurchBoolean(
         arenaEvaluator.reduce(applyMany(ChurchN(0), apply(K, False), True)),
+        arenaEvaluator,
       ),
     ).to.equal(true);
 
     expect(
       await UnChurchBoolean(
         arenaEvaluator.reduce(applyMany(ChurchN(1), apply(K, False), True)),
+        arenaEvaluator,
       ),
     ).to.equal(false);
 
     // IsZero combinator
     expect(
-      await UnChurchBoolean(arenaEvaluator.reduce(apply(IsZero, ChurchN(0)))),
+      await UnChurchBoolean(
+        arenaEvaluator.reduce(apply(IsZero, ChurchN(0))),
+        arenaEvaluator,
+      ),
     ).to.equal(true);
 
     expect(
-      await UnChurchBoolean(arenaEvaluator.reduce(apply(IsZero, ChurchN(1)))),
+      await UnChurchBoolean(
+        arenaEvaluator.reduce(apply(IsZero, ChurchN(1))),
+        arenaEvaluator,
+      ),
     ).to.equal(false);
   });
 
   await t.test("sums and products (0‥N-1)", async () => {
+    const arenaEvaluator = await createArenaEvaluator();
+
     for (let m = 0n; m < N; m++) {
       for (let n = 0n; n < N; n++) {
         // m + n   via λmn.(m succ) n
         expect(
           await UnChurchNumber(
             arenaEvaluator.reduce(applyMany(ChurchN(m), Succ, ChurchN(n))),
+            arenaEvaluator,
           ),
         ).to.equal(m + n);
 
@@ -412,6 +464,7 @@ test("Church encodings", async (t) => {
         expect(
           await UnChurchNumber(
             arenaEvaluator.reduce(applyMany(Plus, ChurchN(m), ChurchN(n))),
+            arenaEvaluator,
           ),
         ).to.equal(m + n);
 
@@ -421,6 +474,7 @@ test("Church encodings", async (t) => {
             arenaEvaluator.reduce(
               applyMany(ChurchN(m), apply(ChurchN(n), Succ), Zero),
             ),
+            arenaEvaluator,
           ),
         ).to.equal(m * n);
 
@@ -430,6 +484,7 @@ test("Church encodings", async (t) => {
             arenaEvaluator.reduce(
               applyMany(B, ChurchN(m), ChurchN(n), Succ, Zero),
             ),
+            arenaEvaluator,
           ),
         ).to.equal(m * n);
       }
@@ -451,12 +506,16 @@ test("Church encodings", async (t) => {
           arenaEvaluator.reduce(
             apply(Cdr, applyMany(ChurchN(m), pairShiftSucc, pairZeroZero)),
           ),
+          arenaEvaluator,
         ),
       ).to.equal(expected);
 
       // Lambda derived from book definition
       expect(
-        await UnChurchNumber(arenaEvaluator.reduce(apply(pred, ChurchN(m)))),
+        await UnChurchNumber(
+          arenaEvaluator.reduce(apply(pred, ChurchN(m))),
+          arenaEvaluator,
+        ),
       ).to.equal(expected);
     }
   });

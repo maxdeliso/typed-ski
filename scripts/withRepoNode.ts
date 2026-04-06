@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execWithRepoNode, getRequiredNodeVersion } from "./repoNode.js";
+import { execWithRepoNode } from "./repoNode.js";
 
 if (process.argv.length <= 2) {
   console.error(`Usage: node scripts/withRepoNode.js <node-args...>

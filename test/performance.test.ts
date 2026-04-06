@@ -3,10 +3,11 @@ import { hrtime } from "node:process";
 import randomSeed from "random-seed";
 
 import type { SKIExpression } from "../lib/ski/expression.ts";
-import { arenaEvaluator } from "../lib/evaluator/skiEvaluator.ts";
 import { randExpression } from "../lib/ski/generator.ts";
+import { createArenaEvaluator } from "../lib/index.ts";
 
 test("evaluator performance", async (t) => {
+  const arenaEvaluator = await createArenaEvaluator();
   const S = 128; // symbol count in each generated expression
   const N = 2048; // number of reductions to perform
 

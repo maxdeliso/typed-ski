@@ -17,12 +17,6 @@
  * @module
  */
 // Core evaluator exports
-/** Default hash-consing arena evaluator singleton. */
-export {
-  arenaEvaluator,
-  ArenaEvaluatorWasm,
-} from "./evaluator/skiEvaluator.ts";
-
 export { ParallelArenaEvaluatorWasm } from "./evaluator/parallelArenaEvaluator.ts";
 
 // WebAssembly arena evaluator exports

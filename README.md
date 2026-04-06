@@ -257,5 +257,5 @@ session. See the workflow files in `.github/workflows/` for details.
 
 ## Status
 
-[![Node.js CI](https://github.com/maxdeliso/typed-ski/actions/workflows/node.yml/badge.svg?branch=main)](https://github.com/maxdeliso/typed-ski/actions/workflows/node.yml)
+[![Bazel CI](https://github.com/maxdeliso/typed-ski/actions/workflows/node.yml/badge.svg)](https://github.com/maxdeliso/typed-ski/actions/workflows/node.yml)
 [![COC](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)

@@ -5,15 +5,12 @@ import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
-import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
-import type { Evaluator } from "../../lib/evaluator/evaluator.ts";
 
 interface TripHarnessOptions {
   includePrelude?: boolean;
   includeNat?: boolean;
   includeBin?: boolean;
-  evaluator?: Evaluator;
 }
 
 interface TripIoOptions extends TripHarnessOptions {
@@ -26,7 +23,6 @@ interface TripIoOptions extends TripHarnessOptions {
 interface TripIoResult {
   result: SKIExpression;
   stdout: Uint8Array;
-  evaluator: Evaluator;
 }
 
 async function compileAndLink(
@@ -56,41 +52,27 @@ async function compileAndLink(
 
 export async function evaluateTrip(
   source: string,
+  evaluator: ParallelArenaEvaluatorWasm,
   options: TripHarnessOptions = {},
 ): Promise<SKIExpression> {
   const skiExpression = await compileAndLink(source, options);
   const skiExpr = parseSKI(skiExpression);
-  const evalToUse = options.evaluator ?? arenaEvaluator;
-  if (evalToUse.reduceAsync) {
-    return await evalToUse.reduceAsync(skiExpr);
-  }
-  return evalToUse.reduce(skiExpr);
+  return await evaluator.reduceAsync(skiExpr);
 }
 
 export async function evaluateTripWithIo(
   source: string,
+  evaluator: ParallelArenaEvaluatorWasm,
   options: TripIoOptions = {},
 ): Promise<TripIoResult> {
   const verbose = options.verbose ?? false;
   const skiExpression = await compileAndLink(source, options, verbose);
   const skiExpr = parseSKI(skiExpression);
-  const evaluator =
-    options.evaluator instanceof ParallelArenaEvaluatorWasm
-      ? options.evaluator
-      : await ParallelArenaEvaluatorWasm.create(1, verbose);
-  const ownsEvaluator = evaluator !== options.evaluator;
-
-  try {
-    const resultPromise = evaluator.reduceAsync!(skiExpr, options.stepLimit);
-    if (options.stdin && options.stdin.length > 0) {
-      await evaluator.writeStdin(options.stdin);
-    }
-    const result = await resultPromise;
-    const stdout = await evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
-    return { result, stdout, evaluator };
-  } finally {
-    if (ownsEvaluator) {
-      evaluator.terminate();
-    }
+  const resultPromise = evaluator.reduceAsync(skiExpr, options.stepLimit);
+  if (options.stdin && options.stdin.length > 0) {
+    await evaluator.writeStdin(options.stdin);
   }
+  const result = await resultPromise;
+  const stdout = await evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
+  return { result, stdout };
 }

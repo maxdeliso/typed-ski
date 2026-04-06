@@ -1,10 +1,10 @@
 #!/usr/bin/env -S node --experimental-transform-types
 
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
-import * as os from "node:os";
+
 import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
 
@@ -72,12 +72,6 @@ async function ensureNpmCache(): Promise<string> {
 }
 const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
 const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
-const FAST_TEST_TIMEOUT_MS = 30_000;
-const FAST_TEST_RERUN_FAILURES_PATH = join(
-  PROJECT_ROOT,
-  ".tmp",
-  "node-test-rerun-failures.json",
-);
 
 type ShardConfig = {
   totalShards: number;
@@ -512,19 +506,6 @@ async function collectTests(): Promise<string[]> {
   return files;
 }
 
-function filterTests(files: string[], patterns: string[]): string[] {
-  if (patterns.length === 0) {
-    return files;
-  }
-
-  const normalizedPatterns = patterns.map((pattern) =>
-    pattern.replaceAll("\\", "/").trim(),
-  );
-  return files.filter((file) =>
-    normalizedPatterns.some((pattern) => file.includes(pattern)),
-  );
-}
-
 function readNodeTestArgs(args: string[]): string[] {
   return args
     .map((arg) => arg.trim())
@@ -719,19 +700,6 @@ async function build(): Promise<void> {
   await syncGenerated();
   await stageBazelWasmArtifactIfPresent();
   await buildDist();
-}
-
-async function ci(): Promise<void> {
-  verifyVersion();
-  await formatCheck();
-  await lint();
-
-  const files = await collectTests();
-  const env = await typecheckAndPrepareTestExecution(files);
-  await fsp
-    .rm(join(PROJECT_ROOT, "coverage"), { recursive: true, force: true })
-    .catch(() => {});
-  await runSelectedTests(files, env, { coverage: true });
 }
 
 function escapeForJsonPath(value: string): string {

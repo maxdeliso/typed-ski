@@ -645,20 +645,6 @@ export class ArenaEvaluatorWasm implements Evaluator {
   }
 }
 
-/**
- * Synchronously creates an arena evaluator using `wasm/release.wasm` from the
- * package layout.
- *
- * Note: this requires a sync-readable file URL. In other
- * environments, use `createArenaEvaluator()` instead.
- */
-export function createArenaEvaluatorReleaseSync(): ArenaEvaluatorWasm {
-  const evaluator = ArenaEvaluatorWasm.instantiateFromBytes(
-    getReleaseWasmBytesSync(),
-  );
-  return evaluator;
-}
-
 export async function createArenaEvaluator(): Promise<ArenaEvaluatorWasm> {
   const evaluator = ArenaEvaluatorWasm.instantiateFromBytes(
     await getReleaseWasmBytes(),

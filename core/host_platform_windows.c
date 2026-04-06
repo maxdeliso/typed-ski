@@ -7,6 +7,7 @@
 #include <process.h>
 #include <profileapi.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <synchapi.h>
@@ -30,9 +31,15 @@ static HostWakeByAddressSingleFn host_wake_by_address_single_fn = NULL;
 static HostWakeByAddressAllFn host_wake_by_address_all_fn = NULL;
 static volatile long host_wait_on_address_initialized = 0;
 
+static void host_winapi_fail(const char *op) {
+  fprintf(stderr, "host_platform_windows: %s failed (err=%lu)\n", op,
+          (unsigned long)GetLastError());
+  abort();
+}
+
 static void host_init_wait_on_address_support(void) {
   if (InterlockedCompareExchange(&host_wait_on_address_initialized, 1, 0) == 0) {
-    HMODULE kernel32 = GetModuleHandleW(L"Kernel32.dll");
+    HMODULE kernel32 = GetModuleHandleW(L"KERNEL32.DLL");
     if (kernel32 != NULL) {
       host_wait_on_address_fn = (HostWaitOnAddressFn)(void *)GetProcAddress(
           kernel32, "WaitOnAddress");
@@ -45,9 +52,15 @@ static void host_init_wait_on_address_support(void) {
     }
     InterlockedExchange(&host_wait_on_address_initialized, 2);
   } else {
+    uint32_t spin_count = 0;
     while (InterlockedCompareExchange(&host_wait_on_address_initialized, 2, 2) !=
            2) {
-      YieldProcessor();
+      if (spin_count < 64) {
+        YieldProcessor();
+        spin_count += 1;
+      } else {
+        SwitchToThread();
+      }
     }
   }
 }
@@ -123,25 +136,44 @@ void host_cond_destroy(HostCond *cond) { (void)cond; }
 void host_cond_signal(HostCond *cond) { WakeConditionVariable(cond); }
 
 void host_cond_wait(HostCond *cond, HostMutex *mutex) {
-  SleepConditionVariableCS(cond, &mutex->cs, INFINITE);
+  if (!SleepConditionVariableCS(cond, &mutex->cs, INFINITE)) {
+    host_winapi_fail("SleepConditionVariableCS");
+  }
 }
 
 void host_event_init(HostEvent *event) {
   event->handle = CreateEventW(NULL, FALSE, FALSE, NULL);
+  if (event->handle == NULL) {
+    host_winapi_fail("CreateEventW");
+  }
 }
 
 void host_event_destroy(HostEvent *event) {
   if (event->handle != NULL) {
-    CloseHandle(event->handle);
+    if (!CloseHandle(event->handle)) {
+      host_winapi_fail("CloseHandle");
+    }
     event->handle = NULL;
   }
 }
 
-void host_event_notify(HostEvent *event) { SetEvent(event->handle); }
+void host_event_notify(HostEvent *event) {
+  if (!SetEvent(event->handle)) {
+    host_winapi_fail("SetEvent");
+  }
+}
 
 bool host_event_wait(HostEvent *event, uint32_t timeout_ms) {
   DWORD wait_ms = timeout_ms == 0 ? INFINITE : timeout_ms;
-  return WaitForSingleObject(event->handle, wait_ms) == WAIT_OBJECT_0;
+  DWORD rc = WaitForSingleObject(event->handle, wait_ms);
+  if (rc == WAIT_OBJECT_0) {
+    return true;
+  }
+  if (rc == WAIT_TIMEOUT) {
+    return false;
+  }
+  host_winapi_fail("WaitForSingleObject");
+  return false;
 }
 
 int host_thread_create(HostThread *thread, HostThreadFn fn, void *arg) {
@@ -161,8 +193,13 @@ int host_thread_create(HostThread *thread, HostThreadFn fn, void *arg) {
 }
 
 void host_thread_join(HostThread thread) {
-  WaitForSingleObject(thread, INFINITE);
-  CloseHandle(thread);
+  DWORD rc = WaitForSingleObject(thread, INFINITE);
+  if (rc != WAIT_OBJECT_0) {
+    host_winapi_fail("WaitForSingleObject");
+  }
+  if (!CloseHandle(thread)) {
+    host_winapi_fail("CloseHandle");
+  }
 }
 
 void *host_reserve_memory(size_t bytes) {
@@ -195,7 +232,9 @@ bool host_commit_memory_range(void *base, size_t offset, size_t bytes) {
 void host_release_memory(void *base, size_t bytes) {
   (void)bytes;
   if (base != NULL) {
-    VirtualFree(base, 0, MEM_RELEASE);
+    if (!VirtualFree(base, 0, MEM_RELEASE)) {
+      host_winapi_fail("VirtualFree");
+    }
   }
 }
 
@@ -246,7 +285,10 @@ uint32_t host_cpu_count(void) {
     if (info.dwNumberOfProcessors > 0) {
       count = (uint32_t)info.dwNumberOfProcessors;
     } else {
-      count = 4;
+      fprintf(stderr, "host_platform_windows: GetSystemInfo returned "
+                      "dwNumberOfProcessors=%lu\n",
+              (unsigned long)info.dwNumberOfProcessors);
+      abort();
     }
   }
   return count;
@@ -314,7 +356,9 @@ int host_runtime_input_read_byte(uint8_t *byte_out) {
 
 void host_runtime_input_close(void) {
   if (runtime_stdin_handle != INVALID_HANDLE_VALUE) {
-    CloseHandle(runtime_stdin_handle);
+    if (!CloseHandle(runtime_stdin_handle)) {
+      host_winapi_fail("CloseHandle");
+    }
     runtime_stdin_handle = INVALID_HANDLE_VALUE;
   }
 }
@@ -417,13 +461,19 @@ HostFileMapResult host_map_output_file(const char *path, size_t size,
 
 void host_close_file_mapping(HostFileMapping *mapping) {
   if (mapping->data != NULL) {
-    UnmapViewOfFile(mapping->data);
+    if (!UnmapViewOfFile(mapping->data)) {
+      host_winapi_fail("UnmapViewOfFile");
+    }
   }
   if (mapping->mapping_handle != NULL) {
-    CloseHandle(mapping->mapping_handle);
+    if (!CloseHandle(mapping->mapping_handle)) {
+      host_winapi_fail("CloseHandle");
+    }
   }
   if (mapping->file_handle != INVALID_HANDLE_VALUE) {
-    CloseHandle(mapping->file_handle);
+    if (!CloseHandle(mapping->file_handle)) {
+      host_winapi_fail("CloseHandle");
+    }
   }
   memset(mapping, 0, sizeof(*mapping));
   mapping->file_handle = INVALID_HANDLE_VALUE;
@@ -435,19 +485,27 @@ bool host_finish_output_file(HostFileMapping *mapping, size_t written) {
     ok = FlushViewOfFile(mapping->data, written) != 0;
   }
   if (mapping->data != NULL) {
-    UnmapViewOfFile(mapping->data);
+    if (!UnmapViewOfFile(mapping->data)) {
+      ok = false;
+    }
     mapping->data = NULL;
   }
   if (mapping->mapping_handle != NULL) {
-    CloseHandle(mapping->mapping_handle);
+    if (!CloseHandle(mapping->mapping_handle)) {
+      ok = false;
+    }
     mapping->mapping_handle = NULL;
   }
   if (!host_set_file_size(mapping->file_handle, written)) {
     ok = false;
   }
   if (mapping->file_handle != INVALID_HANDLE_VALUE) {
-    FlushFileBuffers(mapping->file_handle);
-    CloseHandle(mapping->file_handle);
+    if (!FlushFileBuffers(mapping->file_handle)) {
+      ok = false;
+    }
+    if (!CloseHandle(mapping->file_handle)) {
+      ok = false;
+    }
     mapping->file_handle = INVALID_HANDLE_VALUE;
   }
   mapping->size = 0;

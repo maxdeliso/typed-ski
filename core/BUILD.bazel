@@ -96,8 +96,7 @@ cc_binary(
     linkstatic = 1,
     tags = ["no-coverage"],
     features = ["-coverage"],
-    deps = [
-":thanatos_lib"],
+    deps = [":thanatos_lib"],
 )
 
 cc_test(
@@ -123,8 +122,7 @@ cc_test(
     linkstatic = 1,
     tags = ["no-coverage"],
     features = ["-coverage"],
-    deps = [
-":thanatos_lib"],
+    deps = [":thanatos_lib"],
 )
 
 cc_test(
@@ -135,9 +133,7 @@ cc_test(
     linkstatic = 1,
     tags = ["no-coverage"],
     features = ["-coverage"],
-    deps = [
-        ":thanatos_lib",
-    ],
+    deps = [":thanatos_lib"],
 )
 
 cc_test(
@@ -147,8 +143,7 @@ cc_test(
     linkstatic = 1,
     tags = ["no-coverage"],
     features = ["-coverage"],
-    deps = [
-":util"],
+    deps = [":util"],
 )
 
 cc_binary(
@@ -159,6 +154,5 @@ cc_binary(
     linkstatic = 1,
     tags = ["no-coverage"],
     features = ["-coverage"],
-    deps = [
-":thanatos_lib"],
+    deps = [":thanatos_lib"],
 )

@@ -702,7 +702,6 @@ async function build(): Promise<void> {
   await buildDist();
 }
 
-
 function escapeForJsonPath(value: string): string {
   return value.replaceAll("/", "\\\\");
 }

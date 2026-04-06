@@ -168,7 +168,9 @@ test("TripLang → System F compiler integration", async (t) => {
       assert.deepEqual(Array.from(typeRefs.keys()).sort(), ["Nat"]);
 
       const compiled = compile(src);
-      const mains = compiled.program.terms.filter(term => term.name == 'main');
+      const mains = compiled.program.terms.filter(
+        (term) => term.name == "main",
+      );
       assert.equal(mains.length, 1);
       const mainSki = parseSKI(
         await compileToCombinatorString(`${src}\nexport main`),

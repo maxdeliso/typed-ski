@@ -1,11 +1,7 @@
 import { test } from "node:test";
 import { expect } from "../util/assertions.ts";
 
-import {
-  untypedApp,
-  untypedAbs,
-  mkVar,
-} from "../../lib/terms/lambda.ts";
+import { untypedApp, untypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { parseType } from "../../lib/parser/type.ts";
 import { emptyContext } from "../../lib/types/typedLambda.ts";
 
@@ -102,9 +98,7 @@ test("type utilities: construction, normalisation, inference, unification", asyn
       });
 
       await t.test("K combinator", () => {
-        const [, ty] = inferType(
-          untypedAbs("x", untypedAbs("y", mkVar("x"))),
-        );
+        const [, ty] = inferType(untypedAbs("x", untypedAbs("y", mkVar("x"))));
         const [, parsed] = parseType("a->b->a");
         expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
@@ -134,9 +128,7 @@ test("type utilities: construction, normalisation, inference, unification", asyn
     await t.test("inference failures", async (t) => {
       await t.test("λx.xx fails (occurs check)", () => {
         expect(() =>
-          inferType(
-            untypedAbs("x", untypedApp(mkVar("x"), mkVar("x"))),
-          ),
+          inferType(untypedAbs("x", untypedApp(mkVar("x"), mkVar("x")))),
         ).to.throw(/occurs check failed/);
       });
 
@@ -147,10 +139,7 @@ test("type utilities: construction, normalisation, inference, unification", asyn
               "x",
               untypedAbs(
                 "y",
-                untypedApp(
-                  untypedApp(mkVar("x"), mkVar("y")),
-                  mkVar("x"),
-                ),
+                untypedApp(untypedApp(mkVar("x"), mkVar("y")), mkVar("x")),
               ),
             ),
           ),

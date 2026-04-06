@@ -429,7 +429,11 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       const current: TripLangTerm = {
         kind: "poly",
         name: "f",
-        term: mkSystemFAbs("x", { kind: "type-var", typeName: "A" }, mkSystemFVar("y")),
+        term: mkSystemFAbs(
+          "x",
+          { kind: "type-var", typeName: "A" },
+          mkSystemFVar("y"),
+        ),
       };
 
       const substitutions = new Map<string, TripLangTerm>([

@@ -14,11 +14,7 @@ import {
   makeUntypedChurchNumeral,
   parseNatLiteralIdentifier,
 } from "../consts/nat.ts";
-import {
-  untypedApp,
-  untypedAbs,
-  type UntypedLambda,
-} from "../terms/lambda.ts";
+import { untypedApp, untypedAbs, type UntypedLambda } from "../terms/lambda.ts";
 import { mkSystemFAbs, type SystemFTerm } from "../terms/systemF.ts";
 import { normalize } from "./normalization.ts";
 

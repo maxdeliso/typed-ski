@@ -1,18 +1,11 @@
 import { test } from "node:test";
 import { expect } from "../util/assertions.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
-import {
-  applyMany,
-  type SKIExpression,
-} from "../../lib/ski/expression.ts";
+import { applyMany, type SKIExpression } from "../../lib/ski/expression.ts";
 import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { ConversionError } from "../../lib/conversion/conversionError.ts";
-import {
-  untypedApp,
-  untypedAbs,
-  mkVar,
-} from "../../lib/terms/lambda.ts";
+import { untypedApp, untypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import {
   mkSystemFTAbs,
   mkSystemFTypeApp,
@@ -38,10 +31,7 @@ test("Lambda conversion", async (t) => {
       "y",
       untypedAbs(
         "z",
-        untypedApp(
-          mkVar("x"),
-          untypedApp(mkVar("y"), mkVar("z")),
-        ),
+        untypedApp(mkVar("x"), untypedApp(mkVar("y"), mkVar("z"))),
       ),
     ),
   );
@@ -51,10 +41,7 @@ test("Lambda conversion", async (t) => {
       "y",
       untypedAbs(
         "z",
-        untypedApp(
-          untypedApp(mkVar("x"), mkVar("z")),
-          mkVar("y"),
-        ),
+        untypedApp(untypedApp(mkVar("x"), mkVar("z")), mkVar("y")),
       ),
     ),
   );
@@ -71,10 +58,7 @@ test("Lambda conversion", async (t) => {
       ),
     ),
   );
-  const selfApply = untypedAbs(
-    "x",
-    untypedApp(mkVar("x"), mkVar("x")),
-  );
+  const selfApply = untypedAbs("x", untypedApp(mkVar("x"), mkVar("x")));
 
   const reduceToKey = (...exps: Parameters<typeof applyMany>) =>
     arenaEvaluator.reduce(applyMany(...exps));

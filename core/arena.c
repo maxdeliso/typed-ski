@@ -772,6 +772,7 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
 
   atomic_init(&h->total_nodes, 0);
   atomic_init(&h->total_steps, 0);
+  atomic_init(&h->total_link_chase_hops, 0);
   atomic_init(&h->total_cons_allocs, 0);
   atomic_init(&h->total_cont_allocs, 0);
   atomic_init(&h->total_susp_allocs, 0);
@@ -875,6 +876,7 @@ void reset(void) {
 
   atomic_store_explicit(&h->total_nodes, 0, memory_order_release);
   atomic_store_explicit(&h->total_steps, 0, memory_order_release);
+  atomic_store_explicit(&h->total_link_chase_hops, 0, memory_order_release);
   atomic_store_explicit(&h->total_cons_allocs, 0, memory_order_release);
   atomic_store_explicit(&h->total_cont_allocs, 0, memory_order_release);
   atomic_store_explicit(&h->total_susp_allocs, 0, memory_order_release);
@@ -1024,6 +1026,14 @@ unsigned long long arena_total_steps(void) {
     return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   return atomic_load_explicit(&h->total_steps, memory_order_relaxed);
+}
+
+unsigned long long arena_total_link_chase_hops(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_link_chase_hops,
+                              memory_order_relaxed);
 }
 
 unsigned long long arena_total_cons_allocs(void) {
@@ -2115,6 +2125,7 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
   uint32_t capacity = arena_capacity();
   unsigned long long total_nodes = arena_total_nodes();
   unsigned long long total_steps = arena_total_steps();
+  unsigned long long total_link_chase_hops = arena_total_link_chase_hops();
   unsigned long long total_cons_allocs = arena_total_cons_allocs();
   unsigned long long total_cont_allocs = arena_total_cont_allocs();
   unsigned long long total_susp_allocs = arena_total_susp_allocs();
@@ -2123,11 +2134,11 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
   unsigned long long hashcons_misses = arena_hashcons_misses();
 
   fprintf(out,
-          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
+          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_link_chase_hops\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
           epoch, timed_out ? "true" : "false", worker_count, top, capacity,
-          top, total_nodes, total_steps, total_cons_allocs, total_cont_allocs,
-          total_susp_allocs, duplicate_lost_allocs, hashcons_hits,
-          hashcons_misses);
+          top, total_nodes, total_steps, total_link_chase_hops,
+          total_cons_allocs, total_cont_allocs, total_susp_allocs,
+          duplicate_lost_allocs, hashcons_hits, hashcons_misses);
 
   uint32_t limit = worker_count < TRACE_WORKER_COUNT ? worker_count : TRACE_WORKER_COUNT;
   for (uint32_t i = 0; i < limit; i++) {
@@ -2661,6 +2672,7 @@ static LinkChaseResult chase_link_path(atomic_uint *links, uint32_t start,
                                        uint32_t max_hops) {
   LinkChaseResult out = {.end = start, .fixpoint = false, .truncated = false};
   uint32_t cur = start;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
 
   for (uint32_t hops = 0; hops < max_hops; hops++) {
     uint32_t next = load_u32_link(links, cur);
@@ -2677,6 +2689,8 @@ static LinkChaseResult chase_link_path(atomic_uint *links, uint32_t start,
       out.truncated = true;
       return out;
     }
+    atomic_fetch_add_explicit(&h->total_link_chase_hops, 1,
+                              memory_order_relaxed);
     cur = next;
   }
 

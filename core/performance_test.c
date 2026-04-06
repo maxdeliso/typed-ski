@@ -48,6 +48,7 @@ typedef struct {
   uint32_t capacity;
   unsigned long long total_nodes;
   unsigned long long total_steps;
+  unsigned long long total_link_chase_hops;
   unsigned long long total_cons_allocs;
   unsigned long long total_cont_allocs;
   unsigned long long total_susp_allocs;
@@ -78,7 +79,8 @@ typedef struct {
 static PerfStats capture_stats(void) {
   PerfStats stats;
   thanatos_get_stats(&stats.top, &stats.capacity, &stats.total_nodes,
-                     &stats.total_steps, &stats.total_cons_allocs,
+                     &stats.total_steps, &stats.total_link_chase_hops,
+                     &stats.total_cons_allocs,
                      &stats.total_cont_allocs, &stats.total_susp_allocs,
                      &stats.duplicate_lost_allocs, &stats.hashcons_hits,
                      &stats.hashcons_misses, &stats.dispatcher_events,

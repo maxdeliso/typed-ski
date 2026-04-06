@@ -51,6 +51,7 @@ uint32_t thanatos_reduce_to_normal_form(uint32_t node_id);
 void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
                         unsigned long long *out_total_nodes,
                         unsigned long long *out_total_steps,
+                        unsigned long long *out_total_link_chase_hops,
                         unsigned long long *out_total_cons_allocs,
                         unsigned long long *out_total_cont_allocs,
                         unsigned long long *out_total_susp_allocs,

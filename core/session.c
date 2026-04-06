@@ -234,22 +234,26 @@ static void handle_reset(ThanatosSession *s) {
 static void handle_stats(ThanatosSession *s) {
   uint32_t top = 0, capacity = 0;
   unsigned long long events = 0, dropped = 0, total_nodes = 0, total_steps = 0,
-                     total_cons_allocs = 0, total_cont_allocs = 0,
-                     total_susp_allocs = 0, duplicate_lost_allocs = 0,
-                     hashcons_hits = 0, hashcons_misses = 0;
+                     total_link_chase_hops = 0, total_cons_allocs = 0,
+                     total_cont_allocs = 0, total_susp_allocs = 0,
+                     duplicate_lost_allocs = 0, hashcons_hits = 0,
+                     hashcons_misses = 0;
   thanatos_get_stats(&top, &capacity, &total_nodes, &total_steps,
+                     &total_link_chase_hops,
                      &total_cons_allocs, &total_cont_allocs, &total_susp_allocs,
                      &duplicate_lost_allocs, &hashcons_hits, &hashcons_misses,
                      &events, &dropped);
   session_printf(
       s,
-      "OK top=%u capacity=%u total_nodes=%llu total_steps=%llu events=%llu "
+      "OK top=%u capacity=%u total_nodes=%llu total_steps=%llu "
+      "total_link_chase_hops=%llu events=%llu "
       "dropped=%llu total_cons_allocs=%llu total_cont_allocs=%llu "
       "total_susp_allocs=%llu duplicate_lost_allocs=%llu "
       "hashcons_hits=%llu hashcons_misses=%llu\n",
-      (unsigned)top, (unsigned)capacity, total_nodes, total_steps, events,
-      dropped, total_cons_allocs, total_cont_allocs, total_susp_allocs,
-      duplicate_lost_allocs, hashcons_hits, hashcons_misses);
+      (unsigned)top, (unsigned)capacity, total_nodes, total_steps,
+      total_link_chase_hops, events, dropped, total_cons_allocs,
+      total_cont_allocs, total_susp_allocs, duplicate_lost_allocs,
+      hashcons_hits, hashcons_misses);
   session_fflush(s);
 }
 

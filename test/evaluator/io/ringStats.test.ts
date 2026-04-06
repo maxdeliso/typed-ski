@@ -29,6 +29,7 @@ test("RingStats - statistics recording", () => {
     duplicateLostAllocs: 2,
     hashconsHits: 30,
     hashconsMisses: 20,
+    totalLinkChaseHops: 0
   };
   const snapshot = stats.getSnapshot(5, 10, extra);
 
@@ -63,6 +64,7 @@ test("RingStats - reset", () => {
     duplicateLostAllocs: 0,
     hashconsHits: 0,
     hashconsMisses: 0,
+    totalLinkChaseHops: 0
   };
   const snapshot = stats.getSnapshot(0, 0, extra);
   assert.strictEqual(snapshot.submitOk, 0);

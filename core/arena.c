@@ -3145,6 +3145,13 @@ static StepOutcome step_once_with_links(uint32_t slice_id, WorkerState *ws,
                                         bool yield_on_step_limit,
                                         bool allow_retry,
                                         uint64_t *step_counter) {
+#ifndef __wasm__
+  if (atomic_load_explicit(&mmap_stdin_active, memory_order_acquire) ||
+      mmap_stdout_buf != NULL) {
+    return step_iterative(slice_id, ws, gas, h, yield_on_gas,
+                          yield_on_step_limit, allow_retry, step_counter);
+  }
+#endif
   if (is_control_ptr(ws->current_val) || ws->current_val >= MAX_CAP) {
     return step_iterative(slice_id, ws, gas, h, yield_on_gas,
                           yield_on_step_limit, allow_retry, step_counter);

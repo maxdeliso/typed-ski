@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
   applyMany,
@@ -12,6 +11,11 @@ import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 import { randExpression } from "../../lib/ski/generator.ts";
+import { createArenaEvaluator } from "../../lib/index.ts";
+
+const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
+  assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
+};
 
 test("stepOnce", async (t) => {
   const first = parseSKI("III");
@@ -22,9 +26,7 @@ test("stepOnce", async (t) => {
   const sixth = parseSKI("SKKII");
   const seventh = parseSKI("KI(KI)");
 
-  const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
-    assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
-  };
+  const arenaEvaluator = await createArenaEvaluator();
 
   await t.test(
     `evaluates ${unparseSKI(second)}
@@ -90,9 +92,7 @@ test("stepOnce", async (t) => {
 });
 
 test("B and C combinators", async (t) => {
-  const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
-    assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
-  };
+  const arenaEvaluator = await createArenaEvaluator();
 
   await t.test("B x y z = x (y z)", () => {
     const expr = applyMany(B, I, I, I);
@@ -121,26 +121,23 @@ test("B and C combinators", async (t) => {
 
 const MAX_ITER = 100;
 
-/**
- * Drive stepOnce until it returns { altered:false, expr:e }
- * and count how many iterations it took.
- */
-function reduceByLoop(expr: SKIExpression, maxIter = MAX_ITER) {
-  let cur = expr;
-  for (let i = 0; i < maxIter; i++) {
-    const r = arenaEvaluator.stepOnce(cur);
-    if (!r.altered) return { expr: r.expr, steps: i };
-    cur = r.expr;
-  }
-  throw new Error("stepOnce failed to normalise within maxIter");
-}
-
 test("stepOnce loop vs. reduce()", async (t) => {
   const seed = "df394b";
   const normalizeTests = 19;
   const minLength = 5;
   const maxLength = 12;
+  const arenaEvaluator = await createArenaEvaluator();
   const rs: RandomSeed = create(seed);
+
+  function reduceByLoop(expr: SKIExpression, max: number) {
+    let cur = expr;
+    for (let i = 0; i < max; i++) {
+      const r = arenaEvaluator.stepOnce(cur);
+      if (!r.altered) return { expr: r.expr, steps: i };
+      cur = r.expr;
+    }
+    throw new Error("stepOnce failed to normalise within maxIter");
+  }
 
   await t.test(
     `runs ${normalizeTests.toString()} normalization tests with random expressions`,
@@ -148,15 +145,14 @@ test("stepOnce loop vs. reduce()", async (t) => {
       [...Array(normalizeTests).keys()].forEach(() => {
         const length = rs.intBetween(minLength, maxLength);
         const fresh = randExpression(rs, length);
-        const reducedOnce = arenaEvaluator.reduce(fresh);
-        const { expr: reducedMany } = reduceByLoop(fresh);
+
+        const reduced = arenaEvaluator.reduce(fresh, MAX_ITER);
+        const { expr: reducedMany } = reduceByLoop(fresh, MAX_ITER);
 
         assert.deepStrictEqual(
-          unparseSKI(reducedOnce),
+          unparseSKI(reduced),
           unparseSKI(reducedMany),
-          `expected: ${unparseSKI(reducedOnce)}, got: ${unparseSKI(
-            reducedMany,
-          )}`,
+          `expected: ${unparseSKI(reduced)}, got: ${unparseSKI(reducedMany)}`,
         );
       });
     },

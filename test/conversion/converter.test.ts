@@ -3,7 +3,6 @@ import { expect } from "../util/assertions.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
 import { makeUntypedBinNumeral } from "../../lib/consts/nat.ts";
-import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
 import {
   apply,
@@ -26,8 +25,11 @@ import {
   type SystemFTerm,
 } from "../../lib/terms/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../lib/types/types.ts";
+import { createArenaEvaluator } from "../../lib/index.ts";
 
 test("Lambda conversion", async (t) => {
+  let arenaEvaluator = await createArenaEvaluator();
+
   const N = 5;
   const id = mkUntypedAbs("x", mkVar("x"));
   const konst = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
@@ -97,6 +99,7 @@ test("Lambda conversion", async (t) => {
               arenaEvaluator.reduce(
                 applyMany(bracketLambda(konst), ChurchN(a), ChurchN(b)),
               ),
+              arenaEvaluator,
             );
             expect(result).to.equal(BigInt(a));
           }
@@ -157,6 +160,7 @@ test("Lambda conversion", async (t) => {
             arenaEvaluator.reduce(
               applyMany(bracketLambda(flip), ChurchN(a), ChurchN(b)),
             ),
+            arenaEvaluator,
           );
           expect(result).to.equal(BigInt(expected));
         }
@@ -173,6 +177,7 @@ test("Lambda conversion", async (t) => {
           const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
           const result = await UnChurchNumber(
             arenaEvaluator.reduce(apply(bracketLambda(predLambda), ChurchN(n))),
+            arenaEvaluator,
           );
           expect(result).to.equal(BigInt(expected));
         }
@@ -218,7 +223,10 @@ test("Lambda conversion", async (t) => {
 
     const churchTerm = substituteBin(literal);
     const ski = bracketLambda(churchTerm);
-    const result = await UnChurchNumber(arenaEvaluator.reduce(ski));
+    const result = await UnChurchNumber(
+      arenaEvaluator.reduce(ski),
+      arenaEvaluator,
+    );
     expect(result).to.equal(8n);
   });
 

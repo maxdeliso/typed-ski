@@ -9,7 +9,6 @@
  */
 import { B, False, One, Succ, True, Zero } from "../consts/combinators.ts";
 import { apply, applyMany, type SKIExpression } from "./expression.ts";
-import { arenaEvaluator } from "../evaluator/skiEvaluator.ts";
 import type { Evaluator } from "../evaluator/evaluator.ts";
 import { SKITerminalSymbol } from "./terminal.ts";
 
@@ -334,7 +333,7 @@ export const ChurchN = (value: number | bigint): SKIExpression => {
  */
 export const UnChurchNumber = async (
   exp: SKIExpression,
-  evaluator: Evaluator = arenaEvaluator,
+  evaluator: Evaluator,
 ): Promise<bigint> => {
   const normalized = evaluator.reduceAsync
     ? await evaluator.reduceAsync(exp)
@@ -368,7 +367,7 @@ export const UnChurchNumber = async (
  */
 export const UnChurchBoolean = async (
   expr: SKIExpression,
-  evaluator: Evaluator = arenaEvaluator,
+  evaluator: Evaluator,
 ): Promise<boolean> => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
   const applied = applyMany(expr, ChurchN(1), ChurchN(0));

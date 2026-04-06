@@ -145,6 +145,7 @@ typedef struct {
   uint64_t offset_node_right;
   uint64_t offset_node_hash32;
   uint64_t offset_node_next_idx;
+  uint64_t offset_node_link;
   uint64_t offset_node_kind;
   uint64_t offset_node_sym;
   uint64_t offset_buckets;

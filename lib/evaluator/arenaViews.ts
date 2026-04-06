@@ -158,7 +158,7 @@ export function getOrBuildArenaViews(
   if (!memory) return null;
 
   const cached = viewsCache.get(memory.buffer);
-  let views: ArenaViews | null = null;
+  let views: ArenaViews | null;
 
   if (cached) {
     const validated = validateAndRebuildViews(cached.views, memory, provider);

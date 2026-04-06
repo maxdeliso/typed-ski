@@ -10,6 +10,7 @@
 #endif
 #include <sched.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -19,64 +20,168 @@
 #include <unistd.h>
 
 static int runtime_stdin_fd = -1;
+static clockid_t host_cond_clock_id = CLOCK_REALTIME;
+static bool host_cond_clock_initialized = false;
 
-void host_mutex_init(HostMutex *mutex) { pthread_mutex_init(mutex, NULL); }
+static void host_pthread_fail(const char *op, int rc) {
+  fprintf(stderr, "host_platform_posix: %s failed (rc=%d)\n", op, rc);
+  abort();
+}
 
-void host_mutex_destroy(HostMutex *mutex) { pthread_mutex_destroy(mutex); }
+static void host_cond_clock_init(void) {
+  if (host_cond_clock_initialized) {
+    return;
+  }
 
-void host_mutex_lock(HostMutex *mutex) { pthread_mutex_lock(mutex); }
+  pthread_condattr_t attr;
+  int rc = pthread_condattr_init(&attr);
+  if (rc != 0) {
+    host_pthread_fail("pthread_condattr_init", rc);
+  }
 
-void host_mutex_unlock(HostMutex *mutex) { pthread_mutex_unlock(mutex); }
+  rc = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+  if (rc == 0) {
+    host_cond_clock_id = CLOCK_MONOTONIC;
+  } else if (rc != EINVAL) {
+    pthread_condattr_destroy(&attr);
+    host_pthread_fail("pthread_condattr_setclock", rc);
+  }
 
-void host_cond_init(HostCond *cond) { pthread_cond_init(cond, NULL); }
+  rc = pthread_condattr_destroy(&attr);
+  if (rc != 0) {
+    host_pthread_fail("pthread_condattr_destroy", rc);
+  }
 
-void host_cond_destroy(HostCond *cond) { pthread_cond_destroy(cond); }
+  host_cond_clock_initialized = true;
+}
 
-void host_cond_signal(HostCond *cond) { pthread_cond_signal(cond); }
+static struct timespec host_deadline_after_ms(uint32_t timeout_ms) {
+  struct timespec ts;
+  if (clock_gettime(host_cond_clock_id, &ts) != 0) {
+    perror("host_platform_posix: clock_gettime");
+    abort();
+  }
+
+  ts.tv_sec += (time_t)(timeout_ms / 1000u);
+  ts.tv_nsec += (long)(timeout_ms % 1000u) * 1000000L;
+  ts.tv_sec += ts.tv_nsec / 1000000000L;
+  ts.tv_nsec %= 1000000000L;
+  return ts;
+}
+
+void host_mutex_init(HostMutex *mutex) {
+  int rc = pthread_mutex_init(mutex, NULL);
+  if (rc != 0) {
+    host_pthread_fail("pthread_mutex_init", rc);
+  }
+}
+
+void host_mutex_destroy(HostMutex *mutex) {
+  int rc = pthread_mutex_destroy(mutex);
+  if (rc != 0) {
+    host_pthread_fail("pthread_mutex_destroy", rc);
+  }
+}
+
+void host_mutex_lock(HostMutex *mutex) {
+  int rc = pthread_mutex_lock(mutex);
+  if (rc != 0) {
+    host_pthread_fail("pthread_mutex_lock", rc);
+  }
+}
+
+void host_mutex_unlock(HostMutex *mutex) {
+  int rc = pthread_mutex_unlock(mutex);
+  if (rc != 0) {
+    host_pthread_fail("pthread_mutex_unlock", rc);
+  }
+}
+
+void host_cond_init(HostCond *cond) {
+  host_cond_clock_init();
+
+  pthread_condattr_t attr;
+  int rc = pthread_condattr_init(&attr);
+  if (rc != 0) {
+    host_pthread_fail("pthread_condattr_init", rc);
+  }
+
+  pthread_condattr_t *attr_ptr = NULL;
+  if (host_cond_clock_id == CLOCK_MONOTONIC) {
+    rc = pthread_condattr_setclock(&attr, host_cond_clock_id);
+    if (rc != 0) {
+      pthread_condattr_destroy(&attr);
+      host_pthread_fail("pthread_condattr_setclock", rc);
+    }
+    attr_ptr = &attr;
+  }
+
+  rc = pthread_cond_init(cond, attr_ptr);
+  int destroy_rc = pthread_condattr_destroy(&attr);
+  if (destroy_rc != 0) {
+    host_pthread_fail("pthread_condattr_destroy", destroy_rc);
+  }
+  if (rc != 0) {
+    host_pthread_fail("pthread_cond_init", rc);
+  }
+}
+
+void host_cond_destroy(HostCond *cond) {
+  int rc = pthread_cond_destroy(cond);
+  if (rc != 0) {
+    host_pthread_fail("pthread_cond_destroy", rc);
+  }
+}
+
+void host_cond_signal(HostCond *cond) {
+  int rc = pthread_cond_signal(cond);
+  if (rc != 0) {
+    host_pthread_fail("pthread_cond_signal", rc);
+  }
+}
 
 void host_cond_wait(HostCond *cond, HostMutex *mutex) {
-  pthread_cond_wait(cond, mutex);
+  int rc = pthread_cond_wait(cond, mutex);
+  if (rc != 0) {
+    host_pthread_fail("pthread_cond_wait", rc);
+  }
 }
 
 void host_event_init(HostEvent *event) {
-  pthread_mutex_init(&event->mutex, NULL);
-  pthread_cond_init(&event->cond, NULL);
   event->signaled = false;
+  host_mutex_init(&event->mutex);
+  host_cond_init(&event->cond);
 }
 
 void host_event_destroy(HostEvent *event) {
-  pthread_mutex_destroy(&event->mutex);
-  pthread_cond_destroy(&event->cond);
+  host_mutex_destroy(&event->mutex);
+  host_cond_destroy(&event->cond);
 }
 
 void host_event_notify(HostEvent *event) {
-  pthread_mutex_lock(&event->mutex);
+  host_mutex_lock(&event->mutex);
   event->signaled = true;
-  pthread_cond_signal(&event->cond);
-  pthread_mutex_unlock(&event->mutex);
+  host_cond_signal(&event->cond);
+  host_mutex_unlock(&event->mutex);
 }
 
 bool host_event_wait(HostEvent *event, uint32_t timeout_ms) {
   bool signaled = false;
-  pthread_mutex_lock(&event->mutex);
+  host_mutex_lock(&event->mutex);
   if (!event->signaled) {
     if (timeout_ms == 0) {
-      pthread_cond_wait(&event->cond, &event->mutex);
+      host_cond_wait(&event->cond, &event->mutex);
     } else {
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME, &ts);
-      ts.tv_sec += timeout_ms / 1000u;
-      ts.tv_nsec += (long)(timeout_ms % 1000u) * 1000000L;
-      if (ts.tv_nsec >= 1000000000L) {
-        ts.tv_sec += 1;
-        ts.tv_nsec -= 1000000000L;
+      struct timespec ts = host_deadline_after_ms(timeout_ms);
+      int rc = pthread_cond_timedwait(&event->cond, &event->mutex, &ts);
+      if (rc != 0 && rc != ETIMEDOUT) {
+        host_pthread_fail("pthread_cond_timedwait", rc);
       }
-      (void)pthread_cond_timedwait(&event->cond, &event->mutex, &ts);
     }
   }
   signaled = event->signaled;
   event->signaled = false;
-  pthread_mutex_unlock(&event->mutex);
+  host_mutex_unlock(&event->mutex);
   return signaled;
 }
 
@@ -84,7 +189,12 @@ int host_thread_create(HostThread *thread, HostThreadFn fn, void *arg) {
   return pthread_create(thread, NULL, fn, arg);
 }
 
-void host_thread_join(HostThread thread) { pthread_join(thread, NULL); }
+void host_thread_join(HostThread thread) {
+  int rc = pthread_join(thread, NULL);
+  if (rc != 0) {
+    host_pthread_fail("pthread_join", rc);
+  }
+}
 
 void *host_reserve_memory(size_t bytes) {
   void *ptr =
@@ -110,7 +220,10 @@ bool host_commit_memory_range(void *base, size_t offset, size_t bytes) {
 
 void host_release_memory(void *base, size_t bytes) {
   if (base != NULL && bytes > 0) {
-    munmap(base, bytes);
+    if (munmap(base, bytes) != 0) {
+      perror("host_platform_posix: munmap");
+      abort();
+    }
   }
 }
 
@@ -142,7 +255,10 @@ uint32_t host_cpu_count(void) {
   if (n > 0 && n <= 0xffffffffu) {
     return (uint32_t)n;
   }
-  return 4;
+  fprintf(stderr, "host_platform_posix: sysconf(_SC_NPROCESSORS_ONLN) "
+                  "returned %ld\n",
+          n);
+  abort();
 }
 
 uint32_t host_process_id(void) { return (uint32_t)getpid(); }
@@ -176,7 +292,8 @@ int host_runtime_input_read_byte(uint8_t *byte_out) {
   if (n == 0) {
     return 0;
   }
-  if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+  int err = errno;
+  if (err == EAGAIN || err == EWOULDBLOCK || err == EINTR) {
     return 0;
   }
   return -1;
@@ -184,7 +301,10 @@ int host_runtime_input_read_byte(uint8_t *byte_out) {
 
 void host_runtime_input_close(void) {
   if (runtime_stdin_fd >= 0) {
-    close(runtime_stdin_fd);
+    if (close(runtime_stdin_fd) != 0) {
+      perror("host_platform_posix: close");
+      abort();
+    }
     runtime_stdin_fd = -1;
   }
 }
@@ -192,6 +312,7 @@ void host_runtime_input_close(void) {
 HostFileMapResult host_map_input_file(const char *path,
                                       HostFileMapping *mapping) {
   memset(mapping, 0, sizeof(*mapping));
+  mapping->fd = -1;
   mapping->fd = open(path, O_RDONLY);
   if (mapping->fd < 0) {
     return HOST_FILE_MAP_OPEN_FAILED;
@@ -224,6 +345,7 @@ HostFileMapResult host_map_input_file(const char *path,
 HostFileMapResult host_map_output_file(const char *path, size_t size,
                                        HostFileMapping *mapping) {
   memset(mapping, 0, sizeof(*mapping));
+  mapping->fd = -1;
   mapping->fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0666);
   if (mapping->fd < 0) {
     return HOST_FILE_MAP_OPEN_FAILED;
@@ -250,10 +372,16 @@ HostFileMapResult host_map_output_file(const char *path, size_t size,
 
 void host_close_file_mapping(HostFileMapping *mapping) {
   if (mapping->data != NULL && mapping->size > 0) {
-    munmap(mapping->data, mapping->size);
+    if (munmap(mapping->data, mapping->size) != 0) {
+      perror("host_platform_posix: munmap");
+      abort();
+    }
   }
   if (mapping->fd >= 0) {
-    close(mapping->fd);
+    if (close(mapping->fd) != 0) {
+      perror("host_platform_posix: close");
+      abort();
+    }
   }
   memset(mapping, 0, sizeof(*mapping));
   mapping->fd = -1;
@@ -265,14 +393,19 @@ bool host_finish_output_file(HostFileMapping *mapping, size_t written) {
     ok = msync(mapping->data, written, MS_SYNC) == 0;
   }
   if (mapping->data != NULL && mapping->size > 0) {
-    munmap(mapping->data, mapping->size);
+    if (munmap(mapping->data, mapping->size) != 0) {
+      perror("host_platform_posix: munmap");
+      ok = false;
+    }
     mapping->data = NULL;
   }
   if (mapping->fd >= 0) {
     if (ftruncate(mapping->fd, (off_t)written) != 0) {
       ok = false;
     }
-    close(mapping->fd);
+    if (close(mapping->fd) != 0) {
+      ok = false;
+    }
     mapping->fd = -1;
   }
   mapping->size = 0;

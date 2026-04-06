@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 import { typelessApp } from "../util/ast.ts";
@@ -7,23 +8,23 @@ import { makeUntypedBinNumeral } from "../../lib/consts/nat.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
 
-Deno.test("Parser - untyped λ-calculus", async (t) => {
-  await t.step("parseLambda → application parsing", async (t) => {
-    await t.step("simple application", () => {
+test("Parser - untyped λ-calculus", async (t) => {
+  await t.test("parseLambda → application parsing", async (t) => {
+    await t.test("simple application", () => {
       const src = "a b";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
       expect(term).to.deep.equal(typelessApp(mkVar("a"), mkVar("b")));
     });
 
-    await t.step("application with parentheses", () => {
+    await t.test("application with parentheses", () => {
       const src = "(a b)";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
       expect(term).to.deep.equal(typelessApp(mkVar("a"), mkVar("b")));
     });
 
-    await t.step("nested application", () => {
+    await t.test("nested application", () => {
       const src = "a (b c)";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
@@ -32,7 +33,7 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
       );
     });
 
-    await t.step("parses nat literal", () => {
+    await t.test("parses nat literal", () => {
       const src = "7";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
@@ -40,8 +41,8 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
     });
   });
 
-  await t.step("parseLambda → error cases", async (t) => {
-    await t.step(
+  await t.test("parseLambda → error cases", async (t) => {
+    await t.test(
       "rejects purely numeric identifiers in lambda bindings",
       () => {
         // Purely numeric strings should be parsed as numeric literals, not identifiers
@@ -54,8 +55,8 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
     );
   });
 
-  await t.step("parseLambda → complex expressions", async (t) => {
-    await t.step("var applied to λ-expression", () => {
+  await t.test("parseLambda → complex expressions", async (t) => {
+    await t.test("var applied to λ-expression", () => {
       const src = "a (\\b=>b (a a))";
       const [lit, term] = parseLambda(src);
       expect(lit).to.equal(src);
@@ -70,7 +71,7 @@ Deno.test("Parser - untyped λ-calculus", async (t) => {
       );
     });
 
-    await t.step("parses Church-style predecessor (pred)", () => {
+    await t.test("parses Church-style predecessor (pred)", () => {
       const src =
         "\\n=> \\f=> \\x=> n (\\g=> \\h=> h (g f)) (\\u=> x) (\\u=> u)";
 

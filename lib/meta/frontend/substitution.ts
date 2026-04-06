@@ -415,11 +415,7 @@ export function alphaRenameTermBinder<T extends TripLangValueType>(
         typeArg: alphaRenameTermBinder(term.typeArg, oldName, newName),
       } as T;
     case "systemF-match": {
-      const scrutinee = alphaRenameTermBinder(
-        term.scrutinee,
-        oldName,
-        newName,
-      );
+      const scrutinee = alphaRenameTermBinder(term.scrutinee, oldName, newName);
       const returnType = alphaRenameTermBinder(
         term.returnType,
         oldName,
@@ -436,7 +432,7 @@ export function alphaRenameTermBinder<T extends TripLangValueType>(
           };
         }
         const updatedParams = arm.params.map((param) =>
-          param === oldName ? newName : param
+          param === oldName ? newName : param,
         );
         return {
           ...arm,
@@ -531,11 +527,7 @@ export function alphaRenameTypeBinder<T extends TripLangValueType>(
         arg: alphaRenameTypeBinder(term.arg, oldName, newName),
       } as T;
     case "systemF-match": {
-      const scrutinee = alphaRenameTypeBinder(
-        term.scrutinee,
-        oldName,
-        newName,
-      );
+      const scrutinee = alphaRenameTypeBinder(term.scrutinee, oldName, newName);
       const returnType = alphaRenameTypeBinder(
         term.returnType,
         oldName,
@@ -927,7 +919,8 @@ export function substituteTermHygienicBatch(
       });
 
       if (
-        scrutinee === term.scrutinee && returnType === term.returnType &&
+        scrutinee === term.scrutinee &&
+        returnType === term.returnType &&
         !armsChanged
       ) {
         return term;
@@ -1323,9 +1316,9 @@ export function substituteTypeHygienic<T extends TripLangValueType>(
         rgt: substituteTypeHygienic(term.rgt, typeName, replacement, bound),
       } as T;
     case "type-var":
-      return (term.typeName === typeName && !bound.has(typeName)
-        ? replacement as T
-        : term);
+      return term.typeName === typeName && !bound.has(typeName)
+        ? (replacement as T)
+        : term;
     default:
       return term;
   }
@@ -1358,7 +1351,7 @@ export function resolveExternalProgramReferences(
   return {
     kind: "program",
     terms: program.terms.map((t) =>
-      resolveExternalTermReferences(t, syms, importedSymbols)
+      resolveExternalTermReferences(t, syms, importedSymbols),
     ),
   };
 }
@@ -1417,7 +1410,8 @@ export function resolveExternalTermReferences(
     const symbolReferencedType = syms.types.get(termRef);
 
     if (
-      symbolReferencedTerm === undefined && symbolReferencedType === undefined
+      symbolReferencedTerm === undefined &&
+      symbolReferencedType === undefined
     ) {
       // Skip imported symbols - they should remain unresolved
       if (importedSymbols.has(termRef)) {
@@ -1432,7 +1426,8 @@ export function resolveExternalTermReferences(
     }
 
     if (
-      symbolReferencedTerm !== undefined && symbolReferencedType !== undefined
+      symbolReferencedTerm !== undefined &&
+      symbolReferencedType !== undefined
     ) {
       throw new CompilationError(
         `Duplicate external term reference resolution: ${termRef}`,
@@ -1488,33 +1483,13 @@ function substituteTripLangTerm(
     case "poly": {
       return {
         ...current,
-        term: substituteHygienic(
-          current.term,
-          term.name,
-          termDefinitionValue,
-        ),
+        term: substituteHygienic(current.term, term.name, termDefinitionValue),
       };
     }
-    case "typed": {
-      return {
-        kind: "typed",
-        name: current.name,
-        term: substituteHygienic(
-          current.term,
-          term.name,
-          termDefinitionValue,
-        ),
-        type: undefined,
-      };
-    }
-    case "untyped": {
+    case "lambda": {
       return {
         ...current,
-        term: substituteHygienic(
-          current.term,
-          term.name,
-          termDefinitionValue,
-        ),
+        term: substituteHygienic(current.term, term.name, termDefinitionValue),
       };
     }
     case "combinator":
@@ -1557,36 +1532,12 @@ function substituteTripLangType(
       return {
         ...current,
         type: current.type
-          ? substituteTypeHygienic(
-            current.type,
-            typeRef,
-            replacement,
-          )
+          ? substituteTypeHygienic(current.type, typeRef, replacement)
           : current.type,
-        term: substituteTypeHygienic(
-          current.term,
-          typeRef,
-          replacement,
-        ),
-      };
-    case "typed":
-      return {
-        ...current,
-        type: current.type
-          ? substituteTypeHygienic(
-            current.type,
-            typeRef,
-            replacement,
-          )
-          : current.type,
-        term: substituteTypeHygienic(
-          current.term,
-          typeRef,
-          replacement,
-        ),
+        term: substituteTypeHygienic(current.term, typeRef, replacement),
       };
     case "data":
-    case "untyped":
+    case "lambda":
     case "combinator":
     case "native":
     case "module":
@@ -1694,19 +1645,7 @@ export function substituteTripLangTermDirectBatch(
         term: newTerm as SystemFTerm,
       };
     }
-    case "typed": {
-      const newTerm = substituteTermHygienicBatch(
-        current.term,
-        valueSubstitutions,
-        combinedFVs,
-      );
-      if (newTerm === current.term) return current;
-      return {
-        ...current,
-        term: newTerm as TypedLambda,
-      };
-    }
-    case "untyped": {
+    case "lambda": {
       const newTerm = substituteTermHygienicBatch(
         current.term,
         valueSubstitutions,
@@ -1759,28 +1698,7 @@ export function substituteTripLangTypeDirect(
       return {
         ...current,
         type: current.type
-          ? substituteTypeHygienic(
-            current.type,
-            type.name,
-            typeDefinitionValue,
-          )
-          : current.type,
-        term: substituteTypeHygienic(
-          current.term,
-          type.name,
-          typeDefinitionValue,
-        ),
-      };
-    }
-    case "typed": {
-      return {
-        ...current,
-        type: current.type
-          ? substituteTypeHygienic(
-            current.type,
-            type.name,
-            typeDefinitionValue,
-          )
+          ? substituteTypeHygienic(current.type, type.name, typeDefinitionValue)
           : current.type,
         term: substituteTypeHygienic(
           current.term,
@@ -1800,7 +1718,7 @@ export function substituteTripLangTypeDirect(
       };
     }
     case "data":
-    case "untyped":
+    case "lambda":
     case "combinator":
     case "native":
     case "module":

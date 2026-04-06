@@ -204,7 +204,7 @@ function toDeBruijnInternal(
     }
     case "type-var": {
       const idx = typeCtx.indexOf(term.typeName);
-      return (idx === -1)
+      return idx === -1
         ? { kind: "DbFreeTypeVar", name: term.typeName }
         : { kind: "DbVar", index: idx };
     }
@@ -217,11 +217,7 @@ function toDeBruijnInternal(
     case "lambda-abs":
       return {
         kind: "DbAbs",
-        body: toDeBruijnInternal(
-          term.body,
-          [term.name, ...termCtx],
-          typeCtx,
-        ),
+        body: toDeBruijnInternal(term.body, [term.name, ...termCtx], typeCtx),
       };
     case "systemF-abs":
       return {
@@ -246,20 +242,18 @@ function toDeBruijnInternal(
     case "systemF-type-abs":
       return {
         kind: "DbTyAbs",
-        body: toDeBruijnInternal(
-          term.body,
-          termCtx,
-          [term.typeVar, ...typeCtx],
-        ),
+        body: toDeBruijnInternal(term.body, termCtx, [
+          term.typeVar,
+          ...typeCtx,
+        ]),
       };
     case "forall":
       return {
         kind: "DbForall",
-        body: toDeBruijnInternal(
-          term.body,
-          termCtx,
-          [term.typeVar, ...typeCtx],
-        ),
+        body: toDeBruijnInternal(term.body, termCtx, [
+          term.typeVar,
+          ...typeCtx,
+        ]),
       };
     case "non-terminal":
       return {

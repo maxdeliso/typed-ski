@@ -1,4 +1,7 @@
-import { dirname, fromFileUrl, join } from "std/path";
+import { readFileSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { compileToObjectFile } from "./compiler/index.ts";
 import type { TripCObject } from "./compiler/objectFile.ts";
 import { parseTripLang } from "./parser/tripLang.ts";
@@ -11,9 +14,14 @@ const MODULE_CACHE = new Map<string, TripCObject>();
 
 function normalizePath(sourceLocation: TripSourceLocation): string {
   if (sourceLocation instanceof URL) {
-    return fromFileUrl(sourceLocation);
+    return fileURLToPath(sourceLocation as any);
   }
   return sourceLocation;
+}
+
+export function resetSourceCache(): void {
+  SOURCE_CACHE.clear();
+  MODULE_CACHE.clear();
 }
 
 export async function loadTripSourceFile(
@@ -25,7 +33,7 @@ export async function loadTripSourceFile(
     return cached;
   }
 
-  const source = await Deno.readTextFile(filePath);
+  const source = await readFile(filePath, "utf8");
   SOURCE_CACHE.set(filePath, source);
   return source;
 }
@@ -40,7 +48,7 @@ export function loadTripSourceFileSync(
     return cached;
   }
 
-  const source = Deno.readTextFileSync(filePath);
+  const source = readFileSync(filePath, "utf8");
   SOURCE_CACHE.set(filePath, source);
   return source;
 }
@@ -61,9 +69,10 @@ async function resolveImportedModuleSourcePath(
   moduleName: string,
 ): Promise<string | undefined> {
   const parentDir = dirname(importerFilePath);
-  const lowerLeading = moduleName.length > 0
-    ? `${moduleName[0]!.toLowerCase()}${moduleName.slice(1)}`
-    : moduleName;
+  const lowerLeading =
+    moduleName.length > 0
+      ? `${moduleName[0]!.toLowerCase()}${moduleName.slice(1)}`
+      : moduleName;
   const candidates = Array.from(
     new Set([
       join(parentDir, `${moduleName}.trip`),
@@ -74,8 +83,8 @@ async function resolveImportedModuleSourcePath(
 
   for (const candidate of candidates) {
     try {
-      const stat = await Deno.stat(candidate);
-      if (stat.isFile) {
+      const stats = await stat(candidate);
+      if (stats.isFile()) {
         return candidate;
       }
     } catch {

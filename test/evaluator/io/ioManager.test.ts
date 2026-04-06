@@ -4,7 +4,8 @@
  * @module
  */
 
-import { assertEquals, assertRejects } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import type { ArenaWasmExports } from "../../../lib/evaluator/arenaEvaluator.ts";
 import { IoManager } from "../../../lib/evaluator/io/ioManager.ts";
 
@@ -98,8 +99,8 @@ function setupArenaHeader(memory: WebAssembly.Memory, baseAddr: number): void {
   );
 }
 
-Deno.test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
-  await t.step(
+test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
+  await t.test(
     "successfully submits suspension when hostSubmit returns 0",
     async () => {
       const BASE_ADDR = 1024; // Non-zero base address
@@ -108,9 +109,9 @@ Deno.test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
         BASE_ADDR,
         (nodeId, reqId, maxSteps) => {
           callCount++;
-          assertEquals(nodeId, 42);
-          assertEquals(reqId, 100);
-          assertEquals(maxSteps, 0);
+          assert.strictEqual(nodeId, 42);
+          assert.strictEqual(reqId, 100);
+          assert.strictEqual(maxSteps, 0);
           return 0; // Success
         },
       );
@@ -127,13 +128,13 @@ Deno.test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
       // Wake stdin waiters - this should call submitSuspension
       const woken = await ioManager.wakeStdinWaiters(10);
 
-      assertEquals(woken, 1);
-      assertEquals(callCount, 1);
-      assertEquals(ioManager.isIoWaiting(42), false);
+      assert.strictEqual(woken, 1);
+      assert.strictEqual(callCount, 1);
+      assert.strictEqual(ioManager.isIoWaiting(42), false);
     },
   );
 
-  await t.step(
+  await t.test(
     "retries submission when hostSubmit returns 1 (queue full)",
     async () => {
       const BASE_ADDR = 1024;
@@ -159,13 +160,13 @@ Deno.test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
 
       const woken = await ioManager.wakeStdinWaiters(10);
 
-      assertEquals(woken, 1);
-      assertEquals(callCount, 3); // Should retry twice before succeeding
-      assertEquals(ioManager.isIoWaiting(42), false);
+      assert.strictEqual(woken, 1);
+      assert.strictEqual(callCount, 3); // Should retry twice before succeeding
+      assert.strictEqual(ioManager.isIoWaiting(42), false);
     },
   );
 
-  await t.step(
+  await t.test(
     "throws error when hostSubmit returns non-zero non-one code",
     async () => {
       const BASE_ADDR = 1024;
@@ -184,17 +185,19 @@ Deno.test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
       const rings = ioManager.getIoRings();
       rings.stdinWait.tryEnqueue(42);
 
-      await assertRejects(
+      await assert.rejects(
         async () => {
           await ioManager.wakeStdinWaiters(10);
         },
-        Error,
-        "Resubmit failed for reqId 100 with code 2",
+        {
+          name: "Error",
+          message: "Resubmit failed for reqId 100 with code 2",
+        },
       );
     },
   );
 
-  await t.step("throws error when aborted during submission", async () => {
+  await t.test("throws error when aborted during submission", async () => {
     const BASE_ADDR = 1024;
     let callCount = 0;
     const mockExports = createMockExports(
@@ -220,12 +223,14 @@ Deno.test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
     await new Promise((r) => setTimeout(r, 10));
     aborted = true;
 
-    await assertRejects(
+    await assert.rejects(
       async () => {
         await wakePromise;
       },
-      Error,
-      "Evaluator terminated",
+      {
+        name: "Error",
+        message: "Evaluator terminated",
+      },
     );
   });
 });

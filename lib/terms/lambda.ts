@@ -66,10 +66,7 @@ interface UntypedApplication {
  * The union type representing all possible untyped lambda calculus terms.
  * Includes variables, abstractions, and applications.
  */
-export type UntypedLambda =
-  | LambdaVar
-  | UntypedLambdaAbs
-  | UntypedApplication;
+export type UntypedLambda = LambdaVar | UntypedLambdaAbs | UntypedApplication;
 
 /**
  * Creates an application of one untyped lambda term to another.

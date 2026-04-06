@@ -1,0 +1,47 @@
+{
+  "dataDefinitions": [],
+  "definitions": {
+    "addA": {
+      "kind": "poly",
+      "name": "addA",
+      "term": {
+        "body": {
+          "body": {
+            "body": {
+              "kind": "systemF-var",
+              "name": "x"
+            },
+            "kind": "systemF-abs",
+            "name": "y",
+            "typeAnnotation": {
+              "kind": "type-var",
+              "typeName": "X"
+            }
+          },
+          "kind": "systemF-abs",
+          "name": "x",
+          "typeAnnotation": {
+            "kind": "type-var",
+            "typeName": "X"
+          }
+        },
+        "kind": "systemF-type-abs",
+        "typeVar": "X"
+      }
+    },
+    "main": {
+      "kind": "poly",
+      "name": "main",
+      "term": {
+        "kind": "systemF-var",
+        "name": "addA"
+      }
+    }
+  },
+  "exports": [
+    "addA",
+    "main"
+  ],
+  "imports": [],
+  "module": "A"
+}

@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@maxdeliso/typed-ski": "../lib/index.ts"
+  }
+}

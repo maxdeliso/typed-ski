@@ -4,10 +4,11 @@
  * @module
  */
 
-import { assertEquals } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { RingStats } from "../../../lib/evaluator/io/ringStats.ts";
 
-Deno.test("RingStats - statistics recording", () => {
+test("RingStats - statistics recording", () => {
   const stats = new RingStats();
 
   stats.recordSubmitOk();
@@ -31,20 +32,20 @@ Deno.test("RingStats - statistics recording", () => {
   };
   const snapshot = stats.getSnapshot(5, 10, extra);
 
-  assertEquals(snapshot.submitOk, 2);
-  assertEquals(snapshot.submitFull, 1);
-  assertEquals(snapshot.submitNotConnected, 1);
-  assertEquals(snapshot.pullEmpty, 1);
-  assertEquals(snapshot.pullNonEmpty, 2);
-  assertEquals(snapshot.completionsStashed, 1);
-  assertEquals(snapshot.pending, 5);
-  assertEquals(snapshot.completed, 10);
-  assertEquals(snapshot.totalNodes, 100);
-  assertEquals(snapshot.totalSteps, 200);
-  assertEquals(snapshot.hashconsHits, 30);
+  assert.strictEqual(snapshot.submitOk, 2);
+  assert.strictEqual(snapshot.submitFull, 1);
+  assert.strictEqual(snapshot.submitNotConnected, 1);
+  assert.strictEqual(snapshot.pullEmpty, 1);
+  assert.strictEqual(snapshot.pullNonEmpty, 2);
+  assert.strictEqual(snapshot.completionsStashed, 1);
+  assert.strictEqual(snapshot.pending, 5);
+  assert.strictEqual(snapshot.completed, 10);
+  assert.strictEqual(snapshot.totalNodes, 100);
+  assert.strictEqual(snapshot.totalSteps, 200);
+  assert.strictEqual(snapshot.hashconsHits, 30);
 });
 
-Deno.test("RingStats - reset", () => {
+test("RingStats - reset", () => {
   const stats = new RingStats();
 
   stats.recordSubmitOk();
@@ -64,7 +65,7 @@ Deno.test("RingStats - reset", () => {
     hashconsMisses: 0,
   };
   const snapshot = stats.getSnapshot(0, 0, extra);
-  assertEquals(snapshot.submitOk, 0);
-  assertEquals(snapshot.submitFull, 0);
-  assertEquals(snapshot.pullNonEmpty, 0);
+  assert.strictEqual(snapshot.submitOk, 0);
+  assert.strictEqual(snapshot.submitFull, 0);
+  assert.strictEqual(snapshot.pullNonEmpty, 0);
 });

@@ -75,10 +75,7 @@ const DEFAULT_WASM_ARENA_MAX_CAPACITY = 1 << 20;
  */
 function toArenaWithExports(
   root: SKIExpression,
-  exports: Pick<
-    ArenaWasmExports,
-    "allocTerminal" | "allocCons" | "allocU8"
-  >,
+  exports: Pick<ArenaWasmExports, "allocTerminal" | "allocCons" | "allocU8">,
 ): ArenaNodeId {
   const EMPTY = 0xffffffff;
 
@@ -285,7 +282,8 @@ function fromArenaWithExports(
     }
     const kind = getKind(id);
 
-    if (kind === 1) { // ArenaKind.Terminal
+    if (kind === 1) {
+      // ArenaKind.Terminal
       // TERMINAL: Construct immediately and cache
       const sym = getSym(id);
       cache.set(id, ARENA_SYM_TO_SKI[sym as ArenaSym]!);
@@ -296,12 +294,14 @@ function fromArenaWithExports(
       stack.pop();
     } else if (kind === ArenaKind.NonTerm) {
       // NON-TERMINAL: Check children (AoS: use view getters when available)
-      const leftId = views && id < views.capacity
-        ? viewGetLeft(id, views)
-        : exports.leftOf(id);
-      const rightId = views && id < views.capacity
-        ? viewGetRight(id, views)
-        : exports.rightOf(id);
+      const leftId =
+        views && id < views.capacity
+          ? viewGetLeft(id, views)
+          : exports.leftOf(id);
+      const rightId =
+        views && id < views.capacity
+          ? viewGetRight(id, views)
+          : exports.rightOf(id);
 
       const leftDone = cache.has(leftId);
       const rightDone = cache.has(rightId);
@@ -360,7 +360,7 @@ export interface ArenaWasmExports {
   debugGetRingEntries?(): number;
 }
 
-// deno-lint-ignore ban-types
+// lint-ignore ban-types
 function assertFn(obj: unknown, name: string): asserts obj is Function {
   if (typeof obj !== "function") {
     throw new TypeError(`WASM export \`${name}\` is missing or not a function`);
@@ -573,10 +573,10 @@ export class ArenaEvaluatorWasm implements Evaluator {
     }
 
     // 2. Build Terminal
-    if (k === 1) { // ArenaKind.Terminal
-      const symValue = views && id < views.capacity
-        ? viewGetSym(id, views)
-        : this.$.symOf(id);
+    if (k === 1) {
+      // ArenaKind.Terminal
+      const symValue =
+        views && id < views.capacity ? viewGetSym(id, views) : this.$.symOf(id);
 
       const expr = ARENA_SYM_TO_SKI[symValue as ArenaSym]!;
       return { id, kind: "terminal", sym: unparseSKI(expr) };
@@ -584,19 +584,18 @@ export class ArenaEvaluatorWasm implements Evaluator {
 
     // 2b. Build U8 literal (display as #u8(n))
     if (k === ArenaKind.U8) {
-      const symValue = views && id < views.capacity
-        ? viewGetSym(id, views)
-        : this.$.symOf(id);
+      const symValue =
+        views && id < views.capacity ? viewGetSym(id, views) : this.$.symOf(id);
       return { id, kind: "terminal", sym: `#u8(${symValue})` };
     }
 
     // 3. Build Non-Terminal
-    const left = views && id < views.capacity
-      ? viewGetLeft(id, views)
-      : this.$.leftOf(id);
-    const right = views && id < views.capacity
-      ? viewGetRight(id, views)
-      : this.$.rightOf(id);
+    const left =
+      views && id < views.capacity ? viewGetLeft(id, views) : this.$.leftOf(id);
+    const right =
+      views && id < views.capacity
+        ? viewGetRight(id, views)
+        : this.$.rightOf(id);
 
     return { id, kind: "non-terminal", left, right };
   }
@@ -650,7 +649,7 @@ export class ArenaEvaluatorWasm implements Evaluator {
  * Synchronously creates an arena evaluator using `wasm/release.wasm` from the
  * package layout.
  *
- * Note: this requires a sync-readable file URL (Deno runtime). In other
+ * Note: this requires a sync-readable file URL. In other
  * environments, use `createArenaEvaluator()` instead.
  */
 export function createArenaEvaluatorReleaseSync(): ArenaEvaluatorWasm {

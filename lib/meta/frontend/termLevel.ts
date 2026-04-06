@@ -3,7 +3,7 @@
  *
  * This module provides functionality for managing term levels in the
  * type hierarchy and lowering terms from higher levels to lower levels
- * (e.g., System F → typed lambda → untyped lambda → SKI).
+ * (e.g., System F → lambda → SKI).
  *
  * @module
  */
@@ -14,7 +14,6 @@ import {
   mkVar,
   type UntypedLambda,
 } from "../../terms/lambda.ts";
-import { eraseTypedLambda } from "../../types/typedLambda.ts";
 import type { TripLangTerm } from "../trip.ts";
 import { CompilationError } from "./errors.ts";
 import { freeTermVars, fresh } from "./substitution.ts";
@@ -63,10 +62,8 @@ function applyFixpoint(name: string, body: UntypedLambda): UntypedLambda {
 export function termLevel(dt: TripLangTerm): number {
   switch (dt.kind) {
     case "poly":
-      return 4;
-    case "typed":
       return 3;
-    case "untyped":
+    case "lambda":
       return 2;
     case "combinator":
     case "native":
@@ -89,22 +86,12 @@ export function lower(dt: TripLangTerm): TripLangTerm {
       const lowered = dt.rec ? applyFixpoint(dt.name, erased) : erased;
 
       return {
-        kind: "untyped",
+        kind: "lambda",
         name: dt.name,
         term: lowered,
       };
     }
-    case "typed": {
-      const erased = eraseTypedLambda(dt.term);
-
-      return {
-        kind: "untyped",
-        name: dt.name,
-        term: erased,
-      };
-    }
-
-    case "untyped": {
+    case "lambda": {
       const erased = bracketLambda(dt.term);
 
       return {
@@ -135,17 +122,13 @@ export function lower(dt: TripLangTerm): TripLangTerm {
     }
 
     case "type":
-      throw new CompilationError(
-        "Cannot lower a type",
-        "resolve",
-        { type: dt },
-      );
+      throw new CompilationError("Cannot lower a type", "resolve", {
+        type: dt,
+      });
     case "data":
-      throw new CompilationError(
-        "Cannot lower a data definition",
-        "resolve",
-        { term: dt },
-      );
+      throw new CompilationError("Cannot lower a data definition", "resolve", {
+        term: dt,
+      });
     case "module":
     case "import":
     case "export":

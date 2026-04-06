@@ -8,6 +8,7 @@
  * @module
  */
 import type {
+  LambdaDefinition,
   PolyDefinition,
   SymbolTable,
   TripLangProgram,
@@ -19,14 +20,17 @@ import {
   indexSymbols as indexSymbolsImpl,
 } from "./symbolTable.ts";
 import { elaborateTerms } from "./elaboration.ts";
-import { resolveExternalProgramReferences } from "./substitution.ts";
+import {
+  resolveExternalProgramReferences,
+  resolveExternalTermReferences,
+} from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
 import { expandDataDefinitions } from "./data.ts";
 import { emptySystemFContext, typecheckSystemF } from "../../types/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
-import { typecheckTypedLambda } from "../../types/typedLambda.ts";
 import { CompilationError } from "./errors.ts";
+import { lower } from "./termLevel.ts";
 
 type ParsedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
@@ -62,6 +66,44 @@ interface TypecheckedProgramWithTypes {
   readonly __moniker: unique symbol;
 }
 
+function collectImportedSymbols(program: TripLangProgram): Set<string> {
+  const importedSymbols = new Set<string>();
+  for (const term of program.terms) {
+    if (term.kind === "import") {
+      importedSymbols.add(term.ref);
+    }
+  }
+  return importedSymbols;
+}
+
+function isRecursivePolyReference(symbols: SymbolTable, name: string): boolean {
+  const term = symbols.terms.get(name);
+  return term?.kind === "poly" && term.rec === true;
+}
+
+function collectRecursivePolyTypes(
+  program: TripLangProgram,
+): Map<string, BaseType> {
+  const recursivePolyTypes = new Map<string, BaseType>();
+  for (const term of program.terms) {
+    if (term.kind === "poly" && term.rec && term.type) {
+      recursivePolyTypes.set(term.name, term.type);
+    }
+  }
+  return recursivePolyTypes;
+}
+
+function createSystemFTypecheckContext(
+  typeAliases: Map<string, BaseType>,
+  recursivePolyTypes: Map<string, BaseType>,
+) {
+  const ctx = emptySystemFContext(typeAliases);
+  for (const [name, type] of recursivePolyTypes) {
+    ctx.termCtx.set(name, type);
+  }
+  return ctx;
+}
+
 /**
  * Parses TripLang source into a `ParsedProgram`, validating that exactly one module is declared.
  * @throws CompilationError if zero or multiple module definitions are present
@@ -70,8 +112,8 @@ function parse(input: string): ParsedProgram {
   const program = parseTripLang(input);
 
   // Validate module constraints
-  const moduleDefinitions = program.terms.filter((term) =>
-    term.kind === "module"
+  const moduleDefinitions = program.terms.filter(
+    (term) => term.kind === "module",
   );
 
   if (moduleDefinitions.length === 0) {
@@ -133,16 +175,7 @@ function elaborate(
 function resolve(
   programWithSymbols: ElaboratedProgramWithSymbols,
 ): ResolvedProgram {
-  // Collect imported symbol names
-  // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
-  // Parser produces: {name: moduleName, ref: symbolName}
-  // We track the symbol name (ref) so we can skip resolution for imported symbols
-  const importedSymbols = new Set<string>();
-  for (const term of programWithSymbols.program.terms) {
-    if (term.kind === "import") {
-      importedSymbols.add(term.ref);
-    }
-  }
+  const importedSymbols = collectImportedSymbols(programWithSymbols.program);
 
   const resolved = resolveExternalProgramReferences(
     programWithSymbols.program,
@@ -159,17 +192,19 @@ function resolve(
     // Check for unresolved terms that are not imported
     let unresolvedTerms = Array.from(ut.keys());
     if (resolvedTerm.kind === "poly" && resolvedTerm.rec) {
-      unresolvedTerms = unresolvedTerms.filter((term) =>
-        term !== resolvedTerm.name
+      unresolvedTerms = unresolvedTerms.filter(
+        (term) => term !== resolvedTerm.name,
       );
     }
     const unresolvedTypes = Array.from(uty.keys());
 
-    const nonImportedUnresolvedTerms = unresolvedTerms.filter((term) =>
-      !importedSymbols.has(term)
+    const nonImportedUnresolvedTerms = unresolvedTerms.filter(
+      (term) =>
+        !importedSymbols.has(term) &&
+        !isRecursivePolyReference(programWithSymbols.symbols, term),
     );
-    const nonImportedUnresolvedTypes = unresolvedTypes.filter((type) =>
-      !importedSymbols.has(type)
+    const nonImportedUnresolvedTypes = unresolvedTypes.filter(
+      (type) => !importedSymbols.has(type),
     );
 
     if (
@@ -210,23 +245,12 @@ function resolve(
 }
 
 /**
- * Typechecks System F and simply typed lambda definitions in a resolved program.
+ * Typechecks System F definitions in a resolved program.
  * Skips terms that reference imported symbols which remain unresolved by design.
  * @throws CompilationError wrapping type errors with term context
  */
-function typecheck(
-  program: ResolvedProgram,
-): TypecheckedProgramWithTypes {
-  // Collect imported symbol names
-  // TripLang syntax: "import <module> <symbol>" (e.g., "import Prelude zero")
-  // Parser produces: {name: moduleName, ref: symbolName}
-  // We track the symbol name (ref) to skip typechecking for unresolved imported symbols
-  const importedSymbols = new Set<string>();
-  for (const term of program.terms) {
-    if (term.kind === "import") {
-      importedSymbols.add(term.ref);
-    }
-  }
+function typecheck(program: ResolvedProgram): TypecheckedProgramWithTypes {
+  const importedSymbols = collectImportedSymbols(program);
 
   // Build type alias map from program's type definitions
   const typeAliases = new Map<string, BaseType>();
@@ -235,6 +259,7 @@ function typecheck(
       typeAliases.set(term.name, term.type);
     }
   }
+  const recursivePolyTypes = collectRecursivePolyTypes(program);
 
   const types = new Map<string, BaseType>();
 
@@ -248,9 +273,8 @@ function typecheck(
         const unresolvedTypes = Array.from(uty.keys());
 
         // Check if any unresolved references are imported symbols
-        const hasUnresolvedImportedSymbols = unresolvedTerms.some((term) =>
-          importedSymbols.has(term)
-        ) ||
+        const hasUnresolvedImportedSymbols =
+          unresolvedTerms.some((term) => importedSymbols.has(term)) ||
           unresolvedTypes.some((type) => importedSymbols.has(type));
 
         if (hasUnresolvedImportedSymbols) {
@@ -269,20 +293,21 @@ function typecheck(
                 { term },
               );
             }
-            const ctx = emptySystemFContext(typeAliases);
+            const ctx = createSystemFTypecheckContext(
+              typeAliases,
+              recursivePolyTypes,
+            );
             ctx.termCtx.set(term.name, term.type);
             const [ty] = typecheckSystemF(ctx, term.term);
             types.set(term.name, ty);
           } else {
-            const [ty] = typecheckSystemF(
-              emptySystemFContext(typeAliases),
-              term.term,
+            const ctx = createSystemFTypecheckContext(
+              typeAliases,
+              recursivePolyTypes,
             );
+            const [ty] = typecheckSystemF(ctx, term.term);
             types.set(term.name, ty);
           }
-          break;
-        case "typed":
-          types.set(term.name, typecheckTypedLambda(term.term));
           break;
         case "native":
           types.set(term.name, term.type);
@@ -316,18 +341,14 @@ function typecheck(
 export function compile(input: string): TypecheckedProgramWithTypes {
   const parsed = parse(input);
   const indexed = indexSymbols(parsed, (p) => indexSymbolsImpl(p));
-  const elaborated = elaborate(
-    indexed,
-    (p) => elaborateTerms(p.program, p.symbols),
+  const elaborated = elaborate(indexed, (p) =>
+    elaborateTerms(p.program, p.symbols),
   );
   const resolved = resolve(elaborated);
   return typecheck(resolved);
 }
 
-function findTerm(
-  program: TripLangProgram,
-  id: string,
-): TripLangTerm {
+function findTerm(program: TripLangProgram, id: string): TripLangTerm {
   const term = program.terms.find((t) => t.name === id);
   if (!term) {
     throw new CompilationError(
@@ -364,13 +385,44 @@ export function resolvePoly(
 }
 
 /**
- * @internal
+ * Resolves a definition to the internal lambda stage, lowering recursive poly
+ * references through the fixpoint encoding so the result is executable.
  */
-export function resolveUntyped(
+export function resolveLambda(
   prog: TypecheckedProgramWithTypes,
   id: string,
-) {
+): LambdaDefinition {
   const term = findTerm(prog.program, id);
-  assertKind(term, "untyped");
-  return term;
+  const lambda =
+    term.kind === "lambda"
+      ? term
+      : term.kind === "poly"
+        ? lower(term)
+        : undefined;
+
+  if (!lambda || lambda.kind !== "lambda") {
+    throw new CompilationError(
+      `Expected term '${id}' to resolve to kind 'lambda', got '${term.kind}'`,
+      "resolve",
+      { term },
+    );
+  }
+
+  const symbols = indexSymbolsImpl(prog.program);
+  const importedSymbols = collectImportedSymbols(prog.program);
+  const resolved = resolveExternalTermReferences(
+    lambda,
+    symbols,
+    importedSymbols,
+  );
+
+  if (resolved.kind !== "lambda") {
+    throw new CompilationError(
+      `Expected resolved term '${id}' to be of kind 'lambda', got '${resolved.kind}'`,
+      "resolve",
+      { term: resolved },
+    );
+  }
+
+  return resolved;
 }

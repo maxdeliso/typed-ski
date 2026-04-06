@@ -1,3 +1,4 @@
+import { test } from "node:test";
 /**
  * Tests for hygienic substitution functions
  *
@@ -5,7 +6,7 @@
  * capture by tracking bound variables and performing alpha-renaming when necessary.
  */
 
-import { assertEquals } from "std/assert";
+import assert from "node:assert/strict";
 import { requiredAt } from "../../util/required.ts";
 import {
   alphaRenameTermBinder,
@@ -19,9 +20,9 @@ import {
 import type { TripLangValueType } from "../../../lib/meta/trip.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 
-Deno.test("hygienic substitution functions", async (t) => {
-  await t.step("freeTermVars", async (t) => {
-    await t.step("should identify free variables in lambda abstraction", () => {
+test("hygienic substitution functions", async (t) => {
+  await t.test("freeTermVars", async (t) => {
+    await t.test("should identify free variables in lambda abstraction", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "x",
@@ -31,12 +32,12 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const free = freeTermVars(term);
-      assertEquals(free.size, 1);
-      assertEquals(free.has("y"), true);
-      assertEquals(free.has("x"), false);
+      assert.deepStrictEqual(free.size, 1);
+      assert.deepStrictEqual(free.has("y"), true);
+      assert.deepStrictEqual(free.has("x"), false);
     });
 
-    await t.step(
+    await t.test(
       "should identify free variables in System F abstraction",
       () => {
         const term: TripLangValueType = {
@@ -52,13 +53,13 @@ Deno.test("hygienic substitution functions", async (t) => {
           },
         };
         const free = freeTermVars(term);
-        assertEquals(free.size, 1);
-        assertEquals(free.has("y"), true);
-        assertEquals(free.has("x"), false);
+        assert.deepStrictEqual(free.size, 1);
+        assert.deepStrictEqual(free.has("y"), true);
+        assert.deepStrictEqual(free.has("x"), false);
       },
     );
 
-    await t.step(
+    await t.test(
       "should identify free variables in nested abstractions",
       () => {
         const term: TripLangValueType = {
@@ -74,14 +75,14 @@ Deno.test("hygienic substitution functions", async (t) => {
           },
         };
         const free = freeTermVars(term);
-        assertEquals(free.size, 1);
-        assertEquals(free.has("z"), true);
-        assertEquals(free.has("x"), false);
-        assertEquals(free.has("y"), false);
+        assert.deepStrictEqual(free.size, 1);
+        assert.deepStrictEqual(free.has("z"), true);
+        assert.deepStrictEqual(free.has("x"), false);
+        assert.deepStrictEqual(free.has("y"), false);
       },
     );
 
-    await t.step("should identify free variables in type abstractions", () => {
+    await t.test("should identify free variables in type abstractions", () => {
       const term: TripLangValueType = {
         kind: "systemF-type-abs",
         typeVar: "A",
@@ -91,11 +92,11 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const free = freeTermVars(term);
-      assertEquals(free.size, 1);
-      assertEquals(free.has("x"), true);
+      assert.deepStrictEqual(free.size, 1);
+      assert.deepStrictEqual(free.has("x"), true);
     });
 
-    await t.step("should identify free variables in applications", () => {
+    await t.test("should identify free variables in applications", () => {
       const term: TripLangValueType = {
         kind: "non-terminal",
         lft: {
@@ -108,12 +109,12 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const free = freeTermVars(term);
-      assertEquals(free.size, 2);
-      assertEquals(free.has("f"), true);
-      assertEquals(free.has("x"), true);
+      assert.deepStrictEqual(free.size, 2);
+      assert.deepStrictEqual(free.has("f"), true);
+      assert.deepStrictEqual(free.has("x"), true);
     });
 
-    await t.step("should identify free variables in match expression", () => {
+    await t.test("should identify free variables in match expression", () => {
       const term: TripLangValueType = {
         kind: "systemF-match",
         scrutinee: {
@@ -144,14 +145,14 @@ Deno.test("hygienic substitution functions", async (t) => {
         ],
       };
       const free = freeTermVars(term);
-      assertEquals(free.size, 3);
-      assertEquals(free.has("x"), true);
-      assertEquals(free.has("y"), true);
-      assertEquals(free.has("z"), true);
-      assertEquals(free.has("a"), false); // Bound in match arm
+      assert.deepStrictEqual(free.size, 3);
+      assert.deepStrictEqual(free.has("x"), true);
+      assert.deepStrictEqual(free.has("y"), true);
+      assert.deepStrictEqual(free.has("z"), true);
+      assert.deepStrictEqual(free.has("a"), false); // Bound in match arm
     });
 
-    await t.step(
+    await t.test(
       "should not count match arm parameters as free variables",
       () => {
         const term: TripLangValueType = {
@@ -176,14 +177,14 @@ Deno.test("hygienic substitution functions", async (t) => {
           ],
         };
         const free = freeTermVars(term);
-        assertEquals(free.size, 1);
-        assertEquals(free.has("m"), true);
-        assertEquals(free.has("a"), false);
-        assertEquals(free.has("b"), false);
+        assert.deepStrictEqual(free.size, 1);
+        assert.deepStrictEqual(free.has("m"), true);
+        assert.deepStrictEqual(free.has("a"), false);
+        assert.deepStrictEqual(free.has("b"), false);
       },
     );
 
-    await t.step("should identify free variables in systemF-let", () => {
+    await t.test("should identify free variables in systemF-let", () => {
       const term: TripLangValueType = {
         kind: "systemF-let",
         name: "x",
@@ -191,31 +192,28 @@ Deno.test("hygienic substitution functions", async (t) => {
         body: { kind: "systemF-var", name: "z" },
       };
       const free = freeTermVars(term);
-      assertEquals(free.size, 2);
-      assertEquals(free.has("y"), true);
-      assertEquals(free.has("z"), true);
-      assertEquals(free.has("x"), false);
+      assert.deepStrictEqual(free.size, 2);
+      assert.deepStrictEqual(free.has("y"), true);
+      assert.deepStrictEqual(free.has("z"), true);
+      assert.deepStrictEqual(free.has("x"), false);
     });
 
-    await t.step(
-      "should not count systemF-let binder as free in body",
-      () => {
-        const term: TripLangValueType = {
-          kind: "systemF-let",
-          name: "x",
-          value: { kind: "systemF-var", name: "y" },
-          body: { kind: "systemF-var", name: "x" },
-        };
-        const free = freeTermVars(term);
-        assertEquals(free.size, 1);
-        assertEquals(free.has("y"), true);
-        assertEquals(free.has("x"), false);
-      },
-    );
+    await t.test("should not count systemF-let binder as free in body", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-let",
+        name: "x",
+        value: { kind: "systemF-var", name: "y" },
+        body: { kind: "systemF-var", name: "x" },
+      };
+      const free = freeTermVars(term);
+      assert.deepStrictEqual(free.size, 1);
+      assert.deepStrictEqual(free.has("y"), true);
+      assert.deepStrictEqual(free.has("x"), false);
+    });
   });
 
-  await t.step("freeTypeVars", async (t) => {
-    await t.step("should identify free type variables", () => {
+  await t.test("freeTypeVars", async (t) => {
+    await t.test("should identify free type variables", () => {
       const term: TripLangValueType = {
         kind: "systemF-type-abs",
         typeVar: "A",
@@ -225,12 +223,12 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const free = freeTypeVars(term);
-      assertEquals(free.size, 0);
-      assertEquals(free.has("x"), false);
-      assertEquals(free.has("A"), false);
+      assert.deepStrictEqual(free.size, 0);
+      assert.deepStrictEqual(free.has("x"), false);
+      assert.deepStrictEqual(free.has("A"), false);
     });
 
-    await t.step(
+    await t.test(
       "should identify free type variables in nested abstractions",
       () => {
         const term: TripLangValueType = {
@@ -246,14 +244,14 @@ Deno.test("hygienic substitution functions", async (t) => {
           },
         };
         const free = freeTypeVars(term);
-        assertEquals(free.size, 0);
-        assertEquals(free.has("x"), false);
-        assertEquals(free.has("A"), false);
-        assertEquals(free.has("B"), false);
+        assert.deepStrictEqual(free.size, 0);
+        assert.deepStrictEqual(free.has("x"), false);
+        assert.deepStrictEqual(free.has("A"), false);
+        assert.deepStrictEqual(free.has("B"), false);
       },
     );
 
-    await t.step(
+    await t.test(
       "should identify free type variables in match expression",
       () => {
         const term: TripLangValueType = {
@@ -278,12 +276,12 @@ Deno.test("hygienic substitution functions", async (t) => {
           ],
         };
         const free = freeTypeVars(term);
-        assertEquals(free.size, 1);
-        assertEquals(free.has("T"), true);
+        assert.deepStrictEqual(free.size, 1);
+        assert.deepStrictEqual(free.has("T"), true);
       },
     );
 
-    await t.step(
+    await t.test(
       "should not count bound type variables in match expression",
       () => {
         const term: TripLangValueType = {
@@ -312,12 +310,12 @@ Deno.test("hygienic substitution functions", async (t) => {
           },
         };
         const free = freeTypeVars(term);
-        assertEquals(free.size, 0);
-        assertEquals(free.has("A"), false);
+        assert.deepStrictEqual(free.size, 0);
+        assert.deepStrictEqual(free.has("A"), false);
       },
     );
 
-    await t.step("should identify free type variables in systemF-let", () => {
+    await t.test("should identify free type variables in systemF-let", () => {
       const term: TripLangValueType = {
         kind: "systemF-let",
         name: "x",
@@ -330,33 +328,33 @@ Deno.test("hygienic substitution functions", async (t) => {
         body: { kind: "systemF-var", name: "x" },
       };
       const free = freeTypeVars(term);
-      assertEquals(free.size, 1);
-      assertEquals(free.has("A"), true);
+      assert.deepStrictEqual(free.size, 1);
+      assert.deepStrictEqual(free.has("A"), true);
     });
   });
 
-  await t.step("fresh", async (t) => {
-    await t.step("should generate fresh names avoiding conflicts", () => {
+  await t.test("fresh", async (t) => {
+    await t.test("should generate fresh names avoiding conflicts", () => {
       const avoid = new Set(["x", "x_0", "x_1"]);
       const freshName = fresh("x", avoid);
-      assertEquals(freshName, "x_2");
+      assert.deepStrictEqual(freshName, "x_2");
     });
 
-    await t.step("should return original name if no conflicts", () => {
+    await t.test("should return original name if no conflicts", () => {
       const avoid = new Set(["y", "z"]);
       const freshName = fresh("x", avoid);
-      assertEquals(freshName, "x");
+      assert.deepStrictEqual(freshName, "x");
     });
 
-    await t.step("should handle empty avoid set", () => {
+    await t.test("should handle empty avoid set", () => {
       const avoid = new Set<string>();
       const freshName = fresh("x", avoid);
-      assertEquals(freshName, "x");
+      assert.deepStrictEqual(freshName, "x");
     });
   });
 
-  await t.step("alphaRenameTermBinder", async (t) => {
-    await t.step("should rename lambda binder", () => {
+  await t.test("alphaRenameTermBinder", async (t) => {
+    await t.test("should rename lambda binder", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "x",
@@ -366,12 +364,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTermBinder(term, "x", "y");
-      assertEquals(renamed.kind, "lambda-abs");
-      assertEquals((renamed as { name: string }).name, "y");
-      assertEquals((renamed as { body: { name: string } }).body.name, "y");
+      assert.deepStrictEqual(renamed.kind, "lambda-abs");
+      assert.deepStrictEqual((renamed as { name: string }).name, "y");
+      assert.deepStrictEqual(
+        (renamed as { body: { name: string } }).body.name,
+        "y",
+      );
     });
 
-    await t.step("should rename System F binder", () => {
+    await t.test("should rename System F binder", () => {
       const term: TripLangValueType = {
         kind: "systemF-abs",
         name: "x",
@@ -385,12 +386,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTermBinder(term, "x", "y");
-      assertEquals(renamed.kind, "systemF-abs");
-      assertEquals((renamed as { name: string }).name, "y");
-      assertEquals((renamed as { body: { name: string } }).body.name, "y");
+      assert.deepStrictEqual(renamed.kind, "systemF-abs");
+      assert.deepStrictEqual((renamed as { name: string }).name, "y");
+      assert.deepStrictEqual(
+        (renamed as { body: { name: string } }).body.name,
+        "y",
+      );
     });
 
-    await t.step("should rename typed lambda binder", () => {
+    await t.test("should rename typed lambda binder", () => {
       const term: TripLangValueType = {
         kind: "typed-lambda-abstraction",
         varName: "x",
@@ -404,12 +408,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTermBinder(term, "x", "y");
-      assertEquals(renamed.kind, "typed-lambda-abstraction");
-      assertEquals((renamed as { varName: string }).varName, "y");
-      assertEquals((renamed as { body: { name: string } }).body.name, "y");
+      assert.deepStrictEqual(renamed.kind, "typed-lambda-abstraction");
+      assert.deepStrictEqual((renamed as { varName: string }).varName, "y");
+      assert.deepStrictEqual(
+        (renamed as { body: { name: string } }).body.name,
+        "y",
+      );
     });
 
-    await t.step("should not rename if binder name doesn't match", () => {
+    await t.test("should not rename if binder name doesn't match", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "x",
@@ -419,12 +426,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTermBinder(term, "y", "z");
-      assertEquals(renamed.kind, "lambda-abs");
-      assertEquals((renamed as { name: string }).name, "x");
-      assertEquals((renamed as { body: { name: string } }).body.name, "x");
+      assert.deepStrictEqual(renamed.kind, "lambda-abs");
+      assert.deepStrictEqual((renamed as { name: string }).name, "x");
+      assert.deepStrictEqual(
+        (renamed as { body: { name: string } }).body.name,
+        "x",
+      );
     });
 
-    await t.step("should stop renaming under shadowing binder", () => {
+    await t.test("should stop renaming under shadowing binder", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "x",
@@ -438,16 +448,16 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTermBinder(term, "x", "y");
-      assertEquals(renamed.kind, "lambda-abs");
-      assertEquals((renamed as { name: string }).name, "y");
+      assert.deepStrictEqual(renamed.kind, "lambda-abs");
+      assert.deepStrictEqual((renamed as { name: string }).name, "y");
       // Inner x should not be renamed due to shadowing
-      assertEquals(
+      assert.deepStrictEqual(
         (renamed as { body: { body: { name: string } } }).body.body.name,
         "x",
       );
     });
 
-    await t.step("should rename term binders in match expression", () => {
+    await t.test("should rename term binders in match expression", () => {
       const term: TripLangValueType = {
         kind: "systemF-match",
         scrutinee: {
@@ -470,26 +480,28 @@ Deno.test("hygienic substitution functions", async (t) => {
         ],
       };
       const renamed = alphaRenameTermBinder(term, "x", "y");
-      assertEquals(renamed.kind, "systemF-match");
-      assertEquals(
+      assert.deepStrictEqual(renamed.kind, "systemF-match");
+      assert.deepStrictEqual(
         (renamed as { scrutinee: { name: string } }).scrutinee.name,
         "y",
       );
       const arm = requiredAt(
-        (renamed as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms,
+        (
+          renamed as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }
+        ).arms,
         0,
         "expected first match arm",
       );
-      assertEquals(
+      assert.deepStrictEqual(
         requiredAt(arm.params, 0, "expected first arm parameter"),
         "y",
       );
-      assertEquals(arm.body.name, "y");
+      assert.deepStrictEqual(arm.body.name, "y");
     });
 
-    await t.step(
+    await t.test(
       "should rename match arm parameters when they match oldName",
       () => {
         const term: TripLangValueType = {
@@ -514,27 +526,29 @@ Deno.test("hygienic substitution functions", async (t) => {
           ],
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
-        assertEquals(renamed.kind, "systemF-match");
+        assert.deepStrictEqual(renamed.kind, "systemF-match");
         const arm = requiredAt(
-          (renamed as {
-            arms: Array<{ params: string[]; body: { name: string } }>;
-          }).arms,
+          (
+            renamed as {
+              arms: Array<{ params: string[]; body: { name: string } }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
-        assertEquals(
+        assert.deepStrictEqual(
           requiredAt(arm.params, 0, "expected first arm parameter"),
           "a",
         );
-        assertEquals(
+        assert.deepStrictEqual(
           requiredAt(arm.params, 1, "expected second arm parameter"),
           "y",
         );
-        assertEquals(arm.body.name, "y");
+        assert.deepStrictEqual(arm.body.name, "y");
       },
     );
 
-    await t.step(
+    await t.test(
       "should not rename match arm parameters when newName already exists",
       () => {
         const term: TripLangValueType = {
@@ -559,28 +573,30 @@ Deno.test("hygienic substitution functions", async (t) => {
           ],
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
-        assertEquals(renamed.kind, "systemF-match");
+        assert.deepStrictEqual(renamed.kind, "systemF-match");
         const arm = requiredAt(
-          (renamed as {
-            arms: Array<{ params: string[]; body: { name: string } }>;
-          }).arms,
+          (
+            renamed as {
+              arms: Array<{ params: string[]; body: { name: string } }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
         // Should not rename because "y" already exists in params
-        assertEquals(
+        assert.deepStrictEqual(
           requiredAt(arm.params, 0, "expected first arm parameter"),
           "x",
         );
-        assertEquals(
+        assert.deepStrictEqual(
           requiredAt(arm.params, 1, "expected second arm parameter"),
           "y",
         );
-        assertEquals(arm.body.name, "x");
+        assert.deepStrictEqual(arm.body.name, "x");
       },
     );
 
-    await t.step(
+    await t.test(
       "should rename in match arm body when param doesn't match",
       () => {
         const term: TripLangValueType = {
@@ -605,23 +621,25 @@ Deno.test("hygienic substitution functions", async (t) => {
           ],
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
-        assertEquals(renamed.kind, "systemF-match");
+        assert.deepStrictEqual(renamed.kind, "systemF-match");
         const arm = requiredAt(
-          (renamed as {
-            arms: Array<{ params: string[]; body: { name: string } }>;
-          }).arms,
+          (
+            renamed as {
+              arms: Array<{ params: string[]; body: { name: string } }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
-        assertEquals(
+        assert.deepStrictEqual(
           requiredAt(arm.params, 0, "expected first arm parameter"),
           "a",
         );
-        assertEquals(arm.body.name, "y");
+        assert.deepStrictEqual(arm.body.name, "y");
       },
     );
 
-    await t.step("should rename systemF-let binder", () => {
+    await t.test("should rename systemF-let binder", () => {
       const term: TripLangValueType = {
         kind: "systemF-let",
         name: "x",
@@ -629,13 +647,19 @@ Deno.test("hygienic substitution functions", async (t) => {
         body: { kind: "systemF-var", name: "x" },
       };
       const renamed = alphaRenameTermBinder(term, "x", "y");
-      assertEquals(renamed.kind, "systemF-let");
-      assertEquals((renamed as { name: string }).name, "y");
-      assertEquals((renamed as { value: { name: string } }).value.name, "a");
-      assertEquals((renamed as { body: { name: string } }).body.name, "y");
+      assert.deepStrictEqual(renamed.kind, "systemF-let");
+      assert.deepStrictEqual((renamed as { name: string }).name, "y");
+      assert.deepStrictEqual(
+        (renamed as { value: { name: string } }).value.name,
+        "a",
+      );
+      assert.deepStrictEqual(
+        (renamed as { body: { name: string } }).body.name,
+        "y",
+      );
     });
 
-    await t.step(
+    await t.test(
       "should not rename systemF-let binder when name doesn't match",
       () => {
         const term: TripLangValueType = {
@@ -645,13 +669,16 @@ Deno.test("hygienic substitution functions", async (t) => {
           body: { kind: "systemF-var", name: "x" },
         };
         const renamed = alphaRenameTermBinder(term, "z", "w");
-        assertEquals(renamed.kind, "systemF-let");
-        assertEquals((renamed as { name: string }).name, "x");
-        assertEquals((renamed as { body: { name: string } }).body.name, "x");
+        assert.deepStrictEqual(renamed.kind, "systemF-let");
+        assert.deepStrictEqual((renamed as { name: string }).name, "x");
+        assert.deepStrictEqual(
+          (renamed as { body: { name: string } }).body.name,
+          "x",
+        );
       },
     );
 
-    await t.step(
+    await t.test(
       "should rename free occurrence in systemF-let value and body when binder doesn't match",
       () => {
         const term: TripLangValueType = {
@@ -661,14 +688,20 @@ Deno.test("hygienic substitution functions", async (t) => {
           body: { kind: "systemF-var", name: "y" },
         };
         const renamed = alphaRenameTermBinder(term, "x", "z");
-        assertEquals(renamed.kind, "systemF-let");
-        assertEquals((renamed as { name: string }).name, "y");
-        assertEquals((renamed as { value: { name: string } }).value.name, "z");
-        assertEquals((renamed as { body: { name: string } }).body.name, "y");
+        assert.deepStrictEqual(renamed.kind, "systemF-let");
+        assert.deepStrictEqual((renamed as { name: string }).name, "y");
+        assert.deepStrictEqual(
+          (renamed as { value: { name: string } }).value.name,
+          "z",
+        );
+        assert.deepStrictEqual(
+          (renamed as { body: { name: string } }).body.name,
+          "y",
+        );
       },
     );
 
-    await t.step(
+    await t.test(
       "should rename nested systemF-let binders when both bind same name (no early exit for newName)",
       () => {
         const term: TripLangValueType = {
@@ -683,12 +716,12 @@ Deno.test("hygienic substitution functions", async (t) => {
           },
         };
         const renamed = alphaRenameTermBinder(term, "x", "y");
-        assertEquals(renamed.kind, "systemF-let");
-        assertEquals((renamed as { name: string }).name, "y");
+        assert.deepStrictEqual(renamed.kind, "systemF-let");
+        assert.deepStrictEqual((renamed as { name: string }).name, "y");
         const inner = (renamed as { body: TripLangValueType }).body;
-        assertEquals(inner.kind, "systemF-let");
-        assertEquals((inner as { name: string }).name, "y");
-        assertEquals(
+        assert.deepStrictEqual(inner.kind, "systemF-let");
+        assert.deepStrictEqual((inner as { name: string }).name, "y");
+        assert.deepStrictEqual(
           (inner as { body: { name: string } }).body.name,
           "y",
         );
@@ -696,8 +729,8 @@ Deno.test("hygienic substitution functions", async (t) => {
     );
   });
 
-  await t.step("alphaRenameTypeBinder", async (t) => {
-    await t.step("should rename forall binder", () => {
+  await t.test("alphaRenameTypeBinder", async (t) => {
+    await t.test("should rename forall binder", () => {
       const term: TripLangValueType = {
         kind: "forall",
         typeVar: "A",
@@ -707,15 +740,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTypeBinder(term, "A", "B");
-      assertEquals(renamed.kind, "forall");
-      assertEquals((renamed as { typeVar: string }).typeVar, "B");
-      assertEquals(
+      assert.deepStrictEqual(renamed.kind, "forall");
+      assert.deepStrictEqual((renamed as { typeVar: string }).typeVar, "B");
+      assert.deepStrictEqual(
         (renamed as { body: { typeName: string } }).body.typeName,
         "B",
       );
     });
 
-    await t.step("should rename System F type binder", () => {
+    await t.test("should rename System F type binder", () => {
       const term: TripLangValueType = {
         kind: "systemF-type-abs",
         typeVar: "A",
@@ -725,13 +758,16 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTypeBinder(term, "A", "B");
-      assertEquals(renamed.kind, "systemF-type-abs");
-      assertEquals((renamed as { typeVar: string }).typeVar, "B");
+      assert.deepStrictEqual(renamed.kind, "systemF-type-abs");
+      assert.deepStrictEqual((renamed as { typeVar: string }).typeVar, "B");
       // The body should remain unchanged since it doesn't contain the type variable
-      assertEquals((renamed as { body: { name: string } }).body.name, "x");
+      assert.deepStrictEqual(
+        (renamed as { body: { name: string } }).body.name,
+        "x",
+      );
     });
 
-    await t.step("should not rename if binder name doesn't match", () => {
+    await t.test("should not rename if binder name doesn't match", () => {
       const term: TripLangValueType = {
         kind: "forall",
         typeVar: "A",
@@ -741,15 +777,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         },
       };
       const renamed = alphaRenameTypeBinder(term, "B", "C");
-      assertEquals(renamed.kind, "forall");
-      assertEquals((renamed as { typeVar: string }).typeVar, "A");
-      assertEquals(
+      assert.deepStrictEqual(renamed.kind, "forall");
+      assert.deepStrictEqual((renamed as { typeVar: string }).typeVar, "A");
+      assert.deepStrictEqual(
         (renamed as { body: { typeName: string } }).body.typeName,
         "A",
       );
     });
 
-    await t.step("should rename type variables in match expression", () => {
+    await t.test("should rename type variables in match expression", () => {
       const term: TripLangValueType = {
         kind: "systemF-match",
         scrutinee: {
@@ -772,31 +808,33 @@ Deno.test("hygienic substitution functions", async (t) => {
         ],
       };
       const renamed = alphaRenameTypeBinder(term, "A", "B");
-      assertEquals(renamed.kind, "systemF-match");
-      assertEquals(
+      assert.deepStrictEqual(renamed.kind, "systemF-match");
+      assert.deepStrictEqual(
         (renamed as { returnType: { typeName: string } }).returnType.typeName,
         "B",
       );
       // Scrutinee and arms should remain unchanged
-      assertEquals(
+      assert.deepStrictEqual(
         (renamed as { scrutinee: { name: string } }).scrutinee.name,
         "x",
       );
       const arm = requiredAt(
-        (renamed as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms,
+        (
+          renamed as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }
+        ).arms,
         0,
         "expected first match arm",
       );
-      assertEquals(
+      assert.deepStrictEqual(
         requiredAt(arm.params, 0, "expected first arm parameter"),
         "a",
       );
-      assertEquals(arm.body.name, "a");
+      assert.deepStrictEqual(arm.body.name, "a");
     });
 
-    await t.step(
+    await t.test(
       "should rename type variables in match scrutinee and return type",
       () => {
         const term: TripLangValueType = {
@@ -828,22 +866,24 @@ Deno.test("hygienic substitution functions", async (t) => {
           ],
         };
         const renamed = alphaRenameTypeBinder(term, "A", "B");
-        assertEquals(renamed.kind, "systemF-match");
-        const scrutinee = (renamed as {
-          scrutinee: {
-            kind: string;
-            typeArg: { typeName: string };
-          };
-        }).scrutinee;
-        assertEquals(scrutinee.typeArg.typeName, "B");
-        assertEquals(
+        assert.deepStrictEqual(renamed.kind, "systemF-match");
+        const scrutinee = (
+          renamed as {
+            scrutinee: {
+              kind: string;
+              typeArg: { typeName: string };
+            };
+          }
+        ).scrutinee;
+        assert.deepStrictEqual(scrutinee.typeArg.typeName, "B");
+        assert.deepStrictEqual(
           (renamed as { returnType: { typeName: string } }).returnType.typeName,
           "B",
         );
       },
     );
 
-    await t.step(
+    await t.test(
       "should recurse into systemF-let value and body for type binder rename",
       () => {
         const term: TripLangValueType = {
@@ -857,11 +897,11 @@ Deno.test("hygienic substitution functions", async (t) => {
           body: { kind: "systemF-var", name: "x" },
         };
         const renamed = alphaRenameTypeBinder(term, "A", "B");
-        assertEquals(renamed.kind, "systemF-let");
-        assertEquals((renamed as { name: string }).name, "x");
+        assert.deepStrictEqual(renamed.kind, "systemF-let");
+        assert.deepStrictEqual((renamed as { name: string }).name, "x");
         const value = (renamed as { value: TripLangValueType }).value;
-        assertEquals(value.kind, "systemF-type-app");
-        assertEquals(
+        assert.deepStrictEqual(value.kind, "systemF-type-app");
+        assert.deepStrictEqual(
           (value as { typeArg: { typeName: string } }).typeArg.typeName,
           "B",
         );
@@ -869,8 +909,8 @@ Deno.test("hygienic substitution functions", async (t) => {
     );
   });
 
-  await t.step("substituteHygienic", async (t) => {
-    await t.step("should substitute variable without capture", () => {
+  await t.test("substituteHygienic", async (t) => {
+    await t.test("should substitute variable without capture", () => {
       const term: TripLangValueType = {
         kind: "lambda-var",
         name: "x",
@@ -880,11 +920,11 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "y",
       };
       const result = substituteHygienic(term, "x", replacement);
-      assertEquals(result.kind, "lambda-var");
-      assertEquals((result as { name: string }).name, "y");
+      assert.deepStrictEqual(result.kind, "lambda-var");
+      assert.deepStrictEqual((result as { name: string }).name, "y");
     });
 
-    await t.step("should avoid variable capture in lambda abstraction", () => {
+    await t.test("should avoid variable capture in lambda abstraction", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "x",
@@ -898,17 +938,17 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "x",
       };
       const result = substituteHygienic(term, "x", replacement);
-      assertEquals(result.kind, "lambda-abs");
+      assert.deepStrictEqual(result.kind, "lambda-abs");
       // The binder should be renamed to avoid capture
       const binderName = (result as { name: string }).name;
-      assertEquals(binderName !== "x", true);
-      assertEquals(
+      assert.deepStrictEqual(binderName !== "x", true);
+      assert.deepStrictEqual(
         (result as { body: { name: string } }).body.name,
         binderName,
       );
     });
 
-    await t.step(
+    await t.test(
       "should avoid variable capture in System F abstraction",
       () => {
         const term: TripLangValueType = {
@@ -928,18 +968,18 @@ Deno.test("hygienic substitution functions", async (t) => {
           name: "x",
         };
         const result = substituteHygienic(term, "x", replacement);
-        assertEquals(result.kind, "systemF-abs");
+        assert.deepStrictEqual(result.kind, "systemF-abs");
         // The binder should be renamed to avoid capture
         const binderName = (result as { name: string }).name;
-        assertEquals(binderName !== "x", true);
-        assertEquals(
+        assert.deepStrictEqual(binderName !== "x", true);
+        assert.deepStrictEqual(
           (result as { body: { name: string } }).body.name,
           binderName,
         );
       },
     );
 
-    await t.step("should substitute in nested structures", () => {
+    await t.test("should substitute in nested structures", () => {
       const term: TripLangValueType = {
         kind: "non-terminal",
         lft: {
@@ -956,12 +996,18 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "z",
       };
       const result = substituteHygienic(term, "x", replacement);
-      assertEquals(result.kind, "non-terminal");
-      assertEquals((result as { lft: { name: string } }).lft.name, "z");
-      assertEquals((result as { rgt: { name: string } }).rgt.name, "y");
+      assert.deepStrictEqual(result.kind, "non-terminal");
+      assert.deepStrictEqual(
+        (result as { lft: { name: string } }).lft.name,
+        "z",
+      );
+      assert.deepStrictEqual(
+        (result as { rgt: { name: string } }).rgt.name,
+        "y",
+      );
     });
 
-    await t.step("should not substitute bound variables", () => {
+    await t.test("should not substitute bound variables", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "x",
@@ -975,12 +1021,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "y",
       };
       const result = substituteHygienic(term, "x", replacement, new Set(["x"]));
-      assertEquals(result.kind, "lambda-abs");
-      assertEquals((result as { name: string }).name, "x");
-      assertEquals((result as { body: { name: string } }).body.name, "x");
+      assert.deepStrictEqual(result.kind, "lambda-abs");
+      assert.deepStrictEqual((result as { name: string }).name, "x");
+      assert.deepStrictEqual(
+        (result as { body: { name: string } }).body.name,
+        "x",
+      );
     });
 
-    await t.step("should handle complex nested substitution", () => {
+    await t.test("should handle complex nested substitution", () => {
       const term: TripLangValueType = {
         kind: "lambda-abs",
         name: "f",
@@ -1005,22 +1054,22 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "g",
       };
       const result = substituteHygienic(term, "f", replacement);
-      assertEquals(result.kind, "lambda-abs");
-      assertEquals((result as { name: string }).name, "f");
+      assert.deepStrictEqual(result.kind, "lambda-abs");
+      assert.deepStrictEqual((result as { name: string }).name, "f");
       // The inner f should be substituted, but not the binder
-      assertEquals(
+      assert.deepStrictEqual(
         (result as { body: { body: { lft: { name: string } } } }).body.body.lft
           .name,
         "f",
       );
-      assertEquals(
+      assert.deepStrictEqual(
         (result as { body: { body: { rgt: { name: string } } } }).body.body.rgt
           .name,
         "x",
       );
     });
 
-    await t.step("should substitute in systemF-let value and body", () => {
+    await t.test("should substitute in systemF-let value and body", () => {
       const term: TripLangValueType = {
         kind: "systemF-let",
         name: "x",
@@ -1032,18 +1081,30 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "w",
       };
       const resultY = substituteHygienic(term, "y", replacement);
-      assertEquals(resultY.kind, "systemF-let");
-      assertEquals((resultY as { name: string }).name, "x");
-      assertEquals((resultY as { value: { name: string } }).value.name, "w");
-      assertEquals((resultY as { body: { name: string } }).body.name, "z");
+      assert.deepStrictEqual(resultY.kind, "systemF-let");
+      assert.deepStrictEqual((resultY as { name: string }).name, "x");
+      assert.deepStrictEqual(
+        (resultY as { value: { name: string } }).value.name,
+        "w",
+      );
+      assert.deepStrictEqual(
+        (resultY as { body: { name: string } }).body.name,
+        "z",
+      );
 
       const resultZ = substituteHygienic(term, "z", replacement);
-      assertEquals(resultZ.kind, "systemF-let");
-      assertEquals((resultZ as { value: { name: string } }).value.name, "y");
-      assertEquals((resultZ as { body: { name: string } }).body.name, "w");
+      assert.deepStrictEqual(resultZ.kind, "systemF-let");
+      assert.deepStrictEqual(
+        (resultZ as { value: { name: string } }).value.name,
+        "y",
+      );
+      assert.deepStrictEqual(
+        (resultZ as { body: { name: string } }).body.name,
+        "w",
+      );
     });
 
-    await t.step(
+    await t.test(
       "should avoid variable capture when substituting into systemF-let and replacement contains let binder",
       () => {
         const term: TripLangValueType = {
@@ -1057,11 +1118,14 @@ Deno.test("hygienic substitution functions", async (t) => {
           name: "x",
         };
         const result = substituteHygienic(term, "y", replacement);
-        assertEquals(result.kind, "systemF-let");
+        assert.deepStrictEqual(result.kind, "systemF-let");
         const binderName = (result as { name: string }).name;
-        assertEquals(binderName !== "x", true);
-        assertEquals((result as { value: { name: string } }).value.name, "x");
-        assertEquals(
+        assert.deepStrictEqual(binderName !== "x", true);
+        assert.deepStrictEqual(
+          (result as { value: { name: string } }).value.name,
+          "x",
+        );
+        assert.deepStrictEqual(
           (result as { body: { name: string } }).body.name,
           binderName,
         );
@@ -1069,8 +1133,8 @@ Deno.test("hygienic substitution functions", async (t) => {
     );
   });
 
-  await t.step("substituteTypeHygienic", async (t) => {
-    await t.step("should substitute type variable without capture", () => {
+  await t.test("substituteTypeHygienic", async (t) => {
+    await t.test("should substitute type variable without capture", () => {
       const term: TripLangValueType = {
         kind: "type-var",
         typeName: "A",
@@ -1080,11 +1144,11 @@ Deno.test("hygienic substitution functions", async (t) => {
         typeName: "B",
       };
       const result = substituteTypeHygienic(term, "A", replacement);
-      assertEquals(result.kind, "type-var");
-      assertEquals((result as { typeName: string }).typeName, "B");
+      assert.deepStrictEqual(result.kind, "type-var");
+      assert.deepStrictEqual((result as { typeName: string }).typeName, "B");
     });
 
-    await t.step("should avoid type variable capture in forall", () => {
+    await t.test("should avoid type variable capture in forall", () => {
       const term: TripLangValueType = {
         kind: "forall",
         typeVar: "A",
@@ -1098,17 +1162,17 @@ Deno.test("hygienic substitution functions", async (t) => {
         typeName: "A",
       };
       const result = substituteTypeHygienic(term, "A", replacement);
-      assertEquals(result.kind, "forall");
+      assert.deepStrictEqual(result.kind, "forall");
       // The binder should be renamed to avoid capture
       const binderName = (result as { typeVar: string }).typeVar;
-      assertEquals(binderName !== "A", true);
-      assertEquals(
+      assert.deepStrictEqual(binderName !== "A", true);
+      assert.deepStrictEqual(
         (result as { body: { typeName: string } }).body.typeName,
         binderName,
       );
     });
 
-    await t.step(
+    await t.test(
       "should avoid type variable capture in System F type abstraction",
       () => {
         const term: TripLangValueType = {
@@ -1124,16 +1188,19 @@ Deno.test("hygienic substitution functions", async (t) => {
           typeName: "B",
         };
         const result = substituteTypeHygienic(term, "A", replacement);
-        assertEquals(result.kind, "systemF-type-abs");
+        assert.deepStrictEqual(result.kind, "systemF-type-abs");
         // The binder should remain unchanged since there's no capture
         const binderName = (result as { typeVar: string }).typeVar;
-        assertEquals(binderName, "A");
+        assert.deepStrictEqual(binderName, "A");
         // The body should remain unchanged since it doesn't contain the type variable
-        assertEquals((result as { body: { name: string } }).body.name, "x");
+        assert.deepStrictEqual(
+          (result as { body: { name: string } }).body.name,
+          "x",
+        );
       },
     );
 
-    await t.step("should substitute in nested type structures", () => {
+    await t.test("should substitute in nested type structures", () => {
       const term: TripLangValueType = {
         kind: "systemF-type-app",
         term: {
@@ -1150,16 +1217,19 @@ Deno.test("hygienic substitution functions", async (t) => {
         typeName: "C",
       };
       const result = substituteTypeHygienic(term, "A", replacement);
-      assertEquals(result.kind, "systemF-type-app");
+      assert.deepStrictEqual(result.kind, "systemF-type-app");
       // The term should remain unchanged since it doesn't contain the type variable
-      assertEquals((result as { term: { name: string } }).term.name, "x");
-      assertEquals(
+      assert.deepStrictEqual(
+        (result as { term: { name: string } }).term.name,
+        "x",
+      );
+      assert.deepStrictEqual(
         (result as { typeArg: { typeName: string } }).typeArg.typeName,
         "B",
       );
     });
 
-    await t.step(
+    await t.test(
       "should recurse into systemF-let value and body for type substitution",
       () => {
         const term: TripLangValueType = {
@@ -1177,19 +1247,22 @@ Deno.test("hygienic substitution functions", async (t) => {
           typeName: "B",
         };
         const result = substituteTypeHygienic(term, "A", replacement);
-        assertEquals(result.kind, "systemF-let");
-        assertEquals((result as { name: string }).name, "x");
+        assert.deepStrictEqual(result.kind, "systemF-let");
+        assert.deepStrictEqual((result as { name: string }).name, "x");
         const value = (result as { value: TripLangValueType }).value;
-        assertEquals(value.kind, "systemF-type-app");
-        assertEquals(
+        assert.deepStrictEqual(value.kind, "systemF-type-app");
+        assert.deepStrictEqual(
           (value as { typeArg: { typeName: string } }).typeArg.typeName,
           "B",
         );
-        assertEquals((result as { body: { name: string } }).body.name, "x");
+        assert.deepStrictEqual(
+          (result as { body: { name: string } }).body.name,
+          "x",
+        );
       },
     );
 
-    await t.step("should not substitute bound type variables", () => {
+    await t.test("should not substitute bound type variables", () => {
       const term: TripLangValueType = {
         kind: "forall",
         typeVar: "A",
@@ -1208,15 +1281,15 @@ Deno.test("hygienic substitution functions", async (t) => {
         replacement,
         new Set(["A"]),
       );
-      assertEquals(result.kind, "forall");
-      assertEquals((result as { typeVar: string }).typeVar, "A");
-      assertEquals(
+      assert.deepStrictEqual(result.kind, "forall");
+      assert.deepStrictEqual((result as { typeVar: string }).typeVar, "A");
+      assert.deepStrictEqual(
         (result as { body: { typeName: string } }).body.typeName,
         "A",
       );
     });
 
-    await t.step("should handle complex nested type substitution", () => {
+    await t.test("should handle complex nested type substitution", () => {
       const term: TripLangValueType = {
         kind: "systemF-abs",
         name: "x",
@@ -1238,24 +1311,26 @@ Deno.test("hygienic substitution functions", async (t) => {
         typeName: "B",
       };
       const result = substituteTypeHygienic(term, "A", replacement);
-      assertEquals(result.kind, "systemF-abs");
+      assert.deepStrictEqual(result.kind, "systemF-abs");
       // The inner A should be substituted, but not the binder
-      const typeAnnotation = (result as {
-        typeAnnotation: {
-          kind: string;
-          typeVar: string;
-          body: { typeName: string };
-        };
-      }).typeAnnotation;
-      assertEquals(typeAnnotation.kind, "forall");
+      const typeAnnotation = (
+        result as {
+          typeAnnotation: {
+            kind: string;
+            typeVar: string;
+            body: { typeName: string };
+          };
+        }
+      ).typeAnnotation;
+      assert.deepStrictEqual(typeAnnotation.kind, "forall");
       const binderName = typeAnnotation.typeVar;
-      assertEquals(binderName, "A");
-      assertEquals(typeAnnotation.body.typeName, "A");
+      assert.deepStrictEqual(binderName, "A");
+      assert.deepStrictEqual(typeAnnotation.body.typeName, "A");
     });
   });
 
-  await t.step("edge cases", async (t) => {
-    await t.step("should handle empty bound set", () => {
+  await t.test("edge cases", async (t) => {
+    await t.test("should handle empty bound set", () => {
       const term: TripLangValueType = {
         kind: "lambda-var",
         name: "x",
@@ -1265,11 +1340,11 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "y",
       };
       const result = substituteHygienic(term, "x", replacement, new Set());
-      assertEquals(result.kind, "lambda-var");
-      assertEquals((result as { name: string }).name, "y");
+      assert.deepStrictEqual(result.kind, "lambda-var");
+      assert.deepStrictEqual((result as { name: string }).name, "y");
     });
 
-    await t.step("should handle non-matching variable names", () => {
+    await t.test("should handle non-matching variable names", () => {
       const term: TripLangValueType = {
         kind: "lambda-var",
         name: "x",
@@ -1279,11 +1354,11 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "y",
       };
       const result = substituteHygienic(term, "z", replacement);
-      assertEquals(result.kind, "lambda-var");
-      assertEquals((result as { name: string }).name, "x");
+      assert.deepStrictEqual(result.kind, "lambda-var");
+      assert.deepStrictEqual((result as { name: string }).name, "x");
     });
 
-    await t.step("should handle terminal nodes", () => {
+    await t.test("should handle terminal nodes", () => {
       const term: TripLangValueType = {
         kind: "terminal",
         sym: SKITerminalSymbol.S,
@@ -1293,10 +1368,10 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "x",
       };
       const result = substituteHygienic(term, "x", replacement);
-      assertEquals(result.kind, "terminal");
+      assert.deepStrictEqual(result.kind, "terminal");
     });
 
-    await t.step("should handle type variables in term substitution", () => {
+    await t.test("should handle type variables in term substitution", () => {
       const term: TripLangValueType = {
         kind: "type-var",
         typeName: "A",
@@ -1306,11 +1381,11 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "x",
       };
       const result = substituteHygienic(term, "x", replacement);
-      assertEquals(result.kind, "type-var");
-      assertEquals((result as { typeName: string }).typeName, "A");
+      assert.deepStrictEqual(result.kind, "type-var");
+      assert.deepStrictEqual((result as { typeName: string }).typeName, "A");
     });
 
-    await t.step("should substitute in match expression", () => {
+    await t.test("should substitute in match expression", () => {
       const term: TripLangValueType = {
         kind: "systemF-match",
         scrutinee: {
@@ -1337,13 +1412,13 @@ Deno.test("hygienic substitution functions", async (t) => {
         name: "y",
       };
       const result = substituteHygienic(term, "x", replacement);
-      assertEquals(result.kind, "systemF-match");
-      assertEquals(
+      assert.deepStrictEqual(result.kind, "systemF-match");
+      assert.deepStrictEqual(
         (result as { scrutinee: { name: string } }).scrutinee.name,
         "y",
       );
       // The x in the match arm body should be substituted
-      assertEquals(
+      assert.deepStrictEqual(
         requiredAt(
           (result as { arms: Array<{ body: { name: string } }> }).arms,
           0,
@@ -1353,7 +1428,7 @@ Deno.test("hygienic substitution functions", async (t) => {
       );
     });
 
-    await t.step(
+    await t.test(
       "should avoid variable capture in match arm parameters",
       () => {
         const term: TripLangValueType = {
@@ -1382,16 +1457,18 @@ Deno.test("hygienic substitution functions", async (t) => {
           name: "x",
         };
         const result = substituteHygienic(term, "m", replacement);
-        assertEquals(result.kind, "systemF-match");
-        assertEquals(
+        assert.deepStrictEqual(result.kind, "systemF-match");
+        assert.deepStrictEqual(
           (result as { scrutinee: { name: string } }).scrutinee.name,
           "x",
         );
         // The match arm parameter 'x' should be renamed to avoid capture
         const arm = requiredAt(
-          (result as {
-            arms: Array<{ params: string[]; body: { name: string } }>;
-          }).arms,
+          (
+            result as {
+              arms: Array<{ params: string[]; body: { name: string } }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
@@ -1400,54 +1477,53 @@ Deno.test("hygienic substitution functions", async (t) => {
           0,
           "expected first arm parameter",
         );
-        assertEquals(param0 !== "x", true); // Should be renamed
-        assertEquals(arm.body.name, param0); // Body should reference renamed param
+        assert.deepStrictEqual(param0 !== "x", true); // Should be renamed
+        assert.deepStrictEqual(arm.body.name, param0); // Body should reference renamed param
       },
     );
 
-    await t.step(
-      "should substitute in match scrutinee and return type",
-      () => {
-        const term: TripLangValueType = {
-          kind: "systemF-match",
-          scrutinee: {
-            kind: "systemF-var",
-            name: "x",
-          },
-          returnType: {
-            kind: "type-var",
-            typeName: "T",
-          },
-          arms: [
-            {
-              constructorName: "None",
-              params: [],
-              body: {
-                kind: "systemF-var",
-                name: "y",
-              },
-            },
-          ],
-        };
-        const replacement: TripLangValueType = {
+    await t.test("should substitute in match scrutinee and return type", () => {
+      const term: TripLangValueType = {
+        kind: "systemF-match",
+        scrutinee: {
           kind: "systemF-var",
-          name: "z",
-        };
-        const result = substituteHygienic(term, "x", replacement);
-        assertEquals(result.kind, "systemF-match");
-        assertEquals(
-          (result as { scrutinee: { name: string } }).scrutinee.name,
-          "z",
-        );
-        // Return type should remain unchanged since it's a type-var, not a term variable
-        const returnType = (result as {
+          name: "x",
+        },
+        returnType: {
+          kind: "type-var",
+          typeName: "T",
+        },
+        arms: [
+          {
+            constructorName: "None",
+            params: [],
+            body: {
+              kind: "systemF-var",
+              name: "y",
+            },
+          },
+        ],
+      };
+      const replacement: TripLangValueType = {
+        kind: "systemF-var",
+        name: "z",
+      };
+      const result = substituteHygienic(term, "x", replacement);
+      assert.deepStrictEqual(result.kind, "systemF-match");
+      assert.deepStrictEqual(
+        (result as { scrutinee: { name: string } }).scrutinee.name,
+        "z",
+      );
+      // Return type should remain unchanged since it's a type-var, not a term variable
+      const returnType = (
+        result as {
           returnType: { typeName: string };
-        }).returnType;
-        assertEquals(returnType.typeName, "T");
-      },
-    );
+        }
+      ).returnType;
+      assert.deepStrictEqual(returnType.typeName, "T");
+    });
 
-    await t.step(
+    await t.test(
       "should handle multiple match arms with different parameter names",
       () => {
         const term: TripLangValueType = {
@@ -1484,22 +1560,24 @@ Deno.test("hygienic substitution functions", async (t) => {
           name: "z",
         };
         const result = substituteHygienic(term, "y", replacement);
-        assertEquals(result.kind, "systemF-match");
-        const arms = (result as {
-          arms: Array<{ params: string[]; body: { name: string } }>;
-        }).arms;
-        assertEquals(
+        assert.deepStrictEqual(result.kind, "systemF-match");
+        const arms = (
+          result as {
+            arms: Array<{ params: string[]; body: { name: string } }>;
+          }
+        ).arms;
+        assert.deepStrictEqual(
           requiredAt(arms, 0, "expected first match arm").body.name,
           "x",
         ); // Should remain unchanged
-        assertEquals(
+        assert.deepStrictEqual(
           requiredAt(arms, 1, "expected second match arm").body.name,
           "z",
         ); // Should be substituted
       },
     );
 
-    await t.step(
+    await t.test(
       "should rename multiple match arm parameters to avoid capture",
       () => {
         const term: TripLangValueType = {
@@ -1542,16 +1620,16 @@ Deno.test("hygienic substitution functions", async (t) => {
           },
         };
         const result = substituteHygienic(term, "m", replacement);
-        assertEquals(result.kind, "systemF-match");
+        assert.deepStrictEqual(result.kind, "systemF-match");
         const arm = requiredAt(
-          (result as {
-            arms: Array<
-              {
+          (
+            result as {
+              arms: Array<{
                 params: string[];
                 body: { lft: { name: string }; rgt: { name: string } };
-              }
-            >;
-          }).arms,
+              }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
@@ -1566,16 +1644,16 @@ Deno.test("hygienic substitution functions", async (t) => {
           1,
           "expected second arm parameter",
         );
-        assertEquals(param0 !== "x", true);
-        assertEquals(param1 !== "y", true);
-        assertEquals(arm.body.lft.name, param0);
-        assertEquals(arm.body.rgt.name, param1);
+        assert.deepStrictEqual(param0 !== "x", true);
+        assert.deepStrictEqual(param1 !== "y", true);
+        assert.deepStrictEqual(arm.body.lft.name, param0);
+        assert.deepStrictEqual(arm.body.rgt.name, param1);
       },
     );
   });
 
-  await t.step("substituteTypeHygienic - systemF-match", async (t) => {
-    await t.step("should substitute type variables in match expression", () => {
+  await t.test("substituteTypeHygienic - systemF-match", async (t) => {
+    await t.test("should substitute type variables in match expression", () => {
       const term: TripLangValueType = {
         kind: "systemF-match",
         scrutinee: {
@@ -1602,14 +1680,14 @@ Deno.test("hygienic substitution functions", async (t) => {
         typeName: "B",
       };
       const result = substituteTypeHygienic(term, "A", replacement);
-      assertEquals(result.kind, "systemF-match");
-      assertEquals(
+      assert.deepStrictEqual(result.kind, "systemF-match");
+      assert.deepStrictEqual(
         (result as { returnType: { typeName: string } }).returnType.typeName,
         "B",
       );
     });
 
-    await t.step(
+    await t.test(
       "should substitute type variables in match scrutinee and arms",
       () => {
         const term: TripLangValueType = {
@@ -1652,35 +1730,39 @@ Deno.test("hygienic substitution functions", async (t) => {
           typeName: "B",
         };
         const result = substituteTypeHygienic(term, "A", replacement);
-        assertEquals(result.kind, "systemF-match");
-        const scrutinee = (result as {
-          scrutinee: {
-            kind: string;
-            typeArg: { typeName: string };
-          };
-        }).scrutinee;
-        assertEquals(scrutinee.typeArg.typeName, "B");
-        assertEquals(
+        assert.deepStrictEqual(result.kind, "systemF-match");
+        const scrutinee = (
+          result as {
+            scrutinee: {
+              kind: string;
+              typeArg: { typeName: string };
+            };
+          }
+        ).scrutinee;
+        assert.deepStrictEqual(scrutinee.typeArg.typeName, "B");
+        assert.deepStrictEqual(
           (result as { returnType: { typeName: string } }).returnType.typeName,
           "B",
         );
         const arm = requiredAt(
-          (result as {
-            arms: Array<{
-              body: {
-                kind: string;
-                typeArg: { typeName: string };
-              };
-            }>;
-          }).arms,
+          (
+            result as {
+              arms: Array<{
+                body: {
+                  kind: string;
+                  typeArg: { typeName: string };
+                };
+              }>;
+            }
+          ).arms,
           0,
           "expected first match arm",
         );
-        assertEquals(arm.body.typeArg.typeName, "B");
+        assert.deepStrictEqual(arm.body.typeArg.typeName, "B");
       },
     );
 
-    await t.step(
+    await t.test(
       "should not substitute bound type variables in match arms",
       () => {
         const term: TripLangValueType = {
@@ -1713,16 +1795,18 @@ Deno.test("hygienic substitution functions", async (t) => {
           typeName: "B",
         };
         const result = substituteTypeHygienic(term, "A", replacement);
-        assertEquals(result.kind, "systemF-type-abs");
-        const match = (result as {
-          body: {
-            kind: string;
-            returnType: { typeName: string };
-          };
-        }).body;
-        assertEquals(match.kind, "systemF-match");
+        assert.deepStrictEqual(result.kind, "systemF-type-abs");
+        const match = (
+          result as {
+            body: {
+              kind: string;
+              returnType: { typeName: string };
+            };
+          }
+        ).body;
+        assert.deepStrictEqual(match.kind, "systemF-match");
         // The A in returnType should remain A because it's bound by the outer type abstraction
-        assertEquals(match.returnType.typeName, "A");
+        assert.deepStrictEqual(match.returnType.typeName, "A");
       },
     );
   });

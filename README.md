@@ -6,9 +6,8 @@ An implementation of a parser, evaluator, printer, and visualizer for
 ## Project Dependencies
 
 - [TypeScript](https://www.typescriptlang.org/)
-- [Deno](https://deno.com/) as a bootstrap for the repo-pinned toolchain in
-  `deno.jsonc`
-- [C](https://en.wikipedia.org/wiki/C_(programming_language)) (compiled to
+- [Node.js](https://nodejs.org/) as a bootstrap for the repo-pinned toolchain
+- [C](<https://en.wikipedia.org/wiki/C_(programming_language)>) (compiled to
   WebAssembly)
 - [Bazelisk](https://github.com/bazelbuild/bazelisk), which downloads the
   hermetic Zig-based C/C++ toolchain on first native build
@@ -20,7 +19,7 @@ This project uses Bazelisk for common development tasks:
 ```bash
 bazelisk build //:thanatos //:release_wasm
 bazelisk test //:native_tests
-bazelisk test //:deno_tests
+bazelisk test //:node_tests
 bazelisk run //:build
 bazelisk run //:test
 bazelisk run //:coverage
@@ -30,7 +29,7 @@ bazelisk run //:vs_project
 ```
 
 The Bazel graph now includes hermetic native `thanatos` and `wasm/release.wasm`
-targets alongside the Deno-based build, lint, coverage, and packaging flows,
+targets alongside the Node.js-based build, lint, coverage, and packaging flows,
 without requiring WSL, Nix, or Visual Studio Build Tools on Windows.
 
 If Bazelisk is installed as `bazel` on your machine, the same commands work with
@@ -38,53 +37,38 @@ If Bazelisk is installed as `bazel` on your machine, the same commands work with
 
 ## Development Setup
 
-### VS Code Extensions
-
-This project includes VS Code workspace settings that require the following
-extensions:
-
-- **[Deno](https://marketplace.visualstudio.com/items?itemName=denoland.vscode-deno)** -
-  Official Deno extension for TypeScript support, linting, and IntelliSense
-
-The `.vscode/settings.json` file configures:
-
-- Enables the Deno extension for this workspace
-- Disables the built-in TypeScript language server to avoid conflicts
-- Configures Deno linting and import suggestions
-
 ### Installation
 
-1. Install `Deno`
+1. Install `Node.js`
 2. Install `Bazelisk`
 3. Clone the repository
 4. Run `bazelisk build //:thanatos //:release_wasm`
 5. Run `bazelisk run //:build`
-6. Open the project in VS Code and install the Deno extension if you want IDE
-   support
+6. Open the project in VS Code
 
-The required Deno toolchain version is pinned in `deno.jsonc` under
-`toolchain.deno`. Bazelisk commands use your installed Deno only as a bootstrap
-shim, then run the repo-pinned Deno version for the actual build/test command.
-If your system Deno does not match, the first Bazelisk run will install the
+The required Node.js toolchain version is pinned in the repository configuration.
+Bazelisk commands use your installed Node.js only as a bootstrap shim, then run
+the repo-pinned Node.js version for the actual build/test command.
+If your system Node.js does not match, the first Bazelisk run will install the
 exact pinned binary into a local toolchain cache. Set
-`TYPED_SKI_DENO_TOOLCHAIN_DIR` if you want that cache in a specific location.
+`TYPED_SKI_NODE_TOOLCHAIN_DIR` if you want that cache in a specific location.
 
 ### Running Tests
 
 Run the test suite with:
 
 ```bash
-bazelisk test //:deno_tests
+bazelisk test //:node_tests
 ```
 
-For a local single-process workspace run of the same Deno suite, you can still
+For a local single-process workspace run of the same Node.js suite, you can still
 use:
 
 ```bash
 bazelisk run //:test
 ```
 
-On Windows, pass `--enable_runfiles` to `bazelisk test //:deno_tests` if your
+On Windows, pass `--enable_runfiles` to `bazelisk test //:node_tests` if your
 Bazel setup does not expose a runfiles tree by default.
 
 Run the native C targets with:
@@ -94,7 +78,7 @@ bazelisk build //:thanatos //:release_wasm
 bazelisk test //:native_tests
 ```
 
-Check which repo-pinned Deno version Bazelisk will use with:
+Check which repo-pinned Node.js version Bazelisk will use with:
 
 ```bash
 bazelisk run //:verify_version
@@ -103,7 +87,7 @@ bazelisk run //:verify_version
 Other useful commands:
 
 - `bazelisk run //:build` builds generated metadata and distributable artifacts
-- `bazelisk run //:typecheck` runs Deno type checking over the test suite
+- `bazelisk run //:typecheck` runs TypeScript type checking over the test suite
 - `bazelisk run //:coverage` runs the tests with coverage output
 - `bazelisk run //:ci` runs formatting, lint, type checking, build, and a single
   coverage-producing local test pass
@@ -190,7 +174,7 @@ Notes:
 - `//:serve_hephaestus` builds `dist/workbench.js`, `dist/webglForest.js`, and
   `dist/arenaWorker.js` before starting the server.
 - `bazelisk build //:release_wasm` writes the hermetic wasm artifact to
-  `bazel-bin/wasm/release.wasm`. The Deno-side build flow stages that artifact
+  `bazel-bin/wasm/release.wasm`. The Node.js-side build flow stages that artifact
   into `wasm/release.wasm` when present so browser and publish paths can use the
   Bazel-built module.
 
@@ -201,7 +185,7 @@ Notes:
 ## Build System
 
 This project uses **Bazel** as the primary build entrypoint. The supported
-workflow for this branch is Bazel plus Deno, with generated metadata, packaging,
+workflow for this branch is Bazel plus Node.js, with generated metadata, packaging,
 linting, coverage, and the test suite exposed through Bazel commands.
 
 ## Canonicalization
@@ -209,9 +193,9 @@ linting, coverage, and the test suite exposed through Bazel commands.
 The TypeScript bootstrap pipeline treats compiler artifacts as canonical,
 ASCII-only outputs:
 
-- Top-level Trip unparse preserves the original definition kind and emits
-  parseable canonical syntax such as `poly rec`, `typed`, `untyped`, and
-  `combinator`.
+- Top-level Trip unparse preserves the original source-level definition kind and
+  emits parseable canonical syntax such as `poly rec` and `combinator`, while
+  internal lowering stages use `lambda` during linking and execution.
 - `.tripc` object files are emitted with canonical import/export/definition
   ordering and recursively sorted object keys.
 - Link-time dependency traversal and SCC processing use explicit ASCII ordering
@@ -238,9 +222,9 @@ This project implements a high-performance, multi-threaded SKI reducer:
 Thanatos is the native C11/pthreads orchestrator for compute-heavy reductions.
 The same C core (arena and reduction logic) is compiled in two ways: as the
 native `thanatos` binary for CLI/batch use, and to WebAssembly
-(`wasm/release.wasm`) for use by the parallel arena evaluator in Deno. The
+(`wasm/release.wasm`) for use by the parallel arena evaluator in Node.js. The
 native binary keeps the SKI evaluator on-metal by managing worker dispatch and
-completion queues directly, which avoids Deno/WASM bridge overhead and improves
+completion queues directly, which avoids Node.js/WASM bridge overhead and improves
 throughput and runtime stability for long-running workloads.
 
 ## Works Referenced
@@ -267,11 +251,11 @@ throughput and runtime stability for long-running workloads.
 ## CI/CD
 
 GitHub Actions use Bazel on both Ubuntu and native Windows. Native C targets run
-through ordinary Bazel build/test steps, and the Deno suite runs through the
-sharded `//:deno_tests` Bazel test target so each shard owns its own Thanatos
+through ordinary Bazel build/test steps, and the Node.js suite runs through the
+sharded `//:node_tests` Bazel test target so each shard owns its own Thanatos
 session. See the workflow files in `.github/workflows/` for details.
 
 ## Status
 
-[![Deno CI](https://github.com/maxdeliso/typed-ski/actions/workflows/deno.yml/badge.svg?branch=main)](https://github.com/maxdeliso/typed-ski/actions/workflows/deno.yml)
+[![Node.js CI](https://github.com/maxdeliso/typed-ski/actions/workflows/node.yml/badge.svg?branch=main)](https://github.com/maxdeliso/typed-ski/actions/workflows/node.yml)
 [![COC](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)

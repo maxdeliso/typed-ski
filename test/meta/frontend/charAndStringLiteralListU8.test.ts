@@ -1,3 +1,4 @@
+import { test } from "node:test";
 /**
  * Bottom-up parse and elaboration test: single character literals and
  * double-quote string literals must be elaborated (in System F and through
@@ -96,63 +97,63 @@ function assertU8(term: SystemFTerm, expectedCode: number, msg?: string) {
   );
 }
 
-Deno.test("Character and string literals → U8 / List U8 (parse + elaboration)", async (t) => {
-  await t.step("parse: single character literal has U8 form", () => {
+test("Character and string literals → U8 / List U8 (parse + elaboration)", async (t) => {
+  await t.test("parse: single character literal has U8 form", () => {
     const [, ast] = parseSystemF("'a'");
     assertU8(ast, 97);
   });
 
-  await t.step("parse: string literal has List U8 form", () => {
+  await t.test("parse: string literal has List U8 form", () => {
     const [, ast] = parseSystemF('"ab"');
     assertListU8(ast, [97, 98]);
   });
 
-  await t.step("parse: empty string literal has List U8 form", () => {
+  await t.test("parse: empty string literal has List U8 form", () => {
     const [, ast] = parseSystemF('""');
     assertListU8(ast, []);
   });
 
-  await t.step(
+  await t.test(
     "elaboration: program with character literal elaborates to U8",
     () => {
       const src = "module Test\npoly main = 'a'";
       const parsed = expandDataDefinitions(parseTripLang(src));
       const symbols = indexSymbols(parsed);
       const elaborated = elaborateTerms(parsed, symbols);
-      const mainPoly = elaborated.terms.find((t) =>
-        t.kind === "poly" && t.name === "main"
+      const mainPoly = elaborated.terms.find(
+        (t) => t.kind === "poly" && t.name === "main",
       );
-      assert(mainPoly && mainPoly.kind === "poly");
+      assert.ok(mainPoly && mainPoly.kind === "poly");
       assertU8(mainPoly.term, 97);
     },
   );
 
-  await t.step(
+  await t.test(
     "elaboration: program with string literal elaborates to List U8",
     () => {
       const src = 'module Test\npoly main = "ab"';
       const parsed = expandDataDefinitions(parseTripLang(src));
       const symbols = indexSymbols(parsed);
       const elaborated = elaborateTerms(parsed, symbols);
-      const mainPoly = elaborated.terms.find((t) =>
-        t.kind === "poly" && t.name === "main"
+      const mainPoly = elaborated.terms.find(
+        (t) => t.kind === "poly" && t.name === "main",
       );
-      assert(mainPoly && mainPoly.kind === "poly");
+      assert.ok(mainPoly && mainPoly.kind === "poly");
       assertListU8(mainPoly.term, [97, 98]);
     },
   );
 
-  await t.step(
+  await t.test(
     "elaboration: program with empty string literal elaborates to List U8",
     () => {
       const src = 'module Test\npoly main = ""';
       const parsed = expandDataDefinitions(parseTripLang(src));
       const symbols = indexSymbols(parsed);
       const elaborated = elaborateTerms(parsed, symbols);
-      const mainPoly = elaborated.terms.find((t) =>
-        t.kind === "poly" && t.name === "main"
+      const mainPoly = elaborated.terms.find(
+        (t) => t.kind === "poly" && t.name === "main",
       );
-      assert(mainPoly && mainPoly.kind === "poly");
+      assert.ok(mainPoly && mainPoly.kind === "poly");
       assertListU8(mainPoly.term, []);
     },
   );

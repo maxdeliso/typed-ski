@@ -1,8 +1,9 @@
-import { assertEquals, assertRejects } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { ParallelArenaEvaluatorWasm } from "../../../lib/index.ts";
 import { parseSKI } from "../../../lib/parser/ski.ts";
 
-Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue (rc=1)", async () => {
+test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue (rc=1)", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -31,14 +32,14 @@ Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full q
     };
 
     const result = await evaluator.reduceArenaNodeIdAsync(nodeId, expr);
-    assertEquals(submits >= 2, true);
-    assertEquals(result, nodeId); // I reduces to I
+    assert.strictEqual(submits >= 2, true);
+    assert.strictEqual(result, nodeId); // I reduces to I
   } finally {
     evaluator.terminate();
   }
 });
 
-Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync throws on rc=2", async () => {
+test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync throws on rc=2", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -48,28 +49,26 @@ Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync throws on rc=2", 
     mockedExports.hostSubmit = () => 2; // Not connected
     Object.defineProperty(evaluator, "$", { value: mockedExports });
 
-    await assertRejects(
-      () => evaluator.reduceArenaNodeIdAsync(nodeId, expr),
-      Error,
-      "hostSubmit failed with code 2",
-    );
+    await assert.rejects(() => evaluator.reduceArenaNodeIdAsync(nodeId, expr), {
+      name: "Error",
+      message: "hostSubmit failed with code 2",
+    });
   } finally {
     evaluator.terminate();
   }
 });
 
-Deno.test("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
+test("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   evaluator.terminate();
   const expr = parseSKI("I");
-  await assertRejects(
-    () => evaluator.reduceAsync(expr),
-    Error,
-    "Evaluator terminated",
-  );
+  await assert.rejects(() => evaluator.reduceAsync(expr), {
+    name: "Error",
+    message: "Evaluator terminated",
+  });
 });
 
-Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask backoff after prolonged full queue", async () => {
+test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask backoff after prolonged full queue", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -86,14 +85,14 @@ Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask ba
     Object.defineProperty(evaluator, "$", { value: mockedExports });
 
     const result = await evaluator.reduceArenaNodeIdAsync(nodeId, expr);
-    assertEquals(result, nodeId);
-    assertEquals(submits > 512, true);
+    assert.strictEqual(result, nodeId);
+    assert.strictEqual(submits > 512, true);
   } finally {
     evaluator.terminate();
   }
 });
 
-Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync wraps non-Error submit failures", async () => {
+test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync wraps non-Error submit failures", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -105,10 +104,11 @@ Deno.test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync wraps non-Error s
     };
     Object.defineProperty(evaluator, "$", { value: mockedExports });
 
-    await assertRejects(
+    await assert.rejects(
       () => evaluator.reduceArenaNodeIdAsync(nodeId, expr),
-      Error,
-      "string failure",
+      (err) => {
+        return err instanceof Error && err.message === "string failure";
+      },
     );
   } finally {
     evaluator.terminate();

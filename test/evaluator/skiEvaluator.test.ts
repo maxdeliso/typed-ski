@@ -1,4 +1,5 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 
 import { arenaEvaluator } from "../../lib/evaluator/skiEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -12,7 +13,7 @@ import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 import { randExpression } from "../../lib/ski/generator.ts";
 
-Deno.test("stepOnce", async (t) => {
+test("stepOnce", async (t) => {
   const first = parseSKI("III");
   const second = parseSKI("II");
   const third = parseSKI("I");
@@ -25,93 +26,93 @@ Deno.test("stepOnce", async (t) => {
     assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
   };
 
-  await t.step(
+  await t.test(
     `evaluates ${unparseSKI(second)}
       =>
       ${unparseSKI(third)}`,
     () => {
       const result = arenaEvaluator.stepOnce(second);
-      assert(result.altered);
+      assert.ok(result.altered);
       compareExpressions(result.expr, third);
     },
   );
 
-  await t.step(
+  await t.test(
     `evaluates ${unparseSKI(first)}
       =>
       ${unparseSKI(third)}`,
     () => {
       const firstStep = arenaEvaluator.stepOnce(first);
-      assert(firstStep.altered);
+      assert.ok(firstStep.altered);
       const secondStep = arenaEvaluator.stepOnce(firstStep.expr);
-      assert(secondStep.altered);
+      assert.ok(secondStep.altered);
       compareExpressions(secondStep.expr, third);
     },
   );
 
-  await t.step(
+  await t.test(
     `evaluates ${unparseSKI(fourth)}
       =>
       ${unparseSKI(third)}`,
     () => {
       const result = arenaEvaluator.stepOnce(fourth);
-      assert(result.altered);
+      assert.ok(result.altered);
       compareExpressions(result.expr, third);
     },
   );
 
-  await t.step(
+  await t.test(
     `evaluates
       ${unparseSKI(fifth)}
       =>
       ${unparseSKI(seventh)}`,
     () => {
       const first = arenaEvaluator.stepOnce(fifth);
-      assert(first.altered);
+      assert.ok(first.altered);
       compareExpressions(first.expr, seventh);
     },
   );
 
-  await t.step(
+  await t.test(
     `${unparseSKI(sixth)}
       =>
       ${unparseSKI(third)}`,
     () => {
       const firstStep = arenaEvaluator.stepOnce(sixth);
-      assert(firstStep.altered);
+      assert.ok(firstStep.altered);
       const secondStep = arenaEvaluator.stepOnce(firstStep.expr);
-      assert(secondStep.altered);
+      assert.ok(secondStep.altered);
       const thirdStep = arenaEvaluator.stepOnce(secondStep.expr);
-      assert(thirdStep.altered);
+      assert.ok(thirdStep.altered);
       compareExpressions(thirdStep.expr, third);
     },
   );
 });
 
-Deno.test("B and C combinators", async (t) => {
+test("B and C combinators", async (t) => {
   const compareExpressions = (a: SKIExpression, b: SKIExpression): void => {
     assert.deepStrictEqual(unparseSKI(a), unparseSKI(b));
   };
 
-  await t.step("B x y z = x (y z)", () => {
+  await t.test("B x y z = x (y z)", () => {
     const expr = applyMany(B, I, I, I);
     const reduced = arenaEvaluator.reduce(expr);
     compareExpressions(reduced, I);
   });
 
-  await t.step("B with distinct args preserves order", () => {
+  await t.test("B with distinct args preserves order", () => {
     const left = arenaEvaluator.reduce(applyMany(B, K, I, S));
     const right = arenaEvaluator.reduce(applyMany(K, applyMany(I, S)));
     compareExpressions(left, right);
   });
 
-  await t.step("C x y z = x z y", () => {
+  await t.test("C x y z = x z y", () => {
     const expr = applyMany(C, I, I, I);
     const reduced = arenaEvaluator.reduce(expr);
     compareExpressions(reduced, I);
   });
 
-  await t.step("C with distinct args preserves order", () => {
+  await t.test("C with distinct args preserves order", () => {
     const left = arenaEvaluator.reduce(applyMany(C, K, I, S));
     const right = arenaEvaluator.reduce(applyMany(K, S, I));
     compareExpressions(left, right);
@@ -134,14 +135,14 @@ function reduceByLoop(expr: SKIExpression, maxIter = MAX_ITER) {
   throw new Error("stepOnce failed to normalise within maxIter");
 }
 
-Deno.test("stepOnce loop vs. reduce()", async (t) => {
+test("stepOnce loop vs. reduce()", async (t) => {
   const seed = "df394b";
   const normalizeTests = 19;
   const minLength = 5;
   const maxLength = 12;
   const rs: RandomSeed = create(seed);
 
-  await t.step(
+  await t.test(
     `runs ${normalizeTests.toString()} normalization tests with random expressions`,
     () => {
       [...Array(normalizeTests).keys()].forEach(() => {
@@ -153,9 +154,9 @@ Deno.test("stepOnce loop vs. reduce()", async (t) => {
         assert.deepStrictEqual(
           unparseSKI(reducedOnce),
           unparseSKI(reducedMany),
-          `expected: ${unparseSKI(reducedOnce)}, got: ${
-            unparseSKI(reducedMany)
-          }`,
+          `expected: ${unparseSKI(reducedOnce)}, got: ${unparseSKI(
+            reducedMany,
+          )}`,
         );
       });
     },

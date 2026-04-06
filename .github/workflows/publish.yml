@@ -18,12 +18,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Read Deno version
-        id: deno_version
-        shell: bash
-        run: |
-          version=$(node -p "JSON.parse(require('fs').readFileSync('deno.jsonc', 'utf8')).toolchain.deno")
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25.6.0"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
@@ -32,11 +34,6 @@ jobs:
           disk-cache: ${{ github.workflow }}
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
-
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: ${{ steps.deno_version.outputs.version }}
 
       - name: Prepare hermetic Zig cache
         run: mkdir -p /tmp/zig-cache
@@ -53,5 +50,10 @@ jobs:
       - name: Run test suite
         run: bazel run //:test
 
+      - name: Setup Deno (for JSR publish)
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Publish to JSR (Deno Registry)
-        run: deno publish
+        run: deno publish --config jsr.json

@@ -12,16 +12,17 @@ typed-ski-native.sln
 typed-ski-*.vcxproj
 typed-ski-*.vcxproj.filters
 *.vcxproj.user
-package-lock.json
-package.json
 bazel-bin
 bazel-out
 bazel-testlogs
 bazel-typed-ski
 .bazel-user-root/
+jsr.json
+.tmp/
 
 # TripLang compiled object files
 *.tripc
+!test/**/*.tripc
 
 # Distribution files (can be regenerated)
 dist/

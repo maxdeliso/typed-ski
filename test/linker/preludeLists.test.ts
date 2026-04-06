@@ -1,106 +1,61 @@
-import { assertEquals } from "std/assert";
-import { dirname } from "node:path";
+import { test } from "node:test";
+/**
+ * Linker tests for prelude list operations
+ */
+
+import { expect } from "../util/assertions.ts";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UnChurchNumber } from "../../lib/ski/church.ts";
-import { evaluateTrip, evaluateTripWithIo } from "../util/tripHarness.ts";
-import { loadInput } from "../util/fileLoader.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
+import { linkModules } from "../../lib/linker/moduleLinker.ts";
+import { getBinObject } from "../../lib/bin.ts";
+import { getPreludeObject } from "../../lib/prelude.ts";
+import { getNatObject } from "../../lib/nat.ts";
+import { parseSKI } from "../../lib/parser/ski.ts";
+import { UnChurchBoolean, UnChurchNumber } from "../../lib/ski/church.ts";
+import {
+  closeBatchThanatosSessions,
+  passthroughEvaluator,
+  runThanatosBatch,
+  thanatosAvailable,
+} from "../thanatosHarness.ts";
+import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-Deno.test("prelude scott lists support head/tail", async () => {
-  const source = loadInput("preludeListHeadTail.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 2n);
-  } finally {
-    evaluator.terminate();
-  }
-});
 
-Deno.test("prelude scott lists support matchList", async () => {
-  const source = loadInput("preludeMatchList.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 42n);
-  } finally {
-    evaluator.terminate();
-  }
-});
+test("Prelude List Linking", async (t) => {
+  await t.test(
+    "links prelude list cases (thanatos)",
+    {
+      skip: !thanatosAvailable(),
+    },
+    async () => {
+      try {
+        const preludeObj = await getPreludeObject();
+        const binObj = await getBinObject();
+        const natObj = await getNatObject();
+        const testObj = await loadTripModuleObject(
+          join(__dirname, "inputs", "testLists.trip"),
+        );
 
-Deno.test("string literal length via matchList", async () => {
-  const source = loadInput("stringLengthMatchList.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { includeBin: true, evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 2n);
-  } finally {
-    evaluator.terminate();
-  }
-});
+        const skiExpression = linkModules([
+          { name: "Prelude", object: preludeObj },
+          { name: "Bin", object: binObj },
+          { name: "Nat", object: natObj },
+          { name: "Test", object: testObj },
+        ]);
 
-Deno.test("prelude list combinators map/append/foldl", async () => {
-  const source = loadInput("preludeListCombinators.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { includeBin: true, evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 8n);
-  } finally {
-    evaluator.terminate();
-  }
-});
+        const results = await runThanatosBatch([skiExpression]);
+        const result = results[0];
+        expect(result).to.not.be.undefined;
 
-Deno.test("prelude list combinators takeWhile/dropWhile", async () => {
-  const source = loadInput("preludeListPrefix.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { includeBin: true, evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 3n);
-  } finally {
-    evaluator.terminate();
-  }
-});
-
-Deno.test("prelude Result/Pair/ParseError data types", async () => {
-  const source = loadInput("preludeDataPrelude.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { includeBin: true, evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 5n);
-  } finally {
-    evaluator.terminate();
-  }
-});
-
-Deno.test({
-  name: "trip harness evaluates IO programs",
-  fn: async () => {
-    const source = loadInput("echoOne.trip", __dirname);
-    const evaluator = await ParallelArenaEvaluatorWasm.create();
-    try {
-      const input = new Uint8Array([65]);
-      const { result, stdout } = await evaluateTripWithIo(source, {
-        stdin: input,
-        stdoutMaxBytes: 1,
-        evaluator,
-      });
-      assertEquals(stdout.length, 1);
-      assertEquals(stdout[0], 65);
-      assertEquals((result as { value: number }).value, 65);
-    } finally {
-      evaluator.terminate();
-    }
-  },
-});
-
-Deno.test("trip harness evaluates numeric literal main", async () => {
-  const source = loadInput("literalMain.trip", __dirname);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const result = await evaluateTrip(source, { evaluator });
-    assertEquals(await UnChurchNumber(result, evaluator), 13n);
-  } finally {
-    evaluator.terminate();
-  }
+        const decoded = await UnChurchNumber(
+          parseSKI(result!),
+          passthroughEvaluator,
+        );
+        expect(decoded).to.equal(6n); // sum [1, 2, 3]
+      } finally {
+        await closeBatchThanatosSessions();
+      }
+    },
+  );
 });

@@ -1,12 +1,13 @@
-#!/usr/bin/env -S deno run -A
-
-import { dirname, join } from "std/path";
+import { dirname, join, resolve } from "node:path";
+import * as fsp from "node:fs/promises";
+import * as os from "node:os";
+import { pathToFileURL } from "node:url";
 
 function usage(): never {
   console.error(
-    "Usage: deno run -A scripts/bazelBuildDist.ts <manifest> <tripc.js> <tripc.min.js> <tripc.node.js> <tripc-bin>",
+    "Usage: node scripts/bazelBuildDist.js <manifest> <tripc.js> <tripc.min.js> <tripc.node.js> <arenaWorker.js> <tripc-bin>",
   );
-  Deno.exit(1);
+  process.exit(1);
 }
 
 async function copyListedFiles(
@@ -14,17 +15,21 @@ async function copyListedFiles(
   targetRoot: string,
   manifestPath: string,
 ): Promise<void> {
-  const manifest = await Deno.readTextFile(manifestPath);
+  const manifest = await fsp.readFile(manifestPath, "utf8");
   for (const relativePath of manifest.split(/\r?\n/)) {
     if (!relativePath) continue;
     const sourcePath = join(sourceRoot, relativePath);
     const targetPath = join(targetRoot, relativePath);
-    const stat = await Deno.stat(sourcePath);
-    if (!stat.isFile) continue;
-    await Deno.mkdir(dirname(targetPath), { recursive: true });
-    await Deno.copyFile(sourcePath, targetPath);
-    if (Deno.build.os !== "windows" && stat.mode !== null) {
-      await Deno.chmod(targetPath, stat.mode).catch(() => {});
+    try {
+      const stat = await fsp.stat(sourcePath);
+      if (!stat.isFile()) continue;
+      await fsp.mkdir(dirname(targetPath), { recursive: true });
+      await fsp.copyFile(sourcePath, targetPath);
+      if (process.platform !== "win32") {
+        await fsp.chmod(targetPath, stat.mode);
+      }
+    } catch {
+      // Skip missing files
     }
   }
 }
@@ -33,66 +38,85 @@ async function copyOutput(
   sourcePath: string,
   targetPath: string,
 ): Promise<void> {
-  const stat = await Deno.stat(sourcePath);
-  await Deno.mkdir(dirname(targetPath), { recursive: true });
-  await Deno.copyFile(sourcePath, targetPath);
-  if (Deno.build.os !== "windows" && stat.mode !== null) {
-    await Deno.chmod(targetPath, stat.mode).catch(() => {});
+  const stat = await fsp.stat(sourcePath);
+  await fsp.mkdir(dirname(targetPath), { recursive: true });
+  await fsp.copyFile(sourcePath, targetPath);
+  if (process.platform !== "win32") {
+    await fsp.chmod(targetPath, stat.mode);
   }
 }
 
-if (Deno.args.length !== 5) usage();
+if (process.argv.length !== 8) usage();
 
-const [manifestPath, tripcJsOut, tripcMinJsOut, tripcNodeJsOut, tripcBinOut] =
-  Deno.args;
+const [
+  ,
+  ,
+  manifestPath,
+  tripcJsOut,
+  tripcMinJsOut,
+  tripcNodeJsOut,
+  arenaWorkerJsOut,
+  tripcBinOut,
+] = process.argv;
+
 if (
-  !manifestPath || !tripcJsOut || !tripcMinJsOut || !tripcNodeJsOut ||
+  !manifestPath ||
+  !tripcJsOut ||
+  !tripcMinJsOut ||
+  !tripcNodeJsOut ||
+  !arenaWorkerJsOut ||
   !tripcBinOut
 ) {
   usage();
 }
 
-const sourceRoot = Deno.cwd();
-const tempRoot = await Deno.makeTempDir({ prefix: "typed-ski-dist-" });
+const sourceRoot = process.cwd();
+const tempRoot = await fsp.mkdtemp(join(os.tmpdir(), "typed-ski-dist-"));
 const workspaceCopy = join(tempRoot, "workspace");
 const processTempDir = join(tempRoot, "temp");
 const buildTempDir = join(tempRoot, "build");
+const tripcJsOutputPath = resolve(sourceRoot, tripcJsOut);
+const tripcMinJsOutputPath = resolve(sourceRoot, tripcMinJsOut);
+const tripcNodeJsOutputPath = resolve(sourceRoot, tripcNodeJsOut);
+const arenaWorkerJsOutputPath = resolve(sourceRoot, arenaWorkerJsOut);
+const tripcBinOutputPath = resolve(sourceRoot, tripcBinOut);
 
+await fsp.mkdir(workspaceCopy, { recursive: true });
 await copyListedFiles(sourceRoot, workspaceCopy, manifestPath);
-await Deno.mkdir(processTempDir, { recursive: true });
-await Deno.mkdir(buildTempDir, { recursive: true });
+await fsp.mkdir(processTempDir, { recursive: true });
+await fsp.mkdir(buildTempDir, { recursive: true });
 
-const childEnv: Record<string, string> = {
-  ...Deno.env.toObject(),
+const childEnv = {
+  ...process.env,
   TYPED_SKI_BUILD_TEMP_DIR: buildTempDir,
   TEMP: processTempDir,
   TMP: processTempDir,
 };
+Object.assign(process.env, childEnv);
+process.chdir(workspaceCopy);
+const { buildDist } = (await import(
+  pathToFileURL(join(workspaceCopy, "scripts", "bazel.ts")).href
+)) as typeof import("./bazel.ts");
+await buildDist();
 
-const { code } = await new Deno.Command(
-  Deno.execPath(),
-  {
-    args: ["run", "-A", "scripts/bazel.ts", "dist"],
-    cwd: workspaceCopy,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-    env: childEnv,
-  },
-).output();
-
-if (code !== 0) {
-  Deno.exit(code);
-}
-
-await copyOutput(join(workspaceCopy, "dist", "tripc.js"), tripcJsOut);
-await copyOutput(join(workspaceCopy, "dist", "tripc.min.js"), tripcMinJsOut);
-await copyOutput(join(workspaceCopy, "dist", "tripc.node.js"), tripcNodeJsOut);
+await copyOutput(join(workspaceCopy, "dist", "tripc.js"), tripcJsOutputPath);
+await copyOutput(
+  join(workspaceCopy, "dist", "tripc.min.js"),
+  tripcMinJsOutputPath,
+);
+await copyOutput(
+  join(workspaceCopy, "dist", "tripc.node.js"),
+  tripcNodeJsOutputPath,
+);
+await copyOutput(
+  join(workspaceCopy, "dist", "arenaWorker.js"),
+  arenaWorkerJsOutputPath,
+);
 await copyOutput(
   join(
     workspaceCopy,
     "dist",
-    Deno.build.os === "windows" ? "tripc.exe" : "tripc",
+    process.platform === "win32" ? "tripc.cmd" : "tripc",
   ),
-  tripcBinOut,
+  tripcBinOutputPath,
 );

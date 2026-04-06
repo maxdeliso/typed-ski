@@ -8,21 +8,31 @@
  * - CLI accessibility via JSR imports
  */
 
-import { expect } from "chai";
-import { dirname, fromFileUrl, join } from "std/path";
-import { existsSync } from "std/fs";
+import { expect } from "../util/assertions.ts";
+import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile, readdir, rm } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 
-const __dirname = dirname(fromFileUrl(import.meta.url));
+import { parseJsonc } from "../util/jsonc.ts";
+import {
+  cleanupTempWorkspace,
+  createTempWorkspace,
+} from "../util/tripcHarness.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "../..");
 
-Deno.test("JSR Packaging Configuration", async (t) => {
-  await t.step("deno.jsonc configuration", async (t) => {
-    await t.step("has required fields", async () => {
-      const configPath = join(projectRoot, "deno.jsonc");
+test("JSR Packaging Configuration", async (t) => {
+  await t.test("jsr.json configuration", async (t) => {
+    await t.test("has required fields", async () => {
+      const configPath = join(projectRoot, "jsr.json");
       expect(existsSync(configPath)).to.be.true;
 
-      const configContent = await Deno.readTextFile(configPath);
-      const config = JSON.parse(configContent);
+      const configContent = await readFile(configPath, "utf-8");
+      const config = parseJsonc(configContent);
 
       // Check required fields
       expect(config).to.have.property("name");
@@ -36,10 +46,10 @@ Deno.test("JSR Packaging Configuration", async (t) => {
       expect(config.license).to.equal("MIT");
     });
 
-    await t.step("exports field configuration", async () => {
-      const configPath = join(projectRoot, "deno.jsonc");
-      const configContent = await Deno.readTextFile(configPath);
-      const config = JSON.parse(configContent);
+    await t.test("exports field configuration", async () => {
+      const configPath = join(projectRoot, "jsr.json");
+      const configContent = await readFile(configPath, "utf-8");
+      const config = parseJsonc(configContent);
 
       expect(config.exports).to.have.property(".");
       expect(config.exports).to.have.property("./bin/tripc");
@@ -48,10 +58,10 @@ Deno.test("JSR Packaging Configuration", async (t) => {
       expect(config.exports["./bin/tripc"]).to.equal("./bin/tripc.ts");
     });
 
-    await t.step("publish include configuration", async () => {
-      const configPath = join(projectRoot, "deno.jsonc");
-      const configContent = await Deno.readTextFile(configPath);
-      const config = JSON.parse(configContent);
+    await t.test("publish include configuration", async () => {
+      const configPath = join(projectRoot, "jsr.json");
+      const configContent = await readFile(configPath, "utf-8");
+      const config = parseJsonc(configContent);
 
       expect(config.publish.include).to.include("bin/**");
       expect(config.publish.include).to.include("lib/**");
@@ -61,13 +71,13 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     });
   });
 
-  await t.step("CLI file structure", async (t) => {
-    await t.step("bin directory exists", () => {
+  await t.test("CLI file structure", async (t) => {
+    await t.test("bin directory exists", () => {
       const binDir = join(projectRoot, "bin");
       expect(existsSync(binDir)).to.be.true;
     });
 
-    await t.step("required CLI files exist", () => {
+    await t.test("required CLI files exist", () => {
       const binDir = join(projectRoot, "bin");
 
       // Core CLI files
@@ -76,23 +86,24 @@ Deno.test("JSR Packaging Configuration", async (t) => {
       // Documentation and scripts
     });
 
-    await t.step("CLI files have proper shebang", async () => {
-      const tripcTs = await Deno.readTextFile(
+    await t.test("CLI files have proper shebang", async () => {
+      const tripcTs = await readFile(
         join(projectRoot, "bin/tripc.ts"),
+        "utf-8",
       );
-      expect(tripcTs).to.include(
-        "#!/usr/bin/env -S deno run --allow-read --allow-write",
-      );
+      expect(tripcTs).to.include("#!/usr/bin/env");
+      expect(tripcTs).to.include("node --experimental-transform-types");
     });
 
-    // Shell wrapper tests removed - using Deno tasks instead
+    // Shell wrapper tests removed
   });
 
-  await t.step("library integration", async (t) => {
-    await t.step("compiler library exports", async () => {
+  await t.test("library integration", async (t) => {
+    await t.test("compiler library exports", async () => {
       // Test that the compiler library is properly exported
-      const libIndex = await Deno.readTextFile(
+      const libIndex = await readFile(
         join(projectRoot, "lib/index.ts"),
+        "utf-8",
       );
 
       expect(libIndex).to.include("compileToObjectFile");
@@ -102,7 +113,7 @@ Deno.test("JSR Packaging Configuration", async (t) => {
       expect(libIndex).to.include("SingleFileCompilerError");
     });
 
-    await t.step("compiler module structure", () => {
+    await t.test("compiler module structure", () => {
       const compilerDir = join(projectRoot, "lib/compiler");
       expect(existsSync(compilerDir)).to.be.true;
 
@@ -112,19 +123,20 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     });
   });
 
-  await t.step("distribution files", async (t) => {
-    await t.step("dist directory structure", async () => {
+  await t.test("distribution files", async (t) => {
+    await t.test("dist directory structure", async () => {
       const distDir = join(projectRoot, "dist");
 
       // These files are created by build tasks
       if (existsSync(distDir)) {
-        const distFiles = [];
-        for await (const entry of Deno.readDir(distDir)) {
-          distFiles.push(entry.name);
-        }
+        const distFiles = await readdir(distDir);
 
         // Check for expected distribution files
-        const expectedFiles = ["tripc.js", "tripc.min.js", "tripc"];
+        const expectedFiles = [
+          "tripc.js",
+          "tripc.min.js",
+          process.platform === "win32" ? "tripc.cmd" : "tripc",
+        ];
         for (const file of expectedFiles) {
           if (distFiles.includes(file)) {
             expect(existsSync(join(distDir, file))).to.be.true;
@@ -138,98 +150,87 @@ Deno.test("JSR Packaging Configuration", async (t) => {
     });
   });
 
-  await t.step("version consistency", async (t) => {
-    await t.step("version numbers match across files", async () => {
-      const configPath = join(projectRoot, "deno.jsonc");
-      const configContent = await Deno.readTextFile(configPath);
-      JSON.parse(configContent);
+  await t.test("version consistency", async (t) => {
+    await t.test("version numbers match across files", async () => {
+      const packageJsonPath = join(projectRoot, "package.json");
+      const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
+      const version = packageJson.version;
 
-      // Check CLI version import
-      const tripcTs = await Deno.readTextFile(
-        join(projectRoot, "bin/tripc.ts"),
+      const jsrJsonPath = join(projectRoot, "jsr.json");
+      const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
+      expect(jsrJson.version).to.equal(version);
+
+      const generatedVersionPath = join(
+        projectRoot,
+        "lib",
+        "shared",
+        "version.generated.ts",
       );
-      expect(tripcTs).to.include(
-        `import { VERSION } from "../lib/shared/version.ts"`,
+      const generatedVersion = await readFile(generatedVersionPath, "utf-8");
+      expect(generatedVersion).to.include(
+        `export const VERSION = "${version}";`,
       );
     });
   });
 
-  await t.step("CLI tools functionality", async (t) => {
-    await t.step("tripc CLI can show version", async () => {
+  await t.test("CLI tools functionality", async (t) => {
+    await t.test("tripc CLI can show version", async () => {
       const tripcScript = join(projectRoot, "bin/tripc.ts");
 
-      const command = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          tripcScript,
-          "--version",
-        ],
-        cwd: projectRoot,
-      });
+      const { status, stdout } = spawnSync(
+        process.execPath,
+        ["--experimental-transform-types", tripcScript, "--version"],
+        {
+          cwd: projectRoot,
+          encoding: "utf-8",
+        },
+      );
 
-      const { code, stdout } = await command.output();
-      const output = new TextDecoder().decode(stdout);
-
-      expect(code).to.equal(0);
-      expect(output.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+      expect(status).to.equal(0);
+      expect(stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
     });
 
-    await t.step("tripc CLI can show help", async () => {
+    await t.test("tripc CLI can show help", async () => {
       const tripcScript = join(projectRoot, "bin/tripc.ts");
 
-      const command = new Deno.Command(Deno.execPath(), {
-        args: ["run", "--allow-read", "--allow-write", tripcScript, "--help"],
-        cwd: projectRoot,
-      });
+      const { status, stdout } = spawnSync(
+        process.execPath,
+        ["--experimental-transform-types", tripcScript, "--help"],
+        {
+          cwd: projectRoot,
+          encoding: "utf-8",
+        },
+      );
 
-      const { code, stdout } = await command.output();
-      const output = new TextDecoder().decode(stdout);
-
-      expect(code).to.equal(0);
-      expect(output).to.include("USAGE:");
+      expect(status).to.equal(0);
+      expect(stdout).to.include("USAGE:");
     });
 
-    await t.step("tripc can compile test file", async () => {
+    await t.test("tripc can compile test file", async () => {
       const tripcScript = join(projectRoot, "bin/tripc.ts");
       const testFile = join(projectRoot, "test/test.trip");
-      const outputFile = join(projectRoot, "test/test_output.tripc");
-
+      const outputDir = await createTempWorkspace("typed-ski-jsr-packaging-");
       try {
-        await Deno.remove(outputFile);
-      } catch {
-        // Ignore if doesn't exist
-      }
+        const outputFile = join(outputDir, "test_output.tripc");
+        const { status, stderr } = spawnSync(
+          process.execPath,
+          ["--experimental-transform-types", tripcScript, testFile, outputFile],
+          {
+            cwd: projectRoot,
+            encoding: "utf-8",
+          },
+        );
 
-      const command = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          tripcScript,
-          testFile,
-          outputFile,
-        ],
-        cwd: projectRoot,
-      });
-
-      const { code, stderr } = await command.output();
-      const errorOutput = new TextDecoder().decode(stderr);
-
-      expect(code).to.equal(0, `Compilation failed: ${errorOutput}`);
-      expect(existsSync(outputFile)).to.be.true;
-
-      try {
-        await Deno.remove(outputFile);
-      } catch {
-        // Ignore cleanup errors
+        expect(status).to.equal(0, `Compilation failed: ${stderr}`);
+        expect(existsSync(outputFile)).to.be.true;
+      } finally {
+        await cleanupTempWorkspace(outputDir);
       }
     });
   });
 
-  await t.step("WASM build files", async (t) => {
-    await t.step("WASM files exist", () => {
+  await t.test("WASM build files", async (t) => {
+    await t.test("WASM files exist", () => {
       // NOTE: wasm/release.wasm is no longer staged during tests to avoid ambiguity.
       // It is only staged during the final build/publish flow.
     });

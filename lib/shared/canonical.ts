@@ -43,7 +43,7 @@ export function sortByKey<T>(
   key: (value: T) => string,
 ): T[] {
   return Array.from(values).sort((left, right) =>
-    compareAscii(key(left), key(right))
+    compareAscii(key(left), key(right)),
   );
 }
 
@@ -51,6 +51,6 @@ export function sortedRecordEntries<T>(
   record: Readonly<Record<string, T>>,
 ): Array<[string, T]> {
   return Object.entries(record).sort(([left], [right]) =>
-    compareAscii(left, right)
+    compareAscii(left, right),
   );
 }

@@ -13,7 +13,6 @@ import type {
 } from "../compiler/objectFile.ts";
 import type { TripLangTerm, TripLangValueType } from "../meta/trip.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
-import type { TypedLambda } from "../types/typedLambda.ts";
 import type { UntypedLambda } from "../terms/lambda.ts";
 import { externalReferences } from "../meta/frontend/externalReferences.ts";
 import { extractDefinitionValue } from "../meta/frontend/symbolTable.ts";
@@ -107,9 +106,7 @@ function sortedModuleNames(ps: ProgramSpace): string[] {
   return sortedStrings(ps.modules.keys());
 }
 
-function sortedModuleDefs(
-  module: LoadedModule,
-): Array<[string, TripLangTerm]> {
+function sortedModuleDefs(module: LoadedModule): Array<[string, TripLangTerm]> {
   return sortByKey(module.defs.entries(), ([name]) => name);
 }
 
@@ -156,7 +153,7 @@ export function loadModule(
   // Convert imports to ImportSpec format
   const imports: ImportSpec[] = [...object.imports]
     .sort((left, right) =>
-      compareAsciiTuple([left.from, left.name], [right.from, right.name])
+      compareAsciiTuple([left.from, left.name], [right.from, right.name]),
     )
     .map((imp) => ({
       from: imp.from,
@@ -186,9 +183,10 @@ function initializeProgramSpace(modules: LoadedModule[]): ProgramSpace {
     typeEnv: new Map(),
   };
 
-  for (
-    const module of sortByKey(modules, (loadedModule) => loadedModule.name)
-  ) {
+  for (const module of sortByKey(
+    modules,
+    (loadedModule) => loadedModule.name,
+  )) {
     ps.modules.set(module.name, module);
     ps.termEnv.set(module.name, new Map());
     ps.typeEnv.set(module.name, new Map());
@@ -307,11 +305,14 @@ export function createProgramSpace(modules: LoadedModule[]): ProgramSpace {
  * Helper to get module info from a qualified name
  * Caches results to avoid repeated string operations
  */
-const moduleInfoCache = new Map<QualifiedName, {
-  moduleName: string;
-  localName: string;
-  module: LoadedModule;
-}>();
+const moduleInfoCache = new Map<
+  QualifiedName,
+  {
+    moduleName: string;
+    localName: string;
+    module: LoadedModule;
+  }
+>();
 
 function getModuleInfo(ps: ProgramSpace, qualified: QualifiedName) {
   const cached = moduleInfoCache.get(qualified);
@@ -496,8 +497,9 @@ function substituteDependencies(
 
   // Cache external references computation
   const [termRefs, typeRefs] = externalReferences(defValue);
-  const externalTermRefs = sortedStrings(termRefs.keys()).filter((ref) =>
-    !/^__trip_u8_\d+$/.test(ref) && !ref.startsWith("__trip_nat_literal__")
+  const externalTermRefs = sortedStrings(termRefs.keys()).filter(
+    (ref) =>
+      !/^__trip_u8_\d+$/.test(ref) && !ref.startsWith("__trip_nat_literal__"),
   );
   const externalTypeRefs = sortedStrings(typeRefs.keys());
 
@@ -511,8 +513,8 @@ function substituteDependencies(
   // Resolve term references iteratively until no new external references appear
   let currentExternalTermRefs = [...externalTermRefs];
   if (resolvedDefinition.kind === "poly" && resolvedDefinition.rec) {
-    currentExternalTermRefs = currentExternalTermRefs.filter((ref) =>
-      ref !== localName
+    currentExternalTermRefs = currentExternalTermRefs.filter(
+      (ref) => ref !== localName,
     );
   }
   let iteration = 0;
@@ -523,9 +525,9 @@ function substituteDependencies(
 
     if (verbose && currentExternalTermRefs.length > 0) {
       console.error(
-        `  Term resolution iteration ${iteration} for ${moduleName}.${localName}: resolving terms [${
-          currentExternalTermRefs.join(", ")
-        }]`,
+        `  Term resolution iteration ${iteration} for ${moduleName}.${localName}: resolving terms [${currentExternalTermRefs.join(
+          ", ",
+        )}]`,
       );
     }
 
@@ -536,7 +538,8 @@ function substituteDependencies(
     for (const termRef of currentExternalTermRefs) {
       // Self-ref check
       if (
-        termRef === localName && resolvedDefinition.kind === "poly" &&
+        termRef === localName &&
+        resolvedDefinition.kind === "poly" &&
         resolvedDefinition.rec
       ) {
         continue;
@@ -580,9 +583,9 @@ function substituteDependencies(
             }
           } else {
             // Ambiguous - keep pending
-            const candidatesText = ` (candidate modules: ${
-              candidateModules.join(", ")
-            })`;
+            const candidatesText = ` (candidate modules: ${candidateModules.join(
+              ", ",
+            )})`;
             const fixHint = ` To fix: add 'import ${
               candidateModules[0]
             } ${termRef}' or use qualified name '${
@@ -600,9 +603,10 @@ function substituteDependencies(
     if (replacements.size > 0) {
       // Build a map of name -> value for the batch substitution
       const valueSubstitutions = new Map<string, TripLangValueType>();
-      for (
-        const [name, term] of sortByKey(replacements.entries(), ([key]) => key)
-      ) {
+      for (const [name, term] of sortByKey(
+        replacements.entries(),
+        ([key]) => key,
+      )) {
         const value = extractDefinitionValue(term);
         if (value) {
           valueSubstitutions.set(name, value);
@@ -636,13 +640,7 @@ function substituteDependencies(
                   term: newDefValue as SystemFTerm,
                 };
                 break;
-              case "typed":
-                resolvedDefinition = {
-                  ...resolvedDefinition,
-                  term: newDefValue as TypedLambda,
-                };
-                break;
-              case "untyped":
+              case "lambda":
                 resolvedDefinition = {
                   ...resolvedDefinition,
                   term: newDefValue as UntypedLambda,
@@ -677,8 +675,8 @@ function substituteDependencies(
       // Check if we made progress
       const refsChanged =
         nextExternalTermRefs.size !== currentExternalTermRefs.length ||
-        sortedStrings(nextExternalTermRefs).some((ref) =>
-          !currentExternalTermRefs.includes(ref)
+        sortedStrings(nextExternalTermRefs).some(
+          (ref) => !currentExternalTermRefs.includes(ref),
         );
 
       if (!refsChanged) {
@@ -694,9 +692,9 @@ function substituteDependencies(
 
       if (verbose) {
         console.error(
-          `  Batch resolved ${replacements.size} terms in ${
-            (performance.now() - iterationStartTime).toFixed(2)
-          }ms`,
+          `  Batch resolved ${replacements.size} terms in ${(
+            performance.now() - iterationStartTime
+          ).toFixed(2)}ms`,
         );
       }
     } else {
@@ -724,7 +722,8 @@ function substituteDependencies(
   const MAX_TYPE_ITERATIONS = 10; // Prevent infinite loops
 
   while (
-    currentExternalTypeRefs.length > 0 && typeIteration < MAX_TYPE_ITERATIONS
+    currentExternalTypeRefs.length > 0 &&
+    typeIteration < MAX_TYPE_ITERATIONS
   ) {
     const nextExternalTypeRefs = new Set<string>();
     const typeEnv = ps.typeEnv.get(moduleName)!;
@@ -790,7 +789,7 @@ function substituteDependencies(
               );
               const newExternalTypeRefs = sortedStrings(newTypeRefs.keys());
               newExternalTypeRefs.forEach((ref) =>
-                nextExternalTypeRefs.add(ref)
+                nextExternalTypeRefs.add(ref),
               );
             }
           }
@@ -803,17 +802,19 @@ function substituteDependencies(
             exportIndex.get(typeRef) ?? [],
           );
 
-          const candidatesText = candidateModules.length > 0
-            ? ` (candidate modules: ${candidateModules.join(", ")})`
-            : " (no modules export this type)";
+          const candidatesText =
+            candidateModules.length > 0
+              ? ` (candidate modules: ${candidateModules.join(", ")})`
+              : " (no modules export this type)";
 
-          const fixHint = candidateModules.length > 0
-            ? ` To fix: add 'import ${
-              candidateModules[0]
-            } ${typeRef}' or use qualified name '${
-              candidateModules[0]
-            }.${typeRef}'.`
-            : "";
+          const fixHint =
+            candidateModules.length > 0
+              ? ` To fix: add 'import ${
+                  candidateModules[0]
+                } ${typeRef}' or use qualified name '${
+                  candidateModules[0]
+                }.${typeRef}'.`
+              : "";
 
           throw new Error(
             `Symbol '${typeRef}' is not defined in module '${moduleName}' and is not imported${candidatesText}${fixHint}`,
@@ -986,13 +987,11 @@ export function resolveCrossModuleDependencies(
   clearModuleInfoCache();
   const resolvedPS = shallowCopyProgramSpace(programSpace);
   const exportIndex = buildExportIndex(resolvedPS);
-  // Pre-lower poly/typed/native terms to avoid recursive inlining loops and resolve intrinsics.
+  // Pre-lower poly/native terms to avoid recursive inlining loops and resolve intrinsics.
   for (const moduleName of sortedModuleNames(resolvedPS)) {
     const module = resolvedPS.modules.get(moduleName)!;
     for (const [name, def] of sortedModuleDefs(module)) {
-      if (
-        def.kind === "poly" || def.kind === "typed" || def.kind === "native"
-      ) {
+      if (def.kind === "poly" || def.kind === "native") {
         const lowered = lower(def);
         module.defs.set(name, lowered);
         setGlobal(resolvedPS, qualifiedName(module.name, name), lowered);
@@ -1029,9 +1028,11 @@ export function resolveCrossModuleDependencies(
             (ref) => {
               // Allow self-reference for recursive definitions
               if (
-                ref === exportName && definition.kind === "poly" &&
+                ref === exportName &&
+                definition.kind === "poly" &&
                 definition.rec
-              ) return false;
+              )
+                return false;
 
               // Allow references to other recursive definitions (local)
               const localDef = module.defs.get(ref);
@@ -1079,21 +1080,20 @@ export function resolveCrossModuleDependencies(
             (externalTermRefs.length > 0 || externalTypeRefs.length > 0)
           ) {
             console.warn(
-              `Warning: Exported definition '${
-                qualifiedName(moduleName, exportName)
-              }' still has external references: terms=[${
-                externalTermRefs.join(", ")
-              }], types=[${externalTypeRefs.join(", ")}]`,
+              `Warning: Exported definition '${qualifiedName(
+                moduleName,
+                exportName,
+              )}' still has external references: terms=[${externalTermRefs.join(
+                ", ",
+              )}], types=[${externalTypeRefs.join(", ")}]`,
             );
 
             console.error(
-              `  Definition value: ${
-                JSON.stringify(
-                  definitionValue,
-                  BIGINT_JSON_REPLACER,
-                  2,
-                )
-              }`,
+              `  Definition value: ${JSON.stringify(
+                definitionValue,
+                BIGINT_JSON_REPLACER,
+                2,
+              )}`,
             );
           }
         }
@@ -1153,23 +1153,23 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
 
   let current = term;
   let level = 0;
-  const MAX_LEVELS = 3; // poly→typed→untyped→comb suggests ≤3 unless lowering can re-introduce higher levels
+  const MAX_LEVELS = 2; // poly→lambda→combinator
 
-  // Lower through the pipeline: poly -> typed -> untyped -> combinator
+  // Lower through the pipeline: poly -> lambda -> combinator
   while (current.kind !== "combinator") {
     if (verbose) {
       console.error(`  Level ${level}: ${current.kind} -> lowering...`);
     }
 
     // Debug: check for external references before lowering
-    if (verbose && current.kind === "untyped") {
+    if (verbose && current.kind === "lambda") {
       const [termRefs, _typeRefs] = externalReferences(current.term);
       const externalTermRefs = sortedStrings(termRefs.keys());
       if (externalTermRefs.length > 0) {
         console.error(
-          `  Warning: untyped term still has external references: ${
-            externalTermRefs.join(", ")
-          }`,
+          `  Warning: lambda term still has external references: ${externalTermRefs.join(
+            ", ",
+          )}`,
         );
       }
     }
@@ -1206,9 +1206,9 @@ export function linkModules(
   }
 
   // Step 1: Load modules into program space
-  const loadedModules = sortByKey(modules, (module) => module.name).map((
-    { name, object },
-  ) => loadModule(object, name));
+  const loadedModules = sortByKey(modules, (module) => module.name).map(
+    ({ name, object }) => loadModule(object, name),
+  );
   let programSpace = createProgramSpace(loadedModules);
 
   if (verbose) {

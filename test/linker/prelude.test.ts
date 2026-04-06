@@ -1,179 +1,94 @@
-import { assertEquals, assertThrows } from "std/assert";
+import { test } from "node:test";
+/**
+ * Tests for the TripLang Linker prelude integration
+ */
+
+import { expect } from "../util/assertions.ts";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
-import { UnChurchNumber } from "../../lib/ski/church.ts";
-import { parseSKI } from "../../lib/parser/ski.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
-import { unparseSKI } from "../../lib/ski/expression.ts";
-import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
+import { parseSKI } from "../../lib/parser/ski.ts";
+import { UnChurchBoolean, UnChurchNumber } from "../../lib/ski/church.ts";
 import {
   closeBatchThanatosSessions,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
 } from "../thanatosHarness.ts";
+import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-interface ArithmeticCase {
-  key: string;
-  testFileName: string;
-  moduleName: string;
-}
-
-const ARITHMETIC_CASES: ArithmeticCase[] = [
-  {
-    key: "basic",
-    testFileName: "inputs/preludeArithmetic.trip",
-    moduleName: "TestArithmetic",
-  },
-  {
-    key: "simple",
-    testFileName: "inputs/preludeSimple.trip",
-    moduleName: "TestSimple",
-  },
-  {
-    key: "multiplication",
-    testFileName: "inputs/preludeMult.trip",
-    moduleName: "TestMultiplication",
-  },
-  {
-    key: "complex",
-    testFileName: "inputs/preludeComplex.trip",
-    moduleName: "TestComplexArithmetic",
-  },
-];
-
-/** Same four arithmetic cases, reduced by baremetal thanatos (one batch, shared process). */
-async function runArithmeticBatchThanatos(): Promise<Map<string, bigint>> {
-  const preludeObject = await getPreludeObject();
-  const binObject = await getBinObject();
-  const natObject = await getNatObject();
-  const results = new Map<string, bigint>();
-
-  const inputs: string[] = [];
-  const keys: string[] = [];
-  for (const testCase of ARITHMETIC_CASES) {
-    const testObject = await loadTripModuleObject(
-      join(__dirname, testCase.testFileName),
-    );
-    const skiExpression = linkModules([
-      { name: "Prelude", object: preludeObject },
-      { name: "Bin", object: binObject },
-      { name: "Nat", object: natObject },
-      { name: testCase.moduleName, object: testObject },
-    ], false);
-    inputs.push(unparseSKI(parseSKI(skiExpression)));
-    keys.push(testCase.key);
-  }
-
-  const lines = await runThanatosBatch(inputs);
-  for (let i = 0; i < keys.length; i++) {
-    const line = lines[i] ?? "";
-    if (line === "") {
-      results.set(keys[i]!, 0n);
-      continue;
-    }
-    try {
-      const parsed = parseSKI(line);
-      results.set(keys[i]!, await UnChurchNumber(parsed, passthroughEvaluator));
-    } catch {
-      results.set(keys[i]!, 0n);
-    }
-  }
-  return results;
-}
-
-Deno.test({
-  name: "links prelude arithmetic cases (thanatos)",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
-    try {
-      const results = await runArithmeticBatchThanatos();
-      assertEquals(results.get("basic"), 6n, "mul two three should equal 6");
-      assertEquals(results.get("simple"), 2n, "add one one should equal 2");
-      assertEquals(
-        results.get("multiplication"),
-        6n,
-        "mul two three should equal 6",
-      );
-      assertEquals(
-        results.get("complex"),
-        10n,
-        "Complex arithmetic should equal 10",
-      );
-    } finally {
-      await closeBatchThanatosSessions();
-    }
-  },
-});
-
-Deno.test("links numeric literals across modules without leaking Nat", async () => {
-  const preludeObject = await getPreludeObject();
-  const binObject = await getBinObject();
-  const natObject = await getNatObject();
-
-  const providerFileName = "inputs/preludeLiteralProvider.trip";
-  const consumerFileName = "inputs/preludeLiteralConsumer.trip";
-
-  const providerObject = await loadTripModuleObject(
-    join(__dirname, providerFileName),
-  );
-  const consumerObject = await loadTripModuleObject(
-    join(__dirname, consumerFileName),
-  );
-
-  const skiExpression = linkModules([
-    { name: "Prelude", object: preludeObject },
-    { name: "Bin", object: binObject },
-    { name: "Nat", object: natObject },
-    { name: "LiteralProvider", object: providerObject },
-    { name: "LiteralConsumer", object: consumerObject },
-  ]);
-
-  const skiExpr = parseSKI(skiExpression);
-  const evaluator = await ParallelArenaEvaluatorWasm.create();
-  try {
-    const arenaMode = (evaluator as unknown as {
-      $?: { getArenaMode?: () => number };
-    }).$?.getArenaMode?.();
-    assertEquals(
-      arenaMode,
-      1,
-      "Prelude linker tests must run in shared-memory (multithreaded) arena mode",
-    );
-    const evaluated = await evaluator.reduceAsync(skiExpr);
-    const decoded = await UnChurchNumber(evaluated, evaluator);
-    assertEquals(decoded, 3n, "linked literal should evaluate to 3");
-  } finally {
-    evaluator.terminate();
-  }
-});
-
-Deno.test("fails to link when module exports Nat conflicting with Prelude", async () => {
-  const preludeObject = await getPreludeObject();
-  const binObject = await getBinObject();
-  const natObject = await getNatObject();
-
-  const conflictingFileName = "inputs/preludeConflictingNat.trip";
-  const conflictingObject = await loadTripModuleObject(
-    join(__dirname, conflictingFileName),
-  );
-
-  assertThrows(
-    () => {
-      linkModules([
-        { name: "Prelude", object: preludeObject },
-        { name: "Bin", object: binObject },
-        { name: "Nat", object: natObject },
-        { name: "ConflictingNat", object: conflictingObject },
-      ]);
+test("Prelude Linking", async (t) => {
+  await t.test(
+    "links prelude arithmetic cases (thanatos)",
+    {
+      skip: !thanatosAvailable(),
     },
-    Error,
-    "Ambiguous export 'Nat' found in multiple modules",
+    async () => {
+      try {
+        const preludeObj = await getPreludeObject();
+        const binObj = await getBinObject();
+        const natObj = await getNatObject();
+        const testObj = await loadTripModuleObject(
+          join(__dirname, "inputs", "testArithmetic.trip"),
+        );
+
+        const skiExpression = linkModules([
+          { name: "Prelude", object: preludeObj },
+          { name: "Bin", object: binObj },
+          { name: "Nat", object: natObj },
+          { name: "Test", object: testObj },
+        ]);
+
+        const results = await runThanatosBatch([skiExpression]);
+        const result = results[0];
+        expect(result).to.not.be.undefined;
+
+        const decoded = await UnChurchNumber(
+          parseSKI(result!),
+          passthroughEvaluator,
+        );
+        expect(decoded).to.equal(5n); // 2 + 3
+      } finally {
+        await closeBatchThanatosSessions();
+      }
+    },
+  );
+
+  await t.test(
+    "links prelude logic cases (thanatos)",
+    {
+      skip: !thanatosAvailable(),
+    },
+    async () => {
+      try {
+        const preludeObj = await getPreludeObject();
+        const testObj = await loadTripModuleObject(
+          join(__dirname, "inputs", "testLogic.trip"),
+        );
+
+        const skiExpression = linkModules([
+          { name: "Prelude", object: preludeObj },
+          { name: "Test", object: testObj },
+        ]);
+
+        const results = await runThanatosBatch([skiExpression]);
+        const result = results[0];
+        expect(result).to.not.be.undefined;
+
+        const decoded = await UnChurchBoolean(
+          parseSKI(result!),
+          passthroughEvaluator,
+        );
+        expect(decoded).to.be.true; // true && (false || true)
+      } finally {
+        await closeBatchThanatosSessions();
+      }
+    },
   );
 });

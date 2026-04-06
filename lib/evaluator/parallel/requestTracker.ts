@@ -114,10 +114,7 @@ export class RequestTracker {
    * Creates a new request and assigns it to a worker.
    * Returns the request ID.
    */
-  createRequest(
-    nWorkers: number,
-    expr?: SKIExpression,
-  ): number {
+  createRequest(nWorkers: number, expr?: SKIExpression): number {
     const reqId = this.nextRequestId++ >>> 0;
 
     // Track logical worker slot for UI (round-robin assignment).
@@ -202,12 +199,7 @@ export class RequestTracker {
       const expr = this.getExpression(reqId);
       this.decrementWorkerPending(workerIndex);
       this.cleanupRequest(reqId);
-      this.hooks.onRequestError?.(
-        reqId,
-        workerIndex,
-        expr,
-        error.message,
-      );
+      this.hooks.onRequestError?.(reqId, workerIndex, expr, error.message);
       resolver.reject(error);
     }
   }

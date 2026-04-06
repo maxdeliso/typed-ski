@@ -4,7 +4,6 @@ import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
-import Prelude Bin
 import Prelude List
 import Prelude nil
 import Prelude cons
@@ -17,15 +16,9 @@ import Lexer Token
 import Lexer T_KwRec
 import Lexer T_KwPoly
 import Lexer T_KwCombinator
-import Lexer T_KwUntyped
-import Lexer T_KwTyped
 import Lexer T_KwModule
 import Lexer T_Ident
 import Lexer T_Eq
-import Lexer T_Colon
-import Lexer T_Nat
-import Lexer T_Backslash
-import Lexer T_FatArrow
 import Lexer T_Comma
 import Lexer T_Dot
 import Lexer T_EOF
@@ -33,8 +26,6 @@ import Lexer eqListU8
 import Parser parseProgram
 import Parser DefKind
 import Parser K_Poly
-import Parser K_Typed
-import Parser K_Untyped
 import Parser K_Combinator
 import Parser Decl
 import Parser D_Module
@@ -51,29 +42,11 @@ poly eqDefKind = \a : DefKind => \b : DefKind =>
     | K_Poly =>
       match b [Bool] {
         | K_Poly => true
-        | K_Typed => false
-        | K_Untyped => false
-        | K_Combinator => false
-      }
-    | K_Typed =>
-      match b [Bool] {
-        | K_Poly => false
-        | K_Typed => true
-        | K_Untyped => false
-        | K_Combinator => false
-      }
-    | K_Untyped =>
-      match b [Bool] {
-        | K_Poly => false
-        | K_Typed => false
-        | K_Untyped => true
         | K_Combinator => false
       }
     | K_Combinator =>
       match b [Bool] {
         | K_Poly => false
-        | K_Typed => false
-        | K_Untyped => false
         | K_Combinator => true
       }
   }
@@ -86,26 +59,13 @@ poly main =
   let t4 = cons [Token] T_Eq t3 in
   let t5 = cons [Token] (T_Ident "c") t4 in
   let t6 = cons [Token] T_KwCombinator t5 in
-  let t7 = cons [Token] (T_Ident "x") t6 in
-  let t8 = cons [Token] T_FatArrow t7 in
-  let t9 = cons [Token] (T_Ident "x") t8 in
-  let t10 = cons [Token] T_Backslash t9 in
-  let t11 = cons [Token] T_Eq t10 in
-  let t12 = cons [Token] (T_Ident "u") t11 in
-  let t13 = cons [Token] T_KwUntyped t12 in
-  let t14 = cons [Token] (T_Nat "1") t13 in
-  let t15 = cons [Token] T_Eq t14 in
-  let t16 = cons [Token] (T_Ident "Nat") t15 in
-  let t17 = cons [Token] T_Colon t16 in
-  let t18 = cons [Token] (T_Ident "t") t17 in
-  let t19 = cons [Token] T_KwTyped t18 in
-  let t20 = cons [Token] (T_Ident "id") t19 in
-  let t21 = cons [Token] T_Eq t20 in
-  let t22 = cons [Token] (T_Ident "p") t21 in
-  let t23 = cons [Token] T_KwRec t22 in
-  let t24 = cons [Token] T_KwPoly t23 in
-  let t25 = cons [Token] (T_Ident "M") t24 in
-  let input = cons [Token] T_KwModule t25 in
+  let t7 = cons [Token] (T_Ident "p") t6 in
+  let t8 = cons [Token] T_Eq t7 in
+  let t9 = cons [Token] (T_Ident "p") t8 in
+  let t10 = cons [Token] T_KwRec t9 in
+  let t11 = cons [Token] T_KwPoly t10 in
+  let t12 = cons [Token] (T_Ident "M") t11 in
+  let input = cons [Token] T_KwModule t12 in
   match (parseProgram input) [Bool] {
     | Err e => false
     | Ok decls =>
@@ -139,65 +99,21 @@ poly main =
                                             | D_Type x => false
                                             | D_Data x ctors => false
                                             | D_Def kind2 isRec2 name2 body2 =>
-                                              if [Bool] (eqDefKind kind2 K_Typed)
+                                              if [Bool] (eqDefKind kind2 K_Combinator)
                                                 (\u : U8 =>
                                                   if [Bool] isRec2
                                                     (\u : U8 => false)
                                                     (\u : U8 =>
-                                                      if [Bool] (eqListU8 name2 "t")
+                                                      if [Bool] (eqListU8 name2 "c")
                                                         (\u : U8 =>
-                                                          matchList [Decl] [Bool] rest2 false
-                                                            (\d3 : Decl => \rest3 : List Decl =>
-                                                              match d3 [Bool] {
-                                                                | D_Module name => false
-                                                                | D_Import m s => false
-                                                                | D_Export x => false
-                                                                | D_Type x => false
-                                                                | D_Data x ctors => false
-                                                                | D_Def kind3 isRec3 name3 body3 =>
-                                                                  if [Bool] (eqDefKind kind3 K_Untyped)
-                                                                    (\u : U8 =>
-                                                                      if [Bool] isRec3
-                                                                        (\u : U8 => false)
-                                                                        (\u : U8 =>
-                                                                          if [Bool] (eqListU8 name3 "u")
-                                                                            (\u : U8 =>
-                                                                              matchList [Decl] [Bool] rest3 false
-                                                                                (\d4 : Decl => \rest4 : List Decl =>
-                                                                                  match d4 [Bool] {
-                                                                                    | D_Module name => false
-                                                                                    | D_Import m s => false
-                                                                                    | D_Export x => false
-                                                                                    | D_Type x => false
-                                                                                    | D_Data x ctors => false
-                                                                                    | D_Def kind4 isRec4 name4 body4 =>
-                                                                                      if [Bool] (eqDefKind kind4 K_Combinator)
-                                                                                        (\u : U8 =>
-                                                                                          if [Bool] isRec4
-                                                                                            (\u : U8 => false)
-                                                                                            (\u : U8 =>
-                                                                                              if [Bool] (eqListU8 name4 "c")
-                                                                                                (\u : U8 =>
-                                                                                                  matchList [Decl] [Bool] rest4 true
-                                                                                                    (\d5 : Decl => \rest5 : List Decl => false))
-                                                                                                (\u : U8 => false))
-                                                                                        )
-                                                                                        (\u : U8 => false)
-                                                                                  })
-                                                                            )
-                                                                            (\u : U8 => false))
-                                                                    )
-                                                                    (\u : U8 => false)
-                                                              })
-                                                        )
-                                                        (\u : U8 => false))
-                                                )
+                                                          matchList [Decl] [Bool] rest2 true
+                                                            (\d3 : Decl => \rest3 : List Decl => false))
+                                                        (\u : U8 => false)))
                                                 (\u : U8 => false)
                                           })
                                     )
                                     (\u : U8 => false))
-                                (\u : U8 => false)
-                            )
+                                (\u : U8 => false))
                             (\u : U8 => false)
                       })
                 )

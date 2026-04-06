@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
+#!/usr/bin/env -S node --experimental-transform-types
 
 /**
  * TripLang Compiler & Linker CLI (tripc)
@@ -23,7 +23,9 @@
  *   tripc --help
  */
 
-import { resolve } from "std/path";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SingleFileCompilerError } from "../lib/compiler/index.ts";
 import {
   deserializeTripCObject,
@@ -42,11 +44,10 @@ interface CLIOptions {
   version: boolean;
   verbose: boolean;
   mode: Mode;
+  stdout: boolean;
 }
 
-function parseArgs(
-  args: string[],
-): {
+function parseArgs(args: string[]): {
   options: CLIOptions;
   inputPath?: string;
   outputPath?: string;
@@ -57,6 +58,7 @@ function parseArgs(
     version: false,
     verbose: false,
     mode: "compile", // Default to compile mode
+    stdout: false,
   };
 
   let inputPath: string | undefined;
@@ -89,11 +91,15 @@ function parseArgs(
       case "-l":
         options.mode = "link";
         break;
+      case "--stdout":
+      case "-s":
+        options.stdout = true;
+        break;
       default:
         if (arg.startsWith("-")) {
           console.error(`Unknown option: ${arg}`);
           console.error("Use --help for usage information.");
-          Deno.exit(1);
+          process.exit(1);
         }
 
         if (options.mode === "link") {
@@ -107,7 +113,7 @@ function parseArgs(
             console.error(
               "Too many arguments. Use --help for usage information.",
             );
-            Deno.exit(1);
+            process.exit(1);
           }
         }
         break;
@@ -142,6 +148,7 @@ OPTIONS:
     -V, --verbose    Enable verbose output
     -c, --compile    Compile mode (default)
     -l, --link       Link mode
+    -s, --stdout     Print compiled output to stdout
 
 EXAMPLES:
     tripc mymodule.trip                           # Compile to mymodule.tripc
@@ -170,7 +177,7 @@ async function validateInputFiles(inputFiles: string[]): Promise<string[]> {
   for (const file of inputFiles) {
     // Check if file exists
     try {
-      await Deno.stat(file);
+      await stat(file);
     } catch {
       throw new Error(`Input file does not exist: ${file}`);
     }
@@ -188,9 +195,7 @@ async function validateInputFiles(inputFiles: string[]): Promise<string[]> {
 
 async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
   if (verbose) {
-    console.log(
-      `Linking ${inputFiles.length} files: ${inputFiles.join(", ")}`,
-    );
+    console.log(`Linking ${inputFiles.length} files: ${inputFiles.join(", ")}`);
   }
 
   // Load all .tripc files
@@ -206,7 +211,7 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
   } catch (error) {
     if (error instanceof SingleFileCompilerError) {
       console.error(`Error compiling prelude module: ${error.message}`);
-      Deno.exit(1);
+      process.exit(1);
     }
     throw error;
   }
@@ -216,7 +221,7 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
       console.log(`Loading ${file}...`);
     }
 
-    const content = await Deno.readTextFile(file);
+    const content = await readFile(file, "utf8");
     const object = deserializeTripCObject(content);
 
     // Use the module name from the file's content
@@ -237,6 +242,7 @@ async function compileFile(
   inputPath: string,
   outputPath?: string,
   verbose = false,
+  stdout = false,
 ): Promise<void> {
   try {
     if (verbose) {
@@ -250,14 +256,19 @@ async function compileFile(
     const objectFile = await loadTripModuleObject(inputPath);
     const serialized = serializeTripCObject(objectFile);
 
-    const finalOutputPath = outputPath ||
-      inputPath.replace(/\.trip$/, ".tripc");
+    if (stdout) {
+      process.stdout.write(serialized + "\n");
+      return;
+    }
+
+    const finalOutputPath =
+      outputPath || inputPath.replace(/\.trip$/, ".tripc");
 
     if (verbose) {
       console.log(`Writing object file to ${finalOutputPath}...`);
     }
 
-    await Deno.writeTextFile(finalOutputPath, serialized);
+    await writeFile(finalOutputPath, serialized, "utf8");
 
     if (verbose) {
       console.log(`   Module: ${objectFile.module}`);
@@ -268,25 +279,25 @@ async function compileFile(
       );
       console.log(`   Output: ${finalOutputPath}`);
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof SingleFileCompilerError) {
       console.error(`Compilation error: ${error.message}`);
-      Deno.exit(1);
-    } else if (error instanceof Deno.errors.NotFound) {
+      process.exit(1);
+    } else if (error.code === "ENOENT") {
       console.error(`File not found: ${inputPath}`);
-      Deno.exit(1);
-    } else if (error instanceof Deno.errors.PermissionDenied) {
+      process.exit(1);
+    } else if (error.code === "EACCES") {
       console.error(`Permission denied: ${error.message}`);
-      Deno.exit(1);
+      process.exit(1);
     } else {
       console.error(`Compilation error: ${String(error)}`);
-      Deno.exit(1);
+      process.exit(1);
     }
   }
 }
 
 async function main(): Promise<void> {
-  const args = Deno.args;
+  const args = process.argv.slice(2);
   const { options, inputPath, outputPath, inputFiles } = parseArgs(args);
 
   if (options.help) {
@@ -304,7 +315,7 @@ async function main(): Promise<void> {
       if (!inputFiles || inputFiles.length === 0) {
         console.error("Error: No input files specified for linking.");
         console.error("Use --help for usage information.");
-        Deno.exit(1);
+        process.exit(1);
       }
 
       const validatedFiles = await validateInputFiles(inputFiles);
@@ -314,41 +325,46 @@ async function main(): Promise<void> {
       if (!inputPath) {
         console.error("Error: No input file specified.");
         console.error("Use --help for usage information.");
-        Deno.exit(1);
+        process.exit(1);
       }
 
       const resolvedInputPath = resolve(inputPath);
 
       try {
-        const stat = await Deno.stat(resolvedInputPath);
-        if (!stat.isFile) {
+        const stats = await stat(resolvedInputPath);
+        if (!stats.isFile()) {
           throw new Error("Input path is not a file");
         }
-      } catch (error) {
-        if (error instanceof Deno.errors.NotFound) {
+      } catch (error: any) {
+        if (error.code === "ENOENT") {
           console.error(`Input file not found: ${inputPath}`);
         } else {
           console.error(`Cannot read input file '${inputPath}': ${error}`);
         }
-        Deno.exit(1);
+        process.exit(1);
       }
 
       if (!inputPath.endsWith(".trip")) {
         console.error(`Input file must have .trip extension: ${inputPath}`);
-        Deno.exit(1);
+        process.exit(1);
       }
 
       const resolvedOutputPath = outputPath ? resolve(outputPath) : undefined;
-      await compileFile(resolvedInputPath, resolvedOutputPath, options.verbose);
+      await compileFile(
+        resolvedInputPath,
+        resolvedOutputPath,
+        options.verbose,
+        options.stdout,
+      );
     }
   } catch (error) {
     console.error(
       `Error: ${error instanceof Error ? error.message : String(error)}`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
-if (import.meta.main) {
+if ((import.meta as any).main) {
   await main();
 }

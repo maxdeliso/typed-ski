@@ -1,7 +1,8 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env -S node --experimental-transform-types
 
 import { Node, Project, SyntaxKind } from "ts-morph";
-import { join } from "std/path";
+import { join } from "node:path";
+import * as fs from "node:fs";
 
 const project = new Project({
   useInMemoryFileSystem: true,
@@ -16,9 +17,9 @@ function normalizeFilePath(path: string): string {
 
 function findFiles(dir: string, depth = 0) {
   try {
-    for (const entry of Deno.readDirSync(dir)) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = join(dir, entry.name);
-      if (entry.isFile) {
+      if (entry.isFile()) {
         if (
           entry.name.endsWith(".ts") ||
           entry.name.endsWith(".tsx") ||
@@ -26,12 +27,12 @@ function findFiles(dir: string, depth = 0) {
         ) {
           files.push(normalizeFilePath(fullPath));
         }
-      } else if (entry.isDirectory) {
+      } else if (entry.isDirectory()) {
         findFiles(fullPath, depth + 1);
       }
     }
-  } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) {
+  } catch (e: any) {
+    if (e.code !== "ENOENT") {
       console.error(e);
     }
   }
@@ -43,7 +44,7 @@ console.log(`Analyzing ${files.length} files...`);
 
 for (const file of files) {
   try {
-    const content = Deno.readTextFileSync(file);
+    const content = fs.readFileSync(file, "utf8");
     project.createSourceFile(file, content);
   } catch (e) {
     console.error(`Failed to read ${file}: ${e}`);
@@ -56,8 +57,8 @@ const PROD_ROOTS = [
   "server/serveWorkbench.ts",
   "server/webglForest.ts",
 ];
-const TEST_ROOTS = files.filter((f) =>
-  f.startsWith("test/") && f.endsWith(".test.ts")
+const TEST_ROOTS = files.filter(
+  (f) => f.startsWith("test/") && f.endsWith(".test.ts"),
 );
 
 function isInternal(node: Node): boolean {
@@ -104,7 +105,8 @@ function traceReachability(rootFiles: string[]): Set<Node> {
 
     sourceFile.forEachDescendant((node) => {
       if (
-        Node.isStatement(node) && !Node.isExportDeclaration(node) &&
+        Node.isStatement(node) &&
+        !Node.isExportDeclaration(node) &&
         !Node.isExportSpecifier(node)
       ) {
         node.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id) => {
@@ -129,7 +131,8 @@ function traceReachability(rootFiles: string[]): Set<Node> {
         if (decl && !reachable.has(decl)) {
           const sourceFile = decl.getSourceFile();
           if (
-            sourceFile && !sourceFile.getFilePath().includes("node_modules")
+            sourceFile &&
+            !sourceFile.getFilePath().includes("node_modules")
           ) {
             reachable.add(decl);
             queue.push(decl);
@@ -177,12 +180,12 @@ for (const sourceFile of project.getSourceFiles()) {
       });
 
       if (!isProd && !isTest) {
-        const isServer = files.filter((f) => f.startsWith("server/")).some(
-          (f) => {
-            const content = Deno.readTextFileSync(f);
+        const isServer = files
+          .filter((f) => f.startsWith("server/"))
+          .some((f) => {
+            const content = fs.readFileSync(f, "utf8");
             return content.includes(name);
-          },
-        );
+          });
         if (isServer) stats.serverOnly.push(location);
         else stats.totallyDead.push(location);
       } else if (isProd && tagged) {
@@ -256,6 +259,6 @@ console.log(`SUMMARY:
   - Prod Internal Exports: ${unique(stats.prodInternalExport).length}
   - Well-behaved Internals: ${unique(stats.wellBehavedInternal).length}
   - Issues Found:          ${
-  totallyDead.length + leaked.length + missing.length
-}
+    totallyDead.length + leaked.length + missing.length
+  }
 `);

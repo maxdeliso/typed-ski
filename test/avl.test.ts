@@ -1,4 +1,9 @@
-import { assertEquals } from "std/assert";
+import {
+  strictEqual as assertEquals,
+  deepStrictEqual,
+} from "node:assert/strict";
+import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFileString } from "../lib/compiler/index.ts";
@@ -32,7 +37,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const INPUT_DIR = join(__dirname, "inputs", "avl");
 
 function loadInput(fileName: string): Promise<string> {
-  return Deno.readTextFile(join(INPUT_DIR, fileName));
+  return readFile(join(INPUT_DIR, fileName), "utf-8");
 }
 
 function buildAvlBinBoolProbeSource(mainExpression: string): string {
@@ -136,18 +141,14 @@ const AVL_CASES: AvlCase[] = [
     name: "AvlBinBoolTreeTest sizeBefore",
     moduleName: "AvlBinBoolProbe",
     loadSource: () =>
-      Promise.resolve(
-        buildAvlBinBoolProbeSource("size [Bin] [Bool] t3"),
-      ),
+      Promise.resolve(buildAvlBinBoolProbeSource("size [Bin] [Bool] t3")),
     expected: 3n,
   },
   {
     name: "AvlBinBoolTreeTest sizeAfter",
     moduleName: "AvlBinBoolProbe",
     loadSource: () =>
-      Promise.resolve(
-        buildAvlBinBoolProbeSource("size [Bin] [Bool] t4"),
-      ),
+      Promise.resolve(buildAvlBinBoolProbeSource("size [Bin] [Bool] t4")),
     expected: 4n,
   },
   {
@@ -170,19 +171,19 @@ let natObjectPromise: Promise<TripCObject> | undefined;
 let avlObjectPromise: Promise<TripCObject> | undefined;
 
 function getPreludeObjectCached(): Promise<TripCObject> {
-  return preludeObjectPromise ??= getPreludeObject();
+  return (preludeObjectPromise ??= getPreludeObject());
 }
 
 function getBinObjectCached(): Promise<TripCObject> {
-  return binObjectPromise ??= getBinObject();
+  return (binObjectPromise ??= getBinObject());
 }
 
 function getNatObjectCached(): Promise<TripCObject> {
-  return natObjectPromise ??= getNatObject();
+  return (natObjectPromise ??= getNatObject());
 }
 
 function getAvlObjectCached(): Promise<TripCObject> {
-  return avlObjectPromise ??= getAvlObject();
+  return (avlObjectPromise ??= getAvlObject());
 }
 
 async function buildTestExpression(
@@ -209,29 +210,24 @@ async function buildTestExpression(
   return parseSKI(skiExpression);
 }
 
-async function evaluateTestModuleThanatos(
-  testCase: AvlCase,
-): Promise<bigint> {
+async function evaluateTestModuleThanatos(testCase: AvlCase): Promise<bigint> {
   const source = await testCase.loadSource();
   const expr = await buildTestExpression(source, testCase.moduleName);
   return await withBatchThanatosSession(async (session) => {
     const resultDag = await session.reduceDag(toDagWire(expr));
-    return await UnChurchNumber(
-      fromDagWire(resultDag),
-      passthroughEvaluator,
-    );
+    return await UnChurchNumber(fromDagWire(resultDag), passthroughEvaluator);
   });
 }
 
-Deno.test("thanatosHarness runThanatosBatch empty input", async () => {
-  assertEquals(await runThanatosBatch([]), []);
+test("thanatosHarness runThanatosBatch empty input", async () => {
+  deepStrictEqual(await runThanatosBatch([]), []);
 });
 
 for (const testCase of AVL_CASES) {
-  Deno.test({
-    name: `AVL module ${testCase.name} (thanatos)`,
-    ignore: !thanatosAvailable(),
-    fn: async () => {
+  test(
+    `AVL module ${testCase.name} (thanatos)`,
+    { skip: !thanatosAvailable() },
+    async () => {
       try {
         const actual = await evaluateTestModuleThanatos(testCase);
         assertEquals(actual, testCase.expected);
@@ -239,5 +235,5 @@ for (const testCase of AVL_CASES) {
         await closeBatchThanatosSessions();
       }
     },
-  });
+  );
 }

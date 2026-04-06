@@ -1,0 +1,14 @@
+module TestSNat
+
+import SNatLike SNat
+import SNatLike SZ
+import SNatLike SS
+import SNatLike toSNat
+import SNatLike fromSNat
+import Nat Nat
+import Nat zero
+import Nat succ
+
+export main
+
+poly main = fromSNat (SS (SS SZ))

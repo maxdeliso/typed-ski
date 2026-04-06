@@ -1,18 +1,19 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import { assert } from "../../util/assertions.ts";
 import {
   type DataDefinition,
   extractDefinitionValue,
   indexSymbols,
+  type LambdaDefinition,
   type PolyDefinition,
   type TripLangProgram,
-  type TypedDefinition,
   type TypeDefinition,
 } from "../../../lib/index.ts";
 import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 
-Deno.test("Symbol Table", async (t) => {
-  await t.step("should index a program with unique terms and types", () => {
+test("Symbol Table", async (t) => {
+  await t.test("should index a program with unique terms and types", () => {
     const program: TripLangProgram = {
       kind: "program",
       terms: [
@@ -39,7 +40,7 @@ Deno.test("Symbol Table", async (t) => {
     assert.deepStrictEqual(type, program.terms[1]);
   });
 
-  await t.step("should throw on duplicate term definitions", () => {
+  await t.test("should throw on duplicate term definitions", () => {
     const program: TripLangProgram = {
       kind: "program",
       terms: [
@@ -63,7 +64,7 @@ Deno.test("Symbol Table", async (t) => {
     );
   });
 
-  await t.step("should throw on duplicate type definitions", () => {
+  await t.test("should throw on duplicate type definitions", () => {
     const program: TripLangProgram = {
       kind: "program",
       terms: [
@@ -87,10 +88,10 @@ Deno.test("Symbol Table", async (t) => {
     );
   });
 
-  await t.step(
+  await t.test(
     "should throw on duplicate definitions across different term kinds",
     async (t) => {
-      await t.step("poly vs typed", () => {
+      await t.test("poly vs lambda", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
@@ -100,7 +101,7 @@ Deno.test("Symbol Table", async (t) => {
               term: { kind: "systemF-var", name: "x" },
             },
             {
-              kind: "typed",
+              kind: "lambda",
               name: "id",
               term: { kind: "lambda-var", name: "x" },
             },
@@ -114,31 +115,7 @@ Deno.test("Symbol Table", async (t) => {
         );
       });
 
-      await t.step("poly vs untyped", () => {
-        const program: TripLangProgram = {
-          kind: "program",
-          terms: [
-            {
-              kind: "poly",
-              name: "id",
-              term: { kind: "systemF-var", name: "x" },
-            },
-            {
-              kind: "untyped",
-              name: "id",
-              term: { kind: "lambda-var", name: "x" },
-            },
-          ],
-        };
-
-        assert.throws(
-          () => indexSymbols(program),
-          CompilationError,
-          "Duplicate definition: id",
-        );
-      });
-
-      await t.step("poly vs combinator", () => {
+      await t.test("poly vs combinator", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
@@ -162,60 +139,12 @@ Deno.test("Symbol Table", async (t) => {
         );
       });
 
-      await t.step("typed vs untyped", () => {
+      await t.test("lambda vs combinator", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
             {
-              kind: "typed",
-              name: "id",
-              term: { kind: "lambda-var", name: "x" },
-            },
-            {
-              kind: "untyped",
-              name: "id",
-              term: { kind: "lambda-var", name: "x" },
-            },
-          ],
-        };
-
-        assert.throws(
-          () => indexSymbols(program),
-          CompilationError,
-          "Duplicate definition: id",
-        );
-      });
-
-      await t.step("typed vs combinator", () => {
-        const program: TripLangProgram = {
-          kind: "program",
-          terms: [
-            {
-              kind: "typed",
-              name: "id",
-              term: { kind: "lambda-var", name: "x" },
-            },
-            {
-              kind: "combinator",
-              name: "id",
-              term: { kind: "terminal", sym: SKITerminalSymbol.I },
-            },
-          ],
-        };
-
-        assert.throws(
-          () => indexSymbols(program),
-          CompilationError,
-          "Duplicate definition: id",
-        );
-      });
-
-      await t.step("untyped vs combinator", () => {
-        const program: TripLangProgram = {
-          kind: "program",
-          terms: [
-            {
-              kind: "untyped",
+              kind: "lambda",
               name: "id",
               term: { kind: "lambda-var", name: "x" },
             },
@@ -236,7 +165,7 @@ Deno.test("Symbol Table", async (t) => {
     },
   );
 
-  await t.step("should throw on duplicate data definitions", () => {
+  await t.test("should throw on duplicate data definitions", () => {
     const program: TripLangProgram = {
       kind: "program",
       terms: [
@@ -268,10 +197,10 @@ Deno.test("Symbol Table", async (t) => {
     );
   });
 
-  await t.step(
+  await t.test(
     "should throw on duplicate constructor definitions",
     async (t) => {
-      await t.step("duplicate constructor within same data type", () => {
+      await t.test("duplicate constructor within same data type", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
@@ -295,7 +224,7 @@ Deno.test("Symbol Table", async (t) => {
         );
       });
 
-      await t.step("duplicate constructor across different data types", () => {
+      await t.test("duplicate constructor across different data types", () => {
         const program: TripLangProgram = {
           kind: "program",
           terms: [
@@ -336,7 +265,7 @@ Deno.test("Symbol Table", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "should index imported constructors with canonical declaration order",
     () => {
       const program: TripLangProgram = {
@@ -413,34 +342,36 @@ Deno.test("Symbol Table", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "should index imported metadata from plain-object options and clone complex field shapes",
     () => {
       const complexData: DataDefinition = {
         kind: "data",
         name: "Complex",
         typeParams: ["A"],
-        constructors: [{
-          name: "MkComplex",
-          fields: [
-            { kind: "type-var", typeName: "A" },
-            {
-              kind: "type-app",
-              fn: { kind: "type-var", typeName: "List" },
-              arg: { kind: "type-var", typeName: "A" },
-            },
-            {
-              kind: "forall",
-              typeVar: "T",
-              body: { kind: "type-var", typeName: "T" },
-            },
-            {
-              kind: "non-terminal",
-              lft: { kind: "type-var", typeName: "A" },
-              rgt: { kind: "type-var", typeName: "A" },
-            },
-          ],
-        }],
+        constructors: [
+          {
+            name: "MkComplex",
+            fields: [
+              { kind: "type-var", typeName: "A" },
+              {
+                kind: "type-app",
+                fn: { kind: "type-var", typeName: "List" },
+                arg: { kind: "type-var", typeName: "A" },
+              },
+              {
+                kind: "forall",
+                typeVar: "T",
+                body: { kind: "type-var", typeName: "T" },
+              },
+              {
+                kind: "non-terminal",
+                lft: { kind: "type-var", typeName: "A" },
+                rgt: { kind: "type-var", typeName: "A" },
+              },
+            ],
+          },
+        ],
       };
 
       const program: TripLangProgram = {
@@ -464,8 +395,7 @@ Deno.test("Symbol Table", async (t) => {
       assert.strictEqual(ctorInfo!.index, 0);
       assert.deepStrictEqual(
         ctorInfo!.constructor.fields,
-        complexData
-          .constructors[0]!.fields,
+        complexData.constructors[0]!.fields,
       );
       assert.notStrictEqual(
         ctorInfo!.constructor.fields,
@@ -478,7 +408,7 @@ Deno.test("Symbol Table", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "should preserve local constructors and allow duplicate imported constructors",
     () => {
       const importedMaybe: DataDefinition = {
@@ -510,9 +440,9 @@ Deno.test("Symbol Table", async (t) => {
       };
 
       const symbols = indexSymbols(program, {
-        importedDataDefinitionsByModule: new Map([["Prelude", [
-          importedMaybe,
-        ]]]),
+        importedDataDefinitionsByModule: new Map([
+          ["Prelude", [importedMaybe]],
+        ]),
       });
 
       const someInfo = symbols.constructors.get("Some");
@@ -522,7 +452,7 @@ Deno.test("Symbol Table", async (t) => {
     },
   );
 
-  await t.step("should resolve poly term definition", () => {
+  await t.test("should resolve poly term definition", () => {
     const term: PolyDefinition = {
       kind: "poly",
       name: "id",
@@ -533,11 +463,10 @@ Deno.test("Symbol Table", async (t) => {
     assert.deepStrictEqual(resolved, { kind: "systemF-var", name: "x" });
   });
 
-  await t.step("should resolve typed term definition", () => {
-    const term: TypedDefinition = {
-      kind: "typed",
+  await t.test("should resolve lambda term definition", () => {
+    const term: LambdaDefinition = {
+      kind: "lambda",
       name: "id",
-      type: { kind: "type-var", typeName: "X" },
       term: { kind: "lambda-var", name: "x" },
     };
 
@@ -545,7 +474,7 @@ Deno.test("Symbol Table", async (t) => {
     assert.deepStrictEqual(resolved, { kind: "lambda-var", name: "x" });
   });
 
-  await t.step("should resolve type definition", () => {
+  await t.test("should resolve type definition", () => {
     const term: TypeDefinition = {
       kind: "type",
       name: "Nat",

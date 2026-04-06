@@ -1,4 +1,5 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import { assert } from "../../util/assertions.ts";
 import {
   externalReferences,
   extractDefinitionValue,
@@ -15,8 +16,8 @@ function getFirstDefinitionValue(input: string) {
   );
 }
 
-Deno.test("externalReferences", async (t) => {
-  await t.step(
+test("externalReferences", async (t) => {
+  await t.test(
     "identifies external references in a simple lambda abstraction",
     () => {
       const input = "poly id = \\x:A=>x";
@@ -25,13 +26,11 @@ Deno.test("externalReferences", async (t) => {
       );
 
       assert.deepStrictEqual(Array.from(termRefs.keys()), []);
-      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
-        "A",
-      ]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), ["A"]);
     },
   );
 
-  await t.step("identifies external references in a System F term", () => {
+  await t.test("identifies external references in a System F term", () => {
     const input = "poly id = #X=>\\x:X=>x";
     const [termRefs, typeRefs] = externalReferences(
       getFirstDefinitionValue(input),
@@ -41,7 +40,7 @@ Deno.test("externalReferences", async (t) => {
     assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step(
+  await t.test(
     "identifies external references in a term with free variables",
     () => {
       const input = "poly free = \\x:A=>y";
@@ -49,16 +48,12 @@ Deno.test("externalReferences", async (t) => {
         getFirstDefinitionValue(input),
       );
 
-      assert.deepStrictEqual(Array.from(termRefs.keys()), [
-        "y",
-      ]);
-      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
-        "A",
-      ]);
+      assert.deepStrictEqual(Array.from(termRefs.keys()), ["y"]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), ["A"]);
     },
   );
 
-  await t.step(
+  await t.test(
     "identifies external references in a System F term with free type variables",
     () => {
       const input = "poly freeType = #X=>\\x:Y=>x";
@@ -67,26 +62,21 @@ Deno.test("externalReferences", async (t) => {
       );
 
       assert.deepStrictEqual(Array.from(termRefs.keys()), []);
-      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
-        "Y",
-      ]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), ["Y"]);
     },
   );
 
-  await t.step("identifies external references in a complex term", () => {
+  await t.test("identifies external references in a complex term", () => {
     const input = "poly complex = \\x:A=>\\y:B=>(x (y z))";
     const [termRefs, typeRefs] = externalReferences(
       getFirstDefinitionValue(input),
     );
 
     assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), ["z"]);
-    assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), [
-      "A",
-      "B",
-    ]);
+    assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), ["A", "B"]);
   });
 
-  await t.step(
+  await t.test(
     "identifies external references in a System F term with type application",
     () => {
       const input = "poly typeApp = #X=>\\x:X=>(x[Y])";
@@ -95,26 +85,21 @@ Deno.test("externalReferences", async (t) => {
       );
 
       assert.deepStrictEqual(Array.from(termRefs.keys()), []);
-      assert.deepStrictEqual(Array.from(typeRefs.keys()), [
-        "Y",
-      ]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()), ["Y"]);
     },
   );
 
-  await t.step("identifies external references in a non-terminal term", () => {
+  await t.test("identifies external references in a non-terminal term", () => {
     const input = "poly app = (x y)";
     const [termRefs, typeRefs] = externalReferences(
       getFirstDefinitionValue(input),
     );
 
-    assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), [
-      "x",
-      "y",
-    ]);
+    assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), ["x", "y"]);
     assert.deepStrictEqual(Array.from(typeRefs.keys()), []);
   });
 
-  await t.step(
+  await t.test(
     "identifies external references in a term with nested abstractions",
     () => {
       const input = "poly nested = \\x:A=>\\y:B=>(\\z:C=>(x y z))";
@@ -131,7 +116,7 @@ Deno.test("externalReferences", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "identifies external references in a System F match expression",
     () => {
       const input =
@@ -150,7 +135,7 @@ Deno.test("externalReferences", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "identifies external references in a System F match with nested match",
     () => {
       const input =
@@ -160,14 +145,8 @@ Deno.test("externalReferences", async (t) => {
       );
 
       // x, w are external; a, b, c are bound by match arms
-      assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), [
-        "w",
-        "x",
-      ]);
-      assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), [
-        "T",
-        "U",
-      ]);
+      assert.deepStrictEqual(Array.from(termRefs.keys()).sort(), ["w", "x"]);
+      assert.deepStrictEqual(Array.from(typeRefs.keys()).sort(), ["T", "U"]);
     },
   );
 });

@@ -94,10 +94,7 @@ export const toSKIKey = (expr: SKIExpression): SKIKey => {
  * @internal
  * Compare two SKI expressions for structural equivalence.
  */
-export const equivalent = (
-  lft: SKIExpression,
-  rgt: SKIExpression,
-): boolean => {
+export const equivalent = (lft: SKIExpression, rgt: SKIExpression): boolean => {
   const firstStack = [lft];
   const secondStack = [rgt];
 
@@ -108,19 +105,19 @@ export const equivalent = (
     if (firstItem === undefined || secondItem === undefined) {
       throw new Error("stack underflow");
     } else if (
-      firstItem.kind === "terminal" && secondItem.kind === "terminal"
+      firstItem.kind === "terminal" &&
+      secondItem.kind === "terminal"
     ) {
       if (firstItem!.sym !== secondItem!.sym) {
         return false;
       }
-    } else if (
-      firstItem.kind === "u8" && secondItem.kind === "u8"
-    ) {
+    } else if (firstItem.kind === "u8" && secondItem.kind === "u8") {
       if (firstItem.value !== secondItem.value) {
         return false;
       }
     } else if (
-      firstItem.kind === "non-terminal" && secondItem.kind === "non-terminal"
+      firstItem.kind === "non-terminal" &&
+      secondItem.kind === "non-terminal"
     ) {
       firstStack.push(firstItem.rgt);
       firstStack.push(firstItem.lft);

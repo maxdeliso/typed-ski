@@ -1,7 +1,4 @@
-export function required<T>(
-  value: T | null | undefined,
-  message: string,
-): T {
+export function required<T>(value: T | null | undefined, message: string): T {
   if (value === undefined || value === null) {
     throw new Error(message);
   }

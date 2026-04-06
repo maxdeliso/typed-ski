@@ -54,8 +54,6 @@ export T_KwMatch
 export T_KwModule
 export T_KwImport
 export T_KwExport
-export T_KwTyped
-export T_KwUntyped
 export T_KwCombinator
 export T_KwType
 export T_KwData
@@ -75,8 +73,6 @@ export isKeywordWord
 export keywordTokenFromWordData
 export keywordTokenFromWordType
 export keywordTokenFromWordCombinator
-export keywordTokenFromWordUntyped
-export keywordTokenFromWordTyped
 export keywordTokenFromWordExport
 export keywordTokenFromWordImport
 export keywordTokenFromWordModule
@@ -127,8 +123,6 @@ poly T_KwMatch : Token = T_Tagged #u8(20)
 poly T_KwModule : Token = T_Tagged #u8(21)
 poly T_KwImport : Token = T_Tagged #u8(22)
 poly T_KwExport : Token = T_Tagged #u8(23)
-poly T_KwTyped : Token = T_Tagged #u8(24)
-poly T_KwUntyped : Token = T_Tagged #u8(25)
 poly T_KwCombinator : Token = T_Tagged #u8(26)
 poly T_KwType : Token = T_Tagged #u8(27)
 poly T_KwData : Token = T_Tagged #u8(28)
@@ -156,20 +150,10 @@ poly tokenTaggedTextCombinator = \tag : U8 =>
     (\u : U8 => "combinator")
     (\u : U8 => tokenTaggedTextType tag)
 
-poly tokenTaggedTextUntyped = \tag : U8 =>
-  if [List U8] (eqU8 tag #u8(25))
-    (\u : U8 => "untyped")
-    (\u : U8 => tokenTaggedTextCombinator tag)
-
-poly tokenTaggedTextTyped = \tag : U8 =>
-  if [List U8] (eqU8 tag #u8(24))
-    (\u : U8 => "typed")
-    (\u : U8 => tokenTaggedTextUntyped tag)
-
 poly tokenTaggedTextExport = \tag : U8 =>
   if [List U8] (eqU8 tag #u8(23))
     (\u : U8 => "export")
-    (\u : U8 => tokenTaggedTextTyped tag)
+    (\u : U8 => tokenTaggedTextCombinator tag)
 
 poly tokenTaggedTextImport = \tag : U8 =>
   if [List U8] (eqU8 tag #u8(22))
@@ -273,12 +257,10 @@ poly keywordWords =
             (cons [List U8] "module"
               (cons [List U8] "import"
                 (cons [List U8] "export"
-                  (cons [List U8] "typed"
-                    (cons [List U8] "untyped"
-                      (cons [List U8] "combinator"
-                        (cons [List U8] "type"
-                          (cons [List U8] "data"
-                            (nil [List U8])))))))))))))
+                  (cons [List U8] "combinator"
+                    (cons [List U8] "type"
+                      (cons [List U8] "data"
+                        (nil [List U8])))))))))))
 
 poly rec anyEqWord = \word : List U8 => \words : List (List U8) =>
   matchList [List U8] [Bool] words false
@@ -327,16 +309,8 @@ poly keywordTokenFromWordE = \word : List U8 =>
     (\u : U8 => T_Ident word)
 
 poly keywordTokenFromWordT = \word : List U8 =>
-  if [Token] (eqListU8 word "typed")
-    (\u : U8 => T_KwTyped)
-    (\u : U8 =>
-      if [Token] (eqListU8 word "type")
-        (\u : U8 => T_KwType)
-        (\u : U8 => T_Ident word))
-
-poly keywordTokenFromWordU = \word : List U8 =>
-  if [Token] (eqListU8 word "untyped")
-    (\u : U8 => T_KwUntyped)
+  if [Token] (eqListU8 word "type")
+    (\u : U8 => T_KwType)
     (\u : U8 => T_Ident word)
 
 poly keywordTokenFromWordC = \word : List U8 =>
@@ -359,20 +333,10 @@ poly keywordTokenFromWordCombinator = \word : List U8 =>
     (\u : U8 => T_KwCombinator)
     (\u : U8 => keywordTokenFromWordType word)
 
-poly keywordTokenFromWordUntyped = \word : List U8 =>
-  if [Token] (eqListU8 word "untyped")
-    (\u : U8 => T_KwUntyped)
-    (\u : U8 => keywordTokenFromWordCombinator word)
-
-poly keywordTokenFromWordTyped = \word : List U8 =>
-  if [Token] (eqListU8 word "typed")
-    (\u : U8 => T_KwTyped)
-    (\u : U8 => keywordTokenFromWordUntyped word)
-
 poly keywordTokenFromWordExport = \word : List U8 =>
   if [Token] (eqListU8 word "export")
     (\u : U8 => T_KwExport)
-    (\u : U8 => keywordTokenFromWordTyped word)
+    (\u : U8 => keywordTokenFromWordCombinator word)
 
 poly keywordTokenFromWordImport = \word : List U8 =>
   if [Token] (eqListU8 word "import")
@@ -429,15 +393,12 @@ poly keywordTokenFromWord = \word : List U8 =>
                               if [Token] (eqU8 h 't')
                                 (\u : U8 => keywordTokenFromWordT word)
                                 (\u : U8 =>
-                                  if [Token] (eqU8 h 'u')
-                                    (\u : U8 => keywordTokenFromWordU word)
+                                  if [Token] (eqU8 h 'c')
+                                    (\u : U8 => keywordTokenFromWordC word)
                                     (\u : U8 =>
-                                      if [Token] (eqU8 h 'c')
-                                        (\u : U8 => keywordTokenFromWordC word)
-                                        (\u : U8 =>
-                                          if [Token] (eqU8 h 'd')
-                                            (\u : U8 => keywordTokenFromWordData word)
-                                            (\u : U8 => T_Ident word)))))))))))
+                                      if [Token] (eqU8 h 'd')
+                                        (\u : U8 => keywordTokenFromWordData word)
+                                        (\u : U8 => T_Ident word))))))))))
 
 poly simpleTokenFromU8Hash = \c : U8 =>
   if [Maybe Token] (eqU8 c '#')

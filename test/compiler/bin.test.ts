@@ -2,7 +2,8 @@
  * Unit test for Bin operations (Prelude)
  */
 
-import { assert } from "chai";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -37,22 +38,25 @@ async function compileTestProgram() {
   return await loadTripModuleObject(testSourcePath);
 }
 
-Deno.test("Bin operations - add/mul/sub round trip", async () => {
+test("Bin operations - add/mul/sub round trip", async () => {
   const testObj = await compileTestProgram();
   const preludeObj = await getPreludeObjectCached();
   const binObj = await getBinObjectCached();
 
-  const skiExpression = linkModules([
-    { name: "Prelude", object: preludeObj },
-    { name: "Bin", object: binObj },
-    { name: "Test", object: testObj },
-  ], false);
+  const skiExpression = linkModules(
+    [
+      { name: "Prelude", object: preludeObj },
+      { name: "Bin", object: binObj },
+      { name: "Test", object: testObj },
+    ],
+    false,
+  );
 
   const evaluator = await ParallelArenaEvaluatorWasm.create();
   try {
     const nf = await evaluator.reduceAsync(parseSKI(skiExpression));
     const value = await UnChurchNumber(nf, evaluator);
-    assert.equal(value, 9n);
+    assert.strictEqual(value, 9n);
   } finally {
     evaluator.terminate();
   }

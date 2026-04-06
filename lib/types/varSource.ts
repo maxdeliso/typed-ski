@@ -11,7 +11,7 @@ import { mkTypeVariable } from "./types.ts";
 /**
  * Returns a generator that yields sequential numbers.
  */
-const monoInts = (): () => number => {
+const monoInts = (): (() => number) => {
   let num = 0;
   return () => {
     const ret = num;
@@ -24,7 +24,7 @@ const monoInts = (): () => number => {
  * Returns a generator that produces fresh type variables.
  * For instance, the first call might return the variable "a", the next "b", etc.
  */
-export const varSource = (): () => ReturnType<typeof mkTypeVariable> => {
+export const varSource = (): (() => ReturnType<typeof mkTypeVariable>) => {
   const ordinals = monoInts();
   const baseCharCode = 97; // 'a'
   const alphabetSize = 26;

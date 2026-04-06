@@ -8,386 +8,294 @@
  * - Cross-format compatibility
  */
 
-import { expect } from "chai";
-import { dirname, fromFileUrl, join } from "std/path";
-import { existsSync } from "std/fs";
+import {
+  strictEqual as equal,
+  deepStrictEqual as deepEqual,
+  ok,
+  match,
+} from "node:assert/strict";
+import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile, rm, mkdtemp } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { requiredAt } from "../util/required.ts";
 
-const __dirname = dirname(fromFileUrl(import.meta.url));
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "../..");
+const fixturesDir = join(__dirname, "fixtures");
 
 // Import library functions for testing
 import {
   compileToObjectFile,
-  type compileToObjectFileString as _compileToObjectFileString,
   deserializeTripCObject,
-  type TripCObject as _TripCObject,
 } from "../../lib/compiler/index.ts";
 
 // Test utilities
-async function runCommand(command: string[], cwd = projectRoot): Promise<{
+async function runCommand(
+  command: string[],
+  cwd = projectRoot,
+): Promise<{
   success: boolean;
   stdout: string;
   stderr: string;
-  code: number;
+  code: number | null;
 }> {
-  const process = new Deno.Command(
-    requiredAt(command, 0, "expected command executable"),
-    {
-      args: command.slice(1),
-      cwd,
-      stdout: "piped",
-      stderr: "piped",
-    },
-  );
+  const executable = requiredAt(command, 0, "expected command executable");
+  const args = command.slice(1);
 
-  try {
-    const { code, stdout, stderr } = await process.output();
-    return {
-      success: code === 0,
-      stdout: new TextDecoder().decode(stdout),
-      stderr: new TextDecoder().decode(stderr),
-      code,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      stdout: "",
-      stderr: (error as Error).message,
-      code: -1,
-    };
-  }
+  const result = spawnSync(executable, args, {
+    cwd,
+    encoding: "utf-8",
+  });
+
+  return {
+    success: result.status === 0,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    code: result.status,
+  };
 }
 
-async function createTestFile(content: string): Promise<string> {
-  const tempDir = await Deno.makeTempDir();
-  const filePath = join(tempDir, "test.trip");
-  await Deno.writeTextFile(filePath, content);
-  return filePath;
+function fixturePath(fixtureName: string): string {
+  return join(fixturesDir, fixtureName);
 }
 
-async function cleanupTestFile(filePath: string): Promise<void> {
-  try {
-    const tempDir = dirname(filePath);
-    await Deno.remove(tempDir, { recursive: true });
-  } catch {
-    // Ignore if doesn't exist
-  }
-}
-
-Deno.test("CLI Integration Tests", async (t) => {
+test("CLI Integration Tests", async (t) => {
   const testCases = [
     {
       name: "simple module",
-      content: `module Simple
-export id
-poly id = #a => \\x:a => x`,
+      fixture: "simple.trip",
     },
     {
       name: "module with imports",
-      content: `module WithImports
-import Math add
-import Utils format
-export double
-typed double = \\x:Int => add x x`,
+      fixture: "with_imports.trip",
     },
     {
       name: "module with types",
-      content: `module WithTypes
-export Nat
-export zero
-type Nat = Int
-poly zero = #a => \\s:a->a => \\z:a => z`,
+      fixture: "with_types.trip",
     },
     {
       name: "module with combinators",
-      content: `module WithCombinators
-export K
-export S
-combinator K = K
-combinator S = S`,
+      fixture: "with_combinators.trip",
     },
   ];
 
-  await t.step("Library vs CLI consistency", async (t) => {
+  await t.test("Library vs CLI consistency", async (t) => {
     for (const testCase of testCases) {
-      await t.step(
+      await t.test(
         `library and CLI produce same output for ${testCase.name}`,
         async () => {
-          const testFile = await createTestFile(testCase.content);
+          const testFile = fixturePath(testCase.fixture);
 
-          try {
-            // Compile using library
-            const sourceContent = await Deno.readTextFile(testFile);
-            const libraryResult = compileToObjectFile(sourceContent);
+          // Compile using library
+          const sourceContent = await readFile(testFile, "utf-8");
+          const libraryResult = compileToObjectFile(sourceContent);
 
-            // Compile using CLI
-            const cliResult = await runCommand([
-              "deno",
-              "run",
-              "--allow-read",
-              "--allow-write",
-              "bin/tripc.ts",
-              testFile,
-            ]);
+          // Compile using CLI
+          const cliResult = await runCommand([
+            process.execPath,
+            "--experimental-transform-types",
+            "bin/tripc.ts",
+            testFile,
+            "--stdout",
+          ]);
 
-            expect(cliResult.success).to.be.true;
+          ok(cliResult.success, `CLI failed: ${cliResult.stderr}`);
 
-            // Read CLI output
-            const tripcFile = testFile.replace(/\.trip$/, ".tripc");
-            expect(existsSync(tripcFile)).to.be.true;
+          // Read CLI output
+          const cliResultParsed = deserializeTripCObject(cliResult.stdout);
 
-            const cliOutput = await Deno.readTextFile(tripcFile);
-            const cliResultParsed = deserializeTripCObject(cliOutput);
-
-            // Compare results
-            expect(cliResultParsed.module).to.equal(libraryResult.module);
-            expect(cliResultParsed.imports).to.deep.equal(
-              libraryResult.imports,
-            );
-            expect(cliResultParsed.exports).to.deep.equal(
-              libraryResult.exports,
-            );
-            expect(cliResultParsed.dataDefinitions).to.deep.equal(
-              libraryResult.dataDefinitions,
-            );
-            expect(Object.keys(cliResultParsed.definitions)).to.deep.equal(
-              Object.keys(libraryResult.definitions),
-            );
-          } finally {
-            await cleanupTestFile(testFile);
-          }
+          // Compare results
+          equal(cliResultParsed.module, libraryResult.module);
+          deepEqual(cliResultParsed.imports, libraryResult.imports);
+          deepEqual(cliResultParsed.exports, libraryResult.exports);
+          deepEqual(
+            cliResultParsed.dataDefinitions,
+            libraryResult.dataDefinitions,
+          );
+          deepEqual(
+            Object.keys(cliResultParsed.definitions),
+            Object.keys(libraryResult.definitions),
+          );
         },
       );
     }
   });
 
-  await t.step("Object file format validation", async (t) => {
-    await t.step("CLI produces valid object files", async () => {
-      const testFile = await createTestFile(
-        requiredAt(testCases, 0, "expected first test case").content,
+  await t.test("Object file format validation", async (t) => {
+    await t.test("CLI produces valid object files", async () => {
+      const testFile = fixturePath(
+        requiredAt(testCases, 0, "expected first test case").fixture,
       );
 
-      try {
-        const result = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "bin/tripc.ts",
-          testFile,
-        ]);
+      const result = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+        "--stdout",
+      ]);
 
-        expect(result.success).to.be.true;
+      ok(result.success);
 
-        const tripcFile = testFile.replace(/\.trip$/, ".tripc");
-        const objectContent = await Deno.readTextFile(tripcFile);
+      const objectContent = result.stdout;
 
-        // Should be valid JSON
-        const parsed = JSON.parse(objectContent);
+      // Should be valid JSON
+      const parsed = JSON.parse(objectContent);
 
-        // Should have required fields
-        expect(parsed).to.have.property("module");
-        expect(parsed).to.have.property("imports");
-        expect(parsed).to.have.property("exports");
-        expect(parsed).to.have.property("definitions");
-        expect(parsed).to.have.property("dataDefinitions");
+      // Should have required fields
+      ok("module" in parsed);
+      ok("imports" in parsed);
+      ok("exports" in parsed);
+      ok("definitions" in parsed);
+      ok("dataDefinitions" in parsed);
 
-        // Should be deserializable
-        const deserialized = deserializeTripCObject(objectContent);
-        expect(deserialized).to.deep.equal(parsed);
-      } finally {
-        await cleanupTestFile(testFile);
-      }
+      // Should be deserializable
+      const deserialized = deserializeTripCObject(objectContent);
+      deepEqual(deserialized, parsed);
     });
 
-    await t.step("object file contains elaborated definitions", async () => {
-      const testFile = await createTestFile(`module Test
-export id
-poly id = #a => \\x:a => x`);
+    await t.test("object file contains elaborated definitions", async () => {
+      const testFile = fixturePath("test.trip");
 
-      try {
-        const result = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "bin/tripc.ts",
-          testFile,
-        ]);
+      const result = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+        "--stdout",
+      ]);
 
-        expect(result.success).to.be.true;
+      ok(result.success);
 
-        const tripcFile = testFile.replace(/\.trip$/, ".tripc");
-        const objectContent = await Deno.readTextFile(tripcFile);
-        const parsed = JSON.parse(objectContent);
+      const objectContent = result.stdout;
+      const parsed = JSON.parse(objectContent);
 
-        // Check that definition is elaborated (not just parsed)
-        const idDef = parsed.definitions.id;
-        expect(idDef).to.have.property("kind", "poly");
-        expect(idDef).to.have.property("name", "id");
-        expect(idDef).to.have.property("term");
+      // Check that definition is elaborated (not just parsed)
+      const idDef = parsed.definitions.id;
+      ok("kind" in idDef && idDef.kind === "poly");
+      ok("name" in idDef && idDef.name === "id");
+      ok("term" in idDef);
 
-        // Term should be elaborated System F
-        expect(idDef.term).to.have.property("kind", "systemF-type-abs");
-      } finally {
-        await cleanupTestFile(testFile);
-      }
+      // Term should be elaborated System F
+      ok("kind" in idDef.term && idDef.term.kind === "systemF-type-abs");
     });
   });
 
-  await t.step("Error handling consistency", async (t) => {
-    await t.step("library and CLI handle errors consistently", async () => {
-      const invalidContent = `module Test
-poly id = invalid syntax here`;
+  await t.test("Error handling consistency", async (t) => {
+    await t.test("library and CLI handle errors consistently", async () => {
+      const testFile = fixturePath("invalid_expression.trip");
 
-      const testFile = await createTestFile(invalidContent);
+      const sourceContent = await readFile(testFile, "utf-8");
+      // Library should parse invalid syntax as non-terminal (current behavior)
+      const libraryResult = compileToObjectFile(sourceContent);
+      equal(libraryResult.module, "Test");
+      ok("id" in libraryResult.definitions);
 
-      try {
-        // Library should parse invalid syntax as non-terminal (current behavior)
-        const libraryResult = compileToObjectFile(invalidContent);
-        expect(libraryResult.module).to.equal("Test");
-        expect(libraryResult.definitions).to.have.property("id");
+      // CLI should also succeed (current behavior)
+      const cliResult = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+        "--stdout",
+      ]);
 
-        // CLI should also succeed (current behavior)
-        const cliResult = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "bin/tripc.ts",
-          testFile,
-        ]);
-
-        expect(cliResult.success).to.be.true;
-      } finally {
-        await cleanupTestFile(testFile);
-      }
+      ok(cliResult.success);
     });
 
-    await t.step("missing module definition", async () => {
-      const noModuleContent = `poly id = #a => \\x:a => x`;
+    await t.test("missing module definition", async () => {
+      const testFile = fixturePath("no_module.trip");
 
-      const testFile = await createTestFile(noModuleContent);
+      const result = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+      ]);
 
-      try {
-        const result = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "bin/tripc.ts",
-          testFile,
-        ]);
-
-        expect(result.success).to.be.false;
-        expect(result.stderr).to.include("No module definition found");
-      } finally {
-        await cleanupTestFile(testFile);
-      }
+      ok(!result.success);
+      match(result.stderr, /No module definition found/);
     });
 
-    await t.step("multiple module definitions", async () => {
-      const multipleModulesContent = `module First
-module Second
-poly id = #a => \\x:a => x`;
+    await t.test("multiple module definitions", async () => {
+      const testFile = fixturePath("multiple_modules.trip");
 
-      const testFile = await createTestFile(multipleModulesContent);
+      const result = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+      ]);
 
-      try {
-        const result = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "bin/tripc.ts",
-          testFile,
-        ]);
-
-        expect(result.success).to.be.false;
-        expect(result.stderr).to.include("Multiple module definitions found");
-      } finally {
-        await cleanupTestFile(testFile);
-      }
+      ok(!result.success);
+      match(result.stderr, /Multiple module definitions found/);
     });
   });
 
-  await t.step("Cross-format compatibility", async (t) => {
-    await t.step("different CLI formats produce identical output", async () => {
-      const testFile = await createTestFile(
-        requiredAt(testCases, 0, "expected first test case").content,
+  await t.test("Cross-format compatibility", async (t) => {
+    await t.test("different CLI formats produce identical output", async () => {
+      const testFile = fixturePath(
+        requiredAt(testCases, 0, "expected first test case").fixture,
       );
 
+      // Test TypeScript CLI with stdout
+      const tsResult = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+        "--stdout",
+      ]);
+      ok(tsResult.success);
+
+      // Test with implicit output (using temp path for this one since we want to compare file output)
+      const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-compat-"));
+      const output1Path = join(tempDir, "output1.tripc");
+
       try {
-        // Test TypeScript CLI
-        const tsResult = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
+        const fileResult = await runCommand([
+          process.execPath,
+          "--experimental-transform-types",
           "bin/tripc.ts",
           testFile,
-          "output1.tripc",
+          output1Path,
         ]);
-        expect(tsResult.success).to.be.true;
-
-        // Test Deno task
-        const taskResult = await runCommand([
-          "deno",
-          "task",
-          "tripc",
-          testFile,
-          "output2.tripc",
-        ]);
-        expect(taskResult.success).to.be.true;
+        ok(fileResult.success);
 
         // Compare outputs
-        const output1 = await Deno.readTextFile("output1.tripc");
-        const output2 = await Deno.readTextFile("output2.tripc");
-
-        expect(output1).to.equal(output2);
-
-        // Cleanup
-        await Deno.remove("output1.tripc");
-        await Deno.remove("output2.tripc");
+        const fileOutput = await readFile(output1Path, "utf-8");
+        equal(tsResult.stdout.trim(), fileOutput.trim());
       } finally {
-        await cleanupTestFile(testFile);
+        await rm(tempDir, { recursive: true, force: true });
       }
     });
   });
 
-  await t.step("Performance and resource usage", async (t) => {
-    await t.step("CLI handles large files efficiently", async () => {
-      // Create a larger test file
-      let largeContent = `module LargeModule\n`;
-      for (let i = 0; i < 100; i++) {
-        largeContent += `export func${i}\npoly func${i} = #a => \\x:a => x\n`;
-      }
+  await t.test("Performance and resource usage", async (t) => {
+    await t.test("CLI handles large files efficiently", async () => {
+      const testFile = fixturePath("large.trip");
 
-      const testFile = await createTestFile(largeContent);
+      const result = await runCommand([
+        process.execPath,
+        "--experimental-transform-types",
+        "bin/tripc.ts",
+        testFile,
+        "--stdout",
+      ]);
 
-      try {
-        const result = await runCommand([
-          "deno",
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "bin/tripc.ts",
-          testFile,
-        ]);
+      ok(result.success);
 
-        expect(result.success).to.be.true;
+      // Verify output
+      const objectContent = result.stdout;
+      const parsed = JSON.parse(objectContent);
 
-        // Verify output
-        const tripcFile = testFile.replace(/\.trip$/, ".tripc");
-        const objectContent = await Deno.readTextFile(tripcFile);
-        const parsed = JSON.parse(objectContent);
-
-        expect(parsed.exports).to.have.length(100);
-        expect(Object.keys(parsed.definitions)).to.have.length(100);
-      } finally {
-        await cleanupTestFile(testFile);
-      }
+      equal(parsed.exports.length, 100);
+      equal(Object.keys(parsed.definitions).length, 100);
     });
   });
 });

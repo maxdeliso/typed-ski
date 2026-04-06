@@ -1,0 +1,25 @@
+module RecursiveAdt
+
+import Nat Nat
+import Nat fromBin
+
+export Tree
+export Leaf
+export Node
+export makeLeaf
+export makeNode
+export getValue
+
+data Tree =
+  | Leaf Nat
+  | Node Tree Tree
+
+poly makeLeaf = \n : Nat => Leaf n
+
+poly makeNode = \left : Tree => \right : Tree => Node left right
+
+poly getValue = \t : Tree =>
+  match t [Nat] {
+    | Leaf n => n
+    | Node _ _ => fromBin 0
+  }

@@ -79,10 +79,10 @@ let workbenchTornDown = false;
 
 const webglViewer = forestCanvas
   ? initWebglForestViewer({
-    canvas: forestCanvas,
-    getEvaluator: () => evaluator,
-    statusEl: webglStatus,
-  })
+      canvas: forestCanvas,
+      getEvaluator: () => evaluator,
+      statusEl: webglStatus,
+    })
   : null;
 
 // When the WebGL panel becomes visible, ensure the canvas has non-zero size before rendering.
@@ -207,15 +207,16 @@ let uiPendingDirty = false;
 let lastUiFlushMs = 0;
 
 function nowMs() {
-  return (typeof performance !== "undefined" &&
-      typeof performance.now === "function")
+  return typeof performance !== "undefined" &&
+    typeof performance.now === "function"
     ? performance.now()
     : Date.now();
 }
 
-function markUiDirty(
-  { stats: statsDirty = false, pending: pendingDirty = false } = {},
-) {
+function markUiDirty({
+  stats: statsDirty = false,
+  pending: pendingDirty = false,
+} = {}) {
   if (statsDirty) uiStatsDirty = true;
   if (pendingDirty) uiPendingDirty = true;
   scheduleUiFlush();
@@ -273,7 +274,7 @@ function updateStats() {
       throughput.textContent = (stats.completed / elapsed).toFixed(2);
 
       // Calculate and display effective parallelism
-      const parallelism = (stats.totalTime / 1000) / elapsed;
+      const parallelism = stats.totalTime / 1000 / elapsed;
       throughput.title = `Effective Parallelism: ${parallelism.toFixed(2)}x`;
     }
   }
@@ -285,8 +286,7 @@ function logMemoryInfo(evaluator) {
   const memoryBytes = evaluator.memory.buffer.byteLength;
   const memoryPages = memoryBytes / 65536;
 
-  const memoryInfo =
-    `Current memory: ${memoryBytes} bytes (${memoryPages} pages)`;
+  const memoryInfo = `Current memory: ${memoryBytes} bytes (${memoryPages} pages)`;
   console.log(`[DEBUG] ${memoryInfo}`);
   addLog(`[MEMORY] ${memoryInfo}`, true);
 }
@@ -395,7 +395,8 @@ async function submitAndTrack(
     const isResubmitLimit = error instanceof ResubmissionLimitExceededError;
 
     // Check if this is a WASM RuntimeError (unreachable trap, OOM, etc.)
-    const isWasmTrap = error instanceof Error &&
+    const isWasmTrap =
+      error instanceof Error &&
       (error.name === "RuntimeError" ||
         error.message?.includes("unreachable") ||
         error.message?.includes("RuntimeError"));
@@ -469,11 +470,7 @@ async function loadWasm() {
     }
 
     evaluator = await ParallelArenaEvaluatorWasm.create(workerCount);
-    evaluator.onRequestQueued = (
-      _reqId,
-      _workerIndex,
-      _expr,
-    ) => {
+    evaluator.onRequestQueued = (_reqId, _workerIndex, _expr) => {
       markUiDirty({ pending: true });
     };
     evaluator.onRequestYield = (
@@ -488,12 +485,7 @@ async function loadWasm() {
       );
       markUiDirty({ pending: true });
     };
-    evaluator.onRequestError = (
-      reqId,
-      _workerIndex,
-      _expr,
-      errorMessage,
-    ) => {
+    evaluator.onRequestError = (reqId, _workerIndex, _expr, errorMessage) => {
       // Log errors immediately when they occur (before promise rejection)
       // Force logging even in continuous mode for critical errors
       addLog(`[ERROR] Request ${reqId}: ${errorMessage}`, true);
@@ -585,7 +577,7 @@ async function startContinuous() {
   const YIELD_BUDGET_MS = 8;
   const MAX_SPAWNS_PER_SLICE = 64;
   const yieldToRenderer = () =>
-    (typeof requestAnimationFrame === "function")
+    typeof requestAnimationFrame === "function"
       ? new Promise((r) => requestAnimationFrame(() => r()))
       : new Promise((r) => setTimeout(r, 0));
 
@@ -596,18 +588,21 @@ async function startContinuous() {
     const expr = randExpression(rs, size);
     const maxSteps = parseInt(maxStepsInput.value, 10) || 1000;
 
-    const p = submitAndTrack(expr, maxSteps).then(() => {
-      // noop
-    }).catch((error) => {
-      console.error(error);
-      // Log ResubmissionLimitExceededError to the UI log (forced even in continuous mode)
-      if (error instanceof ResubmissionLimitExceededError) {
-        addLog(`[ERROR] ${error.message}`, true);
-      }
-    }).finally(() => {
-      inFlight.delete(p);
-      markUiDirty({ pending: true });
-    });
+    const p = submitAndTrack(expr, maxSteps)
+      .then(() => {
+        // noop
+      })
+      .catch((error) => {
+        console.error(error);
+        // Log ResubmissionLimitExceededError to the UI log (forced even in continuous mode)
+        if (error instanceof ResubmissionLimitExceededError) {
+          addLog(`[ERROR] ${error.message}`, true);
+        }
+      })
+      .finally(() => {
+        inFlight.delete(p);
+        markUiDirty({ pending: true });
+      });
 
     inFlight.add(p);
   };
@@ -741,8 +736,8 @@ if (webglMaxNodesInput) {
   webglMaxNodesInput.value = String(DEFAULT_MAX_NODES);
   webglMaxNodesInput.addEventListener("change", () => {
     if (!webglViewer) return;
-    const maxNodes = parseInt(webglMaxNodesInput.value, 10) ||
-      DEFAULT_MAX_NODES;
+    const maxNodes =
+      parseInt(webglMaxNodesInput.value, 10) || DEFAULT_MAX_NODES;
     webglViewer.setConfig({ maxNodes });
     scheduleWebglRebuild();
   });

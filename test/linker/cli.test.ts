@@ -8,388 +8,170 @@
  * - Error handling
  */
 
-import { expect } from "chai";
+import { afterEach, beforeEach, describe, it } from "node:test";
+
+import { expect } from "../util/assertions.ts";
+import {
+  cleanupTempWorkspace,
+  copyFixtures,
+  createTempWorkspace,
+  runTripcSync,
+} from "../util/tripcHarness.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURE_FILES = [
+  "A.trip",
+  "cli_A.tripc",
+  "cli_B.tripc",
+  "cli_complex.tripc",
+  "cli_helper.trip",
+  "cli_helper.tripc",
+  "cli_temp.txt",
+] as const;
 
-/**
- * Helper function to compile a .trip file to .tripc format.
- * Uses cli_ prefix for output so parallel test runs do not collide with linker tests.
- */
-async function compileTripFile(
-  tripFileName: string,
-  outputTripc?: string,
-): Promise<void> {
-  const out = outputTripc ?? tripFileName.replace(".trip", ".tripc");
-  const compileCommand = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "--allow-read",
-      "--allow-write",
-      "../../bin/tripc.ts",
-      tripFileName,
-      out,
-    ],
-    cwd: __dirname,
+describe("TripLang Linker CLI", { concurrency: false }, () => {
+  let workspacePath: string | null = null;
+
+  beforeEach(async () => {
+    workspacePath = await createTempWorkspace("typed-ski-linker-cli-");
+    await copyFixtures(__dirname, workspacePath, FIXTURE_FILES);
   });
 
-  const { code } = await compileCommand.output();
-  if (code !== 0) {
-    throw new Error(`Failed to compile ${tripFileName}`);
+  afterEach(async () => {
+    await cleanupTempWorkspace(workspacePath);
+    workspacePath = null;
+  });
+
+  function runLinkerCli(args: string[]) {
+    if (workspacePath === null) {
+      throw new Error("Expected test workspace to be prepared");
+    }
+    return runTripcSync(["--link", ...args], {
+      cwd: workspacePath,
+    });
   }
-}
 
-Deno.test("TripLang Linker CLI", async (t) => {
-  // Setup: Compile required .trip files to cli_*.tripc (distinct names for parallel runs)
-  await t.step("setup: compile test files", async () => {
-    await compileTripFile("A.trip", "cli_A.tripc");
-    await compileTripFile("B.trip", "cli_B.tripc");
-    await compileTripFile("complex.trip", "cli_complex.tripc");
-  });
-  await t.step("shows help message", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "--help",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("shows help message", () => {
+    const { stdout, status: code } = runLinkerCli(["--help"]);
 
     expect(code).to.equal(0);
-    expect(output).to.include("TripLang Compiler & Linker");
-    expect(output).to.include("USAGE:");
-    expect(output).to.include("OPTIONS:");
-    expect(output).to.include("EXAMPLES:");
+    expect(stdout).to.include("TripLang Compiler & Linker");
+    expect(stdout).to.include("USAGE:");
+    expect(stdout).to.include("OPTIONS:");
+    expect(stdout).to.include("EXAMPLES:");
   });
 
-  await t.step("shows version information", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "--version",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("shows version information", () => {
+    const { stdout, status: code } = runLinkerCli(["--version"]);
 
     expect(code).to.equal(0);
-    expect(output.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+    expect(stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
   });
 
-  await t.step("accepts short help flag", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "-h",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("accepts short help flag", () => {
+    const { stdout, status: code } = runLinkerCli(["-h"]);
 
     expect(code).to.equal(0);
-    expect(output).to.include("TripLang Compiler & Linker");
+    expect(stdout).to.include("TripLang Compiler & Linker");
   });
 
-  await t.step("accepts short version flag", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "-v",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("accepts short version flag", () => {
+    const { stdout, status: code } = runLinkerCli(["-v"]);
 
     expect(code).to.equal(0);
-    expect(output.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+    expect(stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
   });
 
-  await t.step("accepts verbose flag", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "--verbose",
-        "cli_A.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr, code } = await command.output();
-    const stdoutText = new TextDecoder().decode(stdout);
-    const stderrText = new TextDecoder().decode(stderr);
+  it("accepts verbose flag", () => {
+    const {
+      stdout,
+      stderr,
+      status: code,
+    } = runLinkerCli(["--verbose", "cli_A.tripc"]);
 
     expect(code).to.equal(0);
-    expect(stdoutText).to.be.a("string");
-    expect(stderrText).to.include("Linking");
+    expect(stdout).to.be.a("string");
+    expect(stderr).to.include("Linking");
   });
 
-  await t.step("accepts short verbose flag", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "-V",
-        "cli_A.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr, code } = await command.output();
-    const stdoutText = new TextDecoder().decode(stdout);
-    const stderrText = new TextDecoder().decode(stderr);
+  it("accepts short verbose flag", () => {
+    const {
+      stdout,
+      stderr,
+      status: code,
+    } = runLinkerCli(["-V", "cli_A.tripc"]);
 
     expect(code).to.equal(0);
-    expect(stdoutText).to.be.a("string");
-    expect(stderrText).to.include("Linking");
+    expect(stdout).to.be.a("string");
+    expect(stderr).to.include("Linking");
   });
 
-  await t.step("links single .tripc file", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "cli_A.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("links single .tripc file", () => {
+    const { stdout, status: code } = runLinkerCli(["cli_A.tripc"]);
 
     expect(code).to.equal(0);
-    expect(output).to.be.a("string");
-    expect(output.length).to.be.greaterThan(0);
+    expect(stdout).to.be.a("string");
+    expect(stdout.length).to.be.greaterThan(0);
   });
 
-  await t.step("links multiple .tripc files", async () => {
-    // Create a helper module without main to avoid ambiguous exports
-    const helperSource = `module Helper
-
-export helper
-
-poly helper = #X => \\x: X => x`;
-
-    const helperFile = `${__dirname}/cli_helper.trip`;
-    await Deno.writeTextFile(helperFile, helperSource);
-
-    // Compile the helper module
-    const compileCommand = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "cli_helper.trip",
-        "cli_helper.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { code: compileCode } = await compileCommand.output();
-    if (compileCode !== 0) {
-      throw new Error("Failed to compile helper module");
-    }
-
-    // Now link cli_A.tripc with cli_helper.tripc (only A has main)
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "cli_A.tripc",
-        "cli_helper.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
-
-    // Clean up
-    try {
-      await Deno.remove(helperFile);
-      await Deno.remove(`${__dirname}/cli_helper.tripc`);
-    } catch {
-      // Ignore cleanup errors
-    }
+  it("links multiple .tripc files", () => {
+    const { stdout, status: code } = runLinkerCli([
+      "cli_A.tripc",
+      "cli_helper.tripc",
+    ]);
 
     expect(code).to.equal(0);
-    expect(output).to.be.a("string");
-    expect(output.length).to.be.greaterThan(0);
+    expect(stdout).to.be.a("string");
+    expect(stdout.length).to.be.greaterThan(0);
   });
 
-  await t.step("links complex expression", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "cli_complex.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("links complex expression", () => {
+    const { stdout, status: code } = runLinkerCli(["cli_complex.tripc"]);
 
     expect(code).to.equal(0);
-    expect(output).to.include("K");
-    expect(() => parseSKI(output.trim())).to.not.throw();
+    expect(stdout).to.include("K");
+    expect(() => parseSKI(stdout.trim())).to.not.throw();
   });
 
-  await t.step("rejects non-.tripc files", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "A.trip",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout: _stdout, stderr, code } = await command.output();
-    const stderrText = new TextDecoder().decode(stderr);
+  it("rejects non-.tripc files", () => {
+    const { stderr, status: code } = runLinkerCli(["A.trip"]);
 
     expect(code).to.equal(1);
-    expect(stderrText).to.include("Input file must have .tripc extension");
+    expect(stderr).to.include("Input file must have .tripc extension");
   });
 
-  await t.step("rejects non-existent files", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "nonexistent.tripc",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout: _stdout, stderr, code } = await command.output();
-    const stderrText = new TextDecoder().decode(stderr);
+  it("rejects non-existent files", () => {
+    const { stderr, status: code } = runLinkerCli(["nonexistent.tripc"]);
 
     expect(code).to.equal(1);
-    expect(stderrText).to.include("Input file does not exist");
+    expect(stderr).to.include("Input file does not exist");
   });
 
-  await t.step("rejects empty argument list", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout: _stdout, stderr, code } = await command.output();
-    const stderrText = new TextDecoder().decode(stderr);
+  it("rejects empty argument list", () => {
+    const { stderr, status: code } = runLinkerCli([]);
 
     expect(code).to.equal(1);
-    expect(stderrText).to.include("No input files specified");
+    expect(stderr).to.include("No input files specified");
   });
 
-  await t.step("handles mixed valid and invalid files", async () => {
-    // Create a temporary file with wrong extension to test extension validation
-    const tempFile = `${__dirname}/cli_temp.txt`;
-    await Deno.writeTextFile(tempFile, "some content");
+  it("handles mixed valid and invalid files", () => {
+    const { stderr, status: code } = runLinkerCli([
+      "cli_A.tripc",
+      "cli_temp.txt",
+      "cli_B.tripc",
+    ]);
 
-    try {
-      const command = new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-read",
-          "--allow-write",
-          "../../bin/tripc.ts",
-          "--link",
-          "cli_A.tripc",
-          "cli_temp.txt",
-          "cli_B.tripc",
-        ],
-        cwd: __dirname,
-      });
-
-      const { stdout: _stdout, stderr, code } = await command.output();
-      const stderrText = new TextDecoder().decode(stderr);
-
-      expect(code).to.equal(1);
-      expect(stderrText).to.include("Input file must have .tripc extension");
-    } finally {
-      // Clean up temporary file
-      try {
-        await Deno.remove(tempFile);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
+    expect(code).to.equal(1);
+    expect(stderr).to.include("Input file must have .tripc extension");
   });
 
-  await t.step("executable wrapper works", async () => {
-    const command = new Deno.Command(Deno.execPath(), {
-      args: [
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "../../bin/tripc.ts",
-        "--link",
-        "--help",
-      ],
-      cwd: __dirname,
-    });
-
-    const { stdout, stderr: _stderr, code } = await command.output();
-    const output = new TextDecoder().decode(stdout);
+  it("executable wrapper works", () => {
+    const { stdout, status: code } = runLinkerCli(["--help"]);
 
     expect(code).to.equal(0);
-    expect(output).to.include("TripLang Compiler & Linker");
+    expect(stdout).to.include("TripLang Compiler & Linker");
   });
 });

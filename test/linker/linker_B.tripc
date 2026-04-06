@@ -1,0 +1,45 @@
+{
+  "dataDefinitions": [],
+  "definitions": {
+    "main": {
+      "kind": "poly",
+      "name": "main",
+      "term": {
+        "body": {
+          "kind": "non-terminal",
+          "lft": {
+            "kind": "non-terminal",
+            "lft": {
+              "kind": "systemF-var",
+              "name": "addA"
+            },
+            "rgt": {
+              "kind": "systemF-var",
+              "name": "x"
+            }
+          },
+          "rgt": {
+            "kind": "systemF-var",
+            "name": "x"
+          }
+        },
+        "kind": "systemF-abs",
+        "name": "x",
+        "typeAnnotation": {
+          "kind": "type-var",
+          "typeName": "Int"
+        }
+      }
+    }
+  },
+  "exports": [
+    "main"
+  ],
+  "imports": [
+    {
+      "from": "A",
+      "name": "addA"
+    }
+  ],
+  "module": "B"
+}

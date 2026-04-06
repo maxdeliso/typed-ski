@@ -1,0 +1,11 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude and
+import Prelude or
+
+export main
+
+poly main = and true (or false true)

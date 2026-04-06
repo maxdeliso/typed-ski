@@ -1,13 +1,15 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import { assert } from "../../util/assertions.ts";
 import {
   unparseProgram,
   unparseTerm,
 } from "../../../lib/meta/frontend/unparse.ts";
 import { parseTripLang } from "../../../lib/parser/tripLang.ts";
 import { requiredAt } from "../../util/required.ts";
+import { mkUntypedAbs, mkVar } from "../../../lib/terms/lambda.ts";
 
-Deno.test("unparseTerm", async (t) => {
-  await t.step("should unparse a poly definition", () => {
+test("unparseTerm", async (t) => {
+  await t.test("should unparse a poly definition", () => {
     const input = "module Test\npoly id = #X=>\\x:X=>x";
     const program = parseTripLang(input);
     const result = unparseTerm(
@@ -16,7 +18,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "poly id = #X=>\\x:X=>x");
   });
 
-  await t.step("should unparse a poly definition with match", () => {
+  await t.test("should unparse a poly definition with match", () => {
     const input =
       "module Test\ndata Maybe = None | Some T\npoly test = match x [Maybe] { | None => y | Some a => a }";
     const program = parseTripLang(input);
@@ -26,7 +28,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.include(result, "match");
   });
 
-  await t.step("should unparse a data definition", () => {
+  await t.test("should unparse a data definition", () => {
     const input = "module Test\ndata Maybe = None | Some T";
     const program = parseTripLang(input);
     const dataTerm = requiredAt(program.terms, 1, "expected data definition");
@@ -34,25 +36,16 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "data Maybe = None | Some T");
   });
 
-  await t.step("should unparse a typed definition", () => {
-    const input = "module Test\ntyped id = \\x:A=>x";
-    const program = parseTripLang(input);
-    const result = unparseTerm(
-      requiredAt(program.terms, 1, "expected typed definition"),
-    );
-    assert.equal(result, "typed id = \\x:A=>x");
+  await t.test("should unparse an internal lambda definition", () => {
+    const result = unparseTerm({
+      kind: "lambda",
+      name: "id",
+      term: mkUntypedAbs("x", mkVar("x")),
+    });
+    assert.equal(result, "lambda id = \\x=>x");
   });
 
-  await t.step("should unparse an untyped definition", () => {
-    const input = "module Test\nuntyped id = \\x=>x";
-    const program = parseTripLang(input);
-    const result = unparseTerm(
-      requiredAt(program.terms, 1, "expected untyped definition"),
-    );
-    assert.equal(result, "untyped id = \\x=>x");
-  });
-
-  await t.step("should unparse a combinator definition", () => {
+  await t.test("should unparse a combinator definition", () => {
     const input = "module Test\ncombinator id = I";
     const program = parseTripLang(input);
     const result = unparseTerm(
@@ -61,7 +54,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "combinator id = I");
   });
 
-  await t.step("should unparse a type definition", () => {
+  await t.test("should unparse a type definition", () => {
     const input = "module Test\ntype MyType = A->B";
     const program = parseTripLang(input);
     const result = unparseTerm(
@@ -70,11 +63,11 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "type MyType = (A->B)");
   });
 
-  await t.step("should unparse a native definition", () => {
+  await t.test("should unparse a native definition", () => {
     const input = "module Test\nnative eqU8 : U8 -> U8 -> Bool";
     const program = parseTripLang(input);
     const nativeTerm = program.terms.find((d) => d.kind === "native");
-    assert(nativeTerm !== undefined, "expected native definition");
+    assert.ok(nativeTerm !== undefined, "expected native definition");
     const result = unparseTerm(nativeTerm);
     assert.include(result, "native");
     assert.include(result, "eqU8");
@@ -82,7 +75,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.include(result, "Bool");
   });
 
-  await t.step("should unparse module definition", () => {
+  await t.test("should unparse module definition", () => {
     const input = "module Test";
     const program = parseTripLang(input);
     const result = unparseTerm(
@@ -91,7 +84,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "module Test");
   });
 
-  await t.step("should unparse import definition", () => {
+  await t.test("should unparse import definition", () => {
     const input = "module Test\nimport Foo bar";
     const program = parseTripLang(input);
     const result = unparseTerm(
@@ -100,7 +93,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "import Foo bar");
   });
 
-  await t.step("should unparse export definition", () => {
+  await t.test("should unparse export definition", () => {
     const input = "module Test\nexport Foo";
     const program = parseTripLang(input);
     const result = unparseTerm(
@@ -109,7 +102,7 @@ Deno.test("unparseTerm", async (t) => {
     assert.equal(result, "export Foo");
   });
 
-  await t.step("should round-trip a program through canonical unparse", () => {
+  await t.test("should round-trip a program through canonical unparse", () => {
     const input = `module Test
 import Foo bar
 export main

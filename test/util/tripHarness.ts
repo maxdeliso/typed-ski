@@ -74,9 +74,10 @@ export async function evaluateTripWithIo(
   const verbose = options.verbose ?? false;
   const skiExpression = await compileAndLink(source, options, verbose);
   const skiExpr = parseSKI(skiExpression);
-  const evaluator = options.evaluator instanceof ParallelArenaEvaluatorWasm
-    ? options.evaluator
-    : await ParallelArenaEvaluatorWasm.create(1, verbose);
+  const evaluator =
+    options.evaluator instanceof ParallelArenaEvaluatorWasm
+      ? options.evaluator
+      : await ParallelArenaEvaluatorWasm.create(1, verbose);
   const ownsEvaluator = evaluator !== options.evaluator;
 
   try {

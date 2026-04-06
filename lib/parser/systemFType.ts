@@ -55,9 +55,8 @@ export function parseSystemFType(
     const stateAfterForall = matchCh(s, HASH); // consume '#'
     const [typeVar, stateAfterVar] = parseIdentifier(stateAfterForall);
     const stateAfterArrow = matchArrow(stateAfterVar);
-    const [bodyLit, bodyType, stateAfterBody] = parseSystemFType(
-      stateAfterArrow,
-    );
+    const [bodyLit, bodyType, stateAfterBody] =
+      parseSystemFType(stateAfterArrow);
     return [
       `${HASH}${typeVar}${ARROW}${bodyLit}`,
       forall(typeVar, bodyType),
@@ -69,9 +68,8 @@ export function parseSystemFType(
     const [isArrow] = peekArrow(stateAfterLeft);
     if (isArrow) {
       const stateAfterArrow = matchArrow(stateAfterLeft);
-      const [rightLit, rightType, stateAfterRight] = parseSystemFType(
-        stateAfterArrow,
-      );
+      const [rightLit, rightType, stateAfterRight] =
+        parseSystemFType(stateAfterArrow);
       return [
         `${leftLit}${ARROW}${rightLit}`,
         arrow(leftType, rightType),
@@ -122,9 +120,8 @@ function parseSimpleSystemFType(
   const [ch, s] = peek(state);
   if (ch === "(") {
     const stateAfterLP = matchLP(s);
-    const [innerLit, innerType, stateAfterInner] = parseSystemFType(
-      stateAfterLP,
-    );
+    const [innerLit, innerType, stateAfterInner] =
+      parseSystemFType(stateAfterLP);
     const [closing, sAfterInner] = peek(stateAfterInner);
     if (closing !== ")") {
       throw new ParseError(
@@ -148,18 +145,20 @@ export function unparseSystemFType(ty: BaseType): string {
     return ty.typeName;
   }
   if (ty.kind === "type-app") {
-    const fn = ty.fn.kind === "type-var" || ty.fn.kind === "type-app"
-      ? unparseSystemFType(ty.fn)
-      : `${LEFT_PAREN}${unparseSystemFType(ty.fn)}${RIGHT_PAREN}`;
-    const arg = ty.arg.kind === "type-var"
-      ? unparseSystemFType(ty.arg)
-      : `${LEFT_PAREN}${unparseSystemFType(ty.arg)}${RIGHT_PAREN}`;
+    const fn =
+      ty.fn.kind === "type-var" || ty.fn.kind === "type-app"
+        ? unparseSystemFType(ty.fn)
+        : `${LEFT_PAREN}${unparseSystemFType(ty.fn)}${RIGHT_PAREN}`;
+    const arg =
+      ty.arg.kind === "type-var"
+        ? unparseSystemFType(ty.arg)
+        : `${LEFT_PAREN}${unparseSystemFType(ty.arg)}${RIGHT_PAREN}`;
     return `${fn} ${arg}`;
   }
   if (ty.kind === "non-terminal") {
-    return `${LEFT_PAREN}${unparseSystemFType(ty.lft)}${ARROW}${
-      unparseSystemFType(ty.rgt)
-    }${RIGHT_PAREN}`;
+    return `${LEFT_PAREN}${unparseSystemFType(ty.lft)}${ARROW}${unparseSystemFType(
+      ty.rgt,
+    )}${RIGHT_PAREN}`;
   }
   // Must be a forall type.
   return `${HASH}${ty.typeVar}${ARROW}${unparseSystemFType(ty.body)}`;

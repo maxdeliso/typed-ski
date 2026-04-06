@@ -1,0 +1,201 @@
+module LargeModule
+export func0
+poly func0 = #a => \x:a => x
+export func1
+poly func1 = #a => \x:a => x
+export func2
+poly func2 = #a => \x:a => x
+export func3
+poly func3 = #a => \x:a => x
+export func4
+poly func4 = #a => \x:a => x
+export func5
+poly func5 = #a => \x:a => x
+export func6
+poly func6 = #a => \x:a => x
+export func7
+poly func7 = #a => \x:a => x
+export func8
+poly func8 = #a => \x:a => x
+export func9
+poly func9 = #a => \x:a => x
+export func10
+poly func10 = #a => \x:a => x
+export func11
+poly func11 = #a => \x:a => x
+export func12
+poly func12 = #a => \x:a => x
+export func13
+poly func13 = #a => \x:a => x
+export func14
+poly func14 = #a => \x:a => x
+export func15
+poly func15 = #a => \x:a => x
+export func16
+poly func16 = #a => \x:a => x
+export func17
+poly func17 = #a => \x:a => x
+export func18
+poly func18 = #a => \x:a => x
+export func19
+poly func19 = #a => \x:a => x
+export func20
+poly func20 = #a => \x:a => x
+export func21
+poly func21 = #a => \x:a => x
+export func22
+poly func22 = #a => \x:a => x
+export func23
+poly func23 = #a => \x:a => x
+export func24
+poly func24 = #a => \x:a => x
+export func25
+poly func25 = #a => \x:a => x
+export func26
+poly func26 = #a => \x:a => x
+export func27
+poly func27 = #a => \x:a => x
+export func28
+poly func28 = #a => \x:a => x
+export func29
+poly func29 = #a => \x:a => x
+export func30
+poly func30 = #a => \x:a => x
+export func31
+poly func31 = #a => \x:a => x
+export func32
+poly func32 = #a => \x:a => x
+export func33
+poly func33 = #a => \x:a => x
+export func34
+poly func34 = #a => \x:a => x
+export func35
+poly func35 = #a => \x:a => x
+export func36
+poly func36 = #a => \x:a => x
+export func37
+poly func37 = #a => \x:a => x
+export func38
+poly func38 = #a => \x:a => x
+export func39
+poly func39 = #a => \x:a => x
+export func40
+poly func40 = #a => \x:a => x
+export func41
+poly func41 = #a => \x:a => x
+export func42
+poly func42 = #a => \x:a => x
+export func43
+poly func43 = #a => \x:a => x
+export func44
+poly func44 = #a => \x:a => x
+export func45
+poly func45 = #a => \x:a => x
+export func46
+poly func46 = #a => \x:a => x
+export func47
+poly func47 = #a => \x:a => x
+export func48
+poly func48 = #a => \x:a => x
+export func49
+poly func49 = #a => \x:a => x
+export func50
+poly func50 = #a => \x:a => x
+export func51
+poly func51 = #a => \x:a => x
+export func52
+poly func52 = #a => \x:a => x
+export func53
+poly func53 = #a => \x:a => x
+export func54
+poly func54 = #a => \x:a => x
+export func55
+poly func55 = #a => \x:a => x
+export func56
+poly func56 = #a => \x:a => x
+export func57
+poly func57 = #a => \x:a => x
+export func58
+poly func58 = #a => \x:a => x
+export func59
+poly func59 = #a => \x:a => x
+export func60
+poly func60 = #a => \x:a => x
+export func61
+poly func61 = #a => \x:a => x
+export func62
+poly func62 = #a => \x:a => x
+export func63
+poly func63 = #a => \x:a => x
+export func64
+poly func64 = #a => \x:a => x
+export func65
+poly func65 = #a => \x:a => x
+export func66
+poly func66 = #a => \x:a => x
+export func67
+poly func67 = #a => \x:a => x
+export func68
+poly func68 = #a => \x:a => x
+export func69
+poly func69 = #a => \x:a => x
+export func70
+poly func70 = #a => \x:a => x
+export func71
+poly func71 = #a => \x:a => x
+export func72
+poly func72 = #a => \x:a => x
+export func73
+poly func73 = #a => \x:a => x
+export func74
+poly func74 = #a => \x:a => x
+export func75
+poly func75 = #a => \x:a => x
+export func76
+poly func76 = #a => \x:a => x
+export func77
+poly func77 = #a => \x:a => x
+export func78
+poly func78 = #a => \x:a => x
+export func79
+poly func79 = #a => \x:a => x
+export func80
+poly func80 = #a => \x:a => x
+export func81
+poly func81 = #a => \x:a => x
+export func82
+poly func82 = #a => \x:a => x
+export func83
+poly func83 = #a => \x:a => x
+export func84
+poly func84 = #a => \x:a => x
+export func85
+poly func85 = #a => \x:a => x
+export func86
+poly func86 = #a => \x:a => x
+export func87
+poly func87 = #a => \x:a => x
+export func88
+poly func88 = #a => \x:a => x
+export func89
+poly func89 = #a => \x:a => x
+export func90
+poly func90 = #a => \x:a => x
+export func91
+poly func91 = #a => \x:a => x
+export func92
+poly func92 = #a => \x:a => x
+export func93
+poly func93 = #a => \x:a => x
+export func94
+poly func94 = #a => \x:a => x
+export func95
+poly func95 = #a => \x:a => x
+export func96
+poly func96 = #a => \x:a => x
+export func97
+poly func97 = #a => \x:a => x
+export func98
+poly func98 = #a => \x:a => x
+export func99
+poly func99 = #a => \x:a => x

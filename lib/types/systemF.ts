@@ -240,9 +240,9 @@ export const typecheckSystemF = (
       const [argTy, ctxAfterRight] = typecheckSystemF(ctxAfterLeft, term.rgt);
       if (funTy.kind !== "non-terminal") {
         throw new TypeError(
-          `expected an arrow type in function application, but got: ${
-            unparseType(funTy)
-          }`,
+          `expected an arrow type in function application, but got: ${unparseType(
+            funTy,
+          )}`,
         );
       }
       // Resolve type aliases before comparison
@@ -250,7 +250,8 @@ export const typecheckSystemF = (
       const resolvedArg = resolveTypeAlias(argTy, ctxAfterRight.typeAliases);
 
       const argTerm = term.rgt;
-      const natLiteralAsU8 = resolvedLft.kind === "type-var" &&
+      const natLiteralAsU8 =
+        resolvedLft.kind === "type-var" &&
         resolvedLft.typeName === "U8" &&
         argTerm.kind === "systemF-var" &&
         (() => {
@@ -265,16 +266,16 @@ export const typecheckSystemF = (
           const normArg = normalize(resolvedArg);
           if (!typesLitEq(normLft, normArg)) {
             throw new TypeError(
-              `function argument type mismatch: expected ${
-                unparseType(funTy.lft)
-              }, got ${unparseType(argTy)}`,
+              `function argument type mismatch: expected ${unparseType(
+                funTy.lft,
+              )}, got ${unparseType(argTy)}`,
             );
           }
         } else {
           throw new TypeError(
-            `function argument type mismatch: expected ${
-              unparseType(funTy.lft)
-            }, got ${unparseType(argTy)}`,
+            `function argument type mismatch: expected ${unparseType(
+              funTy.lft,
+            )}, got ${unparseType(argTy)}`,
           );
         }
       }
@@ -297,9 +298,9 @@ export const typecheckSystemF = (
       const [funTy, updatedCtx] = typecheckSystemF(ctx, term.term);
       if (funTy.kind !== "forall") {
         throw new TypeError(
-          `type application expected a universal type, but got: ${
-            unparseType(funTy)
-          }`,
+          `type application expected a universal type, but got: ${unparseType(
+            funTy,
+          )}`,
         );
       }
       const resultType = substituteSystemFType(
@@ -350,10 +351,7 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
       return { kind: "lambda-var", name: term.name };
     }
     case "systemF-abs":
-      return mkUntypedAbs(
-        term.name,
-        eraseSystemF(term.body),
-      );
+      return mkUntypedAbs(term.name, eraseSystemF(term.body));
     case "systemF-type-abs":
       return eraseSystemF(term.body);
     case "systemF-type-app":
@@ -366,9 +364,6 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
         eraseSystemF(term.value),
       );
     default:
-      return createApplication(
-        eraseSystemF(term.lft),
-        eraseSystemF(term.rgt),
-      );
+      return createApplication(eraseSystemF(term.lft), eraseSystemF(term.rgt));
   }
 };

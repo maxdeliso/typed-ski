@@ -8,10 +8,13 @@
  *    - source modules: `../../wasm/release.wasm`
  *    - bundled dist modules: `../wasm/release.wasm`
  * 4. `TYPED_SKI_WASM_URL` network fallback.
- * 5. Version-pinned JSR fallback derived from `deno.jsonc` version.
+ * 5. Version-pinned JSR fallback derived from `jsr.jsonc` version.
  */
 
 import { VERSION } from "../shared/version.generated.ts";
+import fs from "node:fs";
+import fsPromises from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 let cachedReleaseBytes: Uint8Array | null = null;
 let releaseBytesPromise: Promise<ArrayBuffer> | null = null;
@@ -47,48 +50,47 @@ function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
 }
 
-function getDenoGlobal():
-  | {
-    readFile(path: string | URL): Promise<Uint8Array>;
-    readFileSync(path: string | URL): Uint8Array;
-    execPath?: () => string;
-  }
-  | null {
-  const deno = (globalThis as typeof globalThis & { Deno?: unknown }).Deno;
-  if (!deno || typeof deno !== "object") return null;
-  const maybe = deno as {
-    readFile?: unknown;
-    readFileSync?: unknown;
-    execPath?: unknown;
-  };
-  if (
-    typeof maybe.readFile !== "function" ||
-    typeof maybe.readFileSync !== "function"
-  ) {
-    return null;
-  }
+function getNodeFs() {
   return {
-    readFile: maybe.readFile as (path: string | URL) => Promise<Uint8Array>,
-    readFileSync: maybe.readFileSync as (path: string | URL) => Uint8Array,
-    execPath: typeof maybe.execPath === "function"
-      ? (maybe.execPath as () => string)
-      : undefined,
+    readFile: async (path: string | URL): Promise<Uint8Array> => {
+      const p =
+        path instanceof URL && path.protocol === "file:"
+          ? fileURLToPath(path as any)
+          : path.toString();
+      return new Uint8Array(await fsPromises.readFile(p));
+    },
+    readFileSync: (path: string | URL): Uint8Array => {
+      const p =
+        path instanceof URL && path.protocol === "file:"
+          ? fileURLToPath(path as any)
+          : path.toString();
+      return new Uint8Array(fs.readFileSync(p));
+    },
+    execPath: () => process.execPath,
   };
 }
 
 function getReleaseWasmCandidates(): ReleaseWasmCandidate[] {
+  let envWasmPath: string | undefined;
+  let envWasmUrl: string | undefined;
+  try {
+    envWasmPath = process.env["TYPED_SKI_WASM_PATH"];
+    envWasmUrl = process.env["TYPED_SKI_WASM_URL"];
+  } catch {
+    // Ignore env access errors.
+  }
   return buildReleaseWasmCandidates({
     importMetaUrl: import.meta.url,
     version: VERSION,
-    envWasmPath: getDenoEnvVar("TYPED_SKI_WASM_PATH"),
-    envWasmUrl: getDenoEnvVar("TYPED_SKI_WASM_URL"),
+    envWasmPath,
+    envWasmUrl,
     execPath: getExecPath(),
   });
 }
 
 function getExecPath(): string | undefined {
   try {
-    return getDenoGlobal()?.execPath?.();
+    return getNodeFs().execPath();
   } catch {
     return undefined;
   }
@@ -187,7 +189,7 @@ function getWasmUrlNetworkFallbackFromEnv(
 function getWasmUrlNetworkFallbackFromVersion(
   version: string,
 ): ReleaseWasmCandidate | null {
-  // VERSION is generated from deno.jsonc during build.
+  // VERSION is generated from jsr.jsonc during build.
   if (!/^\d+\.\d+\.\d+$/.test(version)) return null;
   return {
     kind: "version-url",
@@ -197,24 +199,14 @@ function getWasmUrlNetworkFallbackFromVersion(
   };
 }
 
-function getDenoEnvVar(name: string): string | undefined {
-  try {
-    return (globalThis as typeof globalThis & {
-      Deno?: { env?: { get(name: string): string | undefined } };
-    }).Deno?.env?.get?.(name);
-  } catch {
-    return undefined;
-  }
-}
-
 function getWasmUrlFromExecPath(
   execPath: string | undefined,
 ): ReleaseWasmCandidate | null {
   if (!execPath) return null;
   try {
     const exec = execPath;
-    // Ignore normal `deno run` runtime; this fallback is for `deno compile`.
-    if (/(^|\/)deno(\.exe)?$/.test(exec)) return null;
+    // Ignore normal `node` runtime; this fallback is for packaged binaries.
+    if (/(^|\/)node(\.exe)?$/.test(exec)) return null;
     return {
       kind: "exec-path",
       url: new URL("../wasm/release.wasm", `file://${exec}`),
@@ -251,23 +243,21 @@ function getWasmUrlFromModulePath(
 }
 
 async function tryLoadReleaseWasmFromCandidates(): Promise<ArrayBuffer | null> {
-  const deno = getDenoGlobal();
+  const nodeFs = getNodeFs();
   const candidates = getReleaseWasmCandidates();
 
-  if (deno) {
-    for (const candidate of candidates) {
-      if (candidate.url.protocol !== "file:") continue;
-      try {
-        const bytes = await deno.readFile(candidate.url);
-        cachedReleaseLoadInfo = {
-          kind: candidate.kind,
-          url: candidate.url.href,
-          via: "readFile",
-        };
-        return uint8ArrayToArrayBuffer(bytes);
-      } catch {
-        // Continue to next candidate.
-      }
+  for (const candidate of candidates) {
+    if (candidate.url.protocol !== "file:") continue;
+    try {
+      const bytes = await nodeFs.readFile(candidate.url);
+      cachedReleaseLoadInfo = {
+        kind: candidate.kind,
+        url: candidate.url.href,
+        via: "readFile",
+      };
+      return uint8ArrayToArrayBuffer(bytes);
+    } catch {
+      // Continue to next candidate.
     }
   }
 
@@ -290,13 +280,12 @@ async function tryLoadReleaseWasmFromCandidates(): Promise<ArrayBuffer | null> {
 }
 
 function tryLoadReleaseWasmFromCandidatesSync(): ArrayBuffer | null {
-  const deno = getDenoGlobal();
-  if (!deno) return null;
+  const nodeFs = getNodeFs();
 
   for (const candidate of getReleaseWasmCandidates()) {
     if (candidate.url.protocol !== "file:") continue;
     try {
-      const bytes = deno.readFileSync(candidate.url);
+      const bytes = nodeFs.readFileSync(candidate.url);
       cachedReleaseLoadInfo = {
         kind: candidate.kind,
         url: candidate.url.href,

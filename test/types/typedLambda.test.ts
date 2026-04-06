@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import { mkVar } from "../../lib/terms/lambda.ts";
 import {
@@ -14,30 +15,33 @@ import {
   typesLitEq,
 } from "../../lib/types/types.ts";
 
-Deno.test("typed λ-calculus type-checker", async (t) => {
-  await t.step("type-checking errors", async (t) => {
-    await t.step("free variable triggers error", () => {
-      expect(() => typecheckTypedLambda(mkVar("x")))
-        .to.throw(/unbound variable x/);
+test("typed λ-calculus type-checker", async (t) => {
+  await t.test("type-checking errors", async (t) => {
+    await t.test("free variable triggers error", () => {
+      expect(() => typecheckTypedLambda(mkVar("x"))).to.throw(
+        /unbound variable x/,
+      );
     });
 
-    await t.step("duplicate binding in context", () => {
+    await t.test("duplicate binding in context", () => {
       let ctx = emptyContext();
       ctx = addBinding(ctx, "x", mkTypeVariable("a"));
-      expect(() => addBinding(ctx, "x", mkTypeVariable("b")))
-        .to.throw(/variable x already bound in context/);
+      expect(() => addBinding(ctx, "x", mkTypeVariable("b"))).to.throw(
+        /variable x already bound in context/,
+      );
     });
   });
 
-  await t.step("successful type-checks", async (t) => {
-    await t.step("I combinator (λx:a.x)", () => {
+  await t.test("successful type-checks", async (t) => {
+    await t.test("I combinator (λx:a.x)", () => {
       const typedI = mkTypedAbs("x", mkTypeVariable("a"), mkVar("x"));
       const ty = typecheckTypedLambda(typedI);
-      expect(typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("a"))))
-        .to.equal(true);
+      expect(
+        typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("a"))),
+      ).to.equal(true);
     });
 
-    await t.step("K combinator", () => {
+    await t.test("K combinator", () => {
       const typedK = mkTypedAbs(
         "x",
         mkTypeVariable("a"),
@@ -52,7 +56,7 @@ Deno.test("typed λ-calculus type-checker", async (t) => {
       expect(typesLitEq(ty, expected)).to.equal(true);
     });
 
-    await t.step("S combinator", () => {
+    await t.test("S combinator", () => {
       const typedS = mkTypedAbs(
         "x",
         arrows(mkTypeVariable("a"), mkTypeVariable("b"), mkTypeVariable("c")),

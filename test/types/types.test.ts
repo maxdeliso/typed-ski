@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import {
   createApplication,
@@ -23,9 +24,9 @@ import { unparseType } from "../../lib/parser/type.ts";
 import { inferType, substituteType, unify } from "../../lib/types/inference.ts";
 import { normalize } from "../../lib/types/normalization.ts";
 
-Deno.test("type utilities: construction, normalisation, inference, unification", async (t) => {
-  await t.step("basic type operations", async (t) => {
-    await t.step("literal equivalence & associativity", () => {
+test("type utilities: construction, normalisation, inference, unification", async (t) => {
+  await t.test("basic type operations", async (t) => {
+    await t.test("literal equivalence & associativity", () => {
       const t1 = arrows(
         mkTypeVariable("a"),
         mkTypeVariable("b"),
@@ -58,8 +59,8 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
       ).to.equal(true);
     });
 
-    await t.step("normalisation rules", async (t) => {
-      await t.step("repeated variables", () => {
+    await t.test("normalisation rules", async (t) => {
+      await t.test("repeated variables", () => {
         const nonNorm = arrow(
           mkTypeVariable("q"),
           arrow(mkTypeVariable("p"), mkTypeVariable("q")),
@@ -68,12 +69,10 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
           mkTypeVariable("a"),
           arrow(mkTypeVariable("b"), mkTypeVariable("a")),
         );
-        expect(unparseType(normalize(nonNorm))).to.equal(
-          unparseType(expected),
-        );
+        expect(unparseType(normalize(nonNorm))).to.equal(unparseType(expected));
       });
 
-      await t.step("arrow chain fresh naming", () => {
+      await t.test("arrow chain fresh naming", () => {
         const nonNorm = arrows(
           mkTypeVariable("x"),
           mkTypeVariable("y"),
@@ -87,7 +86,7 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
         expect(typesLitEq(normalize(nonNorm), expected)).to.equal(true);
       });
 
-      await t.step("already normal remains same", () => {
+      await t.test("already normal remains same", () => {
         const norm = arrow(
           mkTypeVariable("a"),
           arrow(mkTypeVariable("b"), mkTypeVariable("a")),
@@ -97,9 +96,9 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
     });
   });
 
-  await t.step("type inference", async (t) => {
-    await t.step("successful cases", async (t) => {
-      await t.step("I combinator", () => {
+  await t.test("type inference", async (t) => {
+    await t.test("successful cases", async (t) => {
+      await t.test("I combinator", () => {
         const [term, ty] = inferType(mkUntypedAbs("x", mkVar("x")));
         const [, typed] = parseTypedLambda("\\x:a=>x");
         const [, parsed] = parseType("a->a");
@@ -108,7 +107,7 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
         expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
 
-      await t.step("K combinator", () => {
+      await t.test("K combinator", () => {
         const [term, ty] = inferType(
           mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x"))),
         );
@@ -119,7 +118,7 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
         expect(unparseType(ty)).to.equal(unparseType(parsed));
       });
 
-      await t.step("S combinator", () => {
+      await t.test("S combinator", () => {
         const [term, ty] = inferType(
           mkUntypedAbs(
             "x",
@@ -144,7 +143,7 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
         expect(typedTermsLitEq(term, typed)).to.equal(true);
       });
 
-      await t.step("λx.λy.xy", () => {
+      await t.test("λx.λy.xy", () => {
         const [term, ty] = inferType(
           mkUntypedAbs(
             "x",
@@ -159,17 +158,16 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
       });
     });
 
-    await t.step("inference failures", async (t) => {
-      await t.step("λx.xx fails (occurs check)", () => {
+    await t.test("inference failures", async (t) => {
+      await t.test("λx.xx fails (occurs check)", () => {
         expect(() =>
           inferType(
             mkUntypedAbs("x", createApplication(mkVar("x"), mkVar("x"))),
-          )
-        )
-          .to.throw(/occurs check failed/);
+          ),
+        ).to.throw(/occurs check failed/);
       });
 
-      await t.step("λx.λy.(xy)x fails", () => {
+      await t.test("λx.λy.(xy)x fails", () => {
         expect(() =>
           inferType(
             mkUntypedAbs(
@@ -182,22 +180,21 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
                 ),
               ),
             ),
-          )
-        )
-          .to.throw(/occurs check failed/);
+          ),
+        ).to.throw(/occurs check failed/);
       });
     });
   });
 
-  await t.step("unification", async (t) => {
-    await t.step("occurs-check errors", async (t) => {
-      await t.step("variable occurs in own substitution", () => {
+  await t.test("unification", async (t) => {
+    await t.test("occurs-check errors", async (t) => {
+      await t.test("variable occurs in own substitution", () => {
         const a = mkTypeVariable("a");
         const fun = arrow(a, mkTypeVariable("b"));
         expect(() => substituteType(a, a, fun)).to.throw(/occurs check failed/);
       });
 
-      await t.step("unifying var with self-containing type", () => {
+      await t.test("unifying var with self-containing type", () => {
         const a = mkTypeVariable("a");
         const fun = arrow(a, mkTypeVariable("b"));
         let ctx = emptyContext();
@@ -207,7 +204,7 @@ Deno.test("type utilities: construction, normalisation, inference, unification",
       });
     });
 
-    await t.step("arrow-type unification decomposes structure", () => {
+    await t.test("arrow-type unification decomposes structure", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const c = mkTypeVariable("c");

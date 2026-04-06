@@ -1,0 +1,3 @@
+module Simple
+export id
+poly id = #a => \x:a => x

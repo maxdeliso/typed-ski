@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import { parseLambda } from "../../lib/parser/untyped.ts";
 import { makeUntypedBinNumeral } from "../../lib/consts/nat.ts";
@@ -26,7 +27,7 @@ import {
 } from "../../lib/terms/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 
-Deno.test("Lambda conversion", async (t) => {
+test("Lambda conversion", async (t) => {
   const N = 5;
   const id = mkUntypedAbs("x", mkVar("x"));
   const konst = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
@@ -81,12 +82,12 @@ Deno.test("Lambda conversion", async (t) => {
   const reduceToKey = (...exps: Parameters<typeof applyMany>) =>
     arenaEvaluator.reduce(applyMany(...exps));
 
-  await t.step("basic combinators", async (t) => {
-    await t.step("converts identity function (λx.x) to I combinator", () => {
+  await t.test("basic combinators", async (t) => {
+    await t.test("converts identity function (λx.x) to I combinator", () => {
       expect(bracketLambda(id)).to.deep.equal(I);
     });
 
-    await t.step(
+    await t.test(
       "converts K-like function (λx.λy.x) to equivalent SKI term",
       async () => {
         // The K combinator should return its first argument.
@@ -104,49 +105,37 @@ Deno.test("Lambda conversion", async (t) => {
     );
   });
 
-  await t.step("combinator equivalences", async (t) => {
-    await t.step("lambda B behaves like B", () => {
+  await t.test("combinator equivalences", async (t) => {
+    await t.test("lambda B behaves like B", () => {
       const args = [I, K, S];
-      const reducedLambda = reduceToKey(
-        bracketLambda(lambdaB),
-        ...args,
-      );
+      const reducedLambda = reduceToKey(bracketLambda(lambdaB), ...args);
       const reducedB = reduceToKey(B, ...args);
       expect(reducedLambda).to.deep.equal(reducedB);
     });
 
-    await t.step("lambda C behaves like C", () => {
+    await t.test("lambda C behaves like C", () => {
       const args = [K, S, I];
-      const reducedLambda = reduceToKey(
-        bracketLambda(lambdaC),
-        ...args,
-      );
+      const reducedLambda = reduceToKey(bracketLambda(lambdaC), ...args);
       const reducedC = reduceToKey(C, ...args);
       expect(reducedLambda).to.deep.equal(reducedC);
     });
 
-    await t.step("lambda S behaves like S", () => {
+    await t.test("lambda S behaves like S", () => {
       const args = [B, C, K];
-      const reducedLambda = reduceToKey(
-        bracketLambda(lambdaS),
-        ...args,
-      );
+      const reducedLambda = reduceToKey(bracketLambda(lambdaS), ...args);
       const reducedS = reduceToKey(S, ...args);
       expect(reducedLambda).to.deep.equal(reducedS);
     });
 
-    await t.step("self-application matches S I I", () => {
-      const reducedLambda = reduceToKey(
-        bracketLambda(selfApply),
-        K,
-      );
+    await t.test("self-application matches S I I", () => {
+      const reducedLambda = reduceToKey(bracketLambda(selfApply), K);
       const reducedExpected = reduceToKey(applyMany(S, I, I), K);
       expect(reducedLambda).to.deep.equal(reducedExpected);
     });
   });
 
-  await t.step("arithmetic operations", async (t) => {
-    await t.step("computes exponentiation using flip combinator", async () => {
+  await t.test("arithmetic operations", async (t) => {
+    await t.test("computes exponentiation using flip combinator", async () => {
       /**
        * flip is defined as:    flip ≡ λx.λy. y x
        *
@@ -174,7 +163,7 @@ Deno.test("Lambda conversion", async (t) => {
       }
     });
 
-    await t.step(
+    await t.test(
       "converts predecessor function to equivalent SKI term",
       async () => {
         const [, predLambda] = parseLambda(
@@ -183,9 +172,7 @@ Deno.test("Lambda conversion", async (t) => {
         for (let n = 0; n < N; n++) {
           const expected = Math.max(n - 1, 0); // pred(0) is defined as 0.
           const result = await UnChurchNumber(
-            arenaEvaluator.reduce(
-              apply(bracketLambda(predLambda), ChurchN(n)),
-            ),
+            arenaEvaluator.reduce(apply(bracketLambda(predLambda), ChurchN(n))),
           );
           expect(result).to.equal(BigInt(expected));
         }
@@ -193,7 +180,7 @@ Deno.test("Lambda conversion", async (t) => {
     );
   });
 
-  await t.step("nat literal lowers via church encoder", async () => {
+  await t.test("nat literal lowers via church encoder", async () => {
     // 1. Define Bin constructors as Church arithmetic operators
     // BZ = 0
     const [, BZ] = parseLambda("\\f=>\\x=>x");
@@ -235,7 +222,7 @@ Deno.test("Lambda conversion", async (t) => {
     expect(result).to.equal(8n);
   });
 
-  await t.step("toCore conversion errors on unsupported constructs", () => {
+  await t.test("toCore conversion errors on unsupported constructs", () => {
     expect(() => bracketLambda(mkVar("x"))).to.throw(
       ConversionError,
       /free variable detected: x/,

@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   serializeTripCObject,
   type TripCObject,
@@ -49,7 +52,7 @@ export async function compileFreshObject(
   sourceFile: URL,
   importedModules: ReadonlyArray<TripCObject>,
 ): Promise<TripCObject> {
-  const source = await Deno.readTextFile(sourceFile);
+  const source = await readFile(fileURLToPath(sourceFile), "utf8");
   return compileToObjectFile(source, { importedModules });
 }
 
@@ -113,10 +116,7 @@ export async function runFreshCompilerCorpusBuild(): Promise<DeterminismRun> {
 }
 
 function writeFully(bytes: Uint8Array): void {
-  let written = 0;
-  while (written < bytes.length) {
-    written += Deno.stdout.writeSync(bytes.subarray(written));
-  }
+  process.stdout.write(bytes);
 }
 
 if (import.meta.main) {

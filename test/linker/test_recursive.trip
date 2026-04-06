@@ -1,0 +1,14 @@
+module TestRecursive
+
+import RecursiveAdt Tree
+import RecursiveAdt Leaf
+import RecursiveAdt Node
+import RecursiveAdt makeLeaf
+import RecursiveAdt makeNode
+import RecursiveAdt getValue
+import Nat Nat
+import Nat fromBin
+
+export main
+
+poly main = getValue (makeNode (makeLeaf (fromBin 1)) (makeLeaf (fromBin 2)))

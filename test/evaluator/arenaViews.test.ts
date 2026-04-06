@@ -1,4 +1,4 @@
-import { expect } from "chai";
+import { expect } from "../util/assertions.ts";
 import {
   type ArenaViews,
   getKind,
@@ -13,12 +13,14 @@ import {
   SabHeaderField,
 } from "../../lib/evaluator/arenaHeader.generated.ts";
 
-Deno.test("arenaViews - coverage", async (t) => {
-  await t.step("getOrBuildArenaViews handles missing memory", () => {
+import { test } from "node:test";
+
+test("arenaViews - coverage", async (t) => {
+  await t.test("getOrBuildArenaViews handles missing memory", () => {
     expect(getOrBuildArenaViews(undefined, {})).to.be.null;
   });
 
-  await t.step(
+  await t.test(
     "validateAndRebuildViews handles missing views or memory",
     () => {
       expect(validateAndRebuildViews(null, undefined, {})).to.be.null;
@@ -43,7 +45,7 @@ Deno.test("arenaViews - coverage", async (t) => {
     },
   );
 
-  await t.step("validateAndRebuildViews handles missing baseAddr", () => {
+  await t.test("validateAndRebuildViews handles missing baseAddr", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     const dummyViews = {
       buffer: new ArrayBuffer(0),
@@ -65,18 +67,18 @@ Deno.test("arenaViews - coverage", async (t) => {
     );
   });
 
-  await t.step("getOrBuildArenaViews handles missing baseAddr", () => {
+  await t.test("getOrBuildArenaViews handles missing baseAddr", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     expect(getOrBuildArenaViews(memory, {})).to.be.null;
   });
 
-  await t.step("getOrBuildArenaViews handles baseAddr 0", () => {
+  await t.test("getOrBuildArenaViews handles baseAddr 0", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     expect(getOrBuildArenaViews(memory, { debugGetArenaBaseAddr: () => 0 })).to
       .be.null;
   });
 
-  await t.step("getKind/getLeft/getRight/getSym with SoA layout", () => {
+  await t.test("getKind/getLeft/getRight/getSym with SoA layout", () => {
     const capacity = 5;
     // Layout: Left (cap*4), Right (cap*4), Kind (cap*1), Sym (cap*1)
     const offsetLeft = 0;
@@ -124,7 +126,7 @@ Deno.test("arenaViews - coverage", async (t) => {
     expect(getSym(2, views)).to.equal(3);
   });
 
-  await t.step("validateAndRebuildViews rebuilds when capacity changed", () => {
+  await t.test("validateAndRebuildViews rebuilds when capacity changed", () => {
     const headerSize = SABHEADER_HEADER_SIZE_U32 * 4;
     const baseAddr = 64;
     const buf = new ArrayBuffer(baseAddr + headerSize + 256);
@@ -155,7 +157,7 @@ Deno.test("arenaViews - coverage", async (t) => {
     expect(validated!.capacity).to.equal(10);
   });
 
-  await t.step(
+  await t.test(
     "getOrBuildArenaViews returns fresh views when cache stale",
     () => {
       const headerSize = SABHEADER_HEADER_SIZE_U32 * 4;

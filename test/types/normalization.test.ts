@@ -1,4 +1,5 @@
-import { assert, expect } from "chai";
+import { test } from "node:test";
+import { assert, expect } from "../util/assertions.ts";
 
 import { normalize } from "../../lib/types/normalization.ts";
 import {
@@ -15,9 +16,9 @@ function assertIsTypeVar(
   assert.equal(bt.kind, "type-var", "expected kind 'type-var'");
 }
 
-Deno.test("type-normalization edge cases", async (t) => {
+test("type-normalization edge cases", async (t) => {
   /* single type variable */
-  await t.step("single type variable stays a variable", () => {
+  await t.test("single type variable stays a variable", () => {
     const a = mkTypeVariable("a");
     const out = normalize(a);
 
@@ -28,7 +29,7 @@ Deno.test("type-normalization edge cases", async (t) => {
   });
 
   /* repeated variable inside nested arrows */
-  await t.step("nested arrow with repeated vars keeps names aligned", () => {
+  await t.test("nested arrow with repeated vars keeps names aligned", () => {
     const repeated = arrow(
       arrow(mkTypeVariable("a"), mkTypeVariable("a")),
       arrow(mkTypeVariable("a"), mkTypeVariable("a")),
@@ -53,7 +54,7 @@ Deno.test("type-normalization edge cases", async (t) => {
   });
 
   /* forall a. a → a */
-  await t.step("quantified type gets fresh binder", () => {
+  await t.test("quantified type gets fresh binder", () => {
     const ty = mkUniversal(
       "a",
       arrow(mkTypeVariable("a"), mkTypeVariable("a")),
@@ -75,7 +76,7 @@ Deno.test("type-normalization edge cases", async (t) => {
   });
 
   /* nested foralls ∀a. ∀b. a → b → a */
-  await t.step("nested forall bindings stay distinct", () => {
+  await t.test("nested forall bindings stay distinct", () => {
     const ty = mkUniversal(
       "a",
       mkUniversal(
@@ -120,7 +121,7 @@ Deno.test("type-normalization edge cases", async (t) => {
   });
 
   /* (∀a. a→a) → (∀a. a→a) — distinct scopes */
-  await t.step(
+  await t.test(
     "same variable names in different scopes normalise differently",
     () => {
       const ty = arrow(
@@ -160,7 +161,7 @@ Deno.test("type-normalization edge cases", async (t) => {
   );
 
   /* type-app: List a, Result E T */
-  await t.step("normalises type application recursively", () => {
+  await t.test("normalises type application recursively", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("a"));
     const out = normalize(listA);
 
@@ -175,7 +176,7 @@ Deno.test("type-normalization edge cases", async (t) => {
     }
   });
 
-  await t.step(
+  await t.test(
     "normalises nested type applications and aligns variables",
     () => {
       const a = mkTypeVariable("a");
@@ -189,9 +190,8 @@ Deno.test("type-normalization edge cases", async (t) => {
           expect(out.fn.fn.kind).to.equal("type-var");
           expect(out.fn.arg.kind).to.equal("type-var");
           expect(out.arg.kind).to.equal("type-var");
-          const fnArg = out.fn.arg.kind === "type-var"
-            ? out.fn.arg.typeName
-            : "";
+          const fnArg =
+            out.fn.arg.kind === "type-var" ? out.fn.arg.typeName : "";
           const topArg = out.arg.kind === "type-var" ? out.arg.typeName : "";
           expect(fnArg).to.equal(
             topArg,

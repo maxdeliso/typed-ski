@@ -1,4 +1,6 @@
-import { dirname, join } from "std/path";
+import { test } from "node:test";
+import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { toDagWire } from "../../lib/ski/dagWire.ts";
@@ -36,17 +38,19 @@ async function compileAndLinkCompiler() {
     join(compilerLibDir, "telemetry.trip"),
   ];
 
-  const modules = await Promise.all(files.map(async (file) => {
-    const content = await Deno.readTextFile(file);
-    const object = compileToObjectFile(content);
-    return { name: object.module, object };
-  }));
+  const modules = await Promise.all(
+    files.map(async (file) => {
+      const content = await readFile(file, "utf8");
+      const object = compileToObjectFile(content);
+      return { name: object.module, object };
+    }),
+  );
 
   const { createProgramSpace, resolveCrossModuleDependencies, loadModule } =
     await import("../../lib/linker/moduleLinker.ts");
 
   const loadedModules = modules.map(({ name, object }) =>
-    loadModule(object, name)
+    loadModule(object, name),
   );
   let ps = createProgramSpace(loadedModules);
   ps = resolveCrossModuleDependencies(ps);
@@ -90,10 +94,12 @@ const PHASE_BUDGETS: Record<string, number> = {
   phase4: 1 << 22,
 };
 
-Deno.test({
-  name: "Bootstrapped Single-File Compiler Telemetry",
-  ignore: !thanatosAvailable(),
-  fn: async (t) => {
+test(
+  "Bootstrapped Single-File Compiler Telemetry",
+  {
+    skip: !thanatosAvailable(),
+  },
+  async (t) => {
     try {
       const ps = await compileAndLinkCompiler();
       await withBatchThanatosSession(async (session) => {
@@ -120,7 +126,7 @@ Deno.test({
         ];
 
         const runTestForFile = async (filePath: string) => {
-          const sourceText = await Deno.readTextFile(filePath);
+          const sourceText = await readFile(filePath, "utf8");
           const sourceBytes = new TextEncoder().encode(sourceText);
           let currentDag = toDagWire(encodeListU8(sourceBytes, nil, cons));
 
@@ -129,7 +135,7 @@ Deno.test({
           await session.reset();
 
           for (const phase of phases) {
-            const ok = await t.step(`Phase: ${phase.name}`, async () => {
+            await t.test(`Phase: ${phase.name}`, async () => {
               await session.reset();
               const startTime = performance.now();
 
@@ -143,9 +149,9 @@ Deno.test({
                 const endTime = performance.now();
                 const elapsedMs = endTime - startTime;
                 console.error(
-                  `\n[FATAL] Phase ${phase.name} failed after ${
-                    elapsedMs.toFixed(2)
-                  }ms`,
+                  `\n[FATAL] Phase ${phase.name} failed after ${elapsedMs.toFixed(
+                    2,
+                  )}ms`,
                 );
                 console.error(`Error: ${(e as Error).message}`);
                 throw e;
@@ -191,8 +197,9 @@ Deno.test({
                 ? parseInt(hashconsMissesMatch[1]!, 10)
                 : 0;
 
-              const uniqueNodeCount =
-                resultDag.split(" ").filter(Boolean).length;
+              const uniqueNodeCount = resultDag
+                .split(" ")
+                .filter(Boolean).length;
               const elapsedMs = endTime - startTime;
 
               metrics.push({
@@ -210,18 +217,21 @@ Deno.test({
                 elapsedMs,
               });
 
-              const duplicationFactor = uniqueNodeCount > 0
-                ? (totalNodeCount / uniqueNodeCount).toFixed(2)
-                : "0.00";
-              const hashconsHitRate = (hashconsHits + hashconsMisses) > 0
-                ? (
-                  (hashconsHits / (hashconsHits + hashconsMisses)) * 100
-                ).toFixed(2)
-                : "0.00";
+              const duplicationFactor =
+                uniqueNodeCount > 0
+                  ? (totalNodeCount / uniqueNodeCount).toFixed(2)
+                  : "0.00";
+              const hashconsHitRate =
+                hashconsHits + hashconsMisses > 0
+                  ? (
+                      (hashconsHits / (hashconsHits + hashconsMisses)) *
+                      100
+                    ).toFixed(2)
+                  : "0.00";
               console.log(
-                `[${phase.name}] Unique: ${uniqueNodeCount}, Total: ${totalNodeCount}, Duplication: ${duplicationFactor}x, Cons: ${totalConsAllocs}, Cont: ${totalContAllocs}, Susp: ${totalSuspAllocs}, DupLost: ${duplicateLostAllocs}, HashHits: ${hashconsHits}, HashMisses: ${hashconsMisses}, HitRate: ${hashconsHitRate}%, Steps: ${totalSteps}, Time: ${
-                  elapsedMs.toFixed(2)
-                }ms`,
+                `[${phase.name}] Unique: ${uniqueNodeCount}, Total: ${totalNodeCount}, Duplication: ${duplicationFactor}x, Cons: ${totalConsAllocs}, Cont: ${totalContAllocs}, Susp: ${totalSuspAllocs}, DupLost: ${duplicateLostAllocs}, HashHits: ${hashconsHits}, HashMisses: ${hashconsMisses}, HitRate: ${hashconsHitRate}%, Steps: ${totalSteps}, Time: ${elapsedMs.toFixed(
+                  2,
+                )}ms`,
               );
 
               const budget = PHASE_BUDGETS[phase.name];
@@ -237,8 +247,6 @@ elapsed_ms: ${elapsedMs.toFixed(2)}`);
               currentDag = resultDag;
               await session.reset();
             });
-
-            if (!ok) break;
           }
 
           return metrics;
@@ -252,7 +260,7 @@ elapsed_ms: ${elapsedMs.toFixed(2)}`);
       await closeBatchThanatosSessions();
     }
   },
-});
+);
 
 function combineDagWires(dag1: string, dag2: string): string {
   const tokens1 = dag1.trim().split(/\s+/);

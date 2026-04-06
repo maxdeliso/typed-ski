@@ -6,6 +6,6 @@ poly id = #A=>\x:A=>x
 
 combinator complex = S(K(SII))(S(S(KS)K)(K(SII)))
 
-typed two : Nat = succ (succ zero)
+poly two : Nat = succ (succ zero)
 
-typed main : Nat = two
+poly main : Nat = two

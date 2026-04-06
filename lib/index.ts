@@ -107,10 +107,10 @@ export { parseTripLang } from "./parser/tripLang.ts";
 export { compile } from "./meta/frontend.ts";
 export {
   type DataDefinition,
+  type LambdaDefinition,
   type PolyDefinition,
   type TripLangProgram,
   type TripLangTerm,
-  type TypedDefinition,
   type TypeDefinition,
 } from "./meta/trip.ts";
 /** Collects all free (external) term and type references appearing inside a TripLang value. */
@@ -128,7 +128,7 @@ export {
   resolveExternalTermReferences,
 } from "./meta/frontend/substitution.ts";
 /** Resolves polymorphic definitions in a TripLang program. */
-export { resolvePoly } from "./meta/frontend/compilation.ts";
+export { resolveLambda, resolvePoly } from "./meta/frontend/compilation.ts";
 
 // Phase 1 Single-File Compiler exports
 export {

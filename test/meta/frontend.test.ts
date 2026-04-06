@@ -1,9 +1,11 @@
-import { assert } from "chai";
+import { test } from "node:test";
+import { assert } from "../util/assertions.ts";
 
-import { dirname, fromFileUrl } from "std/path";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadInput } from "../util/fileLoader.ts";
 
-const __dirname = dirname(fromFileUrl(import.meta.url));
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import {
   bracketLambda,
@@ -25,21 +27,23 @@ import {
 import type { BaseType } from "../../lib/types/types.ts";
 
 import {
+  resolveLambda,
   resolvePoly,
-  resolveUntyped,
 } from "../../lib/meta/frontend/compilation.ts";
 import { elaborateTerms } from "../../lib/meta/frontend/elaboration.ts";
 
 function isSystemFTerm(term: unknown): term is SystemFTerm {
-  return !!term && typeof term === "object" &&
+  return (
+    !!term &&
+    typeof term === "object" &&
     [
       "systemF-var",
       "systemF-abs",
       "systemF-type-abs",
       "systemF-type-app",
       "non-terminal",
-    ]
-      .includes((term as { kind?: string }).kind ?? "");
+    ].includes((term as { kind?: string }).kind ?? "")
+  );
 }
 
 function assertSystemFTermMatches(
@@ -69,23 +73,21 @@ function assertTypeDefinition(
   assert.strictEqual(unparseType(ty!), expected);
 }
 
-Deno.test("TripLang → System F compiler integration", async (t) => {
+test("TripLang → System F compiler integration", async (t) => {
   // Use the parallel WASM arena reducer (worker pool) in this suite.
-  // Important: terminate it at the end to avoid Deno leak detection (workers/timers).
+  // Important: terminate it at the end to avoid leak detection (workers/timers).
   const arenaEval = await ParallelArenaEvaluatorWasm.create(2);
   try {
-    await t.step("executes condSucc example", async () => {
+    await t.test("executes condSucc example", async () => {
       const src = loadInput("condSucc.trip", __dirname);
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
-      const skiMain = bracketLambda(
-        eraseSystemF(mainPoly.term),
-      );
+      const skiMain = bracketLambda(eraseSystemF(mainPoly.term));
       const nf = await arenaEval.reduceAsync(skiMain);
       assert.equal(await UnChurchNumber(nf, arenaEval), 3n);
     });
 
-    await t.step("Result data type with match expression", async () => {
+    await t.test("Result data type with match expression", async () => {
       const src = loadInput("resultMatch.trip", __dirname);
       const compiled = compile(src);
 
@@ -108,7 +110,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       assert.equal(await num("main"), 2n);
     });
 
-    await t.step("parses & runs pred example", async () => {
+    await t.test("parses & runs pred example", async () => {
       const src = loadInput("pred.trip", __dirname);
       const compiled = compile(src);
 
@@ -130,20 +132,16 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       assert.equal(await num("main"), 3n);
     });
 
-    await t.step("compiles mul example (six & twenty-four)", async () => {
+    await t.test("compiles mul example (six & twenty-four)", async () => {
       const src = loadInput("mul.trip", __dirname);
       const compiled = compile(src);
 
       const sixPoly = resolvePoly(compiled, "six");
 
-      const skiSix = bracketLambda(
-        eraseSystemF(sixPoly.term),
-      );
+      const skiSix = bracketLambda(eraseSystemF(sixPoly.term));
 
       const twentyFourPoly = resolvePoly(compiled, "twentyFour");
-      const ski24 = bracketLambda(
-        eraseSystemF(twentyFourPoly.term),
-      );
+      const ski24 = bracketLambda(eraseSystemF(twentyFourPoly.term));
 
       assert.equal(
         await UnChurchNumber(await arenaEval.reduceAsync(skiSix), arenaEval),
@@ -155,34 +153,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       );
     });
 
-    await t.step("loads factorial with fixpoint", async () => {
-      const src = loadInput("fixFact.trip", __dirname);
-      const program = parseTripLang(src);
-
-      const factKernel = program.terms.find(
-        (d) => d.kind === "poly" && d.name === "factKernel",
-      ) as { kind: "poly"; term: SystemFTerm };
-      const [termRefs, typeRefs] = externalReferences(factKernel.term);
-
-      assert.deepEqual(
-        Array.from(termRefs.keys()).sort(),
-        ["cond", "isZero", "mul", "one", "pred"].sort(),
-      );
-      assert.deepEqual(
-        Array.from(typeRefs.keys()).sort(),
-        ["Nat"],
-      );
-
-      const compiled = compile(src);
-      const mainUntyped = resolveUntyped(compiled, "main");
-      const mainSki = bracketLambda(mainUntyped.term);
-      assert.equal(
-        await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
-        120n,
-      );
-    });
-
-    await t.step("loads factorial with poly rec syntax", async () => {
+    await t.test("loads factorial with poly rec syntax", async () => {
       const src = loadInput("recFact.trip", __dirname);
       const program = parseTripLang(src);
 
@@ -195,21 +166,18 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         Array.from(termRefs.keys()).sort(),
         ["cond", "fact", "isZero", "mul", "one", "pred"].sort(),
       );
-      assert.deepEqual(
-        Array.from(typeRefs.keys()).sort(),
-        ["Nat"],
-      );
+      assert.deepEqual(Array.from(typeRefs.keys()).sort(), ["Nat"]);
 
       const compiled = compile(src);
-      const mainUntyped = resolveUntyped(compiled, "main");
-      const mainSki = bracketLambda(mainUntyped.term);
+      const mainLambda = resolveLambda(compiled, "main");
+      const mainSki = bracketLambda(mainLambda.term);
       assert.equal(
         await UnChurchNumber(await arenaEval.reduceAsync(mainSki), arenaEval),
         120n,
       );
     });
 
-    await t.step("evaluates Maybe ADT constructors", async () => {
+    await t.test("evaluates Maybe ADT constructors", async () => {
       const src = loadInput("adtMaybe.trip", __dirname);
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
@@ -220,7 +188,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       );
     });
 
-    await t.step("evaluates Result ADT constructors", async () => {
+    await t.test("evaluates Result ADT constructors", async () => {
       const src = loadInput("adtResult.trip", __dirname);
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
@@ -231,17 +199,15 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       );
     });
 
-    await t.step("elaborates nested type applications", () => {
+    await t.test("elaborates nested type applications", () => {
       const src = loadInput("nestedTypeApps.trip", __dirname);
       const program = parseTripLang(src);
-      const succRaw = program.terms.find((d) =>
-        d.kind === "poly" && d.name === "succ"
+      const succRaw = program.terms.find(
+        (d) => d.kind === "poly" && d.name === "succ",
       )!;
 
       assertTermMatches(
-        unparseSystemF(
-          (succRaw as { kind: "poly"; term: SystemFTerm }).term,
-        ),
+        unparseSystemF((succRaw as { kind: "poly"; term: SystemFTerm }).term),
         "\\n:Nat=>#X=>\\s:(X->X)=>\\z:X=>(s (n[X] s z))",
       );
 
@@ -249,18 +215,16 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         program,
         indexSymbols(program),
       );
-      const succRes = resolved.terms.find((d: TripLangTerm) =>
-        d.kind === "poly" && d.name === "succ"
+      const succRes = resolved.terms.find(
+        (d: TripLangTerm) => d.kind === "poly" && d.name === "succ",
       )!;
       assertTermMatches(
-        unparseSystemF(
-          (succRes as { kind: "poly"; term: SystemFTerm }).term,
-        ),
+        unparseSystemF((succRes as { kind: "poly"; term: SystemFTerm }).term),
         "\\n:#X->((X->X)->(X->X))=>#X=>\\s:(X->X)=>\\z:X=>(s (n[X] s z))",
       );
     });
 
-    await t.step(
+    await t.test(
       "compiles + evaluates full polymorphic factorial",
       async () => {
         const src = loadInput("polyFact.trip", __dirname);
@@ -284,11 +248,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
         );
 
         // spot-check a few definitions
-        assertTypeDefinition(
-          compiled.types,
-          "zero",
-          "#X->((X->X)->(X->X))",
-        );
+        assertTypeDefinition(compiled.types, "zero", "#X->((X->X)->(X->X))");
         assertTypeDefinition(
           compiled.types,
           "fact",
@@ -302,7 +262,7 @@ Deno.test("TripLang → System F compiler integration", async (t) => {
       },
     );
 
-    await t.step("expands data definitions into constructors", () => {
+    await t.test("expands data definitions into constructors", () => {
       const src = `module DataMaybe
 data Maybe A = Nothing | Just A`;
       const compiled = compile(src);
@@ -310,8 +270,8 @@ data Maybe A = Nothing | Just A`;
 
       assert.deepEqual(terms[0], { kind: "module", name: "DataMaybe" });
 
-      const maybeType = terms.find((term) =>
-        term.kind === "type" && term.name === "Maybe"
+      const maybeType = terms.find(
+        (term) => term.kind === "type" && term.name === "Maybe",
       );
       assert.isDefined(maybeType);
       assert.strictEqual(
@@ -326,15 +286,15 @@ data Maybe A = Nothing | Just A`;
       assert.deepEqual(ctorNames, ["Just", "Nothing"]);
     });
 
-    await t.step("desugars match arms in constructor order", () => {
+    await t.test("desugars match arms in constructor order", () => {
       const src = `module MatchBool
 data Bool = False | True
 poly flip = match True [Bool] { | True => False | False => True }`;
       const program = parseTripLang(src);
       const syms = indexSymbols(program);
       const elaborated = elaborateTerms(program, syms);
-      const flip = elaborated.terms.find((term) =>
-        term.kind === "poly" && term.name === "flip"
+      const flip = elaborated.terms.find(
+        (term) => term.kind === "poly" && term.name === "flip",
       );
       assert.isDefined(flip);
       assert.strictEqual(
@@ -343,7 +303,7 @@ poly flip = match True [Bool] { | True => False | False => True }`;
       );
     });
 
-    await t.step("evaluates match with both alternatives", async () => {
+    await t.test("evaluates match with both alternatives", async () => {
       const src = `module MatchBoolEval
 type Nat = #X -> (X -> X) -> X -> X
 poly zero = #X => \\s : X -> X => \\z : X => z
@@ -367,14 +327,11 @@ poly mainFalse = match False [Nat] { | True => one | False => zero }`;
       assert.equal(await UnChurchNumber(falseRes, arenaEval), 0n);
     });
 
-    await t.step("rejects non-exhaustive match", () => {
+    await t.test("rejects non-exhaustive match", () => {
       const src = `module MatchNonExhaustive
 data Bool = False | True
 poly main = match True [Bool] { | True => False }`;
-      assert.throws(
-        () => compile(src),
-        /match is missing constructors: False/,
-      );
+      assert.throws(() => compile(src), /match is missing constructors: False/);
     });
   } finally {
     arenaEval.terminate();

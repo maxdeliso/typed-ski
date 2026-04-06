@@ -1,4 +1,4 @@
-import { assert } from "chai";
+import { assert } from "../util/assertions.ts";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -7,6 +7,8 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
+import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import {
   closeBatchThanatosSessions,
   passthroughEvaluator,
@@ -46,18 +48,9 @@ const BRIDGE_SOURCE_FILE = new URL(
   "../../lib/compiler/bridge.trip",
   import.meta.url,
 );
-const AVL_SOURCE_FILE = new URL(
-  "../../lib/avl.trip",
-  import.meta.url,
-);
-const BIN_SOURCE_FILE = new URL(
-  "../../lib/bin.trip",
-  import.meta.url,
-);
-const NAT_SOURCE_FILE = new URL(
-  "../../lib/nat.trip",
-  import.meta.url,
-);
+const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
+const BIN_SOURCE_FILE = new URL("../../lib/bin.trip", import.meta.url);
+const NAT_SOURCE_FILE = new URL("../../lib/nat.trip", import.meta.url);
 
 interface BridgeModules {
   prelude: TripCObject;
@@ -185,8 +178,8 @@ async function runBridgeHarness(source: string): Promise<boolean> {
   });
 }
 
-Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async () => {
-  const source = await Deno.readTextFile(BRIDGE_SOURCE_FILE);
+test("Bridge recursion lowering uses explicit Z expansion helpers", async () => {
+  const source = await readFile(BRIDGE_SOURCE_FILE, "utf-8");
 
   assert.include(source, "poly zLower");
   assert.include(source, "poly applyFixpoint");
@@ -203,10 +196,7 @@ Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async (
   assert.include(source, "poly buildBinLiteralCore");
   assert.include(source, "poly ctorCountOverflowError");
   assert.include(source, "poly rec checkedLengthU8");
-  assert.include(
-    source,
-    "Ok [List U8] [Core] (Cr_Match coreScrut coreArms)",
-  );
+  assert.include(source, "Ok [List U8] [Core] (Cr_Match coreScrut coreArms)");
 
   const bridgeObject = await loadTripModuleObject(BRIDGE_SOURCE_FILE);
   assert.property(bridgeObject.definitions, "zLower");
@@ -217,12 +207,14 @@ Deno.test("Bridge recursion lowering uses explicit Z expansion helpers", async (
   assert.property(bridgeObject.definitions, "elaborateProgram");
 });
 
-Deno.test({
-  name: "Bridge rejects data declarations with too many constructors",
-  ignore: !thanatosAvailable(),
-  fn: async () => {
+test(
+  "Bridge rejects data declarations with too many constructors",
+  {
+    skip: !thanatosAvailable(),
+  },
+  async () => {
     try {
-      const source = await Deno.readTextFile(BRIDGE_SOURCE_FILE);
+      const source = await readFile(BRIDGE_SOURCE_FILE, "utf-8");
       assert.include(
         source,
         "checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)",
@@ -237,4 +229,4 @@ Deno.test({
       await closeBatchThanatosSessions();
     }
   },
-});
+);

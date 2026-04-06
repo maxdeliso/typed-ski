@@ -139,9 +139,7 @@ const integerRootCeil = (n: bigint, k: bigint): bigint => {
  * Returns [a, b] if found, null otherwise.
  * Prefers smallest exponent b to minimize application depth.
  */
-function findPerfectPower(
-  value: number | bigint,
-): [bigint, bigint] | null {
+function findPerfectPower(value: number | bigint): [bigint, bigint] | null {
   const n = toBigInt(value);
   if (n < 4n) return null; // 0,1,2,3 are not perfect powers (with b > 1)
 
@@ -258,7 +256,7 @@ function optimizeChurchN(n: bigint): SKIExpression {
   }
 
   const sortedNumbers = Array.from(deferred.keys()).sort((a, b) =>
-    a < b ? -1 : a > b ? 1 : 0
+    a < b ? -1 : a > b ? 1 : 0,
   );
 
   for (const num of sortedNumbers) {
@@ -381,4 +379,4 @@ export const UnChurchBoolean = async (
 };
 
 /** @internal */
-export const ChurchB = (b: boolean): SKIExpression => b ? True : False;
+export const ChurchB = (b: boolean): SKIExpression => (b ? True : False);

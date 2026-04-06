@@ -3,70 +3,74 @@
  * from C header file.
  */
 
-const cHeaderFile = await Deno.readTextFile("core/arena.h");
+import { readFile, writeFile } from "node:fs/promises";
 
-function parseCStruct(source: string, structName: string) {
-  const structRegex = new RegExp(
-    `typedef struct\\s*{([^}]*)}\\s*${structName};`,
-    "s",
-  );
-  const match = source.match(structRegex);
-  if (!match) throw new Error(`Could not find struct ${structName}`);
-  const body = match[1];
-  if (body === undefined) {
-    throw new Error(`Could not parse fields for struct ${structName}`);
-  }
+async function main() {
+  const cHeaderFile = await readFile("core/arena.h", "utf8");
 
-  const fields: { name: string; u32Slots: number }[] = [];
-  const fieldLines = body.split(";");
-  for (const line of fieldLines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    // Handle "type name" or "type name[size]" or "type _pad[size]"
-    const parts = trimmed.split(/\s+/);
-    const name = parts[parts.length - 1];
-    if (name && !name.startsWith("_pad")) {
-      const cleanName = name.split("[")[0];
-      if (cleanName) {
-        const type = parts[0] ?? "";
-        const is64 = type.includes("uint64_t") ||
-          parts.some((p) => p.includes("uint64_t"));
-        fields.push({
-          name: cleanName,
-          u32Slots: is64 ? 2 : 1,
-        });
+  function parseCStruct(source: string, structName: string) {
+    const structRegex = new RegExp(
+      `typedef struct\\s*{([^}]*)}\\s*${structName};`,
+      "s",
+    );
+    const match = source.match(structRegex);
+    if (!match) throw new Error(`Could not find struct ${structName}`);
+    const body = match[1];
+    if (body === undefined) {
+      throw new Error(`Could not parse fields for struct ${structName}`);
+    }
+
+    const fields: { name: string; u32Slots: number }[] = [];
+    const fieldLines = body.split(";");
+    for (const line of fieldLines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // Handle "type name" or "type name[size]" or "type _pad[size]"
+      const parts = trimmed.split(/\s+/);
+      const name = parts[parts.length - 1];
+      if (name && !name.startsWith("_pad")) {
+        const cleanName = name.split("[")[0];
+        if (cleanName) {
+          const type = parts[0] ?? "";
+          const is64 =
+            type.includes("uint64_t") ||
+            parts.some((p) => p.includes("uint64_t"));
+          fields.push({
+            name: cleanName,
+            u32Slots: is64 ? 2 : 1,
+          });
+        }
       }
     }
+    return fields;
   }
-  return fields;
-}
 
-const fields = parseCStruct(cHeaderFile, "SabHeader");
+  const fields = parseCStruct(cHeaderFile, "SabHeader");
 
-let u32Index = 0;
-const indexByField: number[] = [];
-for (const f of fields) {
-  indexByField.push(u32Index);
-  u32Index += f.u32Slots;
-}
-const totalU32 = u32Index;
+  let u32Index = 0;
+  const indexByField: number[] = [];
+  for (const f of fields) {
+    indexByField.push(u32Index);
+    u32Index += f.u32Slots;
+  }
+  const totalU32 = u32Index;
 
-let enumContent = "";
-for (let i = 0; i < fields.length; i++) {
-  const f = fields[i];
-  if (!f) continue;
-  const constName = f.name.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase();
-  enumContent += `  ${constName} = ${indexByField[i]!},\n`;
-}
+  let enumContent = "";
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i];
+    if (!f) continue;
+    const constName = f.name.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase();
+    enumContent += `  ${constName} = ${indexByField[i]!},\n`;
+  }
 
-let fieldsContent = "";
-for (let i = 0; i < fields.length; i++) {
-  fieldsContent += `  "${fields[i]!.name}"${
-    i === fields.length - 1 ? "" : ","
-  }\n`;
-}
+  let fieldsContent = "";
+  for (let i = 0; i < fields.length; i++) {
+    fieldsContent += `  "${fields[i]!.name}"${
+      i === fields.length - 1 ? "" : ","
+    }\n`;
+  }
 
-const content = `/**
+  const content = `/**
  * SabHeader field indices (generated from core/arena.h)
  *
  * These constants represent the index into the SabHeader when viewed as a Uint32Array.
@@ -102,5 +106,8 @@ export const RING_MASK_INDEX = RING_TAIL_INDEX + CACHE_LINE_U32;
 export const RING_ENTRIES_INDEX = RING_MASK_INDEX + 1;
 `;
 
-await Deno.writeTextFile("lib/evaluator/arenaHeader.generated.ts", content);
-console.log(`Generated arena header from C with ${fields.length} fields.`);
+  await writeFile("lib/evaluator/arenaHeader.generated.ts", content, "utf8");
+  console.log(`Generated arena header from C with ${fields.length} fields.`);
+}
+
+await main();

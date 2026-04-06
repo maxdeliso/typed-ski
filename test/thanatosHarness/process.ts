@@ -1,31 +1,39 @@
 import { PROJECT_ROOT, THANATOS_BIN } from "./config.ts";
+import { spawn } from "node:child_process";
 
 export async function runThanatosProcess(
   args: string[],
   input = "",
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const child = new Deno.Command(THANATOS_BIN, {
-    args,
+  const child = spawn(THANATOS_BIN, args, {
     cwd: PROJECT_ROOT,
-    stdin: "piped",
-    stdout: "piped",
-    stderr: "piped",
-  }).spawn();
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 
-  const writer = child.stdin.getWriter();
   if (input.length > 0) {
-    await writer.write(new TextEncoder().encode(input));
+    child.stdin.write(input);
   }
-  await writer.close();
+  child.stdin.end();
 
-  const [status, stdout, stderr] = await Promise.all([
-    child.status,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  let stdout = "";
+  let stderr = "";
+
+  child.stdout.on("data", (data) => {
+    stdout += data.toString();
+  });
+
+  child.stderr.on("data", (data) => {
+    stderr += data.toString();
+  });
+
+  const code = await new Promise<number>((resolve) => {
+    child.on("close", (code) => {
+      resolve(code ?? 0);
+    });
+  });
 
   return {
-    code: status.code,
+    code,
     stdout,
     stderr,
   };

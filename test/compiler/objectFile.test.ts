@@ -1,4 +1,5 @@
-import { assertEquals, assertThrows } from "std/assert";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import {
   deserializeTripCObject,
   serializeTripCObject,
@@ -6,7 +7,7 @@ import {
 } from "../../lib/compiler/objectFile.ts";
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
 
-Deno.test("objectFile serialization and validation", async (t) => {
+test("objectFile serialization and validation", async (t) => {
   const validObject: TripCObject = {
     module: "M",
     exports: ["main"],
@@ -21,13 +22,13 @@ Deno.test("objectFile serialization and validation", async (t) => {
     dataDefinitions: [],
   };
 
-  await t.step("round-trips a valid object file", () => {
+  await t.test("round-trips a valid object file", () => {
     const json = serializeTripCObject(validObject);
     const parsed = deserializeTripCObject(json);
-    assertEquals(parsed, validObject);
+    assert.deepEqual(parsed, validObject);
   });
 
-  await t.step("serializes and revives bigint payloads", () => {
+  await t.test("serializes and revives bigint payloads", () => {
     const withBigint: TripCObject = {
       ...validObject,
       definitions: {
@@ -48,11 +49,11 @@ Deno.test("objectFile serialization and validation", async (t) => {
     const revived = parsed.definitions.main as unknown as {
       bigintMeta: unknown;
     };
-    assertEquals(typeof revived.bigintMeta, "bigint");
-    assertEquals(revived.bigintMeta, 123n);
+    assert.deepEqual(typeof revived.bigintMeta, "bigint");
+    assert.deepEqual(revived.bigintMeta, 123n);
   });
 
-  await t.step("serializes equivalent nested objects canonically", () => {
+  await t.test("serializes equivalent nested objects canonically", () => {
     const a: TripCObject = {
       ...validObject,
       definitions: {
@@ -80,18 +81,18 @@ Deno.test("objectFile serialization and validation", async (t) => {
       },
     };
 
-    assertEquals(serializeTripCObject(a), serializeTripCObject(b));
+    assert.deepEqual(serializeTripCObject(a), serializeTripCObject(b));
   });
 
-  await t.step("throws on invalid JSON", () => {
-    assertThrows(
+  await t.test("throws on invalid JSON", () => {
+    assert.throws(
       () => deserializeTripCObject("{invalid json"),
       Error,
       "Invalid JSON in object file",
     );
   });
 
-  await t.step("throws on invalid bigint encoding", () => {
+  await t.test("throws on invalid bigint encoding", () => {
     const invalidBigint = JSON.stringify({
       module: "M",
       exports: [],
@@ -102,21 +103,21 @@ Deno.test("objectFile serialization and validation", async (t) => {
       dataDefinitions: [],
     });
 
-    assertThrows(
+    assert.throws(
       () => deserializeTripCObject(invalidBigint),
       Error,
       "Invalid bigint encoding in object file",
     );
   });
 
-  await t.step("validates required top-level fields", () => {
-    assertThrows(
+  await t.test("validates required top-level fields", () => {
+    assert.throws(
       () =>
         deserializeTripCObject(JSON.stringify({ ...validObject, module: 1 })),
       Error,
       "missing or invalid module name",
     );
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({ ...validObject, exports: "x" }),
@@ -124,7 +125,7 @@ Deno.test("objectFile serialization and validation", async (t) => {
       Error,
       "exports must be an array",
     );
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({ ...validObject, imports: "x" }),
@@ -132,7 +133,7 @@ Deno.test("objectFile serialization and validation", async (t) => {
       Error,
       "imports must be an array",
     );
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({ ...validObject, definitions: null }),
@@ -140,7 +141,7 @@ Deno.test("objectFile serialization and validation", async (t) => {
       Error,
       "definitions must be an object",
     );
-    assertThrows(
+    assert.throws(
       () => {
         const withoutDataDefinitions = JSON.parse(
           JSON.stringify(validObject),
@@ -151,7 +152,7 @@ Deno.test("objectFile serialization and validation", async (t) => {
       Error,
       "dataDefinitions must be an array",
     );
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({ ...validObject, dataDefinitions: "x" }),
@@ -161,8 +162,8 @@ Deno.test("objectFile serialization and validation", async (t) => {
     );
   });
 
-  await t.step("validates import entries", () => {
-    assertThrows(
+  await t.test("validates import entries", () => {
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({
@@ -175,8 +176,8 @@ Deno.test("objectFile serialization and validation", async (t) => {
     );
   });
 
-  await t.step("validates data definition metadata", () => {
-    assertThrows(
+  await t.test("validates data definition metadata", () => {
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({
@@ -188,51 +189,57 @@ Deno.test("objectFile serialization and validation", async (t) => {
       "each data definition must contain kind/name/typeParams/constructors",
     );
 
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({
             ...validObject,
-            dataDefinitions: [{
-              kind: "data",
-              name: "Maybe",
-              typeParams: [123],
-              constructors: [],
-            }],
+            dataDefinitions: [
+              {
+                kind: "data",
+                name: "Maybe",
+                typeParams: [123],
+                constructors: [],
+              },
+            ],
           }),
         ),
       Error,
       "typeParams must be strings",
     );
 
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({
             ...validObject,
-            dataDefinitions: [{
-              kind: "data",
-              name: "Maybe",
-              typeParams: [],
-              constructors: [{ name: 123, fields: [] }],
-            }],
+            dataDefinitions: [
+              {
+                kind: "data",
+                name: "Maybe",
+                typeParams: [],
+                constructors: [{ name: 123, fields: [] }],
+              },
+            ],
           }),
         ),
       Error,
       "data constructors must have name and fields",
     );
 
-    assertThrows(
+    assert.throws(
       () =>
         deserializeTripCObject(
           JSON.stringify({
             ...validObject,
-            dataDefinitions: [{
-              kind: "data",
-              name: "Maybe",
-              typeParams: [],
-              constructors: [{ name: "Some", fields: "bad" }],
-            }],
+            dataDefinitions: [
+              {
+                kind: "data",
+                name: "Maybe",
+                typeParams: [],
+                constructors: [{ name: "Some", fields: "bad" }],
+              },
+            ],
           }),
         ),
       Error,

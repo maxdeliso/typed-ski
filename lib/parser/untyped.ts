@@ -52,20 +52,14 @@ function parseAtomicUntypedLambda(
     let currentState = matchCh(s, BACKSLASH);
     const [varLit, stateAfterVar] = parseIdentifier(currentState);
     currentState = matchFatArrow(stateAfterVar);
-    const [, bodyTerm, stateAfterBody] = parseUntypedLambdaInternal(
-      currentState,
-    );
+    const [, bodyTerm, stateAfterBody] =
+      parseUntypedLambdaInternal(currentState);
     const literal = s.buf.slice(s.idx, stateAfterBody.idx);
-    return [
-      literal,
-      mkUntypedAbs(varLit, bodyTerm),
-      stateAfterBody,
-    ];
+    return [literal, mkUntypedAbs(varLit, bodyTerm), stateAfterBody];
   } else if (peeked === "(") {
     let currentState = matchLP(s);
-    const [, innerTerm, stateAfterInner] = parseUntypedLambdaInternal(
-      currentState,
-    );
+    const [, innerTerm, stateAfterInner] =
+      parseUntypedLambdaInternal(currentState);
     currentState = matchRP(stateAfterInner);
     const fullLiteral = s.buf.slice(s.idx, currentState.idx);
     return [fullLiteral, innerTerm, currentState];
@@ -100,11 +94,13 @@ export function unparseUntypedLambda(ut: UntypedLambda): string {
     case "lambda-var":
       return ut.name;
     case "lambda-abs":
-      return `${BACKSLASH}${ut.name}${FAT_ARROW}${
-        unparseUntypedLambda(ut.body)
-      }`;
+      return `${BACKSLASH}${ut.name}${FAT_ARROW}${unparseUntypedLambda(
+        ut.body,
+      )}`;
     case "non-terminal":
-      return `${LEFT_PAREN}${unparseUntypedLambda(ut.lft)}` +
-        ` ${unparseUntypedLambda(ut.rgt)}${RIGHT_PAREN}`;
+      return (
+        `${LEFT_PAREN}${unparseUntypedLambda(ut.lft)}` +
+        ` ${unparseUntypedLambda(ut.rgt)}${RIGHT_PAREN}`
+      );
   }
 }

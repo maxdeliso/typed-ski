@@ -1,14 +1,15 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 
 import { TypeError } from "../../lib/types/typeError.ts";
 
-Deno.test("TypeError", async (t) => {
-  await t.step("should be an instance of Error", () => {
+test("TypeError", async (t) => {
+  await t.test("should be an instance of Error", () => {
     const error = new TypeError("test error message");
     expect(error).to.be.an.instanceof(Error);
   });
 
-  await t.step("should store the error message", () => {
+  await t.test("should store the error message", () => {
     const message = "test type error message";
     const error = new TypeError(message);
     expect(error.message).to.equal(message);

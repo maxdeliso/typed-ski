@@ -129,9 +129,10 @@ class ArenaRingView {
           ) === toInt32(h)
         ) {
           const payloadOffset = this.slotsBase + slotIndex * 4 + 4;
-          const value = this.payloadKind === "u8"
-            ? this.payloadU8[payloadOffset]!
-            : this.payloadU32[payloadOffset >>> 2]!;
+          const value =
+            this.payloadKind === "u8"
+              ? this.payloadU8[payloadOffset]!
+              : this.payloadU32[payloadOffset >>> 2]!;
           const nextSeq = (h + this.mask + 1) >>> 0;
           Atomics.store(this.slotsI32, slotIndex, toInt32(nextSeq));
           Atomics.add(this.headerI32, RING_NOT_FULL_INDEX, 1);
@@ -162,11 +163,7 @@ export class ArenaIoRings {
     baseAddr: number,
     sabHeaderSizeU32: number,
   ) {
-    const headerView = new Uint32Array(
-      buffer,
-      baseAddr,
-      sabHeaderSizeU32,
-    );
+    const headerView = new Uint32Array(buffer, baseAddr, sabHeaderSizeU32);
     // Use enum values directly as array indices (they're numeric constants)
     const offsetStdin = headerView[SabHeaderField.OFFSET_STDIN]!;
     const offsetStdout = headerView[SabHeaderField.OFFSET_STDOUT]!;

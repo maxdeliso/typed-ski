@@ -1,0 +1,5 @@
+module WithImports
+import Math add
+import Utils format
+export double
+poly double = \x:Int => add x x

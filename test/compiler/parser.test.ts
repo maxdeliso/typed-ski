@@ -1,5 +1,8 @@
-import { assert } from "chai";
-import { dirname, fromFileUrl, join } from "std/path";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
 import {
   closeBatchThanatosSessions,
@@ -18,15 +21,9 @@ import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import { getNatObject } from "../../lib/nat.ts";
 
-const __dirname = dirname(fromFileUrl(import.meta.url));
-const PARSER_SOURCE_FILE = join(
-  __dirname,
-  "../../lib/compiler/parser.trip",
-);
-const LEXER_SOURCE_FILE = join(
-  __dirname,
-  "../../lib/compiler/lexer.trip",
-);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PARSER_SOURCE_FILE = join(__dirname, "../../lib/compiler/parser.trip");
+const LEXER_SOURCE_FILE = join(__dirname, "../../lib/compiler/lexer.trip");
 
 let parserObj: TripCObject | null = null;
 let lexerObj: TripCObject | null = null;
@@ -70,144 +67,137 @@ async function getBinObjectCached() {
 }
 
 async function compileTestProgram(fileName: string) {
-  const source = await Deno.readTextFile(join(__dirname, "inputs", fileName));
+  const source = await readFile(join(__dirname, "inputs", fileName), "utf-8");
   return compileToObjectFile(source);
 }
 
-Deno.test({
-  name: "Parser thanatos suite",
-  ignore: !thanatosAvailable(),
-  fn: async (t) => {
-    try {
-      await t.step("Parser unit tests", async () => {
-        const tests = [
-          {
-            name: "Parser stage 1 - parseAtom parses identifiers",
-            file: "testParseAtom.trip",
-            assertion:
-              'Expected parseAtom([T_Ident "x", T_EOF]) to return E_Var "x"',
-          },
-          {
-            name:
-              "Parser stage 2 - parseApp parses left-associated application",
-            file: "testParseApp.trip",
-            assertion:
-              'Expected parseApp([T_Ident "x", T_Ident "y", T_Ident "z", T_EOF]) to return ((x y) z)',
-          },
-          {
-            name: "Parser stage 3 - parseLam parses lambdas",
-            file: "testParseExprLambdaTyped.trip",
-            assertion: 'Expected parseLam(["\\\\", "x", ":", "T", "=>", "x"])',
-          },
-          {
-            name:
-              "Parser stage 4 - parseType parses T_App with right associativity",
-            file: "testParseExprTypeApplication.trip",
-            assertion: 'Expected parseType("A B C") to return (A (B C))',
-          },
-          {
-            name: "Parser stage 5 - parseMatch parses match expressions",
-            file: "testParseExprMatchTyped.trip",
-            assertion:
-              'Expected parseMatch("match x with | C1 => y | C2 => z")',
-          },
-          {
-            name: "Parser stage 6 - parseLet parses let expressions",
-            file: "testParseExprLetTyped.trip",
-            assertion: 'Expected parseLet("let x : T = y in z")',
-          },
-          {
-            name: "Parser stage 7 - parseDecl parses top-level declarations",
-            file: "testParseDefinitionKinds.trip",
-            assertion: 'Expected parseDecl("poly x : T = y")',
-          },
-          {
-            name: "Parser stage 8 - full module parsing",
-            file: "testParseProgramForms.trip",
-            assertion:
-              "Expected full module with imports and multiple declarations",
-          },
-        ];
+test("Parser thanatos suite", { skip: !thanatosAvailable() }, async (t) => {
+  try {
+    await t.test("Parser unit tests", async () => {
+      const tests = [
+        {
+          name: "Parser stage 1 - parseAtom parses identifiers",
+          file: "testParseAtom.trip",
+          assertion:
+            'Expected parseAtom([T_Ident "x", T_EOF]) to return E_Var "x"',
+        },
+        {
+          name: "Parser stage 2 - parseApp parses left-associated application",
+          file: "testParseApp.trip",
+          assertion:
+            'Expected parseApp([T_Ident "x", T_Ident "y", T_Ident "z", T_EOF]) to return ((x y) z)',
+        },
+        {
+          name: "Parser stage 3 - parseLam parses lambdas",
+          file: "testParseExprLambdaTyped.trip",
+          assertion: 'Expected parseLam(["\\\\", "x", ":", "T", "=>", "x"])',
+        },
+        {
+          name: "Parser stage 4 - parseType parses T_App with right associativity",
+          file: "testParseExprTypeApplication.trip",
+          assertion: 'Expected parseType("A B C") to return (A (B C))',
+        },
+        {
+          name: "Parser stage 5 - parseMatch parses match expressions",
+          file: "testParseExprMatchTyped.trip",
+          assertion: 'Expected parseMatch("match x with | C1 => y | C2 => z")',
+        },
+        {
+          name: "Parser stage 6 - parseLet parses let expressions",
+          file: "testParseExprLetTyped.trip",
+          assertion: 'Expected parseLet("let x : T = y in z")',
+        },
+        {
+          name: "Parser stage 7 - parseDecl parses top-level declarations",
+          file: "testParseDefinitionKinds.trip",
+          assertion: 'Expected parseDecl("poly x : T = y")',
+        },
+        {
+          name: "Parser stage 8 - full module parsing",
+          file: "testParseProgramForms.trip",
+          assertion:
+            "Expected full module with imports and multiple declarations",
+        },
+      ];
 
-        const parserObj = await getParserObjectCached();
-        const lexerObj = await getLexerObjectCached();
-        const preludeObj = await getPreludeObjectCached();
-        const natObj = await getNatObjectCached();
-        const binObj = await getBinObjectCached();
+      const parserObj = await getParserObjectCached();
+      const lexerObj = await getLexerObjectCached();
+      const preludeObj = await getPreludeObjectCached();
+      const natObj = await getNatObjectCached();
+      const binObj = await getBinObjectCached();
 
-        await withBatchThanatosSession(async (session) => {
-          for (const parserTest of tests) {
-            const runOne = async () => {
+      await withBatchThanatosSession(async (session) => {
+        for (const parserTest of tests) {
+          const runOne = async () => {
+            await session.reset();
+            const testObj = await compileTestProgram(parserTest.file);
+            const linked = linkModules([
+              { name: "Prelude", object: preludeObj },
+              { name: "Nat", object: natObj },
+              { name: "Bin", object: binObj },
+              { name: "Lexer", object: lexerObj },
+              { name: "Parser", object: parserObj },
+              { name: "Test", object: testObj },
+            ]);
+            const expr = parseSKI(linked);
+            const dag = toDagWire(expr);
+            try {
+              const resultDag = await session.reduceDag(dag);
+              const resultExpr = fromDagWire(resultDag);
+              const ok = await UnChurchBoolean(
+                resultExpr,
+                passthroughEvaluator,
+              );
+              assert.ok(ok, parserTest.assertion);
+            } finally {
               await session.reset();
-              const testObj = await compileTestProgram(parserTest.file);
-              const linked = linkModules([
-                { name: "Prelude", object: preludeObj },
-                { name: "Nat", object: natObj },
-                { name: "Bin", object: binObj },
-                { name: "Lexer", object: lexerObj },
-                { name: "Parser", object: parserObj },
-                { name: "Test", object: testObj },
-              ]);
-              const expr = parseSKI(linked);
-              const dag = toDagWire(expr);
-              try {
-                const resultDag = await session.reduceDag(dag);
-                const resultExpr = fromDagWire(resultDag);
-                const ok = await UnChurchBoolean(
-                  resultExpr,
-                  passthroughEvaluator,
-                );
-                assert.isTrue(ok, parserTest.assertion);
-              } finally {
-                await session.reset();
-              }
-            };
-            await runOne();
-          }
-        });
+            }
+          };
+          await runOne();
+        }
       });
+    });
 
-      await t.step(
-        "Parser rejects constructor type nesting beyond U8 depth",
-        async () => {
-          const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
-          assert.include(
-            parserSource,
-            "match (checkedIncrementU8 depth)",
-            "Expected skipBalanced to use checkedIncrementU8 for nested type tracking",
-          );
-          const ok = await runInlineParserHarness(
-            makeCheckedIncrementOverflowHarness(),
-          );
-          assert.isTrue(
-            ok,
-            "Expected checkedIncrementU8 to reject U8 overflow while tracking parser nesting depth",
-          );
-        },
-      );
+    await t.test(
+      "Parser rejects constructor type nesting beyond U8 depth",
+      async () => {
+        const parserSource = await readFile(PARSER_SOURCE_FILE, "utf-8");
+        assert.match(
+          parserSource,
+          /match \(checkedIncrementU8 depth\)/,
+          "Expected skipBalanced to use checkedIncrementU8 for nested type tracking",
+        );
+        const ok = await runInlineParserHarness(
+          makeCheckedIncrementOverflowHarness(),
+        );
+        assert.ok(
+          ok,
+          "Expected checkedIncrementU8 to reject U8 overflow while tracking parser nesting depth",
+        );
+      },
+    );
 
-      await t.step(
-        "Parser rejects constructor arity beyond U8 range",
-        async () => {
-          const parserSource = await Deno.readTextFile(PARSER_SOURCE_FILE);
-          assert.include(
-            parserSource,
-            "match (checkedIncrementU8 acc)",
-            "Expected parseCtorArity to use checkedIncrementU8 for arity tracking",
-          );
-          const ok = await runInlineParserHarness(
-            makeParseCtorArityOverflowHarness(),
-          );
-          assert.isTrue(
-            ok,
-            "Expected parseCtorArity to reject constructor arity overflow at #u8(255)",
-          );
-        },
-      );
-    } finally {
-      await closeBatchThanatosSessions();
-    }
-  },
+    await t.test(
+      "Parser rejects constructor arity beyond U8 range",
+      async () => {
+        const parserSource = await readFile(PARSER_SOURCE_FILE, "utf-8");
+        assert.match(
+          parserSource,
+          /match \(checkedIncrementU8 acc\)/,
+          "Expected parseCtorArity to use checkedIncrementU8 for arity tracking",
+        );
+        const ok = await runInlineParserHarness(
+          makeParseCtorArityOverflowHarness(),
+        );
+        assert.ok(
+          ok,
+          "Expected parseCtorArity to reject constructor arity overflow at #u8(255)",
+        );
+      },
+    );
+  } finally {
+    await closeBatchThanatosSessions();
+  }
 });
 
 function makeCheckedIncrementOverflowHarness(): string {

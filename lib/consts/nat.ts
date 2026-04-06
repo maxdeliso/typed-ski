@@ -26,10 +26,7 @@ const lambdaS = mkUntypedAbs(
   ),
 );
 
-const lambdaK = mkUntypedAbs(
-  "x",
-  mkUntypedAbs("y", mkVar("x")),
-);
+const lambdaK = mkUntypedAbs("x", mkUntypedAbs("y", mkVar("x")));
 
 const lambdaI = mkUntypedAbs("x", mkVar("x"));
 
@@ -53,10 +50,7 @@ export const skiToUntyped = (expr: SKIExpression): UntypedLambda => {
   if (expr.kind === "u8") {
     throw new Error("U8 literals cannot be converted to untyped lambda");
   }
-  return createApplication(
-    skiToUntyped(expr.lft),
-    skiToUntyped(expr.rgt),
-  );
+  return createApplication(skiToUntyped(expr.lft), skiToUntyped(expr.rgt));
 };
 
 export const makeUntypedChurchNumeral = (value: bigint): UntypedLambda => {

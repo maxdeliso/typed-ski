@@ -2,12 +2,13 @@
  * Compiler tests that validate lowering (TripLang → SKI) behavior.
  */
 
-import { assert } from "chai";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 
-Deno.test("naked character literal 'x' compiles to U8 after lower", async () => {
+test("naked character literal 'x' compiles to U8 after lower", async () => {
   const source = `module Test
 export main
 poly main = 'x'
@@ -18,10 +19,10 @@ poly main = 'x'
     { name: "Prelude", object: prelude },
     { name: "Test", object: obj },
   ]);
-  assert.equal(skiStr.trim(), "#u8(120)");
+  assert.strictEqual(skiStr.trim(), "#u8(120)");
 });
 
-Deno.test("numeric literal 255 vs 256: 255 uses U8, 256 uses number pipeline", async () => {
+test("numeric literal 255 vs 256: 255 uses U8, 256 uses number pipeline", async () => {
   const prelude = await getPreludeObject();
 
   const source255 = `module Test
@@ -46,6 +47,10 @@ poly main = 256
   ]);
   console.log("256 rep:", rep256.trim());
 
-  assert.equal(rep255.trim(), "#u8(255)", "255 should lower to U8");
-  assert.notEqual(rep256.trim(), "#u8(256)", "256 should not lower to U8");
+  assert.strictEqual(rep255.trim(), "#u8(255)", "255 should lower to U8");
+  assert.notStrictEqual(
+    rep256.trim(),
+    "#u8(256)",
+    "256 should not lower to U8",
+  );
 });

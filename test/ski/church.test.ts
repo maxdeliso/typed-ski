@@ -1,4 +1,5 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 import { Car, Cdr, F, Fst, Plus, Snd } from "../util/combinators.ts";
 
 import { B, False, Succ, True, V, Zero } from "../../lib/consts/combinators.ts";
@@ -35,8 +36,8 @@ const pairShiftSucc = applyMany(
 
 const pairZeroZero = applyMany(V, ChurchN(0), ChurchN(0));
 
-Deno.test("Church numeral optimization functions", async (t) => {
-  await t.step("findPerfectPower", () => {
+test("Church numeral optimization functions", async (t) => {
+  await t.test("findPerfectPower", () => {
     // Test perfect powers
     // Note: Algorithm prefers smallest exponent b, so 16 = 4^2 (b=2) over 16 = 2^4 (b=4)
     expect(findPerfectPower(4)).to.deep.equal([2n, 2n]); // 4 = 2^2
@@ -80,7 +81,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(findPerfectPower(99)).to.be.null;
   });
 
-  await t.step("findFactors", () => {
+  await t.test("findFactors", () => {
     // Test composite numbers
     expect(findFactors(4)).to.deep.equal([2n, 2n]); // 4 = 2 * 2
     expect(findFactors(6)).to.deep.equal([2n, 3n]); // 6 = 2 * 3
@@ -135,43 +136,11 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(findFactors(97)).to.be.null;
   });
 
-  await t.step("optimization correctness", async () => {
+  await t.test("optimization correctness", async () => {
     // Test that optimized Church numerals decode correctly
     const testCases = [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19,
-      20,
-      21,
-      22,
-      23,
-      24,
-      25,
-      27,
-      30,
-      32,
-      36,
-      49,
-      64,
-      81,
-      100,
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24, 25, 27, 30, 32, 36, 49, 64, 81, 100,
     ];
 
     for (const n of testCases) {
@@ -184,7 +153,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     }
   });
 
-  await t.step("maximum safe integer - stack safety test", () => {
+  await t.test("maximum safe integer - stack safety test", () => {
     // Test with Number.MAX_SAFE_INTEGER (2^53 - 1 = 9007199254740991)
     // This tests that the iterative, stack-safe implementation can handle
     // very large numbers without stack overflow during construction.
@@ -216,7 +185,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     }
   });
 
-  await t.step("supports arbitrarily large bigint inputs", () => {
+  await t.test("supports arbitrarily large bigint inputs", () => {
     const huge = 2n ** 200n; // comfortably above Number.MAX_SAFE_INTEGER
     expect(() => {
       const expr = ChurchN(huge);
@@ -224,7 +193,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     }).to.not.throw();
   });
 
-  await t.step("memoization", async () => {
+  await t.test("memoization", async () => {
     // Clear any existing cache by testing fresh
     // Multiple calls should return equivalent expressions
     const church1 = ChurchN(10);
@@ -237,7 +206,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(await UnChurchNumber(arenaEvaluator.reduce(church3))).to.equal(10n);
   });
 
-  await t.step("optimization strategy verification", async () => {
+  await t.test("optimization strategy verification", async () => {
     // Verify that perfect powers use exponentiation
     // 9 = 3^2 should use application (exponentiation)
     const church9 = ChurchN(9);
@@ -262,19 +231,19 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(decoded64).to.equal(64n);
   });
 
-  await t.step("toBigInt should throw for non-integers", () => {
+  await t.test("toBigInt should throw for non-integers", () => {
     expect(() => ChurchN(1.5)).to.throw(
       "Only integer values can be converted to Church numerals",
     );
   });
 
-  await t.step("ChurchN should throw for negative integers", () => {
+  await t.test("ChurchN should throw for negative integers", () => {
     expect(() => ChurchN(-1)).to.throw(
       "only non-negative integers are supported",
     );
   });
 
-  await t.step(
+  await t.test(
     "UnChurchNumber should handle non-function-valued SKI terms",
     async () => {
       // K is a function, but when applied to one arg it returns another function.
@@ -284,7 +253,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     },
   );
 
-  await t.step(
+  await t.test(
     "UnChurchNumber should handle IO terminals by returning 0",
     async () => {
       const readOneExpr = {
@@ -296,7 +265,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     },
   );
 
-  await t.step("UnChurchNumber should handle Turner primes", async () => {
+  await t.test("UnChurchNumber should handle Turner primes", async () => {
     // S' w x y z = w (x z) (y z)
     // S' I I I 0 should be I(I 0)(I 0) = 0(0) which might fail as 0 is not a function
     // But let's just see if it doesn't crash
@@ -309,7 +278,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(await UnChurchNumber(applyMany(CPrime, I, I, I))).to.be.a("bigint");
   });
 
-  await t.step("findPerfectPower edge cases", () => {
+  await t.test("findPerfectPower edge cases", () => {
     expect(findPerfectPower(0)).to.be.null;
     expect(findPerfectPower(1)).to.be.null;
     expect(findPerfectPower(2)).to.be.null;
@@ -317,7 +286,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(findPerfectPower(4)).to.deep.equal([2n, 2n]);
   });
 
-  await t.step("findFactors edge cases", () => {
+  await t.test("findFactors edge cases", () => {
     expect(findFactors(0)).to.be.null;
     expect(findFactors(1)).to.be.null;
     expect(findFactors(2)).to.be.null;
@@ -326,7 +295,7 @@ Deno.test("Church numeral optimization functions", async (t) => {
     expect(findFactors(5)).to.be.null; // prime
   });
 
-  await t.step(
+  await t.test(
     "UnChurchNumber with invalid church numeral (not returning bigint)",
     async () => {
       // A "church numeral" that returns something else
@@ -337,22 +306,22 @@ Deno.test("Church numeral optimization functions", async (t) => {
   );
 });
 
-Deno.test("Church encodings", async (t) => {
+test("Church encodings", async (t) => {
   const N = 5;
 
-  await t.step("succ / basic arithmetic", async (t) => {
-    await t.step("0 + 1 = 1", async () => {
+  await t.test("succ / basic arithmetic", async (t) => {
+    await t.test("0 + 1 = 1", async () => {
       expect(await UnChurchNumber(apply(Succ, ChurchN(0)))).to.equal(1n);
     });
 
-    await t.step("1 + 1 = 2", async () => {
+    await t.test("1 + 1 = 2", async () => {
       expect(
         await UnChurchNumber(arenaEvaluator.reduce(apply(Succ, ChurchN(1)))),
       ).to.equal(2n);
     });
   });
 
-  await t.step("boolean logic (AND / OR in Church encoding)", async () => {
+  await t.test("boolean logic (AND / OR in Church encoding)", async () => {
     for (const p of [false, true]) {
       for (const q of [false, true]) {
         const conj = p && q;
@@ -379,7 +348,7 @@ Deno.test("Church encodings", async (t) => {
     }
   });
 
-  await t.step("pairs (make, fst, snd, car, cdr)", async () => {
+  await t.test("pairs (make, fst, snd, car, cdr)", async () => {
     expect(
       await UnChurchNumber(
         arenaEvaluator.reduce(applyMany(V, ChurchN(0), ChurchN(1), Fst)),
@@ -394,22 +363,18 @@ Deno.test("Church encodings", async (t) => {
 
     expect(
       await UnChurchNumber(
-        arenaEvaluator.reduce(
-          apply(Car, applyMany(V, ChurchN(0), ChurchN(1))),
-        ),
+        arenaEvaluator.reduce(apply(Car, applyMany(V, ChurchN(0), ChurchN(1)))),
       ),
     ).to.equal(0n);
 
     expect(
       await UnChurchNumber(
-        arenaEvaluator.reduce(
-          apply(Cdr, applyMany(V, ChurchN(0), ChurchN(1))),
-        ),
+        arenaEvaluator.reduce(apply(Cdr, applyMany(V, ChurchN(0), ChurchN(1)))),
       ),
     ).to.equal(1n);
   });
 
-  await t.step("isZero predicate", async () => {
+  await t.test("isZero predicate", async () => {
     // definition-style tests
     expect(
       await UnChurchBoolean(
@@ -433,7 +398,7 @@ Deno.test("Church encodings", async (t) => {
     ).to.equal(false);
   });
 
-  await t.step("sums and products (0‥N-1)", async () => {
+  await t.test("sums and products (0‥N-1)", async () => {
     for (let m = 0n; m < N; m++) {
       for (let n = 0n; n < N; n++) {
         // m + n   via λmn.(m succ) n
@@ -471,7 +436,7 @@ Deno.test("Church encodings", async (t) => {
     }
   });
 
-  await t.step("predecessor", async () => {
+  await t.test("predecessor", async () => {
     const [, predLambda] = parseLambda(
       "\\n=>\\f=>\\x=>n(\\g=>\\h=>h(g f))(\\u=>x)(\\u=>u)",
     );
@@ -491,9 +456,7 @@ Deno.test("Church encodings", async (t) => {
 
       // Lambda derived from book definition
       expect(
-        await UnChurchNumber(
-          arenaEvaluator.reduce(apply(pred, ChurchN(m))),
-        ),
+        await UnChurchNumber(arenaEvaluator.reduce(apply(pred, ChurchN(m)))),
       ).to.equal(expected);
     }
   });

@@ -79,7 +79,10 @@ function isTerminator(state: ParserState): boolean {
 
   // Structural delimiters
   if (
-    ch === RIGHT_PAREN || ch === RIGHT_BRACE || ch === "]" || ch === "|" ||
+    ch === RIGHT_PAREN ||
+    ch === RIGHT_BRACE ||
+    ch === "]" ||
+    ch === "|" ||
     ch === LEFT_BRACE
   ) {
     return true;
@@ -112,7 +115,7 @@ function parseMatchExpression(
   let scrutinee = headTerm;
   let currentState = headState;
 
-  for (let matchLength = 0;; matchLength = matchLength + 1) {
+  for (let matchLength = 0; ; matchLength = matchLength + 1) {
     currentState = skipWhitespace(currentState);
 
     // Standard termination checks
@@ -145,9 +148,8 @@ function parseMatchExpression(
   currentState = matchCh(peekState, "[");
   // Ensure we skip whitespace before parsing the type
   currentState = skipWhitespace(currentState);
-  const [returnTypeLit, returnType, stateAfterType] = parseSystemFType(
-    currentState,
-  );
+  const [returnTypeLit, returnType, stateAfterType] =
+    parseSystemFType(currentState);
 
   currentState = skipWhitespace(stateAfterType);
   currentState = matchCh(currentState, "]");
@@ -159,7 +161,7 @@ function parseMatchExpression(
   const arms: SystemFMatchArm[] = [];
 
   // 3. Arms
-  for (let armLength = 0;; armLength = armLength + 1) {
+  for (let armLength = 0; ; armLength = armLength + 1) {
     currentState = skipWhitespace(currentState);
     const [nextArmCh] = peek(currentState);
 
@@ -183,7 +185,7 @@ function parseMatchExpression(
 
     // Parameters (identifiers until =>)
     const params: string[] = [];
-    for (let paramLength = 0;; paramLength = paramLength + 1) {
+    for (let paramLength = 0; ; paramLength = paramLength + 1) {
       const [isArrow, arrowState] = peekFatArrow(currentState);
       if (isArrow) {
         currentState = matchFatArrow(arrowState);
@@ -238,9 +240,7 @@ function parseLetExpression(
   if (nextCh === COLON) {
     currentState = matchCh(currentState, COLON);
     currentState = skipWhitespace(currentState); // Skip space after colon
-    [typeLit, typeAnnotation, currentState] = parseSystemFType(
-      currentState,
-    );
+    [typeLit, typeAnnotation, currentState] = parseSystemFType(currentState);
     currentState = skipWhitespace(currentState);
   }
 
@@ -432,7 +432,7 @@ const parseStringLiteralTerm = (
   const literalParts: string[] = [];
   const codes: number[] = [];
 
-  for (let litLen = 0;; litLen = litLen + 1) {
+  for (let litLen = 0; ; litLen = litLen + 1) {
     if (currentState.idx >= currentState.buf.length) {
       throw new ParseError(
         withParserState(currentState, "unterminated string literal"),
@@ -501,16 +501,14 @@ function parseAtomicSystemFTerm(
     const stateAfterColon = matchCh(stateBeforeColon, ":");
 
     const stateBeforeType = skipWhitespace(stateAfterColon);
-    const [typeLit, typeAnnotation, stateAfterType] = parseSystemFType(
-      stateBeforeType,
-    );
+    const [typeLit, typeAnnotation, stateAfterType] =
+      parseSystemFType(stateBeforeType);
 
     const stateBeforeArrow = skipWhitespace(stateAfterType);
     const stateAfterArrow = matchFatArrow(stateBeforeArrow);
 
-    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(
-      stateAfterArrow,
-    );
+    const [bodyLit, bodyTerm, stateAfterBody] =
+      parseSystemFTerm(stateAfterArrow);
     return [
       `${BACKSLASH}${varLit}:${typeLit}${FAT_ARROW}${bodyLit}`,
       mkSystemFAbs(varLit, typeAnnotation, bodyTerm),
@@ -549,9 +547,8 @@ function parseAtomicSystemFTerm(
     const stateBeforeArrow = skipWhitespace(stateAfterVar);
     const stateAfterArrow = matchFatArrow(stateBeforeArrow);
 
-    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(
-      stateAfterArrow,
-    );
+    const [bodyLit, bodyTerm, stateAfterBody] =
+      parseSystemFTerm(stateAfterArrow);
     return [
       `${HASH}${typeVar}${FAT_ARROW}${bodyLit}`,
       mkSystemFTAbs(typeVar, bodyTerm),
@@ -560,9 +557,8 @@ function parseAtomicSystemFTerm(
   } // 3. Parentheses: ( term )
   else if (ch === "(") {
     const stateAfterLP = matchLP(state);
-    const [innerLit, innerTerm, stateAfterTerm] = parseSystemFTerm(
-      stateAfterLP,
-    );
+    const [innerLit, innerTerm, stateAfterTerm] =
+      parseSystemFTerm(stateAfterLP);
     const stateAfterRP = matchRP(stateAfterTerm);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
   } // 4. Literals
@@ -574,11 +570,7 @@ function parseAtomicSystemFTerm(
     const [literal, value, stateAfterLiteral] = parseNumericLiteral(state);
     // Values < 256 default to U8 literals; others to Nat
     if (value >= 0n && value <= 255n) {
-      return [
-        literal,
-        mkSystemFVar(`__trip_u8_${value}`),
-        stateAfterLiteral,
-      ];
+      return [literal, mkSystemFVar(`__trip_u8_${value}`), stateAfterLiteral];
     }
     return [
       literal,
@@ -625,7 +617,7 @@ export function parseSystemFTerm(
   let currentState = headState;
 
   // 2. Loop to parse the tail (Arguments)
-  for (let appLength = 0;; appLength = appLength + 1) {
+  for (let appLength = 0; ; appLength = appLength + 1) {
     currentState = skipWhitespace(currentState);
 
     // Check strict termination conditions
@@ -639,9 +631,8 @@ export function parseSystemFTerm(
     if (ch === "[") {
       const stateAfterLBracket = matchCh(peekState, "[");
       const stateBeforeType = skipWhitespace(stateAfterLBracket);
-      const [typeLit, typeArg, stateAfterType] = parseSystemFType(
-        stateBeforeType,
-      );
+      const [typeLit, typeArg, stateAfterType] =
+        parseSystemFType(stateBeforeType);
       const stateBeforeRBracket = skipWhitespace(stateAfterType);
       const stateAfterRBracket = matchCh(stateBeforeRBracket, "]");
 
@@ -653,9 +644,8 @@ export function parseSystemFTerm(
 
     // Case B: Term Application (Next Atom)
     try {
-      const [atomLit, atomTerm, nextState] = parseAtomicSystemFTerm(
-        currentState,
-      );
+      const [atomLit, atomTerm, nextState] =
+        parseAtomicSystemFTerm(currentState);
       literals.push(atomLit);
       resultTerm = createSystemFApplication(resultTerm, atomTerm);
       currentState = nextState;
@@ -681,9 +671,9 @@ export function unparseSystemF(term: SystemFTerm): string {
   switch (term.kind) {
     case "non-terminal": {
       const parts = flattenSystemFApp(term);
-      return `${LEFT_PAREN}${
-        parts.map(unparseSystemF).join(" ")
-      }${RIGHT_PAREN}`;
+      return `${LEFT_PAREN}${parts
+        .map(unparseSystemF)
+        .join(" ")}${RIGHT_PAREN}`;
     }
     case "systemF-var": {
       const u8Match = /^__trip_u8_(\d+)$/.exec(term.name);
@@ -691,36 +681,41 @@ export function unparseSystemF(term: SystemFTerm): string {
       return parseNatLiteralIdentifier(term.name)?.toString() ?? term.name;
     }
     case "systemF-abs":
-      return `${BACKSLASH}${term.name}${COLON}${
-        unparseSystemFType(term.typeAnnotation)
-      }${FAT_ARROW}${unparseSystemF(term.body)}`;
+      return `${BACKSLASH}${term.name}${COLON}${unparseSystemFType(
+        term.typeAnnotation,
+      )}${FAT_ARROW}${unparseSystemF(term.body)}`;
     case "systemF-type-abs":
       return `${HASH}${term.typeVar}${FAT_ARROW}${unparseSystemF(term.body)}`;
     case "systemF-type-app": {
-      const target = term.term.kind === "systemF-var" ||
-          term.term.kind === "systemF-type-app" ||
-          term.term.kind === "non-terminal"
-        ? unparseSystemF(term.term)
-        : `${LEFT_PAREN}${unparseSystemF(term.term)}${RIGHT_PAREN}`;
+      const target =
+        term.term.kind === "systemF-var" ||
+        term.term.kind === "systemF-type-app" ||
+        term.term.kind === "non-terminal"
+          ? unparseSystemF(term.term)
+          : `${LEFT_PAREN}${unparseSystemF(term.term)}${RIGHT_PAREN}`;
       return `${target}[${unparseSystemFType(term.typeArg)}]`;
     }
     case "systemF-match": {
-      const arms = term.arms.map((arm) =>
-        `| ${arm.constructorName}${
-          arm.params.length > 0 ? ` ${arm.params.join(" ")}` : ""
-        } ${FAT_ARROW} ${unparseSystemF(arm.body)}`
-      ).join(" ");
-      return `match ${unparseSystemF(term.scrutinee)} [${
-        unparseSystemFType(term.returnType)
-      }] { ${arms} }`;
+      const arms = term.arms
+        .map(
+          (arm) =>
+            `| ${arm.constructorName}${
+              arm.params.length > 0 ? ` ${arm.params.join(" ")}` : ""
+            } ${FAT_ARROW} ${unparseSystemF(arm.body)}`,
+        )
+        .join(" ");
+      return `match ${unparseSystemF(term.scrutinee)} [${unparseSystemFType(
+        term.returnType,
+      )}] { ${arms} }`;
     }
     case "systemF-let": {
-      const ann = term.typeAnnotation !== undefined
-        ? ` : ${unparseSystemFType(term.typeAnnotation)}`
-        : "";
-      return `let ${term.name}${ann} = ${unparseSystemF(term.value)} in ${
-        unparseSystemF(term.body)
-      }`;
+      const ann =
+        term.typeAnnotation !== undefined
+          ? ` : ${unparseSystemFType(term.typeAnnotation)}`
+          : "";
+      return `let ${term.name}${ann} = ${unparseSystemF(term.value)} in ${unparseSystemF(
+        term.body,
+      )}`;
     }
   }
 }

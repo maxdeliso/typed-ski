@@ -39,7 +39,7 @@ export function parseChain<T>(
   let resultTerm: T | undefined = undefined;
   let currentState = skipWhitespace(state);
 
-  for (let chainLength = 0;; chainLength = chainLength + 1) {
+  for (let chainLength = 0; ; chainLength = chainLength + 1) {
     const [hasRemaining] = remaining(currentState);
     if (!hasRemaining) break;
     const [peeked] = peek(currentState);

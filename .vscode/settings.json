@@ -1,12 +1,5 @@
 {
-  "deno.enable": true,
-  "deno.lint": true,
-  "deno.codeLens.test": true,
-  "deno.unstable": [],
-  "deno.suggest.imports.hosts": {
-    "https://deno.land": true
-  },
+  "deno.enable": false,
   "typescript.preferences.includePackageJsonAutoImports": "off",
-  "typescript.suggest.autoImports": false,
-  "typescript.validate.enable": false
+  "typescript.suggest.autoImports": false
 }

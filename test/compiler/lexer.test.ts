@@ -7,7 +7,8 @@
  * still resetting the arena between logical test runs.
  */
 
-import { assert } from "chai";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
@@ -71,24 +72,26 @@ async function compileAndValidateTestProgram(
   return parseSKI(skiExpression);
 }
 
-Deno.test({
-  name: "Lexer thanatos suite",
-  ignore: !thanatosAvailable(),
-  fn: async (t) => {
+test(
+  "Lexer thanatos suite",
+  {
+    skip: !thanatosAvailable(),
+  },
+  async (t) => {
     try {
-      await t.step("Lexer - isSpace structure validation", async () => {
+      await t.test("Lexer - isSpace structure validation", async () => {
         const program = await compileAndValidateTestProgram("testIsSpace.trip");
         const lines = await runThanatosBatch([unparseSKI(program)]);
         const line = lines[0];
-        assert.isNotEmpty(line, "thanatos should return a result");
-        assert.equal(
+        assert.ok(line && line.length > 0, "thanatos should return a result");
+        assert.strictEqual(
           await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
           false,
           "isSpace structure validation",
         );
       });
 
-      await t.step("Lexer - isSpace character codes", async () => {
+      await t.test("Lexer - isSpace character codes", async () => {
         const lexerObj = await getLexerObject();
         const preludeObj = await getPreludeObjectCached();
 
@@ -120,21 +123,21 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         }
 
         const results = await runThanatosBatch(inputs);
-        assert.equal(results.length, inputs.length);
+        assert.strictEqual(results.length, inputs.length);
         for (let i = 0; i < testCases.length; i++) {
           const tc = testCases[i];
           if (tc === undefined) continue;
           const [charCode, expected] = tc;
           const line = results[i] ?? "";
-          assert.isNotEmpty(
-            line,
+          assert.ok(
+            line && line.length > 0,
             `thanatos should return result for isSpace(${charCode})`,
           );
           const decoded = await UnChurchNumber(
             parseSKI(line),
             passthroughEvaluator,
           );
-          assert.equal(
+          assert.strictEqual(
             decoded,
             expected ? 1n : 0n,
             `isSpace(${charCode}) should be ${expected} (got ${decoded}n)`,
@@ -142,7 +145,7 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         }
       });
 
-      await t.step(
+      await t.test(
         'Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF',
         async () => {
           const lexerObj = await getLexerObject();
@@ -160,15 +163,15 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
 
           const lines = await runThanatosBatch([input]);
           const line = lines[0];
-          assert.isNotEmpty(line, "thanatos should return a result");
-          assert.isTrue(
+          assert.ok(line && line.length > 0, "thanatos should return a result");
+          assert.ok(
             await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
             'tokenize "1 2" should yield T_Nat "1", T_Nat "2", T_EOF',
           );
         },
       );
 
-      await t.step("Lexer - structural validations", async () => {
+      await t.test("Lexer - structural validations", async () => {
         const structuralTests = [
           {
             file: "testLexIdentVsKw.trip",
@@ -180,13 +183,11 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
           },
           {
             file: "testLexArrows.trip",
-            msg:
-              "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
+            msg: "Expected `->` => T_Arrow, `=>` => T_FatArrow, and `=` => T_Eq",
           },
           {
             file: "testLexCoreKeywords.trip",
-            msg:
-              "Expected let/match/in to tokenize as dedicated keyword tokens",
+            msg: "Expected let/match/in to tokenize as dedicated keyword tokens",
           },
           {
             file: "testLexRecKeyword.trip",
@@ -200,7 +201,7 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
             const resultDag = await session.reduceDag(dag);
             const resultExpr = fromDagWire(resultDag);
             const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
-            assert.isTrue(ok, tc.msg);
+            assert.ok(ok, tc.msg);
           }
         });
       });
@@ -208,4 +209,4 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
       await closeBatchThanatosSessions();
     }
   },
-});
+);

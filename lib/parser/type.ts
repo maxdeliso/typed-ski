@@ -39,9 +39,7 @@ import {
  *
  * Returns a triple: [literal, BaseType, updatedState]
  */
-function parseSimpleType(
-  state: ParserState,
-): [string, BaseType, ParserState] {
+function parseSimpleType(state: ParserState): [string, BaseType, ParserState] {
   const [ch, s] = peek(state);
   if (ch === "(") {
     // Parenthesized type.
@@ -108,9 +106,8 @@ export function parseArrowType(
   const [isArrow] = peekArrow(stateAfterLeft);
   if (isArrow) {
     const stateAfterArrow = matchArrow(stateAfterLeft);
-    const [rightLit, rightType, stateAfterRight] = parseArrowType(
-      stateAfterArrow,
-    );
+    const [rightLit, rightType, stateAfterRight] =
+      parseArrowType(stateAfterArrow);
     return [
       `${leftLit}${ARROW}${rightLit}`,
       arrow(leftType, rightType),
@@ -131,9 +128,8 @@ export function parseArrowTypeNoApp(
   const [isArrow] = peekArrow(stateAfterLeft);
   if (isArrow) {
     const stateAfterArrow = matchArrow(stateAfterLeft);
-    const [rightLit, rightType, stateAfterRight] = parseArrowTypeNoApp(
-      stateAfterArrow,
-    );
+    const [rightLit, rightType, stateAfterRight] =
+      parseArrowTypeNoApp(stateAfterArrow);
     return [
       `${leftLit}${ARROW}${rightLit}`,
       arrow(leftType, rightType),
@@ -162,18 +158,20 @@ export function unparseType(ty: BaseType): string {
   if (ty.kind === "type-var") {
     return ty.typeName;
   } else if (ty.kind === "type-app") {
-    const fn = ty.fn.kind === "type-var" || ty.fn.kind === "type-app"
-      ? unparseType(ty.fn)
-      : `${LEFT_PAREN}${unparseType(ty.fn)}${RIGHT_PAREN}`;
-    const arg = ty.arg.kind === "type-var"
-      ? unparseType(ty.arg)
-      : `${LEFT_PAREN}${unparseType(ty.arg)}${RIGHT_PAREN}`;
+    const fn =
+      ty.fn.kind === "type-var" || ty.fn.kind === "type-app"
+        ? unparseType(ty.fn)
+        : `${LEFT_PAREN}${unparseType(ty.fn)}${RIGHT_PAREN}`;
+    const arg =
+      ty.arg.kind === "type-var"
+        ? unparseType(ty.arg)
+        : `${LEFT_PAREN}${unparseType(ty.arg)}${RIGHT_PAREN}`;
     return `${fn} ${arg}`;
   } else if (ty.kind === "forall") {
     return `${HASH}${ty.typeVar}${ARROW}${unparseType(ty.body)}`;
   } else {
-    return `${LEFT_PAREN}${unparseType(ty.lft)}${ARROW}${
-      unparseType(ty.rgt)
-    }${RIGHT_PAREN}`;
+    return `${LEFT_PAREN}${unparseType(ty.lft)}${ARROW}${unparseType(
+      ty.rgt,
+    )}${RIGHT_PAREN}`;
   }
 }

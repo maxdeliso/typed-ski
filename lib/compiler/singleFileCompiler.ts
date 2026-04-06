@@ -30,7 +30,10 @@ import {
  * Compilation error specific to the single-file compiler
  */
 export class SingleFileCompilerError extends Error {
-  constructor(message: string, public override readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public override readonly cause?: unknown,
+  ) {
     super(message);
     this.name = "SingleFileCompilerError";
   }
@@ -53,8 +56,9 @@ type NamedDefinitionTerm = Exclude<
 function isNamedDefinitionTerm(
   term: TripLangTerm,
 ): term is NamedDefinitionTerm {
-  return term.kind !== "module" && term.kind !== "import" &&
-    term.kind !== "export";
+  return (
+    term.kind !== "module" && term.kind !== "import" && term.kind !== "export"
+  );
 }
 
 /**
@@ -65,8 +69,8 @@ function extractModuleInfo(program: TripLangProgram): {
   imports: ModuleImport[];
   exports: string[];
 } {
-  const moduleDefs = program.terms.filter((term): term is ModuleDefinition =>
-    term.kind === "module"
+  const moduleDefs = program.terms.filter(
+    (term): term is ModuleDefinition => term.kind === "module",
   );
 
   if (moduleDefs.length === 0) {
@@ -93,7 +97,7 @@ function extractModuleInfo(program: TripLangProgram): {
     .filter((term): term is ImportDefinition => term.kind === "import")
     .map((imp) => ({ name: imp.ref, from: imp.name }))
     .sort((left, right) =>
-      compareAsciiTuple([left.from, left.name], [right.from, right.name])
+      compareAsciiTuple([left.from, left.name], [right.from, right.name]),
     );
 
   // Extract exports
@@ -129,19 +133,18 @@ function extractDefinitions(
  * Extracts structural ADT metadata from a parsed TripLang program.
  */
 function extractDataDefinitions(program: TripLangProgram): DataDefinition[] {
-  return program.terms.filter((term): term is DataDefinition =>
-    term.kind === "data"
-  ).sort((left, right) => compareAscii(left.name, right.name));
+  return program.terms
+    .filter((term): term is DataDefinition => term.kind === "data")
+    .sort((left, right) => compareAscii(left.name, right.name));
 }
 
 function buildImportedDataDefinitionsByModule(
   options: CompileToObjectFileOptions,
 ): Map<string, ReadonlyArray<DataDefinition>> {
   const byModule = new Map<string, ReadonlyArray<DataDefinition>>();
-  const importedModules = [...(options.importedModules ?? [])].sort((
-    left,
-    right,
-  ) => compareAscii(left.module, right.module));
+  const importedModules = [...(options.importedModules ?? [])].sort(
+    (left, right) => compareAscii(left.module, right.module),
+  );
   for (const moduleObject of importedModules) {
     byModule.set(moduleObject.module, moduleObject.dataDefinitions);
   }
@@ -171,9 +174,8 @@ export function compileToObjectFile(
 
     // Index symbols
     const symbolTable = indexSymbolsImpl(parsedProgram, {
-      importedDataDefinitionsByModule: buildImportedDataDefinitionsByModule(
-        options,
-      ),
+      importedDataDefinitionsByModule:
+        buildImportedDataDefinitionsByModule(options),
     });
 
     // Elaborate terms (desugaring, annotation propagation)

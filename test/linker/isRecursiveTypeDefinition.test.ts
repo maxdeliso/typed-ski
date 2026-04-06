@@ -1,21 +1,22 @@
-import { expect } from "chai";
+import { test } from "node:test";
+import { expect } from "../util/assertions.ts";
 import { isRecursiveTypeDefinition } from "../../lib/linker/moduleLinker.ts";
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
 import { mkUntypedAbs, mkVar } from "../../lib/terms/lambda.ts";
 
-Deno.test("isRecursiveTypeDefinition", async (t) => {
-  await t.step("returns false for non-type definitions", () => {
+test("isRecursiveTypeDefinition", async (t) => {
+  await t.test("returns false for non-type definitions", () => {
     // Arc 1: typeDef.kind !== "type"
-    const untypedDef: TripLangTerm = {
-      kind: "untyped",
+    const lambdaDef: TripLangTerm = {
+      kind: "lambda",
       name: "id",
       term: mkUntypedAbs("x", mkVar("x")),
     };
 
-    expect(isRecursiveTypeDefinition(untypedDef)).to.be.false;
+    expect(isRecursiveTypeDefinition(lambdaDef)).to.be.false;
   });
 
-  await t.step("returns false when definition value extraction fails", () => {
+  await t.test("returns false when definition value extraction fails", () => {
     // Arc 2: extractDefinitionValue returns undefined (e.g., malformed type def)
     const malformedTypeDef = {
       kind: "type",
@@ -26,7 +27,7 @@ Deno.test("isRecursiveTypeDefinition", async (t) => {
     expect(isRecursiveTypeDefinition(malformedTypeDef)).to.be.false;
   });
 
-  await t.step("returns false for non-recursive type definitions", () => {
+  await t.test("returns false for non-recursive type definitions", () => {
     // Normal case: not recursive
     const typeDef: TripLangTerm = {
       kind: "type",
@@ -37,7 +38,7 @@ Deno.test("isRecursiveTypeDefinition", async (t) => {
     expect(isRecursiveTypeDefinition(typeDef)).to.be.false;
   });
 
-  await t.step("returns true for recursive type definitions", () => {
+  await t.test("returns true for recursive type definitions", () => {
     // Recursive case
     const typeDef: TripLangTerm = {
       kind: "type",

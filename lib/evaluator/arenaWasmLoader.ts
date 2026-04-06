@@ -55,14 +55,14 @@ function getNodeFs() {
     readFile: async (path: string | URL): Promise<Uint8Array> => {
       const p =
         path instanceof URL && path.protocol === "file:"
-          ? fileURLToPath(path)
+          ? fileURLToPath(path as any)
           : path.toString();
       return new Uint8Array(await fsPromises.readFile(p));
     },
     readFileSync: (path: string | URL): Uint8Array => {
       const p =
         path instanceof URL && path.protocol === "file:"
-          ? fileURLToPath(path)
+          ? fileURLToPath(path as any)
           : path.toString();
       return new Uint8Array(fs.readFileSync(p));
     },

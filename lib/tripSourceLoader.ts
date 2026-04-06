@@ -14,7 +14,7 @@ const MODULE_CACHE = new Map<string, TripCObject>();
 
 function normalizePath(sourceLocation: TripSourceLocation): string {
   if (sourceLocation instanceof URL) {
-    return fileURLToPath(sourceLocation);
+    return fileURLToPath(sourceLocation as any);
   }
   return sourceLocation;
 }

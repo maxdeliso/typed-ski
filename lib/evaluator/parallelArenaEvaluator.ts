@@ -381,7 +381,7 @@ export class ParallelArenaEvaluatorWasm
   }
 
   static async create(
-    workerCount = globalThis.navigator?.hardwareConcurrency ?? 4,
+    workerCount: number = globalThis.navigator?.hardwareConcurrency ?? 4,
     verbose = false,
     options: ParallelArenaEvaluatorOptions = {},
   ): Promise<ParallelArenaEvaluatorWasm> {

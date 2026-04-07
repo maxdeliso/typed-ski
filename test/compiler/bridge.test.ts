@@ -5,7 +5,7 @@ import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
-import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
+import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { test } from "node:test";
 import { readFile } from "node:fs/promises";
@@ -172,8 +172,8 @@ async function runBridgeHarness(source: string): Promise<boolean> {
   ]);
   const expr = parseSKI(linked);
   return await withBatchThanatosSession(async (session) => {
-    const resultDag = await session.reduceDag(toDagWire(expr));
-    const resultExpr = fromDagWire(resultDag);
+    const resultDag = await session.reduceExpr(expr);
+    const resultExpr = fromTopoDagWire(resultDag);
     return await UnChurchBoolean(resultExpr, passthroughEvaluator);
   });
 }

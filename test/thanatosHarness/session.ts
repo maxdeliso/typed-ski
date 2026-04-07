@@ -1,6 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import type { SKIExpression } from "../../lib/ski/expression.ts";
+import {
+  type TopoDagWireEncodeOptions,
+  writeTopoDagWireAsync,
+} from "../../lib/ski/topoDagWire.ts";
 import {
   defaultWorkerCount,
   PROJECT_ROOT,
@@ -61,6 +66,11 @@ export interface ThanatosSession {
   signal(signal: string): Promise<void>;
   rawRequest(line: string): Promise<string>;
   reduceDag(dag: string): Promise<string>;
+  reduceDagChunks(chunks: Iterable<string>): Promise<string>;
+  reduceExpr(
+    expr: SKIExpression,
+    options?: TopoDagWireEncodeOptions,
+  ): Promise<string>;
   reduceIo(
     dag: string,
     stdin: Uint8Array,
@@ -126,7 +136,10 @@ class DirectThanatosSession implements ThanatosSession {
     return Promise.resolve();
   }
 
-  private async request(line: string): Promise<string> {
+  private async writePart(part: string): Promise<void> {
+    if (part.length === 0) {
+      return;
+    }
     if (
       this.child == null ||
       this.child.stdin == null ||
@@ -135,8 +148,32 @@ class DirectThanatosSession implements ThanatosSession {
       throw new Error("ThanatosSession not started");
     }
     if (this.closed) throw new Error("ThanatosSession closed");
+    if (this.child.stdin.write(part)) {
+      return;
+    }
+    await new Promise((resolve, reject) => {
+      const onError = (error: Error) => {
+        this.child.stdin.off("drain", onDrain);
+        reject(error);
+      };
+      const onDrain = () => {
+        this.child.stdin.off("error", onError);
+        resolve(null);
+      };
+      this.child.stdin.once("error", onError);
+      this.child.stdin.once("drain", onDrain);
+    });
+  }
 
-    this.child.stdin.write(line + "\n");
+  private async readResponseLine(): Promise<string> {
+    if (
+      this.child == null ||
+      this.child.stdin == null ||
+      this.child.stdout == null
+    ) {
+      throw new Error("ThanatosSession not started");
+    }
+    if (this.closed) throw new Error("ThanatosSession closed");
 
     const decoder = new TextDecoder();
     while (true) {
@@ -164,6 +201,20 @@ class DirectThanatosSession implements ThanatosSession {
     }
   }
 
+  private async request(line: string): Promise<string> {
+    await this.writePart(line);
+    await this.writePart("\n");
+    return await this.readResponseLine();
+  }
+
+  private async requestChunks(chunks: Iterable<string>): Promise<string> {
+    for (const chunk of chunks) {
+      await this.writePart(chunk);
+    }
+    await this.writePart("\n");
+    return await this.readResponseLine();
+  }
+
   private serialRequest(line: string): Promise<string> {
     const previous = this.pending;
     let resolveNext!: () => void;
@@ -171,6 +222,42 @@ class DirectThanatosSession implements ThanatosSession {
       resolveNext = resolve;
     });
     const result = previous.then(() => this.request(line));
+    result.finally(() => resolveNext());
+    return result;
+  }
+
+  private serialChunkRequest(chunks: Iterable<string>): Promise<string> {
+    const previous = this.pending;
+    let resolveNext!: () => void;
+    this.pending = new Promise<void>((resolve) => {
+      resolveNext = resolve;
+    });
+    const result = previous.then(() => this.requestChunks(chunks));
+    result.finally(() => resolveNext());
+    return result;
+  }
+
+  private serialExprRequest(
+    expr: SKIExpression,
+    options: TopoDagWireEncodeOptions,
+  ): Promise<string> {
+    const previous = this.pending;
+    let resolveNext!: () => void;
+    this.pending = new Promise<void>((resolve) => {
+      resolveNext = resolve;
+    });
+    const result = previous.then(async () => {
+      await this.writePart("REDUCE ");
+      await writeTopoDagWireAsync(
+        expr,
+        async (chunk) => {
+          await this.writePart(chunk);
+        },
+        options,
+      );
+      await this.writePart("\n");
+      return await this.readResponseLine();
+    });
     result.finally(() => resolveNext());
     return result;
   }
@@ -183,6 +270,37 @@ class DirectThanatosSession implements ThanatosSession {
   async reduceDag(dag: string): Promise<string> {
     this.start();
     const response = await this.serialRequest("REDUCE " + dag.trim());
+    if (response.startsWith("OK ")) return response.slice(3).trim();
+    if (response === "OK") return "";
+    if (response.startsWith("ERR ")) {
+      throw new Error("thanatos: " + response.slice(4));
+    }
+    throw new Error("thanatos: unexpected " + response);
+  }
+
+  async reduceDagChunks(chunks: Iterable<string>): Promise<string> {
+    this.start();
+    function* requestChunks(): Generator<string> {
+      yield "REDUCE ";
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    }
+    const response = await this.serialChunkRequest(requestChunks());
+    if (response.startsWith("OK ")) return response.slice(3).trim();
+    if (response === "OK") return "";
+    if (response.startsWith("ERR ")) {
+      throw new Error("thanatos: " + response.slice(4));
+    }
+    throw new Error("thanatos: unexpected " + response);
+  }
+
+  async reduceExpr(
+    expr: SKIExpression,
+    options: TopoDagWireEncodeOptions = {},
+  ): Promise<string> {
+    this.start();
+    const response = await this.serialExprRequest(expr, options);
     if (response.startsWith("OK ")) return response.slice(3).trim();
     if (response === "OK") return "";
     if (response.startsWith("ERR ")) {
@@ -341,6 +459,29 @@ class BrokerThanatosSession implements ThanatosSession {
 
   async reduceDag(dag: string): Promise<string> {
     return await this.request<string>({ op: "reduceDag", dag });
+  }
+
+  async reduceDagChunks(chunks: Iterable<string>): Promise<string> {
+    let dag = "";
+    for (const chunk of chunks) {
+      dag += chunk;
+    }
+    return await this.reduceDag(dag);
+  }
+
+  async reduceExpr(
+    expr: SKIExpression,
+    options: TopoDagWireEncodeOptions = {},
+  ): Promise<string> {
+    const chunks: string[] = [];
+    await writeTopoDagWireAsync(
+      expr,
+      async (chunk) => {
+        chunks.push(chunk);
+      },
+      options,
+    );
+    return await this.reduceDagChunks(chunks);
   }
 
   async reduceIo(

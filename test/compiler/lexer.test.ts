@@ -19,7 +19,7 @@ import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
-import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
+import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import {
@@ -197,9 +197,8 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         await withBatchThanatosSession(async (session) => {
           for (const tc of structuralTests) {
             const program = await compileAndValidateTestProgram(tc.file);
-            const dag = toDagWire(program);
-            const resultDag = await session.reduceDag(dag);
-            const resultExpr = fromDagWire(resultDag);
+            const resultDag = await session.reduceExpr(program);
+            const resultExpr = fromTopoDagWire(resultDag);
             const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
             assert.ok(ok, tc.msg);
           }

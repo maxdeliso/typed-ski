@@ -257,6 +257,15 @@ size_t unparse_ski(uint32_t node_id, char *buf, size_t capacity) {
 
 /* --- DAG wire codec --- */
 
+enum {
+  TOPO_DAG_TERM_WIDTH = 3,
+  TOPO_DAG_PTR_WIDTH = 8,
+  TOPO_DAG_RECORD_WIDTH = TOPO_DAG_TERM_WIDTH + (TOPO_DAG_PTR_WIDTH * 2),
+  TOPO_DAG_RECORD_STRIDE = TOPO_DAG_RECORD_WIDTH + 1,
+};
+
+#define TOPO_DAG_NULL_PTR 0xffffffffu
+
 /* Map single char to ARENA_SYM_* for DAG terminal tokens. Returns 0 if not a
  * DAG terminal. */
 static uint32_t dag_char_to_sym(int c) {
@@ -308,167 +317,166 @@ static bool parse_hex_byte(const char *p, uint8_t *out) {
   return false;
 }
 
-static bool parse_u32_dec(const char *start, const char *end, uint32_t *out) {
-  if (start >= end)
-    return false;
-  uint32_t val = 0;
-  const char *p = start;
-  while (p < end && *p >= '0' && *p <= '9') {
-    uint32_t digit = (uint32_t)(*p - '0');
-    if (val > (0xffffffffu - digit) / 10)
+static bool parse_u32_hex_fixed(const char *p, size_t width, uint32_t *out) {
+  uint32_t value = 0;
+  for (size_t i = 0; i < width; i++) {
+    int digit = hex_digit((unsigned char)p[i]);
+    if (digit < 0)
       return false;
-    val = val * 10 + digit;
-    p++;
+    value = (value << 4) | (uint32_t)digit;
   }
-  if (p == start)
-    return false;
-  *out = val;
+  *out = value;
   return true;
 }
 
-typedef enum {
-  DAG_TOK_TERMINAL,
-  DAG_TOK_U8,
-  DAG_TOK_APP,
-} DagTokKind;
+static bool parse_topo_pointer(const char *p, uint32_t *out, bool *is_null) {
+  static const char null_ptr[] = "FFFFFFFF";
+  if (memcmp(p, null_ptr, TOPO_DAG_PTR_WIDTH) == 0) {
+    *out = TOPO_DAG_NULL_PTR;
+    *is_null = true;
+    return true;
+  }
+  *is_null = false;
+  return parse_u32_hex_fixed(p, TOPO_DAG_PTR_WIDTH, out);
+}
 
-typedef struct {
-  DagTokKind kind;
-  uint32_t sym_or_left; /* terminal/u8: sym; app: left index */
-  uint32_t right;       /* app only: right index */
-} DagToken;
+static bool is_ws_char(char c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
 
-/* Scan one DAG token from s->buf[s->idx..]. On success advance s->idx and set
- * *tok. Return true on success, false on error or end of input. */
-static bool parse_dag_token(ParseState *s, DagToken *tok) {
-  skip_ws(s);
-  if (s->idx >= s->len)
+static bool topo_term_is_app(const char *term) {
+  return term[0] == '@' && term[1] == '0' && term[2] == '0';
+}
+
+static bool topo_term_is_leaf_terminal(const char *term, uint32_t *sym_out) {
+  if (term[1] != '0' || term[2] != '0')
     return false;
-
-  const char *start = s->buf + s->idx;
-  int c = (unsigned char)start[0];
-
-  /* Terminal: single char */
-  if (dag_char_to_sym(c) != 0) {
-    tok->kind = DAG_TOK_TERMINAL;
-    tok->sym_or_left = dag_char_to_sym(c);
-    tok->right = 0;
-    s->idx++;
-    return true;
-  }
-
-  /* Uxx: two hex digits */
-  if (c == 'U' && s->idx + 3 <= s->len) {
-    uint8_t byte;
-    if (parse_hex_byte(start + 1, &byte)) {
-      tok->kind = DAG_TOK_U8;
-      tok->sym_or_left = byte;
-      tok->right = 0;
-      s->idx += 3;
-      return true;
-    }
-  }
-
-  /* @L,R */
-  if (c == '@' && s->idx + 1 < s->len) {
-    s->idx++;
-    const char *end = s->buf + s->len;
-    uint32_t L, R;
-
-    skip_ws(s);
-    const char *p = s->buf + s->idx;
-    if (p >= end || !parse_u32_dec(p, end, &L))
-      return false;
-    while (s->idx < s->len && s->buf[s->idx] >= '0' && s->buf[s->idx] <= '9')
-      s->idx++;
-
-    skip_ws(s);
-    if (s->idx >= s->len || s->buf[s->idx] != ',')
-      return false;
-    s->idx++;
-
-    skip_ws(s);
-    p = s->buf + s->idx;
-    if (p >= end || !parse_u32_dec(p, end, &R))
-      return false;
-    while (s->idx < s->len && s->buf[s->idx] >= '0' && s->buf[s->idx] <= '9')
-      s->idx++;
-
-    tok->kind = DAG_TOK_APP;
-    tok->sym_or_left = L;
-    tok->right = R;
-    return true;
-  }
-
-  return false;
+  uint32_t sym = dag_char_to_sym((unsigned char)term[0]);
+  if (sym == 0)
+    return false;
+  *sym_out = sym;
+  return true;
 }
 
 uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
   if (!buf)
     return EMPTY;
-  ParseState s = {.buf = buf, .len = len, .idx = 0};
-  skip_ws(&s);
-  if (s.idx >= s.len)
+
+  size_t start = 0;
+  while (start < len && is_ws_char(buf[start]))
+    start++;
+  size_t end = len;
+  while (end > start && is_ws_char(buf[end - 1]))
+    end--;
+
+  if (start >= end)
     return EMPTY;
 
-  size_t count = 0;
-  {
-    ParseState scan = s;
-    DagToken tok;
-    while (parse_dag_token(&scan, &tok)) {
-      count++;
-      if (count > 1024 * 1024) {
-        fprintf(stderr, "parse_dag: token count exceeds limit (1M tokens)\n");
-        return EMPTY;
-      }
-    }
-    skip_ws(&scan);
-    if (scan.idx != len) {
-      fprintf(stderr,
-              "parse_dag: scan error (trailing garbage or incomplete parse at "
-              "idx %zu/%zu)\n",
-              scan.idx, len);
+  size_t dag_len = end - start;
+  if (dag_len < TOPO_DAG_RECORD_WIDTH)
+    return EMPTY;
+  if (dag_len > TOPO_DAG_RECORD_WIDTH &&
+      ((dag_len - TOPO_DAG_RECORD_WIDTH) % TOPO_DAG_RECORD_STRIDE) != 0) {
+    fprintf(stderr, "parse_dag: invalid topoDagWire length %zu\n", dag_len);
+    return EMPTY;
+  }
+  size_t count =
+      1 + ((dag_len - TOPO_DAG_RECORD_WIDTH) / TOPO_DAG_RECORD_STRIDE);
+  if (count > 1024 * 1024) {
+    fprintf(stderr, "parse_dag: token count exceeds limit (1M records)\n");
+    return EMPTY;
+  }
+
+  for (size_t i = 0; i + 1 < count; i++) {
+    size_t sep_idx = (i * TOPO_DAG_RECORD_STRIDE) + TOPO_DAG_RECORD_WIDTH;
+    if (buf[start + sep_idx] != '|') {
+      fprintf(stderr, "parse_dag: expected record separator at %zu\n",
+              start + sep_idx);
       return EMPTY;
     }
   }
 
-  if (count == 0)
-    return EMPTY;
-
   uint32_t *mapped = (uint32_t *)malloc(count * sizeof(uint32_t));
   if (!mapped) {
-    fprintf(stderr, "parse_dag: malloc failed for %zu tokens\n", count);
+    fprintf(stderr, "parse_dag: malloc failed for %zu records\n", count);
     return EMPTY;
   }
 
   for (size_t i = 0; i < count; i++) {
-    DagToken tok;
-    if (!parse_dag_token(&s, &tok)) {
-      fprintf(stderr, "parse_dag: failed to parse token %zu (pass 2)\n", i);
+    const char *record = buf + start + (i * TOPO_DAG_RECORD_STRIDE);
+    const char *term = record;
+    const char *left_field = record + TOPO_DAG_TERM_WIDTH;
+    const char *right_field = left_field + TOPO_DAG_PTR_WIDTH;
+    uint32_t sym_or_byte = 0;
+    uint32_t left_ptr = 0, right_ptr = 0;
+    bool left_is_null = false, right_is_null = false;
+
+    if (!parse_topo_pointer(left_field, &left_ptr, &left_is_null) ||
+        !parse_topo_pointer(right_field, &right_ptr, &right_is_null)) {
+      fprintf(stderr, "parse_dag: invalid pointer field at record %zu\n", i);
       free(mapped);
       return EMPTY;
     }
-    if (tok.kind == DAG_TOK_TERMINAL) {
-      mapped[i] = allocTerminal(tok.sym_or_left);
-    } else if (tok.kind == DAG_TOK_U8) {
-      mapped[i] = allocU8((uint8_t)tok.sym_or_left);
-    } else {
-      uint32_t L = tok.sym_or_left, R = tok.right;
-      if (L >= (uint32_t)i || R >= (uint32_t)i) {
+
+    if (topo_term_is_leaf_terminal(term, &sym_or_byte)) {
+      if (!left_is_null || !right_is_null) {
         fprintf(stderr,
-                "parse_dag: invalid application @%u,%u (forward ref or OOB) at "
-                "token %zu\n",
-                L, R, i);
+                "parse_dag: terminal record %zu must use null pointers\n", i);
         free(mapped);
         return EMPTY;
       }
-      mapped[i] = allocCons(mapped[L], mapped[R]);
+      mapped[i] = allocTerminal(sym_or_byte);
+      continue;
     }
+
+    uint8_t byte_value = 0;
+    if (term[0] == 'U' && parse_hex_byte(term + 1, &byte_value)) {
+      if (!left_is_null || !right_is_null) {
+        fprintf(stderr, "parse_dag: U8 record %zu must use null pointers\n", i);
+        free(mapped);
+        return EMPTY;
+      }
+      mapped[i] = allocU8(byte_value);
+      continue;
+    }
+
+    if (!topo_term_is_app(term)) {
+      fprintf(stderr, "parse_dag: invalid term field at record %zu\n", i);
+      free(mapped);
+      return EMPTY;
+    }
+
+    if (left_is_null || right_is_null) {
+      fprintf(stderr,
+              "parse_dag: application record %zu cannot use null pointers\n",
+              i);
+      free(mapped);
+      return EMPTY;
+    }
+    if ((left_ptr % TOPO_DAG_RECORD_STRIDE) != 0 ||
+        (right_ptr % TOPO_DAG_RECORD_STRIDE) != 0) {
+      fprintf(stderr,
+              "parse_dag: application record %zu uses unaligned pointers\n", i);
+      free(mapped);
+      return EMPTY;
+    }
+
+    uint32_t left_index = left_ptr / TOPO_DAG_RECORD_STRIDE;
+    uint32_t right_index = right_ptr / TOPO_DAG_RECORD_STRIDE;
+    if (left_index >= (uint32_t)i || right_index >= (uint32_t)i) {
+      fprintf(stderr,
+              "parse_dag: invalid application offsets %08X,%08X at record %zu\n",
+              left_ptr, right_ptr, i);
+      free(mapped);
+      return EMPTY;
+    }
+
+    mapped[i] = allocCons(mapped[left_index], mapped[right_index]);
   }
 
   uint32_t root = mapped[count - 1];
   if (end_idx)
-    *end_idx = s.idx;
+    *end_idx = len;
   free(mapped);
   return root;
 }
@@ -479,7 +487,8 @@ static int dag_exportable_kind(uint32_t kind) {
          kind == ARENA_KIND_NON_TERM;
 }
 
-/* Open-addressed hash table: arena_id -> local_index. O(1) lookup/insert. */
+/* Open-addressed hash table: arena_id -> serialized byte offset. O(1)
+ * lookup/insert. */
 #define DAG_HT_EMPTY 0xffffffffu
 
 typedef struct {
@@ -570,7 +579,6 @@ typedef struct {
   DagHtEntry *ht;
   uint32_t ht_cap;
   uint32_t ht_count;
-  uint32_t next_local;
   DagExportFrame *stack;
   size_t stack_cap;
   size_t stack_len;
@@ -584,18 +592,12 @@ static void unparse_ctx_free(UnparseCtx *ctx) {
   free(ctx->stack);
 }
 
-static bool unparse_append(UnparseCtx *ctx, const char *fmt, ...) {
-  if (ctx->written >= ctx->capacity)
-    return false;
-  va_list args;
-  va_start(args, fmt);
-  int nw = vsnprintf(ctx->buf + ctx->written, ctx->capacity - ctx->written, fmt,
-                     args);
-  va_end(args);
-  if (nw < 0 || (size_t)nw >= ctx->capacity - ctx->written)
-    return false;
-  ctx->written += (size_t)nw;
-  return true;
+static void write_hex8(char *dst, uint32_t value) {
+  static const char HEX[] = "0123456789ABCDEF";
+  for (int i = TOPO_DAG_PTR_WIDTH - 1; i >= 0; i--) {
+    dst[i] = HEX[value & 0xfu];
+    value >>= 4;
+  }
 }
 
 static bool unparse_push(UnparseCtx *ctx, uint32_t node_id, int state) {
@@ -620,22 +622,62 @@ static bool unparse_push(UnparseCtx *ctx, uint32_t node_id, int state) {
 
 static bool unparse_emit_node(UnparseCtx *ctx, uint32_t n) {
   uint32_t k = kindOf(n);
+  size_t current_offset = ctx->written;
+  if (ctx->written > 0) {
+    current_offset += 1;
+  }
+  if (current_offset > 0xffffffffu) {
+    fprintf(stderr, "unparse_emit_node: offset exceeds 32-bit range\n");
+    return false;
+  }
+
+  size_t required = TOPO_DAG_RECORD_WIDTH + (ctx->written > 0 ? 1 : 0);
+  if (ctx->capacity - ctx->written <= required) {
+    return false;
+  }
+
   ctx->ht = dag_ht_ensure(ctx->ht, &ctx->ht_cap, ctx->ht_count + 1);
   if (!ctx->ht)
     return false;
-  dag_ht_put(ctx->ht, ctx->ht_cap, n, ctx->next_local++);
+  dag_ht_put(ctx->ht, ctx->ht_cap, n, (uint32_t)current_offset);
   ctx->ht_count++;
 
-  if (k == ARENA_KIND_TERMINAL) {
-    return unparse_append(ctx, "%c ", sym_to_char(symOf(n)));
-  } else if (k == ARENA_KIND_U8) {
-    return unparse_append(ctx, "U%02x ", (unsigned)symOf(n));
-  } else {
-    uint32_t li = 0, ri = 0;
-    dag_ht_get(ctx->ht, ctx->ht_cap, leftOf(n), &li);
-    dag_ht_get(ctx->ht, ctx->ht_cap, rightOf(n), &ri);
-    return unparse_append(ctx, "@%u,%u ", (unsigned)li, (unsigned)ri);
+  if (ctx->written > 0) {
+    ctx->buf[ctx->written++] = '|';
   }
+
+  char *record = ctx->buf + ctx->written;
+  if (k == ARENA_KIND_TERMINAL) {
+    record[0] = sym_to_char(symOf(n));
+    record[1] = '0';
+    record[2] = '0';
+    write_hex8(record + TOPO_DAG_TERM_WIDTH, TOPO_DAG_NULL_PTR);
+    write_hex8(record + TOPO_DAG_TERM_WIDTH + TOPO_DAG_PTR_WIDTH,
+               TOPO_DAG_NULL_PTR);
+  } else if (k == ARENA_KIND_U8) {
+    static const char HEX[] = "0123456789ABCDEF";
+    uint8_t value = (uint8_t)symOf(n);
+    record[0] = 'U';
+    record[1] = HEX[(value >> 4) & 0xfu];
+    record[2] = HEX[value & 0xfu];
+    write_hex8(record + TOPO_DAG_TERM_WIDTH, TOPO_DAG_NULL_PTR);
+    write_hex8(record + TOPO_DAG_TERM_WIDTH + TOPO_DAG_PTR_WIDTH,
+               TOPO_DAG_NULL_PTR);
+  } else {
+    uint32_t left_offset = 0, right_offset = 0;
+    dag_ht_get(ctx->ht, ctx->ht_cap, leftOf(n), &left_offset);
+    dag_ht_get(ctx->ht, ctx->ht_cap, rightOf(n), &right_offset);
+    record[0] = '@';
+    record[1] = '0';
+    record[2] = '0';
+    write_hex8(record + TOPO_DAG_TERM_WIDTH, left_offset);
+    write_hex8(record + TOPO_DAG_TERM_WIDTH + TOPO_DAG_PTR_WIDTH,
+               right_offset);
+  }
+
+  ctx->written += TOPO_DAG_RECORD_WIDTH;
+  ctx->buf[ctx->written] = '\0';
+  return true;
 }
 
 size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
@@ -654,7 +696,6 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
       .written = 0,
       .ht_cap = DAG_HT_INIT,
       .ht_count = 0,
-      .next_local = 0,
       .stack_cap = DAG_STACK_INIT,
       .stack_len = 0,
   };
@@ -698,8 +739,6 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
         continue;
       }
 
-      /* NON_TERM: replace current ENTER with EMIT, then push R ENTER, then L
-       * ENTER */
       f->state = DAG_EXPORT_EMIT;
       uint32_t l = leftOf(n), r = rightOf(n);
       if (!unparse_push(&ctx, r, DAG_EXPORT_ENTER)) {
@@ -713,7 +752,6 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
       continue;
     }
 
-    /* EMIT */
     ctx.stack_len--;
     if (!unparse_emit_node(&ctx, n)) {
       unparse_ctx_free(&ctx);
@@ -721,8 +759,6 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
     }
   }
 
-  if (ctx.written > 0 && ctx.buf[ctx.written - 1] == ' ')
-    ctx.written--;
   if (ctx.written < ctx.capacity)
     ctx.buf[ctx.written] = '\0';
 

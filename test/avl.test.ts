@@ -17,7 +17,7 @@ import { getPreludeObject } from "../lib/prelude.ts";
 import type { TripCObject } from "../lib/compiler/objectFile.ts";
 import type { SKIExpression } from "../lib/ski/expression.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
-import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
+import { fromTopoDagWire, toTopoDagWire } from "../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
   passthroughEvaluator,
@@ -214,8 +214,11 @@ async function evaluateTestModuleThanatos(testCase: AvlCase): Promise<bigint> {
   const source = await testCase.loadSource();
   const expr = await buildTestExpression(source, testCase.moduleName);
   return await withBatchThanatosSession(async (session) => {
-    const resultDag = await session.reduceDag(toDagWire(expr));
-    return await UnChurchNumber(fromDagWire(resultDag), passthroughEvaluator);
+    const resultDag = await session.reduceDag(toTopoDagWire(expr));
+    return await UnChurchNumber(
+      fromTopoDagWire(resultDag),
+      passthroughEvaluator,
+    );
   });
 }
 

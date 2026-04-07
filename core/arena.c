@@ -254,6 +254,19 @@ typedef struct {
   uint8_t padding[14];
 } __attribute__((aligned(32))) ArenaNode;
 
+enum {
+  /*
+   * Per-capacity arrays in the active layout:
+   * u32: left, right, hash32, next_idx, link, buckets
+   * u8: kind, sym
+   */
+  ACTIVE_LAYOUT_U32_ARRAY_COUNT = 6,
+  ACTIVE_LAYOUT_U8_ARRAY_COUNT = 2,
+  ACTIVE_LAYOUT_BYTES_PER_CAPACITY_SLOT =
+      (int)(sizeof(atomic_uint) * ACTIVE_LAYOUT_U32_ARRAY_COUNT +
+            sizeof(atomic_uchar) * ACTIVE_LAYOUT_U8_ARRAY_COUNT),
+};
+
 typedef struct {
   uint32_t current_val;
   uint32_t sp;
@@ -400,6 +413,7 @@ typedef struct {
   uint64_t offset_node_right;
   uint64_t offset_node_hash32;
   uint64_t offset_node_next_idx;
+  uint64_t offset_node_link;
   uint64_t offset_node_kind;
   uint64_t offset_node_sym;
   uint64_t offset_buckets;
@@ -481,8 +495,16 @@ static inline uint32_t load_u32_payload(atomic_uint *arr, uint32_t n) {
   return atomic_load_explicit(&arr[n], memory_order_relaxed);
 }
 
+static inline uint32_t load_u32_link(atomic_uint *arr, uint32_t n) {
+  return atomic_load_explicit(&arr[n], memory_order_acquire);
+}
+
 static inline uint8_t load_u8_payload(atomic_uchar *arr, uint32_t n) {
   return atomic_load_explicit(&arr[n], memory_order_relaxed);
+}
+
+static inline atomic_uint *link_table_from_header(SabHeader *h) {
+  return (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_link);
 }
 
 /** Debug-only structural invariant checks. */
@@ -550,8 +572,10 @@ static SabLayout calculate_layout(uint32_t capacity, uint32_t max_capacity) {
       align64_u64(l.offset_node_right + (uint64_t)reserve_capacity * 4);
   l.offset_node_next_idx =
       align64_u64(l.offset_node_hash32 + (uint64_t)reserve_capacity * 4);
-  l.offset_node_kind =
+  l.offset_node_link =
       align64_u64(l.offset_node_next_idx + (uint64_t)reserve_capacity * 4);
+  l.offset_node_kind =
+      align64_u64(l.offset_node_link + (uint64_t)reserve_capacity * 4);
   l.offset_node_sym =
       align64_u64(l.offset_node_kind + (uint64_t)reserve_capacity * 1);
   /* Buckets follow the node arrays. */
@@ -593,7 +617,8 @@ static void control_init_at(SabHeader *h) {
 
 static uint64_t active_layout_bytes(const SabLayout *layout,
                                     uint32_t capacity) {
-  return layout->offset_node_left + (uint64_t)capacity * 22u;
+  return layout->offset_node_left +
+         (uint64_t)capacity * ACTIVE_LAYOUT_BYTES_PER_CAPACITY_SLOT;
 }
 
 #ifndef __wasm__
@@ -630,6 +655,8 @@ static bool commit_arena_capacity_ranges(const SabLayout *layout,
     return false;
   if (!commit_arena_range(layout->offset_node_next_idx + start * 4u,
                           count * 4u))
+    return false;
+  if (!commit_arena_range(layout->offset_node_link + start * 4u, count * 4u))
     return false;
   if (!commit_arena_range(layout->offset_node_kind + start, count))
     return false;
@@ -691,6 +718,7 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   h->offset_node_right = layout.offset_node_right;
   h->offset_node_hash32 = layout.offset_node_hash32;
   h->offset_node_next_idx = layout.offset_node_next_idx;
+  h->offset_node_link = layout.offset_node_link;
   h->offset_node_kind = layout.offset_node_kind;
   h->offset_node_sym = layout.offset_node_sym;
   h->offset_buckets = layout.offset_buckets;
@@ -700,7 +728,8 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   ARENA_ASSERT(h->offset_node_left < h->offset_node_right);
   ARENA_ASSERT(h->offset_node_right < h->offset_node_hash32);
   ARENA_ASSERT(h->offset_node_hash32 < h->offset_node_next_idx);
-  ARENA_ASSERT(h->offset_node_next_idx < h->offset_node_kind);
+  ARENA_ASSERT(h->offset_node_next_idx < h->offset_node_link);
+  ARENA_ASSERT(h->offset_node_link < h->offset_node_kind);
   ARENA_ASSERT(h->offset_node_kind < h->offset_node_sym);
   ARENA_ASSERT(h->offset_node_sym < h->offset_buckets);
 #ifndef __wasm__
@@ -730,6 +759,7 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   memset(ARENA_BASE_ADDR + h->offset_node_right, 0, initial_capacity * 4);
   memset(ARENA_BASE_ADDR + h->offset_node_hash32, 0, initial_capacity * 4);
   memset(ARENA_BASE_ADDR + h->offset_node_next_idx, 0, initial_capacity * 4);
+  memset(ARENA_BASE_ADDR + h->offset_node_link, 0xff, initial_capacity * 4);
   memset(ARENA_BASE_ADDR + h->offset_node_kind, 0, initial_capacity * 1);
   memset(ARENA_BASE_ADDR + h->offset_node_sym, 0, initial_capacity * 1);
 
@@ -742,6 +772,7 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
 
   atomic_init(&h->total_nodes, 0);
   atomic_init(&h->total_steps, 0);
+  atomic_init(&h->total_link_chase_hops, 0);
   atomic_init(&h->total_cons_allocs, 0);
   atomic_init(&h->total_cont_allocs, 0);
   atomic_init(&h->total_susp_allocs, 0);
@@ -825,11 +856,14 @@ uint32_t arena_max_capacity(void) { return MAX_CAP; }
 void reset(void) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  uint32_t capacity = atomic_load_explicit(&h->capacity, memory_order_relaxed);
   atomic_store_explicit(&h->top, 0, memory_order_release);
   atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
-  for (uint32_t i = 0;
-       i < atomic_load_explicit(&h->capacity, memory_order_relaxed); i++)
+  for (uint32_t i = 0; i < capacity; i++)
     atomic_store_explicit(&buckets[i], EMPTY, memory_order_release);
+  atomic_uint *links = link_table_from_header(h);
+  for (uint32_t i = 0; i < capacity; i++)
+    atomic_store_explicit(&links[i], EMPTY, memory_order_release);
   atomic_uint *cache = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_term_cache);
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_store_explicit(&cache[i], EMPTY, memory_order_release);
@@ -842,6 +876,7 @@ void reset(void) {
 
   atomic_store_explicit(&h->total_nodes, 0, memory_order_release);
   atomic_store_explicit(&h->total_steps, 0, memory_order_release);
+  atomic_store_explicit(&h->total_link_chase_hops, 0, memory_order_release);
   atomic_store_explicit(&h->total_cons_allocs, 0, memory_order_release);
   atomic_store_explicit(&h->total_cont_allocs, 0, memory_order_release);
   atomic_store_explicit(&h->total_susp_allocs, 0, memory_order_release);
@@ -991,6 +1026,14 @@ unsigned long long arena_total_steps(void) {
     return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   return atomic_load_explicit(&h->total_steps, memory_order_relaxed);
+}
+
+unsigned long long arena_total_link_chase_hops(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->total_link_chase_hops,
+                              memory_order_relaxed);
 }
 
 unsigned long long arena_total_cons_allocs(void) {
@@ -2082,6 +2125,7 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
   uint32_t capacity = arena_capacity();
   unsigned long long total_nodes = arena_total_nodes();
   unsigned long long total_steps = arena_total_steps();
+  unsigned long long total_link_chase_hops = arena_total_link_chase_hops();
   unsigned long long total_cons_allocs = arena_total_cons_allocs();
   unsigned long long total_cont_allocs = arena_total_cont_allocs();
   unsigned long long total_susp_allocs = arena_total_susp_allocs();
@@ -2090,11 +2134,11 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
   unsigned long long hashcons_misses = arena_hashcons_misses();
 
   fprintf(out,
-          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
+          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_link_chase_hops\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
           epoch, timed_out ? "true" : "false", worker_count, top, capacity,
-          top, total_nodes, total_steps, total_cons_allocs, total_cont_allocs,
-          total_susp_allocs, duplicate_lost_allocs, hashcons_hits,
-          hashcons_misses);
+          top, total_nodes, total_steps, total_link_chase_hops,
+          total_cons_allocs, total_cont_allocs, total_susp_allocs,
+          duplicate_lost_allocs, hashcons_hits, hashcons_misses);
 
   uint32_t limit = worker_count < TRACE_WORKER_COUNT ? worker_count : TRACE_WORKER_COUNT;
   for (uint32_t i = 0; i < limit; i++) {
@@ -2476,6 +2520,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   h->offset_node_right = layout.offset_node_right;
   h->offset_node_hash32 = layout.offset_node_hash32;
   h->offset_node_next_idx = layout.offset_node_next_idx;
+  h->offset_node_link = layout.offset_node_link;
   h->offset_node_kind = layout.offset_node_kind;
   h->offset_node_sym = layout.offset_node_sym;
   h->offset_buckets = layout.offset_buckets;
@@ -2485,7 +2530,8 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   ARENA_ASSERT(h->offset_node_left < h->offset_node_right);
   ARENA_ASSERT(h->offset_node_right < h->offset_node_hash32);
   ARENA_ASSERT(h->offset_node_hash32 < h->offset_node_next_idx);
-  ARENA_ASSERT(h->offset_node_next_idx < h->offset_node_kind);
+  ARENA_ASSERT(h->offset_node_next_idx < h->offset_node_link);
+  ARENA_ASSERT(h->offset_node_link < h->offset_node_kind);
   ARENA_ASSERT(h->offset_node_kind < h->offset_node_sym);
   ARENA_ASSERT(h->offset_node_sym < h->offset_buckets);
 #ifndef __wasm__
@@ -2510,6 +2556,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
     memset(ARENA_BASE_ADDR + h->offset_node_hash32 + old_cap * 4, 0, diff * 4);
     memset(ARENA_BASE_ADDR + h->offset_node_next_idx + old_cap * 4, 0,
            diff * 4);
+    memset(ARENA_BASE_ADDR + h->offset_node_link + old_cap * 4, 0xff, diff * 4);
     memset(ARENA_BASE_ADDR + h->offset_node_kind + old_cap * 1, 0, diff * 1);
     memset(ARENA_BASE_ADDR + h->offset_node_sym + old_cap * 1, 0, diff * 1);
   }
@@ -2594,6 +2641,109 @@ static bool maybe_park_io_wait(uint32_t slice_id, WorkerState *ws,
   out->type = RESULT_YIELD;
   out->val = susp_ptr;
   return true;
+}
+
+typedef struct {
+  uint32_t end;
+  bool fixpoint;
+  bool truncated;
+} LinkChaseResult;
+
+static void publish_link_ptr(atomic_uint *links, uint32_t from, uint32_t to) {
+  if (from >= MAX_CAP || to >= MAX_CAP || is_control_ptr(from) ||
+      is_control_ptr(to))
+    return;
+
+  uint32_t current = atomic_load_explicit(&links[from], memory_order_relaxed);
+  while (true) {
+    if (current == from && to != from)
+      return;
+    if (current == to)
+      return;
+    if (atomic_compare_exchange_weak_explicit(&links[from], &current, to,
+                                              memory_order_release,
+                                              memory_order_relaxed)) {
+      return;
+    }
+  }
+}
+
+static LinkChaseResult chase_link_path(atomic_uint *links, uint32_t start,
+                                       uint32_t max_hops) {
+  LinkChaseResult out = {.end = start, .fixpoint = false, .truncated = false};
+  uint32_t cur = start;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+
+  for (uint32_t hops = 0; hops < max_hops; hops++) {
+    uint32_t next = load_u32_link(links, cur);
+    if (next == EMPTY) {
+      out.end = cur;
+      return out;
+    }
+    if (next == cur) {
+      out.end = cur;
+      out.fixpoint = true;
+      return out;
+    }
+    if (next >= MAX_CAP || is_control_ptr(next)) {
+      out.truncated = true;
+      return out;
+    }
+    atomic_fetch_add_explicit(&h->total_link_chase_hops, 1,
+                              memory_order_relaxed);
+    cur = next;
+  }
+
+  out.truncated = true;
+  return out;
+}
+
+static void compress_link_path(atomic_uint *links, uint32_t start, uint32_t stop,
+                               uint32_t target, bool write_stop,
+                               uint32_t max_hops) {
+  if (start >= MAX_CAP || stop >= MAX_CAP || target >= MAX_CAP ||
+      is_control_ptr(start) || is_control_ptr(stop) || is_control_ptr(target))
+    return;
+
+  uint32_t cur = start;
+  for (uint32_t hops = 0; hops < max_hops; hops++) {
+    if (cur == stop) {
+      if (write_stop)
+        publish_link_ptr(links, cur, target);
+      return;
+    }
+
+    uint32_t next = load_u32_link(links, cur);
+    publish_link_ptr(links, cur, target);
+
+    if (next == EMPTY || next == cur || next >= MAX_CAP || is_control_ptr(next))
+      return;
+    cur = next;
+  }
+}
+
+static bool node_has_effectful_top_step(SabHeader *h, uint32_t node_id) {
+  if (node_id >= MAX_CAP || is_control_ptr(node_id))
+    return false;
+
+  atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+  atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+  atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+
+  if (load_kind_pub(kinds, node_id) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t left = load_u32_payload(lefts, node_id);
+  if (left >= MAX_CAP || load_kind_pub(kinds, left) != ARENA_KIND_TERMINAL) {
+    if (left >= MAX_CAP || load_kind_pub(kinds, left) != ARENA_KIND_NON_TERM)
+      return false;
+    uint32_t ll = load_u32_payload(lefts, left);
+    if (ll >= MAX_CAP || load_kind_pub(kinds, ll) != ARENA_KIND_TERMINAL)
+      return false;
+    return load_u8_payload(syms, ll) == ARENA_SYM_WRITE_ONE;
+  }
+
+  return load_u8_payload(syms, left) == ARENA_SYM_READ_ONE;
 }
 
 static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
@@ -3017,6 +3167,63 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
   }
 }
 
+static StepOutcome step_once_with_links(uint32_t slice_id, WorkerState *ws,
+                                        uint32_t *gas, SabHeader *h,
+                                        bool yield_on_gas,
+                                        bool yield_on_step_limit,
+                                        bool allow_retry,
+                                        uint64_t *step_counter) {
+#ifndef __wasm__
+  if (atomic_load_explicit(&mmap_stdin_active, memory_order_acquire) ||
+      mmap_stdout_buf != NULL) {
+    return step_iterative(slice_id, ws, gas, h, yield_on_gas,
+                          yield_on_step_limit, allow_retry, step_counter);
+  }
+#endif
+  if (is_control_ptr(ws->current_val) || ws->current_val >= MAX_CAP) {
+    return step_iterative(slice_id, ws, gas, h, yield_on_gas,
+                          yield_on_step_limit, allow_retry, step_counter);
+  }
+
+  uint32_t start = ws->current_val;
+  uint32_t hop_limit = atomic_load_explicit(&h->top, memory_order_acquire) + 1;
+  if (hop_limit == 0)
+    hop_limit = 1;
+
+  atomic_uint *links = link_table_from_header(h);
+  LinkChaseResult chase = chase_link_path(links, start, hop_limit);
+  if (chase.truncated) {
+    return step_iterative(slice_id, ws, gas, h, yield_on_gas,
+                          yield_on_step_limit, allow_retry, step_counter);
+  }
+
+  if (chase.fixpoint) {
+    if (chase.end != start) {
+      compress_link_path(links, start, chase.end, chase.end, false, hop_limit);
+    }
+    StepOutcome out = {RESULT_DONE, chase.end};
+    ws->current_val = chase.end;
+    return out;
+  }
+
+  ws->current_val = chase.end;
+  ws->sp = 0;
+  ws->mode = MODE_DESCEND;
+  bool cacheable_step = !node_has_effectful_top_step(h, chase.end);
+
+  StepOutcome out = step_iterative(slice_id, ws, gas, h, yield_on_gas,
+                                   yield_on_step_limit, allow_retry,
+                                   step_counter);
+  if (cacheable_step && out.type == RESULT_DONE && is_value_ptr(out.val)) {
+    bool fixpoint = (out.val == chase.end);
+    compress_link_path(links, start, chase.end, out.val, true, hop_limit);
+    if (fixpoint) {
+      publish_link_ptr(links, out.val, out.val);
+    }
+  }
+  return out;
+}
+
 uint32_t arenaKernelStep(uint32_t expr) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
@@ -3038,8 +3245,8 @@ uint32_t arenaKernelStep(uint32_t expr) {
   while (true) {
     uint32_t gas = ARENA_STEP_GAS;
     uint64_t sync_steps = 0;
-    StepOutcome o = step_iterative(CONTROL_SYNC_SLICE_ID, &ws, &gas, h, false,
-                                   false, false, &sync_steps);
+    StepOutcome o = step_once_with_links(CONTROL_SYNC_SLICE_ID, &ws, &gas, h,
+                                         false, false, false, &sync_steps);
     if (o.type == RESULT_YIELD)
       return o.val;
     return o.val;
@@ -3245,8 +3452,8 @@ void workerLoop(uint32_t worker_id) {
       }
       uint32_t before = ws.current_val;
       uint32_t gas = batch_gas;
-      StepOutcome o = step_iterative(worker_id, &ws, &gas, h, true, true, true,
-                                   &worker_steps);
+      StepOutcome o = step_once_with_links(worker_id, &ws, &gas, h, true, true,
+                                           true, &worker_steps);
       if (o.type == RESULT_YIELD) {
         uint32_t reason = controlSuspensionReason(o.val);
         uint32_t event;

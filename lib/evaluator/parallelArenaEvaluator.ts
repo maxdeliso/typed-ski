@@ -205,6 +205,7 @@ export class ParallelArenaEvaluatorWasm
     const extra = {
       totalNodes: 0,
       totalSteps: 0,
+      totalLinkChaseHops: 0,
       totalConsAllocs: 0,
       totalContAllocs: 0,
       totalSuspAllocs: 0,
@@ -222,6 +223,9 @@ export class ParallelArenaEvaluatorWasm
 
       extra.totalNodes = readHeaderU64(SabHeaderField.TOTAL_NODES);
       extra.totalSteps = readHeaderU64(SabHeaderField.TOTAL_STEPS);
+      extra.totalLinkChaseHops = readHeaderU64(
+        SabHeaderField.TOTAL_LINK_CHASE_HOPS,
+      );
       extra.totalConsAllocs = readHeaderU64(SabHeaderField.TOTAL_CONS_ALLOCS);
       extra.totalContAllocs = readHeaderU64(SabHeaderField.TOTAL_CONT_ALLOCS);
       extra.totalSuspAllocs = readHeaderU64(SabHeaderField.TOTAL_SUSP_ALLOCS);

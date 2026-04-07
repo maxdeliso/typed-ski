@@ -68,6 +68,22 @@ test("stepOnce", async (t) => {
     assert.ok(r1.altered && r2.altered && r3.altered);
     assert.deepStrictEqual(unparseSKI(r3.expr), unparseSKI(e3));
   });
+
+  await t.test(
+    "repeated stepOnceArena on the same root chases cached links",
+    () => {
+      arenaEval.reset();
+      const root = arenaEval.toArena(parseSKI("III"));
+
+      const first = arenaEval.stepOnceArena(root);
+      const second = arenaEval.stepOnceArena(root);
+      const third = arenaEval.stepOnceArena(root);
+
+      assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(first)), "(II)");
+      assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(second)), "I");
+      assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(third)), "I");
+    },
+  );
 });
 
 test("eqU8 intrinsic - reduce to True/False", async (t) => {

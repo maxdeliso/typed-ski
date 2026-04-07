@@ -100,6 +100,20 @@ cc_binary(
 )
 
 cc_test(
+    name = "arena_test",
+    srcs = ["arena_test.c"],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS,
+    linkstatic = 1,
+    tags = ["no-coverage"],
+    features = ["-coverage"],
+    deps = [
+        ":arena_runtime",
+        ":ski_io",
+    ],
+)
+
+cc_test(
     name = "dag_codec_test",
     srcs = ["dag_codec_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,

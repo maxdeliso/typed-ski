@@ -655,6 +655,7 @@ uint32_t thanatos_reduce_to_normal_form(uint32_t node_id) {
 void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
                         unsigned long long *out_total_nodes,
                         unsigned long long *out_total_steps,
+                        unsigned long long *out_total_link_chase_hops,
                         unsigned long long *out_total_cons_allocs,
                         unsigned long long *out_total_cont_allocs,
                         unsigned long long *out_total_susp_allocs,
@@ -671,6 +672,8 @@ void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
     *out_total_nodes = arena_total_nodes();
   if (out_total_steps)
     *out_total_steps = arena_total_steps();
+  if (out_total_link_chase_hops)
+    *out_total_link_chase_hops = arena_total_link_chase_hops();
   if (out_total_cons_allocs)
     *out_total_cons_allocs = arena_total_cons_allocs();
   if (out_total_cont_allocs)

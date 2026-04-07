@@ -145,6 +145,7 @@ typedef struct {
   uint64_t offset_node_right;
   uint64_t offset_node_hash32;
   uint64_t offset_node_next_idx;
+  uint64_t offset_node_link;
   uint64_t offset_node_kind;
   uint64_t offset_node_sym;
   uint64_t offset_buckets;
@@ -155,6 +156,7 @@ typedef struct {
   atomic_uint top;
   _Atomic uint64_t total_nodes;
   _Atomic uint64_t total_steps;
+  _Atomic uint64_t total_link_chase_hops;
   _Atomic uint64_t total_cons_allocs;
   _Atomic uint64_t total_cont_allocs;
   _Atomic uint64_t total_susp_allocs;
@@ -180,6 +182,7 @@ uint32_t arena_top(void);
 uint32_t arena_capacity(void);
 unsigned long long arena_total_nodes(void);
 unsigned long long arena_total_steps(void);
+unsigned long long arena_total_link_chase_hops(void);
 unsigned long long arena_total_cons_allocs(void);
 unsigned long long arena_total_cont_allocs(void);
 unsigned long long arena_total_susp_allocs(void);

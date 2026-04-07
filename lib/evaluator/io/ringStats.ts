@@ -21,6 +21,7 @@ export type ArenaRingStatsSnapshot = {
   completed: number;
   totalNodes: number;
   totalSteps: number;
+  totalLinkChaseHops: number;
   totalConsAllocs: number;
   totalContAllocs: number;
   totalSuspAllocs: number;
@@ -71,6 +72,7 @@ export class RingStats {
     extra: {
       totalNodes: number;
       totalSteps: number;
+      totalLinkChaseHops: number;
       totalConsAllocs: number;
       totalContAllocs: number;
       totalSuspAllocs: number;

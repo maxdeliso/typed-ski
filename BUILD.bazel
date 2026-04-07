@@ -64,6 +64,7 @@ alias(
 test_suite(
     name = "native_tests",
     tests = [
+        "//core:arena_test",
         "//core:dag_codec_test",
         "//core:session_test",
         "//core:ski_io_test",
@@ -141,4 +142,3 @@ workspace_command(
     name = "vs_project",
     subcommand = "vs-project",
 )
-

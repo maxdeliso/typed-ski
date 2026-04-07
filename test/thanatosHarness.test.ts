@@ -318,6 +318,7 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
             statsLine.includes("capacity=") &&
             statsLine.includes("total_nodes=") &&
             statsLine.includes("total_steps=") &&
+            statsLine.includes("total_link_chase_hops=") &&
             statsLine.includes("total_cons_allocs=") &&
             statsLine.includes("total_cont_allocs=") &&
             statsLine.includes("total_susp_allocs=") &&

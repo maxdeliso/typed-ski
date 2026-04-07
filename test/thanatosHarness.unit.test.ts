@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
-import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
+import { fromTopoDagWire, toTopoDagWire } from "../lib/ski/topoDagWire.ts";
 import {
   passthroughEvaluator,
   runThanatosBatch,
@@ -45,7 +45,7 @@ async function loadThanatosSnapshot(name: string): Promise<ThanatosSnapshot> {
   const resultDagPath = join(snapshotDir, "result.dag");
   const stdinPath = join(snapshotDir, "stdin.bin");
   return {
-    dag: toDagWire(parseSKI(program)),
+    dag: toTopoDagWire(parseSKI(program)),
     stdin: await readFile(stdinPath),
     stdinPath,
     stdout: await readFile(join(snapshotDir, "stdout.bin")),
@@ -94,7 +94,7 @@ function mockBrokerTransport() {
 }
 
 test("thanatos harness helpers cover U8 DAG and passthrough evaluator", async () => {
-  const parsed = fromDagWire("#u8(65)");
+  const parsed = fromTopoDagWire("U41FFFFFFFFFFFFFFFF");
   assert.equal(parsed.kind, "u8");
   assert.equal((parsed as { kind: "u8"; value: number }).value, 65);
   assert.equal(defaultWorkerCount() >= 2, true);
@@ -130,8 +130,8 @@ test(
       const reduceIoResult = await first.reduceIo(snapshot.dag, snapshot.stdin);
       assert.deepEqual(reduceIoResult.stdout, new Uint8Array(snapshot.stdout));
       assert.equal(
-        unparseSKI(fromDagWire(reduceIoResult.resultDag)),
-        unparseSKI(fromDagWire(snapshot.resultDag ?? snapshot.dag)),
+        unparseSKI(fromTopoDagWire(reduceIoResult.resultDag)),
+        unparseSKI(fromTopoDagWire(snapshot.resultDag ?? snapshot.dag)),
       );
 
       assert.deepEqual(await runThanatosBatch(["I K", "K S K"]), ["K", "S"]);
@@ -139,7 +139,7 @@ test(
       const noResetValue = await withBatchThanatosSession(
         async (session) => {
           await session.ping();
-          return await session.reduceDag(toDagWire(parseSKI("I K")));
+          return await session.reduceDag(toTopoDagWire(parseSKI("I K")));
         },
         {
           key: "thanatos-unit-no-reset",
@@ -147,7 +147,7 @@ test(
           resetAfter: false,
         },
       );
-      assert.equal(unparseSKI(fromDagWire(noResetValue)), "K");
+      assert.equal(unparseSKI(fromTopoDagWire(noResetValue)), "K");
     } finally {
       await closeBatchThanatosSessions();
     }
@@ -227,8 +227,8 @@ test(
       assert.equal(await brokerSession.rawRequest("PING"), "OK");
       assert.equal(
         unparseSKI(
-          fromDagWire(
-            await brokerSession.reduceDag(toDagWire(parseSKI("I K"))),
+          fromTopoDagWire(
+            await brokerSession.reduceDag(toTopoDagWire(parseSKI("I K"))),
           ),
         ),
         "K",
@@ -240,8 +240,8 @@ test(
       );
       assert.deepEqual(reduceIoResult.stdout, new Uint8Array(snapshot.stdout));
       assert.equal(
-        unparseSKI(fromDagWire(reduceIoResult.resultDag)),
-        unparseSKI(fromDagWire(snapshot.resultDag ?? snapshot.dag)),
+        unparseSKI(fromTopoDagWire(reduceIoResult.resultDag)),
+        unparseSKI(fromTopoDagWire(snapshot.resultDag ?? snapshot.dag)),
       );
 
       const fileResultDag = await brokerSession.reduceFile(
@@ -251,8 +251,8 @@ test(
       );
       assert.deepEqual(await readFile(outputPath), snapshot.stdout);
       assert.equal(
-        unparseSKI(fromDagWire(fileResultDag)),
-        unparseSKI(fromDagWire(snapshot.resultDag ?? snapshot.dag)),
+        unparseSKI(fromTopoDagWire(fileResultDag)),
+        unparseSKI(fromTopoDagWire(snapshot.resultDag ?? snapshot.dag)),
       );
 
       await brokerSession.reset();

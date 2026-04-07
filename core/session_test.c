@@ -170,19 +170,23 @@ static void test_daemon_errors(void) {
 
   ThanatosSession s;
   thanatos_session_init(&s, mem);
+  const char *invalid_dag = "@0000000000000000";
 
   thanatos_session_handle_line(&s, "GIBBERISH", 9);
   thanatos_session_handle_line(&s, "REDUCE", 6);
-  thanatos_session_handle_line(&s, "REDUCE @1,1", 11);
+  thanatos_session_handle_line(&s, "REDUCE @0000000000000000",
+                               strlen("REDUCE @0000000000000000"));
   thanatos_session_handle_line(&s, "REDUCE_IO", 9);
   thanatos_session_handle_line(&s, "REDUCE_IO XY I", 14);
   thanatos_session_handle_line(&s, "REDUCE_IO ABC I", 15);
-  thanatos_session_handle_line(&s, "REDUCE_IO 2a @1,1", 16);
+  thanatos_session_handle_line(&s, "REDUCE_IO 2a @0000000000000000",
+                               strlen("REDUCE_IO 2a @0000000000000000"));
   thanatos_session_handle_line(&s, "REDUCE_FILE only_input",
                                strlen("REDUCE_FILE only_input"));
   thanatos_session_handle_line(&s, "STEP", 4);
   thanatos_session_handle_line(&s, "STEP 1", 6);
-  thanatos_session_handle_line(&s, "STEP 1 @1,1", 10);
+  thanatos_session_handle_line(&s, "STEP 1 @0000000000000000",
+                               strlen("STEP 1 @0000000000000000"));
 
   char command[4096];
   int n = snprintf(command, sizeof(command),
@@ -201,8 +205,8 @@ static void test_daemon_errors(void) {
   assert(n > 0 && (size_t)n < sizeof(command));
   thanatos_session_handle_line(&s, command, (size_t)n);
 
-  n = snprintf(command, sizeof(command), "REDUCE_FILE \"%s\" \"%s\" @1,1",
-               input_path, empty_output_path);
+  n = snprintf(command, sizeof(command), "REDUCE_FILE \"%s\" \"%s\" %s",
+               input_path, empty_output_path, invalid_dag);
   assert(n > 0 && (size_t)n < sizeof(command));
   thanatos_session_handle_line(&s, command, (size_t)n);
 

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { test, type TestContext } from "node:test";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
-import { fromDagWire, toDagWire } from "../lib/ski/dagWire.ts";
+import { fromTopoDagWire, toTopoDagWire } from "../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
   defaultWorkerCount,
@@ -41,7 +41,7 @@ async function runThanatosSnapshot(
   const expectedStdout = await readFile(expectedStdoutPath);
 
   const expr = parseSKI(program);
-  const dag = toDagWire(expr);
+  const dag = toTopoDagWire(expr);
 
   const tempDir = await mkdtemp(join(tmpdir(), "thanatos-snapshot-"));
   const outPath = join(tempDir, "stdout.bin");
@@ -78,8 +78,8 @@ async function runThanatosSnapshot(
     if (existsSync(expectedResultDagPath)) {
       const expectedResultDag = await readFile(expectedResultDagPath, "utf8");
       assert.equal(
-        unparseSKI(fromDagWire(actualResultDag)),
-        unparseSKI(fromDagWire(expectedResultDag)),
+        unparseSKI(fromTopoDagWire(actualResultDag)),
+        unparseSKI(fromTopoDagWire(expectedResultDag)),
         `Snapshot "${name}" did not produce expected result DAG`,
       );
     }
@@ -298,13 +298,13 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
 
     await t.test("RESET after several reductions then REDUCE", async () => {
       await withHarnessSession(async (session) => {
-        const r1 = await session.reduceDag(toDagWire(parseSKI("I S")));
-        assert.equal(unparseSKI(fromDagWire(r1)), "S");
-        const r2 = await session.reduceDag(toDagWire(parseSKI("K S K")));
-        assert.equal(unparseSKI(fromDagWire(r2)), "S");
+        const r1 = await session.reduceDag(toTopoDagWire(parseSKI("I S")));
+        assert.equal(unparseSKI(fromTopoDagWire(r1)), "S");
+        const r2 = await session.reduceDag(toTopoDagWire(parseSKI("K S K")));
+        assert.equal(unparseSKI(fromTopoDagWire(r2)), "S");
         await session.reset();
-        const r3 = await session.reduceDag(toDagWire(parseSKI("I K")));
-        assert.equal(unparseSKI(fromDagWire(r3)), "K");
+        const r3 = await session.reduceDag(toTopoDagWire(parseSKI("I K")));
+        assert.equal(unparseSKI(fromTopoDagWire(r3)), "K");
       });
     });
 
@@ -338,8 +338,10 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
         const traceDir = await prepareHarnessTraceDir();
         await withHarnessSession(async (session) => {
           await session.ping();
-          const resultDag = await session.reduceDag(toDagWire(parseSKI("I K")));
-          assert.equal(unparseSKI(fromDagWire(resultDag)), "K");
+          const resultDag = await session.reduceDag(
+            toTopoDagWire(parseSKI("I K")),
+          );
+          assert.equal(unparseSKI(fromTopoDagWire(resultDag)), "K");
 
           await session.traceDump();
           const dumpPath = await waitForTraceDump(t, traceDir);
@@ -416,7 +418,7 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
         const traceDir = await prepareHarnessTraceDir();
         await withHarnessSession(async (session) => {
           await session.ping();
-          await session.reduceDag(toDagWire(parseSKI("I S")));
+          await session.reduceDag(toTopoDagWire(parseSKI("I S")));
 
           await session.traceDump();
           await waitForTraceDump(t, traceDir);
@@ -459,13 +461,14 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
     await t.test("REDUCE_FILE - rejects path > 1023 chars", async () => {
       await withHarnessSession(async (session) => {
         const longPath = "a".repeat(1024);
+        const identityDag = toTopoDagWire(parseSKI("I"));
         const res = await session.rawRequest(
-          `REDUCE_FILE ${longPath} out.bin I`,
+          `REDUCE_FILE ${longPath} out.bin ${identityDag}`,
         );
         assert.equal(res, "ERR path too long (max 1023 chars)");
 
         const res2 = await session.rawRequest(
-          `REDUCE_FILE in.bin "${longPath}" I`,
+          `REDUCE_FILE in.bin "${longPath}" ${identityDag}`,
         );
         assert.equal(res2, "ERR path too long (max 1023 chars)");
       });
@@ -475,8 +478,9 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
       const outPath = join(tmpdir(), `thanatos-test-out-${randomUUID()}.bin`);
       try {
         await withHarnessSession(async (session) => {
+          const identityDag = toTopoDagWire(parseSKI("I"));
           const res = await session.rawRequest(
-            `REDUCE_FILE missing-input.bin "${outPath}" I`,
+            `REDUCE_FILE missing-input.bin "${outPath}" ${identityDag}`,
           );
           assert.equal(res, "ERR cannot open input file");
         });
@@ -492,7 +496,7 @@ test("thanatos session suite", { skip: !thanatosAvailable() }, async (t) => {
         const outPath = join(tmpdir(), `thanatos-test-out-${randomUUID()}.bin`);
         try {
           await withHarnessSession(async (session) => {
-            const dag = toDagWire(parseSKI(", (C . I) I"));
+            const dag = toTopoDagWire(parseSKI(", (C . I) I"));
             try {
               await session.reduceFile(dag, inPath, outPath);
               assert.fail("Expected reduction to fail");
@@ -535,12 +539,16 @@ test(
   "thanatos CLI - daemon mode (always on) trims blank lines and responds with OK",
   { skip: !thanatosAvailable() },
   async () => {
+    const dag = toTopoDagWire(parseSKI("I #u8(65)"));
     const result = await runThanatosProcess(
       ["1", "65536"],
-      "\n  \nREDUCE I U41 @0,1   \r\n",
+      `\n  \nREDUCE ${dag}   \r\n`,
     );
     assert.equal(result.code, 0, result.stderr);
-    assert.equal(normalizeCliOutput(result.stdout), "OK U41\n");
+    assert.equal(
+      normalizeCliOutput(result.stdout),
+      `OK ${toTopoDagWire({ kind: "u8", value: 0x41 })}\n`,
+    );
   },
 );
 
@@ -549,12 +557,16 @@ test(
   { skip: !thanatosAvailable() },
   async () => {
     const stdinPath = join(PROJECT_ROOT, "test", "inputs", "forty-two.bin");
+    const dag = toTopoDagWire(parseSKI(", I"));
     const result = await runThanatosProcess(
       ["--stdin-file", stdinPath, "1", "65536"],
-      "REDUCE , I @0,1\n",
+      `REDUCE ${dag}\n`,
     );
     assert.equal(result.code, 0, result.stderr);
-    assert.equal(normalizeCliOutput(result.stdout), "OK U2a\n");
+    assert.equal(
+      normalizeCliOutput(result.stdout),
+      `OK ${toTopoDagWire({ kind: "u8", value: 0x2a })}\n`,
+    );
   },
 );
 

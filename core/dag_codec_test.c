@@ -18,10 +18,39 @@ static int ok(const char *name) {
   return 0;
 }
 
+static void topo_terminal_record(char glyph, char *out, size_t out_cap) {
+  int n = snprintf(out, out_cap, "%c00FFFFFFFFFFFFFFFF", glyph);
+  if (n < 0 || (size_t)n >= out_cap) {
+    abort();
+  }
+}
+
+static void topo_app_record(uint32_t left_offset, uint32_t right_offset,
+                            char *out, size_t out_cap) {
+  int n = snprintf(out, out_cap, "@00%08X%08X", left_offset, right_offset);
+  if (n < 0 || (size_t)n >= out_cap) {
+    abort();
+  }
+}
+
 /* 1. Export/import round-trip of a DAG with sharing.
- *    DAG "S K I @0,1 @0,2": node 0 (S) is shared as left child of both apps. */
+ *    Record 0 (S) is shared as the left child of both application records. */
 static int test_roundtrip_sharing(void) {
-  const char *dag = "S K I @0,1 @0,2";
+  char s_record[32];
+  char k_record[32];
+  char i_record[32];
+  char first_app[32];
+  char root_app[32];
+  char dag[128];
+  topo_terminal_record('S', s_record, sizeof(s_record));
+  topo_terminal_record('K', k_record, sizeof(k_record));
+  topo_terminal_record('I', i_record, sizeof(i_record));
+  topo_app_record(0, 20, first_app, sizeof(first_app));
+  topo_app_record(0, 40, root_app, sizeof(root_app));
+  int dag_len = snprintf(dag, sizeof(dag), "%s|%s|%s|%s|%s", s_record,
+                         k_record, i_record, first_app, root_app);
+  if (dag_len < 0 || (size_t)dag_len >= sizeof(dag))
+    return fail("roundtrip sharing: failed to build topoDagWire string");
   size_t len = strlen(dag);
   size_t end_idx = 0;
   uint32_t root = parse_dag(dag, len, &end_idx);
@@ -48,17 +77,15 @@ static int test_roundtrip_sharing(void) {
   return ok("roundtrip DAG with sharing");
 }
 
-/* 2. Malformed @L,R: forward refs and out-of-range indices. */
+/* 2. Malformed topoDagWire records: forward refs, null child pointers, and
+ * misaligned offsets. */
 static int test_malformed_refs(void) {
   const char *bad[] = {
-      "@0,0",   /* app before any terminals: L=0,R=0 but token index 0 is this
-                   app, so L < 0 is false; L=0,R=0 with i=0 means L>=i (0>=0) so
-                   invalid */
-      "S @1,0", /* @1,0 at index 1: L=1,R=0, need L<1 and R<1, so L<=0,R<=0. L=1
-                   fails. */
-      "S K @2,0",        /* @2,0 at index 2: L=2,R=0; L<2? 2<2 false. */
-      "S K I @0,1 @3,4", /* last token @3,4: indices 3 and 4; we have 0,1,2,3 so
-                            index 4 is out of range (4 < 4 false). */
+      "@0000000000000000",
+      "S00FFFFFFFFFFFFFFFF|@0000001400000000",
+      "S00FFFFFFFFFFFFFFFF|K00FFFFFFFFFFFFFFFF|@0000002800000000",
+      "S00FFFFFFFFFFFFFFFF|K00FFFFFFFFFFFFFFFF|@0000000100000014",
+      "@00FFFFFFFFFFFFFFFF",
   };
   for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
     size_t len = strlen(bad[i]);
@@ -71,21 +98,25 @@ static int test_malformed_refs(void) {
       return 1;
     }
   }
-  return ok("malformed @L,R and forward refs");
+  return ok("malformed topoDagWire pointers");
 }
 
 /* 3. Deep left spine: build DAG with many left-associative apps, export
  * iteratively. */
 static int test_deep_left_spine(void) {
-  /* Postorder for (((S K) I) S) K: 0=S, 1=K, 2=@0,1, 3=I, 4=@2,3, 5=S, 6=@4,5,
-   * 7=K, 8=@6,7. So after "S K @0,1" we have indices 0,1,2. For step i we add
-   * term at 2*i+1 and app @2*i,2*i+1 at 2*i+2. */
   static char spine_buf[64 * 1024];
   const size_t depth = 200;
   size_t off = 0;
   size_t remaining = sizeof(spine_buf);
   {
-    int n0 = snprintf(spine_buf, remaining, "S K @0,1");
+    char s_record[32];
+    char k_record[32];
+    char app_record[32];
+    topo_terminal_record('S', s_record, sizeof(s_record));
+    topo_terminal_record('K', k_record, sizeof(k_record));
+    topo_app_record(0, 20, app_record, sizeof(app_record));
+    int n0 = snprintf(spine_buf, remaining, "%s|%s|%s", s_record, k_record,
+                      app_record);
     if (n0 < 0 || (size_t)n0 >= remaining) {
       return fail("deep left spine: snprintf initial format overflow");
     }
@@ -93,11 +124,15 @@ static int test_deep_left_spine(void) {
     remaining -= (size_t)n0;
   }
   for (size_t i = 1; i < depth; i++) {
-    uint32_t l = (uint32_t)(2 * i);
-    uint32_t r = (uint32_t)(2 * i + 1);
-    const char *term = (i % 3 == 1) ? " I " : (i % 3 == 2) ? " S " : " K ";
-    int n = snprintf(spine_buf + off, remaining, "%s@%u,%u", term, (unsigned)l,
-                     (unsigned)r);
+    char term_record[32];
+    char app_record[32];
+    uint32_t left = (uint32_t)(2 * i * 20);
+    uint32_t right = (uint32_t)((2 * i + 1) * 20);
+    char glyph = (i % 3 == 1) ? 'I' : (i % 3 == 2) ? 'S' : 'K';
+    topo_terminal_record(glyph, term_record, sizeof(term_record));
+    topo_app_record(left, right, app_record, sizeof(app_record));
+    int n = snprintf(spine_buf + off, remaining, "|%s|%s", term_record,
+                     app_record);
     if (n < 0 || (size_t)n >= remaining) {
       return fail("deep left spine: snprintf overflow while building spine");
     }

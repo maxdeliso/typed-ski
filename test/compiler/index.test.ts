@@ -5,7 +5,7 @@ import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { toDagWire } from "../../lib/ski/dagWire.ts";
+import { toTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const LEXER_SOURCE_FILE = new URL(
@@ -217,7 +217,7 @@ poly main = match Cons 1 Nil {
   | Cons h t => h
 }
 `;
-  const dag = toDagWire(
+  const dag = toTopoDagWire(
     await buildCompilerHarnessExpression(makeParityHarness(source, "#u8(1)")),
   );
   assert.ok(

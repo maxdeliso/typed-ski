@@ -1,7 +1,7 @@
 import type { Evaluator } from "../../lib/evaluator/evaluator.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
-import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
+import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { withBatchThanatosSession } from "./session.ts";
 
@@ -17,9 +17,8 @@ export async function runThanatosBatch(exprLines: string[]): Promise<string[]> {
     const out: string[] = [];
     for (const line of exprLines) {
       const expr = parseSKI(line);
-      const dag = toDagWire(expr);
-      const resultDag = await session.reduceDag(dag);
-      out.push(unparseSKI(fromDagWire(resultDag)));
+      const resultDag = await session.reduceExpr(expr);
+      out.push(unparseSKI(fromTopoDagWire(resultDag)));
     }
     return out;
   });

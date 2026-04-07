@@ -3,7 +3,11 @@ import { dirname, join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
-import { toDagWire } from "../../lib/ski/dagWire.ts";
+import {
+  combineTopoDagWires,
+  countTopoDagWireRecords,
+  toTopoDagWire,
+} from "../../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
   thanatosAvailable,
@@ -128,7 +132,7 @@ test(
         const runTestForFile = async (filePath: string) => {
           const sourceText = await readFile(filePath, "utf8");
           const sourceBytes = new TextEncoder().encode(sourceText);
-          let currentDag = toDagWire(encodeListU8(sourceBytes, nil, cons));
+          let currentDag = toTopoDagWire(encodeListU8(sourceBytes, nil, cons));
 
           const metrics: PhaseMetric[] = [];
 
@@ -139,8 +143,8 @@ test(
               await session.reset();
               const startTime = performance.now();
 
-              const phaseDag = toDagWire(phase.term);
-              const combinedDag = combineDagWires(phaseDag, currentDag);
+              const phaseDag = toTopoDagWire(phase.term);
+              const combinedDag = combineTopoDagWires(phaseDag, currentDag);
 
               let resultDag;
               try {
@@ -197,9 +201,7 @@ test(
                 ? parseInt(hashconsMissesMatch[1]!, 10)
                 : 0;
 
-              const uniqueNodeCount = resultDag
-                .split(" ")
-                .filter(Boolean).length;
+              const uniqueNodeCount = countTopoDagRecords(resultDag);
               const elapsedMs = endTime - startTime;
 
               metrics.push({
@@ -262,23 +264,6 @@ elapsed_ms: ${elapsedMs.toFixed(2)}`);
   },
 );
 
-function combineDagWires(dag1: string, dag2: string): string {
-  const tokens1 = dag1.trim().split(/\s+/);
-  const tokens2 = dag2.trim().split(/\s+/);
-
-  const offset = tokens1.length;
-  const translated2 = tokens2.map((t) => {
-    if (t.startsWith("@")) {
-      const parts = t.slice(1).split(",");
-      const L = parseInt(parts[0]!, 10);
-      const R = parseInt(parts[1]!, 10);
-      return `@${L + offset},${R + offset}`;
-    }
-    return t;
-  });
-
-  const root1 = tokens1.length - 1;
-  const root2 = tokens1.length + tokens2.length - 1;
-
-  return [...tokens1, ...translated2, `@${root1},${root2}`].join(" ");
+function countTopoDagRecords(dag: string): number {
+  return countTopoDagWireRecords(dag);
 }

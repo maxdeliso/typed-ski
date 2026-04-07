@@ -31,6 +31,22 @@ static const TerminalCase TERMINAL_CASES[] = {
     {'A', 'a', ARENA_SYM_ADD_U8}, {'O', 'o', ARENA_SYM_SUB_U8},
 };
 
+static void topo_terminal_record(char glyph, char *out, size_t out_cap) {
+  int n = snprintf(out, out_cap, "%c00FFFFFFFFFFFFFFFF", glyph);
+  assert(n > 0 && (size_t)n < out_cap);
+}
+
+static void topo_u8_record(uint8_t value, char *out, size_t out_cap) {
+  int n = snprintf(out, out_cap, "U%02XFFFFFFFFFFFFFFFF", (unsigned)value);
+  assert(n > 0 && (size_t)n < out_cap);
+}
+
+static void topo_app_record(uint32_t left_offset, uint32_t right_offset,
+                            char *out, size_t out_cap) {
+  int n = snprintf(out, out_cap, "@00%08X%08X", left_offset, right_offset);
+  assert(n > 0 && (size_t)n < out_cap);
+}
+
 static void test_parse_ski_round_trip(void) {
   printf("test_parse_ski_round_trip...\n");
   reset();
@@ -126,17 +142,30 @@ static void test_parse_dag_edge_cases(void) {
   reset();
   size_t end = 0;
 
-  assert(parse_dag("@1,0 S", 6, &end) == EMPTY);
-  assert(parse_dag("S K GIBBERISH", 13, &end) == EMPTY);
+  assert(parse_dag("@0000000000000000", strlen("@0000000000000000"), &end) ==
+         EMPTY);
+  assert(parse_dag("S00FFFFFFFFFFFFFFFF|GIBBERISH",
+                   strlen("S00FFFFFFFFFFFFFFFF|GIBBERISH"), &end) == EMPTY);
   assert(parse_dag("  ", 2, &end) == EMPTY);
-  assert(parse_dag("@X,Y", 4, &end) == EMPTY);
-  assert(parse_dag("UXX", 3, &end) == EMPTY);
+  assert(parse_dag("@00XXXXXXXX00000000", strlen("@00XXXXXXXX00000000"), &end) ==
+         EMPTY);
+  assert(parse_dag("UXXFFFFFFFFFFFFFFFF", strlen("UXXFFFFFFFFFFFFFFFF"), &end) ==
+         EMPTY);
 }
 
 static void test_parse_dag_success_with_whitespace(void) {
   printf("test_parse_dag_success_with_whitespace...\n");
   reset();
-  const char *dag = "\tU2a \n I @0,1";
+  char u8_record[32];
+  char i_record[32];
+  char app_record[32];
+  char dag[96];
+  topo_u8_record(0x2a, u8_record, sizeof(u8_record));
+  topo_terminal_record('I', i_record, sizeof(i_record));
+  topo_app_record(0, 20, app_record, sizeof(app_record));
+  int dag_len = snprintf(dag, sizeof(dag), "\t%s|%s|%s \n", u8_record, i_record,
+                         app_record);
+  assert(dag_len > 0 && (size_t)dag_len < sizeof(dag));
   size_t end = 0;
   uint32_t root = parse_dag(dag, strlen(dag), &end);
   assert(root != EMPTY);
@@ -145,7 +174,9 @@ static void test_parse_dag_success_with_whitespace(void) {
   char buf[64];
   size_t n = unparse_dag(root, buf, sizeof(buf));
   assert(n > 0);
-  assert(strcmp(buf, "U2a I @0,1") == 0);
+  assert(strcmp(buf,
+                "U2AFFFFFFFFFFFFFFFF|I00FFFFFFFFFFFFFFFF|@000000000000000014") ==
+         0);
 }
 
 static void test_parse_dag_all_terminals(void) {
@@ -153,19 +184,29 @@ static void test_parse_dag_all_terminals(void) {
   reset();
   for (size_t i = 0; i < sizeof(TERMINAL_CASES) / sizeof(TERMINAL_CASES[0]);
        i++) {
-    char text[2] = {TERMINAL_CASES[i].glyph, '\0'};
+    char text[32];
+    topo_terminal_record(TERMINAL_CASES[i].glyph, text, sizeof(text));
     size_t end = 0;
-    uint32_t root = parse_dag(text, 1, &end);
+    uint32_t root = parse_dag(text, strlen(text), &end);
     assert(root != EMPTY);
-    assert(end == 1);
+    assert(end == strlen(text));
     assert(kindOf(root) == ARENA_KIND_TERMINAL);
     assert(symOf(root) == TERMINAL_CASES[i].sym);
   }
 
+  char s_record[32];
+  char k_record[32];
+  char app_record[32];
+  char dag[96];
+  topo_terminal_record('S', s_record, sizeof(s_record));
+  topo_terminal_record('K', k_record, sizeof(k_record));
+  topo_app_record(0, 20, app_record, sizeof(app_record));
+  int n = snprintf(dag, sizeof(dag), "%s|%s|%s", s_record, k_record, app_record);
+  assert(n > 0 && (size_t)n < sizeof(dag));
   size_t end = 0;
-  uint32_t app = parse_dag("S K @ 0 , 1", strlen("S K @ 0 , 1"), &end);
+  uint32_t app = parse_dag(dag, strlen(dag), &end);
   assert(app != EMPTY);
-  assert(end == strlen("S K @ 0 , 1"));
+  assert(end == strlen(dag));
 }
 
 static void test_unparse_dag_small_buffer(void) {

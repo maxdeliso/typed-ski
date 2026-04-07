@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
-import { fromDagWire, toDagWire } from "../../lib/ski/dagWire.ts";
+import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
   passthroughEvaluator,
@@ -140,10 +140,9 @@ test("Parser thanatos suite", { skip: !thanatosAvailable() }, async (t) => {
               { name: "Test", object: testObj },
             ]);
             const expr = parseSKI(linked);
-            const dag = toDagWire(expr);
             try {
-              const resultDag = await session.reduceDag(dag);
-              const resultExpr = fromDagWire(resultDag);
+              const resultDag = await session.reduceExpr(expr);
+              const resultExpr = fromTopoDagWire(resultDag);
               const ok = await UnChurchBoolean(
                 resultExpr,
                 passthroughEvaluator,
@@ -254,8 +253,8 @@ async function runInlineParserHarness(source: string): Promise<boolean> {
   ]);
   const expr = parseSKI(linked);
   return await withBatchThanatosSession(async (session) => {
-    const resultDag = await session.reduceDag(toDagWire(expr));
-    const resultExpr = fromDagWire(resultDag);
+    const resultDag = await session.reduceExpr(expr);
+    const resultExpr = fromTopoDagWire(resultDag);
     // resultExpr should be church 1 (#u8(1)) for success
     const result = unparseSKI(resultExpr);
     return result.includes("U01") || result.includes("1");

@@ -37,9 +37,8 @@ export const TOPO_DAG_WIRE_NULL_POINTER = "F".repeat(
 
 const APP_FIELD = "@00";
 const DEFAULT_RECORDS_PER_CHUNK = 2048;
-const HEX_BYTE_TABLE = Array.from(
-  { length: 256 },
-  (_, byte) => byte.toString(16).toUpperCase().padStart(2, "0"),
+const HEX_BYTE_TABLE = Array.from({ length: 256 }, (_, byte) =>
+  byte.toString(16).toUpperCase().padStart(2, "0"),
 );
 
 export interface TopoDagWireEncodeOptions {
@@ -58,9 +57,7 @@ export interface TopoDagWireRecordSlice {
 }
 
 export type TopoDagWireChunkSink = (chunk: string) => void;
-export type AsyncTopoDagWireChunkSink = (
-  chunk: string,
-) => void | Promise<void>;
+export type AsyncTopoDagWireChunkSink = (chunk: string) => void | Promise<void>;
 
 function encodePointer(offset: number | null): string {
   if (offset === null) {
@@ -277,9 +274,7 @@ function buildTopoDagRecord(
     node.kind === "non-terminal" ? nodeToOffset.get(node.lft)! : null;
   const rightPointer =
     node.kind === "non-terminal" ? nodeToOffset.get(node.rgt)! : null;
-  return (
-    termField + encodePointer(leftPointer) + encodePointer(rightPointer)
-  );
+  return termField + encodePointer(leftPointer) + encodePointer(rightPointer);
 }
 
 function shiftPointerField(field: string, offset: number): string {
@@ -473,7 +468,10 @@ export function combineTopoDagWires(leftDag: string, rightDag: string): string {
 
   for (let index = 0; index < right.recordCount; index++) {
     const start = index * TOPO_DAG_WIRE_STRIDE;
-    const record = right.trimmed.slice(start, start + TOPO_DAG_WIRE_RECORD_WIDTH);
+    const record = right.trimmed.slice(
+      start,
+      start + TOPO_DAG_WIRE_RECORD_WIDTH,
+    );
     if (index > 0) {
       translatedRight.push(TOPO_DAG_WIRE_SEPARATOR);
     }
@@ -522,7 +520,10 @@ export function* iterateTopoDagWireRecords(
   for (let index = 0; index < recordCount; index++) {
     const start = index * TOPO_DAG_WIRE_STRIDE;
     const end = start + TOPO_DAG_WIRE_RECORD_WIDTH;
-    if (index + 1 < recordCount && trimmed.charAt(end) !== TOPO_DAG_WIRE_SEPARATOR) {
+    if (
+      index + 1 < recordCount &&
+      trimmed.charAt(end) !== TOPO_DAG_WIRE_SEPARATOR
+    ) {
       throw new Error("invalid topoDagWire separator");
     }
     yield {

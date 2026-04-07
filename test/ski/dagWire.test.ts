@@ -97,7 +97,10 @@ test("topoDagWire streams fixed-width chunks and decodes incrementally", () => {
   ]);
   assert.deepStrictEqual(writeResult.recordCount, 4);
   assert.deepStrictEqual(writeResult.charLength, expected.length);
-  assert.deepStrictEqual(toTopoDagWireChunks(expr, { recordsPerChunk: 2 }), streamedChunks);
+  assert.deepStrictEqual(
+    toTopoDagWireChunks(expr, { recordsPerChunk: 2 }),
+    streamedChunks,
+  );
   assert.deepStrictEqual(streamedChunks.join(""), expected);
   assert.deepStrictEqual(countTopoDagWireRecords(expected), 4);
   assert.deepStrictEqual(

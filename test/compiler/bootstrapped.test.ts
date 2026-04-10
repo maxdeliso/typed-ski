@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..", "..");
 
-test("Bootstrapped Lowering Pipeline", async (t) => {
+describe("Bootstrapped Lowering Pipeline", () => {
   const libDir = join(PROJECT_ROOT, "lib");
   const compilerLibDir = join(libDir, "compiler");
 
@@ -27,58 +27,55 @@ test("Bootstrapped Lowering Pipeline", async (t) => {
     join(compilerLibDir, "index.trip"),
   ];
 
-  await t.test(
-    "link all compiler modules and run a simple compilation",
-    async () => {
-      // 1. Compile each module to .tripc
-      const tripcFiles: string[] = [];
-      for (const file of files) {
-        const tripcFile = file.replace(".trip", ".tripc");
-        const { status: code, stderr } = spawnSync(
-          process.execPath,
-          [
-            "--experimental-transform-types",
-            join(PROJECT_ROOT, "bin", "tripc.ts"),
-            file,
-            tripcFile,
-          ],
-          { cwd: PROJECT_ROOT, maxBuffer: 32 * 1024 * 1024 },
-        );
-
-        if (code !== 0) {
-          const err = stderr.toString();
-          throw new Error(`Failed to compile ${file}: ${err}`);
-        }
-        tripcFiles.push(tripcFile);
-      }
-
-      // 2. Link all modules to an SKI expression
-      const {
-        stdout,
-        status: code,
-        stderr,
-      } = spawnSync(
+  it("link all compiler modules and run a simple compilation", async () => {
+    // 1. Compile each module to .tripc
+    const tripcFiles: string[] = [];
+    for (const file of files) {
+      const tripcFile = file.replace(".trip", ".tripc");
+      const { status: code, stderr } = spawnSync(
         process.execPath,
         [
           "--experimental-transform-types",
           join(PROJECT_ROOT, "bin", "tripc.ts"),
-          "--link",
-          ...tripcFiles,
+          file,
+          tripcFile,
         ],
         { cwd: PROJECT_ROOT, maxBuffer: 32 * 1024 * 1024 },
       );
 
       if (code !== 0) {
         const err = stderr.toString();
-        throw new Error(`Failed to link: ${err}`);
+        throw new Error(`Failed to compile ${file}: ${err}`);
       }
+      tripcFiles.push(tripcFile);
+    }
 
-      const skiOutput = stdout.toString().trim();
-      assert.ok(skiOutput.length > 0);
+    // 2. Link all modules to an SKI expression
+    const {
+      stdout,
+      status: code,
+      stderr,
+    } = spawnSync(
+      process.execPath,
+      [
+        "--experimental-transform-types",
+        join(PROJECT_ROOT, "bin", "tripc.ts"),
+        "--link",
+        ...tripcFiles,
+      ],
+      { cwd: PROJECT_ROOT, maxBuffer: 32 * 1024 * 1024 },
+    );
 
-      // Keep this test focused on the bootstrapped compiler pipeline itself.
-      // Importing thanatosHarness here dynamically registers nested tests,
-      // which breaks the test runner before we can validate compilation/linking.
-    },
-  );
+    if (code !== 0) {
+      const err = stderr.toString();
+      throw new Error(`Failed to link: ${err}`);
+    }
+
+    const skiOutput = stdout.toString().trim();
+    assert.ok(skiOutput.length > 0);
+
+    // Keep this test focused on the bootstrapped compiler pipeline itself.
+    // Importing thanatosHarness here dynamically registers nested tests,
+    // which breaks the test runner before we can validate compilation/linking.
+  });
 });

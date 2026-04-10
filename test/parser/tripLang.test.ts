@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { fileURLToPath } from "node:url";
@@ -21,30 +21,30 @@ import { unparseSystemFType } from "../../lib/parser/systemFType.ts";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const expectSystemFApp = (t: SystemFTerm) => {
-  expect(t.kind).to.equal("non-terminal");
+  assert.strictEqual(t.kind, "non-terminal");
   return t as Extract<SystemFTerm, { kind: "non-terminal" }>;
 };
 
 const expectSystemFTypeApp = (t: SystemFTerm) => {
-  expect(t.kind).to.equal("systemF-type-app");
+  assert.strictEqual(t.kind, "systemF-type-app");
   return t as Extract<SystemFTerm, { kind: "systemF-type-app" }>;
 };
 
 const expectSystemFVar = (t: SystemFTerm) => {
-  expect(t.kind).to.equal("systemF-var");
+  assert.strictEqual(t.kind, "systemF-var");
   return t as Extract<SystemFTerm, { kind: "systemF-var" }>;
 };
 
-test("parseTripLang", async (t) => {
-  await t.test("parses polymorphic definitions", () => {
+describe("parseTripLang", () => {
+  it("parses polymorphic definitions", () => {
     const input = loadInput("polyId.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "PolyId",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "poly",
       name: "id",
       type: undefined,
@@ -59,15 +59,15 @@ test("parseTripLang", async (t) => {
     });
   });
 
-  await t.test("parses recursive polymorphic definitions", () => {
+  it("parses recursive polymorphic definitions", () => {
     const input = loadInput("polyRec.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "PolyRec",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "poly",
       name: "fact",
       rec: true,
@@ -80,15 +80,15 @@ test("parseTripLang", async (t) => {
     });
   });
 
-  await t.test("parses poly definitions with explicit types", () => {
+  it("parses poly definitions with explicit types", () => {
     const input = loadInput("typedInc.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "TypedInc",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "poly",
       name: "inc",
       type: arrow(
@@ -106,15 +106,15 @@ test("parseTripLang", async (t) => {
     });
   });
 
-  await t.test("parses complex combinator definitions", () => {
+  it("parses complex combinator definitions", () => {
     const input = loadInput("combinatorY.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "CombinatorY",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "combinator",
       name: "Y",
       term: apply(
@@ -127,7 +127,7 @@ test("parseTripLang", async (t) => {
     });
   });
 
-  await t.test("parses type definitions correctly", () => {
+  it("parses type definitions correctly", () => {
     const input = loadInput("typeNat.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
@@ -137,11 +137,11 @@ test("parseTripLang", async (t) => {
     });
     const X = typeVar("X");
 
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "TypeNat",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "type",
       name: "Nat",
       type: {
@@ -152,15 +152,15 @@ test("parseTripLang", async (t) => {
     });
   });
 
-  await t.test("parses data definitions", () => {
+  it("parses data definitions", () => {
     const input = loadInput("dataMaybe.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "DataMaybe",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "data",
       name: "Maybe",
       typeParams: ["A"],
@@ -174,41 +174,37 @@ test("parseTripLang", async (t) => {
     });
   });
 
-  await t.test(
-    "parses data definitions with leading pipe and type-application field types",
-    // Parser must: (1) accept optional leading | and whitespace before the first
-    // constructor (data T = \n  | C1); (2) skip whitespace before field types so
-    // "T_Keyword (List Nat)" parses; (3) allow type applications like (List Nat)
-    // in field types, with space between type and argument.
-    () => {
-      const input = `module Lexer
+  it("parses data definitions with leading pipe and type-application field types", // constructor (data T = \n  | C1); (2) skip whitespace before field types so // Parser must: (1) accept optional leading | and whitespace before the first
+  // "T_Keyword (List Nat)" parses; (3) allow type applications like (List Nat)
+  // in field types, with space between type and argument.
+  () => {
+    const input = `module Lexer
 data Token =
   | T_LParen
   | T_Keyword (List Nat)
   | T_EOF`;
-      const [moduleDecl, term] = parseTripLang(input).terms;
+    const [moduleDecl, term] = parseTripLang(input).terms;
 
-      expect(moduleDecl).to.deep.equal({
-        kind: "module",
-        name: "Lexer",
-      });
-      expect(term).to.deep.equal({
-        kind: "data",
-        name: "Token",
-        typeParams: [],
-        constructors: [
-          { name: "T_LParen", fields: [] },
-          {
-            name: "T_Keyword",
-            fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
-          },
-          { name: "T_EOF", fields: [] },
-        ],
-      });
-    },
-  );
+    assert.deepStrictEqual(moduleDecl, {
+      kind: "module",
+      name: "Lexer",
+    });
+    assert.deepStrictEqual(term, {
+      kind: "data",
+      name: "Token",
+      typeParams: [],
+      constructors: [
+        { name: "T_LParen", fields: [] },
+        {
+          name: "T_Keyword",
+          fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("Nat"))],
+        },
+        { name: "T_EOF", fields: [] },
+      ],
+    });
+  });
 
-  await t.test("parses lib/compiler/lexer.trip Token ADT", () => {
+  it("parses lib/compiler/lexer.trip Token ADT", () => {
     const lexerPath = join(
       __dirname,
       "..",
@@ -221,16 +217,16 @@ data Token =
     const program = parseTripLang(input);
 
     // Lightweight "whole file" sanity checks (beyond just the Token ADT)
-    expect(program.kind).to.equal("program");
-    expect(program.terms[0]).to.deep.equal({ kind: "module", name: "Lexer" });
-    expect(
+    assert.deepStrictEqual(program.kind, "program");
+    assert.deepStrictEqual(program.terms[0], { kind: "module", name: "Lexer" });
+    assert.ok(
       program.terms.some((t) => t.kind === "export" && t.name === "Token"),
       "expected lexer.trip to export Token",
-    ).to.equal(true);
-    expect(
+    );
+    assert.ok(
       program.terms.some((t) => t.kind === "poly" && t.name === "tokenize"),
       "expected lexer.trip to define poly tokenize",
-    ).to.equal(true);
+    );
 
     // Assert that every top-level TripLang definition in lexer.trip
     // has a corresponding entry in the parsed program.
@@ -313,44 +309,44 @@ data Token =
     const expectedPoly = ["tokenizeAcc", "tokenize"] as const;
 
     for (const { name, ref } of expectedImports) {
-      expect(
+      assert.ok(
         program.terms.some(
           (t) => t.kind === "import" && t.name === name && t.ref === ref,
         ),
         `expected import ${name} ${ref}`,
-      ).to.equal(true);
+      );
     }
 
     for (const name of expectedExports) {
-      expect(
+      assert.ok(
         program.terms.some((t) => t.kind === "export" && t.name === name),
         `expected export ${name}`,
-      ).to.equal(true);
+      );
     }
 
     for (const name of expectedData) {
-      expect(
+      assert.ok(
         program.terms.some((t) => t.kind === "data" && t.name === name),
         `expected data ${name} = ...`,
-      ).to.equal(true);
+      );
     }
 
     for (const name of expectedPoly) {
-      expect(
+      assert.ok(
         program.terms.some((t) => t.kind === "poly" && t.name === name),
         `expected poly ${name} = ...`,
-      ).to.equal(true);
+      );
     }
 
     const tokenData = program.terms.find(
       (term): term is typeof term & { kind: "data"; name: string } =>
         term.kind === "data" && term.name === "Token",
     );
-    expect(tokenData).to.be.ok;
-    expect(tokenData!.kind).to.equal("data");
-    expect(tokenData!.name).to.equal("Token");
-    expect(tokenData!.typeParams).to.deep.equal([]);
-    expect(tokenData!.constructors).to.deep.equal([
+    assert.ok(tokenData);
+    assert.strictEqual(tokenData!.kind, "data");
+    assert.strictEqual(tokenData!.name, "Token");
+    assert.deepStrictEqual(tokenData!.typeParams, []);
+    assert.deepStrictEqual(tokenData!.constructors, [
       { name: "T_Tagged", fields: [mkTypeVariable("U8")] },
       {
         name: "T_Ident",
@@ -363,7 +359,7 @@ data Token =
     ]);
   });
 
-  await t.test("parses multiple definitions", () => {
+  it("parses multiple definitions", () => {
     const input = loadInput("church.trip", __dirname);
     const program = parseTripLang(input);
     const typeVar = (name: string) => ({
@@ -373,7 +369,7 @@ data Token =
     const X = typeVar("X");
     const A = typeVar("A");
 
-    expect(program).to.deep.equal({
+    assert.deepStrictEqual(program, {
       kind: "program",
       terms: [
         { kind: "module", name: "Church" },
@@ -425,14 +421,14 @@ data Token =
     });
   });
 
-  await t.test("parses poly definition with explicit type annotation", () => {
+  it("parses poly definition with explicit type annotation", () => {
     const input = loadInput("polyWithType.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;
-    expect(moduleDecl).to.deep.equal({
+    assert.deepStrictEqual(moduleDecl, {
       kind: "module",
       name: "PolyWithType",
     });
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "poly",
       name: "id",
       type: {
@@ -454,120 +450,118 @@ data Token =
     });
   });
 
-  await t.test(
-    "parses poly definition without explicit type annotation",
-    () => {
-      const input = loadInput("typedNoType.trip", __dirname);
-      const [moduleDecl, term] = parseTripLang(input).terms;
-      expect(moduleDecl).to.deep.equal({
-        kind: "module",
-        name: "TypedNoType",
-      });
-      expect(term).to.deep.equal({
-        kind: "poly",
-        name: "id",
-        type: undefined,
-        term: mkSystemFAbs(
-          "x",
-          { kind: "type-var", typeName: "Int" },
-          mkSystemFVar("x"),
-        ),
-      });
-    },
-  );
+  it("parses poly definition without explicit type annotation", () => {
+    const input = loadInput("typedNoType.trip", __dirname);
+    const [moduleDecl, term] = parseTripLang(input).terms;
+    assert.deepStrictEqual(moduleDecl, {
+      kind: "module",
+      name: "TypedNoType",
+    });
+    assert.deepStrictEqual(term, {
+      kind: "poly",
+      name: "id",
+      type: undefined,
+      term: mkSystemFAbs(
+        "x",
+        { kind: "type-var", typeName: "Int" },
+        mkSystemFVar("x"),
+      ),
+    });
+  });
 
-  await t.test("rejects legacy typed definitions", () => {
+  it("rejects legacy typed definitions", () => {
     const input = "module Legacy\ntyped id = \\x:Int => x";
-    expect(() => parseTripLang(input)).to.throw(
-      "expected definition keyword, found typed",
+    assert.throws(
+      () => parseTripLang(input),
+      /expected definition keyword, found typed/,
     );
   });
 
-  await t.test("rejects legacy untyped definitions", () => {
+  it("rejects legacy untyped definitions", () => {
     const input = "module Legacy\nuntyped id = \\x => x";
-    expect(() => parseTripLang(input)).to.throw(
-      "expected definition keyword, found untyped",
+    assert.throws(
+      () => parseTripLang(input),
+      /expected definition keyword, found untyped/,
     );
   });
 
-  await t.test("parses module definition", () => {
+  it("parses module definition", () => {
     const input = "module MyModule";
     const [term] = parseTripLang(input).terms;
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "module",
       name: "MyModule",
     });
   });
 
-  await t.test("parses import definition", () => {
+  it("parses import definition", () => {
     const input = "import Foo bar";
     const [term] = parseTripLang(input).terms;
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "import",
       name: "Foo",
       ref: "bar",
     });
   });
 
-  await t.test("parses export definition", () => {
+  it("parses export definition", () => {
     const input = "export Baz";
     const [term] = parseTripLang(input).terms;
-    expect(term).to.deep.equal({
+    assert.deepStrictEqual(term, {
       kind: "export",
       name: "Baz",
     });
   });
 
-  await t.test(
-    "parses combined module/import/export definitions from file",
-    () => {
-      const input = loadInput("moduleCombo.trip", __dirname);
-      const program = parseTripLang(input);
-      expect(program).to.deep.equal({
-        kind: "program",
-        terms: [
-          { kind: "module", name: "MyModule" },
-          { kind: "import", name: "Foo", ref: "bar" },
-          { kind: "export", name: "Baz" },
-        ],
-      });
-    },
-  );
-
-  await t.test("rejects module names containing dots", () => {
-    const input = "module My.Module";
-    expect(() => parseTripLang(input)).to.throw("expected an identifier");
+  it("parses combined module/import/export definitions from file", () => {
+    const input = loadInput("moduleCombo.trip", __dirname);
+    const program = parseTripLang(input);
+    assert.deepStrictEqual(program, {
+      kind: "program",
+      terms: [
+        { kind: "module", name: "MyModule" },
+        { kind: "import", name: "Foo", ref: "bar" },
+        { kind: "export", name: "Baz" },
+      ],
+    });
   });
 
-  await t.test("rejects opaque without type keyword", () => {
+  it("rejects module names containing dots", () => {
+    const input = "module My.Module";
+    assert.throws(() => parseTripLang(input), /expected an identifier/);
+  });
+
+  it("rejects opaque without type keyword", () => {
     const input = "opaque something somethingElse";
-    expect(() => parseTripLang(input)).to.throw(
-      "opaque must be followed by type and a type name",
+    assert.throws(
+      () => parseTripLang(input),
+      /opaque must be followed by type and a type name/,
     );
   });
 
-  await t.test("rejects native without type annotation", () => {
+  it("rejects native without type annotation", () => {
     const input = "native myNative = something";
-    expect(() => parseTripLang(input)).to.throw(
-      "native requires a type annotation",
+    assert.throws(
+      () => parseTripLang(input),
+      /native requires a type annotation/,
     );
   });
 });
 
-test("parse single poly", async (t) => {
-  await t.test("parses single poly", () => {
+describe("parse single poly", () => {
+  it("parses single poly", () => {
     const input = 'poly foo = "foo"';
     const result = parseTripLang(input);
 
-    expect(result.kind).to.equal("program");
-    expect(result.terms).to.have.length(1);
+    assert.strictEqual(result.kind, "program");
+    assert.strictEqual(result.terms.length, 1);
     const term = requiredAt(result.terms, 0, "expected poly term");
 
     if (term.kind !== "poly") {
       throw new Error(`expected 'poly' term, got '${term.kind}'`);
     }
-    expect(term.name).to.equal("foo");
-    expect(term.type).to.equal(undefined);
+    assert.strictEqual(term.name, "foo");
+    assert.strictEqual(term.type, undefined);
 
     // The string literal "foo" is desugared into a List U8 term:
     // cons [U8] (#u8(102)) (cons [U8] (#u8(111)) (cons [U8] (#u8(111)) (nil [U8])))
@@ -590,12 +584,12 @@ test("parse single poly", async (t) => {
       const consApp = expectSystemFApp(outerApp.lft);
       const consTypeApp = expectSystemFTypeApp(consApp.lft);
       const consVar = expectSystemFVar(consTypeApp.term);
-      expect(consVar.name).to.equal("cons");
-      expect(unparseSystemFType(consTypeApp.typeArg)).to.equal("U8");
+      assert.strictEqual(consVar.name, "cons");
+      assert.strictEqual(unparseSystemFType(consTypeApp.typeArg), "U8");
 
       // head is a u8 literal whose decoded value matches
       const decoded = decodeU8Term(consApp.rgt);
-      expect(decoded).to.equal(code);
+      assert.strictEqual(decoded, code);
 
       // tail
       current = outerApp.rgt;
@@ -604,7 +598,7 @@ test("parse single poly", async (t) => {
     // tail is (nil [U8])
     const nilApp = expectSystemFTypeApp(current);
     const nilVar = expectSystemFVar(nilApp.term);
-    expect(nilVar.name).to.equal("nil");
-    expect(unparseSystemFType(nilApp.typeArg)).to.equal("U8");
+    assert.strictEqual(nilVar.name, "nil");
+    assert.strictEqual(unparseSystemFType(nilApp.typeArg), "U8");
   });
 });

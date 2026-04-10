@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { assert } from "../../util/assertions.ts";
+import { describe, it } from "../../util/test_shim.ts";
+import assert from "node:assert/strict";
 import {
   alphaRenameTypeBinder,
   freeTermVars,
@@ -18,8 +18,8 @@ import {
 import { mkSystemFApp } from "../../util/ast.ts";
 import { mkTypeVariable, typeApp } from "../../../lib/types/types.ts";
 
-test("substitute", async (t) => {
-  await t.test("should throw on invalid type", () => {
+describe("substitute", () => {
+  it("should throw on invalid type", () => {
     const type = { kind: "invalid" } as unknown;
 
     assert.throws(
@@ -43,7 +43,7 @@ test("substitute", async (t) => {
     );
   });
 
-  await t.test("should substitute a variable with a term", () => {
+  it("should substitute a variable with a term", () => {
     const varTerm = mkSystemFVar("x");
     const replacement = mkSystemFVar("y");
 
@@ -56,10 +56,10 @@ test("substitute", async (t) => {
       (n) => n,
     );
 
-    assert.deepEqual(result, replacement);
+    assert.deepStrictEqual(result, replacement);
   });
 
-  await t.test("should substitute within a term abstraction", () => {
+  it("should substitute within a term abstraction", () => {
     const absTerm = mkSystemFAbs(
       "x",
       { kind: "type-var", typeName: "T" },
@@ -81,13 +81,13 @@ test("substitute", async (t) => {
       },
     );
 
-    assert.deepEqual(
+    assert.deepStrictEqual(
       result,
       mkSystemFAbs("x", { kind: "type-var", typeName: "T" }, replacement),
     );
   });
 
-  await t.test("should substitute within a type abstraction", () => {
+  it("should substitute within a type abstraction", () => {
     const typeAbs = mkSystemFTAbs("X", mkSystemFVar("x"));
     const replacement = mkSystemFVar("y");
 
@@ -105,10 +105,10 @@ test("substitute", async (t) => {
       },
     );
 
-    assert.deepEqual(result, mkSystemFTAbs("X", replacement));
+    assert.deepStrictEqual(result, mkSystemFTAbs("X", replacement));
   });
 
-  await t.test("should substitute within a type application", () => {
+  it("should substitute within a type application", () => {
     const typeApp = mkSystemFTypeApp(mkSystemFVar("x"), {
       kind: "type-var",
       typeName: "T",
@@ -129,13 +129,13 @@ test("substitute", async (t) => {
       },
     );
 
-    assert.deepEqual(
+    assert.deepStrictEqual(
       result,
       mkSystemFTypeApp(replacement, { kind: "type-var", typeName: "T" }),
     );
   });
 
-  await t.test("should handle nested term substitution", () => {
+  it("should handle nested term substitution", () => {
     const nestedTerm = mkSystemFApp(
       mkSystemFAbs("x", { kind: "type-var", typeName: "T" }, mkSystemFVar("x")),
       mkSystemFVar("y"),
@@ -168,31 +168,31 @@ test("substitute", async (t) => {
       replacement,
     );
 
-    assert.deepEqual(result, expected);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
-test("substitution type-app helpers", async (t) => {
-  await t.test("freeTermVars ignores type-app in annotations", () => {
+describe("substitution type-app helpers", () => {
+  it("freeTermVars ignores type-app in annotations", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
     const term = mkSystemFAbs("x", listA, mkSystemFVar("x"));
     const result = freeTermVars(term);
-    assert.deepEqual(Array.from(result), []);
+    assert.deepStrictEqual(Array.from(result), []);
   });
 
-  await t.test("freeTypeVars collects vars in type-app", () => {
+  it("freeTypeVars collects vars in type-app", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
     const result = freeTypeVars(listA);
-    assert.deepEqual(Array.from(result).sort(), ["A", "List"]);
+    assert.deepStrictEqual(Array.from(result).sort(), ["A", "List"]);
   });
 
-  await t.test("alphaRenameTypeBinder rewrites type-app", () => {
+  it("alphaRenameTypeBinder rewrites type-app", () => {
     const pairAB = typeApp(
       typeApp(mkTypeVariable("Pair"), mkTypeVariable("A")),
       mkTypeVariable("B"),
     );
     const result = alphaRenameTypeBinder(pairAB, "A", "X");
-    assert.deepEqual(
+    assert.deepStrictEqual(
       result,
       typeApp(
         typeApp(mkTypeVariable("Pair"), mkTypeVariable("X")),
@@ -201,10 +201,10 @@ test("substitution type-app helpers", async (t) => {
     );
   });
 
-  await t.test("substituteTypeHygienic replaces vars in type-app", () => {
+  it("substituteTypeHygienic replaces vars in type-app", () => {
     const listA = typeApp(mkTypeVariable("List"), mkTypeVariable("A"));
     const result = substituteTypeHygienic(listA, "A", mkTypeVariable("Nat"));
-    assert.deepEqual(
+    assert.deepStrictEqual(
       result,
       typeApp(mkTypeVariable("List"), mkTypeVariable("Nat")),
     );

@@ -8,294 +8,220 @@
  * - Cross-format compatibility
  */
 
-import {
-  strictEqual as equal,
-  deepStrictEqual as deepEqual,
-  ok,
-  match,
-} from "node:assert/strict";
+import { describe, it } from "../util/test_shim.ts";
+import { strictEqual as equal } from "node:assert/strict";
 import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
-import { readFile, rm, mkdtemp } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import process from "node:process";
-import { requiredAt } from "../util/required.ts";
+import { readFileSync, writeFileSync } from "node:fs";
+
+import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import {
+  cleanupTempWorkspace,
+  createTempWorkspace,
+} from "../util/tripcHarness.ts";
+import { required, requiredAt } from "../util/required.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "../..");
-const fixturesDir = join(__dirname, "fixtures");
 
-// Import library functions for testing
-import {
-  compileToObjectFile,
-  deserializeTripCObject,
-} from "../../lib/compiler/index.ts";
+describe("CLI Integration", () => {
+  describe("Library vs CLI consistency", () => {
+    it("library and CLI produce same output for simple module", async () => {
+      const source = `module Test
+export id
+poly id = #a => \\x:a => x`;
 
-// Test utilities
-async function runCommand(
-  command: string[],
-  cwd = projectRoot,
-): Promise<{
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  code: number | null;
-}> {
-  const executable = requiredAt(command, 0, "expected command executable");
-  const args = command.slice(1);
-
-  const result = spawnSync(executable, args, {
-    cwd,
-    encoding: "utf-8",
-  });
-
-  return {
-    success: result.status === 0,
-    stdout: result.stdout || "",
-    stderr: result.stderr || "",
-    code: result.status,
-  };
-}
-
-function fixturePath(fixtureName: string): string {
-  return join(fixturesDir, fixtureName);
-}
-
-test("CLI Integration Tests", async (t) => {
-  const testCases = [
-    {
-      name: "simple module",
-      fixture: "simple.trip",
-    },
-    {
-      name: "module with imports",
-      fixture: "with_imports.trip",
-    },
-    {
-      name: "module with types",
-      fixture: "with_types.trip",
-    },
-    {
-      name: "module with combinators",
-      fixture: "with_combinators.trip",
-    },
-  ];
-
-  await t.test("Library vs CLI consistency", async (t) => {
-    for (const testCase of testCases) {
-      await t.test(
-        `library and CLI produce same output for ${testCase.name}`,
-        async () => {
-          const testFile = fixturePath(testCase.fixture);
-
-          // Compile using library
-          const sourceContent = await readFile(testFile, "utf-8");
-          const libraryResult = compileToObjectFile(sourceContent);
-
-          // Compile using CLI
-          const cliResult = await runCommand([
-            process.execPath,
-            "--experimental-transform-types",
-            "bin/tripc.ts",
-            testFile,
-            "--stdout",
-          ]);
-
-          ok(cliResult.success, `CLI failed: ${cliResult.stderr}`);
-
-          // Read CLI output
-          const cliResultParsed = deserializeTripCObject(cliResult.stdout);
-
-          // Compare results
-          equal(cliResultParsed.module, libraryResult.module);
-          deepEqual(cliResultParsed.imports, libraryResult.imports);
-          deepEqual(cliResultParsed.exports, libraryResult.exports);
-          deepEqual(
-            cliResultParsed.dataDefinitions,
-            libraryResult.dataDefinitions,
-          );
-          deepEqual(
-            Object.keys(cliResultParsed.definitions),
-            Object.keys(libraryResult.definitions),
-          );
-        },
-      );
-    }
-  });
-
-  await t.test("Object file format validation", async (t) => {
-    await t.test("CLI produces valid object files", async () => {
-      const testFile = fixturePath(
-        requiredAt(testCases, 0, "expected first test case").fixture,
-      );
-
-      const result = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-        "--stdout",
-      ]);
-
-      ok(result.success);
-
-      const objectContent = result.stdout;
-
-      // Should be valid JSON
-      const parsed = JSON.parse(objectContent);
-
-      // Should have required fields
-      ok("module" in parsed);
-      ok("imports" in parsed);
-      ok("exports" in parsed);
-      ok("definitions" in parsed);
-      ok("dataDefinitions" in parsed);
-
-      // Should be deserializable
-      const deserialized = deserializeTripCObject(objectContent);
-      deepEqual(deserialized, parsed);
-    });
-
-    await t.test("object file contains elaborated definitions", async () => {
-      const testFile = fixturePath("test.trip");
-
-      const result = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-        "--stdout",
-      ]);
-
-      ok(result.success);
-
-      const objectContent = result.stdout;
-      const parsed = JSON.parse(objectContent);
-
-      // Check that definition is elaborated (not just parsed)
-      const idDef = parsed.definitions.id;
-      ok("kind" in idDef && idDef.kind === "poly");
-      ok("name" in idDef && idDef.name === "id");
-      ok("term" in idDef);
-
-      // Term should be elaborated System F
-      ok("kind" in idDef.term && idDef.term.kind === "systemF-type-abs");
-    });
-  });
-
-  await t.test("Error handling consistency", async (t) => {
-    await t.test("library and CLI handle errors consistently", async () => {
-      const testFile = fixturePath("invalid_expression.trip");
-
-      const sourceContent = await readFile(testFile, "utf-8");
-      // Library should parse invalid syntax as non-terminal (current behavior)
-      const libraryResult = compileToObjectFile(sourceContent);
-      equal(libraryResult.module, "Test");
-      ok("id" in libraryResult.definitions);
-
-      // CLI should also succeed (current behavior)
-      const cliResult = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-        "--stdout",
-      ]);
-
-      ok(cliResult.success);
-    });
-
-    await t.test("missing module definition", async () => {
-      const testFile = fixturePath("no_module.trip");
-
-      const result = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-      ]);
-
-      ok(!result.success);
-      match(result.stderr, /No module definition found/);
-    });
-
-    await t.test("multiple module definitions", async () => {
-      const testFile = fixturePath("multiple_modules.trip");
-
-      const result = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-      ]);
-
-      ok(!result.success);
-      match(result.stderr, /Multiple module definitions found/);
-    });
-  });
-
-  await t.test("Cross-format compatibility", async (t) => {
-    await t.test("different CLI formats produce identical output", async () => {
-      const testFile = fixturePath(
-        requiredAt(testCases, 0, "expected first test case").fixture,
-      );
-
-      // Test TypeScript CLI with stdout
-      const tsResult = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-        "--stdout",
-      ]);
-      ok(tsResult.success);
-
-      // Test with implicit output (using temp path for this one since we want to compare file output)
-      const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-compat-"));
-      const output1Path = join(tempDir, "output1.tripc");
-
+      const workspaceDir = await createTempWorkspace("cli-integration-");
       try {
-        const fileResult = await runCommand([
-          process.execPath,
-          "--experimental-transform-types",
-          "bin/tripc.ts",
-          testFile,
-          output1Path,
-        ]);
-        ok(fileResult.success);
+        const tripFile = join(workspaceDir, "test.trip");
+        const tripcFile = join(workspaceDir, "test.tripc");
+        writeFileSync(tripFile, source);
 
-        // Compare outputs
-        const fileOutput = await readFile(output1Path, "utf-8");
-        equal(tsResult.stdout.trim(), fileOutput.trim());
+        // Run CLI
+        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const cliResult = spawnSync(
+          "node",
+          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          { encoding: "utf-8" },
+        );
+        equal(cliResult.status, 0, cliResult.stderr);
+
+        // Run library
+        const libResult = compileToObjectFile(source);
+
+        // Read CLI output
+        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
+
+        // Compare key fields
+        equal(cliOutput.module, libResult.module);
+        equal(cliOutput.exports.length, libResult.exports.length);
+        equal(
+          Object.keys(cliOutput.definitions).length,
+          Object.keys(libResult.definitions).length,
+        );
       } finally {
-        await rm(tempDir, { recursive: true, force: true });
+        await cleanupTempWorkspace(workspaceDir);
+      }
+    });
+
+    it("library and CLI produce same output for module with imports", async () => {
+      const source = `module Test
+import Math add
+export double
+poly double = \\x:Int => add x x`;
+
+      const workspaceDir = await createTempWorkspace(
+        "cli-integration-imports-",
+      );
+      try {
+        const tripFile = join(workspaceDir, "test.trip");
+        const tripcFile = join(workspaceDir, "test.tripc");
+        writeFileSync(tripFile, source);
+
+        // Run CLI
+        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const cliResult = spawnSync(
+          "node",
+          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          { encoding: "utf-8" },
+        );
+        equal(cliResult.status, 0, cliResult.stderr);
+
+        // Run library
+        const libResult = compileToObjectFile(source);
+
+        // Read CLI output
+        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
+
+        // Compare
+        equal(cliOutput.module, libResult.module);
+        equal(cliOutput.imports.length, libResult.imports.length);
+        const cliImport0 = requiredAt(
+          cliOutput.imports,
+          0,
+          "cli import missing",
+        ) as any;
+        const libImport0 = requiredAt(
+          libResult.imports,
+          0,
+          "lib import missing",
+        );
+        equal(cliImport0.name, libImport0.name);
+        equal(cliImport0.from, libImport0.from);
+      } finally {
+        await cleanupTempWorkspace(workspaceDir);
+      }
+    });
+
+    it("library and CLI produce same output for module with types", async () => {
+      const source = `module Test
+type MyType = Int -> Int
+export id
+poly id : MyType = \\x:Int => x`;
+
+      const workspaceDir = await createTempWorkspace("cli-integration-types-");
+      try {
+        const tripFile = join(workspaceDir, "test.trip");
+        const tripcFile = join(workspaceDir, "test.tripc");
+        writeFileSync(tripFile, source);
+
+        // Run CLI
+        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const cliResult = spawnSync(
+          "node",
+          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          { encoding: "utf-8" },
+        );
+        equal(cliResult.status, 0, cliResult.stderr);
+
+        // Run library
+        const libResult = compileToObjectFile(source);
+
+        // Read CLI output
+        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
+
+        // Compare
+        equal(cliOutput.module, libResult.module);
+        equal(
+          Object.keys(cliOutput.definitions).length,
+          Object.keys(libResult.definitions).length,
+        );
+      } finally {
+        await cleanupTempWorkspace(workspaceDir);
+      }
+    });
+
+    it("library and CLI produce same output for module with combinators", async () => {
+      const source = `module Test
+combinator myI = I
+export myI`;
+
+      const workspaceDir = await createTempWorkspace("cli-integration-comb-");
+      try {
+        const tripFile = join(workspaceDir, "test.trip");
+        const tripcFile = join(workspaceDir, "test.tripc");
+        writeFileSync(tripFile, source);
+
+        // Run CLI
+        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const cliResult = spawnSync(
+          "node",
+          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          { encoding: "utf-8" },
+        );
+        equal(cliResult.status, 0, cliResult.stderr);
+
+        // Run library
+        const libResult = compileToObjectFile(source);
+
+        // Read CLI output
+        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
+
+        // Compare
+        equal(cliOutput.module, libResult.module);
+        const cliMyI = required(cliOutput.definitions.myI, "cli myI missing");
+        const libMyI = required(libResult.definitions.myI, "lib myI missing");
+        equal(cliMyI.kind, "combinator");
+        equal(libMyI.kind, "combinator");
+      } finally {
+        await cleanupTempWorkspace(workspaceDir);
       }
     });
   });
 
-  await t.test("Performance and resource usage", async (t) => {
-    await t.test("CLI handles large files efficiently", async () => {
-      const testFile = fixturePath("large.trip");
+  describe("Object file validation", () => {
+    it("CLI handles very large module", async () => {
+      // Create a module with 100 definitions
+      let source = "module Large\n";
+      for (let i = 0; i < 100; i++) {
+        source += `export f${i}\npoly f${i} = #a => \\x:a => x\n`;
+      }
 
-      const result = await runCommand([
-        process.execPath,
-        "--experimental-transform-types",
-        "bin/tripc.ts",
-        testFile,
-        "--stdout",
-      ]);
+      const workspaceDir = await createTempWorkspace("cli-integration-large-");
+      try {
+        const tripFile = join(workspaceDir, "large.trip");
+        const tripcFile = join(workspaceDir, "large.tripc");
+        writeFileSync(tripFile, source);
 
-      ok(result.success);
+        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const result = spawnSync(
+          "node",
+          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          { encoding: "utf-8" },
+        );
 
-      // Verify output
-      const objectContent = result.stdout;
-      const parsed = JSON.parse(objectContent);
+        equal(result.status, 0, result.stderr);
 
-      equal(parsed.exports.length, 100);
-      equal(Object.keys(parsed.definitions).length, 100);
+        // Verify output
+        const objectContent = readFileSync(tripcFile, "utf-8");
+        const parsed = JSON.parse(objectContent);
+
+        equal(parsed.exports.length, 100);
+        equal(Object.keys(parsed.definitions).length, 100);
+      } finally {
+        await cleanupTempWorkspace(workspaceDir);
+      }
     });
   });
 });

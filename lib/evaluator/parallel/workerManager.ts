@@ -9,7 +9,11 @@
 import { isNode } from "../../shared/platform.ts";
 
 let WorkerClass: any;
-if (typeof globalThis.Worker !== "undefined") {
+if (isNode) {
+  // @ts-ignore
+  const { Worker } = await import("node:worker_threads");
+  WorkerClass = Worker;
+} else if (typeof globalThis.Worker !== "undefined") {
   WorkerClass = globalThis.Worker;
 }
 

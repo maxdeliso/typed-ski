@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,9 +71,9 @@ async function compileTestProgram(fileName: string) {
   return compileToObjectFile(source);
 }
 
-test("Parser thanatos suite", { skip: !thanatosAvailable() }, async (t) => {
+describe("Parser thanatos suite", { skip: !thanatosAvailable() }, async () => {
   try {
-    await t.test("Parser unit tests", async () => {
+    it("Parser unit tests", async () => {
       const tests = [
         {
           name: "Parser stage 1 - parseAtom parses identifiers",
@@ -157,43 +157,37 @@ test("Parser thanatos suite", { skip: !thanatosAvailable() }, async (t) => {
       });
     });
 
-    await t.test(
-      "Parser rejects constructor type nesting beyond U8 depth",
-      async () => {
-        const parserSource = await readFile(PARSER_SOURCE_FILE, "utf-8");
-        assert.match(
-          parserSource,
-          /match \(checkedIncrementU8 depth\)/,
-          "Expected skipBalanced to use checkedIncrementU8 for nested type tracking",
-        );
-        const ok = await runInlineParserHarness(
-          makeCheckedIncrementOverflowHarness(),
-        );
-        assert.ok(
-          ok,
-          "Expected checkedIncrementU8 to reject U8 overflow while tracking parser nesting depth",
-        );
-      },
-    );
+    it("Parser rejects constructor type nesting beyond U8 depth", async () => {
+      const parserSource = await readFile(PARSER_SOURCE_FILE, "utf-8");
+      assert.match(
+        parserSource,
+        /match \(checkedIncrementU8 depth\)/,
+        "Expected skipBalanced to use checkedIncrementU8 for nested type tracking",
+      );
+      const ok = await runInlineParserHarness(
+        makeCheckedIncrementOverflowHarness(),
+      );
+      assert.ok(
+        ok,
+        "Expected checkedIncrementU8 to reject U8 overflow while tracking parser nesting depth",
+      );
+    });
 
-    await t.test(
-      "Parser rejects constructor arity beyond U8 range",
-      async () => {
-        const parserSource = await readFile(PARSER_SOURCE_FILE, "utf-8");
-        assert.match(
-          parserSource,
-          /match \(checkedIncrementU8 acc\)/,
-          "Expected parseCtorArity to use checkedIncrementU8 for arity tracking",
-        );
-        const ok = await runInlineParserHarness(
-          makeParseCtorArityOverflowHarness(),
-        );
-        assert.ok(
-          ok,
-          "Expected parseCtorArity to reject constructor arity overflow at #u8(255)",
-        );
-      },
-    );
+    it("Parser rejects constructor arity beyond U8 range", async () => {
+      const parserSource = await readFile(PARSER_SOURCE_FILE, "utf-8");
+      assert.match(
+        parserSource,
+        /match \(checkedIncrementU8 acc\)/,
+        "Expected parseCtorArity to use checkedIncrementU8 for arity tracking",
+      );
+      const ok = await runInlineParserHarness(
+        makeParseCtorArityOverflowHarness(),
+      );
+      assert.ok(
+        ok,
+        "Expected parseCtorArity to reject constructor arity overflow at #u8(255)",
+      );
+    });
   } finally {
     await closeBatchThanatosSessions();
   }

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { requiredAt } from "../../util/required.ts";
 
@@ -36,56 +36,47 @@ function emptySyms(): SymbolTable {
   };
 }
 
-test("substitution (batch + resolution) dedicated coverage", async (t) => {
-  await t.test("substituteTripLangTermDirectBatch", async (t) => {
-    await t.test(
-      "preserves object identity when substitutions are empty",
-      () => {
-        const current: TripLangTerm = {
-          kind: "poly",
-          name: "main",
-          term: mkSystemFVar("x"),
-        };
-        const result = substituteTripLangTermDirectBatch(current, new Map());
-        assert.strictEqual(result, current);
-      },
-    );
+describe("substitution (batch + resolution) dedicated coverage", () => {
+  describe("substituteTripLangTermDirectBatch", () => {
+    it("preserves object identity when substitutions are empty", () => {
+      const current: TripLangTerm = {
+        kind: "poly",
+        name: "main",
+        term: mkSystemFVar("x"),
+      };
+      const result = substituteTripLangTermDirectBatch(current, new Map());
+      assert.strictEqual(result, current);
+    });
 
-    await t.test(
-      "does not substitute Nat literal identifiers (placeholders)",
-      () => {
-        const lit = makeNatLiteralIdentifier(3n);
-        const current: TripLangTerm = {
-          kind: "poly",
-          name: "main",
-          term: mkSystemFVar(lit),
-        };
-        const substitutions = new Map<string, TripLangTerm>([
-          [
-            "__irrelevant__",
-            {
-              kind: "poly",
-              name: "__irrelevant__",
-              term: mkSystemFVar("z"),
-            },
-          ],
-          [lit, { kind: "poly", name: lit, term: mkSystemFVar("oops") }],
-        ]);
+    it("does not substitute Nat literal identifiers (placeholders)", () => {
+      const lit = makeNatLiteralIdentifier(3n);
+      const current: TripLangTerm = {
+        kind: "poly",
+        name: "main",
+        term: mkSystemFVar(lit),
+      };
+      const substitutions = new Map<string, TripLangTerm>([
+        [
+          "__irrelevant__",
+          {
+            kind: "poly",
+            name: "__irrelevant__",
+            term: mkSystemFVar("z"),
+          },
+        ],
+        [lit, { kind: "poly", name: lit, term: mkSystemFVar("oops") }],
+      ]);
 
-        const result = substituteTripLangTermDirectBatch(
-          current,
-          substitutions,
-        );
-        assert.strictEqual(result, current, "no substitution should occur");
-        assert.strictEqual(
-          (result as { term: unknown }).term,
-          (current as { term: unknown }).term,
-          "term object identity should be preserved",
-        );
-      },
-    );
+      const result = substituteTripLangTermDirectBatch(current, substitutions);
+      assert.strictEqual(result, current, "no substitution should occur");
+      assert.strictEqual(
+        (result as { term: unknown }).term,
+        (current as { term: unknown }).term,
+        "term object identity should be preserved",
+      );
+    });
 
-    await t.test("renames match arm params to avoid capture (batch)", () => {
+    it("renames match arm params to avoid capture (batch)", () => {
       const current: TripLangTerm = {
         kind: "poly",
         name: "main",
@@ -143,288 +134,255 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test(
-      "renames systemF-abs binder when replacementFVs contains binder (fast capture check)",
-      () => {
-        // Term: (\\x:A => y). Substitute y := x.
-        // If we *don't* rename binder `x`, the inserted `x` would become captured.
-        const term = mkSystemFAbs(
-          "x",
-          { kind: "type-var", typeName: "A" },
-          mkSystemFVar("y"),
-        );
+    it("renames systemF-abs binder when replacementFVs contains binder (fast capture check)", () => {
+      // Term: (\\x:A => y). Substitute y := x.
+      // If we *don't* rename binder `x`, the inserted `x` would become captured.
+      const term = mkSystemFAbs(
+        "x",
+        { kind: "type-var", typeName: "A" },
+        mkSystemFVar("y"),
+      );
 
-        // We intentionally pass replacementFVs containing `x` to force the fast-path rename logic.
-        const replacementFVs = new Set<string>(["x"]);
+      // We intentionally pass replacementFVs containing `x` to force the fast-path rename logic.
+      const replacementFVs = new Set<string>(["x"]);
 
-        const out = substituteTermHygienicBatch(
-          term,
-          new Map([["y", mkSystemFVar("x")]]),
-          replacementFVs,
-        );
+      const out = substituteTermHygienicBatch(
+        term,
+        new Map([["y", mkSystemFVar("x")]]),
+        replacementFVs,
+      );
 
-        assert.deepStrictEqual(out.kind, "systemF-abs");
-        if (out.kind !== "systemF-abs") throw new Error("expected systemF-abs");
-        assert.notStrictEqual(
-          out.name,
-          "x",
-          "binder should be renamed to avoid capture",
-        );
-        assert.deepStrictEqual(out.body.kind, "systemF-var");
-        if (out.body.kind !== "systemF-var") {
-          throw new Error("expected systemF-var");
-        }
-        assert.deepStrictEqual(
-          out.body.name,
-          "x",
-          "inserted free variable should remain free (not captured)",
-        );
-      },
-    );
+      assert.deepStrictEqual(out.kind, "systemF-abs");
+      if (out.kind !== "systemF-abs") throw new Error("expected systemF-abs");
+      assert.notStrictEqual(
+        out.name,
+        "x",
+        "binder should be renamed to avoid capture",
+      );
+      assert.deepStrictEqual(out.body.kind, "systemF-var");
+      if (out.body.kind !== "systemF-var") {
+        throw new Error("expected systemF-var");
+      }
+      assert.deepStrictEqual(
+        out.body.name,
+        "x",
+        "inserted free variable should remain free (not captured)",
+      );
+    });
 
-    await t.test(
-      "renames typed-lambda-abstraction binder when replacementFVs contains binder (fast capture check)",
-      () => {
-        // Term: (\\x:A => y) in typed lambda. Substitute y := x.
-        // Binder must be renamed to avoid capturing the inserted free `x`.
-        const term = mkTypedAbs(
-          "x",
-          { kind: "type-var", typeName: "A" },
-          { kind: "lambda-var", name: "y" },
-        );
+    it("renames typed-lambda-abstraction binder when replacementFVs contains binder (fast capture check)", () => {
+      // Term: (\\x:A => y) in typed lambda. Substitute y := x.
+      // Binder must be renamed to avoid capturing the inserted free `x`.
+      const term = mkTypedAbs(
+        "x",
+        { kind: "type-var", typeName: "A" },
+        { kind: "lambda-var", name: "y" },
+      );
 
-        const replacementFVs = new Set<string>(["x"]);
+      const replacementFVs = new Set<string>(["x"]);
 
-        const out = substituteTermHygienicBatch(
-          term,
-          new Map([["y", { kind: "lambda-var", name: "x" }]]),
-          replacementFVs,
-        );
+      const out = substituteTermHygienicBatch(
+        term,
+        new Map([["y", { kind: "lambda-var", name: "x" }]]),
+        replacementFVs,
+      );
 
-        assert.deepStrictEqual(out.kind, "typed-lambda-abstraction");
-        if (out.kind !== "typed-lambda-abstraction") {
-          throw new Error("expected typed-lambda-abstraction");
-        }
-        assert.notStrictEqual(
-          out.varName,
-          "x",
-          "binder should be renamed to avoid capture",
-        );
-        assert.deepStrictEqual(out.body.kind, "lambda-var");
-        if (out.body.kind !== "lambda-var") {
-          throw new Error("expected lambda-var");
-        }
-        assert.deepStrictEqual(
-          out.body.name,
-          "x",
-          "inserted free variable should remain free (not captured)",
-        );
-      },
-    );
+      assert.deepStrictEqual(out.kind, "typed-lambda-abstraction");
+      if (out.kind !== "typed-lambda-abstraction") {
+        throw new Error("expected typed-lambda-abstraction");
+      }
+      assert.notStrictEqual(
+        out.varName,
+        "x",
+        "binder should be renamed to avoid capture",
+      );
+      assert.deepStrictEqual(out.body.kind, "lambda-var");
+      if (out.body.kind !== "lambda-var") {
+        throw new Error("expected lambda-var");
+      }
+      assert.deepStrictEqual(
+        out.body.name,
+        "x",
+        "inserted free variable should remain free (not captured)",
+      );
+    });
 
-    await t.test(
-      "substitutes systemF-let value and renames binder when replacementFVs contains binder (fast capture check)",
-      () => {
-        // Term: let x = y in z. Substitute y := x, z := x.
-        // Value substitution happens in current scope.
-        // Binder must be renamed to avoid capturing the inserted free `x` in the body.
-        const term: TripLangValueType = {
-          kind: "systemF-let",
-          name: "x",
-          value: mkSystemFVar("y"), // will be substituted to x
-          body: mkSystemFVar("z"), // will be substituted to x
-        };
+    it("substitutes systemF-let value and renames binder when replacementFVs contains binder (fast capture check)", () => {
+      // Term: let x = y in z. Substitute y := x, z := x.
+      // Value substitution happens in current scope.
+      // Binder must be renamed to avoid capturing the inserted free `x` in the body.
+      const term: TripLangValueType = {
+        kind: "systemF-let",
+        name: "x",
+        value: mkSystemFVar("y"), // will be substituted to x
+        body: mkSystemFVar("z"), // will be substituted to x
+      };
 
-        const replacementFVs = new Set<string>(["x"]);
+      const replacementFVs = new Set<string>(["x"]);
 
-        const out = substituteTermHygienicBatch(
-          term,
-          new Map([
-            ["y", mkSystemFVar("x")],
-            ["z", mkSystemFVar("x")],
-          ]),
-          replacementFVs,
-        );
+      const out = substituteTermHygienicBatch(
+        term,
+        new Map([
+          ["y", mkSystemFVar("x")],
+          ["z", mkSystemFVar("x")],
+        ]),
+        replacementFVs,
+      );
 
-        assert.deepStrictEqual(out.kind, "systemF-let");
-        if (out.kind !== "systemF-let") throw new Error("expected systemF-let");
+      assert.deepStrictEqual(out.kind, "systemF-let");
+      if (out.kind !== "systemF-let") throw new Error("expected systemF-let");
 
-        // Value should be substituted (y -> x)
-        assert.deepStrictEqual(out.value.kind, "systemF-var");
-        if (out.value.kind !== "systemF-var") {
-          throw new Error("expected systemF-var");
-        }
-        assert.deepStrictEqual(
-          out.value.name,
-          "x",
-          "value should be substituted",
-        );
+      // Value should be substituted (y -> x)
+      assert.deepStrictEqual(out.value.kind, "systemF-var");
+      if (out.value.kind !== "systemF-var") {
+        throw new Error("expected systemF-var");
+      }
+      assert.deepStrictEqual(
+        out.value.name,
+        "x",
+        "value should be substituted",
+      );
 
-        // Binder should be renamed to avoid capture
-        assert.notStrictEqual(
-          out.name,
-          "x",
-          "binder should be renamed to avoid capture",
-        );
+      // Binder should be renamed to avoid capture
+      assert.notStrictEqual(
+        out.name,
+        "x",
+        "binder should be renamed to avoid capture",
+      );
 
-        // Body should have the substituted variable (x), which should remain free
-        assert.deepStrictEqual(out.body.kind, "systemF-var");
-        if (out.body.kind !== "systemF-var") {
-          throw new Error("expected systemF-var");
-        }
-        assert.deepStrictEqual(
-          out.body.name,
-          "x",
-          "inserted free variable in body should remain free (not captured)",
-        );
-      },
-    );
+      // Body should have the substituted variable (x), which should remain free
+      assert.deepStrictEqual(out.body.kind, "systemF-var");
+      if (out.body.kind !== "systemF-var") {
+        throw new Error("expected systemF-var");
+      }
+      assert.deepStrictEqual(
+        out.body.name,
+        "x",
+        "inserted free variable in body should remain free (not captured)",
+      );
+    });
 
-    await t.test(
-      "substitutes systemF-type-app term and typeArg (both branches traversed)",
-      () => {
-        // Term: y[T] where y is a term variable.
-        // Both term.term and term.typeArg branches are traversed.
-        const term: TripLangValueType = mkSystemFTypeApp(
-          mkSystemFVar("y"), // term variable that can be substituted
-          mkTypeVariable("T"), // type variable (traversed but not substituted)
-        );
+    it("substitutes systemF-type-app term and typeArg (both branches traversed)", () => {
+      // Term: y[T] where y is a term variable.
+      // Both term.term and term.typeArg branches are traversed.
+      const term: TripLangValueType = mkSystemFTypeApp(
+        mkSystemFVar("y"), // term variable that can be substituted
+        mkTypeVariable("T"), // type variable (traversed but not substituted)
+      );
 
-        // This exercises both branches: termPart substitution and typeArg traversal
-        const out = substituteTermHygienicBatch(
-          term,
-          new Map([["y", mkSystemFVar("x")]]),
-          new Set<string>(),
-        );
-        assert.deepStrictEqual(out.kind, "systemF-type-app");
-        if (out.kind !== "systemF-type-app") {
-          throw new Error("expected systemF-type-app");
-        }
-        assert.deepStrictEqual(out.term.kind, "systemF-var");
-        if (out.term.kind !== "systemF-var") {
-          throw new Error("expected systemF-var");
-        }
-        assert.deepStrictEqual(
-          out.term.name,
-          "x",
-          "term part should be substituted",
-        );
-        // typeArg branch is also traversed (even though type vars aren't substituted)
-        assert.deepStrictEqual(out.typeArg.kind, "type-var");
-        if (out.typeArg.kind !== "type-var") {
-          throw new Error("expected type-var");
-        }
-        assert.deepStrictEqual(out.typeArg.typeName, "T");
-      },
-    );
+      // This exercises both branches: termPart substitution and typeArg traversal
+      const out = substituteTermHygienicBatch(
+        term,
+        new Map([["y", mkSystemFVar("x")]]),
+        new Set<string>(),
+      );
+      assert.deepStrictEqual(out.kind, "systemF-type-app");
+      if (out.kind !== "systemF-type-app") {
+        throw new Error("expected systemF-type-app");
+      }
+      assert.deepStrictEqual(out.term.kind, "systemF-var");
+      if (out.term.kind !== "systemF-var") {
+        throw new Error("expected systemF-var");
+      }
+      assert.deepStrictEqual(
+        out.term.name,
+        "x",
+        "term part should be substituted",
+      );
+      // typeArg branch is also traversed (even though type vars aren't substituted)
+      assert.deepStrictEqual(out.typeArg.kind, "type-var");
+      if (out.typeArg.kind !== "type-var") {
+        throw new Error("expected type-var");
+      }
+      assert.deepStrictEqual(out.typeArg.typeName, "T");
+    });
 
-    await t.test(
-      "substitutes systemF-type-abs body (type binders don't shadow term variables)",
-      () => {
-        // Term: #X => y. Substitute y := x.
-        // Type binder X doesn't shadow term variable x, so substitution should work.
-        const term: TripLangValueType = mkSystemFTAbs("X", mkSystemFVar("y"));
+    it("substitutes systemF-type-abs body (type binders don't shadow term variables)", () => {
+      // Term: #X => y. Substitute y := x.
+      // Type binder X doesn't shadow term variable x, so substitution should work.
+      const term: TripLangValueType = mkSystemFTAbs("X", mkSystemFVar("y"));
 
-        const out = substituteTermHygienicBatch(
-          term,
-          new Map([["y", mkSystemFVar("x")]]),
-          new Set<string>(),
-        );
+      const out = substituteTermHygienicBatch(
+        term,
+        new Map([["y", mkSystemFVar("x")]]),
+        new Set<string>(),
+      );
 
-        assert.deepStrictEqual(out.kind, "systemF-type-abs");
-        if (out.kind !== "systemF-type-abs") {
-          throw new Error("expected systemF-type-abs");
-        }
-        assert.deepStrictEqual(
-          out.typeVar,
-          "X",
-          "type binder should remain unchanged",
-        );
-        assert.deepStrictEqual(out.body.kind, "systemF-var");
-        if (out.body.kind !== "systemF-var") {
-          throw new Error("expected systemF-var");
-        }
-        assert.deepStrictEqual(
-          out.body.name,
-          "x",
-          "body should be substituted",
-        );
-      },
-    );
+      assert.deepStrictEqual(out.kind, "systemF-type-abs");
+      if (out.kind !== "systemF-type-abs") {
+        throw new Error("expected systemF-type-abs");
+      }
+      assert.deepStrictEqual(
+        out.typeVar,
+        "X",
+        "type binder should remain unchanged",
+      );
+      assert.deepStrictEqual(out.body.kind, "systemF-var");
+      if (out.body.kind !== "systemF-var") {
+        throw new Error("expected systemF-var");
+      }
+      assert.deepStrictEqual(out.body.name, "x", "body should be substituted");
+    });
 
-    await t.test(
-      "substitutes forall body (type binders don't shadow term variables)",
-      () => {
-        // Type: #X => (Y -> Z) where Y and Z are type variables.
-        // Type variables aren't substituted by term substitution, but the traversal
-        // still happens. To actually test substitution, we'd need term variables nested
-        // in the type structure, but BaseType doesn't contain terms.
-        // So we'll test that the traversal code path is exercised (even if nothing changes).
-        const ty: TripLangValueType = forall("X", mkTypeVariable("Y"));
+    it("substitutes forall body (type binders don't shadow term variables)", () => {
+      // Type: #X => (Y -> Z) where Y and Z are type variables.
+      // Type variables aren't substituted by term substitution, but the traversal
+      // still happens. To actually test substitution, we'd need term variables nested
+      // in the type structure, but BaseType doesn't contain terms.
+      // So we'll test that the traversal code path is exercised (even if nothing changes).
+      const ty: TripLangValueType = forall("X", mkTypeVariable("Y"));
 
-        // This will traverse but not substitute (type vars aren't term vars)
-        const out = substituteTermHygienicBatch(
-          ty,
-          new Map(),
-          new Set<string>(),
-        );
+      // This will traverse but not substitute (type vars aren't term vars)
+      const out = substituteTermHygienicBatch(ty, new Map(), new Set<string>());
 
-        assert.deepStrictEqual(out.kind, "forall");
-        if (out.kind !== "forall") throw new Error("expected forall");
-        assert.deepStrictEqual(
-          out.typeVar,
-          "X",
-          "type binder should remain unchanged",
-        );
-        assert.deepStrictEqual(out.body.kind, "type-var");
-        if (out.body.kind !== "type-var") throw new Error("expected type-var");
-        assert.deepStrictEqual(
-          out.body.typeName,
-          "Y",
-          "body remains unchanged (type vars aren't substituted)",
-        );
-        // The important thing is that the branch was traversed
-      },
-    );
+      assert.deepStrictEqual(out.kind, "forall");
+      if (out.kind !== "forall") throw new Error("expected forall");
+      assert.deepStrictEqual(
+        out.typeVar,
+        "X",
+        "type binder should remain unchanged",
+      );
+      assert.deepStrictEqual(out.body.kind, "type-var");
+      if (out.body.kind !== "type-var") throw new Error("expected type-var");
+      assert.deepStrictEqual(
+        out.body.typeName,
+        "Y",
+        "body remains unchanged (type vars aren't substituted)",
+      );
+      // The important thing is that the branch was traversed
+    });
 
-    await t.test(
-      "substitutes type-app fn and arg (both branches traversed)",
-      () => {
-        // Type: F[A] where F and A are type variables.
-        // Type variables aren't substituted by term substitution, but the traversal
-        // code paths for fn and arg are still exercised.
-        const ty: TripLangValueType = typeApp(
-          mkTypeVariable("F"),
-          mkTypeVariable("A"),
-        );
+    it("substitutes type-app fn and arg (both branches traversed)", () => {
+      // Type: F[A] where F and A are type variables.
+      // Type variables aren't substituted by term substitution, but the traversal
+      // code paths for fn and arg are still exercised.
+      const ty: TripLangValueType = typeApp(
+        mkTypeVariable("F"),
+        mkTypeVariable("A"),
+      );
 
-        // This will traverse both fn and arg branches (even if nothing changes)
-        const out = substituteTermHygienicBatch(
-          ty,
-          new Map(),
-          new Set<string>(),
-        );
-        assert.deepStrictEqual(out.kind, "type-app");
-        if (out.kind !== "type-app") throw new Error("expected type-app");
-        assert.deepStrictEqual(out.fn.kind, "type-var");
-        if (out.fn.kind !== "type-var") throw new Error("expected type-var");
-        assert.deepStrictEqual(
-          out.fn.typeName,
-          "F",
-          "fn remains unchanged (type vars aren't substituted)",
-        );
-        assert.deepStrictEqual(out.arg.kind, "type-var");
-        if (out.arg.kind !== "type-var") throw new Error("expected type-var");
-        assert.deepStrictEqual(
-          out.arg.typeName,
-          "A",
-          "arg remains unchanged (type vars aren't substituted)",
-        );
-        // The important thing is that both branches (fn and arg) were traversed
-      },
-    );
+      // This will traverse both fn and arg branches (even if nothing changes)
+      const out = substituteTermHygienicBatch(ty, new Map(), new Set<string>());
+      assert.deepStrictEqual(out.kind, "type-app");
+      if (out.kind !== "type-app") throw new Error("expected type-app");
+      assert.deepStrictEqual(out.fn.kind, "type-var");
+      if (out.fn.kind !== "type-var") throw new Error("expected type-var");
+      assert.deepStrictEqual(
+        out.fn.typeName,
+        "F",
+        "fn remains unchanged (type vars aren't substituted)",
+      );
+      assert.deepStrictEqual(out.arg.kind, "type-var");
+      if (out.arg.kind !== "type-var") throw new Error("expected type-var");
+      assert.deepStrictEqual(
+        out.arg.typeName,
+        "A",
+        "arg remains unchanged (type vars aren't substituted)",
+      );
+      // The important thing is that both branches (fn and arg) were traversed
+    });
 
-    await t.test("substitutes poly term", () => {
+    it("substitutes poly term", () => {
       // System F term: \x:A => y. Substitute y := z.
       const current: TripLangTerm = {
         kind: "poly",
@@ -471,7 +429,7 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test("returns combinator unchanged (no-op)", () => {
+    it("returns combinator unchanged (no-op)", () => {
       const current: TripLangTerm = {
         kind: "combinator",
         name: "K",
@@ -490,7 +448,7 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test("returns type definition unchanged (no-op)", () => {
+    it("returns type definition unchanged (no-op)", () => {
       const current: TripLangTerm = {
         kind: "type",
         name: "MyType",
@@ -509,7 +467,7 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test("returns data definition unchanged (no-op)", () => {
+    it("returns data definition unchanged (no-op)", () => {
       const current: TripLangTerm = {
         kind: "data",
         name: "Maybe",
@@ -529,7 +487,7 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test("returns module definition unchanged (no-op)", () => {
+    it("returns module definition unchanged (no-op)", () => {
       const current: TripLangTerm = {
         kind: "module",
         name: "MyModule",
@@ -547,7 +505,7 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test("returns import definition unchanged (no-op)", () => {
+    it("returns import definition unchanged (no-op)", () => {
       const current: TripLangTerm = {
         kind: "import",
         name: "OtherModule",
@@ -566,7 +524,7 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       );
     });
 
-    await t.test("returns export definition unchanged (no-op)", () => {
+    it("returns export definition unchanged (no-op)", () => {
       const current: TripLangTerm = {
         kind: "export",
         name: "someSymbol",
@@ -585,8 +543,8 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
     });
   });
 
-  await t.test("resolveExternalProgramReferences", async (t) => {
-    await t.test("keeps imported symbols unresolved (no error)", () => {
+  describe("resolveExternalProgramReferences", () => {
+    it("keeps imported symbols unresolved (no error)", () => {
       const program: TripLangProgram = {
         kind: "program",
         terms: [
@@ -604,25 +562,22 @@ test("substitution (batch + resolution) dedicated coverage", async (t) => {
       assert.deepEqual(main!.term, mkSystemFVar("foo"));
     });
 
-    await t.test(
-      "throws on unresolved external term references when not imported",
-      () => {
-        const program: TripLangProgram = {
-          kind: "program",
-          terms: [
-            { kind: "module", name: "M" },
-            { kind: "poly", name: "main", term: mkSystemFVar("foo") },
-          ],
-        };
-        assert.throws(
-          () => resolveExternalProgramReferences(program, emptySyms()),
-          CompilationError,
-          "Unresolved external term reference: foo",
-        );
-      },
-    );
+    it("throws on unresolved external term references when not imported", () => {
+      const program: TripLangProgram = {
+        kind: "program",
+        terms: [
+          { kind: "module", name: "M" },
+          { kind: "poly", name: "main", term: mkSystemFVar("foo") },
+        ],
+      };
+      assert.throws(
+        () => resolveExternalProgramReferences(program, emptySyms()),
+        CompilationError,
+        "Unresolved external term reference: foo",
+      );
+    });
 
-    await t.test("throws on unresolved external type references", () => {
+    it("throws on unresolved external type references", () => {
       // System F abstraction with a type annotation that references an unknown type var name.
       // Note: externalReferences treats type vars as references for resolution.
       const program: TripLangProgram = {

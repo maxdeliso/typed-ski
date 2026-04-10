@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,7 @@ async function getPreludeObjectCached() {
   return preludeObject;
 }
 
-test("Unparse - Stage 1 Corpus", async () => {
+it("Unparse - Stage 1 Corpus", async () => {
   const unparseObj = await getUnparseObject();
   const preludeObj = await getPreludeObjectCached();
   const stage1Harness = loadUnparseStage1Input("harness.trip");

@@ -5,9 +5,9 @@
  * without getting stuck in circular dependency resolution loops.
  */
 
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "../util/test_shim.ts";
 
-import { expect } from "../util/assertions.ts";
+import assert from "node:assert/strict";
 import {
   cleanupTempWorkspace,
   copyFixtures,
@@ -87,8 +87,8 @@ describe("linking with recursive ADTs", { concurrency: false }, () => {
       false,
     );
 
-    expect(skiExpression).to.be.a("string");
-    expect(skiExpression.length).to.be.greaterThan(0);
+    assert.strictEqual(typeof skiExpression, "string");
+    assert.ok(skiExpression.length > 0);
   });
 
   it("links a self-referential recursive ADT", async () => {
@@ -110,7 +110,7 @@ describe("linking with recursive ADTs", { concurrency: false }, () => {
       false,
     );
 
-    expect(skiExpression).to.be.a("string");
-    expect(skiExpression.length).to.be.greaterThan(0);
+    assert.strictEqual(typeof skiExpression, "string");
+    assert.ok(skiExpression.length > 0);
   });
 });

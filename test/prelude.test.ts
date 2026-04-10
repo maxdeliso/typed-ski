@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "./util/test_shim.ts";
 import assert from "node:assert/strict";
 import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
@@ -9,7 +9,7 @@ import { getNatObject } from "../lib/nat.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
 import { loadTripModuleObject } from "../lib/tripSourceLoader.ts";
 
-test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
+it("links prelude with not, and, or, pred, sub, lte, gte", async () => {
   const preludeObject = await getPreludeObject();
   const binObject = await getBinObject();
   const natObject = await getNatObject();
@@ -42,7 +42,7 @@ test("links prelude with not, and, or, pred, sub, lte, gte", async () => {
   }
 });
 
-test("subU8 primitive subtraction", async () => {
+it("subU8 primitive subtraction", async () => {
   const preludeObject = await getPreludeObject();
   const testObject = await loadTripModuleObject(
     new URL("./compiler/inputs/subU8Test.trip", import.meta.url),

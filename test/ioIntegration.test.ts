@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "./util/test_shim.ts";
 import assert from "node:assert/strict";
 import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
 import { compileToObjectFile } from "../lib/compiler/singleFileCompiler.ts";
@@ -36,7 +36,7 @@ async function runTripWithParallelEvaluator(
   return { result: resultExpr, stdout, evaluator };
 }
 
-test("IO Integration - Hello World", async () => {
+it("IO Integration - Hello World", async () => {
   const source = `
 module Main
 import Prelude writeOne
@@ -61,7 +61,7 @@ poly main =
   }
 });
 
-test("IO Integration - ReadLine and StrLen", async () => {
+it("IO Integration - ReadLine and StrLen", async () => {
   const source = `
 module Main
 import Prelude readOne

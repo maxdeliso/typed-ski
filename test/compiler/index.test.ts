@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
@@ -208,7 +208,7 @@ function countDagNodes(dag: string): number {
   return dag.length === 0 ? 0 : count + 1;
 }
 
-test("Self-hosted compileToComb links a data/match elaboration harness", async () => {
+it("Self-hosted compileToComb links a data/match elaboration harness", async () => {
   const source = `module M
 export main
 data List = Nil | Cons h t

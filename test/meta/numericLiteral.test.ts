@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
@@ -9,8 +9,8 @@ export main
 poly main = 3
 `;
 
-test("numeric literals desugar to nat literal vars", async (t) => {
-  await t.test("parsed main = 3 is nat literal var", () => {
+describe("numeric literals desugar to nat literal vars", () => {
+  it("parsed main = 3 is nat literal var", () => {
     const program = parseTripLang(SOURCE_WITH_NAT_LITERAL);
     const mainDef = program.terms.find(
       (t): t is TripLangTerm => t.kind === "poly" && t.name === "main",
@@ -24,7 +24,7 @@ test("numeric literals desugar to nat literal vars", async (t) => {
     }
   });
 
-  await t.test("no Nat requirement for literals", () => {
+  it("no Nat requirement for literals", () => {
     assert.deepStrictEqual(true, true);
   });
 });

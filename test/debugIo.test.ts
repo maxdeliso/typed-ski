@@ -1,10 +1,10 @@
-import { test } from "node:test";
+import { describe, it } from "./util/test_shim.ts";
 import assert from "node:assert/strict";
 import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
 import { I, WriteOne } from "../lib/ski/terminal.ts";
 import { apply } from "../lib/ski/expression.ts";
 
-test("Evaluator - Direct WriteOne", async () => {
+it("Evaluator - Direct WriteOne", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     // Apply WriteOne to byte 65 ('A') and identity callback I

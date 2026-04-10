@@ -9,17 +9,15 @@
  * - Version consistency
  */
 
-import { expect } from "../util/assertions.ts";
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { existsSync, statSync } from "node:fs";
-import { readFile, copyFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import process from "node:process";
 
-import { parseJsonc } from "../util/jsonc.ts";
 import { resolveDistPath } from "../util/tripcHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -43,10 +41,9 @@ const compiledTripcPath = resolveDistPath(
 import {
   compileToObjectFile,
   compileToObjectFileString,
-  deserializeTripCObject,
   SingleFileCompilerError,
-  type TripCObject as _TripCObject,
-} from "../../lib/compiler/index.ts";
+} from "../../lib/compiler/singleFileCompiler.ts";
+import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { required, requiredAt } from "../util/required.ts";
 
 // Test utilities
@@ -134,85 +131,85 @@ function assertCommandSuccess(
   }
 }
 
-test("CLI Tests", async (t) => {
-  await t.test("Library function tests", async (t) => {
-    await t.test("compileToObjectFile works with valid input", () => {
+describe("CLI Tests", () => {
+  describe("Library function tests", () => {
+    it("compileToObjectFile works with valid input", () => {
       const source = `module Test
 export id
 poly id = #a => \\x:a => x`;
 
       const result = compileToObjectFile(source);
 
-      expect(result).to.have.property("module", "Test");
-      expect(result).to.have.property("imports");
-      expect(result).to.have.property("exports");
-      expect(result).to.have.property("definitions");
-      expect(result).to.have.property("dataDefinitions");
+      assert.strictEqual(result.module, "Test");
+      assert.ok("imports" in result);
+      assert.ok("exports" in result);
+      assert.ok("definitions" in result);
+      assert.ok("dataDefinitions" in result);
 
-      expect(result.imports).to.be.an("array");
-      expect(result.exports).to.be.an("array");
-      expect(result.definitions).to.be.an("object");
-      expect(result.dataDefinitions).to.be.an("array");
+      assert.ok(Array.isArray(result.imports));
+      assert.ok(Array.isArray(result.exports));
+      assert.ok(typeof result.definitions === "object");
+      assert.ok(Array.isArray(result.dataDefinitions));
 
-      expect(result.exports).to.include("id");
-      expect(result.definitions).to.have.property("id");
+      assert.ok(result.exports.includes("id"));
+      assert.ok("id" in result.definitions);
     });
 
-    await t.test("compileToObjectFileString works", () => {
+    it("compileToObjectFileString works", () => {
       const source = `module Test
 export id
 poly id = #a => \\x:a => x`;
 
       const result = compileToObjectFileString(source);
 
-      expect(result).to.be.a("string");
+      assert.strictEqual(typeof result, "string");
 
       // Should be valid JSON
       const parsed = JSON.parse(result);
-      expect(parsed).to.have.property("module", "Test");
+      assert.strictEqual(parsed.module, "Test");
 
       // Should be deserializable
       const deserialized = deserializeTripCObject(result);
-      expect(deserialized).to.deep.equal(parsed);
+      assert.deepStrictEqual(deserialized, parsed);
     });
 
-    await t.test("invalid syntax is parsed as non-terminal", () => {
+    it("invalid syntax is parsed as non-terminal", () => {
       const invalidSource = `module Test
 poly id = invalid syntax here`;
 
       const result = compileToObjectFile(invalidSource);
 
       // Should still compile but with non-terminal structure
-      expect(result.module).to.equal("Test");
-      expect(result.definitions).to.have.property("id");
+      assert.strictEqual(result.module, "Test");
+      assert.ok("id" in result.definitions);
 
       const idDef = required(result.definitions.id, "expected definition 'id'");
       if (idDef.kind === "poly") {
-        expect(idDef.term).to.have.property("kind", "non-terminal");
+        assert.strictEqual(idDef.term.kind, "non-terminal");
       }
     });
 
-    await t.test("error handling for missing module", () => {
+    it("error handling for missing module", () => {
       const noModuleSource = `poly id = #a => \\x:a => x`;
 
-      expect(() => {
+      assert.throws(() => {
         compileToObjectFile(noModuleSource);
-      }).to.throw(SingleFileCompilerError);
+      }, SingleFileCompilerError);
     });
 
-    await t.test("error handling for multiple modules", () => {
+    it("error handling for multiple modules", () => {
       const multipleModulesSource = `module First
 module Second
 poly id = #a => \\x:a => x`;
 
-      expect(() => {
+      assert.throws(() => {
         compileToObjectFile(multipleModulesSource);
-      }).to.throw(SingleFileCompilerError);
+      }, SingleFileCompilerError);
     });
   });
 
-  await t.test("Object file format tests", async (t) => {
-    await t.test("object file has correct structure", () => {
+  describe("Object file format tests", () => {
+    it("object file has correct structure", () => {
       const source = `module Test
 import Math add
 export id
@@ -223,45 +220,40 @@ poly double = \\x:Int => add x x`;
       const result = compileToObjectFile(source);
 
       // Check module
-      expect(result.module).to.equal("Test");
+      assert.strictEqual(result.module, "Test");
 
       // Check imports
-      expect(result.imports).to.have.length(1);
-      expect(
+      assert.strictEqual(result.imports.length, 1);
+      assert.deepStrictEqual(
         requiredAt(result.imports, 0, "expected first import"),
-      ).to.deep.equal({ name: "add", from: "Math" });
+        { name: "add", from: "Math" },
+      );
 
       // Check exports
-      expect(result.exports).to.have.length(2);
-      expect(result.exports).to.include("id");
-      expect(result.exports).to.include("double");
+      assert.strictEqual(result.exports.length, 2);
+      assert.ok(result.exports.includes("id"));
+      assert.ok(result.exports.includes("double"));
 
       // Check definitions
-      expect(Object.keys(result.definitions)).to.have.length(2);
-      expect(result.definitions).to.have.property("id");
-      expect(result.definitions).to.have.property("double");
-      expect(result.dataDefinitions).to.deep.equal([]);
+      assert.strictEqual(Object.keys(result.definitions).length, 2);
+      assert.ok("id" in result.definitions);
+      assert.ok("double" in result.definitions);
+      assert.deepStrictEqual(result.dataDefinitions, []);
 
       // Check definition structure
       const idDef = required(result.definitions.id, "expected definition 'id'");
-      expect(idDef).to.have.property("kind", "poly");
-      expect(idDef).to.have.property("name", "id");
-      if (idDef.kind === "poly") {
-        expect(idDef).to.have.property("term");
-      }
+      assert.strictEqual(idDef.kind, "poly");
+      assert.strictEqual(idDef.name, "id");
 
       const doubleDef = required(
         result.definitions.double,
         "expected definition 'double'",
       );
-      expect(doubleDef).to.have.property("kind", "poly");
-      expect(doubleDef).to.have.property("name", "double");
-      if (doubleDef.kind === "poly") {
-        expect(doubleDef).to.have.property("term");
-      }
+      assert.strictEqual(doubleDef.kind, "poly");
+      assert.strictEqual(doubleDef.name, "double");
     });
 
-    await t.test("object file serialization/deserialization", () => {
+    it("object file serialization/deserialization", () => {
       const source = `module Test
 export id
 poly id = #a => \\x:a => x`;
@@ -271,18 +263,20 @@ poly id = #a => \\x:a => x`;
       const deserialized = deserializeTripCObject(serialized);
 
       // Check key properties instead of deep equality
-      expect(deserialized.module).to.equal(original.module);
-      expect(deserialized.imports).to.deep.equal(original.imports);
-      expect(deserialized.exports).to.deep.equal(original.exports);
-      expect(deserialized.dataDefinitions).to.deep.equal(
+      assert.strictEqual(deserialized.module, original.module);
+      assert.deepStrictEqual(deserialized.imports, original.imports);
+      assert.deepStrictEqual(deserialized.exports, original.exports);
+      assert.deepStrictEqual(
+        deserialized.dataDefinitions,
         original.dataDefinitions,
       );
-      expect(Object.keys(deserialized.definitions)).to.deep.equal(
+      assert.deepStrictEqual(
+        Object.keys(deserialized.definitions),
         Object.keys(original.definitions),
       );
     });
 
-    await t.test("object file contains elaborated definitions", () => {
+    it("object file contains elaborated definitions", () => {
       const source = `module Test
 export id
 poly id = #a => \\x:a => x`;
@@ -292,41 +286,41 @@ poly id = #a => \\x:a => x`;
 
       // Term should be elaborated System F
       if (idDef.kind === "poly") {
-        expect(idDef.term).to.have.property("kind", "systemF-type-abs");
+        assert.strictEqual(idDef.term.kind, "systemF-type-abs");
         if (idDef.term.kind === "systemF-type-abs") {
-          expect(idDef.term.body).to.have.property("kind", "systemF-abs");
+          assert.strictEqual(idDef.term.body.kind, "systemF-abs");
         }
       }
     });
   });
 
-  await t.test("CLI file structure tests", async (t) => {
-    await t.test("CLI files exist", () => {
+  describe("CLI file structure tests", () => {
+    it("CLI files exist", () => {
       const binDir = join(projectRoot, "bin");
-      expect(existsSync(binDir)).to.be.true;
+      assert.strictEqual(existsSync(binDir), true);
 
-      expect(existsSync(join(binDir, "tripc.ts"))).to.be.true;
+      assert.strictEqual(existsSync(join(binDir, "tripc.ts")), true);
     });
 
-    await t.test("CLI files have proper content", async () => {
+    it("CLI files have proper content", async () => {
       const tripcTs = await readFile(
         join(projectRoot, "bin/tripc.ts"),
         "utf-8",
       );
-      expect(tripcTs).to.include("TripLang Compiler & Linker");
-      expect(tripcTs).to.include("loadTripModuleObject");
+      assert.ok(tripcTs.includes("TripLang Compiler & Linker"));
+      assert.ok(tripcTs.includes("loadTripModuleObject"));
     });
   });
 
-  await t.test("Version consistency tests", async (t) => {
-    await t.test("version is consistent across files", async () => {
+  describe("Version consistency tests", () => {
+    it("version is consistent across files", async () => {
       const packageJsonPath = join(projectRoot, "package.json");
       const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
       const version = packageJson.version;
 
       const jsrJsonPath = join(projectRoot, "jsr.json");
       const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
-      expect(jsrJson.version).to.equal(version);
+      assert.strictEqual(jsrJson.version, version);
 
       const generatedVersionPath = join(
         projectRoot,
@@ -335,38 +329,38 @@ poly id = #a => \\x:a => x`;
         "version.generated.ts",
       );
       const generatedVersion = await readFile(generatedVersionPath, "utf-8");
-      expect(generatedVersion).to.include(
-        `export const VERSION = "${version}";`,
+      assert.ok(
+        generatedVersion.includes(`export const VERSION = "${version}";`),
       );
     });
   });
 
-  await t.test("CLI Packaging Tests", async (t) => {
-    await t.test("TypeScript CLI (bin/tripc.ts)", async (t) => {
-      await t.test("--version flag", async () => {
+  describe("CLI Packaging Tests", () => {
+    describe("TypeScript CLI (bin/tripc.ts)", () => {
+      it("--version flag", async () => {
         const result = await runCommand([
           process.execPath,
           "bin/tripc.ts",
           "--version",
         ]);
 
-        expect(result.success).to.be.true;
-        expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+        assert.strictEqual(result.success, true);
+        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
       });
 
-      await t.test("--help flag", async () => {
+      it("--help flag", async () => {
         const result = await runCommand([
           process.execPath,
           "bin/tripc.ts",
           "--help",
         ]);
 
-        expect(result.success).to.be.true;
-        expect(result.stdout).to.include("TripLang Compiler & Linker (tripc)");
-        expect(result.stdout).to.include("USAGE:");
+        assert.strictEqual(result.success, true);
+        assert.ok(result.stdout.includes("TripLang Compiler & Linker (tripc)"));
+        assert.ok(result.stdout.includes("USAGE:"));
       });
 
-      await t.test("compilation", async () => {
+      it("compilation", async () => {
         const testFile = fixturePath("test.trip");
 
         const result = await runCommand([
@@ -376,14 +370,14 @@ poly id = #a => \\x:a => x`;
           "--stdout",
         ]);
 
-        expect(result.success).to.be.true;
+        assert.strictEqual(result.success, true);
 
         // Verify object file content
         const parsed = JSON.parse(result.stdout);
-        expect(parsed).to.have.property("module", "TestModule");
+        assert.strictEqual(parsed.module, "TestModule");
       });
 
-      await t.test("verbose compilation", async () => {
+      it("verbose compilation", async () => {
         const testFile = fixturePath("test.trip");
 
         const result = await runCommand([
@@ -394,10 +388,10 @@ poly id = #a => \\x:a => x`;
           "--stdout",
         ]);
 
-        expect(result.success).to.be.true;
+        assert.strictEqual(result.success, true);
       });
 
-      await t.test("error handling", async () => {
+      it("error handling", async () => {
         const invalidFile = fixturePath("invalid_syntax.trip");
 
         const result = await runCommand([
@@ -406,19 +400,19 @@ poly id = #a => \\x:a => x`;
           invalidFile,
         ]);
 
-        expect(result.success).to.be.false;
-        expect(result.stderr).to.include("Compilation error");
+        assert.strictEqual(result.success, false);
+        assert.ok(result.stderr.includes("Compilation error"));
       });
     });
 
-    await t.test("Bundled JavaScript (dist/tripc.js)", async (t) => {
+    describe("Bundled JavaScript (dist/tripc.js)", () => {
       const bundledJsPath = bundledTripcPath;
 
-      await t.test("file exists", () => {
-        expect(existsSync(bundledJsPath)).to.be.true;
+      it("file exists", () => {
+        assert.strictEqual(existsSync(bundledJsPath), true);
       });
 
-      await t.test("--version flag", async () => {
+      it("--version flag", async () => {
         const command = [process.execPath, bundledJsPath, "--version"];
         const result = await runCommand(command);
 
@@ -427,10 +421,10 @@ poly id = #a => \\x:a => x`;
           command,
           "Bundled JavaScript (dist/tripc.js) --version flag",
         );
-        expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
       });
 
-      await t.test("compilation", async () => {
+      it("compilation", async () => {
         const testFile = fixturePath("test.trip");
 
         const command = [process.execPath, bundledJsPath, testFile, "--stdout"];
@@ -444,18 +438,18 @@ poly id = #a => \\x:a => x`;
 
         // Verify output
         const parsed = JSON.parse(result.stdout);
-        expect(parsed).to.have.property("module", "TestModule");
+        assert.strictEqual(parsed.module, "TestModule");
       });
     });
 
-    await t.test("Minified JavaScript (dist/tripc.min.js)", async (t) => {
+    describe("Minified JavaScript (dist/tripc.min.js)", () => {
       const minifiedJsPath = minifiedTripcPath;
 
-      await t.test("file exists", () => {
-        expect(existsSync(minifiedJsPath)).to.be.true;
+      it("file exists", () => {
+        assert.strictEqual(existsSync(minifiedJsPath), true);
       });
 
-      await t.test("--version flag", async () => {
+      it("--version flag", async () => {
         const command = [process.execPath, minifiedJsPath, "--version"];
         const result = await runCommand(command);
 
@@ -464,10 +458,10 @@ poly id = #a => \\x:a => x`;
           command,
           "Minified JavaScript (dist/tripc.min.js) --version flag",
         );
-        expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
       });
 
-      await t.test("compilation", async () => {
+      it("compilation", async () => {
         const testFile = fixturePath("test.trip");
 
         const command = [
@@ -486,21 +480,21 @@ poly id = #a => \\x:a => x`;
 
         // Verify output
         const parsed = JSON.parse(result.stdout);
-        expect(parsed).to.have.property("module", "TestModule");
+        assert.strictEqual(parsed.module, "TestModule");
       });
     });
 
-    await t.test("Compiled Binary (dist/tripc)", async (t) => {
+    describe("Compiled Binary (dist/tripc)", () => {
       const binaryPath = compiledTripcPath;
 
-      await t.test("file exists", () => {
-        expect(existsSync(binaryPath)).to.be.true;
+      it("file exists", () => {
+        assert.strictEqual(existsSync(binaryPath), true);
       });
 
-      await t.test("file is executable", async () => {
+      it("file is executable", async () => {
         try {
           const stat = statSync(binaryPath);
-          expect(stat.isFile()).to.be.true;
+          assert.strictEqual(stat.isFile(), true);
         } catch (error) {
           throw new Error(
             `Binary file check failed: ${
@@ -510,7 +504,7 @@ poly id = #a => \\x:a => x`;
         }
       });
 
-      await t.test("--version flag", async () => {
+      it("--version flag", async () => {
         const command = [compiledTripcPath, "--version"];
         const result = await runCommand(command);
 
@@ -519,10 +513,10 @@ poly id = #a => \\x:a => x`;
           command,
           "Compiled Binary (dist/tripc) --version flag",
         );
-        expect(result.stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
       });
 
-      await t.test("--help flag", async () => {
+      it("--help flag", async () => {
         const command = [compiledTripcPath, "--help"];
         const result = await runCommand(command);
 
@@ -531,11 +525,11 @@ poly id = #a => \\x:a => x`;
           command,
           "Compiled Binary (dist/tripc) --help flag",
         );
-        expect(result.stdout).to.include("TripLang Compiler & Linker (tripc)");
-        expect(result.stdout).to.include("USAGE:");
+        assert.ok(result.stdout.includes("TripLang Compiler & Linker (tripc)"));
+        assert.ok(result.stdout.includes("USAGE:"));
       });
 
-      await t.test("compilation", async () => {
+      it("compilation", async () => {
         const testFile = fixturePath("test.trip");
 
         const command = [compiledTripcPath, testFile, "--stdout"];
@@ -549,10 +543,10 @@ poly id = #a => \\x:a => x`;
 
         // Verify output
         const parsed = JSON.parse(result.stdout);
-        expect(parsed).to.have.property("module", "TestModule");
+        assert.strictEqual(parsed.module, "TestModule");
       });
 
-      await t.test("verbose compilation", async () => {
+      it("verbose compilation", async () => {
         const testFile = fixturePath("test.trip");
 
         const command = [compiledTripcPath, testFile, "--verbose", "--stdout"];
@@ -567,18 +561,18 @@ poly id = #a => \\x:a => x`;
     });
   });
 
-  await t.test("tripc Extra CLI Coverage", async (t) => {
-    await t.test("error on unknown option", async () => {
+  describe("tripc Extra CLI Coverage", () => {
+    it("error on unknown option", async () => {
       const result = await runCommand([
         process.execPath,
         "bin/tripc.ts",
         "--unknown",
       ]);
-      expect(result.success).to.be.false;
-      expect(result.stderr).to.include("Unknown option: --unknown");
+      assert.strictEqual(result.success, false);
+      assert.ok(result.stderr.includes("Unknown option: --unknown"));
     });
 
-    await t.test("error on too many arguments", async () => {
+    it("error on too many arguments", async () => {
       const result = await runCommand([
         process.execPath,
         "bin/tripc.ts",
@@ -586,49 +580,49 @@ poly id = #a => \\x:a => x`;
         "b.tripc",
         "extra",
       ]);
-      expect(result.success).to.be.false;
-      expect(result.stderr).to.include("Too many arguments");
+      assert.strictEqual(result.success, false);
+      assert.ok(result.stderr.includes("Too many arguments"));
     });
 
-    await t.test("error on no input file", async () => {
+    it("error on no input file", async () => {
       const result = await runCommand([process.execPath, "bin/tripc.ts"]);
-      expect(result.success).to.be.false;
-      expect(result.stderr).to.include("Error: No input file specified");
+      assert.strictEqual(result.success, false);
+      assert.ok(result.stderr.includes("Error: No input file specified"));
     });
 
-    await t.test("error on non-trip extension for compilation", async () => {
+    it("error on non-trip extension for compilation", async () => {
       const tempFile = fixturePath("empty.txt");
       const result = await runCommand([
         process.execPath,
         "bin/tripc.ts",
         tempFile,
       ]);
-      expect(result.success).to.be.false;
-      expect(result.stderr).to.include("must have .trip extension");
+      assert.strictEqual(result.success, false);
+      assert.ok(result.stderr.includes("must have .trip extension"));
     });
 
-    await t.test("error on linking with no files", async () => {
+    it("error on linking with no files", async () => {
       const result = await runCommand([
         process.execPath,
         "bin/tripc.ts",
         "--link",
       ]);
-      expect(result.success).to.be.false;
-      expect(result.stderr).to.include(
-        "Error: No input files specified for linking",
+      assert.strictEqual(result.success, false);
+      assert.ok(
+        result.stderr.includes("Error: No input files specified for linking"),
       );
     });
 
-    await t.test("short flags coverage (-h, -v, -V, -c)", async () => {
+    it("short flags coverage (-h, -v, -V, -c)", async () => {
       // -h
       let result = await runCommand([process.execPath, "bin/tripc.ts", "-h"]);
-      expect(result.success).to.be.true;
-      expect(result.stdout).to.include("USAGE:");
+      assert.strictEqual(result.success, true);
+      assert.ok(result.stdout.includes("USAGE:"));
 
       // -v
       result = await runCommand([process.execPath, "bin/tripc.ts", "-v"]);
-      expect(result.success).to.be.true;
-      expect(result.stdout).to.include("tripc v");
+      assert.strictEqual(result.success, true);
+      assert.ok(result.stdout.includes("tripc v"));
 
       // -V (verbose)
       const testFile = fixturePath("test.trip");
@@ -639,18 +633,18 @@ poly id = #a => \\x:a => x`;
         "-V",
         "--stdout",
       ]);
-      expect(result.success).to.be.true;
-      expect(result.stdout).to.include("Compiling TripLang program");
+      assert.strictEqual(result.success, true);
+      assert.ok(result.stdout.includes("Compiling TripLang program"));
     });
 
-    await t.test("error when input path is a directory", async () => {
+    it("error when input path is a directory", async () => {
       const result = await runCommand([
         process.execPath,
         "bin/tripc.ts",
         "bin/",
       ]);
-      expect(result.success).to.be.false;
-      expect(result.stderr).to.include("Input path is not a file");
+      assert.strictEqual(result.success, false);
+      assert.ok(result.stderr.includes("Input path is not a file"));
     });
   });
 });

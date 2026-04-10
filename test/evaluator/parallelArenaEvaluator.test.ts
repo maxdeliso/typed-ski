@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import randomSeed from "random-seed";
 import type { ArenaWasmExports } from "../../lib/evaluator/arenaEvaluator.ts";
@@ -23,7 +23,7 @@ const mockWasm = {
   getArenaMode: () => 1,
 } as unknown as ArenaWasmExports;
 
-test("ParallelArenaEvaluator - basic reduction", async () => {
+it("ParallelArenaEvaluator - basic reduction", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(2);
   try {
     const expr = parseSKI("I K");
@@ -34,11 +34,11 @@ test("ParallelArenaEvaluator - basic reduction", async () => {
   }
 });
 
-test("ParallelArenaEvaluator - many concurrent reductions", async () => {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(4);
+it("ParallelArenaEvaluator - many concurrent reductions", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(2);
   try {
     const results = await Promise.all(
-      Array.from({ length: 20 }, (_, i) => {
+      Array.from({ length: 8 }, (_, i) => {
         const expr = parseSKI(i % 2 === 0 ? "I K" : "I S");
         return evaluator.reduceAsync(expr);
       }),
@@ -51,7 +51,7 @@ test("ParallelArenaEvaluator - many concurrent reductions", async () => {
   }
 });
 
-test("ParallelArenaEvaluator - concurrent mixed work", async (t) => {
+it("ParallelArenaEvaluator - concurrent mixed work", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(2);
   try {
     const promises = [

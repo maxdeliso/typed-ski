@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import {
   type DirectedGraph,
   sccDependencyOrder,
@@ -33,8 +33,8 @@ function canonicalizeSccs(sccs: string[][]): string[][] {
     });
 }
 
-test("linker graph algorithms", async (t) => {
-  await t.test("tarjanSCC groups cyclic nodes into one SCC", () => {
+describe("linker graph algorithms", () => {
+  it("tarjanSCC groups cyclic nodes into one SCC", () => {
     const graph = buildGraph(
       ["A", "B", "C", "D"],
       [
@@ -46,17 +46,17 @@ test("linker graph algorithms", async (t) => {
     );
 
     const sccs = tarjanSCC(graph);
-    expect(canonicalizeSccs(sccs)).to.deep.equal([["A", "B"], ["C"], ["D"]]);
+    assert.deepStrictEqual(canonicalizeSccs(sccs), [["A", "B"], ["C"], ["D"]]);
   });
 
-  await t.test("tarjanSCC treats self-loops as singleton SCCs", () => {
+  it("tarjanSCC treats self-loops as singleton SCCs", () => {
     const graph = buildGraph(["Self", "Leaf"], [["Self", "Self"]]);
 
     const sccs = tarjanSCC(graph);
-    expect(canonicalizeSccs(sccs)).to.deep.equal([["Leaf"], ["Self"]]);
+    assert.deepStrictEqual(canonicalizeSccs(sccs), [["Leaf"], ["Self"]]);
   });
 
-  await t.test("sccDependencyOrder respects inter-SCC dependency order", () => {
+  it("sccDependencyOrder respects inter-SCC dependency order", () => {
     const graph = buildGraph(
       ["A", "B", "C", "D", "E", "F"],
       [
@@ -80,7 +80,7 @@ test("linker graph algorithms", async (t) => {
     });
 
     for (const node of graph.keys()) {
-      expect(componentIndex.has(node), `missing node ${node}`).to.equal(true);
+      assert.ok(componentIndex.has(node), `missing node ${node}`);
     }
 
     for (const [from, deps] of graph) {
@@ -94,16 +94,16 @@ test("linker graph algorithms", async (t) => {
           throw new Error(`Missing SCC index for '${to}'`);
         }
         if (fromIndex !== toIndex) {
-          expect(
+          assert.ok(
             toIndex < fromIndex,
             `expected dependency order ${to} comes before ${from}`,
-          ).to.equal(true);
+          );
         }
       }
     }
   });
 
-  await t.test("tarjanSCC returns singleton SCCs for an acyclic graph", () => {
+  it("tarjanSCC returns singleton SCCs for an acyclic graph", () => {
     const graph = buildGraph(
       ["N1", "N2", "N3", "N4"],
       [
@@ -115,10 +115,10 @@ test("linker graph algorithms", async (t) => {
 
     const sccs = tarjanSCC(graph);
     const canonical = canonicalizeSccs(sccs);
-    expect(canonical).to.deep.equal([["N1"], ["N2"], ["N3"], ["N4"]]);
+    assert.deepStrictEqual(canonical, [["N1"], ["N2"], ["N3"], ["N4"]]);
   });
 
-  await t.test("tarjanSCC handles graph with undefined dependencies", () => {
+  it("tarjanSCC handles graph with undefined dependencies", () => {
     // We use a bit of casting to force undefined into the graph if the type allows it,
     // or just test how it handles missing nodes in the graph map.
     const graph: DirectedGraph<string> = new Map([
@@ -126,11 +126,11 @@ test("linker graph algorithms", async (t) => {
     ]);
 
     const sccs = tarjanSCC(graph);
-    expect(sccs).to.have.lengthOf(1);
-    expect(sccs[0]).to.deep.equal(["A"]);
+    assert.strictEqual(sccs.length, 1);
+    assert.deepStrictEqual(sccs[0], ["A"]);
   });
 
-  await t.test("tarjanSCC handles nodes not present in the graph map", () => {
+  it("tarjanSCC handles nodes not present in the graph map", () => {
     const graph: DirectedGraph<string> = new Map([
       ["A", new Set(["B"])],
       // "B" is not a key in the map
@@ -138,19 +138,19 @@ test("linker graph algorithms", async (t) => {
 
     const sccs = tarjanSCC(graph);
     // B should be treated as a node with no dependencies
-    expect(sccs).to.have.lengthOf(2);
+    assert.strictEqual(sccs.length, 2);
     // Reverse topological order: B then A
-    expect(sccs[0]).to.deep.equal(["B"]);
-    expect(sccs[1]).to.deep.equal(["A"]);
+    assert.deepStrictEqual(sccs[0], ["B"]);
+    assert.deepStrictEqual(sccs[1], ["A"]);
   });
 
-  await t.test("tarjanSCC handles empty graph", () => {
+  it("tarjanSCC handles empty graph", () => {
     const graph: DirectedGraph<string> = new Map();
     const sccs = tarjanSCC(graph);
-    expect(sccs).to.be.empty;
+    assert.strictEqual(sccs.length, 0);
   });
 
-  await t.test("scc ordering is deterministic across insertion order", () => {
+  it("scc ordering is deterministic across insertion order", () => {
     const graphA = buildGraph(
       ["C", "A", "B", "D"],
       [
@@ -168,7 +168,8 @@ test("linker graph algorithms", async (t) => {
       ],
     );
 
-    expect(sccDependencyOrder(graphA)).to.deep.equal(
+    assert.deepStrictEqual(
+      sccDependencyOrder(graphA),
       sccDependencyOrder(graphB),
     );
   });

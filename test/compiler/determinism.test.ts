@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -49,7 +49,7 @@ function getBaselineRun(): Promise<DeterminismRun> {
   return baselineRunPromise;
 }
 
-test("fresh compiler corpus builds emit byte-identical SKI and object output", async () => {
+it("fresh compiler corpus builds emit byte-identical SKI and object output", async () => {
   const baseline = await getBaselineRun();
   const current = await runFreshCompilerCorpusBuild();
 
@@ -72,7 +72,7 @@ test("fresh compiler corpus builds emit byte-identical SKI and object output", a
   );
 });
 
-test("fresh compiler corpus subprocess build matches the in-process baseline", async () => {
+it("fresh compiler corpus subprocess build matches the in-process baseline", async () => {
   const baseline = decoder.decode((await getBaselineRun()).finalBytes);
   const subprocessRun = decoder.decode(
     await runFreshCompilerCorpusBuildInSubprocess(),
@@ -81,7 +81,7 @@ test("fresh compiler corpus subprocess build matches the in-process baseline", a
   assert.strictEqual(subprocessRun, baseline);
 });
 
-test("compileToObjectFile normalizes imported module metadata order", async () => {
+it("compileToObjectFile normalizes imported module metadata order", async () => {
   const prelude = await getPreludeObject();
   const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);

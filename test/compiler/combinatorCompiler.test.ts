@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,13 +15,13 @@ function loadCompilerInput(fileName: string): string {
   return loadInput(`combinatorCompiler/${fileName}`, __dirname);
 }
 
-test("compileToCombinatorString links built-in imports", async () => {
+it("compileToCombinatorString links built-in imports", async () => {
   const source = loadCompilerInput("withPreludeImport.trip");
 
   assert.strictEqual(await compileToCombinatorString(source), "I");
 });
 
-test("bootstrappedCompile matches the TypeScript compiler", async () => {
+it("bootstrappedCompile matches the TypeScript compiler", async () => {
   const source = loadCompilerInput("literalZero.trip");
 
   const expected = await compileToCombinatorString(source);
@@ -30,7 +30,7 @@ test("bootstrappedCompile matches the TypeScript compiler", async () => {
   assert.strictEqual(actual, expected);
 });
 
-test("bootstrappedCompile rejects unsupported top-level imports", async () => {
+it("bootstrappedCompile rejects unsupported top-level imports", async () => {
   const source = loadCompilerInput("withPreludeImport.trip");
 
   await assert.rejects(() => bootstrappedCompile(source), {

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it, before, after } from "../util/test_shim.ts";
 import { dirname, join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -76,21 +76,6 @@ function encodeListU8(
   return acc;
 }
 
-type PhaseMetric = {
-  phase: string;
-  uniqueNodeCount: number;
-  totalNodeCount: number;
-  totalConsAllocs: number;
-  totalContAllocs: number;
-  totalSuspAllocs: number;
-  duplicateLostAllocs: number;
-  hashconsHits: number;
-  hashconsMisses: number;
-  totalSteps: number;
-  arenaTop: number;
-  elapsedMs: number;
-};
-
 const PHASE_BUDGETS: Record<string, number> = {
   phase1: 1 << 16,
   phase2: 1 << 18,
@@ -98,172 +83,63 @@ const PHASE_BUDGETS: Record<string, number> = {
   phase4: 1 << 22,
 };
 
-test(
-  "Bootstrapped Single-File Compiler Telemetry",
-  {
-    skip: !thanatosAvailable(),
-  },
-  async (t) => {
-    try {
-      const ps = await compileAndLinkCompiler();
-      await withBatchThanatosSession(async (session) => {
-        const nil = parseSKI(lowerToSKI(ps.terms.get("Prelude.nil")!));
-        const cons = parseSKI(lowerToSKI(ps.terms.get("Prelude.cons")!));
+const PHASES = ["phase1", "phase2", "phase3", "phase4"];
 
-        const phases = [
-          {
-            name: "phase1",
-            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase1")!)),
-          },
-          {
-            name: "phase2",
-            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase2")!)),
-          },
-          {
-            name: "phase3",
-            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase3")!)),
-          },
-          {
-            name: "phase4",
-            term: parseSKI(lowerToSKI(ps.terms.get("Telemetry.phase4")!)),
-          },
-        ];
+describe("Bootstrapped Single-File Compiler Telemetry", () => {
+  for (const phaseName of PHASES) {
+    it(
+      `Bootstrapped Phase: ${phaseName}`,
+      { skip: !thanatosAvailable() },
+      async () => {
+        const ps = await compileAndLinkCompiler();
+        await withBatchThanatosSession(async (session) => {
+          const nil = parseSKI(lowerToSKI(ps.terms.get("Prelude.nil")!));
+          const cons = parseSKI(lowerToSKI(ps.terms.get("Prelude.cons")!));
 
-        const runTestForFile = async (filePath: string) => {
+          const getPhaseTerm = (name: string) =>
+            parseSKI(lowerToSKI(ps.terms.get(`Telemetry.${name}`)!));
+
+          const filePath = join(
+            PROJECT_ROOT,
+            "test",
+            "compiler",
+            "inputs",
+            "small.trip",
+          );
           const sourceText = await readFile(filePath, "utf8");
           const sourceBytes = new TextEncoder().encode(sourceText);
+
           let currentDag = toTopoDagWire(encodeListU8(sourceBytes, nil, cons));
 
-          const metrics: PhaseMetric[] = [];
+          // Run preceding phases to get to the current phase's input DAG
+          for (const p of PHASES) {
+            await session.reset();
+            const phaseTerm = getPhaseTerm(p);
+            const phaseDag = toTopoDagWire(phaseTerm);
+            const combinedDag = combineTopoDagWires(phaseDag, currentDag);
 
-          await session.reset();
+            const resultDag = await session.reduceDag(combinedDag);
+            const uniqueNodeCount = countTopoDagWireRecords(resultDag);
 
-          for (const phase of phases) {
-            await t.test(`Phase: ${phase.name}`, async () => {
-              await session.reset();
-              const startTime = performance.now();
-
-              const phaseDag = toTopoDagWire(phase.term);
-              const combinedDag = combineTopoDagWires(phaseDag, currentDag);
-
-              let resultDag;
-              try {
-                resultDag = await session.reduceDag(combinedDag);
-              } catch (e) {
-                const endTime = performance.now();
-                const elapsedMs = endTime - startTime;
-                console.error(
-                  `\n[FATAL] Phase ${phase.name} failed after ${elapsedMs.toFixed(
-                    2,
-                  )}ms`,
-                );
-                console.error(`Error: ${(e as Error).message}`);
-                throw e;
-              }
-
-              const endTime = performance.now();
-              const statsLine = await session.stats();
-              const topMatch = statsLine.match(/top=(\d+)/);
-              const nodesMatch = statsLine.match(/total_nodes=(\d+)/);
-              const stepsMatch = statsLine.match(/total_steps=(\d+)/);
-              const consMatch = statsLine.match(/total_cons_allocs=(\d+)/);
-              const contMatch = statsLine.match(/total_cont_allocs=(\d+)/);
-              const suspMatch = statsLine.match(/total_susp_allocs=(\d+)/);
-              const duplicateMatch = statsLine.match(
-                /duplicate_lost_allocs=(\d+)/,
-              );
-              const hashconsHitsMatch = statsLine.match(/hashcons_hits=(\d+)/);
-              const hashconsMissesMatch = statsLine.match(
-                /hashcons_misses=(\d+)/,
-              );
-
-              const arenaTop = topMatch ? parseInt(topMatch[1]!, 10) : 0;
-              const totalNodeCount = nodesMatch
-                ? parseInt(nodesMatch[1]!, 10)
-                : 0;
-              const totalSteps = stepsMatch ? parseInt(stepsMatch[1]!, 10) : 0;
-              const totalConsAllocs = consMatch
-                ? parseInt(consMatch[1]!, 10)
-                : 0;
-              const totalContAllocs = contMatch
-                ? parseInt(contMatch[1]!, 10)
-                : 0;
-              const totalSuspAllocs = suspMatch
-                ? parseInt(suspMatch[1]!, 10)
-                : 0;
-              const duplicateLostAllocs = duplicateMatch
-                ? parseInt(duplicateMatch[1]!, 10)
-                : 0;
-              const hashconsHits = hashconsHitsMatch
-                ? parseInt(hashconsHitsMatch[1]!, 10)
-                : 0;
-              const hashconsMisses = hashconsMissesMatch
-                ? parseInt(hashconsMissesMatch[1]!, 10)
-                : 0;
-
-              const uniqueNodeCount = countTopoDagRecords(resultDag);
-              const elapsedMs = endTime - startTime;
-
-              metrics.push({
-                phase: phase.name,
-                uniqueNodeCount,
-                totalNodeCount,
-                totalConsAllocs,
-                totalContAllocs,
-                totalSuspAllocs,
-                duplicateLostAllocs,
-                hashconsHits,
-                hashconsMisses,
-                totalSteps,
-                arenaTop,
-                elapsedMs,
-              });
-
-              const duplicationFactor =
-                uniqueNodeCount > 0
-                  ? (totalNodeCount / uniqueNodeCount).toFixed(2)
-                  : "0.00";
-              const hashconsHitRate =
-                hashconsHits + hashconsMisses > 0
-                  ? (
-                      (hashconsHits / (hashconsHits + hashconsMisses)) *
-                      100
-                    ).toFixed(2)
-                  : "0.00";
-              console.log(
-                `[${phase.name}] Unique: ${uniqueNodeCount}, Total: ${totalNodeCount}, Duplication: ${duplicationFactor}x, Cons: ${totalConsAllocs}, Cont: ${totalContAllocs}, Susp: ${totalSuspAllocs}, DupLost: ${duplicateLostAllocs}, HashHits: ${hashconsHits}, HashMisses: ${hashconsMisses}, HitRate: ${hashconsHitRate}%, Steps: ${totalSteps}, Time: ${elapsedMs.toFixed(
-                  2,
-                )}ms`,
-              );
-
-              const budget = PHASE_BUDGETS[phase.name];
+            if (p === phaseName) {
+              const budget = PHASE_BUDGETS[p];
               if (budget !== undefined && uniqueNodeCount > budget) {
-                throw new Error(`[bootstrapped budget exceeded]
-file: ${filePath}
-phase: ${phase.name}
-unique_nodes: ${uniqueNodeCount}
-budget: ${budget}
-elapsed_ms: ${elapsedMs.toFixed(2)}`);
+                throw new Error(
+                  `[bootstrapped budget exceeded] phase: ${p}, unique_nodes: ${uniqueNodeCount}, budget: ${budget}`,
+                );
               }
-
-              currentDag = resultDag;
-              await session.reset();
-            });
+              break;
+            }
+            currentDag = resultDag;
           }
+        });
+      },
+    );
+  }
 
-          return metrics;
-        };
-
-        await runTestForFile(
-          join(PROJECT_ROOT, "test", "compiler", "inputs", "small.trip"),
-        );
-      });
-    } finally {
+  after(async () => {
+    if (thanatosAvailable()) {
       await closeBatchThanatosSessions();
     }
-  },
-);
-
-function countTopoDagRecords(dag: string): number {
-  return countTopoDagWireRecords(dag);
-}
+  });
+});

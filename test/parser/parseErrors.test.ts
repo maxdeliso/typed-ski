@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
@@ -20,283 +20,313 @@ import { parseChain } from "../../lib/parser/chain.ts";
 import { createTypedApp } from "../util/ast.ts";
 import { parseWithEOF } from "../../lib/parser/eof.ts";
 
-test("Parser Error Coverage", async (t) => {
-  await t.test("parserState.ts errors", async (t) => {
-    await t.test("non-ASCII byte error", () => {
-      expect(() => createParserState("hello λ")).to.throw(
-        ParseError,
-        /non-ASCII byte.*0x/,
+describe("Parser Error Coverage", () => {
+  describe("parserState.ts errors", () => {
+    it("non-ASCII byte error", () => {
+      assert.throws(() => createParserState("hello λ"), {
+        message: /non-ASCII byte.*0x/,
+      });
+    });
+
+    it("expected character but found different", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("abc");
+          matchCh(state, "x");
+        },
+        {
+          message: /expected 'x' but found/,
+        },
       );
     });
 
-    await t.test("expected character but found different", () => {
-      expect(() => {
-        const state = createParserState("abc");
-        matchCh(state, "x");
-      }).to.throw(ParseError, /expected 'x' but found/);
+    it("expected character but found EOF", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("");
+          matchCh(state, "x");
+        },
+        {
+          message: /expected 'x' but found.*EOF/,
+        },
+      );
     });
 
-    await t.test("expected character but found EOF", () => {
-      expect(() => {
-        const state = createParserState("");
-        matchCh(state, "x");
-      }).to.throw(ParseError, /expected 'x' but found.*EOF/);
+    it("expected arrow but found different", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("abc");
+          matchArrow(state);
+        },
+        {
+          message: /expected '->' but found/,
+        },
+      );
     });
 
-    await t.test("expected arrow but found different", () => {
-      expect(() => {
-        const state = createParserState("abc");
-        matchArrow(state);
-      }).to.throw(ParseError, /expected '->' but found/);
+    it("expected fat arrow but found different", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("abc");
+          matchFatArrow(state);
+        },
+        {
+          message: /expected '=>' but found/,
+        },
+      );
     });
 
-    await t.test("expected fat arrow but found different", () => {
-      expect(() => {
-        const state = createParserState("abc");
-        matchFatArrow(state);
-      }).to.throw(ParseError, /expected '=>' but found/);
+    it("expected identifier", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("");
+          parseIdentifier(state);
+        },
+        {
+          message: /expected an identifier/,
+        },
+      );
     });
 
-    await t.test("expected identifier", () => {
-      expect(() => {
-        const state = createParserState("");
-        parseIdentifier(state);
-      }).to.throw(ParseError, /expected an identifier/);
+    it("purely numeric identifier", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("123");
+          const wsState = skipWhitespace(state);
+          parseIdentifier(wsState);
+        },
+        {
+          message: /not a valid identifier.*purely numeric/,
+        },
+      );
     });
 
-    await t.test("purely numeric identifier", () => {
-      expect(() => {
-        const state = createParserState("123");
-        const wsState = skipWhitespace(state);
-        parseIdentifier(wsState);
-      }).to.throw(ParseError, /not a valid identifier.*purely numeric/);
+    it("reserved numeric literal identifier", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("__trip_nat_literal__0");
+          parseIdentifier(state);
+        },
+        {
+          message: /reserved for numeric literals/,
+        },
+      );
     });
 
-    await t.test("reserved numeric literal identifier", () => {
-      expect(() => {
-        const state = createParserState("__trip_nat_literal__0");
-        parseIdentifier(state);
-      }).to.throw(ParseError, /reserved for numeric literals/);
+    it("expected numeric literal", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("abc");
+          parseNumericLiteral(state);
+        },
+        {
+          message: /expected numeric literal/,
+        },
+      );
     });
 
-    await t.test("expected numeric literal", () => {
-      expect(() => {
-        const state = createParserState("abc");
-        parseNumericLiteral(state);
-      }).to.throw(ParseError, /expected numeric literal/);
-    });
-
-    await t.test("expected definition keyword", () => {
-      expect(() => {
-        const state = createParserState("invalid");
-        parseDefinitionKeyword(state);
-      }).to.throw(ParseError, /expected definition keyword/);
+    it("expected definition keyword", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("invalid");
+          parseDefinitionKeyword(state);
+        },
+        {
+          message: /expected definition keyword/,
+        },
+      );
     });
   });
 
-  await t.test("systemFTerm.ts errors", async (t) => {
-    await t.test("match requires explicit return type", () => {
-      expect(() => parseSystemF("match x { | None => y }")).to.throw(
-        ParseError,
-        /match requires an explicit return type/,
-      );
+  describe("systemFTerm.ts errors", () => {
+    it("match requires explicit return type", () => {
+      assert.throws(() => parseSystemF("match x { | None => y }"), {
+        message: /match requires an explicit return type/,
+      });
     });
 
-    await t.test("expected pipe to start match arm", () => {
-      expect(() => parseSystemF("match x [T] { None => y }")).to.throw(
-        ParseError,
-        /expected '\|' to start match arm/,
-      );
+    it("expected pipe to start match arm", () => {
+      assert.throws(() => parseSystemF("match x [T] { None => y }"), {
+        message: /expected '\|' to start match arm/,
+      });
     });
 
-    await t.test("match arm requires a body", () => {
+    it("match arm requires a body", () => {
       // The error occurs when parsing the body term, not when checking bodyLit
       // This is tested indirectly - empty body causes parseSystemFTerm to fail
-      expect(() => parseSystemF("match x [T] { | None => }")).to.throw(
-        ParseError,
-      );
+      assert.throws(() => parseSystemF("match x [T] { | None => }"));
     });
 
-    await t.test("match must declare at least one arm", () => {
-      expect(() => parseSystemF("match x [T] { }")).to.throw(
-        ParseError,
-        /match must declare at least one arm/,
-      );
+    it("match must declare at least one arm", () => {
+      assert.throws(() => parseSystemF("match x [T] { }"), {
+        message: /match must declare at least one arm/,
+      });
     });
 
-    await t.test("expected 'in' after let binding", () => {
-      // The error message "expected 'in' after let binding value, found 'X'"
-      // is thrown when an identifier is parsed but it's not "in".
-      // However, due to greedy parsing of the value term, this is hard to trigger
-      // in practice. The error path exists in the code at line 254 of systemFTerm.ts.
-      // We verify that let expressions without 'in' throw errors (tested in systemF.test.ts)
-      expect(() => parseSystemF("let x = 1")).to.throw(ParseError);
+    it("expected 'in' after let binding", () => {
+      assert.throws(() => parseSystemF("let x = 1"));
     });
 
-    await t.test("expected character but found EOF (let)", () => {
+    it("expected character but found EOF (let)", () => {
       // When EOF is reached, it fails trying to parse 'in' as identifier
-      expect(() => parseSystemF("let x = 1")).to.throw(
-        ParseError,
-        /expected an identifier/,
-      );
+      assert.throws(() => parseSystemF("let x = 1"), {
+        message: /expected an identifier/,
+      });
     });
 
-    await t.test("unterminated character literal", () => {
+    it("unterminated character literal", () => {
       // The error occurs when trying to match the closing quote
-      expect(() => parseSystemF("'a")).to.throw(
-        ParseError,
-        /expected ''' but found.*EOF/,
-      );
+      assert.throws(() => parseSystemF("'a"), {
+        message: /expected ''' but found.*EOF/,
+      });
     });
 
-    await t.test("empty character literal", () => {
-      expect(() => parseSystemF("''")).to.throw(
-        ParseError,
-        /empty character literal/,
-      );
+    it("empty character literal", () => {
+      assert.throws(() => parseSystemF("''"), {
+        message: /empty character literal/,
+      });
     });
 
-    await t.test("unsupported escape sequence in character literal", () => {
-      expect(() => parseSystemF("'\\z'")).to.throw(
-        ParseError,
-        /unsupported escape sequence.*character literal/,
-      );
+    it("unsupported escape sequence in character literal", () => {
+      assert.throws(() => parseSystemF("'\\z'"), {
+        message: /unsupported escape sequence.*character literal/,
+      });
     });
 
-    await t.test("non-printable ASCII in character literal", () => {
-      expect(() => parseSystemF("'\u0001'")).to.throw(
-        ParseError,
-        /non-printable ASCII in character literal/,
-      );
+    it("non-printable ASCII in character literal", () => {
+      assert.throws(() => parseSystemF("'\u0001'"), {
+        message: /non-printable ASCII in character literal/,
+      });
     });
 
-    await t.test("unterminated string literal", () => {
-      expect(() => parseSystemF('"hello')).to.throw(
-        ParseError,
-        /unterminated string literal/,
-      );
+    it("unterminated string literal", () => {
+      assert.throws(() => parseSystemF('"hello'), {
+        message: /unterminated string literal/,
+      });
     });
 
-    await t.test("non-printable ASCII in string literal", () => {
-      expect(() => parseSystemF('"\u0001"')).to.throw(
-        ParseError,
-        /non-printable ASCII in string literal/,
-      );
+    it("non-printable ASCII in string literal", () => {
+      assert.throws(() => parseSystemF('"\u0001"'), {
+        message: /non-printable ASCII in string literal/,
+      });
     });
 
-    await t.test("unexpected token while parsing atomic term", () => {
-      expect(() => parseSystemF("!x")).to.throw(
-        ParseError,
-        /unexpected token.*while parsing atomic term/,
-      );
+    it("unexpected token while parsing atomic term", () => {
+      assert.throws(() => parseSystemF("!x"), {
+        message: /unexpected token.*while parsing atomic term/,
+      });
     });
   });
 
-  await t.test("tripLang.ts errors", async (t) => {
-    await t.test(
-      "data definition must declare at least one constructor",
-      () => {
-        expect(() => parseTripLang("module Test\ndata T =")).to.throw(
-          ParseError,
-          /data definition must declare at least one constructor/,
-        );
-      },
-    );
+  describe("tripLang.ts errors", () => {
+    it("data definition must declare at least one constructor", () => {
+      assert.throws(() => parseTripLang("module Test\ndata T ="), {
+        message: /data definition must declare at least one constructor/,
+      });
+    });
 
-    await t.test("Unknown definition kind", () => {
+    it("Unknown definition kind", () => {
       // This shouldn't happen in practice, but we test the error path
       // by checking that invalid keywords are caught
-      expect(() => parseTripLang("invalid x = y")).to.throw(
-        ParseError,
-        /expected definition keyword/,
+      assert.throws(() => parseTripLang("invalid x = y"), {
+        message: /expected definition keyword/,
+      });
+    });
+  });
+
+  describe("eof.ts errors", () => {
+    it("unexpected extra input", () => {
+      assert.throws(
+        () => {
+          parseWithEOF("a b", (state) => {
+            const [lit, ty, finalState] = parseArrowTypeNoApp(state);
+            return [lit, ty, finalState];
+          });
+        },
+        {
+          message: /unexpected extra input/,
+        },
       );
     });
   });
 
-  await t.test("eof.ts errors", async (t) => {
-    await t.test("unexpected extra input", () => {
-      expect(() => {
-        parseWithEOF("a b", (state) => {
-          const [lit, ty, finalState] = parseArrowTypeNoApp(state);
-          return [lit, ty, finalState];
-        });
-      }).to.throw(ParseError, /unexpected extra input/);
+  describe("type.ts errors", () => {
+    it("expected ')' after type expression", () => {
+      assert.throws(() => parseType("(a->b"), {
+        message: /expected '\)' after type expression/,
+      });
     });
   });
 
-  await t.test("type.ts errors", async (t) => {
-    await t.test("expected ')' after type expression", () => {
-      expect(() => parseType("(a->b")).to.throw(
-        ParseError,
-        /expected '\)' after type expression/,
-      );
-    });
-  });
-
-  await t.test("systemFType.ts errors", async (t) => {
-    await t.test("expected ')' after type expression (System F)", () => {
-      expect(() => {
-        const state = createParserState("(a->b");
-        parseSystemFType(state);
-      }).to.throw(ParseError, /expected '\)' after type expression/);
-    });
-  });
-
-  await t.test("ski.ts errors", async (t) => {
-    await t.test("unexpected token when expecting SKI term", () => {
-      expect(() => parseSKI("Z")).to.throw(
-        ParseError,
-        /unexpected token.*when expecting an SKI term/,
-      );
-    });
-
-    await t.test("unexpected extra input (SKI)", () => {
-      expect(() => parseSKI("sX")).to.throw(
-        ParseError,
-        /unexpected extra input/,
+  describe("systemFType.ts errors", () => {
+    it("expected ')' after type expression (System F)", () => {
+      assert.throws(
+        () => {
+          const state = createParserState("(a->b");
+          parseSystemFType(state);
+        },
+        {
+          message: /expected '\)' after type expression/,
+        },
       );
     });
   });
 
-  await t.test("Integration: multiple error scenarios", async (t) => {
-    await t.test("module name with dots", () => {
-      expect(() => parseTripLang("module My.Module")).to.throw(
-        ParseError,
-        /expected an identifier/,
-      );
+  describe("ski.ts errors", () => {
+    it("unexpected token when expecting SKI term", () => {
+      assert.throws(() => parseSKI("Z"), {
+        message: /unexpected token.*when expecting an SKI term/,
+      });
     });
 
-    await t.test("incomplete lambda abstraction", () => {
-      expect(() => parseSystemF("\\x:X")).to.throw(ParseError, /expected '=>'/);
+    it("unexpected extra input (SKI)", () => {
+      assert.throws(() => parseSKI("sX"), {
+        message: /unexpected extra input/,
+      });
+    });
+  });
+
+  describe("Integration: multiple error scenarios", () => {
+    it("module name with dots", () => {
+      assert.throws(() => parseTripLang("module My.Module"), {
+        message: /expected an identifier/,
+      });
     });
 
-    await t.test("incomplete type abstraction", () => {
-      expect(() => parseSystemF("#X")).to.throw(ParseError, /expected '=>'/);
+    it("incomplete lambda abstraction", () => {
+      assert.throws(() => parseSystemF("\\x:X"), {
+        message: /expected '=>'/,
+      });
     });
 
-    await t.test("unmatched parenthesis", () => {
-      expect(() => parseSystemF("(x")).to.throw(ParseError, /expected '\)'/);
+    it("incomplete type abstraction", () => {
+      assert.throws(() => parseSystemF("#X"), {
+        message: /expected '=>'/,
+      });
     });
 
-    await t.test("extra right parenthesis", () => {
-      expect(() => parseSystemF("x)")).to.throw(
-        ParseError,
-        /unexpected extra input/,
-      );
+    it("unmatched parenthesis", () => {
+      assert.throws(() => parseSystemF("(x"), {
+        message: /expected '\)'/,
+      });
     });
 
-    await t.test("missing equals in definition", () => {
-      expect(() => parseTripLang("module Test\npoly x y")).to.throw(
-        ParseError,
-        /expected '='/,
-      );
+    it("extra right parenthesis", () => {
+      assert.throws(() => parseSystemF("x)"), {
+        message: /unexpected extra input/,
+      });
     });
 
-    await t.test("incomplete match expression", () => {
-      expect(() => parseSystemF("match x [T]")).to.throw(
-        ParseError,
-        /expected '{'/,
-      );
+    it("missing equals in definition", () => {
+      assert.throws(() => parseTripLang("module Test\npoly x y"), {
+        message: /expected '='/,
+      });
+    });
+
+    it("incomplete match expression", () => {
+      assert.throws(() => parseSystemF("match x [T]"), {
+        message: /expected '{'/,
+      });
     });
   });
 });

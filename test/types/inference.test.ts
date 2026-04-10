@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 
 import { untypedAbs, mkVar, untypedApp } from "../../lib/terms/lambda.ts";
 
@@ -11,24 +11,24 @@ import {
   typesLitEq,
 } from "../../lib/types/types.ts";
 
-test("Type inference utilities", async (t) => {
-  await t.test("substituteType", async (t) => {
-    await t.test("replaces a variable with another type", () => {
+describe("Type inference utilities", () => {
+  describe("substituteType", () => {
+    it("replaces a variable with another type", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const c = mkTypeVariable("c");
 
       const r1 = substituteType(a, a, b);
-      expect(typesLitEq(r1, b)).to.equal(true);
+      assert.strictEqual(typesLitEq(r1, b), true);
 
       const r2 = substituteType(c, a, b);
-      expect(typesLitEq(r2, c)).to.equal(true);
+      assert.strictEqual(typesLitEq(r2, c), true);
 
       const r3 = substituteType(arrow(a, c), a, b);
-      expect(typesLitEq(r3, arrow(b, c))).to.equal(true);
+      assert.strictEqual(typesLitEq(r3, arrow(b, c)), true);
     });
 
-    await t.test("handles substitutions in complex arrows", () => {
+    it("handles substitutions in complex arrows", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const c = mkTypeVariable("c");
@@ -36,31 +36,35 @@ test("Type inference utilities", async (t) => {
       const complex = arrow(arrow(a, b), c);
       const out = substituteType(complex, a, c);
 
-      expect(typesLitEq(out, arrow(arrow(c, b), c))).to.equal(true);
+      assert.strictEqual(typesLitEq(out, arrow(arrow(c, b), c)), true);
     });
 
-    await t.test("handles deeply nested substitutions", () => {
+    it("handles deeply nested substitutions", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
 
       const nested = arrow(arrow(a, a), arrow(a, a));
       const out = substituteType(nested, a, b);
 
-      expect(typesLitEq(out, arrow(arrow(b, b), arrow(b, b)))).to.equal(true);
+      assert.strictEqual(
+        typesLitEq(out, arrow(arrow(b, b), arrow(b, b))),
+        true,
+      );
     });
 
-    await t.test("handles substitutions in type applications", () => {
+    it("handles substitutions in type applications", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const listA = typeApp(mkTypeVariable("List"), a);
       const out = substituteType(listA, a, b);
 
-      expect(typesLitEq(out, typeApp(mkTypeVariable("List"), b))).to.equal(
+      assert.strictEqual(
+        typesLitEq(out, typeApp(mkTypeVariable("List"), b)),
         true,
       );
     });
 
-    await t.test("substitutes in both fn and arg of nested type-app", () => {
+    it("substitutes in both fn and arg of nested type-app", () => {
       const a = mkTypeVariable("a");
       const b = mkTypeVariable("b");
       const resultAB = typeApp(typeApp(mkTypeVariable("Result"), a), b);
@@ -69,19 +73,19 @@ test("Type inference utilities", async (t) => {
         typeApp(mkTypeVariable("Result"), mkTypeVariable("Err")),
         b,
       );
-      expect(typesLitEq(out, expected)).to.equal(true);
+      assert.strictEqual(typesLitEq(out, expected), true);
 
       const out2 = substituteType(resultAB, b, mkTypeVariable("Ok"));
       const expected2 = typeApp(
         typeApp(mkTypeVariable("Result"), a),
         mkTypeVariable("Ok"),
       );
-      expect(typesLitEq(out2, expected2)).to.equal(true);
+      assert.strictEqual(typesLitEq(out2, expected2), true);
     });
   });
 
-  await t.test("unify", async (t) => {
-    await t.test("unifies type applications by components", () => {
+  describe("unify", () => {
+    it("unifies type applications by components", () => {
       const a = mkTypeVariable("A");
       const b = mkTypeVariable("B");
       const c = mkTypeVariable("C");
@@ -96,18 +100,19 @@ test("Type inference utilities", async (t) => {
       const ok =
         (boundB !== undefined && typesLitEq(boundB, c)) ||
         (boundC !== undefined && typesLitEq(boundC, b));
-      expect(ok).to.equal(true);
+      assert.strictEqual(ok, true);
     });
 
-    await t.test("rejects occurs check in type applications", () => {
+    it("rejects occurs check in type applications", () => {
       const a = mkTypeVariable("A");
       const b = mkTypeVariable("B");
-      expect(() => unify(a, typeApp(a, b), new Map())).to.throw(
+      assert.throws(
+        () => unify(a, typeApp(a, b), new Map()),
         /occurs check failed/,
       );
     });
 
-    await t.test("unifies nested type-apps by components", () => {
+    it("unifies nested type-apps by components", () => {
       const resultAB = typeApp(
         typeApp(mkTypeVariable("Result"), mkTypeVariable("E1")),
         mkTypeVariable("T1"),
@@ -121,33 +126,32 @@ test("Type inference utilities", async (t) => {
       // Unify binds LHS vars: E1 -> E2, T1 -> T2
       const e1 = ctx.get("E1");
       const t1 = ctx.get("T1");
-      expect(e1 !== undefined && typesLitEq(e1, mkTypeVariable("E2"))).to.equal(
-        true,
-      );
-      expect(t1 !== undefined && typesLitEq(t1, mkTypeVariable("T2"))).to.equal(
+      assert.ok(e1 !== undefined && typesLitEq(e1, mkTypeVariable("E2")));
+      assert.strictEqual(
+        t1 !== undefined && typesLitEq(t1, mkTypeVariable("T2")),
         true,
       );
     });
 
-    await t.test("occurs check in type-app arg is rejected", () => {
+    it("occurs check in type-app arg is rejected", () => {
       const a = mkTypeVariable("X");
       const nested = typeApp(
         mkTypeVariable("F"),
         typeApp(a, mkTypeVariable("Y")),
       );
-      expect(() => unify(a, nested, new Map())).to.throw(/occurs check failed/);
+      assert.throws(() => unify(a, nested, new Map()), /occurs check failed/);
     });
   });
 
-  await t.test("inferType", async (t) => {
-    await t.test("infers type for a simple identity function", () => {
+  describe("inferType", () => {
+    it("infers type for a simple identity function", () => {
       const id = untypedAbs("x", mkVar("x"));
       const [, ty] = inferType(id);
 
-      expect(ty.kind).to.equal("non-terminal");
+      assert.strictEqual(ty.kind, "non-terminal");
     });
 
-    await t.test("infers arrow type with matching ends", () => {
+    it("infers arrow type with matching ends", () => {
       const id = untypedAbs("x", mkVar("x"));
       const [, ty] = inferType(id);
 
@@ -156,25 +160,25 @@ test("Type inference utilities", async (t) => {
         ty.lft.kind === "type-var" &&
         ty.rgt.kind === "type-var"
       ) {
-        expect(ty.lft.typeName).to.equal(ty.rgt.typeName);
+        assert.strictEqual(ty.lft.typeName, ty.rgt.typeName);
       }
     });
 
-    await t.test("infers type of the application combinator", () => {
+    it("infers type of the application combinator", () => {
       const appComb = untypedAbs(
         "f",
         untypedAbs("x", untypedApp(mkVar("f"), mkVar("x"))),
       );
       const [, ty] = inferType(appComb);
 
-      expect(ty.kind).to.equal("non-terminal");
+      assert.strictEqual(ty.kind, "non-terminal");
     });
 
-    await t.test("handles a more complex term (K combinator)", () => {
+    it("handles a more complex term (K combinator)", () => {
       const kComb = untypedAbs("x", untypedAbs("y", mkVar("x")));
       const [, ty] = inferType(kComb);
 
-      expect(ty.kind).to.equal("non-terminal");
+      assert.strictEqual(ty.kind, "non-terminal");
     });
   });
 });

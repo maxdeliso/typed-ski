@@ -1,11 +1,11 @@
-import { test } from "node:test";
-import { assert } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import rsexport, { type RandomSeed } from "random-seed";
 import { randTerminal } from "../../lib/ski/generator.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 const { create } = rsexport;
 
-test("randTerminal - covers all possible terminals", () => {
+it("randTerminal - covers all possible terminals", () => {
   const rs: RandomSeed = create("test-seed");
   const seen = new Set<SKITerminalSymbol>();
   const expected = new Set(Object.values(SKITerminalSymbol));
@@ -17,7 +17,11 @@ test("randTerminal - covers all possible terminals", () => {
   }
 
   for (const sym of expected) {
-    assert.isTrue(seen.has(sym), `Terminal ${sym} was never generated`);
+    assert.strictEqual(
+      seen.has(sym),
+      true,
+      `Terminal ${sym} was never generated`,
+    );
   }
 
   assert.strictEqual(
@@ -27,7 +31,7 @@ test("randTerminal - covers all possible terminals", () => {
   );
 });
 
-test("randTerminal - defaults to pure terminals", () => {
+it("randTerminal - defaults to pure terminals", () => {
   const rs: RandomSeed = create("pure-only-seed");
 
   for (let i = 0; i < 1000; i++) {

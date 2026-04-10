@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 
 import {
   mkSystemFAbs,
@@ -39,52 +39,49 @@ const binSystemFContext = () => {
   return ctx;
 };
 
-test("System F type-checker and helpers", async (t) => {
-  await t.test("positive cases", async (t) => {
-    await t.test(
-      "typecheck wrapper uses emptySystemFContext(undefined)",
-      () => {
-        // Regression coverage: ensure the exported `typecheck()` wrapper is exercised
-        // (it should delegate via emptySystemFContext(undefined)).
-        const id: SystemFTerm = mkSystemFTAbs(
-          "X",
-          mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
-        );
-        const ty = typecheck(id);
-        expect(ty.kind).to.equal("forall");
-        if (
-          ty.kind === "forall" &&
-          ty.body.kind === "non-terminal" &&
-          ty.body.lft.kind === "type-var" &&
-          ty.body.rgt.kind === "type-var"
-        ) {
-          expect(ty.typeVar).to.equal("X");
-          expect(ty.body.lft.typeName).to.equal("X");
-          expect(ty.body.rgt.typeName).to.equal("X");
-        }
-      },
-    );
-
-    await t.test("polymorphic identity", () => {
+describe("System F type-checker and helpers", () => {
+  describe("positive cases", () => {
+    it("typecheck wrapper uses emptySystemFContext(undefined)", () => {
+      // Regression coverage: ensure the exported `typecheck()` wrapper is exercised
+      // (it should delegate via emptySystemFContext(undefined)).
       const id: SystemFTerm = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
       );
-      const [ty] = typecheckSystemF(emptySystemFContext(), id);
-      expect(ty.kind).to.equal("forall");
+      const ty = typecheck(id);
+      assert.strictEqual(ty.kind, "forall");
       if (
         ty.kind === "forall" &&
         ty.body.kind === "non-terminal" &&
         ty.body.lft.kind === "type-var" &&
         ty.body.rgt.kind === "type-var"
       ) {
-        expect(ty.typeVar).to.equal("X");
-        expect(ty.body.lft.typeName).to.equal("X");
-        expect(ty.body.rgt.typeName).to.equal("X");
+        assert.strictEqual(ty.typeVar, "X");
+        assert.strictEqual(ty.body.lft.typeName, "X");
+        assert.strictEqual(ty.body.rgt.typeName, "X");
       }
     });
 
-    await t.test("K combinator", () => {
+    it("polymorphic identity", () => {
+      const id: SystemFTerm = mkSystemFTAbs(
+        "X",
+        mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
+      );
+      const [ty] = typecheckSystemF(emptySystemFContext(), id);
+      assert.strictEqual(ty.kind, "forall");
+      if (
+        ty.kind === "forall" &&
+        ty.body.kind === "non-terminal" &&
+        ty.body.lft.kind === "type-var" &&
+        ty.body.rgt.kind === "type-var"
+      ) {
+        assert.strictEqual(ty.typeVar, "X");
+        assert.strictEqual(ty.body.lft.typeName, "X");
+        assert.strictEqual(ty.body.rgt.typeName, "X");
+      }
+    });
+
+    it("K combinator", () => {
       const K: SystemFTerm = mkSystemFTAbs(
         "X",
         mkSystemFTAbs(
@@ -97,11 +94,11 @@ test("System F type-checker and helpers", async (t) => {
         ),
       );
       const [ty] = typecheckSystemF(emptySystemFContext(), K);
-      expect(ty.kind).to.equal("forall");
-      expect(unparseType(ty)).to.match(/#X->.*#Y->.*X->\(Y->X\)/);
+      assert.strictEqual(ty.kind, "forall");
+      assert.match(unparseType(ty), /#X->.*#Y->.*X->\(Y->X\)/);
     });
 
-    await t.test("type application", () => {
+    it("type application", () => {
       const id = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
@@ -122,11 +119,11 @@ test("System F type-checker and helpers", async (t) => {
       };
 
       const [ty] = typecheckSystemF(ctx, term);
-      expect(ty.kind).to.equal("type-var");
-      if (ty.kind === "type-var") expect(ty.typeName).to.equal("A");
+      assert.strictEqual(ty.kind, "type-var");
+      if (ty.kind === "type-var") assert.strictEqual(ty.typeName, "A");
     });
 
-    await t.test("S combinator", () => {
+    it("S combinator", () => {
       const S: SystemFTerm = mkSystemFTAbs(
         "A",
         mkSystemFTAbs(
@@ -156,22 +153,23 @@ test("System F type-checker and helpers", async (t) => {
         ),
       );
       const [ty] = typecheckSystemF(emptySystemFContext(), S);
-      expect(unparseType(ty)).to.equal(
+      assert.strictEqual(
+        unparseType(ty),
         "#A->#B->#C->((A->(B->C))->((A->B)->(A->C)))",
       );
     });
   });
 
   /* ──────────────────────────  negative cases  ────────────────────────── */
-  await t.test("negative cases", async (t) => {
-    await t.test("unbound variable", () => {
+  describe("negative cases", () => {
+    it("unbound variable", () => {
       const term = mkSystemFVar("a");
-      expect(() => typecheckSystemF(emptySystemFContext(), term)).to.throw(
-        /unknown variable/,
-      );
+      assert.throws(() => typecheckSystemF(emptySystemFContext(), term), {
+        message: /unknown variable/,
+      });
     });
 
-    await t.test("apply non-arrow", () => {
+    it("apply non-arrow", () => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
@@ -190,12 +188,12 @@ test("System F type-checker and helpers", async (t) => {
         })(),
       };
       const term = mkSystemFApp(mkSystemFVar("a"), mkSystemFVar("b"));
-      expect(() => typecheckSystemF(ctx, term)).to.throw(
-        /expected an arrow type/,
-      );
+      assert.throws(() => typecheckSystemF(ctx, term), {
+        message: /expected an arrow type/,
+      });
     });
 
-    await t.test("type-apply non-universal", () => {
+    it("type-apply non-universal", () => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
@@ -206,10 +204,12 @@ test("System F type-checker and helpers", async (t) => {
         })(),
       };
       const term = mkSystemFTypeApp(mkSystemFVar("a"), mkTypeVariable("B"));
-      expect(() => typecheckSystemF(ctx, term)).to.throw(/universal type/);
+      assert.throws(() => typecheckSystemF(ctx, term), {
+        message: /universal type/,
+      });
     });
 
-    await t.test("argument type mismatch", () => {
+    it("argument type mismatch", () => {
       const f = mkSystemFAbs("x", mkTypeVariable("A"), mkSystemFVar("x"));
       let ctx = emptySystemFContext();
       ctx = {
@@ -229,130 +229,122 @@ test("System F type-checker and helpers", async (t) => {
         })(),
       };
       const term = mkSystemFApp(f, mkSystemFVar("a"));
-      expect(() => typecheckSystemF(ctx, term)).to.throw(
-        /function argument type mismatch/,
-      );
+      assert.throws(() => typecheckSystemF(ctx, term), {
+        message: /function argument type mismatch/,
+      });
     });
 
-    await t.test("self-application of non-arrow", () => {
+    it("self-application of non-arrow", () => {
       const term = mkSystemFAbs(
         "x",
         mkTypeVariable("X"),
         mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("x")),
       );
-      expect(() => typecheckSystemF(emptySystemFContext(), term)).to.throw(
-        /expected an arrow type/,
-      );
+      assert.throws(() => typecheckSystemF(emptySystemFContext(), term), {
+        message: /expected an arrow type/,
+      });
     });
 
-    await t.test(
-      "function argument type mismatch with non-equivalent forall types",
-      () => {
-        // Create a function expecting #X->X->X
-        const f = mkSystemFAbs(
-          "x",
-          forall("X", arrow(mkTypeVariable("X"), mkTypeVariable("X"))),
-          mkSystemFVar("x"),
-        );
-        // Create an argument with #Y->Y->Z (different structure, not alpha-equivalent)
-        const arg = mkSystemFTAbs(
-          "Y",
-          mkSystemFAbs(
-            "y",
-            mkTypeVariable("Y"),
-            mkSystemFVar("z"), // Different body structure
-          ),
-        );
-        let ctx = emptySystemFContext();
-        ctx = {
-          ...ctx,
-          termCtx: (() => {
-            const newCtx = new Map(ctx.termCtx);
-            newCtx.set("z", mkTypeVariable("Z"));
-            return newCtx;
-          })(),
-        };
-        ctx = {
-          ...ctx,
-          termCtx: (() => {
-            const newCtx = new Map(ctx.termCtx);
-            newCtx.set(
-              "f",
-              arrow(
-                forall("X", arrow(mkTypeVariable("X"), mkTypeVariable("X"))),
-                mkTypeVariable("A"),
-              ),
-            );
-            return newCtx;
-          })(),
-        };
-        const term = mkSystemFApp(f, arg);
-        // This should trigger the normalization path (both are forall) but fail after normalization
-        expect(() => typecheckSystemF(ctx, term)).to.throw(
-          /function argument type mismatch/,
-        );
-      },
-    );
+    it("function argument type mismatch with non-equivalent forall types", () => {
+      // Create a function expecting #X->X->X
+      const f = mkSystemFAbs(
+        "x",
+        forall("X", arrow(mkTypeVariable("X"), mkTypeVariable("X"))),
+        mkSystemFVar("x"),
+      );
+      // Create an argument with #Y->Y->Z (different structure, not alpha-equivalent)
+      const arg = mkSystemFTAbs(
+        "Y",
+        mkSystemFAbs(
+          "y",
+          mkTypeVariable("Y"),
+          mkSystemFVar("z"), // Different body structure
+        ),
+      );
+      let ctx = emptySystemFContext();
+      ctx = {
+        ...ctx,
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set("z", mkTypeVariable("Z"));
+          return newCtx;
+        })(),
+      };
+      ctx = {
+        ...ctx,
+        termCtx: (() => {
+          const newCtx = new Map(ctx.termCtx);
+          newCtx.set(
+            "f",
+            arrow(
+              forall("X", arrow(mkTypeVariable("X"), mkTypeVariable("X"))),
+              mkTypeVariable("A"),
+            ),
+          );
+          return newCtx;
+        })(),
+      };
+      const term = mkSystemFApp(f, arg);
+      // This should trigger the normalization path (both are forall) but fail after normalization
+      assert.throws(() => typecheckSystemF(ctx, term), {
+        message: /function argument type mismatch/,
+      });
+    });
 
-    await t.test(
-      "match expression must be elaborated before typechecking",
-      () => {
-        const matchTerm: SystemFTerm = {
-          kind: "systemF-match",
-          scrutinee: mkSystemFVar("x"),
-          returnType: mkTypeVariable("T"),
-          arms: [
-            {
-              constructorName: "Some",
-              params: ["val"],
-              body: mkSystemFVar("val"),
-            },
-          ],
-        };
-        expect(() =>
-          typecheckSystemF(emptySystemFContext(), matchTerm),
-        ).to.throw(/match must be elaborated before typechecking/);
-      },
-    );
+    it("match expression must be elaborated before typechecking", () => {
+      const matchTerm: SystemFTerm = {
+        kind: "systemF-match",
+        scrutinee: mkSystemFVar("x"),
+        returnType: mkTypeVariable("T"),
+        arms: [
+          {
+            constructorName: "Some",
+            params: ["val"],
+            body: mkSystemFVar("val"),
+          },
+        ],
+      };
+      assert.throws(() => typecheckSystemF(emptySystemFContext(), matchTerm), {
+        message: /match must be elaborated before typechecking/,
+      });
+    });
   });
 
   /* ─────────────────  parser / pretty-printer round-trip  ──────────────── */
-  await t.test("integration with parser & printer", () => {
+  it("integration with parser & printer", () => {
     const src = "#X=> \\x: X => x";
     const [lit, term] = parseSystemF(src);
     const [ty] = typecheckSystemF(emptySystemFContext(), term);
-    expect(unparseType(ty)).to.match(/#X->.*X->X/);
-    expect(lit.replace(/\s+/g, "")).to.equal(src.replace(/\s+/g, ""));
+    assert.match(unparseType(ty), /#X->.*X->X/);
+    assert.strictEqual(lit.replace(/\s+/g, ""), src.replace(/\s+/g, ""));
   });
 
-  await t.test("let bindings", async (t) => {
-    await t.test(
-      "unannotated let typechecks (infers U8 for nat literal < 256)",
-      () => {
-        const [_, term] = parseSystemF("let x = 1 in x");
-        expect(term.kind).to.equal("systemF-let");
-        const [ty] = typecheckSystemF(binSystemFContext(), term);
-        expect(unparseType(ty)).to.match(/U8/);
-      },
-    );
-
-    await t.test("annotated let with correct type typechecks", () => {
-      const [_, term] = parseSystemF("let x : U8 = 1 in x");
-      expect(term.kind).to.equal("non-terminal");
+  describe("let bindings", () => {
+    it("unannotated let typechecks (infers U8 for nat literal < 256)", () => {
+      const [_, term] = parseSystemF("let x = 1 in x");
+      assert.strictEqual(term.kind, "systemF-let");
       const [ty] = typecheckSystemF(binSystemFContext(), term);
-      expect(unparseType(ty)).to.match(/U8/);
+      assert.match(unparseType(ty), /U8/);
     });
 
-    await t.test("annotated let with incorrect type fails typecheck", () => {
+    it("annotated let with correct type typechecks", () => {
+      const [_, term] = parseSystemF("let x : U8 = 1 in x");
+      // Annotated let parses directly to App(Abs(...), value)
+      assert.strictEqual(term.kind, "non-terminal");
+      const [ty] = typecheckSystemF(binSystemFContext(), term);
+      assert.match(unparseType(ty), /U8/);
+    });
+
+    it("annotated let with incorrect type fails typecheck", () => {
       const [_, term] = parseSystemF("let x : Bool = 1 in x");
-      expect(term.kind).to.equal("non-terminal");
-      expect(() => typecheckSystemF(binSystemFContext(), term)).to.throw(
-        /function argument type mismatch/,
-      );
+      assert.strictEqual(term.kind, "non-terminal");
+      assert.throws(() => typecheckSystemF(binSystemFContext(), term), {
+        message: /function argument type mismatch/,
+      });
     });
   });
 
-  await t.test("reduceLets", async (t) => {
+  describe("reduceLets", () => {
     const hasSystemFLet = (term: SystemFTerm): boolean => {
       if (term.kind === "systemF-let") return true;
       switch (term.kind) {
@@ -376,162 +368,145 @@ test("System F type-checker and helpers", async (t) => {
       }
     };
 
-    await t.test("expands unannotated let to App(Abs(...), value)", () => {
+    it("expands unannotated let to App(Abs(...), value)", () => {
       const [_, term] = parseSystemF("let x = 1 in x");
-      expect(term.kind).to.equal("systemF-let");
+      assert.strictEqual(term.kind, "systemF-let");
 
       const reduced = reduceLets(binSystemFContext(), term);
-      expect(hasSystemFLet(reduced)).to.equal(false);
-      expect(reduced.kind).to.equal("non-terminal");
+      assert.strictEqual(hasSystemFLet(reduced), false);
+      assert.strictEqual(reduced.kind, "non-terminal");
       if (reduced.kind === "non-terminal") {
-        expect(reduced.lft.kind).to.equal("systemF-abs");
+        assert.strictEqual(reduced.lft.kind, "systemF-abs");
         if (reduced.lft.kind === "systemF-abs") {
-          expect(reduced.lft.name).to.equal("x");
-          expect(reduced.lft.body.kind).to.equal("systemF-var");
+          assert.strictEqual(reduced.lft.name, "x");
+          assert.strictEqual(reduced.lft.body.kind, "systemF-var");
           if (reduced.lft.body.kind === "systemF-var") {
-            expect(reduced.lft.body.name).to.equal("x");
+            assert.strictEqual(reduced.lft.body.name, "x");
           }
         }
-        expect(["systemF-var", "non-terminal"]).to.include(reduced.rgt.kind); // literal 1
+        assert.ok(["systemF-var", "non-terminal"].includes(reduced.rgt.kind)); // literal 1
       }
 
       const [ty] = typecheckSystemF(binSystemFContext(), reduced);
-      expect(unparseType(ty)).to.match(/U8/);
+      assert.match(unparseType(ty), /U8/);
     });
 
-    await t.test("expands nested lets and preserves type", () => {
+    it("expands nested lets and preserves type", () => {
       const [_, term] = parseSystemF("let x = 1 in let y = 2 in x");
-      expect(term.kind).to.equal("systemF-let");
+      assert.strictEqual(term.kind, "systemF-let");
 
       const reduced = reduceLets(binSystemFContext(), term);
-      expect(hasSystemFLet(reduced)).to.equal(false);
+      assert.strictEqual(hasSystemFLet(reduced), false);
 
       const [tyOriginal] = typecheckSystemF(binSystemFContext(), term);
       const [tyReduced] = typecheckSystemF(binSystemFContext(), reduced);
-      expect(unparseType(tyReduced)).to.equal(unparseType(tyOriginal));
-      expect(unparseType(tyReduced)).to.match(/U8/);
+      assert.strictEqual(unparseType(tyReduced), unparseType(tyOriginal));
+      assert.match(unparseType(tyReduced), /U8/);
     });
 
-    await t.test("preserves type through reduceLets (let x = 1 in x)", () => {
+    it("preserves type through reduceLets (let x = 1 in x)", () => {
       const [_, term] = parseSystemF("let x = 1 in x");
       const reduced = reduceLets(binSystemFContext(), term);
       const [tyOrig] = typecheckSystemF(binSystemFContext(), term);
       const [tyRed] = typecheckSystemF(binSystemFContext(), reduced);
-      expect(unparseType(tyRed)).to.equal(unparseType(tyOrig));
+      assert.strictEqual(unparseType(tyRed), unparseType(tyOrig));
     });
 
-    await t.test("traverses systemF-var (identity)", () => {
+    it("traverses systemF-var (identity)", () => {
       const term = mkSystemFVar("x");
       const reduced = reduceLets(emptySystemFContext(), term);
-      expect(reduced).to.deep.equal(term);
-      expect(reduced.kind).to.equal("systemF-var");
+      assert.strictEqual(reduced, term);
+      assert.strictEqual(reduced.kind, "systemF-var");
     });
 
-    await t.test("traverses systemF-abs (recurses body)", () => {
+    it("traverses systemF-abs (recurses body)", () => {
       const term = mkSystemFAbs("y", mkTypeVariable("Bin"), mkSystemFVar("y"));
       const reduced = reduceLets(emptySystemFContext(), term);
-      expect(reduced.kind).to.equal("systemF-abs");
-      expect((reduced as { name: string }).name).to.equal("y");
-      expect((reduced as { body: SystemFTerm }).body.kind).to.equal(
-        "systemF-var",
-      );
+      assert.strictEqual(reduced.kind, "systemF-abs");
+      assert.strictEqual((reduced as any).name, "y");
+      assert.strictEqual((reduced as any).body.kind, "systemF-var");
     });
 
-    await t.test("traverses systemF-type-abs (recurses body)", () => {
+    it("traverses systemF-type-abs (recurses body)", () => {
       const term = mkSystemFTAbs("X", mkSystemFVar("x"));
       const reduced = reduceLets(emptySystemFContext(), term);
-      expect(reduced.kind).to.equal("systemF-type-abs");
-      expect((reduced as { typeVar: string }).typeVar).to.equal("X");
-      expect((reduced as { body: SystemFTerm }).body.kind).to.equal(
-        "systemF-var",
-      );
+      assert.strictEqual(reduced.kind, "systemF-type-abs");
+      assert.strictEqual((reduced as any).typeVar, "X");
+      assert.strictEqual((reduced as any).body.kind, "systemF-var");
     });
 
-    await t.test("traverses systemF-type-app (recurses term)", () => {
+    it("traverses systemF-type-app (recurses term)", () => {
       const id = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
       );
       const term = mkSystemFTypeApp(id, mkTypeVariable("Nat"));
       const reduced = reduceLets(emptySystemFContext(), term);
-      expect(reduced.kind).to.equal("systemF-type-app");
-      expect((reduced as { term: SystemFTerm }).term.kind).to.equal(
-        "systemF-type-abs",
-      );
-      expect(
-        (reduced as { typeArg: { typeName: string } }).typeArg.typeName,
-      ).to.equal("Nat");
+      assert.strictEqual(reduced.kind, "systemF-type-app");
+      assert.strictEqual((reduced as any).term.kind, "systemF-type-abs");
+      assert.strictEqual((reduced as any).typeArg.typeName, "Nat");
     });
 
-    await t.test("traverses non-terminal (recurses lft and rgt)", () => {
+    it("traverses non-terminal (recurses lft and rgt)", () => {
       const term = mkSystemFApp(mkSystemFVar("f"), mkSystemFVar("x"));
       const reduced = reduceLets(emptySystemFContext(), term);
-      expect(reduced.kind).to.equal("non-terminal");
-      expect((reduced as { lft: { name: string } }).lft.name).to.equal("f");
-      expect((reduced as { rgt: { name: string } }).rgt.name).to.equal("x");
+      assert.strictEqual(reduced.kind, "non-terminal");
+      assert.strictEqual((reduced as any).lft.name, "f");
+      assert.strictEqual((reduced as any).rgt.name, "x");
     });
 
-    await t.test(
-      "traverses systemF-match (recurses scrutinee and arm bodies)",
-      () => {
-        const term: SystemFTerm = {
-          kind: "systemF-match",
-          scrutinee: mkSystemFVar("m"),
-          returnType: mkTypeVariable("T"),
-          arms: [
-            {
-              constructorName: "A",
-              params: [],
-              body: mkSystemFVar("y"),
-            },
-          ],
-        };
-        const reduced = reduceLets(emptySystemFContext(), term);
-        expect(reduced.kind).to.equal("systemF-match");
-        expect(
-          (reduced as { scrutinee: { name: string } }).scrutinee.name,
-        ).to.equal("m");
-        const arm = requiredAt(
-          (
-            reduced as {
-              arms: Array<{ constructorName: string; body: { name: string } }>;
-            }
-          ).arms,
-          0,
-          "expected first match arm",
-        );
-        expect(arm.constructorName).to.equal("A");
-        expect(arm.body.name).to.equal("y");
-      },
-    );
+    it("traverses systemF-match (recurses scrutinee and arm bodies)", () => {
+      const term: SystemFTerm = {
+        kind: "systemF-match",
+        scrutinee: mkSystemFVar("m"),
+        returnType: mkTypeVariable("T"),
+        arms: [
+          {
+            constructorName: "A",
+            params: [],
+            body: mkSystemFVar("y"),
+          },
+        ],
+      };
+      const reduced = reduceLets(emptySystemFContext(), term);
+      assert.strictEqual(reduced.kind, "systemF-match");
+      assert.strictEqual((reduced as any).scrutinee.name, "m");
+      const arm = requiredAt(
+        (reduced as any).arms,
+        0,
+        "expected first match arm",
+      );
+      assert.strictEqual((arm as any).constructorName, "A");
+      assert.strictEqual((arm as any).body.name, "y");
+    });
 
-    await t.test("let whose value is systemF-abs exercises abs branch", () => {
+    it("let whose value is systemF-abs exercises abs branch", () => {
       const bodyUsesLet = parseSystemF("let x = (\\y : Bin => y) in x")[1];
-      expect(bodyUsesLet.kind).to.equal("systemF-let");
-      const value = (bodyUsesLet as { value: SystemFTerm }).value;
-      expect(value.kind).to.equal("systemF-abs");
+      assert.strictEqual(bodyUsesLet.kind, "systemF-let");
+      const value = (bodyUsesLet as any).value;
+      assert.strictEqual(value.kind, "systemF-abs");
       const reduced = reduceLets(emptySystemFContext(), bodyUsesLet);
-      expect(hasSystemFLet(reduced)).to.equal(false);
+      assert.strictEqual(hasSystemFLet(reduced), false);
       const [ty] = typecheckSystemF(emptySystemFContext(), reduced);
-      expect(unparseType(ty)).to.match(/Bin/);
+      assert.match(unparseType(ty), /Bin/);
     });
   });
 
-  await t.test("eraseSystemF", async (t) => {
-    await t.test("erases simple polymorphic id", () => {
+  describe("eraseSystemF", () => {
+    it("erases simple polymorphic id", () => {
       const term = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
       );
       const er = eraseSystemF(term);
-      expect(er.kind).to.equal("lambda-abs");
+      assert.strictEqual(er.kind, "lambda-abs");
       if (er.kind === "lambda-abs") {
-        expect(er.name).to.equal("x");
-        expect(er.body.kind).to.equal("lambda-var");
+        assert.strictEqual(er.name, "x");
+        assert.strictEqual(er.body.kind, "lambda-var");
       }
     });
 
-    await t.test("erases nested type applications", () => {
+    it("erases nested type applications", () => {
       const poly = mkSystemFTAbs(
         "X",
         mkSystemFTAbs(
@@ -552,15 +527,15 @@ test("System F type-checker and helpers", async (t) => {
         mkTypeVariable("bool"),
       );
       const er = eraseSystemF(applied);
-      expect(er.kind).to.equal("lambda-abs");
+      assert.strictEqual(er.kind, "lambda-abs");
       if (er.kind === "lambda-abs") {
-        expect(er.name).to.equal("f");
+        assert.strictEqual(er.name, "f");
       }
     });
   });
 
-  await t.test("typechecker misc edge-cases", async (t) => {
-    await t.test("nested type abstractions (K)", () => {
+  describe("typechecker misc edge-cases", () => {
+    it("nested type abstractions (K)", () => {
       const term = mkSystemFTAbs(
         "X",
         mkSystemFTAbs(
@@ -573,11 +548,11 @@ test("System F type-checker and helpers", async (t) => {
         ),
       );
       const [ty] = typecheckSystemF(emptySystemFContext(), term);
-      expect(ty.kind).to.equal("forall");
-      if (ty.kind === "forall") expect(ty.body.kind).to.equal("forall");
+      assert.strictEqual(ty.kind, "forall");
+      if (ty.kind === "forall") assert.strictEqual(ty.body.kind, "forall");
     });
 
-    await t.test("type-checks under non-empty context", () => {
+    it("type-checks under non-empty context", () => {
       let ctx = emptySystemFContext();
       ctx = {
         ...ctx,
@@ -597,11 +572,11 @@ test("System F type-checker and helpers", async (t) => {
       };
       const term = mkSystemFApp(mkSystemFVar("f"), mkSystemFVar("x"));
       const [ty] = typecheckSystemF(ctx, term);
-      expect(ty.kind).to.equal("type-var");
-      if (ty.kind === "type-var") expect(ty.typeName).to.equal("B");
+      assert.strictEqual(ty.kind, "type-var");
+      if (ty.kind === "type-var") assert.strictEqual(ty.typeName, "B");
     });
 
-    await t.test("combined term & type application", () => {
+    it("combined term & type application", () => {
       const polyId = mkSystemFTAbs(
         "X",
         mkSystemFAbs("x", mkTypeVariable("X"), mkSystemFVar("x")),
@@ -622,8 +597,8 @@ test("System F type-checker and helpers", async (t) => {
       };
 
       const [ty] = typecheckSystemF(ctx, term);
-      expect(ty.kind).to.equal("type-var");
-      if (ty.kind === "type-var") expect(ty.typeName).to.equal("A");
+      assert.strictEqual(ty.kind, "type-var");
+      if (ty.kind === "type-var") assert.strictEqual(ty.typeName, "A");
     });
   });
 });

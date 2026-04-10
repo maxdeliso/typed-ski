@@ -8,9 +8,9 @@
  * - Error handling
  */
 
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "../util/test_shim.ts";
 
-import { expect } from "../util/assertions.ts";
+import assert from "node:assert/strict";
 import {
   cleanupTempWorkspace,
   copyFixtures,
@@ -57,32 +57,32 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
   it("shows help message", () => {
     const { stdout, status: code } = runLinkerCli(["--help"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.include("TripLang Compiler & Linker");
-    expect(stdout).to.include("USAGE:");
-    expect(stdout).to.include("OPTIONS:");
-    expect(stdout).to.include("EXAMPLES:");
+    assert.strictEqual(code, 0);
+    assert.ok(stdout.includes("TripLang Compiler & Linker"));
+    assert.ok(stdout.includes("USAGE:"));
+    assert.ok(stdout.includes("OPTIONS:"));
+    assert.ok(stdout.includes("EXAMPLES:"));
   });
 
   it("shows version information", () => {
     const { stdout, status: code } = runLinkerCli(["--version"]);
 
-    expect(code).to.equal(0);
-    expect(stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+    assert.strictEqual(code, 0);
+    assert.match(stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
   });
 
   it("accepts short help flag", () => {
     const { stdout, status: code } = runLinkerCli(["-h"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.include("TripLang Compiler & Linker");
+    assert.strictEqual(code, 0);
+    assert.ok(stdout.includes("TripLang Compiler & Linker"));
   });
 
   it("accepts short version flag", () => {
     const { stdout, status: code } = runLinkerCli(["-v"]);
 
-    expect(code).to.equal(0);
-    expect(stdout.trim()).to.match(/^tripc v\d+\.\d+\.\d+$/);
+    assert.strictEqual(code, 0);
+    assert.match(stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
   });
 
   it("accepts verbose flag", () => {
@@ -92,9 +92,9 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
       status: code,
     } = runLinkerCli(["--verbose", "cli_A.tripc"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stderr).to.include("Linking");
+    assert.strictEqual(code, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stderr.includes("Linking"));
   });
 
   it("accepts short verbose flag", () => {
@@ -104,17 +104,17 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
       status: code,
     } = runLinkerCli(["-V", "cli_A.tripc"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stderr).to.include("Linking");
+    assert.strictEqual(code, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stderr.includes("Linking"));
   });
 
   it("links single .tripc file", () => {
     const { stdout, status: code } = runLinkerCli(["cli_A.tripc"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stdout.length).to.be.greaterThan(0);
+    assert.strictEqual(code, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stdout.length > 0);
   });
 
   it("links multiple .tripc files", () => {
@@ -123,38 +123,38 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
       "cli_helper.tripc",
     ]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stdout.length).to.be.greaterThan(0);
+    assert.strictEqual(code, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stdout.length > 0);
   });
 
   it("links complex expression", () => {
     const { stdout, status: code } = runLinkerCli(["cli_complex.tripc"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.include("K");
-    expect(() => parseSKI(stdout.trim())).to.not.throw();
+    assert.strictEqual(code, 0);
+    assert.ok(stdout.includes("K"));
+    assert.doesNotThrow(() => parseSKI(stdout.trim()));
   });
 
   it("rejects non-.tripc files", () => {
     const { stderr, status: code } = runLinkerCli(["A.trip"]);
 
-    expect(code).to.equal(1);
-    expect(stderr).to.include("Input file must have .tripc extension");
+    assert.strictEqual(code, 1);
+    assert.ok(stderr.includes("Input file must have .tripc extension"));
   });
 
   it("rejects non-existent files", () => {
     const { stderr, status: code } = runLinkerCli(["nonexistent.tripc"]);
 
-    expect(code).to.equal(1);
-    expect(stderr).to.include("Input file does not exist");
+    assert.strictEqual(code, 1);
+    assert.ok(stderr.includes("Input file does not exist"));
   });
 
   it("rejects empty argument list", () => {
     const { stderr, status: code } = runLinkerCli([]);
 
-    expect(code).to.equal(1);
-    expect(stderr).to.include("No input files specified");
+    assert.strictEqual(code, 1);
+    assert.ok(stderr.includes("No input files specified"));
   });
 
   it("handles mixed valid and invalid files", () => {
@@ -164,14 +164,14 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
       "cli_B.tripc",
     ]);
 
-    expect(code).to.equal(1);
-    expect(stderr).to.include("Input file must have .tripc extension");
+    assert.strictEqual(code, 1);
+    assert.ok(stderr.includes("Input file must have .tripc extension"));
   });
 
   it("executable wrapper works", () => {
     const { stdout, status: code } = runLinkerCli(["--help"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.include("TripLang Compiler & Linker");
+    assert.strictEqual(code, 0);
+    assert.ok(stdout.includes("TripLang Compiler & Linker"));
   });
 });

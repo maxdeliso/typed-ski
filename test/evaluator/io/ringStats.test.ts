@@ -4,11 +4,11 @@
  * @module
  */
 
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { RingStats } from "../../../lib/evaluator/io/ringStats.ts";
 
-test("RingStats - statistics recording", () => {
+it("RingStats - statistics recording", () => {
   const stats = new RingStats();
 
   stats.recordSubmitOk();
@@ -46,7 +46,7 @@ test("RingStats - statistics recording", () => {
   assert.strictEqual(snapshot.hashconsHits, 30);
 });
 
-test("RingStats - reset", () => {
+it("RingStats - reset", () => {
   const stats = new RingStats();
 
   stats.recordSubmitOk();

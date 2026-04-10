@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 
 import { mkVar } from "../../lib/terms/lambda.ts";
 import {
@@ -15,33 +15,36 @@ import {
   typesLitEq,
 } from "../../lib/types/types.ts";
 
-test("typed λ-calculus type-checker", async (t) => {
-  await t.test("type-checking errors", async (t) => {
-    await t.test("free variable triggers error", () => {
-      expect(() => typecheckTypedLambda(mkVar("x"))).to.throw(
+describe("typed λ-calculus type-checker", () => {
+  describe("type-checking errors", () => {
+    it("free variable triggers error", () => {
+      assert.throws(
+        () => typecheckTypedLambda(mkVar("x")),
         /unbound variable x/,
       );
     });
 
-    await t.test("duplicate binding in context", () => {
+    it("duplicate binding in context", () => {
       let ctx = emptyContext();
       ctx = addBinding(ctx, "x", mkTypeVariable("a"));
-      expect(() => addBinding(ctx, "x", mkTypeVariable("b"))).to.throw(
+      assert.throws(
+        () => addBinding(ctx, "x", mkTypeVariable("b")),
         /variable x already bound in context/,
       );
     });
   });
 
-  await t.test("successful type-checks", async (t) => {
-    await t.test("I combinator (λx:a.x)", () => {
+  describe("successful type-checks", () => {
+    it("I combinator (λx:a.x)", () => {
       const typedI = mkTypedAbs("x", mkTypeVariable("a"), mkVar("x"));
       const ty = typecheckTypedLambda(typedI);
-      expect(
+      assert.strictEqual(
         typesLitEq(ty, arrow(mkTypeVariable("a"), mkTypeVariable("a"))),
-      ).to.equal(true);
+        true,
+      );
     });
 
-    await t.test("K combinator", () => {
+    it("K combinator", () => {
       const typedK = mkTypedAbs(
         "x",
         mkTypeVariable("a"),
@@ -53,10 +56,10 @@ test("typed λ-calculus type-checker", async (t) => {
         mkTypeVariable("b"),
         mkTypeVariable("a"),
       );
-      expect(typesLitEq(ty, expected)).to.equal(true);
+      assert.strictEqual(typesLitEq(ty, expected), true);
     });
 
-    await t.test("S combinator", () => {
+    it("S combinator", () => {
       const typedS = mkTypedAbs(
         "x",
         arrows(mkTypeVariable("a"), mkTypeVariable("b"), mkTypeVariable("c")),
@@ -81,7 +84,7 @@ test("typed λ-calculus type-checker", async (t) => {
       );
 
       const ty = typecheckTypedLambda(typedS);
-      expect(typesLitEq(ty, expected)).to.equal(true);
+      assert.strictEqual(typesLitEq(ty, expected), true);
     });
   });
 });

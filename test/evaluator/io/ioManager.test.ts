@@ -4,7 +4,7 @@
  * @module
  */
 
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import type { ArenaWasmExports } from "../../../lib/evaluator/arenaEvaluator.ts";
 import { IoManager } from "../../../lib/evaluator/io/ioManager.ts";
@@ -99,105 +99,96 @@ function setupArenaHeader(memory: WebAssembly.Memory, baseAddr: number): void {
   );
 }
 
-test("IoManager - submitSuspension via wakeStdinWaiters", async (t) => {
-  await t.test(
-    "successfully submits suspension when hostSubmit returns 0",
-    async () => {
-      const BASE_ADDR = 1024; // Non-zero base address
-      let callCount = 0;
-      const mockExports = createMockExports(
-        BASE_ADDR,
-        (nodeId, reqId, maxSteps) => {
-          callCount++;
-          assert.strictEqual(nodeId, 42);
-          assert.strictEqual(reqId, 100);
-          assert.strictEqual(maxSteps, 0);
-          return 0; // Success
-        },
-      );
+describe("IoManager - submitSuspension via wakeStdinWaiters", () => {
+  it("successfully submits suspension when hostSubmit returns 0", async () => {
+    const BASE_ADDR = 1024; // Non-zero base address
+    let callCount = 0;
+    const mockExports = createMockExports(
+      BASE_ADDR,
+      (nodeId, reqId, maxSteps) => {
+        callCount++;
+        assert.strictEqual(nodeId, 42);
+        assert.strictEqual(reqId, 100);
+        assert.strictEqual(maxSteps, 0);
+        return 0; // Success
+      },
+    );
 
-      const memory = createTestMemory();
-      setupArenaHeader(memory, BASE_ADDR);
-      const ioManager = new IoManager(mockExports, memory, () => false);
+    const memory = createTestMemory();
+    setupArenaHeader(memory, BASE_ADDR);
+    const ioManager = new IoManager(mockExports, memory, () => false);
 
-      // Register an IO wait and enqueue a nodeId in stdinWait ring
-      ioManager.registerIoWait(42, 100);
-      const rings = ioManager.getIoRings();
-      rings.stdinWait.tryEnqueue(42);
+    // Register an IO wait and enqueue a nodeId in stdinWait ring
+    ioManager.registerIoWait(42, 100);
+    const rings = ioManager.getIoRings();
+    rings.stdinWait.tryEnqueue(42);
 
-      // Wake stdin waiters - this should call submitSuspension
-      const woken = await ioManager.wakeStdinWaiters(10);
+    // Wake stdin waiters - this should call submitSuspension
+    const woken = await ioManager.wakeStdinWaiters(10);
 
-      assert.strictEqual(woken, 1);
-      assert.strictEqual(callCount, 1);
-      assert.strictEqual(ioManager.isIoWaiting(42), false);
-    },
-  );
+    assert.strictEqual(woken, 1);
+    assert.strictEqual(callCount, 1);
+    assert.strictEqual(ioManager.isIoWaiting(42), false);
+  });
 
-  await t.test(
-    "retries submission when hostSubmit returns 1 (queue full)",
-    async () => {
-      const BASE_ADDR = 1024;
-      let callCount = 0;
-      const mockExports = createMockExports(
-        BASE_ADDR,
-        (_nodeId, _reqId, _maxSteps) => {
-          callCount++;
-          if (callCount < 3) {
-            return 1; // Queue full - retry
-          }
-          return 0; // Success on third attempt
-        },
-      );
+  it("retries submission when hostSubmit returns 1 (queue full)", async () => {
+    const BASE_ADDR = 1024;
+    let callCount = 0;
+    const mockExports = createMockExports(
+      BASE_ADDR,
+      (_nodeId, _reqId, _maxSteps) => {
+        callCount++;
+        if (callCount < 3) {
+          return 1; // Queue full - retry
+        }
+        return 0; // Success on third attempt
+      },
+    );
 
-      const memory = createTestMemory();
-      setupArenaHeader(memory, BASE_ADDR);
-      const ioManager = new IoManager(mockExports, memory, () => false);
+    const memory = createTestMemory();
+    setupArenaHeader(memory, BASE_ADDR);
+    const ioManager = new IoManager(mockExports, memory, () => false);
 
-      ioManager.registerIoWait(42, 100);
-      const rings = ioManager.getIoRings();
-      rings.stdinWait.tryEnqueue(42);
+    ioManager.registerIoWait(42, 100);
+    const rings = ioManager.getIoRings();
+    rings.stdinWait.tryEnqueue(42);
 
-      const woken = await ioManager.wakeStdinWaiters(10);
+    const woken = await ioManager.wakeStdinWaiters(10);
 
-      assert.strictEqual(woken, 1);
-      assert.strictEqual(callCount, 3); // Should retry twice before succeeding
-      assert.strictEqual(ioManager.isIoWaiting(42), false);
-    },
-  );
+    assert.strictEqual(woken, 1);
+    assert.strictEqual(callCount, 3); // Should retry twice before succeeding
+    assert.strictEqual(ioManager.isIoWaiting(42), false);
+  });
 
-  await t.test(
-    "throws error when hostSubmit returns non-zero non-one code",
-    async () => {
-      const BASE_ADDR = 1024;
-      const mockExports = createMockExports(
-        BASE_ADDR,
-        (_nodeId, _reqId, _maxSteps) => {
-          return 2; // Error code
-        },
-      );
+  it("throws error when hostSubmit returns non-zero non-one code", async () => {
+    const BASE_ADDR = 1024;
+    const mockExports = createMockExports(
+      BASE_ADDR,
+      (_nodeId, _reqId, _maxSteps) => {
+        return 2; // Error code
+      },
+    );
 
-      const memory = createTestMemory();
-      setupArenaHeader(memory, BASE_ADDR);
-      const ioManager = new IoManager(mockExports, memory, () => false);
+    const memory = createTestMemory();
+    setupArenaHeader(memory, BASE_ADDR);
+    const ioManager = new IoManager(mockExports, memory, () => false);
 
-      ioManager.registerIoWait(42, 100);
-      const rings = ioManager.getIoRings();
-      rings.stdinWait.tryEnqueue(42);
+    ioManager.registerIoWait(42, 100);
+    const rings = ioManager.getIoRings();
+    rings.stdinWait.tryEnqueue(42);
 
-      await assert.rejects(
-        async () => {
-          await ioManager.wakeStdinWaiters(10);
-        },
-        {
-          name: "Error",
-          message: "Resubmit failed for reqId 100 with code 2",
-        },
-      );
-    },
-  );
+    await assert.rejects(
+      async () => {
+        await ioManager.wakeStdinWaiters(10);
+      },
+      {
+        name: "Error",
+        message: "Resubmit failed for reqId 100 with code 2",
+      },
+    );
+  });
 
-  await t.test("throws error when aborted during submission", async () => {
+  it("throws error when aborted during submission", async () => {
     const BASE_ADDR = 1024;
     let callCount = 0;
     const mockExports = createMockExports(

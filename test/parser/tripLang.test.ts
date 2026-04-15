@@ -174,9 +174,15 @@ describe("parseTripLang", () => {
     });
   });
 
-  it("parses data definitions with leading pipe and type-application field types", // "T_Keyword (List Nat)" parses; (3) allow type applications like (List Nat) // constructor (data T = \n  | C1); (2) skip whitespace before field types so // Parser must: (1) accept optional leading | and whitespace before the first
-  // in field types, with space between type and argument.
-  () => {
+  it("parses data definitions with leading pipe and type-application field types", () => {
+    /*
+      in field types, with space between type and argument. 
+      "T_Keyword (List Nat)" parses; 
+      allow type applications like (List Nat) 
+      constructor (data T = \n  | C1); (2) skip whitespace before field types so 
+      Parser must: (1) accept optional leading | and whitespace before the first
+     */
+
     const input = `module Lexer
 data Token =
   | T_LParen

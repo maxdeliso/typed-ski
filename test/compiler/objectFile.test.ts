@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import {
   deserializeTripCObject,
@@ -7,7 +7,7 @@ import {
 } from "../../lib/compiler/objectFile.ts";
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
 
-test("objectFile serialization and validation", async (t) => {
+describe("objectFile serialization and validation", () => {
   const validObject: TripCObject = {
     module: "M",
     exports: ["main"],
@@ -22,13 +22,13 @@ test("objectFile serialization and validation", async (t) => {
     dataDefinitions: [],
   };
 
-  await t.test("round-trips a valid object file", () => {
+  it("round-trips a valid object file", () => {
     const json = serializeTripCObject(validObject);
     const parsed = deserializeTripCObject(json);
     assert.deepEqual(parsed, validObject);
   });
 
-  await t.test("serializes and revives bigint payloads", () => {
+  it("serializes and revives bigint payloads", () => {
     const withBigint: TripCObject = {
       ...validObject,
       definitions: {
@@ -53,7 +53,7 @@ test("objectFile serialization and validation", async (t) => {
     assert.deepEqual(revived.bigintMeta, 123n);
   });
 
-  await t.test("serializes equivalent nested objects canonically", () => {
+  it("serializes equivalent nested objects canonically", () => {
     const a: TripCObject = {
       ...validObject,
       definitions: {
@@ -84,7 +84,7 @@ test("objectFile serialization and validation", async (t) => {
     assert.deepEqual(serializeTripCObject(a), serializeTripCObject(b));
   });
 
-  await t.test("throws on invalid JSON", () => {
+  it("throws on invalid JSON", () => {
     assert.throws(
       () => deserializeTripCObject("{invalid json"),
       Error,
@@ -92,7 +92,7 @@ test("objectFile serialization and validation", async (t) => {
     );
   });
 
-  await t.test("throws on invalid bigint encoding", () => {
+  it("throws on invalid bigint encoding", () => {
     const invalidBigint = JSON.stringify({
       module: "M",
       exports: [],
@@ -110,7 +110,7 @@ test("objectFile serialization and validation", async (t) => {
     );
   });
 
-  await t.test("validates required top-level fields", () => {
+  it("validates required top-level fields", () => {
     assert.throws(
       () =>
         deserializeTripCObject(JSON.stringify({ ...validObject, module: 1 })),
@@ -162,7 +162,7 @@ test("objectFile serialization and validation", async (t) => {
     );
   });
 
-  await t.test("validates import entries", () => {
+  it("validates import entries", () => {
     assert.throws(
       () =>
         deserializeTripCObject(
@@ -176,7 +176,7 @@ test("objectFile serialization and validation", async (t) => {
     );
   });
 
-  await t.test("validates data definition metadata", () => {
+  it("validates data definition metadata", () => {
     assert.throws(
       () =>
         deserializeTripCObject(

@@ -283,7 +283,8 @@ const compile = (term: CoreTerm): Res => {
  */
 export const bracketLambda = (term: TripLangValueType): SKIExpression => {
   const deb = toDeBruijn(term);
-  const compiled = compile(toCore(deb));
+  const core = toCore(deb);
+  const compiled = compile(core);
   if (compiled.n !== 0) {
     throw new ConversionError("free variable detected after conversion");
   }

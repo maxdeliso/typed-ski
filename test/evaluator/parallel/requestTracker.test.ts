@@ -4,7 +4,7 @@
  * @module
  */
 
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import {
   RequestTracker,
@@ -12,7 +12,7 @@ import {
 } from "../../../lib/evaluator/parallel/requestTracker.ts";
 import { I, S } from "../../../lib/ski/terminal.ts";
 
-test("RequestTracker - request creation and assignment", () => {
+it("RequestTracker - request creation and assignment", () => {
   const tracker = new RequestTracker();
 
   const reqId1 = tracker.createRequest(3, I);
@@ -33,7 +33,7 @@ test("RequestTracker - request creation and assignment", () => {
   assert.strictEqual(tracker.getWorkerIndex(reqId4), 0);
 });
 
-test("RequestTracker - validates maxResubmits constructor option", () => {
+it("RequestTracker - validates maxResubmits constructor option", () => {
   assert.throws(() => new RequestTracker({}, -1), {
     name: "Error",
     message: /^maxResubmits must be an integer >= 0, got -1$/,
@@ -44,7 +44,7 @@ test("RequestTracker - validates maxResubmits constructor option", () => {
   });
 });
 
-test("RequestTracker - expression tracking", () => {
+it("RequestTracker - expression tracking", () => {
   const tracker = new RequestTracker();
 
   const reqId = tracker.createRequest(1, I);
@@ -54,7 +54,7 @@ test("RequestTracker - expression tracking", () => {
   assert.strictEqual(tracker.getExpression(reqId2), undefined);
 });
 
-test("RequestTracker - pending and completed tracking", async () => {
+it("RequestTracker - pending and completed tracking", async () => {
   const tracker = new RequestTracker();
 
   const reqId = tracker.createRequest(1);
@@ -84,7 +84,7 @@ test("RequestTracker - pending and completed tracking", async () => {
   assert.strictEqual(tracker.getTotalCompleted(), 1);
 });
 
-test("RequestTracker - stashed completions", () => {
+it("RequestTracker - stashed completions", () => {
   const tracker = new RequestTracker();
 
   const reqId = tracker.createRequest(1);
@@ -112,7 +112,7 @@ test("RequestTracker - stashed completions", () => {
   assert.strictEqual(tracker.getTotalCompleted(), 1);
 });
 
-test("RequestTracker - resubmission counting", () => {
+it("RequestTracker - resubmission counting", () => {
   const tracker = new RequestTracker({}, 5); // max 5 resubmits
 
   const reqId = tracker.createRequest(1);
@@ -130,7 +130,7 @@ test("RequestTracker - resubmission counting", () => {
   );
 });
 
-test("RequestTracker - resubmission cap can be disabled", () => {
+it("RequestTracker - resubmission cap can be disabled", () => {
   const tracker = new RequestTracker({}, 0); // unlimited
   const reqId = tracker.createRequest(1);
 
@@ -139,7 +139,7 @@ test("RequestTracker - resubmission cap can be disabled", () => {
   }
 });
 
-test("RequestTracker - resubmission limit does not emit duplicate error hook", () => {
+it("RequestTracker - resubmission limit does not emit duplicate error hook", () => {
   let errorHookCalls = 0;
   const tracker = new RequestTracker(
     {
@@ -168,7 +168,7 @@ test("RequestTracker - resubmission limit does not emit duplicate error hook", (
   assert.strictEqual(errorHookCalls, 1);
 });
 
-test("RequestTracker - abort all", () => {
+it("RequestTracker - abort all", () => {
   const tracker = new RequestTracker();
 
   const reqId1 = tracker.createRequest(1);
@@ -200,7 +200,7 @@ test("RequestTracker - abort all", () => {
   assert.strictEqual(tracker.getTotalPending(), 0);
 });
 
-test("RequestTracker - completed counter tracks successful completions only", () => {
+it("RequestTracker - completed counter tracks successful completions only", () => {
   const tracker = new RequestTracker();
 
   const reqId1 = tracker.createRequest(1);
@@ -225,7 +225,7 @@ test("RequestTracker - completed counter tracks successful completions only", ()
   assert.strictEqual(tracker.getTotalCompleted(), 1);
 });
 
-test("RequestTracker - pending counts per worker", () => {
+it("RequestTracker - pending counts per worker", () => {
   const tracker = new RequestTracker();
 
   // Create requests for 3 workers
@@ -263,7 +263,7 @@ test("RequestTracker - pending counts per worker", () => {
   assert.strictEqual(countsAfter[2], 1);
 });
 
-test("RequestTracker - instrumentation hooks", () => {
+it("RequestTracker - instrumentation hooks", () => {
   let queuedCalled = false;
   let completedCalled = false;
   let errorCalled = false;

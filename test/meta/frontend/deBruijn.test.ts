@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { assert } from "../../util/assertions.ts";
+import { describe, it } from "../../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { toDeBruijn } from "../../../lib/meta/frontend/deBruijn.ts";
 import type { BaseType } from "../../../lib/types/types.ts";
 import type { SystemFTerm } from "../../../lib/terms/systemF.ts";
@@ -7,14 +7,14 @@ import type { TypedLambda } from "../../../lib/types/typedLambda.ts";
 import type { UntypedLambda } from "../../../lib/terms/lambda.ts";
 import { SKITerminalSymbol, term } from "../../../lib/ski/terminal.ts";
 
-test("De Bruijn Conversion", async (t) => {
-  await t.test("should convert free term variables", () => {
+describe("De Bruijn Conversion", () => {
+  it("should convert free term variables", () => {
     const term: SystemFTerm = { kind: "systemF-var", name: "x" };
     const result = toDeBruijn(term);
     assert.deepStrictEqual(result, { kind: "DbFreeVar", name: "x" });
   });
 
-  await t.test("should convert bound term variables", () => {
+  it("should convert bound term variables", () => {
     // λx. x
     const term: UntypedLambda = {
       kind: "lambda-abs",
@@ -28,31 +28,28 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test(
-    "should convert nested abstractions with correct indices",
-    () => {
-      // λx. λy. x
-      const term: UntypedLambda = {
+  it("should convert nested abstractions with correct indices", () => {
+    // λx. λy. x
+    const term: UntypedLambda = {
+      kind: "lambda-abs",
+      name: "x",
+      body: {
         kind: "lambda-abs",
-        name: "x",
-        body: {
-          kind: "lambda-abs",
-          name: "y",
-          body: { kind: "lambda-var", name: "x" },
-        },
-      };
-      const result = toDeBruijn(term);
-      assert.deepStrictEqual(result, {
+        name: "y",
+        body: { kind: "lambda-var", name: "x" },
+      },
+    };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, {
+      kind: "DbAbs",
+      body: {
         kind: "DbAbs",
-        body: {
-          kind: "DbAbs",
-          body: { kind: "DbVar", index: 1 },
-        },
-      });
-    },
-  );
+        body: { kind: "DbVar", index: 1 },
+      },
+    });
+  });
 
-  await t.test("should convert free variables in abstractions", () => {
+  it("should convert free variables in abstractions", () => {
     // λx. y
     const term: UntypedLambda = {
       kind: "lambda-abs",
@@ -66,7 +63,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should handle alpha-equivalent terms identically", () => {
+  it("should handle alpha-equivalent terms identically", () => {
     // λx. x
     const term1: UntypedLambda = {
       kind: "lambda-abs",
@@ -88,7 +85,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert System F abstractions", () => {
+  it("should convert System F abstractions", () => {
     // λx: T. x
     const term: SystemFTerm = {
       kind: "systemF-abs",
@@ -104,7 +101,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert systemF-let (let x = value in body)", () => {
+  it("should convert systemF-let (let x = value in body)", () => {
     // let x = y in x  — value y is free, body x is bound at index 0
     const term: SystemFTerm = {
       kind: "systemF-let",
@@ -120,35 +117,32 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test(
-    "should convert nested systemF-let with correct binding depth",
-    () => {
-      // let x = a in let y = b in x  — outer x at index 1 in inner body
-      const term: SystemFTerm = {
+  it("should convert nested systemF-let with correct binding depth", () => {
+    // let x = a in let y = b in x  — outer x at index 1 in inner body
+    const term: SystemFTerm = {
+      kind: "systemF-let",
+      name: "x",
+      value: { kind: "systemF-var", name: "a" },
+      body: {
         kind: "systemF-let",
-        name: "x",
-        value: { kind: "systemF-var", name: "a" },
-        body: {
-          kind: "systemF-let",
-          name: "y",
-          value: { kind: "systemF-var", name: "b" },
-          body: { kind: "systemF-var", name: "x" },
-        },
-      };
-      const result = toDeBruijn(term);
-      assert.deepStrictEqual(result, {
+        name: "y",
+        value: { kind: "systemF-var", name: "b" },
+        body: { kind: "systemF-var", name: "x" },
+      },
+    };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, {
+      kind: "DbLet",
+      value: { kind: "DbFreeVar", name: "a" },
+      body: {
         kind: "DbLet",
-        value: { kind: "DbFreeVar", name: "a" },
-        body: {
-          kind: "DbLet",
-          value: { kind: "DbFreeVar", name: "b" },
-          body: { kind: "DbVar", index: 1 },
-        },
-      });
-    },
-  );
+        value: { kind: "DbFreeVar", name: "b" },
+        body: { kind: "DbVar", index: 1 },
+      },
+    });
+  });
 
-  await t.test("should convert typed lambda abstractions", () => {
+  it("should convert typed lambda abstractions", () => {
     // λx: T. x
     const term: TypedLambda = {
       kind: "typed-lambda-abstraction",
@@ -164,7 +158,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert System F type abstractions", () => {
+  it("should convert System F type abstractions", () => {
     // ΛX. x
     const term: SystemFTerm = {
       kind: "systemF-type-abs",
@@ -178,7 +172,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert applications", () => {
+  it("should convert applications", () => {
     // x y
     const term: UntypedLambda = {
       kind: "non-terminal",
@@ -193,7 +187,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert System F type applications", () => {
+  it("should convert System F type applications", () => {
     // t [T]
     const term: SystemFTerm = {
       kind: "systemF-type-app",
@@ -208,24 +202,24 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert terminals", () => {
+  it("should convert terminals", () => {
     const terminal = term(SKITerminalSymbol.S);
     const result = toDeBruijn(terminal);
     assert.deepStrictEqual(result, { kind: "DbTerminal", sym: "S" });
   });
 
-  await t.test("should convert u8 literals", () => {
+  it("should convert u8 literals", () => {
     const result = toDeBruijn({ kind: "u8", value: 123 });
     assert.deepStrictEqual(result, { kind: "DbU8Literal", value: 123 });
   });
 
-  await t.test("should convert __trip_u8_ literals to DbU8Literal", () => {
+  it("should convert __trip_u8_ literals to DbU8Literal", () => {
     const term: SystemFTerm = { kind: "systemF-var", name: "__trip_u8_123" };
     const result = toDeBruijn(term);
     assert.deepStrictEqual(result, { kind: "DbU8Literal", value: 123 });
   });
 
-  await t.test("should treat out-of-range __trip_u8_ as free variables", () => {
+  it("should treat out-of-range __trip_u8_ as free variables", () => {
     const term: SystemFTerm = { kind: "systemF-var", name: "__trip_u8_256" };
     const result = toDeBruijn(term);
     assert.deepStrictEqual(result, {
@@ -234,13 +228,13 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert type variables", () => {
+  it("should convert type variables", () => {
     const type: BaseType = { kind: "type-var", typeName: "X" };
     const result = toDeBruijn(type);
     assert.deepStrictEqual(result, { kind: "DbFreeTypeVar", name: "X" });
   });
 
-  await t.test("should convert bound type variables in forall", () => {
+  it("should convert bound type variables in forall", () => {
     // ∀X. X
     const type: BaseType = {
       kind: "forall",
@@ -254,7 +248,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert nested forall types", () => {
+  it("should convert nested forall types", () => {
     // ∀X. ∀Y. X
     const type: BaseType = {
       kind: "forall",
@@ -275,7 +269,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should convert arrow types", () => {
+  it("should convert arrow types", () => {
     // T → U
     const type: BaseType = {
       kind: "non-terminal",
@@ -290,7 +284,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should handle complex nested structures", () => {
+  it("should handle complex nested structures", () => {
     // λx. (λy. x) y
     const term: UntypedLambda = {
       kind: "lambda-abs",
@@ -319,7 +313,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should handle mixed term and type abstractions", () => {
+  it("should handle mixed term and type abstractions", () => {
     // ΛX. λx: X. x
     const term: SystemFTerm = {
       kind: "systemF-type-abs",
@@ -342,7 +336,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should handle K combinator structure", () => {
+  it("should handle K combinator structure", () => {
     // λx. λy. x
     const term: UntypedLambda = {
       kind: "lambda-abs",
@@ -363,7 +357,7 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test("should handle S combinator structure", () => {
+  it("should handle S combinator structure", () => {
     // λx. λy. λz. (x z) (y z)
     const term: UntypedLambda = {
       kind: "lambda-abs",
@@ -415,36 +409,33 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test(
-    "should produce stable hashes for alpha-equivalent terms",
-    () => {
-      // λa. λb. a
-      const term1: UntypedLambda = {
+  it("should produce stable hashes for alpha-equivalent terms", () => {
+    // λa. λb. a
+    const term1: UntypedLambda = {
+      kind: "lambda-abs",
+      name: "a",
+      body: {
         kind: "lambda-abs",
-        name: "a",
-        body: {
-          kind: "lambda-abs",
-          name: "b",
-          body: { kind: "lambda-var", name: "a" },
-        },
-      };
-      // λx. λy. x
-      const term2: UntypedLambda = {
+        name: "b",
+        body: { kind: "lambda-var", name: "a" },
+      },
+    };
+    // λx. λy. x
+    const term2: UntypedLambda = {
+      kind: "lambda-abs",
+      name: "x",
+      body: {
         kind: "lambda-abs",
-        name: "x",
-        body: {
-          kind: "lambda-abs",
-          name: "y",
-          body: { kind: "lambda-var", name: "x" },
-        },
-      };
-      const result1 = JSON.stringify(toDeBruijn(term1));
-      const result2 = JSON.stringify(toDeBruijn(term2));
-      assert.strictEqual(result1, result2);
-    },
-  );
+        name: "y",
+        body: { kind: "lambda-var", name: "x" },
+      },
+    };
+    const result1 = JSON.stringify(toDeBruijn(term1));
+    const result2 = JSON.stringify(toDeBruijn(term2));
+    assert.strictEqual(result1, result2);
+  });
 
-  await t.test("should convert match expression with match arm", () => {
+  it("should convert match expression with match arm", () => {
     // match x [T] { | Cons a b => a }
     const term: SystemFTerm = {
       kind: "systemF-match",
@@ -473,45 +464,42 @@ test("De Bruijn Conversion", async (t) => {
     });
   });
 
-  await t.test(
-    "should convert match expression with multiple arms and nested bindings",
-    () => {
-      // match x [T] { | None => y | Some a => a }
-      const term: SystemFTerm = {
-        kind: "systemF-match",
-        scrutinee: { kind: "systemF-var", name: "x" },
-        returnType: { kind: "type-var", typeName: "T" },
-        arms: [
-          {
-            constructorName: "None",
-            params: [],
-            body: { kind: "systemF-var", name: "y" },
-          },
-          {
-            constructorName: "Some",
-            params: ["a"],
-            body: { kind: "systemF-var", name: "a" },
-          },
-        ],
-      };
-      const result = toDeBruijn(term);
-      assert.deepStrictEqual(result, {
-        kind: "DbMatch",
-        scrutinee: { kind: "DbFreeVar", name: "x" },
-        returnType: { kind: "DbFreeTypeVar", name: "T" },
-        arms: [
-          {
-            constructorName: "None",
-            paramsCount: 0,
-            body: { kind: "DbFreeVar", name: "y" },
-          },
-          {
-            constructorName: "Some",
-            paramsCount: 1,
-            body: { kind: "DbVar", index: 0 }, // 'a' is at index 0
-          },
-        ],
-      });
-    },
-  );
+  it("should convert match expression with multiple arms and nested bindings", () => {
+    // match x [T] { | None => y | Some a => a }
+    const term: SystemFTerm = {
+      kind: "systemF-match",
+      scrutinee: { kind: "systemF-var", name: "x" },
+      returnType: { kind: "type-var", typeName: "T" },
+      arms: [
+        {
+          constructorName: "None",
+          params: [],
+          body: { kind: "systemF-var", name: "y" },
+        },
+        {
+          constructorName: "Some",
+          params: ["a"],
+          body: { kind: "systemF-var", name: "a" },
+        },
+      ],
+    };
+    const result = toDeBruijn(term);
+    assert.deepStrictEqual(result, {
+      kind: "DbMatch",
+      scrutinee: { kind: "DbFreeVar", name: "x" },
+      returnType: { kind: "DbFreeTypeVar", name: "T" },
+      arms: [
+        {
+          constructorName: "None",
+          paramsCount: 0,
+          body: { kind: "DbFreeVar", name: "y" },
+        },
+        {
+          constructorName: "Some",
+          paramsCount: 1,
+          body: { kind: "DbVar", index: 0 }, // 'a' is at index 0
+        },
+      ],
+    });
+  });
 });

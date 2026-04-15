@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { describe, it } from "./util/test_shim.ts";
 import {
   loadTripModuleObject,
   loadTripSourceFile,
@@ -11,14 +11,14 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-test("tripSourceLoader", async (t) => {
-  await t.test("loadTripSourceFile with string path", async () => {
+describe("tripSourceLoader", () => {
+  it("loadTripSourceFile with string path", async () => {
     const path = join(__dirname, "linker", "A.trip");
     const source = await loadTripSourceFile(path);
     assert.ok(source.includes("module A"));
   });
 
-  await t.test("loadTripSourceFile with URL", async () => {
+  it("loadTripSourceFile with URL", async () => {
     const path = join(__dirname, "linker", "A.trip");
     const url = new URL(
       `file://${path.startsWith("/") ? "" : "/"}${path.replace(/\\/g, "/")}`,
@@ -27,7 +27,7 @@ test("tripSourceLoader", async (t) => {
     assert.ok(source.includes("module A"));
   });
 
-  await t.test("loadTripSourceFile from cache", async () => {
+  it("loadTripSourceFile from cache", async () => {
     const path = join(__dirname, "linker", "A.trip");
     resetSourceCache();
     const source1 = await loadTripSourceFile(path);
@@ -35,26 +35,23 @@ test("tripSourceLoader", async (t) => {
     assert.strictEqual(source1, source2);
   });
 
-  await t.test(
-    "loadTripSourceFileSync respects cache and reads from disk",
-    () => {
-      const path = join(__dirname, "linker", "A.trip");
-      resetSourceCache();
-      const source1 = loadTripSourceFileSync(path);
-      const source2 = loadTripSourceFileSync(path);
-      assert.strictEqual(source1, source2);
-      assert.ok(source1.includes("module A"));
-    },
-  );
+  it("loadTripSourceFileSync respects cache and reads from disk", () => {
+    const path = join(__dirname, "linker", "A.trip");
+    resetSourceCache();
+    const source1 = loadTripSourceFileSync(path);
+    const source2 = loadTripSourceFileSync(path);
+    assert.strictEqual(source1, source2);
+    assert.ok(source1.includes("module A"));
+  });
 
-  await t.test("loadTripModuleObject compiles source to object", async () => {
+  it("loadTripModuleObject compiles source to object", async () => {
     const path = join(__dirname, "linker", "A.trip");
     const obj = await loadTripModuleObject(path);
     assert.strictEqual(obj.module, "A");
     assert.ok(obj.exports.includes("addA"));
   });
 
-  await t.test("resolveImportedModuleSourcePath coverage", async () => {
+  it("resolveImportedModuleSourcePath coverage", async () => {
     const path = join(__dirname, "linker", "A.trip");
     const url = new URL(
       `file://${path.startsWith("/") ? "" : "/"}${path.replace(/\\/g, "/")}`,

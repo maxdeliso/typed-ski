@@ -1,24 +1,21 @@
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { compile } from "../../../lib/meta/frontend/compilation.ts";
 import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 
-test("Module validation", async (t) => {
-  await t.test(
-    "should accept program with exactly one module definition",
-    () => {
-      const input = `
+describe("Module validation", () => {
+  it("should accept program with exactly one module definition", () => {
+    const input = `
 module MyModule
 poly id = #a=>\\x:a=>x
     `;
 
-      const result = compile(input);
-      assert.deepStrictEqual(result.program.kind, "program");
-      assert.deepStrictEqual(result.types.get("id")?.kind, "forall");
-    },
-  );
+    const result = compile(input);
+    assert.deepStrictEqual(result.program.kind, "program");
+    assert.deepStrictEqual(result.types.get("id")?.kind, "forall");
+  });
 
-  await t.test("should reject program with no module definition", () => {
+  it("should reject program with no module definition", () => {
     const input = `
 poly id = #a=>\\x:a=>x
     `;
@@ -30,7 +27,7 @@ poly id = #a=>\\x:a=>x
     );
   });
 
-  await t.test("should reject program with multiple module definitions", () => {
+  it("should reject program with multiple module definitions", () => {
     const input = `
 module MyModule
 module AnotherModule
@@ -44,23 +41,20 @@ poly id = #a=>\\x:a=>x
     );
   });
 
-  await t.test(
-    "should accept program with module, imports, and exports",
-    () => {
-      const input = `
+  it("should accept program with module, imports, and exports", () => {
+    const input = `
 module MyModule
 import Foo bar
 export Baz
 poly id = #a=>\\x:a=>x
     `;
 
-      // Should not throw
-      const result = compile(input);
-      assert.deepStrictEqual(result.program.kind, "program");
-    },
-  );
+    // Should not throw
+    const result = compile(input);
+    assert.deepStrictEqual(result.program.kind, "program");
+  });
 
-  await t.test("should allow unresolved imported symbol", () => {
+  it("should allow unresolved imported symbol", () => {
     const input = `
 module MyModule
 import Foo bar
@@ -71,7 +65,7 @@ poly usesBar = bar
     assert.deepStrictEqual(result.program.kind, "program");
   });
 
-  await t.test("should fail on unresolved absent symbol", () => {
+  it("should fail on unresolved absent symbol", () => {
     const input = `
 module MyModule
 poly usesBar = Bar
@@ -83,7 +77,7 @@ poly usesBar = Bar
     );
   });
 
-  await t.test("should fail on duplicate match arm", () => {
+  it("should fail on duplicate match arm", () => {
     const input = `
 module MyModule
 data Bool = False | True

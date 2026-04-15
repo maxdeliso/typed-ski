@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import {
   makeUntypedBinNumeral,
   makeUntypedChurchNumeral,
@@ -7,43 +7,43 @@ import {
 } from "../../lib/consts/nat.ts";
 import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 
-test("nat constants utilities - coverage", async (t) => {
-  await t.test("makeUntypedChurchNumeral edge cases", () => {
-    expect(() => makeUntypedChurchNumeral(-1n)).to.throw(
-      RangeError,
-      "Nat literals must be non-negative",
-    );
+describe("nat constants utilities - coverage", () => {
+  it("makeUntypedChurchNumeral edge cases", () => {
+    assert.throws(() => makeUntypedChurchNumeral(-1n), {
+      name: "RangeError",
+      message: "Nat literals must be non-negative",
+    });
 
     // Test 0, 1, 2 to cover different ChurchN outputs
     const church0 = makeUntypedChurchNumeral(0n);
-    expect(church0.kind).to.equal("non-terminal");
+    assert.strictEqual(church0.kind, "non-terminal");
 
     const church1 = makeUntypedChurchNumeral(1n);
-    expect(church1.kind).to.equal("lambda-abs");
+    assert.strictEqual(church1.kind, "lambda-abs");
 
     const church2 = makeUntypedChurchNumeral(2n);
-    expect(church2.kind).to.equal("non-terminal");
+    assert.strictEqual(church2.kind, "non-terminal");
   });
 
-  await t.test("makeUntypedBinNumeral edge cases", () => {
-    expect(() => makeUntypedBinNumeral(-1n)).to.throw(
-      RangeError,
-      "Nat literals must be non-negative",
-    );
+  it("makeUntypedBinNumeral edge cases", () => {
+    assert.throws(() => makeUntypedBinNumeral(-1n), {
+      name: "RangeError",
+      message: "Nat literals must be non-negative",
+    });
 
     const bin0 = makeUntypedBinNumeral(0n);
-    expect(bin0).to.deep.equal({ kind: "lambda-var", name: "BZ" });
+    assert.deepStrictEqual(bin0, { kind: "lambda-var", name: "BZ" });
 
     const bin1 = makeUntypedBinNumeral(1n); // B1 BZ
-    expect(bin1.kind).to.equal("non-terminal");
+    assert.strictEqual(bin1.kind, "non-terminal");
 
     const bin2 = makeUntypedBinNumeral(2n); // B0 (B1 BZ)
-    expect(bin2.kind).to.equal("non-terminal");
+    assert.strictEqual(bin2.kind, "non-terminal");
   });
 
-  await t.test("terminalToLambda unknown terminal", () => {
+  it("terminalToLambda unknown terminal", () => {
     // SPrime is not handled by terminalToLambda
     const expr = { kind: "terminal" as const, sym: SKITerminalSymbol.SPrime };
-    expect(() => skiToUntyped(expr)).to.throw("Unknown SKI terminal: P");
+    assert.throws(() => skiToUntyped(expr), /Unknown SKI terminal/);
   });
 });

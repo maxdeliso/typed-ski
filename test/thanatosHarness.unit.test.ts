@@ -4,7 +4,7 @@ import { readFile, rm, mkdtemp } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { describe, it } from "./util/test_shim.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
 import { fromTopoDagWire, toTopoDagWire } from "../lib/ski/topoDagWire.ts";
@@ -93,7 +93,7 @@ function mockBrokerTransport() {
   };
 }
 
-test("thanatos harness helpers cover U8 DAG and passthrough evaluator", async () => {
+it("thanatos harness helpers cover U8 DAG and passthrough evaluator", async () => {
   const parsed = fromTopoDagWire("U41FFFFFFFFFFFFFFFF");
   assert.equal(parsed.kind, "u8");
   assert.equal((parsed as { kind: "u8"; value: number }).value, 65);
@@ -110,7 +110,7 @@ test("thanatos harness helpers cover U8 DAG and passthrough evaluator", async ()
   assert.equal(await reduceAsync(expr), expr);
 });
 
-test(
+it(
   "thanatos harness direct session covers reduceIo, batching, and shared state",
   { skip: !thanatosAvailable() },
   async () => {
@@ -154,7 +154,7 @@ test(
   },
 );
 
-test(
+it(
   "thanatos harness broker-backed session covers broker request paths",
   { skip: !thanatosAvailable() },
   async () => {

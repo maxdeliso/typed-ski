@@ -1,6 +1,5 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { expect } from "../util/assertions.ts";
 import {
   ArenaEvaluatorWasm,
   createArenaEvaluator,
@@ -25,7 +24,7 @@ import { untypedApp, mkVar } from "../../lib/terms/lambda.ts";
 
 const arenaEval = await createArenaEvaluator();
 
-test("stepOnce", async (t) => {
+describe("stepOnce", () => {
   const e1 = parseSKI("III");
   const e2 = parseSKI("II");
   const e3 = parseSKI("I");
@@ -34,13 +33,13 @@ test("stepOnce", async (t) => {
   const e6 = parseSKI("SKKII");
   const e7 = parseSKI("KI(KI)");
 
-  await t.test(`${unparseSKI(e2)} ⇒ ${unparseSKI(e3)}`, () => {
+  it(`${unparseSKI(e2)} ⇒ ${unparseSKI(e3)}`, () => {
     const r = arenaEval.stepOnce(e2);
     assert.deepStrictEqual(r.altered, true);
     assert.deepStrictEqual(unparseSKI(r.expr), unparseSKI(e3));
   });
 
-  await t.test(`${unparseSKI(e1)} ⇒ ${unparseSKI(e3)}`, () => {
+  it(`${unparseSKI(e1)} ⇒ ${unparseSKI(e3)}`, () => {
     const r1 = arenaEval.stepOnce(e1);
     const r2 = arenaEval.stepOnce(r1.expr);
 
@@ -48,19 +47,19 @@ test("stepOnce", async (t) => {
     assert.deepStrictEqual(unparseSKI(r2.expr), unparseSKI(e3));
   });
 
-  await t.test(`${unparseSKI(e4)} ⇒ ${unparseSKI(e3)}`, () => {
+  it(`${unparseSKI(e4)} ⇒ ${unparseSKI(e3)}`, () => {
     const r = arenaEval.stepOnce(e4);
     assert.ok(r.altered);
     assert.deepStrictEqual(unparseSKI(r.expr), unparseSKI(e3));
   });
 
-  await t.test(`${unparseSKI(e5)} ⇒ ${unparseSKI(e7)}`, () => {
+  it(`${unparseSKI(e5)} ⇒ ${unparseSKI(e7)}`, () => {
     const r = arenaEval.stepOnce(e5);
     assert.ok(r.altered);
     assert.deepStrictEqual(unparseSKI(r.expr), unparseSKI(e7));
   });
 
-  await t.test(`${unparseSKI(e6)} ⇒ ${unparseSKI(e3)}`, () => {
+  it(`${unparseSKI(e6)} ⇒ ${unparseSKI(e3)}`, () => {
     const r1 = arenaEval.stepOnce(e6);
     const r2 = arenaEval.stepOnce(r1.expr);
     const r3 = arenaEval.stepOnce(r2.expr);
@@ -69,25 +68,22 @@ test("stepOnce", async (t) => {
     assert.deepStrictEqual(unparseSKI(r3.expr), unparseSKI(e3));
   });
 
-  await t.test(
-    "repeated stepOnceArena on the same root chases cached links",
-    () => {
-      arenaEval.reset();
-      const root = arenaEval.toArena(parseSKI("III"));
+  it("repeated stepOnceArena on the same root chases cached links", () => {
+    arenaEval.reset();
+    const root = arenaEval.toArena(parseSKI("III"));
 
-      const first = arenaEval.stepOnceArena(root);
-      const second = arenaEval.stepOnceArena(root);
-      const third = arenaEval.stepOnceArena(root);
+    const first = arenaEval.stepOnceArena(root);
+    const second = arenaEval.stepOnceArena(root);
+    const third = arenaEval.stepOnceArena(root);
 
-      assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(first)), "(II)");
-      assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(second)), "I");
-      assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(third)), "I");
-    },
-  );
+    assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(first)), "(II)");
+    assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(second)), "I");
+    assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(third)), "I");
+  });
 });
 
-test("eqU8 intrinsic - reduce to True/False", async (t) => {
-  await t.test("eqU8 65 65 reduces to True (K)", () => {
+describe("eqU8 intrinsic - reduce to True/False", () => {
+  it("eqU8 65 65 reduces to True (K)", () => {
     const u8_65 = { kind: "u8" as const, value: 65 };
     const expr = apply(apply(EqU8, u8_65), u8_65);
     const result = arenaEval.reduce(expr, 10000);
@@ -99,7 +95,7 @@ test("eqU8 intrinsic - reduce to True/False", async (t) => {
     assert.deepStrictEqual(unparseSKI(result), "K");
   });
 
-  await t.test("eqU8 65 66 reduces to False (K I)", () => {
+  it("eqU8 65 66 reduces to False (K I)", () => {
     const u8_65 = { kind: "u8" as const, value: 65 };
     const u8_66 = { kind: "u8" as const, value: 66 };
     const expr = apply(apply(EqU8, u8_65), u8_66);
@@ -111,21 +107,18 @@ test("eqU8 intrinsic - reduce to True/False", async (t) => {
     );
   });
 
-  await t.test(
-    "bracketLambda(eqU8 __trip_u8_65 __trip_u8_65) reduces to K",
-    () => {
-      const term = untypedApp(
-        untypedApp(mkVar("eqU8"), mkVar("__trip_u8_65")),
-        mkVar("__trip_u8_65"),
-      );
-      const ski = bracketLambda(term);
-      const result = arenaEval.reduce(ski, 10000);
-      assert.deepStrictEqual(unparseSKI(result), "K");
-    },
-  );
+  it("bracketLambda(eqU8 __trip_u8_65 __trip_u8_65) reduces to K", () => {
+    const term = untypedApp(
+      untypedApp(mkVar("eqU8"), mkVar("__trip_u8_65")),
+      mkVar("__trip_u8_65"),
+    );
+    const ski = bracketLambda(term);
+    const result = arenaEval.reduce(ski, 10000);
+    assert.deepStrictEqual(unparseSKI(result), "K");
+  });
 });
 
-test("Intrinsic Cache Safety", async (t) => {
+describe("Intrinsic Cache Safety", () => {
   const K = parseSKI("K");
   const I = parseSKI("I");
   const FalseForm = apply(K, I);
@@ -165,19 +158,19 @@ test("Intrinsic Cache Safety", async (t) => {
     );
   };
 
-  await t.test("works after first reset", () => {
+  it("works after first reset", () => {
     arenaEval.reset();
     testReductions();
   });
 
-  await t.test("works after second reset (verifies cache invalidation)", () => {
+  it("works after second reset (verifies cache invalidation)", () => {
     arenaEval.reset();
     testReductions();
   });
 });
 
-test("dumpArena", async (t) => {
-  await t.test("returns nodes for arena with expressions", () => {
+describe("dumpArena", () => {
+  it("returns nodes for arena with expressions", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("I");
     evaluator.toArena(expr);
@@ -190,7 +183,7 @@ test("dumpArena", async (t) => {
     );
   });
 
-  await t.test("correctly dumps terminal nodes", () => {
+  it("correctly dumps terminal nodes", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("I");
     const id = evaluator.toArena(expr);
@@ -205,7 +198,7 @@ test("dumpArena", async (t) => {
     }
   });
 
-  await t.test("round-trips B and C terminals", () => {
+  it("round-trips B and C terminals", () => {
     const evaluator = arenaEval;
     const exprB = parseSKI("B");
     const exprC = parseSKI("C");
@@ -216,7 +209,7 @@ test("dumpArena", async (t) => {
     assert.deepStrictEqual(unparseSKI(evaluator.fromArena(idC)), "C");
   });
 
-  await t.test("correctly dumps non-terminal nodes", () => {
+  it("correctly dumps non-terminal nodes", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("II");
     const id = evaluator.toArena(expr);
@@ -251,7 +244,7 @@ test("dumpArena", async (t) => {
     }
   });
 
-  await t.test("correctly dumps complex expressions", () => {
+  it("correctly dumps complex expressions", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("SKKI");
     const id = evaluator.toArena(expr);
@@ -275,7 +268,7 @@ test("dumpArena", async (t) => {
     );
   });
 
-  await t.test("dumpArena includes U8 nodes when using views", () => {
+  it("dumpArena includes U8 nodes when using views", () => {
     const evaluator = arenaEval;
     const u8_5 = parseSKI("#u8(5)");
     const u8_6 = parseSKI("#u8(6)");
@@ -291,7 +284,7 @@ test("dumpArena", async (t) => {
     );
   });
 
-  await t.test("includes all nodes for multiple expressions", () => {
+  it("includes all nodes for multiple expressions", () => {
     const evaluator = arenaEval;
     // Create different expressions to ensure we have multiple nodes
     const expr1 = parseSKI("I");
@@ -326,7 +319,7 @@ test("dumpArena", async (t) => {
     );
   });
 
-  await t.test("uses views for direct memory access", () => {
+  it("uses views for direct memory access", () => {
     const evaluator = arenaEval;
     const expr = parseSKI("III");
     evaluator.toArena(expr);
@@ -378,7 +371,7 @@ test("dumpArena", async (t) => {
     }
   });
 
-  await t.test("skips holes instead of stopping early", () => {
+  it("skips holes instead of stopping early", () => {
     const evaluator = arenaEval;
     evaluator.reset();
     // Ensure we have multiple allocated nodes.
@@ -410,8 +403,8 @@ test("dumpArena", async (t) => {
   });
 });
 
-test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
-  await t.test("stepOnceArena delegates directly to arenaKernelStep", () => {
+describe("ArenaEvaluatorWasm - edge cases and coverage", () => {
+  it("stepOnceArena delegates directly to arenaKernelStep", () => {
     const evaluator = ArenaEvaluatorWasm.fromInstance(
       {
         reset: () => {},
@@ -431,7 +424,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     assert.deepStrictEqual(evaluator.stepOnceArena(41), 42);
   });
 
-  await t.test("hostSubmit and hostPullV2 throw if missing from WASM", () => {
+  it("hostSubmit and hostPullV2 throw if missing from WASM", () => {
     // We need a real instance but with missing optional exports.
     // The createArenaEvaluator() returns a real one.
     const evaluator = ArenaEvaluatorWasm.fromInstance(
@@ -450,13 +443,15 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
       new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
     );
 
-    expect(() => evaluator.hostSubmit(0, 0, 0)).to.throw(
-      "hostSubmit export missing",
-    );
-    expect(() => evaluator.hostPullV2()).to.throw("hostPullV2 export missing");
+    assert.throws(() => evaluator.hostSubmit(0, 0, 0), {
+      message: "hostSubmit export missing",
+    });
+    assert.throws(() => evaluator.hostPullV2(), {
+      message: "hostPullV2 export missing",
+    });
   });
 
-  await t.test("hostPullV2 delegates to WASM export when present", () => {
+  it("hostPullV2 delegates to WASM export when present", () => {
     const evaluator = ArenaEvaluatorWasm.fromInstance(
       {
         reset: () => {},
@@ -477,7 +472,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     assert.deepStrictEqual(evaluator.hostPullV2(), 123n);
   });
 
-  await t.test("hostSubmit delegates to WASM export when present", () => {
+  it("hostSubmit delegates to WASM export when present", () => {
     let receivedArgs: [number, number, number] | null = null;
     const evaluator = ArenaEvaluatorWasm.fromInstance(
       {
@@ -503,7 +498,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     assert.deepStrictEqual(receivedArgs, [0xffffffff, 0xfffffffe, 0xfffffffd]);
   });
 
-  await t.test("fromArena throws on control pointers", () => {
+  it("fromArena throws on control pointers", () => {
     const exports = {
       kindOf: () => 0,
       debugGetArenaBaseAddr: () => 0,
@@ -530,7 +525,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("fromArena throws on unknown arena node kinds", () => {
+  it("fromArena throws on unknown arena node kinds", () => {
     const exports = {
       kindOf: () => 99,
       debugGetArenaBaseAddr: () => 0,
@@ -557,7 +552,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("toArena throws on unknown terminal symbols", () => {
+  it("toArena throws on unknown terminal symbols", () => {
     const exports = {
       allocTerminal: () => 0,
       reset: () => {},
@@ -587,7 +582,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("toArena throws on U8 allocation OOM", () => {
+  it("toArena throws on U8 allocation OOM", () => {
     const exports = {
       allocTerminal: () => 0,
       allocCons: () => 0,
@@ -613,7 +608,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("toArena throws on cons allocation OOM", () => {
+  it("toArena throws on cons allocation OOM", () => {
     const exports = {
       allocTerminal: () => 0,
       allocCons: () => 0xffffffff,
@@ -639,7 +634,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("fromInstance throws when required exports are missing", () => {
+  it("fromInstance throws when required exports are missing", () => {
     const incompleteExports = {
       reset: () => {},
     } as unknown as ArenaWasmExports;
@@ -655,35 +650,32 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test(
-    "fromInstance throws when required export is not a function",
-    () => {
-      const invalidExports = {
-        reset: 1,
-        allocTerminal: () => 0,
-        allocCons: () => 0,
-        allocU8: () => 0,
-        arenaKernelStep: () => 0,
-        reduce: () => 0,
-        kindOf: () => 0,
-        symOf: () => 0,
-        leftOf: () => 0,
-        rightOf: () => 0,
-      } as unknown as ArenaWasmExports;
+  it("fromInstance throws when required export is not a function", () => {
+    const invalidExports = {
+      reset: 1,
+      allocTerminal: () => 0,
+      allocCons: () => 0,
+      allocU8: () => 0,
+      arenaKernelStep: () => 0,
+      reduce: () => 0,
+      kindOf: () => 0,
+      symOf: () => 0,
+      leftOf: () => 0,
+      rightOf: () => 0,
+    } as unknown as ArenaWasmExports;
 
-      assert.throws(
-        () =>
-          ArenaEvaluatorWasm.fromInstance(
-            invalidExports,
-            new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
-          ),
-        TypeError,
-        "WASM export `reset` is missing or not a function",
-      );
-    },
-  );
+    assert.throws(
+      () =>
+        ArenaEvaluatorWasm.fromInstance(
+          invalidExports,
+          new WebAssembly.Memory({ initial: 1, shared: true, maximum: 1 }),
+        ),
+      TypeError,
+      "WASM export `reset` is missing or not a function",
+    );
+  });
 
-  await t.test("fromInstance throws when initArena returns zero", () => {
+  it("fromInstance throws when initArena returns zero", () => {
     const invalidExports = {
       reset: () => {},
       allocTerminal: () => 0,
@@ -709,7 +701,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("reset invalidates terminal cache", () => {
+  it("reset invalidates terminal cache", () => {
     let allocTerminalCalls = 0;
     const exports = {
       reset: () => {},
@@ -736,7 +728,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     assert.deepStrictEqual(allocTerminalCalls, 32);
   });
 
-  await t.test("structural hash-consing (consCache)", () => {
+  it("structural hash-consing (consCache)", () => {
     arenaEval.reset();
     // Create two distinct JS objects representing the same SKI expression (I I)
     const e1 = parseSKI("II");
@@ -772,7 +764,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("connectArena throws when export is missing", () => {
+  it("connectArena throws when export is missing", () => {
     const evaluator = ArenaEvaluatorWasm.fromInstance(
       {
         reset: () => {},
@@ -796,7 +788,7 @@ test("ArenaEvaluatorWasm - edge cases and coverage", async (t) => {
     );
   });
 
-  await t.test("connectArena invalidates terminal cache on success", () => {
+  it("connectArena invalidates terminal cache on success", () => {
     let allocTerminalCalls = 0;
     const exports = {
       reset: () => {},

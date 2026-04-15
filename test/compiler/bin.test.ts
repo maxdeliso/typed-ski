@@ -2,7 +2,7 @@
  * Unit test for Bin operations (Prelude)
  */
 
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +38,7 @@ async function compileTestProgram() {
   return await loadTripModuleObject(testSourcePath);
 }
 
-test("Bin operations - add/mul/sub round trip", async () => {
+it("Bin operations - add/mul/sub round trip", async () => {
   const testObj = await compileTestProgram();
   const preludeObj = await getPreludeObjectCached();
   const binObj = await getBinObjectCached();

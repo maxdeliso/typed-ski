@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import type { ArenaWasmExports } from "../../../lib/evaluator/arenaEvaluator.ts";
 import type { IoManager } from "../../../lib/evaluator/io/ioManager.ts";
@@ -60,7 +60,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
-test("CompletionPoller - clean completion still resolves request", async () => {
+it("CompletionPoller - clean completion still resolves request", async () => {
   const tracker = new RequestTracker({}, 8);
   const fakeExports = {} as ArenaWasmExports;
 
@@ -104,7 +104,7 @@ test("CompletionPoller - clean completion still resolves request", async () => {
   assert.strictEqual(tracker.isPending(reqId), false);
 });
 
-test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", async () => {
+it("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", async () => {
   const tracker = new RequestTracker({}, 8);
   let ioWaitRegistered: { nodeId: number; reqId: number } | null = null;
   const ioWaitSeen = deferred<void>();
@@ -180,7 +180,7 @@ test("CompletionPoller - prefers typed IO_WAIT events from hostPullV2", async ()
   assert.strictEqual(tracker.isPending(1), true);
 });
 
-test("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
+it("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
   const tracker = new RequestTracker({}, 8);
   const errorSeen = deferred<void>();
   let capturedError: Error | null = null;
@@ -229,7 +229,7 @@ test("CompletionPoller - handles CQ_EVENT_ERROR", async () => {
   assert.ok(err.message.includes("Worker reported error event"));
 });
 
-test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
+it("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   const tracker = new RequestTracker({}, 8);
   const resubmits: number[] = [];
   const yieldSeen = deferred<void>();
@@ -279,7 +279,7 @@ test("CompletionPoller - handles CQ_EVENT_YIELD", async () => {
   assert.strictEqual(tracker.getResubmitCount(reqId), 1);
 });
 
-test("CompletionPoller - hibernation when no work pending", async () => {
+it("CompletionPoller - hibernation when no work pending", async () => {
   const tracker = new RequestTracker({}, 8);
   let pullCount = 0;
   const fakeExports = {
@@ -316,7 +316,7 @@ test("CompletionPoller - hibernation when no work pending", async () => {
   assert.strictEqual(pullCount, 0);
 });
 
-test("CompletionPoller - submitSuspension busy-waits on full queue", async () => {
+it("CompletionPoller - submitSuspension busy-waits on full queue", async () => {
   const tracker = new RequestTracker({}, 8);
   const ioManager = new IoManagerStub();
   ioManager.shouldHandle = true;
@@ -372,7 +372,7 @@ test("CompletionPoller - submitSuspension busy-waits on full queue", async () =>
   assert.strictEqual(submits, 3);
 });
 
-test("CompletionPoller - resubmitSuspension busy-waits on full queue", async () => {
+it("CompletionPoller - resubmitSuspension busy-waits on full queue", async () => {
   const tracker = new RequestTracker({}, 8);
   const yieldSeen = deferred<void>();
   let submits = 0;
@@ -426,7 +426,7 @@ test("CompletionPoller - resubmitSuspension busy-waits on full queue", async () 
   assert.strictEqual(submits, 3);
 });
 
-test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
+it("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
   const fakeExports = {} as ArenaWasmExports;
@@ -463,7 +463,7 @@ test("CompletionPoller - EMPTY_STREAK_THRESHOLD backoff", async () => {
   );
 });
 
-test("CompletionPoller - completion is stashed when resolver is not pending", async () => {
+it("CompletionPoller - completion is stashed when resolver is not pending", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
   const fakeExports = {} as ArenaWasmExports;
@@ -506,7 +506,7 @@ test("CompletionPoller - completion is stashed when resolver is not pending", as
   assert.strictEqual(tracker.getStashedCompletion(reqId), 100);
 });
 
-test("CompletionPoller - maybeYield drains long completion bursts", async () => {
+it("CompletionPoller - maybeYield drains long completion bursts", async () => {
   const tracker = new RequestTracker();
   const ringStats = new RingStatsStub();
   const fakeExports = {} as ArenaWasmExports;

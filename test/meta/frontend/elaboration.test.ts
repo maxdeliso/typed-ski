@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { expect } from "../../util/assertions.ts";
+import { describe, it } from "../../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { elaborateSystemF } from "../../../lib/meta/frontend/elaboration.ts";
 import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import { indexSymbols } from "../../../lib/meta/frontend/symbolTable.ts";
@@ -19,7 +19,7 @@ import {
   mkTypeVariable,
 } from "../../../lib/types/types.ts";
 
-test("elaborateSystemF", async (t) => {
+describe("elaborateSystemF", () => {
   function createSymbolTable(
     types: { name: string; type: BaseType }[],
   ): SymbolTable {
@@ -50,28 +50,26 @@ test("elaborateSystemF", async (t) => {
     },
   ];
 
-  await t.test(
-    "should rewrite term applications as type applications when right-hand side is a type",
-    () => {
-      const syms = createSymbolTable([
-        { name: "T", type: { kind: "type-var", typeName: "T" } },
-      ]);
+  it("should rewrite term applications as type applications when right-hand side is a type", () => {
+    const syms = createSymbolTable([
+      { name: "T", type: { kind: "type-var", typeName: "T" } },
+    ]);
 
-      // Create expression: x T
-      const expr = mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("T"));
+    // Create expression: x T
+    const expr = mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("T"));
 
-      const result = elaborateSystemF(expr, syms);
+    const result = elaborateSystemF(expr, syms);
 
-      expect(result).to.deep.equal(
-        mkSystemFTypeApp(mkSystemFVar("x"), {
-          kind: "type-var",
-          typeName: "T",
-        }),
-      );
-    },
-  );
+    assert.deepStrictEqual(
+      result,
+      mkSystemFTypeApp(mkSystemFVar("x"), {
+        kind: "type-var",
+        typeName: "T",
+      }),
+    );
+  });
 
-  await t.test("should handle nested type applications", () => {
+  it("should handle nested type applications", () => {
     const syms = createSymbolTable([
       { name: "T", type: { kind: "type-var", typeName: "T" } },
       { name: "U", type: { kind: "type-var", typeName: "U" } },
@@ -85,7 +83,8 @@ test("elaborateSystemF", async (t) => {
 
     const result = elaborateSystemF(expr, syms);
 
-    expect(result).to.deep.equal(
+    assert.deepStrictEqual(
+      result,
       mkSystemFTypeApp(
         mkSystemFTypeApp(mkSystemFVar("x"), {
           kind: "type-var",
@@ -96,25 +95,23 @@ test("elaborateSystemF", async (t) => {
     );
   });
 
-  await t.test(
-    "should not rewrite applications when right-hand side is not a type",
-    () => {
-      const syms = createSymbolTable([
-        { name: "T", type: { kind: "type-var", typeName: "T" } },
-      ]);
+  it("should not rewrite applications when right-hand side is not a type", () => {
+    const syms = createSymbolTable([
+      { name: "T", type: { kind: "type-var", typeName: "T" } },
+    ]);
 
-      // Create expression: x y
-      const expr = mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("y"));
+    // Create expression: x y
+    const expr = mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("y"));
 
-      const result = elaborateSystemF(expr, syms);
+    const result = elaborateSystemF(expr, syms);
 
-      expect(result).to.deep.equal(
-        mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("y")),
-      );
-    },
-  );
+    assert.deepStrictEqual(
+      result,
+      mkSystemFApp(mkSystemFVar("x"), mkSystemFVar("y")),
+    );
+  });
 
-  await t.test("should handle mixed type and term applications", () => {
+  it("should handle mixed type and term applications", () => {
     const syms = createSymbolTable([
       { name: "T", type: { kind: "type-var", typeName: "T" } },
     ]);
@@ -127,7 +124,8 @@ test("elaborateSystemF", async (t) => {
 
     const result = elaborateSystemF(expr, syms);
 
-    expect(result).to.deep.equal(
+    assert.deepStrictEqual(
+      result,
       mkSystemFApp(
         mkSystemFTypeApp(mkSystemFVar("x"), {
           kind: "type-var",
@@ -138,7 +136,7 @@ test("elaborateSystemF", async (t) => {
     );
   });
 
-  await t.test("should handle type abstractions correctly", () => {
+  it("should handle type abstractions correctly", () => {
     const syms = createSymbolTable([
       { name: "T", type: { kind: "type-var", typeName: "T" } },
     ]);
@@ -151,7 +149,8 @@ test("elaborateSystemF", async (t) => {
 
     const result = elaborateSystemF(expr, syms);
 
-    expect(result).to.deep.equal(
+    assert.deepStrictEqual(
+      result,
       mkSystemFTAbs(
         "X",
         mkSystemFTypeApp(mkSystemFVar("x"), {
@@ -162,7 +161,7 @@ test("elaborateSystemF", async (t) => {
     );
   });
 
-  await t.test("should handle polymorphic successor function correctly", () => {
+  it("should handle polymorphic successor function correctly", () => {
     const syms = createSymbolTable([
       { name: "X", type: { kind: "type-var", typeName: "X" } },
     ]);
@@ -199,7 +198,8 @@ test("elaborateSystemF", async (t) => {
 
     const result = elaborateSystemF(expr, syms);
 
-    expect(result).to.deep.equal(
+    assert.deepStrictEqual(
+      result,
       mkSystemFAbs(
         "n",
         { kind: "type-var", typeName: "Nat" },
@@ -231,10 +231,8 @@ test("elaborateSystemF", async (t) => {
     );
   });
 
-  await t.test(
-    "should canonicalize imported constructor match arms by declaration order",
-    () => {
-      const src = `
+  it("should canonicalize imported constructor match arms by declaration order", () => {
+    const src = `
 module ImportedMatchOrder
 import Prelude Result
 import Prelude Ok
@@ -244,36 +242,33 @@ import Prelude false
 poly pick = match x [Bool] { | Ok v => v | Err e => false }
       `;
 
-      const program = parseTripLang(src);
-      const syms = indexSymbols(program, {
-        importedDataDefinitionsByModule: new Map([
-          ["Prelude", preludeDataDefinitions],
-        ]),
-      });
-      const pick = program.terms.find(
-        (term) => term.kind === "poly" && term.name === "pick",
-      );
-      if (!pick || pick.kind !== "poly") {
-        throw new Error("expected poly pick");
-      }
+    const program = parseTripLang(src);
+    const syms = indexSymbols(program, {
+      importedDataDefinitionsByModule: new Map([
+        ["Prelude", preludeDataDefinitions],
+      ]),
+    });
+    const pick = program.terms.find(
+      (term) => term.kind === "poly" && term.name === "pick",
+    );
+    if (!pick || pick.kind !== "poly") {
+      throw new Error("expected poly pick");
+    }
 
-      const elaborated = elaborateSystemF(pick.term, syms);
-      const expected = mkSystemFApp(
-        mkSystemFApp(
-          mkSystemFTypeApp(mkSystemFVar("x"), mkTypeVariable("Bool")),
-          mkSystemFAbs("e", mkTypeVariable("E"), mkSystemFVar("false")),
-        ),
-        mkSystemFAbs("v", mkTypeVariable("T"), mkSystemFVar("v")),
-      );
+    const elaborated = elaborateSystemF(pick.term, syms);
+    const expected = mkSystemFApp(
+      mkSystemFApp(
+        mkSystemFTypeApp(mkSystemFVar("x"), mkTypeVariable("Bool")),
+        mkSystemFAbs("e", mkTypeVariable("E"), mkSystemFVar("false")),
+      ),
+      mkSystemFAbs("v", mkTypeVariable("T"), mkSystemFVar("v")),
+    );
 
-      expect(elaborated).to.deep.equal(expected);
-    },
-  );
+    assert.deepStrictEqual(elaborated, expected);
+  });
 
-  await t.test(
-    "should reject non-exhaustive match on imported built-in constructors",
-    () => {
-      const src = `
+  it("should reject non-exhaustive match on imported built-in constructors", () => {
+    const src = `
 module ImportedMatchMissing
 import Prelude Result
 import Prelude Ok
@@ -281,26 +276,29 @@ import Prelude Bool
 poly pick = match x [Bool] { | Ok v => v }
       `;
 
-      const program = parseTripLang(src);
-      const syms = indexSymbols(program, {
-        importedDataDefinitionsByModule: new Map([
-          ["Prelude", preludeDataDefinitions],
-        ]),
-      });
-      const pick = program.terms.find(
-        (term) => term.kind === "poly" && term.name === "pick",
-      );
-      if (!pick || pick.kind !== "poly") {
-        throw new Error("expected poly pick");
-      }
+    const program = parseTripLang(src);
+    const syms = indexSymbols(program, {
+      importedDataDefinitionsByModule: new Map([
+        ["Prelude", preludeDataDefinitions],
+      ]),
+    });
+    const pick = program.terms.find(
+      (term) => term.kind === "poly" && term.name === "pick",
+    );
+    if (!pick || pick.kind !== "poly") {
+      throw new Error("expected poly pick");
+    }
 
-      expect(() => {
+    assert.throws(
+      () => {
         elaborateSystemF(pick.term, syms);
-      }).to.throw(CompilationError, "match is missing constructors: Err");
-    },
-  );
+      },
+      CompilationError,
+      "match is missing constructors: Err",
+    );
+  });
 
-  await t.test("elaborateMatch error cases", async (t) => {
+  describe("elaborateMatch error cases", () => {
     function createSymbolTableWithData(
       dataDefs: DataDefinition[],
     ): SymbolTable {
@@ -339,7 +337,7 @@ poly pick = match x [Bool] { | Ok v => v }
       };
     }
 
-    await t.test("should throw error when match has no arms", () => {
+    it("should throw error when match has no arms", () => {
       const syms = createSymbolTableWithData([]);
       const match = createMatch(
         mkSystemFVar("x"),
@@ -347,12 +345,16 @@ poly pick = match x [Bool] { | Ok v => v }
         [],
       );
 
-      expect(() => {
-        elaborateSystemF(match, syms);
-      }).to.throw(CompilationError, "match must declare at least one arm");
+      assert.throws(
+        () => {
+          elaborateSystemF(match, syms);
+        },
+        CompilationError,
+        "match must declare at least one arm",
+      );
     });
 
-    await t.test("should throw error for unknown constructor", () => {
+    it("should throw error for unknown constructor", () => {
       const syms = createSymbolTableWithData([
         {
           kind: "data",
@@ -377,71 +379,70 @@ poly pick = match x [Bool] { | Ok v => v }
         ],
       );
 
-      expect(() => {
-        elaborateSystemF(match, syms);
-      }).to.throw(
+      assert.throws(
+        () => {
+          elaborateSystemF(match, syms);
+        },
         CompilationError,
         "Unknown constructor 'UnknownCtor' in match",
       );
     });
 
-    await t.test(
-      "should throw error when match arms target different data types",
-      () => {
-        const syms = createSymbolTableWithData([
-          {
-            kind: "data",
-            name: "Option",
-            typeParams: ["T"],
-            constructors: [
-              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
-              { name: "None", fields: [] },
-            ],
-          },
-          {
-            kind: "data",
-            name: "Result",
-            typeParams: ["T", "E"],
-            constructors: [
-              {
-                name: "Ok",
-                fields: [{ kind: "type-var", typeName: "T" }],
-              },
-              {
-                name: "Err",
-                fields: [{ kind: "type-var", typeName: "E" }],
-              },
-            ],
-          },
-        ]);
-
-        const match = createMatch(
-          mkSystemFVar("x"),
-          { kind: "type-var", typeName: "T" },
-          [
+    it("should throw error when match arms target different data types", () => {
+      const syms = createSymbolTableWithData([
+        {
+          kind: "data",
+          name: "Option",
+          typeParams: ["T"],
+          constructors: [
+            { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "None", fields: [] },
+          ],
+        },
+        {
+          kind: "data",
+          name: "Result",
+          typeParams: ["T", "E"],
+          constructors: [
             {
-              constructorName: "Some",
-              params: ["val"],
-              body: mkSystemFVar("val"),
+              name: "Ok",
+              fields: [{ kind: "type-var", typeName: "T" }],
             },
             {
-              constructorName: "Ok",
-              params: ["val"],
-              body: mkSystemFVar("val"),
+              name: "Err",
+              fields: [{ kind: "type-var", typeName: "E" }],
             },
           ],
-        );
+        },
+      ]);
 
-        expect(() => {
+      const match = createMatch(
+        mkSystemFVar("x"),
+        { kind: "type-var", typeName: "T" },
+        [
+          {
+            constructorName: "Some",
+            params: ["val"],
+            body: mkSystemFVar("val"),
+          },
+          {
+            constructorName: "Ok",
+            params: ["val"],
+            body: mkSystemFVar("val"),
+          },
+        ],
+      );
+
+      assert.throws(
+        () => {
           elaborateSystemF(match, syms);
-        }).to.throw(
-          CompilationError,
-          "match arms must all target the same data type",
-        );
-      },
-    );
+        },
+        CompilationError,
+        "match arms must all target the same data type",
+      );
+    });
 
-    await t.test("should throw error when data definition is missing", () => {
+    it("should throw error when data definition is missing", () => {
       const syms: SymbolTable = {
         terms: new Map(),
         types: new Map(),
@@ -474,12 +475,16 @@ poly pick = match x [Bool] { | Ok v => v }
         ],
       );
 
-      expect(() => {
-        elaborateSystemF(match, syms);
-      }).to.throw(CompilationError, "Missing data definition for Option");
+      assert.throws(
+        () => {
+          elaborateSystemF(match, syms);
+        },
+        CompilationError,
+        "Missing data definition for Option",
+      );
     });
 
-    await t.test("should throw error for duplicate match arm", () => {
+    it("should throw error for duplicate match arm", () => {
       const syms = createSymbolTableWithData([
         {
           kind: "data",
@@ -509,166 +514,162 @@ poly pick = match x [Bool] { | Ok v => v }
         ],
       );
 
-      expect(() => {
-        elaborateSystemF(match, syms);
-      }).to.throw(
+      assert.throws(
+        () => {
+          elaborateSystemF(match, syms);
+        },
         CompilationError,
         "Duplicate match arm for constructor 'Some'",
       );
     });
 
-    await t.test(
-      "should throw error when match is missing constructors",
-      () => {
-        const syms = createSymbolTableWithData([
-          {
-            kind: "data",
-            name: "Option",
-            typeParams: ["T"],
-            constructors: [
-              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
-              { name: "None", fields: [] },
-            ],
-          },
-        ]);
-
-        const match = createMatch(
-          mkSystemFVar("x"),
-          { kind: "type-var", typeName: "T" },
-          [
-            {
-              constructorName: "Some",
-              params: ["val"],
-              body: mkSystemFVar("val"),
-            },
-            // Missing "None" arm
+    it("should throw error when match is missing constructors", () => {
+      const syms = createSymbolTableWithData([
+        {
+          kind: "data",
+          name: "Option",
+          typeParams: ["T"],
+          constructors: [
+            { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "None", fields: [] },
           ],
-        );
+        },
+      ]);
 
-        expect(() => {
-          elaborateSystemF(match, syms);
-        }).to.throw(CompilationError, "match is missing constructors: None");
-      },
-    );
-
-    await t.test(
-      "should throw error when constructor parameter count doesn't match",
-      () => {
-        const syms = createSymbolTableWithData([
+      const match = createMatch(
+        mkSystemFVar("x"),
+        { kind: "type-var", typeName: "T" },
+        [
           {
-            kind: "data",
-            name: "Option",
-            typeParams: ["T"],
-            constructors: [
-              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
-              { name: "None", fields: [] },
-            ],
+            constructorName: "Some",
+            params: ["val"],
+            body: mkSystemFVar("val"),
           },
-        ]);
+          // Missing "None" arm
+        ],
+      );
 
-        const match = createMatch(
-          mkSystemFVar("x"),
-          { kind: "type-var", typeName: "T" },
-          [
-            {
-              constructorName: "Some",
-              params: [], // Wrong: Some expects 1 parameter
-              body: mkSystemFVar("y"),
-            },
-            {
-              constructorName: "None",
-              params: [],
-              body: mkSystemFVar("z"),
-            },
-          ],
-        );
-
-        expect(() => {
+      assert.throws(
+        () => {
           elaborateSystemF(match, syms);
-        }).to.throw(
-          CompilationError,
-          "Constructor 'Some' expects 1 parameter(s)",
-        );
-      },
-    );
+        },
+        CompilationError,
+        "match is missing constructors: None",
+      );
+    });
 
-    await t.test(
-      "should throw error when constructor has too many parameters",
-      () => {
-        const syms = createSymbolTableWithData([
+    it("should throw error when constructor parameter count doesn't match", () => {
+      const syms = createSymbolTableWithData([
+        {
+          kind: "data",
+          name: "Option",
+          typeParams: ["T"],
+          constructors: [
+            { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "None", fields: [] },
+          ],
+        },
+      ]);
+
+      const match = createMatch(
+        mkSystemFVar("x"),
+        { kind: "type-var", typeName: "T" },
+        [
           {
-            kind: "data",
-            name: "Option",
-            typeParams: ["T"],
-            constructors: [
-              { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
-              { name: "None", fields: [] },
-            ],
+            constructorName: "Some",
+            params: [], // Wrong: Some expects 1 parameter
+            body: mkSystemFVar("y"),
           },
-        ]);
-
-        const match = createMatch(
-          mkSystemFVar("x"),
-          { kind: "type-var", typeName: "T" },
-          [
-            {
-              constructorName: "Some",
-              params: ["val", "extra"], // Wrong: Some expects only 1 parameter
-              body: mkSystemFVar("val"),
-            },
-            {
-              constructorName: "None",
-              params: [],
-              body: mkSystemFVar("z"),
-            },
-          ],
-        );
-
-        expect(() => {
-          elaborateSystemF(match, syms);
-        }).to.throw(
-          CompilationError,
-          "Constructor 'Some' expects 1 parameter(s)",
-        );
-      },
-    );
-
-    await t.test(
-      "should throw error when match is missing multiple constructors",
-      () => {
-        const syms = createSymbolTableWithData([
           {
-            kind: "data",
-            name: "Triple",
-            typeParams: ["T"],
-            constructors: [
-              { name: "First", fields: [{ kind: "type-var", typeName: "T" }] },
-              { name: "Second", fields: [{ kind: "type-var", typeName: "T" }] },
-              { name: "Third", fields: [{ kind: "type-var", typeName: "T" }] },
-            ],
+            constructorName: "None",
+            params: [],
+            body: mkSystemFVar("z"),
           },
-        ]);
+        ],
+      );
 
-        const match = createMatch(
-          mkSystemFVar("x"),
-          { kind: "type-var", typeName: "T" },
-          [
-            {
-              constructorName: "First",
-              params: ["val"],
-              body: mkSystemFVar("val"),
-            },
-            // Missing Second and Third
-          ],
-        );
-
-        expect(() => {
+      assert.throws(
+        () => {
           elaborateSystemF(match, syms);
-        }).to.throw(
-          CompilationError,
-          "match is missing constructors: Second, Third",
-        );
-      },
-    );
+        },
+        CompilationError,
+        "Constructor 'Some' expects 1 parameter(s)",
+      );
+    });
+
+    it("should throw error when constructor has too many parameters", () => {
+      const syms = createSymbolTableWithData([
+        {
+          kind: "data",
+          name: "Option",
+          typeParams: ["T"],
+          constructors: [
+            { name: "Some", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "None", fields: [] },
+          ],
+        },
+      ]);
+
+      const match = createMatch(
+        mkSystemFVar("x"),
+        { kind: "type-var", typeName: "T" },
+        [
+          {
+            constructorName: "Some",
+            params: ["val", "extra"], // Wrong: Some expects only 1 parameter
+            body: mkSystemFVar("val"),
+          },
+          {
+            constructorName: "None",
+            params: [],
+            body: mkSystemFVar("z"),
+          },
+        ],
+      );
+
+      assert.throws(
+        () => {
+          elaborateSystemF(match, syms);
+        },
+        CompilationError,
+        "Constructor 'Some' expects 1 parameter(s)",
+      );
+    });
+
+    it("should throw error when match is missing multiple constructors", () => {
+      const syms = createSymbolTableWithData([
+        {
+          kind: "data",
+          name: "Triple",
+          typeParams: ["T"],
+          constructors: [
+            { name: "First", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "Second", fields: [{ kind: "type-var", typeName: "T" }] },
+            { name: "Third", fields: [{ kind: "type-var", typeName: "T" }] },
+          ],
+        },
+      ]);
+
+      const match = createMatch(
+        mkSystemFVar("x"),
+        { kind: "type-var", typeName: "T" },
+        [
+          {
+            constructorName: "First",
+            params: ["val"],
+            body: mkSystemFVar("val"),
+          },
+          // Missing Second and Third
+        ],
+      );
+
+      assert.throws(
+        () => {
+          elaborateSystemF(match, syms);
+        },
+        CompilationError,
+        "match is missing constructors: Second, Third",
+      );
+    });
   });
 });

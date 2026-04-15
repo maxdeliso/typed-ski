@@ -1,9 +1,9 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 /**
  * Linker tests for prelude list operations
  */
 
-import { expect } from "../util/assertions.ts";
+import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -22,8 +22,8 @@ import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-test("Prelude List Linking", async (t) => {
-  await t.test(
+describe("Prelude List Linking", () => {
+  it(
     "links prelude list cases (thanatos)",
     {
       skip: !thanatosAvailable(),
@@ -46,13 +46,13 @@ test("Prelude List Linking", async (t) => {
 
         const results = await runThanatosBatch([skiExpression]);
         const result = results[0];
-        expect(result).to.not.be.undefined;
+        assert.notStrictEqual(result, undefined);
 
         const decoded = await UnChurchNumber(
           parseSKI(result!),
           passthroughEvaluator,
         );
-        expect(decoded).to.equal(6n); // sum [1, 2, 3]
+        assert.strictEqual(decoded, 6n); // sum [1, 2, 3]
       } finally {
         await closeBatchThanatosSessions();
       }

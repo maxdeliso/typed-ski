@@ -1,9 +1,9 @@
-import { test } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { ParallelArenaEvaluatorWasm } from "../../../lib/index.ts";
 import { parseSKI } from "../../../lib/parser/ski.ts";
 
-test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue (rc=1)", async () => {
+it("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue (rc=1)", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -39,7 +39,7 @@ test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue 
   }
 });
 
-test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync throws on rc=2", async () => {
+it("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync throws on rc=2", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -58,7 +58,7 @@ test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync throws on rc=2", async
   }
 });
 
-test("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
+it("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   evaluator.terminate();
   const expr = parseSKI("I");
@@ -68,7 +68,7 @@ test("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
   });
 });
 
-test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask backoff after prolonged full queue", async () => {
+it("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask backoff after prolonged full queue", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");
@@ -92,7 +92,7 @@ test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask backoff
   }
 });
 
-test("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync wraps non-Error submit failures", async () => {
+it("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync wraps non-Error submit failures", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
     const expr = parseSKI("I");

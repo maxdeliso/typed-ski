@@ -1,11 +1,11 @@
-import { test } from "node:test";
-import { expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { isRecursiveTypeDefinition } from "../../lib/linker/moduleLinker.ts";
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
 import { I } from "../../lib/ski/terminal.ts";
 
-test("isRecursiveTypeDefinition", async (t) => {
-  await t.test("returns false for non-type definitions", () => {
+describe("isRecursiveTypeDefinition", () => {
+  it("returns false for non-type definitions", () => {
     // Arc 1: typeDef.kind !== "type"
     const combinatorDef: TripLangTerm = {
       kind: "combinator",
@@ -13,10 +13,10 @@ test("isRecursiveTypeDefinition", async (t) => {
       term: I,
     };
 
-    expect(isRecursiveTypeDefinition(combinatorDef)).to.be.false;
+    assert.strictEqual(isRecursiveTypeDefinition(combinatorDef), false);
   });
 
-  await t.test("returns false when definition value extraction fails", () => {
+  it("returns false when definition value extraction fails", () => {
     // Arc 2: extractDefinitionValue returns undefined (e.g., malformed type def)
     const malformedTypeDef = {
       kind: "type",
@@ -24,10 +24,10 @@ test("isRecursiveTypeDefinition", async (t) => {
       // Missing 'type' property makes extractDefinitionValue return undefined
     } as unknown as TripLangTerm;
 
-    expect(isRecursiveTypeDefinition(malformedTypeDef)).to.be.false;
+    assert.strictEqual(isRecursiveTypeDefinition(malformedTypeDef), false);
   });
 
-  await t.test("returns false for non-recursive type definitions", () => {
+  it("returns false for non-recursive type definitions", () => {
     // Normal case: not recursive
     const typeDef: TripLangTerm = {
       kind: "type",
@@ -35,10 +35,10 @@ test("isRecursiveTypeDefinition", async (t) => {
       type: { kind: "type-var", typeName: "X" }, // References X, not Nat
     };
 
-    expect(isRecursiveTypeDefinition(typeDef)).to.be.false;
+    assert.strictEqual(isRecursiveTypeDefinition(typeDef), false);
   });
 
-  await t.test("returns true for recursive type definitions", () => {
+  it("returns true for recursive type definitions", () => {
     // Recursive case
     const typeDef: TripLangTerm = {
       kind: "type",
@@ -51,6 +51,6 @@ test("isRecursiveTypeDefinition", async (t) => {
       },
     };
 
-    expect(isRecursiveTypeDefinition(typeDef)).to.be.true;
+    assert.strictEqual(isRecursiveTypeDefinition(typeDef), true);
   });
 });

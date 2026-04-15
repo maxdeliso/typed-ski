@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { expect } from "./assertions.ts";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { describe, it } from "./test_shim.ts";
 import { evaluateTrip, evaluateTripWithIo } from "./tripHarness.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { loadInput } from "./fileLoader.ts";
@@ -14,8 +13,8 @@ const linkerTestDir = fileURLToPath(
   new URL("../linker/", import.meta.url).href,
 );
 
-test("TripHarness", async (t) => {
-  await t.test("includeNat flag allows using Nat module", async () => {
+describe("TripHarness", () => {
+  it("includeNat flag allows using Nat module", async () => {
     const evaluator = await ParallelArenaEvaluatorWasm.create(1);
     try {
       const source = loadInput("includeNat.trip", __dirname);
@@ -26,14 +25,14 @@ test("TripHarness", async (t) => {
       });
       const number = await UnChurchNumber(result, evaluator);
 
-      expect(number).to.equal(2n);
+      assert.strictEqual(number, 2n);
     } finally {
       evaluator.terminate();
     }
   });
 });
 
-test("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async () => {
+it("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async () => {
   const source = loadInput("echoOne.trip", linkerTestDir);
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
 

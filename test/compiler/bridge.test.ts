@@ -1,4 +1,4 @@
-import { assert } from "../util/assertions.ts";
+import assert from "node:assert/strict";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -7,7 +7,7 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import { readFile } from "node:fs/promises";
 import {
   closeBatchThanatosSessions,
@@ -178,36 +178,38 @@ async function runBridgeHarness(source: string): Promise<boolean> {
   });
 }
 
-test("Bridge recursion lowering uses explicit Z expansion helpers", async () => {
+it("Bridge recursion lowering uses explicit Z expansion helpers", async () => {
   const source = await readFile(BRIDGE_SOURCE_FILE, "utf-8");
 
-  assert.include(source, "poly zLower");
-  assert.include(source, "poly applyFixpoint");
-  assert.include(source, "L_App zLower (L_Lam body)");
-  assert.include(source, "applyFixpoint (coreToLower");
-  assert.notInclude(source, "#u8(89)");
-  assert.include(source, 'eqListU8 name "."');
-  assert.include(source, "Some [Lower] (L_Native T_WriteOne)");
-  assert.include(source, 'eqListU8 name ","');
-  assert.include(source, "Some [Lower] (L_Native T_ReadOne)");
-  assert.include(source, 'eqListU8 name "subU8"');
-  assert.include(source, "Some [Lower] (L_Native T_SubU8)");
-  assert.include(source, "poly unboundNameError");
-  assert.include(source, "poly buildBinLiteralCore");
-  assert.include(source, "poly ctorCountOverflowError");
-  assert.include(source, "poly rec checkedLengthU8");
-  assert.include(source, "Ok [List U8] [Core] (Cr_Match coreScrut coreArms)");
+  assert.ok(source.includes("poly zLower"));
+  assert.ok(source.includes("poly applyFixpoint"));
+  assert.ok(source.includes("L_App zLower (L_Lam body)"));
+  assert.ok(source.includes("applyFixpoint (coreToLower"));
+  assert.ok(!source.includes("#u8(89)"));
+  assert.ok(source.includes('eqListU8 name "."'));
+  assert.ok(source.includes("Some [Lower] (L_Native T_WriteOne)"));
+  assert.ok(source.includes('eqListU8 name ","'));
+  assert.ok(source.includes("Some [Lower] (L_Native T_ReadOne)"));
+  assert.ok(source.includes('eqListU8 name "subU8"'));
+  assert.ok(source.includes("Some [Lower] (L_Native T_SubU8)"));
+  assert.ok(source.includes("poly unboundNameError"));
+  assert.ok(source.includes("poly buildBinLiteralCore"));
+  assert.ok(source.includes("poly ctorCountOverflowError"));
+  assert.ok(source.includes("poly rec checkedLengthU8"));
+  assert.ok(
+    source.includes("Ok [List U8] [Core] (Cr_Match coreScrut coreArms)"),
+  );
 
   const bridgeObject = await loadTripModuleObject(BRIDGE_SOURCE_FILE);
-  assert.property(bridgeObject.definitions, "zLower");
-  assert.property(bridgeObject.definitions, "applyFixpoint");
-  assert.property(bridgeObject.definitions, "resolveNativeName");
-  assert.property(bridgeObject.definitions, "unboundNameError");
-  assert.property(bridgeObject.definitions, "buildBinLiteralCore");
-  assert.property(bridgeObject.definitions, "elaborateProgram");
+  assert.ok("zLower" in bridgeObject.definitions);
+  assert.ok("applyFixpoint" in bridgeObject.definitions);
+  assert.ok("resolveNativeName" in bridgeObject.definitions);
+  assert.ok("unboundNameError" in bridgeObject.definitions);
+  assert.ok("buildBinLiteralCore" in bridgeObject.definitions);
+  assert.ok("elaborateProgram" in bridgeObject.definitions);
 });
 
-test(
+it(
   "Bridge rejects data declarations with too many constructors",
   {
     skip: !thanatosAvailable(),
@@ -215,14 +217,14 @@ test(
   async () => {
     try {
       const source = await readFile(BRIDGE_SOURCE_FILE, "utf-8");
-      assert.include(
-        source,
-        "checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)",
+      assert.ok(
+        source.includes("checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)"),
         "Expected D_Data elaboration to use checkedLengthU8 before populating the data environment",
       );
       const ok = await runBridgeHarness(makeCheckedLengthOverflowHarness());
-      assert.isTrue(
+      assert.strictEqual(
         ok,
+        true,
         "Expected checkedLengthU8 to reject constructor-count overflow at #u8(255)",
       );
     } finally {

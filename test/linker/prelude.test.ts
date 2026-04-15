@@ -1,9 +1,9 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 /**
  * Tests for the TripLang Linker prelude integration
  */
 
-import { expect } from "../util/assertions.ts";
+import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
@@ -23,8 +23,8 @@ import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-test("Prelude Linking", async (t) => {
-  await t.test(
+describe("Prelude Linking", () => {
+  it(
     "links prelude arithmetic cases (thanatos)",
     {
       skip: !thanatosAvailable(),
@@ -47,20 +47,20 @@ test("Prelude Linking", async (t) => {
 
         const results = await runThanatosBatch([skiExpression]);
         const result = results[0];
-        expect(result).to.not.be.undefined;
+        assert.notStrictEqual(result, undefined);
 
         const decoded = await UnChurchNumber(
           parseSKI(result!),
           passthroughEvaluator,
         );
-        expect(decoded).to.equal(5n); // 2 + 3
+        assert.strictEqual(decoded, 5n); // 2 + 3
       } finally {
         await closeBatchThanatosSessions();
       }
     },
   );
 
-  await t.test(
+  it(
     "links prelude logic cases (thanatos)",
     {
       skip: !thanatosAvailable(),
@@ -79,13 +79,13 @@ test("Prelude Linking", async (t) => {
 
         const results = await runThanatosBatch([skiExpression]);
         const result = results[0];
-        expect(result).to.not.be.undefined;
+        assert.notStrictEqual(result, undefined);
 
         const decoded = await UnChurchBoolean(
           parseSKI(result!),
           passthroughEvaluator,
         );
-        expect(decoded).to.be.true; // true && (false || true)
+        assert.strictEqual(decoded, true); // true && (false || true)
       } finally {
         await closeBatchThanatosSessions();
       }

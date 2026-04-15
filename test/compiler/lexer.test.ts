@@ -7,7 +7,7 @@
  * still resetting the arena between logical test runs.
  */
 
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,14 +72,14 @@ async function compileAndValidateTestProgram(
   return parseSKI(skiExpression);
 }
 
-test(
+describe(
   "Lexer thanatos suite",
   {
     skip: !thanatosAvailable(),
   },
-  async (t) => {
+  async () => {
     try {
-      await t.test("Lexer - isSpace structure validation", async () => {
+      it("Lexer - isSpace structure validation", async () => {
         const program = await compileAndValidateTestProgram("testIsSpace.trip");
         const lines = await runThanatosBatch([unparseSKI(program)]);
         const line = lines[0];
@@ -91,7 +91,7 @@ test(
         );
       });
 
-      await t.test("Lexer - isSpace character codes", async () => {
+      it("Lexer - isSpace character codes", async () => {
         const lexerObj = await getLexerObject();
         const preludeObj = await getPreludeObjectCached();
 
@@ -145,33 +145,30 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         }
       });
 
-      await t.test(
-        'Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF',
-        async () => {
-          const lexerObj = await getLexerObject();
-          const preludeObj = await getPreludeObjectCached();
+      it('Lexer - tokenize "1 2" => T_Nat "1", T_Nat "2", T_EOF', async () => {
+        const lexerObj = await getLexerObject();
+        const preludeObj = await getPreludeObjectCached();
 
-          const testObj = await loadTripModuleObject(
-            join(__dirname, "inputs", "testTokenize1Space2.trip"),
-          );
-          const skiExpression = linkModules([
-            { name: "Prelude", object: preludeObj },
-            { name: "Lexer", object: lexerObj },
-            { name: "Test", object: testObj },
-          ]);
-          const input = unparseSKI(parseSKI(skiExpression));
+        const testObj = await loadTripModuleObject(
+          join(__dirname, "inputs", "testTokenize1Space2.trip"),
+        );
+        const skiExpression = linkModules([
+          { name: "Prelude", object: preludeObj },
+          { name: "Lexer", object: lexerObj },
+          { name: "Test", object: testObj },
+        ]);
+        const input = unparseSKI(parseSKI(skiExpression));
 
-          const lines = await runThanatosBatch([input]);
-          const line = lines[0];
-          assert.ok(line && line.length > 0, "thanatos should return a result");
-          assert.ok(
-            await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
-            'tokenize "1 2" should yield T_Nat "1", T_Nat "2", T_EOF',
-          );
-        },
-      );
+        const lines = await runThanatosBatch([input]);
+        const line = lines[0];
+        assert.ok(line && line.length > 0, "thanatos should return a result");
+        assert.ok(
+          await UnChurchBoolean(parseSKI(line!), passthroughEvaluator),
+          'tokenize "1 2" should yield T_Nat "1", T_Nat "2", T_EOF',
+        );
+      });
 
-      await t.test("Lexer - structural validations", async () => {
+      it("Lexer - structural validations", async () => {
         const structuralTests = [
           {
             file: "testLexIdentVsKw.trip",

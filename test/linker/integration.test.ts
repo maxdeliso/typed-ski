@@ -8,9 +8,9 @@
  * - Performance characteristics
  */
 
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "../util/test_shim.ts";
 
-import { expect } from "../util/assertions.ts";
+import assert from "node:assert/strict";
 import {
   cleanupTempWorkspace,
   copyFixtures,
@@ -72,12 +72,12 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_simple.trip",
       "int_simple.tripc",
     );
-    expect(compileCode).to.equal(0);
+    assert.strictEqual(compileCode, 0);
 
     const { stdout, status: linkCode } = linkTripc(["int_simple.tripc"]);
 
-    expect(linkCode).to.equal(0);
-    expect(stdout.trim()).to.equal("I");
+    assert.strictEqual(linkCode, 0);
+    assert.strictEqual(stdout.trim(), "I");
   });
 
   it("full pipeline: compile + link complex expression", () => {
@@ -85,13 +85,13 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_complex.trip",
       "int_complex.tripc",
     );
-    expect(compileCode).to.equal(0);
+    assert.strictEqual(compileCode, 0);
 
     const { stdout, status: linkCode } = linkTripc(["int_complex.tripc"]);
 
-    expect(linkCode).to.equal(0);
-    expect(stdout).to.include("K");
-    expect(() => parseSKI(stdout.trim())).to.not.throw();
+    assert.strictEqual(linkCode, 0);
+    assert.ok(stdout.includes("K"));
+    assert.doesNotThrow(() => parseSKI(stdout.trim()));
   });
 
   it("full pipeline: compile + link multiple modules", () => {
@@ -104,17 +104,17 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_mod_b.tripc",
     );
 
-    expect(compileACode).to.equal(0);
-    expect(compileBCode).to.equal(0);
+    assert.strictEqual(compileACode, 0);
+    assert.strictEqual(compileBCode, 0);
 
     const { stdout, status: linkCode } = linkTripc([
       "int_mod_a.tripc",
       "int_mod_b.tripc",
     ]);
 
-    expect(linkCode).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stdout.length).to.be.greaterThan(0);
+    assert.strictEqual(linkCode, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stdout.length > 0);
   });
 
   it("handles compilation errors gracefully", () => {
@@ -123,8 +123,8 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_invalid.tripc",
     );
 
-    expect(compileCode).to.not.equal(0);
-    expect(stderr).to.include("Compilation error");
+    assert.notStrictEqual(compileCode, 0);
+    assert.ok(stderr.includes("Compilation error"));
   });
 
   it("handles linking errors gracefully", () => {
@@ -132,12 +132,12 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_noMain.trip",
       "int_noMain.tripc",
     );
-    expect(compileCode).to.equal(0);
+    assert.strictEqual(compileCode, 0);
 
     const { stderr, status: linkCode } = linkTripc(["int_noMain.tripc"]);
 
-    expect(linkCode).to.not.equal(0);
-    expect(stderr).to.match(/No 'main' function found|Symbol.*is not defined/);
+    assert.notStrictEqual(linkCode, 0);
+    assert.match(stderr, /No 'main' function found|Symbol.*is not defined/);
   });
 
   it("performance: handles large expressions", () => {
@@ -145,13 +145,13 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_large.trip",
       "int_large.tripc",
     );
-    expect(compileCode).to.equal(0);
+    assert.strictEqual(compileCode, 0);
 
     const { stdout, status: linkCode } = linkTripc(["int_large.tripc"]);
 
-    expect(linkCode).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stdout.length).to.be.greaterThan(0);
+    assert.strictEqual(linkCode, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stdout.length > 0);
   });
 
   it("executable wrapper integration", () => {
@@ -159,12 +159,12 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
       "int_exec_wrapper.trip",
       "int_exec_wrapper.tripc",
     );
-    expect(compileCode).to.equal(0);
+    assert.strictEqual(compileCode, 0);
 
     const { stdout, status: code } = linkTripc(["int_exec_wrapper.tripc"]);
 
-    expect(code).to.equal(0);
-    expect(stdout).to.be.a("string");
-    expect(stdout.length).to.be.greaterThan(0);
+    assert.strictEqual(code, 0);
+    assert.strictEqual(typeof stdout, "string");
+    assert.ok(stdout.length > 0);
   });
 });

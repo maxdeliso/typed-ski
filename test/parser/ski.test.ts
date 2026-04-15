@@ -1,5 +1,5 @@
-import { test } from "node:test";
-import { assert, expect } from "../util/assertions.ts";
+import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 
 import { Y } from "../util/combinators.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
@@ -32,7 +32,7 @@ const assertReparse = (expr: string) => {
   assert.deepStrictEqual(parsed, reparsed);
 };
 
-test("parseSKI", async (t) => {
+describe("parseSKI", () => {
   const firstLiteral = "(I(SK))";
   const secondLiteral = "(((((SK)I)S)K)I)";
 
@@ -44,48 +44,50 @@ test("parseSKI", async (t) => {
     assert.deepStrictEqual(a, b);
   };
 
-  await t.test(`should parse ${firstLiteral} and variations`, () => {
+  it(`should parse ${firstLiteral} and variations`, () => {
     const expectedISK = apply(I, apply(S, K));
     const parsedISK = parseSKI(firstLiteral);
 
     assertPrintedParsedPair(parsedISK, expectedISK);
   });
 
-  await t.test("should fail to parse an unrecognized literal", () => {
-    expect(() => parseSKI("(Z")).to.throw(ParseError, /unexpected token/);
+  it("should fail to parse an unrecognized literal", () => {
+    assert.throws(() => parseSKI("(Z"), {
+      message: /unexpected token/,
+    });
   });
 
-  await t.test(`should parse ${secondLiteral} and variations`, () => {
+  it(`should parse ${secondLiteral} and variations`, () => {
     const expected = apply(apply(apply(apply(apply(S, K), I), S), K), I);
 
     assertPrintedParsedPair(parseSKI(secondLiteral), expected);
   });
 
-  await t.test("should parse adjacent chars associating to the left", () => {
+  it("should parse adjacent chars associating to the left", () => {
     assert.deepStrictEqual(parseSKI("SKI"), parseSKI("(SK)I"));
     assert.deepStrictEqual(parseSKI("(SK)I"), parseSKI("((SK)I)"));
 
-    assert.notDeepEqual(parseSKI("SKI"), parseSKI("S(KI)"));
+    assert.notDeepStrictEqual(parseSKI("SKI"), parseSKI("S(KI)"));
   });
 
-  await t.test("should fail to parse mismatched parens", () => {
-    expect(() => parseSKI("(())(")).to.throw(ParseError, /unexpected token/);
-    expect(() => parseSKI("(")).to.throw(ParseError, /unexpected token/);
-    expect(() => parseSKI("()())")).to.throw(ParseError, /unexpected token/);
+  it("should fail to parse mismatched parens", () => {
+    assert.throws(() => parseSKI("(())("), { message: /unexpected token/ });
+    assert.throws(() => parseSKI("("), { message: /unexpected token/ });
+    assert.throws(() => parseSKI("()())"), { message: /unexpected token/ });
   });
 
-  await t.test("should parse the Y combinator", () => {
+  it("should parse the Y combinator", () => {
     assertReparse(unparseSKI(Y));
   });
 
-  await t.test("should reparse complicated expressions", () => {
+  it("should reparse complicated expressions", () => {
     assertReparse("S(K(SKK))SI");
     assertReparse("SK(SKK)SI");
     assertReparse("SKI");
     assertReparse("(IIII)");
   });
 
-  await t.test("should parse mixed-case input correctly", () => {
+  it("should parse mixed-case input correctly", () => {
     // Lowercase letters should be accepted, and converted to uppercase.
     const upper = parseSKI("SKI");
     const lower = parseSKI("ski");
@@ -94,14 +96,14 @@ test("parseSKI", async (t) => {
     assert.deepStrictEqual(upper, mixed);
   });
 
-  await t.test("should parse IO terminals", () => {
+  it("should parse IO terminals", () => {
     const parsed = parseSKI(",.");
     const expected = apply(ReadOne, WriteOne);
     assert.deepStrictEqual(parsed, expected);
     assertReparse(",.");
   });
 
-  await t.test("should parse B and C terminals", () => {
+  it("should parse B and C terminals", () => {
     assert.deepStrictEqual(parseSKI("B"), B);
     assert.deepStrictEqual(parseSKI("C"), C);
 
@@ -111,7 +113,7 @@ test("parseSKI", async (t) => {
     assertReparse("BCI");
   });
 
-  await t.test("should parse Turner prime terminals", () => {
+  it("should parse Turner prime terminals", () => {
     assert.deepStrictEqual(parseSKI("P"), SPrime);
     assert.deepStrictEqual(parseSKI("Q"), BPrime);
     assert.deepStrictEqual(parseSKI("R"), CPrime);
@@ -122,7 +124,7 @@ test("parseSKI", async (t) => {
     assertReparse("PQR");
   });
 
-  await t.test("should parse mixed-case B and C terminals", () => {
+  it("should parse mixed-case B and C terminals", () => {
     const upper = parseSKI("BCI");
     const lower = parseSKI("bci");
     const mixed = parseSKI("bCi");
@@ -130,7 +132,7 @@ test("parseSKI", async (t) => {
     assert.deepStrictEqual(upper, mixed);
   });
 
-  await t.test("should place IO terminals in correct tree locations", () => {
+  it("should place IO terminals in correct tree locations", () => {
     const parsed = parseSKI(".,I");
     const expected = apply(apply(WriteOne, ReadOne), I);
     assert.deepStrictEqual(parsed, expected);
@@ -140,30 +142,26 @@ test("parseSKI", async (t) => {
     assert.deepStrictEqual(nested, nestedExpected);
   });
 
-  await t.test("should parse input with extra whitespace", () => {
+  it("should parse input with extra whitespace", () => {
     const noSpaces = parseSKI("SKI");
     const withSpaces = parseSKI("S k I");
     assert.deepStrictEqual(withSpaces, noSpaces);
   });
 
-  await t.test(
-    "should parse a complex expression with mixed-case and spaces",
-    () => {
-      const expr1 = parseSKI(" s ( K ( s I i ) ) ");
-      const expr2 = parseSKI("S(K(SII))");
-      assert.deepStrictEqual(expr1, expr2);
-    },
-  );
-
-  await t.test("should fail on invalid mixed-case literal", () => {
-    expect(() => parseSKI("sX")).to.throw(ParseError, /unexpected extra/);
-    expect(() => parseSKI("Xsi")).to.throw(ParseError, /unexpected token/);
+  it("should parse a complex expression with mixed-case and spaces", () => {
+    const expr1 = parseSKI(" s ( K ( s I i ) ) ");
+    const expr2 = parseSKI("S(K(SII))");
+    assert.deepStrictEqual(expr1, expr2);
   });
 
-  await t.test("should fail on #u8 literals out of range", () => {
-    expect(() => parseSKI("#u8(256)")).to.throw(
-      ParseError,
-      /#u8 value must be 0..255/,
-    );
+  it("should fail on invalid mixed-case literal", () => {
+    assert.throws(() => parseSKI("sX"), { message: /unexpected extra/ });
+    assert.throws(() => parseSKI("Xsi"), { message: /unexpected token/ });
+  });
+
+  it("should fail on #u8 literals out of range", () => {
+    assert.throws(() => parseSKI("#u8(256)"), {
+      message: /#u8 value must be 0..255/,
+    });
   });
 });

@@ -2,7 +2,7 @@ import {
   strictEqual as assertEquals,
   deepStrictEqual,
 } from "node:assert/strict";
-import { test } from "node:test";
+import { describe, it } from "./util/test_shim.ts";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -222,21 +222,23 @@ async function evaluateTestModuleThanatos(testCase: AvlCase): Promise<bigint> {
   });
 }
 
-test("thanatosHarness runThanatosBatch empty input", async () => {
-  deepStrictEqual(await runThanatosBatch([]), []);
-});
+describe("AVL module tests", () => {
+  it("thanatosHarness runThanatosBatch empty input", async () => {
+    deepStrictEqual(await runThanatosBatch([]), []);
+  });
 
-for (const testCase of AVL_CASES) {
-  test(
-    `AVL module ${testCase.name} (thanatos)`,
-    { skip: !thanatosAvailable() },
-    async () => {
-      try {
-        const actual = await evaluateTestModuleThanatos(testCase);
-        assertEquals(actual, testCase.expected);
-      } finally {
-        await closeBatchThanatosSessions();
-      }
-    },
-  );
-}
+  for (const testCase of AVL_CASES) {
+    it(
+      `AVL module ${testCase.name} (thanatos)`,
+      { skip: !thanatosAvailable() },
+      async () => {
+        try {
+          const actual = await evaluateTestModuleThanatos(testCase);
+          assertEquals(actual, testCase.expected);
+        } finally {
+          await closeBatchThanatosSessions();
+        }
+      },
+    );
+  }
+});

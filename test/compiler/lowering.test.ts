@@ -2,13 +2,13 @@
  * Compiler tests that validate lowering (TripLang → SKI) behavior.
  */
 
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 
-test("naked character literal 'x' compiles to U8 after lower", async () => {
+it("naked character literal 'x' compiles to U8 after lower", async () => {
   const source = `module Test
 export main
 poly main = 'x'
@@ -22,7 +22,7 @@ poly main = 'x'
   assert.strictEqual(skiStr.trim(), "#u8(120)");
 });
 
-test("numeric literal 255 vs 256: 255 uses U8, 256 uses number pipeline", async () => {
+it("numeric literal 255 vs 256: 255 uses U8, 256 uses number pipeline", async () => {
   const prelude = await getPreludeObject();
 
   const source255 = `module Test

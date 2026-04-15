@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import {
   TOPO_DAG_WIRE_NULL_POINTER,
@@ -33,7 +33,7 @@ function appRecord(left: number, right: number): string {
   return `@00${encodePointer(left)}${encodePointer(right)}`;
 }
 
-test("topoDagWire round-trips shared application graphs", () => {
+it("topoDagWire round-trips shared application graphs", () => {
   const shared = apply(S, K);
   const expr = apply(shared, shared);
 
@@ -49,7 +49,7 @@ test("topoDagWire round-trips shared application graphs", () => {
   assert.ok(equivalent(fromTopoDagWire(toTopoDagWire(expr)), expr));
 });
 
-test("topoDagWire encodes terminals and U8 literals", () => {
+it("topoDagWire encodes terminals and U8 literals", () => {
   for (const symbol of Object.values(SKITerminalSymbol)) {
     assert.ok(TOPO_DAG_WIRE_TERMINAL_CHARS.has(symbol));
     assert.deepStrictEqual(topoDagWireCharToSym(symbol), symbol);
@@ -72,7 +72,7 @@ test("topoDagWire encodes terminals and U8 literals", () => {
   assert.deepStrictEqual(toTopoDagWire(sourceByte), u8Record(0x41));
 });
 
-test("topoDagWire streams fixed-width chunks and decodes incrementally", () => {
+it("topoDagWire streams fixed-width chunks and decodes incrementally", () => {
   const shared = apply(S, K);
   const expr = apply(shared, shared);
   const expected = [
@@ -115,7 +115,7 @@ test("topoDagWire streams fixed-width chunks and decodes incrementally", () => {
   assert.ok(equivalent(decoder.finish(), expr));
 });
 
-test("topoDagWire async writer and DAG combiner preserve sharing layout", async () => {
+it("topoDagWire async writer and DAG combiner preserve sharing layout", async () => {
   const shared = apply(S, K);
   const left = apply(shared, shared);
   const right = apply(K, S);
@@ -142,7 +142,7 @@ test("topoDagWire async writer and DAG combiner preserve sharing layout", async 
   );
 });
 
-test("topoDagWire rejects malformed records", () => {
+it("topoDagWire rejects malformed records", () => {
   assert.throws(() => fromTopoDagWire(""), Error, "empty topoDagWire");
   assert.throws(() => fromTopoDagWire("U41"), Error, "invalid record width");
   assert.throws(

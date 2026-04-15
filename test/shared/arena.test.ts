@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 
 import {
@@ -9,7 +9,7 @@ import {
   makeControlPtr,
 } from "../../lib/shared/arena.ts";
 
-test("control pointer helpers classify and decode pointers", () => {
+it("control pointer helpers classify and decode pointers", () => {
   const valuePtr = 0x12345678;
   const controlPtr = makeControlPtr(valuePtr);
 

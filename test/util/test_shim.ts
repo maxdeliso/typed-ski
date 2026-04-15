@@ -23,7 +23,7 @@ const universalWaitFor = async (
 
 const parseArgs = (arg2: any, arg3?: any) => {
   let fn: any;
-  let options: any = { timeout: 30000 };
+  let options: any = { timeout: 60000 };
 
   if (typeof arg2 === "function") {
     fn = arg2;

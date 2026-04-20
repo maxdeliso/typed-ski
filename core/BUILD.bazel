@@ -48,6 +48,7 @@ cc_library(
     ] + HOST_PLATFORM_SRCS,
     hdrs = [
         "arena.h",
+        "arena_layout.generated.h",
         "host_platform.h",
     ],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,

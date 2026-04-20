@@ -29,10 +29,7 @@ after(async () => {
 
 describe("Thanatos regression coverage", { skip: !thanatosAvailable() }, () => {
   it("reduces a basic expression", async () => {
-    assert.strictEqual(
-      await reduceWithThanatos("I K", "thanatos-basic"),
-      "K",
-    );
+    assert.strictEqual(await reduceWithThanatos("I K", "thanatos-basic"), "K");
   });
 
   it("reduces many expressions correctly with a multi-worker runtime", async () => {

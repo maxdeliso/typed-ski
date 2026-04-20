@@ -17,6 +17,8 @@ typedef _Bool bool;
 #include <stdatomic.h>
 #include <stddef.h>
 
+#include "arena_layout.generated.h"
+
 typedef enum {
   ARENA_KIND_TERMINAL = 1,
   ARENA_KIND_NON_TERM = 2,
@@ -127,43 +129,6 @@ typedef struct {
   uint32_t a;
   uint32_t b;
 } Frame;
-
-typedef struct {
-  uint32_t magic;
-  uint32_t ring_entries;
-  uint32_t ring_mask;
-  uint32_t offset_sq;
-  uint32_t offset_cq;
-  uint32_t offset_stdin;
-  uint32_t offset_stdout;
-  uint32_t offset_stdin_wait;
-  uint32_t offset_stdout_wait;
-  uint32_t offset_control;
-  uint32_t control_bytes;
-  uint32_t offset_term_cache;
-  uint64_t offset_node_left;
-  uint64_t offset_node_right;
-  uint64_t offset_node_hash32;
-  uint64_t offset_node_next_idx;
-  uint64_t offset_node_link;
-  uint64_t offset_node_kind;
-  uint64_t offset_node_sym;
-  uint64_t offset_buckets;
-  uint32_t max_capacity;
-  atomic_uint capacity;
-  uint32_t bucket_mask;
-  atomic_uint resize_seq;
-  atomic_uint top;
-  _Atomic uint64_t total_nodes;
-  _Atomic uint64_t total_steps;
-  _Atomic uint64_t total_link_chase_hops;
-  _Atomic uint64_t total_cons_allocs;
-  _Atomic uint64_t total_cont_allocs;
-  _Atomic uint64_t total_susp_allocs;
-  _Atomic uint64_t duplicate_lost_allocs;
-  _Atomic uint64_t hashcons_hits;
-  _Atomic uint64_t hashcons_misses;
-} SabHeader;
 
 #define RESULT_DONE 0
 #define RESULT_YIELD 1

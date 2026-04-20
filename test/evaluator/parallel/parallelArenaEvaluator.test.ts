@@ -97,14 +97,15 @@ it("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
 it("ParallelArenaEvaluatorWasm - refuses to reuse the same WebAssembly.Memory", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
   try {
-    const ParallelArenaEvaluatorCtor = ParallelArenaEvaluatorWasm as unknown as {
-      new (
-        exports: unknown,
-        memory: WebAssembly.Memory,
-        workers: Worker[],
-        options?: object,
-      ): ParallelArenaEvaluatorWasm;
-    };
+    const ParallelArenaEvaluatorCtor =
+      ParallelArenaEvaluatorWasm as unknown as {
+        new (
+          exports: unknown,
+          memory: WebAssembly.Memory,
+          workers: Worker[],
+          options?: object,
+        ): ParallelArenaEvaluatorWasm;
+      };
 
     assert.throws(
       () =>

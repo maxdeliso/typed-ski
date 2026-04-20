@@ -41,7 +41,10 @@ import { pathToFileURL } from "node:url";
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
 /** @internal */
 
-const activeParallelArenaMemoryLeases = new WeakMap<WebAssembly.Memory, symbol>();
+const activeParallelArenaMemoryLeases = new WeakMap<
+  WebAssembly.Memory,
+  symbol
+>();
 
 function claimParallelArenaMemoryLease(memory: WebAssembly.Memory): symbol {
   if (activeParallelArenaMemoryLeases.has(memory)) {

@@ -18,6 +18,7 @@ import {
 type CommandName =
   | "verify-version"
   | "sync-generated"
+  | "verify-generated"
   | "dist"
   | "build"
   | "hephaestus-assets"
@@ -95,6 +96,8 @@ async function ensureNpmCache(): Promise<string> {
 const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
 const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
 
+const repo = (...parts: string[]) => join(PROJECT_ROOT, ...parts);
+
 type ShardConfig = {
   totalShards: number;
   shardIndex: number;
@@ -125,9 +128,6 @@ function nodeTestArgs(
     args.push("--test-coverage-include=bin/**");
 
     if (options.coverageReporterDestination) {
-      // When specifying a coverage reporter destination, Node.js disables the default
-      // reporter. We must explicitly add a reporter to stdout to ensure test output
-      // remains visible in CI logs.
       const stdoutReporter = process.stdout.isTTY ? "spec" : "tap";
       args.push(`--test-reporter=${stdoutReporter}`);
       args.push("--test-reporter-destination=stdout");
@@ -161,6 +161,7 @@ function usage(): never {
 Commands:
   verify-version
   sync-generated
+  verify-generated
   dist
   build
   hephaestus-assets
@@ -199,9 +200,7 @@ function getBazelWasmArtifactCandidates(): string[] {
         }
       }
     }
-  } catch {
-    // Ignore missing Bazel output roots and fall back to the default candidates.
-  }
+  } catch {}
 
   return [...new Set(candidates)];
 }
@@ -264,9 +263,7 @@ async function getNewestBazelWasmArtifactModifiedTimeMs(): Promise<number> {
       if (stat.isFile()) {
         newest = Math.max(newest, stat.mtimeMs);
       }
-    } catch {
-      // Ignore missing Bazel outputs.
-    }
+    } catch {}
   }
   return newest;
 }
@@ -278,6 +275,7 @@ async function ensureFreshBazelWasmArtifact(): Promise<void> {
   }
 
   ensuredFreshBazelWasmArtifactPromise = (async () => {
+    await syncGenerated();
     const [latestInputMtimeMs, newestArtifactMtimeMs] = await Promise.all([
       getLatestWasmInputModifiedTimeMs(),
       getNewestBazelWasmArtifactModifiedTimeMs(),
@@ -425,17 +423,55 @@ async function syncGenerated(): Promise<void> {
   await run([
     NODE,
     NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
-    NODE_TRANSFORM_TYPES_ARG,
-    "scripts/generateVersion.ts",
+    repo("scripts", "generate_version.mjs"),
+    "--package-json",
+    repo("package.json"),
+    "--ts-out",
+    repo("lib", "shared", "version.generated.ts"),
+    "--jsr-json",
+    repo("jsr.json"),
   ]);
   await run([
     NODE,
     NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
-    NODE_TRANSFORM_TYPES_ARG,
-    "scripts/generateArenaHeaderC.ts",
+    repo("scripts", "generate_layouts.mjs"),
+    "--input",
+    repo("core", "arena_layout.def"),
+    "--c-out",
+    repo("core", "arena_layout.generated.h"),
+    "--ts-out",
+    repo("lib", "evaluator", "arenaHeader.generated.ts"),
   ]);
   await run([NPX, "--yes", "pnpm", "install", "--lockfile-only"]);
   await run([NPM, "install", "--package-lock-only"]);
+}
+
+async function verifyGenerated(): Promise<void> {
+  await run([
+    NODE,
+    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
+    repo("scripts", "generate_version.mjs"),
+    "--package-json",
+    repo("package.json"),
+    "--ts-out",
+    repo("lib", "shared", "version.generated.ts"),
+    "--jsr-json",
+    repo("jsr.json"),
+    "--verify",
+  ]);
+  await run([
+    NODE,
+    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
+    repo("scripts", "generate_layouts.mjs"),
+    "--input",
+    repo("core", "arena_layout.def"),
+    "--c-out",
+    repo("core", "arena_layout.generated.h"),
+    "--ts-out",
+    repo("lib", "evaluator", "arenaHeader.generated.ts"),
+    "--verify",
+  ]);
+  console.log("Generated files are up to date.");
 }
 
 export async function buildDist(): Promise<void> {
@@ -548,9 +584,7 @@ function getBazelWasmArtifactUrl(): string | undefined {
     try {
       const stat = fs.statSync(candidate);
       if (stat.isFile()) return pathToFileURL(candidate).href;
-    } catch {
-      // Ignore missing Bazel outputs.
-    }
+    } catch {}
   }
   return undefined;
 }
@@ -566,9 +600,7 @@ async function stageBazelWasmArtifactIfPresent(): Promise<void> {
       await fsp.rm(stagedPath, { force: true }).catch(() => {});
       await fsp.writeFile(stagedPath, bytes);
       return;
-    } catch {
-      // Ignore missing Bazel outputs.
-    }
+    } catch {}
   }
 }
 
@@ -1385,6 +1417,9 @@ export async function main(
       break;
     case "sync-generated":
       await syncGenerated();
+      break;
+    case "verify-generated":
+      await verifyGenerated();
       break;
     case "dist":
       await buildDist();

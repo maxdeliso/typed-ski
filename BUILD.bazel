@@ -3,7 +3,16 @@ load("//bazel:node_sharded_test.bzl", "node_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+
 package(default_visibility = ["//visibility:public"])
+
+exports_files(["package.json"])
+
+js_library(
+    name = "package_json",
+    srcs = ["package.json"],
+)
 
 npm_link_all_packages(name = "node_modules")
 
@@ -17,7 +26,6 @@ NODE_TEST_DATA = glob(
         "bin/**",
         "compiler/**",
         "lib/**",
-        "scripts/**",
         "server/**",
         "test/**",
     ],
@@ -26,7 +34,14 @@ NODE_TEST_DATA = glob(
         "dist/**",
     ],
     allow_empty = True,
-)
+) + [
+    "//scripts",
+    "//lib/shared",
+    "//lib/evaluator",
+    "//core",
+    "//lib/evaluator:arena_header_generated",
+    "//lib/shared:version_generated",
+]
 
 NODE_DIST_DATA = glob(
     [
@@ -37,14 +52,20 @@ NODE_DIST_DATA = glob(
         "bin/**",
         "compiler/**",
         "lib/**",
-        "scripts/**",
     ],
     exclude = [
         "coverage/**",
         "dist/**",
     ],
     allow_empty = True,
-)
+) + [
+    "//scripts",
+    "//lib/shared",
+    "//lib/evaluator",
+    "//core",
+    "//lib/evaluator:arena_header_generated",
+    "//lib/shared:version_generated",
+]
 
 alias(
     name = "thanatos",

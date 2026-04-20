@@ -1,0 +1,29 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("//bazel:codegen.bzl", "codegen_rule")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["**"], exclude = ["*.generated.*"]))
+
+filegroup(
+    name = "shared",
+    srcs = glob(["**"], exclude = ["*.generated.*"]),
+)
+
+codegen_rule(
+    name = "version_generated_src",
+    args = [
+        "--package-json",
+        "$(location //:package.json)",
+        "--ts-out",
+        "$(location version.generated.ts)",
+    ],
+    data = ["//:package.json"],
+    outs = ["version.generated.ts"],
+    script = "//scripts:generate_version.mjs",
+)
+
+js_library(
+    name = "version_generated",
+    srcs = [":version.generated.ts"],
+)

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-transform-types
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
 
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -49,6 +49,15 @@ const NODE = process.execPath;
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
 const BAZELISK = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
+const NODE_DISABLE_EXPERIMENTAL_WARNING_ARG =
+  "--disable-warning=ExperimentalWarning";
+const LOCAL_TSC_ENTRY = join(
+  PROJECT_ROOT,
+  "node_modules",
+  "typescript",
+  "lib",
+  "tsc.js",
+);
 const NODE_TRANSFORM_TYPES_ARG = "--experimental-transform-types";
 const NODE_TEST_GLOBAL_SETUP_PATH = join(
   PROJECT_ROOT,
@@ -147,7 +156,7 @@ function nodeTestArgs(
 }
 
 function usage(): never {
-  console.error(`Usage: node --experimental-transform-types scripts/bazel.ts <command>
+  console.error(`Usage: node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts <command>
 
 Commands:
   verify-version
@@ -413,9 +422,15 @@ function verifyVersion(): void {
 }
 
 async function syncGenerated(): Promise<void> {
-  await run([NODE, NODE_TRANSFORM_TYPES_ARG, "scripts/generateVersion.ts"]);
   await run([
     NODE,
+    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
+    NODE_TRANSFORM_TYPES_ARG,
+    "scripts/generateVersion.ts",
+  ]);
+  await run([
+    NODE,
+    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
     NODE_TRANSFORM_TYPES_ARG,
     "scripts/generateArenaHeaderC.ts",
   ]);
@@ -560,7 +575,13 @@ async function stageBazelWasmArtifactIfPresent(): Promise<void> {
 async function serveHephaestus(): Promise<void> {
   await buildHephaestusAssets();
   const port = process.env["PORT"] ?? "8080";
-  await run([NODE, NODE_TRANSFORM_TYPES_ARG, "server/serveWorkbench.ts", port]);
+  await run([
+    NODE,
+    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
+    NODE_TRANSFORM_TYPES_ARG,
+    "server/serveWorkbench.ts",
+    port,
+  ]);
 }
 
 async function formatCheck(): Promise<void> {
@@ -628,7 +649,12 @@ function readNodeTestArgs(args: string[]): string[] {
 
 async function typecheckTests(files: string[]): Promise<void> {
   console.log(`Type checking project...`);
-  await run(["npx", "tsc", "--noEmit"]);
+  if (!fs.existsSync(LOCAL_TSC_ENTRY)) {
+    throw new Error(
+      `Local TypeScript compiler not found at ${LOCAL_TSC_ENTRY}. Run ${NPM} install first.`,
+    );
+  }
+  await run([NODE, LOCAL_TSC_ENTRY, "--noEmit"]);
 }
 
 function readShardConfig(): ShardConfig {
@@ -700,6 +726,7 @@ async function runSelectedTests(
   await run(
     [
       NODE,
+      NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
       NODE_TRANSFORM_TYPES_ARG,
       ...nodeTestArgs(files, {
         coverage: options.coverage,

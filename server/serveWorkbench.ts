@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-transform-types
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { readFile, realpath, stat } from "node:fs/promises";

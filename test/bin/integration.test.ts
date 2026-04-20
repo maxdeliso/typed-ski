@@ -42,7 +42,13 @@ poly id = #a => \\x:a => x`;
         const tripcPath = join(projectRoot, "bin/tripc.ts");
         const cliResult = spawnSync(
           "node",
-          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            tripcPath,
+            tripFile,
+            tripcFile,
+          ],
           { encoding: "utf-8" },
         );
         equal(cliResult.status, 0, cliResult.stderr);
@@ -83,7 +89,13 @@ poly double = \\x:Int => add x x`;
         const tripcPath = join(projectRoot, "bin/tripc.ts");
         const cliResult = spawnSync(
           "node",
-          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            tripcPath,
+            tripFile,
+            tripcFile,
+          ],
           { encoding: "utf-8" },
         );
         equal(cliResult.status, 0, cliResult.stderr);
@@ -130,7 +142,13 @@ poly id : MyType = \\x:Int => x`;
         const tripcPath = join(projectRoot, "bin/tripc.ts");
         const cliResult = spawnSync(
           "node",
-          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            tripcPath,
+            tripFile,
+            tripcFile,
+          ],
           { encoding: "utf-8" },
         );
         equal(cliResult.status, 0, cliResult.stderr);
@@ -167,7 +185,13 @@ export myI`;
         const tripcPath = join(projectRoot, "bin/tripc.ts");
         const cliResult = spawnSync(
           "node",
-          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            tripcPath,
+            tripFile,
+            tripcFile,
+          ],
           { encoding: "utf-8" },
         );
         equal(cliResult.status, 0, cliResult.stderr);
@@ -207,7 +231,13 @@ export myI`;
         const tripcPath = join(projectRoot, "bin/tripc.ts");
         const result = spawnSync(
           "node",
-          ["--experimental-transform-types", tripcPath, tripFile, tripcFile],
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            tripcPath,
+            tripFile,
+            tripcFile,
+          ],
           { encoding: "utf-8" },
         );
 

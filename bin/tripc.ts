@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-transform-types
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
 
 /**
  * TripLang Compiler & Linker CLI (tripc)

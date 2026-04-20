@@ -1,69 +1,66 @@
-import { describe, it } from "../util/test_shim.ts";
+import { after, describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import randomSeed from "random-seed";
-import type { ArenaWasmExports } from "../../lib/evaluator/arenaEvaluator.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/evaluator/parallelArenaEvaluator.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
+import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
+import {
+  closeBatchThanatosSessions,
+  withBatchThanatosSession,
+} from "../thanatosHarness.ts";
+import { thanatosAvailable } from "../thanatosHarness/config.ts";
 
-function bytes(values: number[]): ArrayBuffer {
-  return new Uint8Array(values).buffer;
+async function reduceWithThanatos(
+  expr: string,
+  key: string,
+  workers = 4,
+): Promise<string> {
+  return await withBatchThanatosSession(
+    async (session) => {
+      const resultDag = await session.reduceExpr(parseSKI(expr));
+      return unparseSKI(fromTopoDagWire(resultDag));
+    },
+    { key, workers },
+  );
 }
 
-const mockWasm = {
-  allocCons: () => 1,
-  allocTerminal: () => 1,
-  allocU8: () => 1,
-  arenaKernelStep: () => 1,
-  connectArena: () => 1,
-  debugCalculateArenaSize: () => 1,
-  debugGetArenaBaseAddr: () => 1,
-  debugGetRingEntries: () => 1,
-  debugLockState: () => 0,
-  getArenaMode: () => 1,
-} as unknown as ArenaWasmExports;
-
-it("ParallelArenaEvaluator - basic reduction", async () => {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-  try {
-    const expr = parseSKI("I K");
-    const result = await evaluator.reduceAsync(expr);
-    assert.strictEqual(unparseSKI(result), "K");
-  } finally {
-    evaluator.terminate();
-  }
+after(async () => {
+  await closeBatchThanatosSessions();
 });
 
-it("ParallelArenaEvaluator - many concurrent reductions", async () => {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-  try {
-    const results = await Promise.all(
-      Array.from({ length: 8 }, (_, i) => {
-        const expr = parseSKI(i % 2 === 0 ? "I K" : "I S");
-        return evaluator.reduceAsync(expr);
-      }),
+describe("Thanatos regression coverage", { skip: !thanatosAvailable() }, () => {
+  it("reduces a basic expression", async () => {
+    assert.strictEqual(
+      await reduceWithThanatos("I K", "thanatos-basic"),
+      "K",
     );
-    results.forEach((res, i) => {
-      assert.strictEqual(unparseSKI(res), i % 2 === 0 ? "K" : "S");
-    });
-  } finally {
-    evaluator.terminate();
-  }
-});
+  });
 
-it("ParallelArenaEvaluator - concurrent mixed work", async () => {
-  const evaluator = await ParallelArenaEvaluatorWasm.create(2);
-  try {
-    const promises = [
-      evaluator.reduceAsync(parseSKI("I K")),
-      evaluator.reduceAsync(parseSKI("I S")),
-      evaluator.reduceAsync(parseSKI("K S I")),
-    ];
-    const results = await Promise.all(promises);
-    assert.strictEqual(unparseSKI(results[0]!), "K");
-    assert.strictEqual(unparseSKI(results[1]!), "S");
-    assert.strictEqual(unparseSKI(results[2]!), "S");
-  } finally {
-    evaluator.terminate();
-  }
+  it("reduces many expressions correctly with a multi-worker runtime", async () => {
+    const results = await withBatchThanatosSession(
+      async (session) => {
+        const out: string[] = [];
+        for (let i = 0; i < 32; i++) {
+          const expr = parseSKI(i % 2 === 0 ? "I K" : "I S");
+          const resultDag = await session.reduceExpr(expr);
+          out.push(unparseSKI(fromTopoDagWire(resultDag)));
+        }
+        return out;
+      },
+      { key: "thanatos-many", workers: 4 },
+    );
+
+    results.forEach((result, i) => {
+      assert.strictEqual(result, i % 2 === 0 ? "K" : "S");
+    });
+  });
+
+  it("preserves results across concurrent independent sessions", async () => {
+    const results = await Promise.all([
+      reduceWithThanatos("I K", "thanatos-concurrent-1"),
+      reduceWithThanatos("I S", "thanatos-concurrent-2"),
+      reduceWithThanatos("K S I", "thanatos-concurrent-3"),
+    ]);
+
+    assert.deepStrictEqual(results, ["K", "S", "S"]);
+  });
 });

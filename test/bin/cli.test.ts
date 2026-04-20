@@ -60,12 +60,13 @@ async function runCommand(
   let executable = command0;
   let args = command.slice(1);
 
-  // For running 'bin/tripc.ts', use 'process.execPath' with '--experimental-transform-types'.
+  // For running 'bin/tripc.ts', use process.execPath with the repo's transform-types flags.
   if (command0 === "node" || command0 === process.execPath) {
     if (args.includes("bin/tripc.ts")) {
       executable = process.execPath;
       const tripcIndex = args.indexOf("bin/tripc.ts");
       args = [
+        "--disable-warning=ExperimentalWarning",
         "--experimental-transform-types",
         "bin/tripc.ts",
         ...args.slice(tripcIndex + 1),

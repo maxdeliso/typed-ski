@@ -35,6 +35,7 @@ describe("Bootstrapped Lowering Pipeline", () => {
       const { status: code, stderr } = spawnSync(
         process.execPath,
         [
+          "--disable-warning=ExperimentalWarning",
           "--experimental-transform-types",
           join(PROJECT_ROOT, "bin", "tripc.ts"),
           file,
@@ -58,6 +59,7 @@ describe("Bootstrapped Lowering Pipeline", () => {
     } = spawnSync(
       process.execPath,
       [
+        "--disable-warning=ExperimentalWarning",
         "--experimental-transform-types",
         join(PROJECT_ROOT, "bin", "tripc.ts"),
         "--link",

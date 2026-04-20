@@ -233,12 +233,14 @@ function getWasmUrlFromModulePath(
   } else {
     candidates.push({
       kind: "module-path",
+      url: new URL("../../bazel-bin/wasm/release.wasm", moduleUrl),
+    });
+    candidates.push({
+      kind: "module-path",
       url: new URL("../../wasm/release.wasm", moduleUrl),
     });
   }
 
-  // Also look for the bazel-built version in the staged location if it exists
-  // but use module-path kind since it is just a file path.
   return candidates;
 }
 

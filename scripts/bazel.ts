@@ -48,6 +48,7 @@ type AqueryResponse = {
 const NODE = process.execPath;
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
+const BAZELISK = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
 const NODE_TRANSFORM_TYPES_ARG = "--experimental-transform-types";
 const NODE_TEST_GLOBAL_SETUP_PATH = join(
   PROJECT_ROOT,
@@ -64,6 +65,18 @@ const TEMP_ROOT =
 
 const COMPILED_TRIPC_NAME =
   process.platform === "win32" ? "tripc.cmd" : "tripc";
+const WASM_BUILD_INPUT_PATHS = [
+  join(PROJECT_ROOT, "core"),
+  join(PROJECT_ROOT, "wasm"),
+  join(PROJECT_ROOT, "bazel"),
+  join(PROJECT_ROOT, "BUILD.bazel"),
+  join(PROJECT_ROOT, "MODULE.bazel"),
+  join(PROJECT_ROOT, ".bazelrc"),
+];
+const WASM_BUILD_INPUT_EXCLUDES = new Set([
+  join(PROJECT_ROOT, "wasm", "release.wasm"),
+]);
+let ensuredFreshBazelWasmArtifactPromise: Promise<void> | null = null;
 
 async function ensureNpmCache(): Promise<string> {
   const cacheDir = join(PROJECT_ROOT, ".tmp", "npm-cache");
@@ -182,6 +195,106 @@ function getBazelWasmArtifactCandidates(): string[] {
   }
 
   return [...new Set(candidates)];
+}
+
+async function getLatestModifiedTimeMs(path: string): Promise<number> {
+  if (WASM_BUILD_INPUT_EXCLUDES.has(path)) {
+    return 0;
+  }
+
+  let stat: fs.Stats;
+  try {
+    stat = await fsp.stat(path);
+  } catch {
+    return 0;
+  }
+
+  if (!stat.isDirectory()) {
+    return stat.mtimeMs;
+  }
+
+  let latest = stat.mtimeMs;
+  let entries: fs.Dirent[];
+  try {
+    entries = await fsp.readdir(path, { withFileTypes: true });
+  } catch {
+    return latest;
+  }
+
+  for (const entry of entries) {
+    const childPath = join(path, entry.name);
+    if (entry.isDirectory()) {
+      latest = Math.max(latest, await getLatestModifiedTimeMs(childPath));
+      continue;
+    }
+    if (entry.isFile()) {
+      latest = Math.max(latest, (await fsp.stat(childPath)).mtimeMs);
+      continue;
+    }
+    if (entry.isSymbolicLink()) {
+      latest = Math.max(latest, await getLatestModifiedTimeMs(childPath));
+    }
+  }
+
+  return latest;
+}
+
+async function getLatestWasmInputModifiedTimeMs(): Promise<number> {
+  let latest = 0;
+  for (const path of WASM_BUILD_INPUT_PATHS) {
+    latest = Math.max(latest, await getLatestModifiedTimeMs(path));
+  }
+  return latest;
+}
+
+async function getNewestBazelWasmArtifactModifiedTimeMs(): Promise<number> {
+  let newest = 0;
+  for (const candidate of getBazelWasmArtifactCandidates()) {
+    try {
+      const stat = await fsp.stat(candidate);
+      if (stat.isFile()) {
+        newest = Math.max(newest, stat.mtimeMs);
+      }
+    } catch {
+      // Ignore missing Bazel outputs.
+    }
+  }
+  return newest;
+}
+
+async function ensureFreshBazelWasmArtifact(): Promise<void> {
+  if (ensuredFreshBazelWasmArtifactPromise) {
+    await ensuredFreshBazelWasmArtifactPromise;
+    return;
+  }
+
+  ensuredFreshBazelWasmArtifactPromise = (async () => {
+    const [latestInputMtimeMs, newestArtifactMtimeMs] = await Promise.all([
+      getLatestWasmInputModifiedTimeMs(),
+      getNewestBazelWasmArtifactModifiedTimeMs(),
+    ]);
+
+    if (
+      newestArtifactMtimeMs !== 0 &&
+      newestArtifactMtimeMs >= latestInputMtimeMs
+    ) {
+      return;
+    }
+
+    console.log(
+      newestArtifactMtimeMs === 0
+        ? "Building Bazel release_wasm artifact..."
+        : "Refreshing stale Bazel release_wasm artifact...",
+    );
+    await run([BAZELISK, "build", "//:release_wasm"]);
+  })();
+
+  try {
+    await ensuredFreshBazelWasmArtifactPromise;
+  } catch (error) {
+    ensuredFreshBazelWasmArtifactPromise = null;
+    throw error;
+  }
 }
 
 async function run(args: string[], options: any = {}): Promise<void> {
@@ -380,6 +493,7 @@ export async function buildDist(): Promise<void> {
 
 async function buildHephaestusAssets(): Promise<void> {
   await syncGenerated();
+  await ensureFreshBazelWasmArtifact();
   await stageBazelWasmArtifactIfPresent();
   await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
   await run([
@@ -626,7 +740,10 @@ async function prepareTestExecution(
       console.log(`[env] ${key}: ${process.env[key]}`);
     }
   }
-  await stageBazelWasmArtifactIfPresent();
+  const explicitWasmPath = process.env["TYPED_SKI_WASM_PATH"];
+  if (!explicitWasmPath) {
+    await ensureFreshBazelWasmArtifact();
+  }
   if (
     needsDistArtifacts(files) &&
     process.env["TYPED_SKI_DIST_READY"] !== "1"
@@ -635,7 +752,6 @@ async function prepareTestExecution(
     await buildDist();
   }
 
-  const explicitWasmPath = process.env["TYPED_SKI_WASM_PATH"];
   if (explicitWasmPath) {
     console.log(`Using explicit WASM path: ${explicitWasmPath}`);
     return { TYPED_SKI_WASM_PATH: explicitWasmPath };
@@ -698,6 +814,7 @@ export async function runBazelShardTests(args: string[] = []): Promise<void> {
 async function build(): Promise<void> {
   verifyVersion();
   await syncGenerated();
+  await ensureFreshBazelWasmArtifact();
   await stageBazelWasmArtifactIfPresent();
   await buildDist();
 }
@@ -984,11 +1101,10 @@ EndGlobal
 }
 
 async function generateVisualStudioProject(): Promise<void> {
-  const bazel = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
-  const executionRoot = await runCapture([bazel, "info", "execution_root"]);
-  const bazelBin = await runCapture([bazel, "info", "bazel-bin"]);
+  const executionRoot = await runCapture([BAZELISK, "info", "execution_root"]);
+  const bazelBin = await runCapture([BAZELISK, "info", "bazel-bin"]);
   const aqueryOutput = await runCapture([
-    bazel,
+    BAZELISK,
     "aquery",
     "mnemonic('CppCompile', //core:all)",
     "--output=jsonproto",
@@ -1114,21 +1230,21 @@ async function generateVisualStudioProject(): Promise<void> {
         taskLabel: "bazel build thanatos",
         appliesTo: "/",
         type: "default",
-        command: bazel,
+        command: BAZELISK,
         args: ["build", "//:thanatos"],
       },
       {
         taskLabel: "bazel test native_tests",
         appliesTo: "/",
         type: "default",
-        command: bazel,
+        command: BAZELISK,
         args: ["test", "//:native_tests"],
       },
       {
         taskLabel: "bazel refresh Visual Studio metadata",
         appliesTo: "/",
         type: "default",
-        command: bazel,
+        command: BAZELISK,
         args: ["run", "//:vs_project"],
       },
     ],

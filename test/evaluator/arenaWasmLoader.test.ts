@@ -34,6 +34,10 @@ const moduleWasmUrl = new URL(
   "../../wasm/release.wasm",
   new URL("../../lib/evaluator/arenaWasmLoader.ts", import.meta.url),
 ).href;
+const bazelModuleWasmUrl = new URL(
+  "../../bazel-bin/wasm/release.wasm",
+  new URL("../../lib/evaluator/arenaWasmLoader.ts", import.meta.url),
+).href;
 
 const compiledWasmUrl = toFileUrl("/tmp/wasm/release.wasm");
 const execWasmUrl = toFileUrl("/usr/local/wasm/release.wasm");
@@ -224,6 +228,9 @@ describe("arenaWasmLoader", { concurrency: false }, () => {
         if (url === compiledWasmUrl) {
           throw new Error("missing compiled wasm");
         }
+        if (url === bazelModuleWasmUrl) {
+          throw new Error("missing bazel wasm");
+        }
         if (url === moduleWasmUrl) {
           return Buffer.from([4, 4]);
         }
@@ -239,8 +246,9 @@ describe("arenaWasmLoader", { concurrency: false }, () => {
       const loader = await importFreshLoaderModule();
       const loaded = await loader.getReleaseWasmBytes();
       assert.deepStrictEqual(Array.from(new Uint8Array(loaded)), [4, 4]);
-      assert.deepStrictEqual(localAttempts.slice(0, 2), [
+      assert.deepStrictEqual(localAttempts.slice(0, 3), [
         compiledWasmUrl,
+        bazelModuleWasmUrl,
         moduleWasmUrl,
       ]);
       assert.deepStrictEqual(loader.getLastReleaseWasmLoadInfo(), {
@@ -579,6 +587,9 @@ describe("arenaWasmLoader", { concurrency: false }, () => {
       readFile: async (path) => {
         const url =
           typeof path === "string" ? pathToFileURL(path).href : path.href;
+        if (url === bazelModuleWasmUrl) {
+          throw new Error("not found");
+        }
         if (url === moduleWasmUrl) return Buffer.from([1]);
         throw new Error("not found");
       },

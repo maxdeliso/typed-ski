@@ -50,9 +50,10 @@ def wasm_release(name, srcs, hdrs = [], visibility = None):
     src_locations = " ".join(["$(location %s)" % src for src in srcs])
     flag_string = " ".join(flags)
 
-    # We use a trick to get the directory of each header: $(location hdr)/..
-    # This is more robust than shell loops across different platforms.
-    include_flags_bash = " ".join(["-I$(location %s)/.." % hdr for hdr in hdrs])
+    # We use dirname to get the directory of each header.
+    # On Linux, path/to/file/.. is an error (ENOTDIR) because the filesystem
+    # requires the component before /.. to be a directory.
+    include_flags_bash = " ".join(["-I$$(dirname $(location %s))" % hdr for hdr in hdrs])
     include_flags_bat = " ".join(["-I$(location %s)\\..\\" % hdr for hdr in hdrs])
 
     # We explicitly set ZIG_LOCAL_CACHE_DIR and ZIG_GLOBAL_CACHE_DIR to avoid

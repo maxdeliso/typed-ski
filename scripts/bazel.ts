@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
 
 import { dirname, join, relative } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 
@@ -120,6 +120,7 @@ function nodeTestArgs(
   args.push("--experimental-test-module-mocks");
   args.push("--test-global-setup", NODE_TEST_GLOBAL_SETUP_PATH);
   args.push("--preserve-symlinks");
+  args.push("--test-timeout=60000");
 
   if (options.coverage) {
     args.push("--experimental-test-coverage");
@@ -1456,6 +1457,18 @@ export async function main(
   }
 }
 
-if (import.meta.main) {
+function isMain(importMetaUrl: string): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      fs.realpathSync(process.argv[1]) ===
+      fs.realpathSync(fileURLToPath(importMetaUrl))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMain(import.meta.url)) {
   await main();
 }

@@ -20,10 +20,14 @@
       "include": [
         "README.md",
         "SECURITY.md",
-        "lib/**/*",
-        "bin/**/*",
-        "dist/**/*",
+        "lib/**",
+        "bin/**",
+        "dist/**",
         "wasm/release.wasm"
+      ],
+      "exclude": [
+        "!lib/**/*.generated.ts",
+        "!lib/evaluator/arenaHeader.generated.ts"
       ]
     }
   },

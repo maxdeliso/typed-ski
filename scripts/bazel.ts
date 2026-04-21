@@ -429,8 +429,6 @@ async function syncGenerated(): Promise<void> {
     repo("package.json"),
     "--ts-out",
     repo("lib", "shared", "version.generated.ts"),
-    "--jsr-json",
-    repo("jsr.json"),
   ]);
   await run([
     NODE,
@@ -456,8 +454,6 @@ async function verifyGenerated(): Promise<void> {
     repo("package.json"),
     "--ts-out",
     repo("lib", "shared", "version.generated.ts"),
-    "--jsr-json",
-    repo("jsr.json"),
     "--verify",
   ]);
   await run([

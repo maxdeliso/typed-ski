@@ -60,7 +60,8 @@ export const VERSION = "${version}";
       "@types/node": `npm:@types/node@${pkg.devDependencies["@types/node"]}`,
     },
   };
-  const expectedJsrJsonContent = JSON.stringify(expectedJsrJson, null, 2) + "\n";
+  const expectedJsrJsonContent =
+    JSON.stringify(expectedJsrJson, null, 2) + "\n";
 
   const tsPath = args.tsOut
     ? resolve(args.tsOut)
@@ -77,17 +78,25 @@ export const VERSION = "${version}";
       console.error(`ERROR: ${tsPath} does not exist`);
       failed = true;
     } else if (normalize(actualTsContent) !== normalize(expectedTsContent)) {
-      console.error(`ERROR: ${tsPath} is out of sync with package.json metadata`);
+      console.error(
+        `ERROR: ${tsPath} is out of sync with package.json metadata`,
+      );
       failed = true;
     }
 
     // Verify jsr.json
-    const actualJsrContent = await readFile(jsrJsonPath, "utf8").catch(() => null);
+    const actualJsrContent = await readFile(jsrJsonPath, "utf8").catch(
+      () => null,
+    );
     if (actualJsrContent === null) {
       console.error(`ERROR: ${jsrJsonPath} does not exist`);
       failed = true;
-    } else if (normalize(actualJsrContent) !== normalize(expectedJsrJsonContent)) {
-      console.error(`ERROR: ${jsrJsonPath} is out of sync with package.json metadata`);
+    } else if (
+      normalize(actualJsrContent) !== normalize(expectedJsrJsonContent)
+    ) {
+      console.error(
+        `ERROR: ${jsrJsonPath} is out of sync with package.json metadata`,
+      );
       failed = true;
     }
 

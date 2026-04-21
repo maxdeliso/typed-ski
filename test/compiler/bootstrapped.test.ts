@@ -35,7 +35,10 @@ describe("Bootstrapped Lowering Pipeline", () => {
       // 1. Compile each module to .tripc in the temp directory
       const tripcFiles: string[] = [];
       for (const file of files) {
-        const tripcFile = join(tempDir, basename(file).replace(".trip", ".tripc"));
+        const tripcFile = join(
+          tempDir,
+          basename(file).replace(".trip", ".tripc"),
+        );
         const { status: code, stderr } = spawnSync(
           process.execPath,
           [

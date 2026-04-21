@@ -96,7 +96,9 @@ const childEnv = {
 Object.assign(process.env, childEnv);
 process.chdir(workspaceCopy);
 
-const importPath = pathToFileURL(join(workspaceCopy, "scripts", "bazel.ts")).href;
+const importPath = pathToFileURL(
+  join(workspaceCopy, "scripts", "bazel.ts"),
+).href;
 const { buildDist } = (await import(importPath)) as typeof import("./bazel.ts");
 await buildDist();
 

@@ -123,6 +123,9 @@ npm.npm_translate_lock(
     name = "npm",
     lifecycle_hooks_exclude = ["esbuild"],
     pnpm_lock = "//:pnpm-lock.yaml",
+    public_hoist_packages = {
+        "*": [""],
+    },
     verify_node_modules_ignored = "//:.bazelignore",
 )
 use_repo(npm, "npm")

@@ -19,6 +19,13 @@ def _normalize_runfiles_path(path):
         return path[3:]
     return path
 
+def _merge_target_runfiles(runfiles, targets):
+    for target in targets:
+        default_info = target[DefaultInfo]
+        runfiles = runfiles.merge(default_info.default_runfiles)
+        runfiles = runfiles.merge(default_info.data_runfiles)
+    return runfiles
+
 def _node_sharded_test_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
         ctx.attr._windows_constraint[platform_common.ConstraintValueInfo],
@@ -131,9 +138,15 @@ def _node_sharded_test_impl(ctx):
 
     ctx.actions.write(launcher, content, is_executable = True)
 
+    symlinks = {}
+    if ctx.file.generated_jsr:
+        symlinks["jsr.json"] = ctx.file.generated_jsr
+
     runfiles = ctx.runfiles(
-        files = ctx.files.data + [ctx.executable.thanatos, ctx.file.wasm, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list(),
+        files = ctx.files.data + [ctx.executable.thanatos, ctx.file.wasm, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else []),
+        symlinks = symlinks,
     )
+    runfiles = _merge_target_runfiles(runfiles, ctx.attr.data)
     runfiles = runfiles.merge(ctx.attr.thanatos[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.wasm[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.dist[DefaultInfo].default_runfiles)
@@ -148,6 +161,9 @@ node_sharded_test = rule(
         ),
         "dist": attr.label(
             mandatory = True,
+        ),
+        "generated_jsr": attr.label(
+            allow_single_file = True,
         ),
         "thanatos": attr.label(
             executable = True,

@@ -6,11 +6,12 @@ bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
-bazel_dep(name = "rules_nodejs", version = "6.7.3")
+bazel_dep(name = "rules_nodejs", version = "6.7.4")
 bazel_dep(name = "aspect_rules_js", version = "2.2.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.14.0")
 
 NODE_25_VERSION = "25.6.0"
+
 NODE_25_REPOSITORIES = {
     "25.6.0-darwin_amd64": [
         "node-v25.6.0-darwin-x64.tar.xz",
@@ -60,42 +61,52 @@ nodejs_repository(
     node_version = NODE_25_VERSION,
     platform = "darwin_amd64",
 )
+
 nodejs_repository(
     name = "typed_ski_node25_darwin_arm64",
     node_repositories = NODE_25_REPOSITORIES,
     node_version = NODE_25_VERSION,
     platform = "darwin_arm64",
 )
+
 nodejs_repository(
     name = "typed_ski_node25_linux_amd64",
     node_repositories = NODE_25_REPOSITORIES,
     node_version = NODE_25_VERSION,
     platform = "linux_amd64",
 )
+
 nodejs_repository(
     name = "typed_ski_node25_linux_arm64",
     node_repositories = NODE_25_REPOSITORIES,
     node_version = NODE_25_VERSION,
     platform = "linux_arm64",
 )
+
 nodejs_repository(
     name = "typed_ski_node25_linux_ppc64le",
     node_repositories = NODE_25_REPOSITORIES,
     node_version = NODE_25_VERSION,
     platform = "linux_ppc64le",
 )
+
 nodejs_repository(
     name = "typed_ski_node25_linux_s390x",
     node_repositories = NODE_25_REPOSITORIES,
     node_version = NODE_25_VERSION,
     platform = "linux_s390x",
 )
+
 nodejs_repository(
     name = "typed_ski_node25_windows_amd64",
     node_repositories = NODE_25_REPOSITORIES,
     node_version = NODE_25_VERSION,
     platform = "windows_amd64",
 )
+
+node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
+node.toolchain(node_version = "25.6.0")
+use_repo(node, "nodejs_darwin_amd64", "nodejs_darwin_arm64", "nodejs_linux_amd64", "nodejs_linux_arm64", "nodejs_windows_amd64")
 
 register_toolchains(
     "//bazel:node25_darwin_amd64_toolchain",
@@ -112,8 +123,15 @@ npm.npm_translate_lock(
     name = "npm",
     lifecycle_hooks_exclude = ["esbuild"],
     pnpm_lock = "//:pnpm-lock.yaml",
+    public_hoist_packages = {
+        "*": [""],
+    },
+    verify_node_modules_ignored = "//:.bazelignore",
 )
 use_repo(npm, "npm")
+
+pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
+use_repo(pnpm, "pnpm")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 toolchains.exec_platform(

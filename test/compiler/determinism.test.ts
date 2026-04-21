@@ -25,6 +25,7 @@ async function runFreshCompilerCorpusBuildInSubprocess(): Promise<Uint8Array> {
   } = spawnSync(
     process.execPath,
     [
+      "--disable-warning=ExperimentalWarning",
       "--experimental-transform-types",
       fileURLToPath(new URL("./freshCompilerCorpusBuild.ts", import.meta.url)),
     ],

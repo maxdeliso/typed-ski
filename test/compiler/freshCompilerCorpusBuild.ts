@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -119,7 +120,19 @@ function writeFully(bytes: Uint8Array): void {
   process.stdout.write(bytes);
 }
 
-if (import.meta.main) {
+function isMain(importMetaUrl: string): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      realpathSync(process.argv[1]) ===
+      realpathSync(fileURLToPath(importMetaUrl))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMain(import.meta.url)) {
   const { finalBytes } = await runFreshCompilerCorpusBuild();
   writeFully(finalBytes);
 }

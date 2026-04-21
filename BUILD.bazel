@@ -1,23 +1,49 @@
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
+load("//bazel:codegen.bzl", "codegen_rule")
 load("@npm//:defs.bzl", "npm_link_all_packages")
+load(
+    "@@aspect_rules_js++npm+npm__json-stringify-safe__5.0.1__links//:defs.bzl",
+    link_json_stringify_safe = "npm_link_imported_package_store",
+)
+
+load("@aspect_rules_js//js:defs.bzl", "js_library")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["package.json"])
+
+js_library(
+    name = "package_json",
+    srcs = ["package.json"],
+)
+
+codegen_rule(
+    name = "jsr_generated_src",
+    args = [
+        "--package-json",
+        "$(location :package.json)",
+        "--jsr-json",
+        "$(location jsr.generated.json)",
+    ],
+    data = [":package.json"],
+    outs = ["jsr.generated.json"],
+    script = "//scripts:generate_version.mjs",
+)
+
 npm_link_all_packages(name = "node_modules")
+link_json_stringify_safe(name = "node_modules/json-stringify-safe")
 
 NODE_TEST_DATA = glob(
     [
         "package.json",
         "tsconfig.json",
-        "jsr.json",
         "*.jsonc",
         "*.md",
         "bin/**",
         "compiler/**",
         "lib/**",
-        "scripts/**",
         "server/**",
         "test/**",
     ],
@@ -26,7 +52,14 @@ NODE_TEST_DATA = glob(
         "dist/**",
     ],
     allow_empty = True,
-)
+) + [
+    "//scripts",
+    "//lib/shared",
+    "//lib/evaluator",
+    "//core",
+    "//lib/evaluator:arena_header_generated",
+    "//lib/shared:version_generated",
+]
 
 NODE_DIST_DATA = glob(
     [
@@ -37,14 +70,20 @@ NODE_DIST_DATA = glob(
         "bin/**",
         "compiler/**",
         "lib/**",
-        "scripts/**",
     ],
     exclude = [
         "coverage/**",
         "dist/**",
     ],
     allow_empty = True,
-)
+) + [
+    "//scripts",
+    "//lib/shared",
+    "//lib/evaluator",
+    "//core",
+    "//lib/evaluator:arena_header_generated",
+    "//lib/shared:version_generated",
+]
 
 alias(
     name = "thanatos",
@@ -79,8 +118,12 @@ node_dist(
 
 node_sharded_test(
     name = "node_tests",
-    data = NODE_TEST_DATA + [":node_modules"],
+    data = NODE_TEST_DATA + [
+        ":node_modules",
+        ":node_modules/json-stringify-safe",
+    ],
     dist = ":dist_artifacts",
+    generated_jsr = ":jsr.generated.json",
     shard_count = 8,
     size = "large",
     timeout = "long",

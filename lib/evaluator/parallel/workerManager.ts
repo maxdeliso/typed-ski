@@ -91,7 +91,10 @@ export class WorkerManager {
         // repo still needs transform support for enums and parameter properties.
         worker = new WorkerClass(actualUrl, {
           workerData: { memory: sharedMemory, workerId: i },
-          execArgv: ["--experimental-transform-types"],
+          execArgv: [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+          ],
           type: "module",
         });
 

@@ -1,7 +1,33 @@
-import { describe, it } from "../../util/test_shim.ts";
+import { after, before, describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { ParallelArenaEvaluatorWasm } from "../../../lib/index.ts";
 import { parseSKI } from "../../../lib/parser/ski.ts";
+
+const sourceWorkerPath = fileURLToPath(
+  new URL("../../../lib/evaluator/arenaWorker.ts", import.meta.url),
+);
+const originalArenaWorkerPath = process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"];
+
+before(() => {
+  process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"] = sourceWorkerPath;
+});
+
+after(() => {
+  if (originalArenaWorkerPath === undefined) {
+    delete process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"];
+  } else {
+    process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"] = originalArenaWorkerPath;
+  }
+});
+
+it("ParallelArenaEvaluatorWasm.create rejects workerCount > 1", async () => {
+  await assert.rejects(() => ParallelArenaEvaluatorWasm.create(2), {
+    name: "Error",
+    message:
+      "ParallelArenaEvaluatorWasm only supports workerCount=1. Use Thanatos for true parallel reductions.",
+  });
+});
 
 it("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync retries on full queue (rc=1)", async () => {
   const evaluator = await ParallelArenaEvaluatorWasm.create(1);
@@ -66,6 +92,33 @@ it("ParallelArenaEvaluatorWasm - throws if terminated", async () => {
     name: "Error",
     message: "Evaluator terminated",
   });
+});
+
+it("ParallelArenaEvaluatorWasm - refuses to reuse the same WebAssembly.Memory", async () => {
+  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  try {
+    const ParallelArenaEvaluatorCtor =
+      ParallelArenaEvaluatorWasm as unknown as {
+        new (
+          exports: unknown,
+          memory: WebAssembly.Memory,
+          workers: Worker[],
+          options?: object,
+        ): ParallelArenaEvaluatorWasm;
+      };
+
+    assert.throws(
+      () =>
+        new ParallelArenaEvaluatorCtor(evaluator.$, evaluator.memory, [], {}),
+      {
+        name: "Error",
+        message:
+          "ParallelArenaEvaluatorWasm already owns this WebAssembly.Memory. Create a fresh shared memory for each evaluator instance.",
+      },
+    );
+  } finally {
+    evaluator.terminate();
+  }
 });
 
 it("ParallelArenaEvaluatorWasm - reduceArenaNodeIdAsync uses macrotask backoff after prolonged full queue", async () => {

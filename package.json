@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.17.9",
+  "version": "0.17.10",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -20,10 +20,14 @@
       "include": [
         "README.md",
         "SECURITY.md",
-        "lib/**/*",
-        "bin/**/*",
-        "dist/**/*",
+        "lib/**",
+        "bin/**",
+        "dist/**",
         "wasm/release.wasm"
+      ],
+      "exclude": [
+        "!lib/**/*.generated.ts",
+        "!lib/evaluator/arenaHeader.generated.ts"
       ]
     }
   },
@@ -36,13 +40,13 @@
     ]
   },
   "scripts": {
-    "tripc": "node --experimental-transform-types bin/tripc.ts",
+    "tripc": "node --disable-warning=ExperimentalWarning --experimental-transform-types bin/tripc.ts",
     "bundle:tripc": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.js --format=esm --platform=node",
     "bundle:tripc:minified": "esbuild bin/tripc.ts --bundle --minify --outfile=dist/tripc.min.js --format=esm --platform=node",
     "bundle:tripc:node": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.node.js --format=esm --platform=node",
     "dist": "mkdir -p dist && npm run bundle:tripc && npm run bundle:tripc:minified && npm run bundle:tripc:node",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-transform-types scripts/bazel.ts test"
+    "test": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts test"
   },
   "dependencies": {
     "random-seed": "0.3.0",

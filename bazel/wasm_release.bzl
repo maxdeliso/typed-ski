@@ -50,17 +50,25 @@ def wasm_release(name, srcs, hdrs = [], visibility = None):
     src_locations = " ".join(["$(location %s)" % src for src in srcs])
     flag_string = " ".join(flags)
 
+    # We use dirname to get the directory of each header.
+    # On Linux, path/to/file/.. is an error (ENOTDIR) because the filesystem
+    # requires the component before /.. to be a directory.
+    include_flags_bash = " ".join(["-I$$(dirname $(location %s))" % hdr for hdr in hdrs])
+    include_flags_bat = " ".join(["-I$(location %s)\\..\\" % hdr for hdr in hdrs])
+
     # We explicitly set ZIG_LOCAL_CACHE_DIR and ZIG_GLOBAL_CACHE_DIR to avoid
     # AppDataDirUnavailable errors in CI environments where the default cache
     # locations (like $HOME/.cache or %APPDATA%) might not be writable or available.
-    cmd_bash = "export ZIG_LOCAL_CACHE_DIR={cache} && export ZIG_GLOBAL_CACHE_DIR={cache} && \"$(execpath @zig_sdk//:zig)\" cc {flags} -o \"$@\" {srcs}".format(
+    cmd_bash = "export ZIG_LOCAL_CACHE_DIR={cache} && export ZIG_GLOBAL_CACHE_DIR={cache} && \"$(execpath @zig_sdk//:zig)\" cc {includes} {flags} -o \"$@\" {srcs}".format(
         cache = _ZIG_CACHE_PATH_LINUX,
+        includes = include_flags_bash,
         flags = flag_string,
         srcs = src_locations,
     )
 
-    cmd_bat = "set ZIG_LOCAL_CACHE_DIR={cache}&& set ZIG_GLOBAL_CACHE_DIR={cache}&& $(execpath @zig_sdk//:zig) cc {flags} -o $@ {srcs}".format(
+    cmd_bat = "set ZIG_LOCAL_CACHE_DIR={cache}&& set ZIG_GLOBAL_CACHE_DIR={cache}&& $(execpath @zig_sdk//:zig) cc {includes} {flags} -o $@ {srcs}".format(
         cache = _ZIG_CACHE_PATH_WINDOWS,
+        includes = include_flags_bat,
         flags = flag_string,
         srcs = src_locations,
     )

@@ -24,7 +24,7 @@ def _node_dist_impl(ctx):
     manifest = ctx.actions.declare_file(ctx.label.name + ".manifest")
     launcher = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
 
-    manifest_lines = sorted([f.short_path for f in ctx.files.data])
+    manifest_lines = sorted(["%s\t%s" % (f.path, f.short_path) for f in ctx.files.data])
     ctx.actions.write(manifest, "\n".join(manifest_lines) + "\n")
 
     if is_windows:

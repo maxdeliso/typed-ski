@@ -92,7 +92,11 @@ describe("JSR Packaging Configuration", () => {
         "utf-8",
       );
       assert.ok(tripcTs.includes("#!/usr/bin/env"));
-      assert.ok(tripcTs.includes("node --experimental-transform-types"));
+      assert.ok(
+        tripcTs.includes(
+          "node --disable-warning=ExperimentalWarning --experimental-transform-types",
+        ),
+      );
     });
 
     // Shell wrapper tests removed
@@ -182,7 +186,12 @@ describe("JSR Packaging Configuration", () => {
 
       const { status, stdout } = spawnSync(
         process.execPath,
-        ["--experimental-transform-types", tripcScript, "--version"],
+        [
+          "--disable-warning=ExperimentalWarning",
+          "--experimental-transform-types",
+          tripcScript,
+          "--version",
+        ],
         {
           cwd: projectRoot,
           encoding: "utf-8",
@@ -198,7 +207,12 @@ describe("JSR Packaging Configuration", () => {
 
       const { status, stdout } = spawnSync(
         process.execPath,
-        ["--experimental-transform-types", tripcScript, "--help"],
+        [
+          "--disable-warning=ExperimentalWarning",
+          "--experimental-transform-types",
+          tripcScript,
+          "--help",
+        ],
         {
           cwd: projectRoot,
           encoding: "utf-8",
@@ -217,7 +231,13 @@ describe("JSR Packaging Configuration", () => {
         const outputFile = join(outputDir, "test_output.tripc");
         const { status, stderr } = spawnSync(
           process.execPath,
-          ["--experimental-transform-types", tripcScript, testFile, outputFile],
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            tripcScript,
+            testFile,
+            outputFile,
+          ],
           {
             cwd: projectRoot,
             encoding: "utf-8",

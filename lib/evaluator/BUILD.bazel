@@ -1,0 +1,29 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("//bazel:codegen.bzl", "codegen_rule")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["**"], exclude = ["*.generated.*"]))
+
+filegroup(
+    name = "evaluator",
+    srcs = glob(["**"], exclude = ["*.generated.*"]),
+)
+
+codegen_rule(
+    name = "arena_header_generated_src",
+    args = [
+        "--input",
+        "$(location //core:arena_layout.def)",
+        "--ts-out",
+        "$(location arenaHeader.generated.ts)",
+    ],
+    data = ["//core:arena_layout.def"],
+    outs = ["arenaHeader.generated.ts"],
+    script = "//scripts:generate_layouts.mjs",
+)
+
+js_library(
+    name = "arena_header_generated",
+    srcs = [":arenaHeader.generated.ts"],
+)

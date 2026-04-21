@@ -1,8 +1,10 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
+import { dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..", "..");
@@ -28,54 +30,60 @@ describe("Bootstrapped Lowering Pipeline", () => {
   ];
 
   it("link all compiler modules and run a simple compilation", async () => {
-    // 1. Compile each module to .tripc
-    const tripcFiles: string[] = [];
-    for (const file of files) {
-      const tripcFile = file.replace(".trip", ".tripc");
-      const { status: code, stderr } = spawnSync(
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-bootstrapped-"));
+    try {
+      // 1. Compile each module to .tripc in the temp directory
+      const tripcFiles: string[] = [];
+      for (const file of files) {
+        const tripcFile = join(
+          tempDir,
+          basename(file).replace(".trip", ".tripc"),
+        );
+        const { status: code, stderr } = spawnSync(
+          process.execPath,
+          [
+            "--disable-warning=ExperimentalWarning",
+            "--experimental-transform-types",
+            join(PROJECT_ROOT, "bin", "tripc.ts"),
+            file,
+            tripcFile,
+          ],
+          { cwd: PROJECT_ROOT, maxBuffer: 32 * 1024 * 1024 },
+        );
+
+        if (code !== 0) {
+          const err = stderr.toString();
+          throw new Error(`Failed to compile ${file}: ${err}`);
+        }
+        tripcFiles.push(tripcFile);
+      }
+
+      // 2. Link all modules to an SKI expression
+      const {
+        stdout,
+        status: code,
+        stderr,
+      } = spawnSync(
         process.execPath,
         [
+          "--disable-warning=ExperimentalWarning",
           "--experimental-transform-types",
           join(PROJECT_ROOT, "bin", "tripc.ts"),
-          file,
-          tripcFile,
+          "--link",
+          ...tripcFiles,
         ],
         { cwd: PROJECT_ROOT, maxBuffer: 32 * 1024 * 1024 },
       );
 
       if (code !== 0) {
         const err = stderr.toString();
-        throw new Error(`Failed to compile ${file}: ${err}`);
+        throw new Error(`Failed to link: ${err}`);
       }
-      tripcFiles.push(tripcFile);
+
+      const skiOutput = stdout.toString().trim();
+      assert.ok(skiOutput.length > 0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
-
-    // 2. Link all modules to an SKI expression
-    const {
-      stdout,
-      status: code,
-      stderr,
-    } = spawnSync(
-      process.execPath,
-      [
-        "--experimental-transform-types",
-        join(PROJECT_ROOT, "bin", "tripc.ts"),
-        "--link",
-        ...tripcFiles,
-      ],
-      { cwd: PROJECT_ROOT, maxBuffer: 32 * 1024 * 1024 },
-    );
-
-    if (code !== 0) {
-      const err = stderr.toString();
-      throw new Error(`Failed to link: ${err}`);
-    }
-
-    const skiOutput = stdout.toString().trim();
-    assert.ok(skiOutput.length > 0);
-
-    // Keep this test focused on the bootstrapped compiler pipeline itself.
-    // Importing thanatosHarness here dynamically registers nested tests,
-    // which breaks the test runner before we can validate compilation/linking.
   });
 });

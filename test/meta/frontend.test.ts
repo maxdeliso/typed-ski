@@ -47,12 +47,12 @@ function assertTypeDefinition(
 }
 
 describe("TripLang → System F compiler integration", () => {
-  // Use the parallel WASM arena reducer (worker pool) in this suite.
+  // Use the wasm arena reducer in single-worker mode here.
   // Important: terminate it at the end to avoid leak detection (workers/timers).
   let arenaEval: ParallelArenaEvaluatorWasm;
 
   before(async () => {
-    arenaEval = await ParallelArenaEvaluatorWasm.create(2);
+    arenaEval = await ParallelArenaEvaluatorWasm.create(1);
   });
 
   after(async () => {

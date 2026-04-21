@@ -39,8 +39,6 @@ static const uint32_t MAX_CAP = 1 << 26;
 static const uint32_t RING_ENTRIES = 1 << 16;
 static const uint32_t POISON_SEQ = 0xffffffff;
 
-/** QSBR: max worker threads that can register; readers drain before grow(). */
-#define MAX_WORKERS 64
 enum {
   /* Reserved scratch slice for synchronous host-side arenaKernelStep(). */
   CONTROL_SYNC_SLICE_ID = MAX_WORKERS,
@@ -54,8 +52,7 @@ enum {
   CONT_FLAG_ALLOCATED = 0x1,
   SUSP_FLAG_ALLOCATED = 0x1,
 };
-static atomic_uint WORKER_EPOCHS[MAX_WORKERS];
-static atomic_uint GLOBAL_EPOCH;
+
 /** Set by worker at batch start, cleared at batch end; allocators unregister
  * before grow(). */
 #ifdef __wasm__
@@ -66,7 +63,6 @@ static _Thread_local uint32_t tls_worker_id = MAX_WORKERS;
 
 uint8_t *ARENA_BASE_ADDR = NULL;
 static uint32_t ARENA_MODE = 0;
-static atomic_uint GROW_COUNT = 0;
 /** Native only: actual mmap size reserved at init (layout uses uint64_t so no
  * overflow at MAX_CAP). */
 #ifndef __wasm__
@@ -116,13 +112,6 @@ void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
 
 size_t arena_get_mmap_out_cursor(void) { return 0; }
 #endif
-
-/** Cached node IDs for True (K) and False (K I); invalidated by reset(). */
-static uint32_t TRUE_ID = EMPTY;
-static uint32_t FALSE_ID = EMPTY;
-
-/** Canonical U8 node id per byte value; deduplicated across allocU8 calls. */
-static atomic_uint U8_CACHE[256];
 
 static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63u; }
 static inline uint64_t align64_u64(uint64_t x) {
@@ -768,7 +757,7 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
     atomic_init(&buckets[i], EMPTY);
 
   for (uint32_t u = 0; u < 256; u++)
-    atomic_init(&U8_CACHE[u], EMPTY);
+    atomic_init(&h->u8_cache[u], EMPTY);
 
   atomic_init(&h->total_nodes, 0);
   atomic_init(&h->total_steps, 0);
@@ -779,6 +768,16 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   atomic_init(&h->duplicate_lost_allocs, 0);
   atomic_init(&h->hashcons_hits, 0);
   atomic_init(&h->hashcons_misses, 0);
+
+  h->abi_version = SAB_ABI_VERSION;
+  h->layout_hash = SAB_LAYOUT_HASH;
+
+  atomic_init(&h->global_epoch, 1);
+  for (uint32_t i = 0; i < MAX_WORKERS; i++)
+    atomic_init(&h->worker_epochs[i], 0);
+  atomic_init(&h->grow_count, 0);
+  h->true_id = EMPTY;
+  h->false_id = EMPTY;
 
   return ARENA_BASE_ADDR;
 }
@@ -810,21 +809,23 @@ uint32_t initArena(uint32_t initial_capacity) {
     return addr32 > 2 ? addr32 : 3;
 #endif
   }
-  /* One-time QSBR init */
-  static bool qsbr_inited = false;
-  if (!qsbr_inited) {
-    atomic_init(&GLOBAL_EPOCH, 1);
-    for (uint32_t i = 0; i < MAX_WORKERS; i++)
-      atomic_init(&WORKER_EPOCHS[i], 0);
-    qsbr_inited = true;
-  }
+
   {
     uint32_t starting_capacity =
         (initial_capacity < INITIAL_CAP) ? initial_capacity : INITIAL_CAP;
     if (!allocate_raw_arena(starting_capacity, initial_capacity))
       return 0;
   }
+
   ARENA_MODE = 1;
+
+  /* Eagerly initialize core constants */
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  h->true_id = allocTerminal(ARENA_SYM_K);
+  uint32_t k = h->true_id;
+  uint32_t i = allocTerminal(ARENA_SYM_I);
+  h->false_id = allocCons(k, i);
+
 #ifdef __wasm__
   return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
 #else
@@ -841,13 +842,10 @@ uint32_t connectArena(uint32_t ptr_addr) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   if (h->magic != ARENA_MAGIC)
     return 5;
-
-  TRUE_ID = EMPTY;
-  FALSE_ID = EMPTY;
-  atomic_store_explicit(&GROW_COUNT, 0, memory_order_relaxed);
-
-  for (uint32_t u = 0; u < 256; u++)
-    atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_relaxed);
+  if (h->abi_version != SAB_ABI_VERSION)
+    return 6;
+  if (h->layout_hash != SAB_LAYOUT_HASH)
+    return 7;
   return 1;
 }
 
@@ -868,11 +866,11 @@ void reset(void) {
   for (uint32_t i = 0; i < TERM_CACHE_LEN; i++)
     atomic_store_explicit(&cache[i], EMPTY, memory_order_release);
   control_init_at(h);
-  atomic_store_explicit(&GROW_COUNT, 0, memory_order_release);
-  TRUE_ID = EMPTY;
-  FALSE_ID = EMPTY;
+  atomic_store_explicit(&h->grow_count, 0, memory_order_release);
+  h->true_id = EMPTY;
+  h->false_id = EMPTY;
   for (uint32_t u = 0; u < 256; u++)
-    atomic_store_explicit(&U8_CACHE[u], EMPTY, memory_order_release);
+    atomic_store_explicit(&h->u8_cache[u], EMPTY, memory_order_release);
 
   atomic_store_explicit(&h->total_nodes, 0, memory_order_release);
   atomic_store_explicit(&h->total_steps, 0, memory_order_release);
@@ -883,6 +881,12 @@ void reset(void) {
   atomic_store_explicit(&h->duplicate_lost_allocs, 0, memory_order_release);
   atomic_store_explicit(&h->hashcons_hits, 0, memory_order_release);
   atomic_store_explicit(&h->hashcons_misses, 0, memory_order_release);
+
+  /* Eagerly initialize core constants */
+  h->true_id = allocTerminal(ARENA_SYM_K);
+  uint32_t k = h->true_id;
+  uint32_t i = allocTerminal(ARENA_SYM_I);
+  h->false_id = allocCons(k, i);
 
   atomic_store_explicit(
       &h->resize_seq,
@@ -909,7 +913,7 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
          forever for us to reach a quiescent state. */
       bool is_worker = (tls_worker_id < MAX_WORKERS);
       if (is_worker) {
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], 0,
                               memory_order_release);
       }
 
@@ -927,8 +931,8 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
       /* Re-register with the new global epoch before continuing */
       if (is_worker) {
         uint32_t cur_epoch =
-            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+            atomic_load_explicit(&h->global_epoch, memory_order_acquire);
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], cur_epoch,
                               memory_order_release);
       }
       continue;
@@ -1175,12 +1179,12 @@ uint32_t allocTerminal(uint32_t sym) {
     atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
       if (tls_worker_id < MAX_WORKERS) {
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], 0,
                               memory_order_release);
         grow();
         uint32_t cur_epoch =
-            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+            atomic_load_explicit(&h->global_epoch, memory_order_acquire);
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], cur_epoch,
                               memory_order_release);
       } else {
         grow();
@@ -1212,26 +1216,26 @@ uint32_t allocTerminal(uint32_t sym) {
 
 uint32_t allocU8(uint8_t value) {
   ensure_arena();
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
 
   uint32_t cached =
-      atomic_load_explicit(&U8_CACHE[value], memory_order_acquire);
+      atomic_load_explicit(&h->u8_cache[value], memory_order_acquire);
   if (cached != EMPTY)
     return cached;
 
   while (true) {
-    SabHeader *h;
     uint32_t seq = enter_stable(&h);
 
     uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
     atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
       if (tls_worker_id < MAX_WORKERS) {
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], 0,
                               memory_order_release);
         grow();
         uint32_t cur_epoch =
-            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+            atomic_load_explicit(&h->global_epoch, memory_order_acquire);
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], cur_epoch,
                               memory_order_release);
       } else {
         grow();
@@ -1258,11 +1262,11 @@ uint32_t allocU8(uint8_t value) {
       continue;
 
     uint32_t expected = EMPTY;
-    if (atomic_compare_exchange_strong_explicit(&U8_CACHE[value], &expected, id,
+    if (atomic_compare_exchange_strong_explicit(&h->u8_cache[value], &expected, id,
                                                 memory_order_release,
                                                 memory_order_relaxed))
       return id;
-    return atomic_load_explicit(&U8_CACHE[value], memory_order_acquire);
+    return atomic_load_explicit(&h->u8_cache[value], memory_order_acquire);
   }
 }
 
@@ -1419,12 +1423,12 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
     atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
     if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
       if (tls_worker_id < MAX_WORKERS) {
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], 0,
                               memory_order_release);
         grow();
         uint32_t cur_epoch =
-            atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
-        atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], cur_epoch,
+            atomic_load_explicit(&h->global_epoch, memory_order_acquire);
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], cur_epoch,
                               memory_order_release);
       } else {
         grow();
@@ -2353,7 +2357,8 @@ static inline void worker_cooperative_yield(void) {
 #ifdef __wasm__
   /* Temporary host-yield stub: the zero-timeout wait is only a rendezvous
    * hint, not a durable notify/wake protocol yet. */
-  atomic_uint *gate = &GLOBAL_EPOCH;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  atomic_uint *gate = &h->global_epoch;
   uint32_t observed = atomic_load_explicit(gate, memory_order_relaxed);
   __builtin_wasm_memory_atomic_wait32((int *)gate, (int)observed, 0);
 #elif defined(__linux__)
@@ -2418,11 +2423,11 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   /* QSBR: bump epoch so new readers use new epoch; then wait for all active
    * readers to leave the old epoch (drain). */
   uint32_t new_epoch =
-      atomic_fetch_add_explicit(&GLOBAL_EPOCH, 1, memory_order_acq_rel) + 1;
+      atomic_fetch_add_explicit(&h->global_epoch, 1, memory_order_acq_rel) + 1;
   for (uint32_t i = 0; i < MAX_WORKERS; i++) {
     while (true) {
       uint32_t w_epoch =
-          atomic_load_explicit(&WORKER_EPOCHS[i], memory_order_acquire);
+          atomic_load_explicit(&h->worker_epochs[i], memory_order_acquire);
       if (w_epoch == 0 || w_epoch >= new_epoch)
         break;
 #if defined(__linux__) && !defined(__wasm__)
@@ -2473,7 +2478,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
   }
 #endif
   uint32_t grow_num =
-      atomic_fetch_add_explicit(&GROW_COUNT, 1, memory_order_relaxed) + 1;
+      atomic_fetch_add_explicit(&h->grow_count, 1, memory_order_relaxed) + 1;
 #ifndef __wasm__
   fprintf(stderr, "Arena: grow #%u %u -> %u (top=%u)\n", grow_num, old_cap,
           new_cap, old_top);
@@ -2582,20 +2587,14 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
 
 /** Prelude true = K */
 static uint32_t arenaTrue(void) {
-  if (TRUE_ID == EMPTY) {
-    TRUE_ID = allocTerminal(ARENA_SYM_K);
-  }
-  return TRUE_ID;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return h->true_id;
 }
 
 /** Prelude false = (K I) */
 static uint32_t arenaFalse(void) {
-  if (FALSE_ID == EMPTY) {
-    uint32_t k = allocTerminal(ARENA_SYM_K);
-    uint32_t i = allocTerminal(ARENA_SYM_I);
-    FALSE_ID = allocCons(k, i);
-  }
-  return FALSE_ID;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return h->false_id;
 }
 
 /** Direct node loads: fast path. Must check n < capacity so we never return
@@ -2634,7 +2633,8 @@ static bool maybe_park_io_wait(uint32_t slice_id, WorkerState *ws,
     return false;
   }
   if (tls_worker_id < MAX_WORKERS) {
-    atomic_store_explicit(&WORKER_EPOCHS[tls_worker_id], 0,
+    SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+    atomic_store_explicit(&h->worker_epochs[tls_worker_id], 0,
                           memory_order_release);
   }
   enqueue_blocking((Ring *)(ARENA_BASE_ADDR + wait_offset), &susp_ptr, 4);
@@ -3397,8 +3397,8 @@ void workerLoop(uint32_t worker_id) {
      */
     if (use_qsbr) {
       uint32_t current_epoch =
-          atomic_load_explicit(&GLOBAL_EPOCH, memory_order_acquire);
-      atomic_store_explicit(&WORKER_EPOCHS[worker_id], current_epoch,
+          atomic_load_explicit(&h->global_epoch, memory_order_acquire);
+      atomic_store_explicit(&h->worker_epochs[worker_id], current_epoch,
                             memory_order_release);
       tls_worker_id = worker_id;
     }
@@ -3421,7 +3421,7 @@ void workerLoop(uint32_t worker_id) {
       if (!resume_worker_state(worker_id, job.node_id, &ws)) {
         Cqe error = {job.node_id, job.req_id, CQ_EVENT_ERROR};
         if (use_qsbr)
-          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+          atomic_store_explicit(&h->worker_epochs[worker_id], 0,
                                 memory_order_release);
         enqueue_blocking(cq, &error, sizeof(Cqe));
         if (use_qsbr) {
@@ -3445,7 +3445,7 @@ void workerLoop(uint32_t worker_id) {
             park_budget_yield(worker_id, &ws, SUSP_STEP_LIMIT, true);
         Cqe result = {budget.val, job.req_id, CQ_EVENT_YIELD};
         if (use_qsbr)
-          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+          atomic_store_explicit(&h->worker_epochs[worker_id], 0,
                                 memory_order_release);
         enqueue_blocking(cq, &result, sizeof(Cqe));
         break;
@@ -3472,7 +3472,7 @@ void workerLoop(uint32_t worker_id) {
                            o.val, reason, ws.current_val);
         Cqe res = {o.val, job.req_id, event};
         if (use_qsbr)
-          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+          atomic_store_explicit(&h->worker_epochs[worker_id], 0,
                                 memory_order_release);
         enqueue_blocking(cq, &res, sizeof(Cqe));
         break;
@@ -3482,7 +3482,7 @@ void workerLoop(uint32_t worker_id) {
                            o.val, before, 0);
         Cqe res = {o.val, job.req_id, CQ_EVENT_DONE};
         if (use_qsbr)
-          atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0,
+          atomic_store_explicit(&h->worker_epochs[worker_id], 0,
                                 memory_order_release);
         enqueue_blocking(cq, &res, sizeof(Cqe));
         break;
@@ -3494,7 +3494,7 @@ void workerLoop(uint32_t worker_id) {
 
     /* Quiescent state: no longer touching the arena. */
     if (use_qsbr) {
-      atomic_store_explicit(&WORKER_EPOCHS[worker_id], 0, memory_order_release);
+      atomic_store_explicit(&h->worker_epochs[worker_id], 0, memory_order_release);
       tls_worker_id = MAX_WORKERS;
     }
   }
@@ -3514,3 +3514,4 @@ uint32_t debugLockState(void) {
   return atomic_load_explicit(&h->resize_seq, memory_order_relaxed);
 }
 uint32_t debugGetRingEntries(void) { return RING_ENTRIES; }
+

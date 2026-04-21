@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-transform-types
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
 
 import { Node, Project, SyntaxKind } from "ts-morph";
 import { join } from "node:path";

@@ -11,15 +11,15 @@ function usage(): never {
 }
 
 async function copyListedFiles(
-  sourceRoot: string,
   targetRoot: string,
   manifestPath: string,
 ): Promise<void> {
   const manifest = await fsp.readFile(manifestPath, "utf8");
-  for (const relativePath of manifest.split(/\r?\n/)) {
-    if (!relativePath) continue;
-    const sourcePath = join(sourceRoot, relativePath);
-    const targetPath = join(targetRoot, relativePath);
+  for (const line of manifest.split(/\r?\n/)) {
+    if (!line) continue;
+    const [sourcePath, relativePath] = line.split("\t");
+    if (!sourcePath) continue;
+    const targetPath = join(targetRoot, relativePath || sourcePath);
     try {
       const stat = await fsp.stat(sourcePath);
       if (!stat.isFile()) continue;
@@ -28,8 +28,9 @@ async function copyListedFiles(
       if (process.platform !== "win32") {
         await fsp.chmod(targetPath, stat.mode);
       }
-    } catch {
-      // Skip missing files
+    } catch (e) {
+      console.error(`Failed to copy ${sourcePath} to ${targetPath}:`, e);
+      throw e;
     }
   }
 }
@@ -82,7 +83,7 @@ const arenaWorkerJsOutputPath = resolve(sourceRoot, arenaWorkerJsOut);
 const tripcBinOutputPath = resolve(sourceRoot, tripcBinOut);
 
 await fsp.mkdir(workspaceCopy, { recursive: true });
-await copyListedFiles(sourceRoot, workspaceCopy, manifestPath);
+await copyListedFiles(workspaceCopy, manifestPath);
 await fsp.mkdir(processTempDir, { recursive: true });
 await fsp.mkdir(buildTempDir, { recursive: true });
 
@@ -94,9 +95,11 @@ const childEnv = {
 };
 Object.assign(process.env, childEnv);
 process.chdir(workspaceCopy);
-const { buildDist } = (await import(
-  pathToFileURL(join(workspaceCopy, "scripts", "bazel.ts")).href
-)) as typeof import("./bazel.ts");
+
+const importPath = pathToFileURL(
+  join(workspaceCopy, "scripts", "bazel.ts"),
+).href;
+const { buildDist } = (await import(importPath)) as typeof import("./bazel.ts");
 await buildDist();
 
 await copyOutput(join(workspaceCopy, "dist", "tripc.js"), tripcJsOutputPath);

@@ -11,7 +11,7 @@
  * Usage: node --experimental-transform-types compiler/main.ts <input.trip> [output.tripc]
  */
 
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -120,6 +120,18 @@ async function main(): Promise<void> {
   await compileToObjectFile(inputPath, outputPath);
 }
 
-if (import.meta.main) {
+function isMain(importMetaUrl: string): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      realpathSync(process.argv[1]) ===
+      realpathSync(fileURLToPath(importMetaUrl))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMain(import.meta.url)) {
   await main();
 }

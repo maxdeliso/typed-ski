@@ -20,8 +20,10 @@ interface ConnectArenaMessage {
 }
 
 let wasmExports: ArenaWasmExports | null = null;
+let currentWorkerId = 0;
 
 async function init(msg: InitMessage) {
+  currentWorkerId = msg.workerId;
   const wasmBytes = await getReleaseWasmBytes();
   const module = await WebAssembly.compile(wasmBytes);
   const instance = await WebAssembly.instantiate(module, {
@@ -46,8 +48,9 @@ function handleConnectArena(msg: ConnectArenaMessage) {
     const rc = wasmExports.connectArena(msg.arenaPointer);
     if (rc === 1) {
       postMessage({ type: "connectArenaComplete" });
-      // Enter the blocking worker loop; never returns.
-      wasmExports.workerLoop?.(0);
+      // Native workerLoop indexes per-worker control/QSBR state by worker id.
+      // Passing the assigned id keeps concurrent requests isolated.
+      wasmExports.workerLoop?.(currentWorkerId);
     } else {
       postMessage({
         type: "connectArenaComplete",

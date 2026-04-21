@@ -60,12 +60,13 @@ async function runCommand(
   let executable = command0;
   let args = command.slice(1);
 
-  // For running 'bin/tripc.ts', use 'process.execPath' with '--experimental-transform-types'.
+  // For running 'bin/tripc.ts', use process.execPath with the repo's transform-types flags.
   if (command0 === "node" || command0 === process.execPath) {
     if (args.includes("bin/tripc.ts")) {
       executable = process.execPath;
       const tripcIndex = args.indexOf("bin/tripc.ts");
       args = [
+        "--disable-warning=ExperimentalWarning",
         "--experimental-transform-types",
         "bin/tripc.ts",
         ...args.slice(tripcIndex + 1),
@@ -309,29 +310,6 @@ poly id = #a => \\x:a => x`;
       );
       assert.ok(tripcTs.includes("TripLang Compiler & Linker"));
       assert.ok(tripcTs.includes("loadTripModuleObject"));
-    });
-  });
-
-  describe("Version consistency tests", () => {
-    it("version is consistent across files", async () => {
-      const packageJsonPath = join(projectRoot, "package.json");
-      const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
-      const version = packageJson.version;
-
-      const jsrJsonPath = join(projectRoot, "jsr.json");
-      const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
-      assert.strictEqual(jsrJson.version, version);
-
-      const generatedVersionPath = join(
-        projectRoot,
-        "lib",
-        "shared",
-        "version.generated.ts",
-      );
-      const generatedVersion = await readFile(generatedVersionPath, "utf-8");
-      assert.ok(
-        generatedVersion.includes(`export const VERSION = "${version}";`),
-      );
     });
   });
 

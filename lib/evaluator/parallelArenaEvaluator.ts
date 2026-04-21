@@ -41,6 +41,31 @@ import { pathToFileURL } from "node:url";
 export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
 /** @internal */
 
+const activeParallelArenaMemoryLeases = new WeakMap<
+  WebAssembly.Memory,
+  symbol
+>();
+
+function claimParallelArenaMemoryLease(memory: WebAssembly.Memory): symbol {
+  if (activeParallelArenaMemoryLeases.has(memory)) {
+    throw new Error(
+      "ParallelArenaEvaluatorWasm already owns this WebAssembly.Memory. Create a fresh shared memory for each evaluator instance.",
+    );
+  }
+  const lease = Symbol("ParallelArenaEvaluatorWasmMemoryLease");
+  activeParallelArenaMemoryLeases.set(memory, lease);
+  return lease;
+}
+
+function releaseParallelArenaMemoryLease(
+  memory: WebAssembly.Memory,
+  lease: symbol,
+): void {
+  if (activeParallelArenaMemoryLeases.get(memory) === lease) {
+    activeParallelArenaMemoryLeases.delete(memory);
+  }
+}
+
 function resolveArenaWorkerUrl(): string {
   const explicitWorkerPath = process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"];
   if (explicitWorkerPath) {
@@ -64,6 +89,10 @@ interface ParallelArenaEvaluatorOptions {
 
 /**
  * Parallel arena evaluator using Web Workers.
+ *
+ * @deprecated Multi-worker wasm execution is disabled until this backend is
+ * backed by a real wasm threads runtime with per-thread stack/TLS
+ * initialization. Use Thanatos for true parallel reductions.
  */
 export class ParallelArenaEvaluatorWasm
   extends ArenaEvaluatorWasm
@@ -113,6 +142,7 @@ export class ParallelArenaEvaluatorWasm
   private aborted = false;
   private abortError: Error | null = null;
   private readonly activeTimeouts = new Set<() => void>();
+  private readonly memoryLease: symbol;
 
   private constructor(
     exports: ArenaWasmExports,
@@ -122,51 +152,57 @@ export class ParallelArenaEvaluatorWasm
   ) {
     super(exports, memory);
     this.workers = workers;
+    this.memoryLease = claimParallelArenaMemoryLease(memory);
 
-    // Initialize subcomponents
-    const hooks: RequestTrackerHooks = {
-      onRequestQueued: (reqId, workerIndex, expr) => {
-        this.onRequestQueued?.(reqId, workerIndex, expr);
-      },
-      onRequestCompleted: (reqId, workerIndex, expr, arenaNodeId) => {
-        this.onRequestCompleted?.(reqId, workerIndex, expr, arenaNodeId);
-      },
-      onRequestError: (reqId, workerIndex, expr, error) => {
-        this.onRequestError?.(reqId, workerIndex, expr, error);
-      },
-      onRequestYield: (
-        reqId,
-        workerIndex,
-        expr,
-        suspensionNodeId,
-        resubmitCount,
-      ) => {
-        this.onRequestYield?.(
+    try {
+      // Initialize subcomponents
+      const hooks: RequestTrackerHooks = {
+        onRequestQueued: (reqId, workerIndex, expr) => {
+          this.onRequestQueued?.(reqId, workerIndex, expr);
+        },
+        onRequestCompleted: (reqId, workerIndex, expr, arenaNodeId) => {
+          this.onRequestCompleted?.(reqId, workerIndex, expr, arenaNodeId);
+        },
+        onRequestError: (reqId, workerIndex, expr, error) => {
+          this.onRequestError?.(reqId, workerIndex, expr, error);
+        },
+        onRequestYield: (
           reqId,
           workerIndex,
           expr,
           suspensionNodeId,
           resubmitCount,
-        );
-      },
-    };
+        ) => {
+          this.onRequestYield?.(
+            reqId,
+            workerIndex,
+            expr,
+            suspensionNodeId,
+            resubmitCount,
+          );
+        },
+      };
 
-    const maxResubmits = options.maxResubmits ?? DEFAULT_MAX_RESUBMITS;
-    this.requestTracker = new RequestTracker(hooks, maxResubmits);
-    this.ringStats = new RingStats();
-    this.ioManager = new IoManager(exports, memory, () => this.aborted);
-    this.completionPoller = new CompletionPoller(
-      this.requestTracker,
-      this.ioManager,
-      this.ringStats,
-      exports,
-      () => this.aborted,
-    );
+      const maxResubmits = options.maxResubmits ?? DEFAULT_MAX_RESUBMITS;
+      this.requestTracker = new RequestTracker(hooks, maxResubmits);
+      this.ringStats = new RingStats();
+      this.ioManager = new IoManager(exports, memory, () => this.aborted);
+      this.completionPoller = new CompletionPoller(
+        this.requestTracker,
+        this.ioManager,
+        this.ringStats,
+        exports,
+        () => this.aborted,
+      );
 
-    // Set up worker error handling
-    WorkerManager.setupErrorHandling(workers, (err) => {
-      this.abortAll(err);
-    });
+      // Set up worker error handling
+      WorkerManager.setupErrorHandling(workers, (err) => {
+        this.abortAll(err);
+      });
+    } catch (error) {
+      releaseParallelArenaMemoryLease(this.memory, this.memoryLease);
+      throw error;
+    }
   }
 
   private abortAll(err: Error) {
@@ -182,6 +218,7 @@ export class ParallelArenaEvaluatorWasm
     this.ioManager.cleanup();
     this.completionPoller.stop();
     WorkerManager.terminate(this.workers);
+    releaseParallelArenaMemoryLease(this.memory, this.memoryLease);
   }
 
   /**
@@ -384,8 +421,12 @@ export class ParallelArenaEvaluatorWasm
     };
   }
 
+  /**
+   * @deprecated This backend is currently restricted to a single worker.
+   * Pass `1` or omit the argument. Use Thanatos for true parallel execution.
+   */
   static async create(
-    workerCount: number = globalThis.navigator?.hardwareConcurrency ?? 4,
+    workerCount = 1,
     verbose = false,
     options: ParallelArenaEvaluatorOptions = {},
   ): Promise<ParallelArenaEvaluatorWasm> {
@@ -397,6 +438,22 @@ export class ParallelArenaEvaluatorWasm
     if (workerCount < 1) {
       throw new Error(
         "ParallelArenaEvaluatorWasm requires at least one worker",
+      );
+    }
+    if (workerCount > 1) {
+      // Keep this fail-closed until the wasm worker path is migrated to a
+      // proper threads runtime instead of "many instances sharing one memory".
+      // The blockers are all runtime-level, not just queue synchronization:
+      // - no thread bootstrap/trampoline that sets up a per-worker C stack
+      // - no TLS initialization such as `__wasm_init_tls(...)`
+      // - no runtime-managed thread-local base for `_Thread_local` globals
+      // - current JS workers instantiate separate wasm modules over one shared
+      //   linear memory, which is not equivalent to native threads in one
+      //   program image
+      // Until those are true, concurrent wasm workers can corrupt execution
+      // state even when reqId/CQ pairing is correct. Use Thanatos instead.
+      throw new Error(
+        "ParallelArenaEvaluatorWasm only supports workerCount=1. Use Thanatos for true parallel reductions.",
       );
     }
     if (
@@ -467,18 +524,28 @@ export class ParallelArenaEvaluatorWasm
 
     await WorkerManager.connectWorkersToArena(workers, arenaPointer);
 
-    const evaluator = new ParallelArenaEvaluatorWasm(
-      exports,
-      sharedMemory,
-      workers,
-      options,
-    );
+    let evaluator: ParallelArenaEvaluatorWasm | null = null;
+    try {
+      evaluator = new ParallelArenaEvaluatorWasm(
+        exports,
+        sharedMemory,
+        workers,
+        options,
+      );
 
-    // Run self-test to validate IO rings configuration
-    // This catches header/enum mismatches early
-    evaluator.validateIoRingsConfiguration();
+      // Run self-test to validate IO rings configuration
+      // This catches header/enum mismatches early
+      evaluator.validateIoRingsConfiguration();
 
-    return evaluator;
+      return evaluator;
+    } catch (error) {
+      if (evaluator) {
+        evaluator.terminate();
+      } else {
+        WorkerManager.terminate(workers);
+      }
+      throw error;
+    }
   }
 
   /**

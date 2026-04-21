@@ -1,8 +1,14 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("//bazel:codegen.bzl", "codegen_rule")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["arena.c"])
+exports_files(glob(["**"], exclude = ["*.generated.*"]))
+
+filegroup(
+    name = "core",
+    srcs = glob(["**"], exclude = ["*.generated.*"]),
+)
 
 config_setting(
     name = "windows",
@@ -32,6 +38,24 @@ HOST_PLATFORM_SRCS = select({
     "//conditions:default": ["host_platform_posix.c"],
 })
 
+codegen_rule(
+    name = "arena_layout_header_gen",
+    args = [
+        "--input",
+        "$(location arena_layout.def)",
+        "--c-out",
+        "$(location arena_layout.generated.h)",
+    ],
+    data = ["arena_layout.def"],
+    outs = ["arena_layout.generated.h"],
+    script = "//scripts:generate_layouts.mjs",
+)
+
+cc_library(
+    name = "arena_layout_header",
+    hdrs = [":arena_layout.generated.h"],
+)
+
 cc_library(
     name = "util",
     srcs = ["util.c"],
@@ -48,11 +72,14 @@ cc_library(
     ] + HOST_PLATFORM_SRCS,
     hdrs = [
         "arena.h",
+        ":arena_layout.generated.h",
         "host_platform.h",
     ],
+    includes = ["."],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     tags = ["no-coverage"],
     features = ["-coverage"],
+    deps = [":arena_layout_header"],
 )
 
 cc_library(

@@ -32,6 +32,9 @@ dist/
 lib/**/*.generated.ts
 lib/**/*.embedded.ts
 
+# Generated C files
+core/*.generated.h
+
 # Deno cache
 .deno-cache/
 deno.lock.bak

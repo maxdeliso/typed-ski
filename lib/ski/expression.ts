@@ -6,7 +6,11 @@
  *
  * @module
  */
-import type { SKITerminal, SKITerminalSymbol } from "./terminal.ts";
+import type {
+  SKIImmediate,
+  SKITerminal,
+  SKITerminalSymbol,
+} from "./terminal.ts";
 
 /*
  * EBNF grammar:
@@ -45,9 +49,10 @@ interface SKIU8 {
 }
 
 /**
- * An SKI expression is either a terminal symbol (S, K, I, ...), a U8 literal, or an application node.
+ * An SKI expression is either a terminal symbol (S, K, I, ...), an immediate
+ * family leaf (J<n>, V<m>), a U8 literal, or an application node.
  */
-export type SKIExpression = SKITerminal | SKIU8 | SKIApplication;
+export type SKIExpression = SKITerminal | SKIImmediate | SKIU8 | SKIApplication;
 type SKIChar = SKITerminalSymbol | "(" | ")";
 type SKIKey = (SKIChar | string)[];
 
@@ -74,6 +79,8 @@ export const toSKIKey = (expr: SKIExpression): SKIKey => {
     } else if (item.kind === "terminal") {
       // For terminal nodes, simply push the symbol.
       key.push(item.sym);
+    } else if (item.kind === "immediate") {
+      key.push(`${item.family}${item.value}`);
     } else if (item.kind === "u8") {
       key.push(`#u8(${item.value})`);
     } else {
@@ -109,6 +116,16 @@ export const equivalent = (lft: SKIExpression, rgt: SKIExpression): boolean => {
       secondItem.kind === "terminal"
     ) {
       if (firstItem!.sym !== secondItem!.sym) {
+        return false;
+      }
+    } else if (
+      firstItem.kind === "immediate" &&
+      secondItem.kind === "immediate"
+    ) {
+      if (
+        firstItem.family !== secondItem.family ||
+        firstItem.value !== secondItem.value
+      ) {
         return false;
       }
     } else if (firstItem.kind === "u8" && secondItem.kind === "u8") {
@@ -147,7 +164,8 @@ export const unparseSKI = (expr: SKIExpression): string => {
  * @returns how many terminals are present in the expression.
  */
 export const terminals = (exp: SKIExpression): number => {
-  if (exp.kind === "terminal" || exp.kind === "u8") return 1;
+  if (exp.kind === "terminal" || exp.kind === "immediate" || exp.kind === "u8")
+    return 1;
   else return terminals(exp.lft) + terminals(exp.rgt);
 };
 

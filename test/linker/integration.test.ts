@@ -77,7 +77,7 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
     const { stdout, status: linkCode } = linkTripc(["int_simple.tripc"]);
 
     assert.strictEqual(linkCode, 0);
-    assert.strictEqual(stdout.trim(), "I");
+    assert.strictEqual(stdout.trim(), "(J0V0)");
   });
 
   it("full pipeline: compile + link complex expression", () => {
@@ -90,7 +90,6 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
     const { stdout, status: linkCode } = linkTripc(["int_complex.tripc"]);
 
     assert.strictEqual(linkCode, 0);
-    assert.ok(stdout.includes("K"));
     assert.doesNotThrow(() => parseSKI(stdout.trim()));
   });
 

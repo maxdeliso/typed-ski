@@ -28,6 +28,8 @@ export T_ModU8
 export T_AddU8
 export T_SubU8
 export T_Byte
+export T_J
+export T_V
 export Comb
 export C_Term
 export C_App
@@ -54,6 +56,8 @@ data Terminal =
   | T_AddU8
   | T_SubU8
   | T_Byte U8
+  | T_J U8
+  | T_V U8
 
 data Comb =
   | C_Term Terminal
@@ -78,6 +82,8 @@ poly terminalBytes = \t : Terminal =>
     | T_AddU8 => "A"
     | T_SubU8 => "O"
     | T_Byte b => append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
+    | T_J depth => append [U8] "J" (u8ToDigits depth)
+    | T_V argc => append [U8] "V" (u8ToDigits argc)
   }
 
 poly rec unparseCombinator = \c : Comb =>
@@ -132,6 +138,8 @@ poly terminalTag = \t : Terminal =>
     | T_AddU8 => #u8(14)
     | T_SubU8 => #u8(15)
     | T_Byte _ => #u8(16)
+    | T_J _ => #u8(17)
+    | T_V _ => #u8(18)
   }
 
 poly terminalByteValue = \t : Terminal =>
@@ -153,4 +161,6 @@ poly terminalByteValue = \t : Terminal =>
     | T_AddU8 => #u8(0)
     | T_SubU8 => #u8(0)
     | T_Byte b => b
+    | T_J depth => depth
+    | T_V argc => argc
   }

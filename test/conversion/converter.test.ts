@@ -1,8 +1,12 @@
 import { describe, it, before } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { ChurchN, UnChurchNumber } from "../../lib/ski/church.ts";
-import { applyMany, type SKIExpression } from "../../lib/ski/expression.ts";
-import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
+import {
+  apply,
+  applyMany,
+  type SKIExpression,
+} from "../../lib/ski/expression.ts";
+import { B, C, I, J, K, S, V } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { ConversionError } from "../../lib/conversion/conversionError.ts";
 import { untypedApp, untypedAbs, mkVar } from "../../lib/terms/lambda.ts";
@@ -14,6 +18,12 @@ import {
 } from "../../lib/terms/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../lib/types/types.ts";
 import { createArenaEvaluator } from "../../lib/index.ts";
+
+const containsImmediate = (expr: SKIExpression): boolean => {
+  if (expr.kind === "immediate") return true;
+  if (expr.kind !== "non-terminal") return false;
+  return containsImmediate(expr.lft) || containsImmediate(expr.rgt);
+};
 
 describe("Lambda conversion", () => {
   let arenaEvaluator: any;
@@ -68,8 +78,8 @@ describe("Lambda conversion", () => {
     arenaEvaluator.reduce(applyMany(...exps));
 
   describe("basic combinators", () => {
-    it("converts identity function (λx.x) to I combinator", () => {
-      assert.deepStrictEqual(bracketLambda(id), I);
+    it("converts identity function (λx.x) to J0 V0", () => {
+      assert.deepStrictEqual(bracketLambda(id), apply(J(0), V(0)));
     });
 
     it("converts K-like function (λx.λy.x) to equivalent SKI term", async () => {
@@ -85,6 +95,61 @@ describe("Lambda conversion", () => {
           assert.strictEqual(result, BigInt(a));
         }
       }
+    });
+  });
+
+  describe("selectorization boundary", () => {
+    it("selectorizes non-innermost binder selection", async () => {
+      const middleBinder = untypedAbs(
+        "x",
+        untypedAbs("y", untypedAbs("z", mkVar("y"))),
+      );
+      const ski = bracketLambda(middleBinder);
+
+      assert.deepStrictEqual(containsImmediate(ski), true);
+
+      const result = await UnChurchNumber(
+        arenaEvaluator.reduce(
+          applyMany(ski, ChurchN(1), ChurchN(2), ChurchN(3)),
+        ),
+        arenaEvaluator,
+      );
+      assert.strictEqual(result, 2n);
+    });
+
+    it("selectorizes general single-binder block bodies", async () => {
+      const wrappedBinder = untypedAbs(
+        "x",
+        untypedAbs(
+          "y",
+          untypedAbs("z", untypedApp(untypedApp(konst, mkVar("y")), id)),
+        ),
+      );
+      const ski = bracketLambda(wrappedBinder);
+
+      assert.deepStrictEqual(containsImmediate(ski), true);
+
+      const result = await UnChurchNumber(
+        arenaEvaluator.reduce(
+          applyMany(ski, ChurchN(1), ChurchN(2), ChurchN(3)),
+        ),
+        arenaEvaluator,
+      );
+      assert.strictEqual(result, 2n);
+    });
+
+    it("falls back when staged arguments depend on the skipped block", () => {
+      const closureUnsafe = untypedAbs(
+        "x",
+        untypedAbs("y", untypedAbs("z", untypedApp(mkVar("z"), mkVar("x")))),
+      );
+      const ski = bracketLambda(closureUnsafe);
+
+      assert.deepStrictEqual(containsImmediate(ski), false);
+
+      const reducedLambda = reduceToKey(ski, I, K, S);
+      const reducedDirect = arenaEvaluator.reduce(apply(S, I));
+      assert.deepStrictEqual(reducedLambda, reducedDirect);
     });
   });
 

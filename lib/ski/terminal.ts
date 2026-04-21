@@ -40,6 +40,13 @@ export enum SKITerminalSymbol {
   SubU8 = "O",
 }
 
+export enum SKIImmediateFamily {
+  /** Implementation name for the selector family discussed in design notes as L<n>. */
+  J = "J",
+  /** Argument staging family for eventual-head application. */
+  V = "V",
+}
+
 /**
  * Represents a terminal symbol in an SKI expression.
  *
@@ -49,6 +56,12 @@ export enum SKITerminalSymbol {
 export interface SKITerminal {
   kind: "terminal";
   sym: SKITerminalSymbol;
+}
+
+export interface SKIImmediate {
+  kind: "immediate";
+  family: SKIImmediateFamily;
+  value: number;
 }
 
 /**
@@ -61,6 +74,28 @@ export const term = (sym: SKITerminalSymbol): SKITerminal => ({
   kind: "terminal",
   sym,
 });
+
+export const immediate = (
+  family: SKIImmediateFamily,
+  value: number,
+): SKIImmediate => {
+  if (!Number.isInteger(value) || value < 0 || value > 255) {
+    throw new RangeError(
+      `${family} immediates must be integers in the range 0..255`,
+    );
+  }
+  return {
+    kind: "immediate",
+    family,
+    value,
+  };
+};
+
+export const J = (value: number): SKIImmediate =>
+  immediate(SKIImmediateFamily.J, value);
+
+export const V = (value: number): SKIImmediate =>
+  immediate(SKIImmediateFamily.V, value);
 
 /**
  * The S combinator terminal node.

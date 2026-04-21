@@ -11,7 +11,7 @@ import { describe, it } from "../util/test_shim.ts";
 import { readFile } from "node:fs/promises";
 import {
   closeBatchThanatosSessions,
-  passthroughEvaluator,
+  getThanatosDecodeEvaluator,
   thanatosAvailable,
   withBatchThanatosSession,
 } from "../thanatosHarness.ts";
@@ -173,8 +173,10 @@ async function runBridgeHarness(source: string): Promise<boolean> {
   const expr = parseSKI(linked);
   return await withBatchThanatosSession(async (session) => {
     const resultDag = await session.reduceExpr(expr);
-    const resultExpr = fromTopoDagWire(resultDag);
-    return await UnChurchBoolean(resultExpr, passthroughEvaluator);
+    return await UnChurchBoolean(
+      fromTopoDagWire(resultDag),
+      await getThanatosDecodeEvaluator(),
+    );
   });
 }
 

@@ -39,6 +39,13 @@ static const uint32_t MAX_CAP = 1 << 26;
 static const uint32_t RING_ENTRIES = 1 << 16;
 static const uint32_t POISON_SEQ = 0xffffffff;
 
+typedef enum {
+  IMMEDIATE_HEAD_NONE = 0,
+  IMMEDIATE_HEAD_J = 1,
+  IMMEDIATE_HEAD_V = 2,
+  IMMEDIATE_HEAD_OTHER = 3,
+} ImmediateHeadSummary;
+
 enum {
   /* Reserved scratch slice for synchronous host-side arenaKernelStep(). */
   CONTROL_SYNC_SLICE_ID = MAX_WORKERS,
@@ -118,6 +125,20 @@ static inline uint64_t align64_u64(uint64_t x) {
   return (x + 63) & ~(uint64_t)63;
 }
 static inline void worker_cooperative_yield(void);
+
+static inline uint8_t immediate_head_summary_for_leaf_kind(uint8_t kind) {
+  if (kind == ARENA_KIND_J)
+    return IMMEDIATE_HEAD_J;
+  if (kind == ARENA_KIND_V)
+    return IMMEDIATE_HEAD_V;
+  if (kind == 0)
+    return IMMEDIATE_HEAD_NONE;
+  return IMMEDIATE_HEAD_OTHER;
+}
+
+static inline bool immediate_head_summary_is_jv(uint8_t summary) {
+  return summary == IMMEDIATE_HEAD_J || summary == IMMEDIATE_HEAD_V;
+}
 
 static inline void sys_wait32(atomic_uint *ptr, uint32_t expected) {
 #ifdef __wasm__
@@ -947,6 +968,19 @@ static inline bool check_stable(uint32_t seq) {
   return atomic_load_explicit(&h->resize_seq, memory_order_acquire) == seq;
 }
 
+static inline uint8_t load_head_summary_pub(atomic_uchar *kinds,
+                                            atomic_uchar *syms,
+                                            uint32_t node_id) {
+  if (node_id >= MAX_CAP || is_control_ptr(node_id))
+    return IMMEDIATE_HEAD_NONE;
+
+  uint8_t kind = load_kind_pub(kinds, node_id);
+  if (kind == ARENA_KIND_NON_TERM)
+    return load_u8_payload(syms, node_id);
+
+  return immediate_head_summary_for_leaf_kind(kind);
+}
+
 /** Wait-free: nodes never move in memory on grow(). */
 uint32_t kindOf(uint32_t n) {
   ensure_arena();
@@ -1214,6 +1248,58 @@ uint32_t allocTerminal(uint32_t sym) {
   }
 }
 
+static uint32_t allocImmediateLeaf(uint8_t kind, uint8_t value) {
+  ensure_arena();
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+
+  while (true) {
+    uint32_t seq = enter_stable(&h);
+
+    uint32_t id = atomic_fetch_add_explicit(&h->top, 1, memory_order_acq_rel);
+    atomic_fetch_add_explicit(&h->total_nodes, 1, memory_order_relaxed);
+    if (id >= atomic_load_explicit(&h->capacity, memory_order_relaxed)) {
+      if (tls_worker_id < MAX_WORKERS) {
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], 0,
+                              memory_order_release);
+        grow();
+        uint32_t cur_epoch =
+            atomic_load_explicit(&h->global_epoch, memory_order_acquire);
+        atomic_store_explicit(&h->worker_epochs[tls_worker_id], cur_epoch,
+                              memory_order_release);
+      } else {
+        grow();
+      }
+      continue;
+    }
+
+    atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
+    atomic_uint *rights =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
+    atomic_uint *hashes =
+        (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
+    atomic_uchar *kinds =
+        (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+    atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
+
+    atomic_store_explicit(&lefts[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&rights[id], EMPTY, memory_order_relaxed);
+    atomic_store_explicit(&syms[id], value, memory_order_relaxed);
+    atomic_store_explicit(&hashes[id],
+                          ((uint32_t)kind << 8) | (uint32_t)value,
+                          memory_order_relaxed);
+    atomic_store_explicit(&kinds[id], kind, memory_order_release);
+
+    if (!check_stable(seq))
+      continue;
+
+    return id;
+  }
+}
+
+uint32_t allocJ(uint8_t value) { return allocImmediateLeaf(ARENA_KIND_J, value); }
+
+uint32_t allocV(uint8_t value) { return allocImmediateLeaf(ARENA_KIND_V, value); }
+
 uint32_t allocU8(uint8_t value) {
   ensure_arena();
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
@@ -1443,13 +1529,20 @@ uint32_t allocCons(uint32_t l, uint32_t r) {
         (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
     atomic_uchar *kinds =
         (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
+    atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
     atomic_uint *next_idxs =
         (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_next_idx);
     atomic_uint *buckets = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_buckets);
+    uint8_t head_summary = load_head_summary_pub(kinds, syms, l);
+    if (head_summary == IMMEDIATE_HEAD_NONE)
+      head_summary = IMMEDIATE_HEAD_OTHER;
 
     atomic_store_explicit(&lefts[id], l, memory_order_relaxed);
     atomic_store_explicit(&rights[id], r, memory_order_relaxed);
     atomic_store_explicit(&hashes[id], hval, memory_order_relaxed);
+    /* Non-term nodes reuse the sym byte as a cached spine-head summary so the
+     * reducer can skip speculative J/V classification on ordinary nodes. */
+    atomic_store_explicit(&syms[id], head_summary, memory_order_relaxed);
     atomic_store_explicit(&kinds[id], ARENA_KIND_NON_TERM,
                           memory_order_release);
 
@@ -1762,6 +1855,10 @@ static const char *trace_arena_kind_name(uint32_t kind) {
     return "app";
   case ARENA_KIND_U8:
     return "u8";
+  case ARENA_KIND_J:
+    return "j";
+  case ARENA_KIND_V:
+    return "v";
   default:
     return "unknown";
   }
@@ -2108,6 +2205,10 @@ static void trace_write_graph_json(FILE *out, const WorkerTraceSnapshot *snap) {
             node->right);
     if (node->kind == ARENA_KIND_TERMINAL) {
       fprintf(out, ",\"sym\":\"%s\"}", trace_arena_sym_name(node->sym));
+    } else if (node->kind == ARENA_KIND_J) {
+      fprintf(out, ",\"immediate\":\"J\",\"value\":%u}", node->sym);
+    } else if (node->kind == ARENA_KIND_V) {
+      fprintf(out, ",\"immediate\":\"V\",\"value\":%u}", node->sym);
     } else if (node->kind == ARENA_KIND_U8) {
       fprintf(out, ",\"u8\":%u}", node->sym);
     } else {
@@ -2188,6 +2289,10 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
       if (focus->kind == ARENA_KIND_TERMINAL) {
         fprintf(out, ",\"sym\":\"%s\"",
                 trace_arena_sym_name(focus->sym));
+      } else if (focus->kind == ARENA_KIND_J) {
+        fprintf(out, ",\"immediate\":\"J\",\"value\":%u", focus->sym);
+      } else if (focus->kind == ARENA_KIND_V) {
+        fprintf(out, ",\"immediate\":\"V\",\"value\":%u", focus->sym);
       } else if (focus->kind == ARENA_KIND_U8) {
         fprintf(out, ",\"u8\":%u", focus->sym);
       }
@@ -2746,6 +2851,178 @@ static bool node_has_effectful_top_step(SabHeader *h, uint32_t node_id) {
   return load_u8_payload(syms, left) == ARENA_SYM_READ_ONE;
 }
 
+static bool collect_spine_head_and_argc(atomic_uchar *kinds, atomic_uint *lefts,
+                                        uint32_t root, uint32_t *out_head,
+                                        uint8_t *out_head_kind,
+                                        uint32_t *out_argc) {
+  uint32_t argc = 0;
+  uint32_t node = root;
+
+  while (node < MAX_CAP && !is_control_ptr(node) &&
+         load_kind_pub(kinds, node) == ARENA_KIND_NON_TERM) {
+    argc++;
+    node = load_u32_payload(lefts, node);
+    debug_check_child_ptr(node);
+  }
+
+  if (node >= MAX_CAP || is_control_ptr(node))
+    return false;
+
+  *out_head = node;
+  *out_head_kind = load_kind_pub(kinds, node);
+  *out_argc = argc;
+  return true;
+}
+
+static void collect_spine_args_into(atomic_uint *lefts, atomic_uint *rights,
+                                    uint32_t root, uint32_t argc,
+                                    uint32_t *args) {
+  uint32_t node = root;
+  for (uint32_t i = argc; i > 0; i--) {
+    args[i - 1u] = load_u32_payload(rights, node);
+    debug_check_child_ptr(args[i - 1u]);
+    node = load_u32_payload(lefts, node);
+    debug_check_child_ptr(node);
+  }
+}
+
+static uint32_t build_app_chain(uint32_t head, const uint32_t *args,
+                                uint32_t start, uint32_t count) {
+  uint32_t out = head;
+  for (uint32_t i = 0; i < count; i++) {
+    out = allocCons(out, args[start + i]);
+  }
+  return out;
+}
+
+static bool decompose_exact_partial_v(atomic_uchar *kinds, atomic_uchar *syms,
+                                      atomic_uint *lefts, uint32_t expr,
+                                      uint32_t *out_argc) {
+  if (expr >= MAX_CAP || is_control_ptr(expr))
+    return false;
+
+  uint8_t kind = load_kind_pub(kinds, expr);
+  if (kind == ARENA_KIND_V) {
+    if (load_u8_payload(syms, expr) != 0)
+      return false;
+    *out_argc = 0;
+    return true;
+  }
+
+  if (kind != ARENA_KIND_NON_TERM)
+    return false;
+
+  if (load_u8_payload(syms, expr) != IMMEDIATE_HEAD_V)
+    return false;
+
+  uint32_t head = EMPTY;
+  uint32_t argc = 0;
+  uint8_t head_kind = 0;
+  if (!collect_spine_head_and_argc(kinds, lefts, expr, &head, &head_kind,
+                                   &argc) ||
+      head_kind != ARENA_KIND_V) {
+    return false;
+  }
+
+  if (argc != load_u8_payload(syms, head))
+    return false;
+
+  *out_argc = argc;
+  return true;
+}
+
+static bool try_reduce_immediate_spine(atomic_uchar *kinds, atomic_uchar *syms,
+                                       atomic_uint *lefts,
+                                       atomic_uint *rights, uint32_t root,
+                                       uint32_t *out_result) {
+  if (root >= MAX_CAP || is_control_ptr(root) ||
+      load_kind_pub(kinds, root) != ARENA_KIND_NON_TERM) {
+    return false;
+  }
+
+  uint8_t root_summary = load_u8_payload(syms, root);
+  if (!immediate_head_summary_is_jv(root_summary)) {
+    return false;
+  }
+
+  uint32_t head = EMPTY;
+  uint32_t argc = 0;
+  uint8_t head_kind = 0;
+  if (!collect_spine_head_and_argc(kinds, lefts, root, &head, &head_kind,
+                                   &argc)) {
+    return false;
+  }
+
+  if (root_summary == IMMEDIATE_HEAD_J) {
+    if (head_kind != ARENA_KIND_J) {
+      return false;
+    }
+
+    uint32_t depth = load_u8_payload(syms, head);
+    uint32_t saturation = depth + 2u;
+    if (argc < saturation) {
+      return false;
+    }
+
+    uint32_t *args =
+        argc == 0 ? NULL : (uint32_t *)__builtin_alloca(argc * sizeof(uint32_t));
+    collect_spine_args_into(lefts, rights, root, argc, args);
+
+    uint32_t result = EMPTY;
+    uint32_t f = args[0];
+    uint32_t xn = args[depth + 1u];
+    uint32_t staged_argc = 0;
+    uint8_t f_kind =
+        (f < MAX_CAP && !is_control_ptr(f)) ? load_kind_pub(kinds, f) : 0;
+
+    if (f_kind == ARENA_KIND_V && load_u8_payload(syms, f) == 0) {
+      result = xn;
+    } else if (f_kind == ARENA_KIND_NON_TERM &&
+               load_u8_payload(syms, f) == IMMEDIATE_HEAD_V &&
+               decompose_exact_partial_v(kinds, syms, lefts, f,
+                                         &staged_argc)) {
+      uint32_t *staged = staged_argc == 0
+                             ? NULL
+                             : (uint32_t *)__builtin_alloca(staged_argc *
+                                                            sizeof(uint32_t));
+      if (staged_argc > 0)
+        collect_spine_args_into(lefts, rights, f, staged_argc, staged);
+      result = build_app_chain(xn, staged, 0, staged_argc);
+    } else {
+      result = allocCons(f, xn);
+    }
+
+    if (argc > saturation) {
+      result = build_app_chain(result, args, saturation, argc - saturation);
+    }
+
+    *out_result = result;
+    return true;
+  }
+
+  if (head_kind != ARENA_KIND_V) {
+    return false;
+  }
+
+  uint32_t staged_argc = load_u8_payload(syms, head);
+  uint32_t saturation = staged_argc + 1u;
+  if (argc < saturation) {
+    return false;
+  }
+
+  uint32_t *args =
+      argc == 0 ? NULL : (uint32_t *)__builtin_alloca(argc * sizeof(uint32_t));
+  collect_spine_args_into(lefts, rights, root, argc, args);
+
+  uint32_t result = build_app_chain(args[staged_argc], args, 0, staged_argc);
+  if (argc > saturation) {
+    result = build_app_chain(result, args, saturation, argc - saturation);
+  }
+
+  *out_result = result;
+  return true;
+}
+
 static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                                   uint32_t *gas, SabHeader *h,
                                   bool yield_on_gas, bool yield_on_step_limit,
@@ -3160,6 +3437,25 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
       }
     }
 
+    if (immediate_head_summary_is_jv(load_u8_payload(syms, cur))) {
+      uint32_t reduced = EMPTY;
+      if (try_reduce_immediate_spine(kinds, syms, lefts, rights, cur,
+                                     &reduced)) {
+        if (ws->remaining_steps == 0) {
+          if (yield_on_step_limit) {
+            return park_budget_yield(slice_id, ws, SUSP_STEP_LIMIT,
+                                     allow_retry);
+          }
+          ws->mode = MODE_RETURN;
+          continue;
+        }
+        ws->remaining_steps--;
+        ws->current_val = reduced;
+        ws->mode = MODE_DESCEND;
+        continue;
+      }
+    }
+
     worker_push_frame(cv, slice_id, ws,
                       (Frame){FRAME_UPDATE, STAGE_LEFT, 0, ws->current_val, 0});
     ws->current_val = left;
@@ -3514,4 +3810,3 @@ uint32_t debugLockState(void) {
   return atomic_load_explicit(&h->resize_seq, memory_order_relaxed);
 }
 uint32_t debugGetRingEntries(void) { return RING_ENTRIES; }
-

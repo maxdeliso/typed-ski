@@ -109,6 +109,13 @@ const randomInsert = (
       return apply(term, expr);
     }
   }
+  if (expr.kind === "immediate") {
+    if (direction) {
+      return apply(expr, term);
+    } else {
+      return apply(term, expr);
+    }
+  }
   if (expr.kind === "u8") {
     if (direction) {
       return apply(expr, term);

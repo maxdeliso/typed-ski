@@ -20,7 +20,12 @@ import {
 } from "./parserState.ts";
 import { ParseError } from "./parseError.ts";
 import { parseWithEOF } from "./eof.ts";
-import { SKITerminalSymbol, term } from "../ski/terminal.ts";
+import {
+  immediate,
+  SKIImmediateFamily,
+  SKITerminalSymbol,
+  term,
+} from "../ski/terminal.ts";
 
 const TERMINAL_ALIASES: Record<string, SKITerminalSymbol> = {
   S: SKITerminalSymbol.S,
@@ -53,8 +58,22 @@ function isSymbol(tok: string | null): tok is SKITerminalSymbol {
   return normalizeSymbol(tok) !== null;
 }
 
+function immediateFamilyFromToken(
+  tok: string | null,
+): SKIImmediateFamily | null {
+  if (tok === null) return null;
+  if (tok === "J" || tok === "j") return SKIImmediateFamily.J;
+  if (tok === "V" || tok === "v") return SKIImmediateFamily.V;
+  return null;
+}
+
 function isAtomStart(tok: string | null): boolean {
-  return tok === "(" || tok === "#" || isSymbol(tok);
+  return (
+    tok === "(" ||
+    tok === "#" ||
+    isSymbol(tok) ||
+    immediateFamilyFromToken(tok) !== null
+  );
 }
 
 /** Parses #u8(<decimal 0..255>) and returns [literal string, SKI u8 expr, state]. */
@@ -75,6 +94,47 @@ function parseU8Literal(
   const s6 = matchRP(s5);
   const literal = `#u8(${lit})`;
   return [literal, { kind: "u8", value }, s6];
+}
+
+function parseImmediateLiteral(
+  state: ParserState,
+): [string, SKIExpression, ParserState] {
+  const [peeked, skipped] = peek(state);
+  const family = immediateFamilyFromToken(peeked);
+  if (family === null) {
+    throw new ParseError(
+      withParserState(skipped, "expected J<n> or V<m> immediate"),
+    );
+  }
+
+  const afterPrefix = consume(skipped);
+  let digits = "";
+  let current = afterPrefix;
+  while (current.idx < current.buf.length) {
+    const ch = current.buf[current.idx]!;
+    if (!/^[0-9]$/.test(ch)) break;
+    digits += ch;
+    current = consume(current);
+  }
+
+  if (digits.length === 0) {
+    throw new ParseError(
+      withParserState(afterPrefix, `expected decimal suffix after '${family}'`),
+    );
+  }
+
+  const value = Number(digits);
+  if (value < 0 || value > 255) {
+    throw new ParseError(
+      withParserState(
+        current,
+        `${family} immediate must be 0..255, got ${value}`,
+      ),
+    );
+  }
+
+  const literal = `${family}${digits}`;
+  return [literal, immediate(family, value), current];
 }
 
 function parseSeq(rdb: ParserState): [string, SKIExpression, ParserState] {
@@ -101,6 +161,8 @@ function parseAtomicOrParens(
     return parseParens(state);
   } else if (peeked === "#") {
     return parseU8Literal(state);
+  } else if (immediateFamilyFromToken(peeked) !== null) {
+    return parseImmediateLiteral(state);
   } else if (isSymbol(peeked)) {
     const token = normalizeSymbol(peeked)!;
     const stateAfterConsume = consume(state);

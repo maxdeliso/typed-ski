@@ -24,6 +24,7 @@ import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import {
   closeBatchThanatosSessions,
+  normalizeThanatosExpr,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
@@ -195,7 +196,9 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
           for (const tc of structuralTests) {
             const program = await compileAndValidateTestProgram(tc.file);
             const resultDag = await session.reduceExpr(program);
-            const resultExpr = fromTopoDagWire(resultDag);
+            const resultExpr = await normalizeThanatosExpr(
+              fromTopoDagWire(resultDag),
+            );
             const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
             assert.ok(ok, tc.msg);
           }

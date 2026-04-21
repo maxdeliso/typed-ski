@@ -37,6 +37,10 @@ export enum ArenaKind {
   NonTerm = 2,
   /** U8 literal (byte 0..255) */
   U8 = 3,
+  /** J<n> immediate selector */
+  J = 4,
+  /** V<m> immediate stager */
+  V = 5,
 }
 
 export const CONTROL_PTR_BIT = 0x80000000;

@@ -105,9 +105,39 @@ static uint32_t parse_u8_literal(ParseState *s) {
   return allocU8((uint8_t)val);
 }
 
+static int is_immediate_prefix(int c) {
+  return c == 'J' || c == 'j' || c == 'V' || c == 'v';
+}
+
+static uint32_t parse_immediate_literal(ParseState *s) {
+  if (s->idx >= s->len)
+    return EMPTY;
+
+  char prefix = s->buf[s->idx];
+  int is_j = prefix == 'J' || prefix == 'j';
+  int is_v = prefix == 'V' || prefix == 'v';
+  if (!is_j && !is_v)
+    return EMPTY;
+
+  s->idx++;
+  unsigned val = 0;
+  int digits = 0;
+  while (s->idx < s->len && s->buf[s->idx] >= '0' && s->buf[s->idx] <= '9') {
+    val = val * 10 + (unsigned)(s->buf[s->idx] - '0');
+    if (val > 255)
+      return EMPTY;
+    s->idx++;
+    digits++;
+  }
+  if (digits == 0)
+    return EMPTY;
+
+  return is_j ? allocJ((uint8_t)val) : allocV((uint8_t)val);
+}
+
 /* is_atom_start: allow # for #u8(n) */
 static int is_atom_start(int c) {
-  return c == '(' || c == '#' || char_to_sym(c) != 0;
+  return c == '(' || c == '#' || is_immediate_prefix(c) || char_to_sym(c) != 0;
 }
 
 static uint32_t parse_seq(ParseState *s);
@@ -131,6 +161,9 @@ static uint32_t parse_atomic(ParseState *s) {
       return EMPTY;
     consume(s);
     return inner;
+  }
+  if (is_immediate_prefix(c)) {
+    return parse_immediate_literal(s);
   }
   uint32_t sym = char_to_sym(c);
   if (sym == 0)
@@ -216,6 +249,14 @@ static size_t unparse_ski_rec(uint32_t node_id, char *buf, size_t capacity,
       return written;
     buf[written++] = sym_to_char(symOf(node_id));
     return written;
+  }
+  if (kind == ARENA_KIND_J || kind == ARENA_KIND_V) {
+    int n = snprintf(buf + written, (int)(capacity - written), "%c%u",
+                     kind == ARENA_KIND_J ? 'J' : 'V',
+                     (unsigned)symOf(node_id));
+    if (n < 0 || (size_t)n >= capacity - written)
+      return written;
+    return written + (size_t)n;
   }
   if (kind == ARENA_KIND_U8) {
     int n = snprintf(buf + written, (int)(capacity - written), "#u8(%u)",
@@ -358,6 +399,16 @@ static bool topo_term_is_leaf_terminal(const char *term, uint32_t *sym_out) {
   return true;
 }
 
+static bool topo_term_is_leaf_immediate(const char *term, uint8_t *kind_out,
+                                        uint8_t *value_out) {
+  if ((term[0] != 'J' && term[0] != 'V') ||
+      !parse_hex_byte(term + 1, value_out)) {
+    return false;
+  }
+  *kind_out = (term[0] == 'J') ? ARENA_KIND_J : ARENA_KIND_V;
+  return true;
+}
+
 uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
   if (!buf)
     return EMPTY;
@@ -429,7 +480,20 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
       continue;
     }
 
+    uint8_t immediate_kind = 0;
     uint8_t byte_value = 0;
+    if (topo_term_is_leaf_immediate(term, &immediate_kind, &byte_value)) {
+      if (!left_is_null || !right_is_null) {
+        fprintf(stderr,
+                "parse_dag: immediate record %zu must use null pointers\n", i);
+        free(mapped);
+        return EMPTY;
+      }
+      mapped[i] =
+          immediate_kind == ARENA_KIND_J ? allocJ(byte_value) : allocV(byte_value);
+      continue;
+    }
+
     if (term[0] == 'U' && parse_hex_byte(term + 1, &byte_value)) {
       if (!left_is_null || !right_is_null) {
         fprintf(stderr, "parse_dag: U8 record %zu must use null pointers\n", i);
@@ -484,6 +548,7 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
 /* Export: only these kinds are allowed. */
 static int dag_exportable_kind(uint32_t kind) {
   return kind == ARENA_KIND_TERMINAL || kind == ARENA_KIND_U8 ||
+         kind == ARENA_KIND_J || kind == ARENA_KIND_V ||
          kind == ARENA_KIND_NON_TERM;
 }
 
@@ -654,10 +719,10 @@ static bool unparse_emit_node(UnparseCtx *ctx, uint32_t n) {
     write_hex8(record + TOPO_DAG_TERM_WIDTH, TOPO_DAG_NULL_PTR);
     write_hex8(record + TOPO_DAG_TERM_WIDTH + TOPO_DAG_PTR_WIDTH,
                TOPO_DAG_NULL_PTR);
-  } else if (k == ARENA_KIND_U8) {
+  } else if (k == ARENA_KIND_U8 || k == ARENA_KIND_J || k == ARENA_KIND_V) {
     static const char HEX[] = "0123456789ABCDEF";
     uint8_t value = (uint8_t)symOf(n);
-    record[0] = 'U';
+    record[0] = k == ARENA_KIND_U8 ? 'U' : (k == ARENA_KIND_J ? 'J' : 'V');
     record[1] = HEX[(value >> 4) & 0xfu];
     record[2] = HEX[value & 0xfu];
     write_hex8(record + TOPO_DAG_TERM_WIDTH, TOPO_DAG_NULL_PTR);
@@ -734,7 +799,8 @@ size_t unparse_dag(uint32_t root, char *buf, size_t capacity) {
         return 0;
       }
 
-      if (k == ARENA_KIND_TERMINAL || k == ARENA_KIND_U8) {
+      if (k == ARENA_KIND_TERMINAL || k == ARENA_KIND_U8 ||
+          k == ARENA_KIND_J || k == ARENA_KIND_V) {
         f->state = DAG_EXPORT_EMIT;
         continue;
       }

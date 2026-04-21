@@ -15,10 +15,13 @@ import {
   C,
   CPrime,
   I,
+  J,
   K,
+  LtU8,
   ReadOne,
   S,
   SPrime,
+  V,
   WriteOne,
 } from "../../lib/ski/terminal.ts";
 
@@ -148,6 +151,21 @@ describe("parseSKI", () => {
     assert.deepStrictEqual(withSpaces, noSpaces);
   });
 
+  it("should parse J/V immediates with decimal suffixes", () => {
+    assert.deepStrictEqual(parseSKI("J0"), J(0));
+    assert.deepStrictEqual(parseSKI("j12"), J(12));
+    assert.deepStrictEqual(parseSKI("V0"), V(0));
+    assert.deepStrictEqual(parseSKI("v3"), V(3));
+    assertReparse("J12");
+    assertReparse("V3");
+    assertReparse("(J2(V1#u8(65)))");
+  });
+
+  it("should keep plain L mapped to ltU8", () => {
+    assert.deepStrictEqual(parseSKI("L"), LtU8);
+    assert.deepStrictEqual(parseSKI("l"), LtU8);
+  });
+
   it("should parse a complex expression with mixed-case and spaces", () => {
     const expr1 = parseSKI(" s ( K ( s I i ) ) ");
     const expr2 = parseSKI("S(K(SII))");
@@ -162,6 +180,18 @@ describe("parseSKI", () => {
   it("should fail on #u8 literals out of range", () => {
     assert.throws(() => parseSKI("#u8(256)"), {
       message: /#u8 value must be 0..255/,
+    });
+  });
+
+  it("should fail on malformed J/V immediates", () => {
+    assert.throws(() => parseSKI("J"), {
+      message: /decimal suffix/,
+    });
+    assert.throws(() => parseSKI("V"), {
+      message: /decimal suffix/,
+    });
+    assert.throws(() => parseSKI("J256"), {
+      message: /must be 0\.\.255/,
     });
   });
 });

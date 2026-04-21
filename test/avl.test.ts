@@ -20,6 +20,7 @@ import { UnChurchNumber } from "../lib/ski/church.ts";
 import { fromTopoDagWire, toTopoDagWire } from "../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
+  normalizeThanatosExpr,
   passthroughEvaluator,
   runThanatosBatch,
   thanatosAvailable,
@@ -216,7 +217,7 @@ async function evaluateTestModuleThanatos(testCase: AvlCase): Promise<bigint> {
   return await withBatchThanatosSession(async (session) => {
     const resultDag = await session.reduceDag(toTopoDagWire(expr));
     return await UnChurchNumber(
-      fromTopoDagWire(resultDag),
+      await normalizeThanatosExpr(fromTopoDagWire(resultDag)),
       passthroughEvaluator,
     );
   });

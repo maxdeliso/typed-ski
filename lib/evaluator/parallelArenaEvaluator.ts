@@ -32,7 +32,8 @@ import {
 } from "./parallel/requestTracker.ts";
 import { WorkerManager } from "./parallel/workerManager.ts";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
+import fs from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * @internal
@@ -70,6 +71,16 @@ function resolveArenaWorkerUrl(): string {
   const explicitWorkerPath = process.env["TYPED_SKI_ARENA_WORKER_JS_PATH"];
   if (explicitWorkerPath) {
     return pathToFileURL(explicitWorkerPath).href;
+  }
+  if (typeof process !== "undefined" && process.versions?.node) {
+    try {
+      const sourceWorkerUrl = new URL("./arenaWorker.ts", import.meta.url);
+      if (fs.existsSync(fileURLToPath(sourceWorkerUrl))) {
+        return sourceWorkerUrl.href;
+      }
+    } catch {
+      // Fall through to the bundled worker path.
+    }
   }
   return new URL("../../dist/arenaWorker.js", import.meta.url).href;
 }

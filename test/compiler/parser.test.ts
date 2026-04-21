@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
+  normalizeThanatosExpr,
   passthroughEvaluator,
   thanatosAvailable,
   withBatchThanatosSession,
@@ -142,7 +143,9 @@ describe("Parser thanatos suite", { skip: !thanatosAvailable() }, async () => {
             const expr = parseSKI(linked);
             try {
               const resultDag = await session.reduceExpr(expr);
-              const resultExpr = fromTopoDagWire(resultDag);
+              const resultExpr = await normalizeThanatosExpr(
+                fromTopoDagWire(resultDag),
+              );
               const ok = await UnChurchBoolean(
                 resultExpr,
                 passthroughEvaluator,
@@ -248,7 +251,7 @@ async function runInlineParserHarness(source: string): Promise<boolean> {
   const expr = parseSKI(linked);
   return await withBatchThanatosSession(async (session) => {
     const resultDag = await session.reduceExpr(expr);
-    const resultExpr = fromTopoDagWire(resultDag);
+    const resultExpr = await normalizeThanatosExpr(fromTopoDagWire(resultDag));
     // resultExpr should be church 1 (#u8(1)) for success
     const result = unparseSKI(resultExpr);
     return result.includes("U01") || result.includes("1");

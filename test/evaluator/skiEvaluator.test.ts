@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
+  apply,
   applyMany,
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
-import { B, C, I, K, S } from "../../lib/ski/terminal.ts";
+import { B, C, I, J, K, S, V } from "../../lib/ski/terminal.ts";
 import rsexport, { type RandomSeed } from "random-seed";
 const { create } = rsexport;
 import { randExpression } from "../../lib/ski/generator.ts";
@@ -109,6 +110,56 @@ describe("B and C combinators", () => {
     const left = arenaEvaluator.reduce(applyMany(C, K, I, S));
     const right = arenaEvaluator.reduce(applyMany(K, S, I));
     compareExpressions(left, right);
+  });
+});
+
+describe("J and V immediates", () => {
+  let arenaEvaluator: any;
+
+  before(async () => {
+    arenaEvaluator = await createArenaEvaluator();
+  });
+
+  it("J<n> selects the requested binder", () => {
+    const expr = applyMany(J(2), K, I, S, C);
+    const stepped = arenaEvaluator.stepOnce(expr);
+    assert.ok(stepped.altered);
+    compareExpressions(stepped.expr, apply(K, C));
+  });
+
+  it("V<m> stages arguments until the head arrives", () => {
+    const zero = arenaEvaluator.stepOnce(apply(V(0), K));
+    assert.ok(zero.altered);
+    compareExpressions(zero.expr, K);
+
+    const one = arenaEvaluator.stepOnce(applyMany(V(1), I, K));
+    assert.ok(one.altered);
+    compareExpressions(one.expr, apply(K, I));
+
+    const two = arenaEvaluator.stepOnce(applyMany(V(2), I, K, S));
+    assert.ok(two.altered);
+    compareExpressions(two.expr, applyMany(S, I, K));
+  });
+
+  it("fuses J/V selector-head applications in one step", () => {
+    const expr = applyMany(J(2), apply(V(1), I), K, S, C);
+    const stepped = arenaEvaluator.stepOnce(expr);
+    assert.ok(stepped.altered);
+    compareExpressions(stepped.expr, apply(C, I));
+  });
+
+  it("leaves unsaturated J/V spines alone", () => {
+    const unsaturatedJ = applyMany(J(2), K, I);
+    compareExpressions(
+      arenaEvaluator.stepOnce(unsaturatedJ).expr,
+      unsaturatedJ,
+    );
+
+    const unsaturatedV = apply(V(2), I);
+    compareExpressions(
+      arenaEvaluator.stepOnce(unsaturatedV).expr,
+      unsaturatedV,
+    );
   });
 });
 

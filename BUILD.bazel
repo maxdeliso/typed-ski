@@ -5,7 +5,7 @@ load("//bazel:codegen.bzl", "codegen_rule")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load(
     "@@aspect_rules_js++npm+npm__json-stringify-safe__5.0.1__links//:defs.bzl",
-    link_json_stringify_safe = "npm_link_imported_package_store",
+    link_json_stringify_safe = "npm_link_imported_package_store_internal",
 )
 
 load("@aspect_rules_js//js:defs.bzl", "js_library")
@@ -32,8 +32,10 @@ codegen_rule(
     script = "//scripts:generate_version.mjs",
 )
 
-npm_link_all_packages(name = "node_modules")
-link_json_stringify_safe(name = "node_modules/json-stringify-safe")
+npm_link_all_packages(
+    name = "node_modules",
+)
+link_json_stringify_safe(link_name = "json-stringify-safe")
 
 NODE_TEST_DATA = glob(
     [

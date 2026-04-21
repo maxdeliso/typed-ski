@@ -313,29 +313,6 @@ poly id = #a => \\x:a => x`;
     });
   });
 
-  describe("Version consistency tests", () => {
-    it("version is consistent across files", async () => {
-      const packageJsonPath = join(projectRoot, "package.json");
-      const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
-      const version = packageJson.version;
-
-      const jsrJsonPath = join(projectRoot, "jsr.json");
-      const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
-      assert.strictEqual(jsrJson.version, version);
-
-      const generatedVersionPath = join(
-        projectRoot,
-        "lib",
-        "shared",
-        "version.generated.ts",
-      );
-      const generatedVersion = await readFile(generatedVersionPath, "utf-8");
-      assert.ok(
-        generatedVersion.includes(`export const VERSION = "${version}";`),
-      );
-    });
-  });
-
   describe("CLI Packaging Tests", () => {
     describe("TypeScript CLI (bin/tripc.ts)", () => {
       it("--version flag", async () => {

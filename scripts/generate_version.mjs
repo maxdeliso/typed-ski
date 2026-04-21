@@ -99,14 +99,17 @@ async function main() {
       process.exit(1);
     }
   } else {
+    const writes = [];
     if (args.tsOut) {
       const tsPath = resolve(args.tsOut);
-      await writeFile(tsPath, buildTsContent(version), "utf8");
+      writes.push(writeFile(tsPath, buildTsContent(version), "utf8"));
     }
     if (args.jsrJson) {
       const jsrJsonPath = resolve(args.jsrJson);
-      await writeFile(jsrJsonPath, buildJsrJson(pkg), "utf8");
+      writes.push(writeFile(jsrJsonPath, buildJsrJson(pkg), "utf8"));
     }
+
+    await Promise.all(writes);
 
     console.log(
       `Successfully processed version metadata for version: ${version}`,

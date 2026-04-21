@@ -421,6 +421,11 @@ function verifyVersion(): void {
 }
 
 async function syncGenerated(): Promise<void> {
+  if (process.env["BAZEL_TEST"]) {
+    console.log("Skipping syncGenerated during Bazel test.");
+    return;
+  }
+
   await run([
     NODE,
     NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
@@ -429,6 +434,8 @@ async function syncGenerated(): Promise<void> {
     repo("package.json"),
     "--ts-out",
     repo("lib", "shared", "version.generated.ts"),
+    "--jsr-json",
+    repo("jsr.json"),
   ]);
   await run([
     NODE,
@@ -454,6 +461,8 @@ async function verifyGenerated(): Promise<void> {
     repo("package.json"),
     "--ts-out",
     repo("lib", "shared", "version.generated.ts"),
+    "--jsr-json",
+    repo("jsr.json"),
     "--verify",
   ]);
   await run([

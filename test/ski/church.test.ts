@@ -11,7 +11,14 @@ import {
   UnChurchBoolean,
   UnChurchNumber,
 } from "../../lib/ski/church.ts";
-import { I, K, S, SKITerminalSymbol } from "../../lib/ski/terminal.ts";
+import {
+  I,
+  J,
+  K,
+  S,
+  SKITerminalSymbol,
+  V as StageV,
+} from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import {
   apply,
@@ -289,6 +296,20 @@ describe("Church numeral optimization functions", () => {
     };
     const result = await UnChurchNumber(readOneExpr, arenaEvaluator);
     assert.strictEqual(result, 0n);
+  });
+
+  it("UnChurchNumber should decode selectorized Church zero", async () => {
+    const result = await UnChurchNumber(apply(J(1), StageV(0)), arenaEvaluator);
+    assert.strictEqual(result, 0n);
+  });
+
+  it("UnChurchNumber should decode selectorized identity-wrapped numerals", async () => {
+    const selectorId = apply(J(0), StageV(0));
+    const result = await UnChurchNumber(
+      apply(selectorId, ChurchN(3)),
+      arenaEvaluator,
+    );
+    assert.strictEqual(result, 3n);
   });
 
   it("UnChurchNumber should handle Turner primes", async () => {

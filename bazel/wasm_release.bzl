@@ -1,7 +1,9 @@
 _WASM_EXPORTS = [
     "allocCons",
+    "allocJ",
     "allocTerminal",
     "allocU8",
+    "allocV",
     "arenaKernelStep",
     "connectArena",
     "debugCalculateArenaSize",

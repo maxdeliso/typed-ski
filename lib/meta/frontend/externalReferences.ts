@@ -209,6 +209,7 @@ function collectIterative(
         }
 
         case "terminal":
+        case "immediate":
           // ignore - no bindings possible
           break;
       }

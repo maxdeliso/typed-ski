@@ -41,6 +41,13 @@ static void topo_u8_record(uint8_t value, char *out, size_t out_cap) {
   assert(n > 0 && (size_t)n < out_cap);
 }
 
+static void topo_immediate_record(char family, uint8_t value, char *out,
+                                  size_t out_cap) {
+  int n = snprintf(out, out_cap, "%c%02XFFFFFFFFFFFFFFFF", family,
+                   (unsigned)value);
+  assert(n > 0 && (size_t)n < out_cap);
+}
+
 static void topo_app_record(uint32_t left_offset, uint32_t right_offset,
                             char *out, size_t out_cap) {
   int n = snprintf(out, out_cap, "@00%08X%08X", left_offset, right_offset);
@@ -65,8 +72,11 @@ static void test_parse_ski_invalid_inputs(void) {
 
   assert(parse_ski("", 0, &end) == EMPTY);
   assert(parse_ski("X", 1, &end) == EMPTY);
+  assert(parse_ski("J", 1, &end) == EMPTY);
+  assert(parse_ski("V", 1, &end) == EMPTY);
   assert(parse_ski("(S K", 4, &end) == EMPTY);
   assert(parse_ski("#u8(999)", 8, &end) == EMPTY);
+  assert(parse_ski("J256", 4, &end) == EMPTY);
 }
 
 static void test_parse_ski_all_terminals(void) {
@@ -106,6 +116,30 @@ static void test_parse_u8_edge_cases(void) {
   assert(root != EMPTY);
   assert(kindOf(root) == ARENA_KIND_U8);
   assert(symOf(root) == 255);
+}
+
+static void test_parse_immediate_edge_cases(void) {
+  printf("test_parse_immediate_edge_cases...\n");
+  reset();
+  size_t end = 0;
+
+  uint32_t j = parse_ski("J12", 3, &end);
+  assert(j != EMPTY);
+  assert(end == 3);
+  assert(kindOf(j) == ARENA_KIND_J);
+  assert(symOf(j) == 12);
+
+  uint32_t v = parse_ski("v3", 2, &end);
+  assert(v != EMPTY);
+  assert(end == 2);
+  assert(kindOf(v) == ARENA_KIND_V);
+  assert(symOf(v) == 3);
+
+  char buf[32];
+  assert(unparse_ski(j, buf, sizeof(buf)) > 0);
+  assert(strcmp(buf, "J12") == 0);
+  assert(unparse_ski(v, buf, sizeof(buf)) > 0);
+  assert(strcmp(buf, "V3") == 0);
 }
 
 static void test_unparse_ski_edge_cases(void) {
@@ -177,6 +211,33 @@ static void test_parse_dag_success_with_whitespace(void) {
   assert(strcmp(buf,
                 "U2AFFFFFFFFFFFFFFFF|I00FFFFFFFFFFFFFFFF|@000000000000000014") ==
          0);
+}
+
+static void test_parse_dag_immediates(void) {
+  printf("test_parse_dag_immediates...\n");
+  reset();
+
+  char j_record[32];
+  char v_record[32];
+  char app_record[32];
+  char dag[96];
+  topo_immediate_record('J', 0x02, j_record, sizeof(j_record));
+  topo_immediate_record('V', 0x01, v_record, sizeof(v_record));
+  topo_app_record(0, 20, app_record, sizeof(app_record));
+  int n = snprintf(dag, sizeof(dag), "%s|%s|%s", j_record, v_record, app_record);
+  assert(n > 0 && (size_t)n < sizeof(dag));
+
+  size_t end = 0;
+  uint32_t root = parse_dag(dag, strlen(dag), &end);
+  assert(root != EMPTY);
+  assert(end == strlen(dag));
+  assert(kindOf(leftOf(root)) == ARENA_KIND_J);
+  assert(kindOf(rightOf(root)) == ARENA_KIND_V);
+
+  char buf[96];
+  size_t written = unparse_dag(root, buf, sizeof(buf));
+  assert(written > 0);
+  assert(strcmp(buf, dag) == 0);
 }
 
 static void test_parse_dag_all_terminals(void) {
@@ -256,10 +317,12 @@ int main(void) {
   test_parse_ski_invalid_inputs();
   test_parse_ski_all_terminals();
   test_parse_u8_edge_cases();
+  test_parse_immediate_edge_cases();
   test_unparse_ski_edge_cases();
   test_unparse_ski_all_terminals();
   test_parse_dag_edge_cases();
   test_parse_dag_success_with_whitespace();
+  test_parse_dag_immediates();
   test_parse_dag_all_terminals();
   test_unparse_dag_small_buffer();
   test_unparse_empty_dag();

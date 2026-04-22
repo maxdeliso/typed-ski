@@ -15,7 +15,7 @@ import {
   writeTopoDagWireAsync,
 } from "../../lib/ski/topoDagWire.ts";
 import { apply, equivalent } from "../../lib/ski/expression.ts";
-import { K, S, SKITerminalSymbol, term } from "../../lib/ski/terminal.ts";
+import { J, K, S, SKITerminalSymbol, term, V } from "../../lib/ski/terminal.ts";
 
 function encodePointer(offset: number): string {
   return offset.toString(16).toUpperCase().padStart(8, "0");
@@ -27,6 +27,10 @@ function terminalRecord(symbol: string): string {
 
 function u8Record(value: number): string {
   return `U${value.toString(16).toUpperCase().padStart(2, "0")}${TOPO_DAG_WIRE_NULL_POINTER}${TOPO_DAG_WIRE_NULL_POINTER}`;
+}
+
+function immediateRecord(family: "J" | "V", value: number): string {
+  return `${family}${value.toString(16).toUpperCase().padStart(2, "0")}${TOPO_DAG_WIRE_NULL_POINTER}${TOPO_DAG_WIRE_NULL_POINTER}`;
 }
 
 function appRecord(left: number, right: number): string {
@@ -70,6 +74,27 @@ it("topoDagWire encodes terminals and U8 literals", () => {
   }
   assert.deepStrictEqual(sourceByte.value, 65);
   assert.deepStrictEqual(toTopoDagWire(sourceByte), u8Record(0x41));
+});
+
+it("topoDagWire encodes J/V immediate leaves", () => {
+  const jNode = fromTopoDagWire(immediateRecord("J", 0x0c));
+  assert.deepStrictEqual(jNode, J(12));
+  assert.deepStrictEqual(toTopoDagWire(jNode), immediateRecord("J", 0x0c));
+
+  const vNode = fromTopoDagWire(immediateRecord("V", 0x02));
+  assert.deepStrictEqual(vNode, V(2));
+  assert.deepStrictEqual(toTopoDagWire(vNode), immediateRecord("V", 0x02));
+
+  const expr = apply(J(2), V(1));
+  assert.deepStrictEqual(
+    toTopoDagWire(expr),
+    [
+      immediateRecord("J", 0x02),
+      immediateRecord("V", 0x01),
+      appRecord(0, 20),
+    ].join("|"),
+  );
+  assert.ok(equivalent(fromTopoDagWire(toTopoDagWire(expr)), expr));
 });
 
 it("topoDagWire streams fixed-width chunks and decodes incrementally", () => {

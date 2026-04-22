@@ -22,7 +22,9 @@ typedef _Bool bool;
 typedef enum {
   ARENA_KIND_TERMINAL = 1,
   ARENA_KIND_NON_TERM = 2,
-  ARENA_KIND_U8 = 3
+  ARENA_KIND_U8 = 3,
+  ARENA_KIND_J = 4,
+  ARENA_KIND_V = 5
 } ArenaKind;
 
 typedef enum {
@@ -160,6 +162,8 @@ uint32_t hashOf(uint32_t n);
 uint32_t leftOf(uint32_t n);
 uint32_t rightOf(uint32_t n);
 uint32_t allocTerminal(uint32_t sym);
+uint32_t allocJ(uint8_t value);
+uint32_t allocV(uint8_t value);
 uint32_t allocCons(uint32_t l, uint32_t r);
 uint32_t allocU8(uint8_t value);
 uint32_t arenaKernelStep(uint32_t expr);

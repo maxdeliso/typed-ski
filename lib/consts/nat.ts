@@ -47,6 +47,9 @@ export const skiToUntyped = (expr: SKIExpression): UntypedLambda => {
   if (expr.kind === "terminal") {
     return terminalToLambda(expr.sym);
   }
+  if (expr.kind === "immediate") {
+    throw new Error("J/V immediates cannot be converted to untyped lambda");
+  }
   if (expr.kind === "u8") {
     throw new Error("U8 literals cannot be converted to untyped lambda");
   }

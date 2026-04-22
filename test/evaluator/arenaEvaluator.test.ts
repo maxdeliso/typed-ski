@@ -14,11 +14,12 @@ import { makeControlPtr } from "../../lib/shared/arena.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
   apply,
+  applyMany,
   equivalent,
   type SKIExpression,
   unparseSKI,
 } from "../../lib/ski/expression.ts";
-import { EqU8 } from "../../lib/ski/terminal.ts";
+import { C, EqU8, I, J, K, S, V } from "../../lib/ski/terminal.ts";
 import { bracketLambda } from "../../lib/conversion/converter.ts";
 import { untypedApp, mkVar } from "../../lib/terms/lambda.ts";
 
@@ -79,6 +80,49 @@ describe("stepOnce", () => {
     assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(first)), "(II)");
     assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(second)), "I");
     assert.deepStrictEqual(unparseSKI(arenaEval.fromArena(third)), "I");
+  });
+});
+
+describe("J and V immediates", () => {
+  it("reduces J<n> selector spines", () => {
+    const stepped = arenaEval.stepOnce(applyMany(J(2), K, I, S, C));
+    assert.ok(stepped.altered);
+    assert.deepStrictEqual(unparseSKI(stepped.expr), unparseSKI(apply(K, C)));
+  });
+
+  it("reduces V<m> staging spines", () => {
+    const zero = arenaEval.stepOnce(apply(V(0), K));
+    assert.ok(zero.altered);
+    assert.deepStrictEqual(unparseSKI(zero.expr), "K");
+
+    const one = arenaEval.stepOnce(applyMany(V(1), I, K));
+    assert.ok(one.altered);
+    assert.deepStrictEqual(unparseSKI(one.expr), unparseSKI(apply(K, I)));
+
+    const two = arenaEval.stepOnce(applyMany(V(2), I, K, S));
+    assert.ok(two.altered);
+    assert.deepStrictEqual(
+      unparseSKI(two.expr),
+      unparseSKI(applyMany(S, I, K)),
+    );
+  });
+
+  it("fuses J/V selector and staged-argument contractions", () => {
+    const stepped = arenaEval.stepOnce(
+      applyMany(J(2), apply(V(1), I), K, S, C),
+    );
+    assert.ok(stepped.altered);
+    assert.deepStrictEqual(unparseSKI(stepped.expr), unparseSKI(apply(C, I)));
+  });
+
+  it("does not reduce unsaturated J/V spines", () => {
+    const unsaturatedJ = applyMany(J(2), K, I);
+    const steppedJ = arenaEval.stepOnce(unsaturatedJ);
+    assert.deepStrictEqual(unparseSKI(steppedJ.expr), unparseSKI(unsaturatedJ));
+
+    const unsaturatedV = apply(V(2), I);
+    const steppedV = arenaEval.stepOnce(unsaturatedV);
+    assert.deepStrictEqual(unparseSKI(steppedV.expr), unparseSKI(unsaturatedV));
   });
 });
 
@@ -352,8 +396,10 @@ describe("dumpArena", () => {
               "O",
               "?",
             ].includes(sym) ||
-              /^#u8\(\d+\)$/.test(sym)),
-          "Terminal symbol should be S, K, I, B, C, P, Q, R, `,`, `.`, E, L, D, M, A, O, #u8(n), or `?` " +
+              /^#u8\(\d+\)$/.test(sym) ||
+              /^J\d+$/.test(sym) ||
+              /^V\d+$/.test(sym)),
+          "Terminal symbol should be S, K, I, B, C, P, Q, R, `,`, `.`, E, L, D, M, A, O, Jn, Vm, #u8(n), or `?` " +
             `(got ${sym})`,
         );
       } else {

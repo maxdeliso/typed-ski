@@ -23,6 +23,8 @@ export {
 } from "./thanatosHarness/session.ts";
 export type { ThanatosSession } from "./thanatosHarness/session.ts";
 export {
+  getThanatosDecodeEvaluator,
+  normalizeThanatosExpr,
   passthroughEvaluator,
   runThanatosBatch,
 } from "./thanatosHarness/batch.ts";

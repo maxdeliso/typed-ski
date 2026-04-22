@@ -18,7 +18,7 @@ function loadCompilerInput(fileName: string): string {
 it("compileToCombinatorString links built-in imports", async () => {
   const source = loadCompilerInput("withPreludeImport.trip");
 
-  assert.strictEqual(await compileToCombinatorString(source), "I");
+  assert.strictEqual(await compileToCombinatorString(source), "(J0V0)");
 });
 
 it("bootstrappedCompile matches the TypeScript compiler", async () => {

@@ -142,6 +142,15 @@ interface DeBruijnTerminal {
 }
 
 /**
+ * An immediate combinator family leaf such as J<n> or V<m>.
+ */
+interface DeBruijnImmediate {
+  kind: "DbImmediate";
+  family: string;
+  value: number;
+}
+
+/**
  * A U8 literal (byte 0..255).
  */
 interface DeBruijnU8Literal {
@@ -167,6 +176,7 @@ export type DeBruijnTerm =
   | DeBruijnMatch
   | DeBruijnLet
   | DeBruijnTerminal
+  | DeBruijnImmediate
   | DeBruijnU8Literal;
 
 /**
@@ -294,6 +304,12 @@ function toDeBruijnInternal(
       };
     case "terminal":
       return { kind: "DbTerminal", sym: term.sym };
+    case "immediate":
+      return {
+        kind: "DbImmediate",
+        family: term.family,
+        value: term.value,
+      };
     case "u8":
       return { kind: "DbU8Literal", value: term.value };
   }

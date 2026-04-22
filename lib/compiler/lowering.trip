@@ -4,6 +4,8 @@ import Prelude List
 import Prelude nil
 import Prelude cons
 import Prelude matchList
+import Prelude reverse
+import Prelude append
 import Prelude Pair
 import Prelude MkPair
 import Prelude Result
@@ -56,6 +58,8 @@ import Unparse T_ModU8
 import Unparse T_AddU8
 import Unparse T_SubU8
 import Unparse T_Byte
+import Unparse T_J
+import Unparse T_V
 import Unparse terminalTag
 import Unparse terminalByteValue
 
@@ -82,15 +86,128 @@ data Lower =
   | L_Lam Lower
   | L_Native Terminal
 
+data Res = MkRes U8 Comb
+
 poly rec lteTerminal = \a : Terminal => \b : Terminal =>
   let tagA = terminalTag a in
   let tagB = terminalTag b in
   if [Bool] (eqU8 tagA tagB)
     (\u : U8 =>
-      if [Bool] (eqU8 tagA #u8(15))
-        (\u : U8 => lteU8 (terminalByteValue a) (terminalByteValue b))
-        (\u : U8 => true))
+      if [Bool] (ltU8 tagA #u8(16))
+        (\u : U8 => true)
+        (\u : U8 => lteU8 (terminalByteValue a) (terminalByteValue b)))
     (\u : U8 => ltU8 tagA tagB)
+
+data CombSpine = MkCombSpine U8 Comb (List Comb)
+
+data SelectorInfo = MkSelectorInfo U8 Comb
+
+data PartialVInfo = MkPartialVInfo U8 (List Comb)
+
+data LamBlock = MkLamBlock U8 Lower
+
+data LowerSpine = MkLowerSpine Lower (List Lower)
+
+data BlockBinderUse =
+  | NoBlockBinder
+  | OneBlockBinder U8
+  | ManyBlockBinders
+
+poly combJ = \depth : U8 => C_Term (T_J depth)
+poly combV = \argc : U8 => C_Term (T_V argc)
+
+poly selectorExpr = \depth : U8 => \payload : Comb =>
+  C_App (combJ depth) payload
+
+poly selectorDepth = \arity : U8 => \binderIndex : U8 =>
+  subU8 (subU8 arity #u8(1)) binderIndex
+
+poly rec collectSpineRev = \term : Comb => \argc : U8 => \acc : List Comb =>
+  match term [CombSpine] {
+    | C_Term t => MkCombSpine argc (C_Term t) (reverse [Comb] acc)
+    | C_App l r => collectSpineRev l (addU8 argc #u8(1)) (cons [Comb] r acc)
+  }
+
+poly collectSpine = \term : Comb =>
+  collectSpineRev term #u8(0) (nil [Comb])
+
+poly rec buildAppChain = \head : Comb => \args : List Comb =>
+  matchList [Comb] [Comb] args
+    head
+    (\arg : Comb => \rest : List Comb => buildAppChain (C_App head arg) rest)
+
+poly rec collectLowerSpineRev = \term : Lower => \acc : List Lower =>
+  match term [LowerSpine] {
+    | L_App l r => collectLowerSpineRev l (cons [Lower] r acc)
+    | L_Var i => MkLowerSpine term (reverse [Lower] acc)
+    | L_Lam body => MkLowerSpine term (reverse [Lower] acc)
+    | L_Native t => MkLowerSpine term (reverse [Lower] acc)
+  }
+
+poly collectLowerSpine = \term : Lower =>
+  collectLowerSpineRev term (nil [Lower])
+
+poly decomposeSelector = \expr : Comb =>
+  match expr [Maybe SelectorInfo] {
+    | C_Term _ => None [SelectorInfo]
+    | C_App l payload =>
+        match l [Maybe SelectorInfo] {
+          | C_Term t =>
+              if [Maybe SelectorInfo] (eqU8 (terminalTag t) #u8(17))
+                (\u : U8 => Some [SelectorInfo] (MkSelectorInfo (terminalByteValue t) payload))
+                (\u : U8 => None [SelectorInfo])
+          | C_App _ _ => None [SelectorInfo]
+        }
+  }
+
+poly decomposePartialV = \expr : Comb =>
+  match (collectSpine expr) [Maybe PartialVInfo] {
+    | MkCombSpine argc head args =>
+        match head [Maybe PartialVInfo] {
+          | C_Term t =>
+              if [Maybe PartialVInfo] (eqU8 (terminalTag t) #u8(18))
+                (\u : U8 =>
+                  if [Maybe PartialVInfo] (eqU8 argc (terminalByteValue t))
+                    (\u : U8 => Some [PartialVInfo] (MkPartialVInfo argc args))
+                    (\u : U8 => None [PartialVInfo]))
+                (\u : U8 => None [PartialVInfo])
+          | C_App _ _ => None [PartialVInfo]
+        }
+  }
+
+poly zipClosedHeadIntoSelector = \openN : U8 => \closedHead : Comb => \selector : Comb =>
+  match (decomposeSelector selector) [Maybe Res] {
+    | None => None [Res]
+    | Some info =>
+        match info [Maybe Res] { | MkSelectorInfo depth payload =>
+          match (decomposePartialV payload) [Maybe Res] {
+            | None => None [Res]
+            | Some stage =>
+                match stage [Maybe Res] { | MkPartialVInfo argc staged =>
+                  if [Maybe Res] (eqU8 argc #u8(0))
+                    (\u : U8 => Some [Res] (MkRes openN (selectorExpr depth closedHead)))
+                    (\u : U8 => None [Res])
+                }
+          }
+        }
+  }
+
+poly zipSelectorStageArg = \openN : U8 => \selector : Comb => \closedArg : Comb =>
+  match (decomposeSelector selector) [Maybe Res] {
+    | None => None [Res]
+    | Some info =>
+        match info [Maybe Res] { | MkSelectorInfo depth payload =>
+          match (decomposePartialV payload) [Maybe Res] {
+            | None => None [Res]
+            | Some stage =>
+                match stage [Maybe Res] { | MkPartialVInfo argc staged =>
+                  let newArgc = addU8 argc #u8(1) in
+                  let stagedArgs = append [Comb] staged (cons [Comb] closedArg (nil [Comb])) in
+                  Some [Res] (MkRes openN (selectorExpr depth (buildAppChain (combV newArgc) stagedArgs)))
+                }
+          }
+        }
+  }
 
 poly rec lteLower = \a : Lower => \b : Lower =>
   match a [Bool] {
@@ -126,8 +243,6 @@ poly rec lteLower = \a : Lower => \b : Lower =>
           | L_Native t2 => lteTerminal t1 t2
         }
   }
-
-data Res = MkRes U8 Comb
 
 poly sbi = C_App (C_App (C_Term T_S) (C_Term T_B)) (C_Term T_I)
 
@@ -248,30 +363,268 @@ poly liftArity = \expr : Comb => \from : U8 => \to : U8 =>
     (\u : U8 => C_App (dropArity (subU8 to from)) expr)
     (\u : U8 => expr)
 
+poly zipGeneric = \n : U8 => \exprA : Comb => \m : U8 => \exprB : Comb =>
+  if [Res] (and (eqU8 n #u8(0)) (eqU8 m #u8(0)))
+    (\u : U8 => MkRes #u8(0) (C_App exprA exprB))
+    (\u : U8 =>
+  if [Res] (eqU8 n #u8(0))
+    (\u : U8 => MkRes m (C_App (C_App (emitBulk #u8(1) m) exprA) exprB))
+    (\u : U8 =>
+  if [Res] (eqU8 m #u8(0))
+    (\u : U8 => MkRes n (C_App (C_App (emitBulk #u8(2) n) exprA) exprB))
+    (\u : U8 =>
+  if [Res] (eqU8 n m)
+    (\u : U8 => MkRes n (C_App (C_App (emitBulk #u8(0) n) exprA) exprB))
+    (\u : U8 =>
+  if [Res] (ltU8 n m)
+    (\u : U8 =>
+      let liftedA = liftArity exprA n m in
+      MkRes m (C_App (C_App (emitBulk #u8(0) m) liftedA) exprB))
+    (\u : U8 =>
+      let liftedB = liftArity exprB m n in
+      MkRes n (C_App (C_App (emitBulk #u8(0) n) exprA) liftedB))
+  ))))
+
 poly zip = \l : Res => \r : Res =>
   match l [Res] { | MkRes n exprA =>
   match r [Res] { | MkRes m exprB =>
-    if [Res] (and (eqU8 n #u8(0)) (eqU8 m #u8(0)))
-      (\u : U8 => MkRes #u8(0) (C_App exprA exprB))
-      (\u : U8 =>
-    if [Res] (eqU8 n #u8(0))
-      (\u : U8 => MkRes m (C_App (C_App (emitBulk #u8(1) m) exprA) exprB))
-      (\u : U8 =>
-    if [Res] (eqU8 m #u8(0))
-      (\u : U8 => MkRes n (C_App (C_App (emitBulk #u8(2) n) exprA) exprB))
-      (\u : U8 =>
-    if [Res] (eqU8 n m)
-      (\u : U8 => MkRes n (C_App (C_App (emitBulk #u8(0) n) exprA) exprB))
-      (\u : U8 =>
-    if [Res] (ltU8 n m)
-      (\u : U8 =>
-        let liftedA = liftArity exprA n m in
-        MkRes m (C_App (C_App (emitBulk #u8(0) m) liftedA) exprB))
-      (\u : U8 =>
-        let liftedB = liftArity exprB m n in
-        MkRes n (C_App (C_App (emitBulk #u8(0) n) exprA) liftedB))
-    ))))
+    zipGeneric n exprA m exprB
   }}
+
+poly abstractRes = \res : Res =>
+  match res [Res] { | MkRes n expr =>
+    if [Res] (eqU8 n #u8(0))
+      (\u : U8 => MkRes #u8(0) (C_App (C_Term T_K) expr))
+      (\u : U8 => MkRes (subU8 n #u8(1)) expr)
+  }
+
+poly rec compileGeneric = \term : Lower =>
+  match term [Res] {
+    | L_Var i =>
+        let iPlus1 = addU8 i #u8(1) in
+        MkRes iPlus1 (selectOuter iPlus1)
+    | L_App l r => zip (compileGeneric l) (compileGeneric r)
+    | L_Lam body => abstractRes (compileGeneric body)
+    | L_Native t => MkRes #u8(0) (C_Term t)
+  }
+
+poly rec collectLamBlock = \arity : U8 => \term : Lower =>
+  match term [LamBlock] {
+    | L_Lam body => collectLamBlock (addU8 arity #u8(1)) body
+    | L_Var i => MkLamBlock arity term
+    | L_App l r => MkLamBlock arity term
+    | L_Native t => MkLamBlock arity term
+  }
+
+poly combineBlockBinderUse = \left : BlockBinderUse => \right : BlockBinderUse =>
+  match left [BlockBinderUse] {
+    | NoBlockBinder => right
+    | ManyBlockBinders => ManyBlockBinders
+    | OneBlockBinder i =>
+        match right [BlockBinderUse] {
+          | NoBlockBinder => OneBlockBinder i
+          | ManyBlockBinders => ManyBlockBinders
+          | OneBlockBinder j =>
+              if [BlockBinderUse] (eqU8 i j)
+                (\u : U8 => OneBlockBinder i)
+                (\u : U8 => ManyBlockBinders)
+        }
+  }
+
+poly rec blockBinderUse = \arity : U8 => \depth : U8 => \term : Lower =>
+  match term [BlockBinderUse] {
+    | L_Var i =>
+        if [BlockBinderUse] (ltU8 i depth)
+          (\u : U8 => NoBlockBinder)
+          (\u : U8 =>
+            if [BlockBinderUse] (ltU8 i (addU8 depth arity))
+              (\u : U8 => OneBlockBinder (subU8 i depth))
+              (\u : U8 => NoBlockBinder))
+    | L_App l r =>
+        combineBlockBinderUse (blockBinderUse arity depth l) (blockBinderUse arity depth r)
+    | L_Lam body => blockBinderUse arity (addU8 depth #u8(1)) body
+    | L_Native t => NoBlockBinder
+  }
+
+poly rec shiftOutRemovedBinders = \retainedArity : U8 => \removedArity : U8 => \depth : U8 => \term : Lower =>
+  match term [Lower] {
+    | L_Var i =>
+        if [Lower] (ltU8 i (addU8 depth retainedArity))
+          (\u : U8 => L_Var i)
+          (\u : U8 => L_Var (subU8 i removedArity))
+    | L_App l r =>
+        L_App
+          (shiftOutRemovedBinders retainedArity removedArity depth l)
+          (shiftOutRemovedBinders retainedArity removedArity depth r)
+    | L_Lam body =>
+        L_Lam (shiftOutRemovedBinders retainedArity removedArity (addU8 depth #u8(1)) body)
+    | L_Native t => L_Native t
+  }
+
+poly compileClosedLower = \arity : U8 => \term : Lower =>
+  match (blockBinderUse arity #u8(0) term) [Maybe Comb] {
+    | NoBlockBinder =>
+        let shifted = shiftOutRemovedBinders #u8(0) arity #u8(0) term in
+        match (compileGeneric shifted) [Maybe Comb] { | MkRes n expr =>
+          if [Maybe Comb] (eqU8 n #u8(0))
+            (\u : U8 => Some [Comb] expr)
+            (\u : U8 => None [Comb])
+        }
+    | OneBlockBinder i => None [Comb]
+    | ManyBlockBinders => None [Comb]
+  }
+
+poly rec compileClosedArgs = \arity : U8 => \args : List Lower =>
+  matchList [Lower] [Maybe PartialVInfo] args
+    (Some [PartialVInfo] (MkPartialVInfo #u8(0) (nil [Comb])))
+    (\arg : Lower => \rest : List Lower =>
+      match (compileClosedLower arity arg) [Maybe PartialVInfo] {
+        | None => None [PartialVInfo]
+        | Some compiledArg =>
+            match (compileClosedArgs arity rest) [Maybe PartialVInfo] {
+              | None => None [PartialVInfo]
+              | Some compiledRest =>
+                  match compiledRest [Maybe PartialVInfo] { | MkPartialVInfo argc staged =>
+                    Some [PartialVInfo]
+                      (MkPartialVInfo (addU8 argc #u8(1)) (cons [Comb] compiledArg staged))
+                  }
+            }
+      })
+
+poly tryCompileSelectorCanonical = \arity : U8 => \body : Lower =>
+  match body [Maybe Comb] {
+    | L_Var i =>
+        if [Maybe Comb] (eqU8 i #u8(0))
+          (\u : U8 => Some [Comb] (selectorExpr (selectorDepth arity i) (combV #u8(0))))
+          (\u : U8 => None [Comb])
+    | L_App l r =>
+        match r [Maybe Comb] {
+          | L_Var i =>
+              if [Maybe Comb] (eqU8 i #u8(0))
+                (\u : U8 =>
+                  match (compileClosedLower arity l) [Maybe Comb] {
+                    | None => None [Comb]
+                    | Some head => Some [Comb] (selectorExpr (selectorDepth arity i) head)
+                  })
+                (\u : U8 =>
+                  match (collectLowerSpine body) [Maybe Comb] { | MkLowerSpine head args =>
+                    match head [Maybe Comb] {
+                      | L_Var j =>
+                          if [Maybe Comb] (eqU8 j #u8(0))
+                            (\u : U8 =>
+                              match (compileClosedArgs arity args) [Maybe Comb] {
+                                | None => None [Comb]
+                                | Some compiledArgs =>
+                                    match compiledArgs [Maybe Comb] { | MkPartialVInfo argc staged =>
+                                    Some [Comb]
+                                      (selectorExpr
+                                        (selectorDepth arity j)
+                                        (buildAppChain
+                                          (combV argc)
+                                          staged))
+                                    }
+                              })
+                            (\u : U8 => None [Comb])
+                      | L_App _ _ => None [Comb]
+                      | L_Lam _ => None [Comb]
+                      | L_Native _ => None [Comb]
+                    }
+                  })
+          | L_App _ _ =>
+              match (collectLowerSpine body) [Maybe Comb] { | MkLowerSpine head args =>
+                match head [Maybe Comb] {
+                  | L_Var j =>
+                      if [Maybe Comb] (eqU8 j #u8(0))
+                        (\u : U8 =>
+                          match (compileClosedArgs arity args) [Maybe Comb] {
+                            | None => None [Comb]
+                            | Some compiledArgs =>
+                                match compiledArgs [Maybe Comb] { | MkPartialVInfo argc staged =>
+                                Some [Comb]
+                                  (selectorExpr
+                                    (selectorDepth arity j)
+                                    (buildAppChain
+                                      (combV argc)
+                                      staged))
+                                }
+                          })
+                        (\u : U8 => None [Comb])
+                  | L_App _ _ => None [Comb]
+                  | L_Lam _ => None [Comb]
+                  | L_Native _ => None [Comb]
+                }
+              }
+          | L_Lam _ =>
+              match (collectLowerSpine body) [Maybe Comb] { | MkLowerSpine head args =>
+                match head [Maybe Comb] {
+                  | L_Var j =>
+                      if [Maybe Comb] (eqU8 j #u8(0))
+                        (\u : U8 =>
+                          match (compileClosedArgs arity args) [Maybe Comb] {
+                            | None => None [Comb]
+                            | Some compiledArgs =>
+                                match compiledArgs [Maybe Comb] { | MkPartialVInfo argc staged =>
+                                Some [Comb]
+                                  (selectorExpr
+                                    (selectorDepth arity j)
+                                    (buildAppChain
+                                      (combV argc)
+                                      staged))
+                                }
+                          })
+                        (\u : U8 => None [Comb])
+                  | L_App _ _ => None [Comb]
+                  | L_Lam _ => None [Comb]
+                  | L_Native _ => None [Comb]
+                }
+              }
+          | L_Native _ =>
+              match (collectLowerSpine body) [Maybe Comb] { | MkLowerSpine head args =>
+                match head [Maybe Comb] {
+                  | L_Var j =>
+                      if [Maybe Comb] (eqU8 j #u8(0))
+                        (\u : U8 =>
+                          match (compileClosedArgs arity args) [Maybe Comb] {
+                            | None => None [Comb]
+                            | Some compiledArgs =>
+                                match compiledArgs [Maybe Comb] { | MkPartialVInfo argc staged =>
+                                Some [Comb]
+                                  (selectorExpr
+                                    (selectorDepth arity j)
+                                    (buildAppChain
+                                      (combV argc)
+                                      staged))
+                                }
+                          })
+                        (\u : U8 => None [Comb])
+                  | L_App _ _ => None [Comb]
+                  | L_Lam _ => None [Comb]
+                  | L_Native _ => None [Comb]
+                }
+              }
+        }
+    | L_Lam _ => None [Comb]
+    | L_Native _ => None [Comb]
+  }
+
+poly tryCompileSelectorBlock = \arity : U8 => \body : Lower =>
+  match (tryCompileSelectorCanonical arity body) [Maybe Comb] {
+    | Some canonical => Some [Comb] canonical
+    | None =>
+        match (blockBinderUse arity #u8(0) body) [Maybe Comb] {
+          | NoBlockBinder => None [Comb]
+          | ManyBlockBinders => None [Comb]
+          | OneBlockBinder index =>
+              let retainedArity = addU8 index #u8(1) in
+              let removedArity = subU8 arity retainedArity in
+              let shiftedBody = shiftOutRemovedBinders retainedArity removedArity #u8(0) body in
+              match (compileGeneric shiftedBody) [Maybe Comb] { | MkRes n expr =>
+                if [Maybe Comb] (eqU8 n retainedArity)
+                  (\u : U8 => Some [Comb] (selectorExpr removedArity expr))
+                  (\u : U8 => None [Comb])
+              }
+        }
+  }
 
 poly rec compile = \term : Lower =>
   match term [Res] {
@@ -280,11 +633,12 @@ poly rec compile = \term : Lower =>
         MkRes iPlus1 (selectOuter iPlus1)
     | L_App l r => zip (compile l) (compile r)
     | L_Lam body =>
-        let res = compile body in
-        match res [Res] { | MkRes n expr =>
-          if [Res] (eqU8 n #u8(0))
-            (\u : U8 => MkRes #u8(0) (C_App (C_Term T_K) expr))
-            (\u : U8 => MkRes (subU8 n #u8(1)) expr)
+        let block = collectLamBlock #u8(0) term in
+        match block [Res] { | MkLamBlock arity blockBody =>
+          match (tryCompileSelectorBlock arity blockBody) [Res] {
+            | Some special => MkRes #u8(0) special
+            | None => abstractRes (compile body)
+          }
         }
     | L_Native t => MkRes #u8(0) (C_Term t)
   }

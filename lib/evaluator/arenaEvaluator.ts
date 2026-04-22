@@ -9,7 +9,11 @@
 
 import type { SKIExpression } from "../ski/expression.ts";
 import { apply, unparseSKI } from "../ski/expression.ts";
-import { SKITerminalSymbol } from "../ski/terminal.ts";
+import {
+  immediate,
+  SKIImmediateFamily,
+  SKITerminalSymbol,
+} from "../ski/terminal.ts";
 import type { Evaluator } from "./evaluator.ts";
 import {
   ARENA_SYM_TO_SKI,
@@ -75,7 +79,10 @@ const DEFAULT_WASM_ARENA_MAX_CAPACITY = 1 << 20;
  */
 function toArenaWithExports(
   root: SKIExpression,
-  exports: Pick<ArenaWasmExports, "allocTerminal" | "allocCons" | "allocU8">,
+  exports: Pick<
+    ArenaWasmExports,
+    "allocTerminal" | "allocCons" | "allocU8" | "allocJ" | "allocV"
+  >,
 ): ArenaNodeId {
   const EMPTY = 0xffffffff;
 
@@ -175,6 +182,24 @@ function toArenaWithExports(
           break;
         default:
           throw new Error("Unrecognised terminal symbol");
+      }
+      exprCache.set(expr, id);
+      stack.pop();
+    } else if (expr.kind === "immediate") {
+      let id: number;
+      if (expr.family === SKIImmediateFamily.J) {
+        if (typeof exports.allocJ !== "function") {
+          throw new Error("WASM export `allocJ` is missing or not a function");
+        }
+        id = exports.allocJ(expr.value);
+      } else {
+        if (typeof exports.allocV !== "function") {
+          throw new Error("WASM export `allocV` is missing or not a function");
+        }
+        id = exports.allocV(expr.value);
+      }
+      if (id === EMPTY) {
+        throw new Error("Arena Out of Memory during immediate marshaling");
       }
       exprCache.set(expr, id);
       stack.pop();
@@ -282,11 +307,17 @@ function fromArenaWithExports(
     }
     const kind = getKind(id);
 
-    if (kind === 1) {
+    if (kind === ArenaKind.Terminal) {
       // ArenaKind.Terminal
       // TERMINAL: Construct immediately and cache
       const sym = getSym(id);
       cache.set(id, ARENA_SYM_TO_SKI[sym as ArenaSym]!);
+      stack.pop();
+    } else if (kind === ArenaKind.J) {
+      cache.set(id, immediate(SKIImmediateFamily.J, getSym(id)));
+      stack.pop();
+    } else if (kind === ArenaKind.V) {
+      cache.set(id, immediate(SKIImmediateFamily.V, getSym(id)));
       stack.pop();
     } else if (kind === ArenaKind.U8) {
       const value = getSym(id);
@@ -338,6 +369,8 @@ export interface ArenaWasmExports {
   allocTerminal(sym: number): number;
   allocCons(l: number, r: number): number;
   allocU8(value: number): number;
+  allocJ?(value: number): number;
+  allocV?(value: number): number;
   arenaKernelStep(expr: number): number;
   reduce(expr: number, max: number): number;
   hostSubmit?(nodeId: number, reqId: number, maxSteps: number): number;
@@ -573,13 +606,25 @@ export class ArenaEvaluatorWasm implements Evaluator {
     }
 
     // 2. Build Terminal
-    if (k === 1) {
+    if (k === ArenaKind.Terminal) {
       // ArenaKind.Terminal
       const symValue =
         views && id < views.capacity ? viewGetSym(id, views) : this.$.symOf(id);
 
       const expr = ARENA_SYM_TO_SKI[symValue as ArenaSym]!;
       return { id, kind: "terminal", sym: unparseSKI(expr) };
+    }
+
+    if (k === ArenaKind.J) {
+      const value =
+        views && id < views.capacity ? viewGetSym(id, views) : this.$.symOf(id);
+      return { id, kind: "terminal", sym: `J${value}` };
+    }
+
+    if (k === ArenaKind.V) {
+      const value =
+        views && id < views.capacity ? viewGetSym(id, views) : this.$.symOf(id);
+      return { id, kind: "terminal", sym: `V${value}` };
     }
 
     // 2b. Build U8 literal (display as #u8(n))

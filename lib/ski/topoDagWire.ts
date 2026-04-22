@@ -1,6 +1,11 @@
 import type { SKIExpression } from "./expression.ts";
 import { apply } from "./expression.ts";
-import { SKITerminalSymbol, term } from "./terminal.ts";
+import {
+  immediate,
+  SKIImmediateFamily,
+  SKITerminalSymbol,
+  term,
+} from "./terminal.ts";
 
 const TOPO_DAG_WIRE_TERMINAL_SYMBOLS = [
   SKITerminalSymbol.S,
@@ -120,6 +125,9 @@ function encodeTermField(node: SKIExpression): string {
   if (node.kind === "terminal") {
     return node.sym + "00";
   }
+  if (node.kind === "immediate") {
+    return node.family + HEX_BYTE_TABLE[node.value];
+  }
   if (node.kind === "u8") {
     return "U" + HEX_BYTE_TABLE[node.value];
   }
@@ -127,11 +135,34 @@ function encodeTermField(node: SKIExpression): string {
 }
 
 function decodeRecordTerm(termField: string): {
-  kind: "terminal" | "u8" | "app";
-  value?: SKITerminalSymbol | number;
+  kind: "terminal" | "immediate" | "u8" | "app";
+  value?: SKITerminalSymbol | SKIImmediateFamily | number;
+  family?: SKIImmediateFamily;
 } {
   if (termField === APP_FIELD) {
     return { kind: "app" };
+  }
+  if (termField.startsWith(SKIImmediateFamily.J)) {
+    const value = Number.parseInt(termField.slice(1), 16);
+    if (!Number.isInteger(value) || value < 0 || value > 0xff) {
+      throw new Error("invalid topoDagWire J immediate: " + termField);
+    }
+    return {
+      kind: "immediate",
+      family: SKIImmediateFamily.J,
+      value,
+    };
+  }
+  if (termField.startsWith(SKIImmediateFamily.V)) {
+    const value = Number.parseInt(termField.slice(1), 16);
+    if (!Number.isInteger(value) || value < 0 || value > 0xff) {
+      throw new Error("invalid topoDagWire V immediate: " + termField);
+    }
+    return {
+      kind: "immediate",
+      family: SKIImmediateFamily.V,
+      value,
+    };
   }
   if (termField.startsWith("U")) {
     const byte = Number.parseInt(termField.slice(1), 16);
@@ -334,6 +365,12 @@ function decodeTopoDagRecordInto(
   if (termValue.kind === "u8") {
     validateLeafPointers(leftPointer, rightPointer, termField);
     nodes.push({ kind: "u8", value: termValue.value as number });
+    return;
+  }
+
+  if (termValue.kind === "immediate") {
+    validateLeafPointers(leftPointer, rightPointer, termField);
+    nodes.push(immediate(termValue.family!, termValue.value as number));
     return;
   }
 

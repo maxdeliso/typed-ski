@@ -166,6 +166,7 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
 
         case "type-var":
         case "terminal":
+        case "immediate":
           break;
       }
       // If we didn't 'continue', we are done with this node.
@@ -232,6 +233,7 @@ function usesSystemFNatLiteral(term: TripLangValueType): boolean {
       case "lambda-var":
       case "type-var":
       case "terminal":
+      case "immediate":
         break;
     }
   }
@@ -321,6 +323,7 @@ export function freeTypeVars(t: TripLangValueType): Set<string> {
         }
         break;
       case "terminal":
+      case "immediate":
         break;
     }
   }
@@ -1001,6 +1004,7 @@ export function substituteTermHygienicBatch(
 
     case "type-var":
     case "terminal":
+    case "immediate":
     case "u8":
       return term;
   }
@@ -1193,6 +1197,7 @@ export function substituteHygienic<T extends TripLangValueType>(
       return term;
     case "type-var":
     case "terminal":
+    case "immediate":
     case "u8":
       return term;
   }

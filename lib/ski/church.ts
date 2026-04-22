@@ -10,7 +10,7 @@
 import { B, False, One, Succ, True, Zero } from "../consts/combinators.ts";
 import { apply, applyMany, type SKIExpression } from "./expression.ts";
 import type { Evaluator } from "../evaluator/evaluator.ts";
-import { SKITerminalSymbol } from "./terminal.ts";
+import { SKIImmediateFamily, SKITerminalSymbol } from "./terminal.ts";
 
 // Memoization cache for optimized Church numerals
 const churchCache = new Map<bigint, SKIExpression>();
@@ -67,9 +67,47 @@ const runtimeCombinators: Record<SKITerminalSymbol, RuntimeValue> = {
   },
 };
 
+const runtimeImmediate = (
+  family: SKIImmediateFamily,
+  value: number,
+): RuntimeValue => {
+  if (family === SKIImmediateFamily.J) {
+    const step = (collected: readonly RuntimeValue[]): RuntimeFn => {
+      return (arg) => {
+        const next = [...collected, arg];
+        if (next.length < value + 2) {
+          return step(next);
+        }
+        const f = next[0]!;
+        const selected = next[value + 1]!;
+        return asRuntimeFn(f)(selected);
+      };
+    };
+    return step([]);
+  }
+
+  const step = (collected: readonly RuntimeValue[]): RuntimeFn => {
+    return (arg) => {
+      const next = [...collected, arg];
+      if (next.length < value + 1) {
+        return step(next);
+      }
+      let out: RuntimeValue = next[value]!;
+      for (let i = 0; i < value; i++) {
+        out = asRuntimeFn(out)(next[i]!);
+      }
+      return out;
+    };
+  };
+  return step([]);
+};
+
 const evalRuntime = (expr: SKIExpression): RuntimeValue => {
   if (expr.kind === "terminal") {
     return runtimeCombinators[expr.sym];
+  }
+  if (expr.kind === "immediate") {
+    return runtimeImmediate(expr.family, expr.value);
   }
   if (expr.kind === "u8") {
     throw new Error("Cannot decode Church numerals for U8 literals");

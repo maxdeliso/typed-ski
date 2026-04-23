@@ -267,6 +267,11 @@ typedef struct {
 } WorkerState;
 
 enum {
+  WORKER_FLAG_UNLIMITED_STEPS = 0x1,
+  BULK_FUSION_MAX_ARGS = 64,
+};
+
+enum {
   TRACE_RING_SIZE = 128,
   TRACE_STACK_SNAPSHOT = 64,
   TRACE_GRAPH_NODES = 48,
@@ -768,6 +773,9 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   atomic_init(&h->duplicate_lost_allocs, 0);
   atomic_init(&h->hashcons_hits, 0);
   atomic_init(&h->hashcons_misses, 0);
+  atomic_init(&h->bulk_fusion_checks, 0);
+  atomic_init(&h->bulk_fusion_candidates, 0);
+  atomic_init(&h->bulk_fusion_hits, 0);
 
   h->abi_version = SAB_ABI_VERSION;
   h->layout_hash = SAB_LAYOUT_HASH;
@@ -881,6 +889,9 @@ void reset(void) {
   atomic_store_explicit(&h->duplicate_lost_allocs, 0, memory_order_release);
   atomic_store_explicit(&h->hashcons_hits, 0, memory_order_release);
   atomic_store_explicit(&h->hashcons_misses, 0, memory_order_release);
+  atomic_store_explicit(&h->bulk_fusion_checks, 0, memory_order_release);
+  atomic_store_explicit(&h->bulk_fusion_candidates, 0, memory_order_release);
+  atomic_store_explicit(&h->bulk_fusion_hits, 0, memory_order_release);
 
   /* Eagerly initialize core constants */
   h->true_id = allocTerminal(ARENA_SYM_K);
@@ -1080,6 +1091,27 @@ unsigned long long arena_hashcons_misses(void) {
     return 0;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   return atomic_load_explicit(&h->hashcons_misses, memory_order_relaxed);
+}
+
+unsigned long long arena_bulk_fusion_checks(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->bulk_fusion_checks, memory_order_relaxed);
+}
+
+unsigned long long arena_bulk_fusion_candidates(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->bulk_fusion_candidates, memory_order_relaxed);
+}
+
+unsigned long long arena_bulk_fusion_hits(void) {
+  if (ARENA_BASE_ADDR == NULL)
+    return 0;
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  return atomic_load_explicit(&h->bulk_fusion_hits, memory_order_relaxed);
 }
 
 void arena_hash_table_stats(unsigned long long *out_items,
@@ -2136,13 +2168,17 @@ bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
   unsigned long long duplicate_lost_allocs = arena_duplicate_lost_allocs();
   unsigned long long hashcons_hits = arena_hashcons_hits();
   unsigned long long hashcons_misses = arena_hashcons_misses();
+  unsigned long long bulk_fusion_checks = arena_bulk_fusion_checks();
+  unsigned long long bulk_fusion_candidates = arena_bulk_fusion_candidates();
+  unsigned long long bulk_fusion_hits = arena_bulk_fusion_hits();
 
   fprintf(out,
-          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_link_chase_hops\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu},\"workers\":[",
+          "{\"dump_version\":1,\"epoch\":%u,\"timed_out\":%s,\"runtime\":{\"worker_count\":%u,\"top\":%u,\"capacity\":%u,\"live_nodes_estimate\":%u,\"total_nodes\":%llu,\"total_steps\":%llu,\"total_link_chase_hops\":%llu,\"total_cons_allocs\":%llu,\"total_cont_allocs\":%llu,\"total_susp_allocs\":%llu,\"duplicate_lost_allocs\":%llu,\"hashcons_hits\":%llu,\"hashcons_misses\":%llu,\"bulk_fusion_checks\":%llu,\"bulk_fusion_candidates\":%llu,\"bulk_fusion_hits\":%llu},\"workers\":[",
           epoch, timed_out ? "true" : "false", worker_count, top, capacity,
           top, total_nodes, total_steps, total_link_chase_hops,
           total_cons_allocs, total_cont_allocs, total_susp_allocs,
-          duplicate_lost_allocs, hashcons_hits, hashcons_misses);
+          duplicate_lost_allocs, hashcons_hits, hashcons_misses,
+          bulk_fusion_checks, bulk_fusion_candidates, bulk_fusion_hits);
 
   uint32_t limit = worker_count < TRACE_WORKER_COUNT ? worker_count : TRACE_WORKER_COUNT;
   for (uint32_t i = 0; i < limit; i++) {
@@ -2273,7 +2309,7 @@ static bool park_worker_state(uint32_t slice_id, WorkerState *ws,
   cont->saved_sp = ws->sp;
   cont->remaining_steps = ws->remaining_steps;
   cont->mode = ws->mode;
-  cont->reserved = 0;
+  cont->reserved = ws->reserved;
   if (ws->sp > 0) {
     memcpy(cont->frames, control_worker_frames(cv, slice_id),
            ws->sp * sizeof(Frame));
@@ -2340,7 +2376,7 @@ static bool resume_worker_state(uint32_t slice_id, uint32_t susp_ptr,
   ws->remaining_steps = cont->remaining_steps;
   ws->mode = cont->mode;
   ws->status = WORKER_RUNNING;
-  ws->reserved = 0;
+  ws->reserved = cont->reserved;
   if (ws->sp > 0) {
     memcpy(control_worker_frames(cv, slice_id), cont->frames,
            ws->sp * sizeof(Frame));
@@ -2746,6 +2782,348 @@ static bool node_has_effectful_top_step(SabHeader *h, uint32_t node_id) {
   return load_u8_payload(syms, left) == ARENA_SYM_READ_ONE;
 }
 
+static inline bool worker_has_unlimited_steps(const WorkerState *ws) {
+  return (ws->reserved & WORKER_FLAG_UNLIMITED_STEPS) != 0;
+}
+
+static bool match_terminal_sym(atomic_uchar *kinds, atomic_uchar *syms,
+                               uint32_t node_id, uint8_t sym) {
+  return node_id < MAX_CAP && load_kind_pub(kinds, node_id) == ARENA_KIND_TERMINAL &&
+         load_u8_payload(syms, node_id) == sym;
+}
+
+static bool match_sbi(atomic_uchar *kinds, atomic_uchar *syms,
+                      atomic_uint *lefts, atomic_uint *rights,
+                      uint32_t node_id) {
+  if (node_id >= MAX_CAP || load_kind_pub(kinds, node_id) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t left = load_u32_payload(lefts, node_id);
+  uint32_t right = load_u32_payload(rights, node_id);
+  if (!match_terminal_sym(kinds, syms, right, ARENA_SYM_I))
+    return false;
+  if (left >= MAX_CAP || load_kind_pub(kinds, left) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t ll = load_u32_payload(lefts, left);
+  uint32_t lr = load_u32_payload(rights, left);
+  return match_terminal_sym(kinds, syms, ll, ARENA_SYM_S) &&
+         match_terminal_sym(kinds, syms, lr, ARENA_SYM_B);
+}
+
+static bool match_bulk_odd_builder(atomic_uchar *kinds, atomic_uchar *syms,
+                                   atomic_uint *lefts, atomic_uint *rights,
+                                   uint32_t node_id, uint8_t tail_sym,
+                                   uint32_t *sub_out) {
+  if (node_id >= MAX_CAP || load_kind_pub(kinds, node_id) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t prefix = load_u32_payload(lefts, node_id);
+  uint32_t sub = load_u32_payload(rights, node_id);
+  if (prefix >= MAX_CAP || load_kind_pub(kinds, prefix) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t prefix_left = load_u32_payload(lefts, prefix);
+  uint32_t prefix_right = load_u32_payload(rights, prefix);
+  if (!match_sbi(kinds, syms, lefts, rights, prefix_right))
+    return false;
+  if (prefix_left >= MAX_CAP ||
+      load_kind_pub(kinds, prefix_left) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t prefix2 = load_u32_payload(lefts, prefix_left);
+  uint32_t tail = load_u32_payload(rights, prefix_left);
+  if (!match_terminal_sym(kinds, syms, tail, tail_sym))
+    return false;
+  if (prefix2 >= MAX_CAP || load_kind_pub(kinds, prefix2) != ARENA_KIND_NON_TERM)
+    return false;
+
+  uint32_t prefix3 = load_u32_payload(lefts, prefix2);
+  uint32_t mid = load_u32_payload(rights, prefix2);
+  if (!match_terminal_sym(kinds, syms, mid, ARENA_SYM_B))
+    return false;
+
+  if (!match_terminal_sym(kinds, syms, prefix3, ARENA_SYM_BPRIME))
+    return false;
+
+  if (sub_out != NULL)
+    *sub_out = sub;
+  return true;
+}
+
+static bool decode_bulk_b(atomic_uchar *kinds, atomic_uchar *syms,
+                          atomic_uint *lefts, atomic_uint *rights,
+                          uint32_t node_id, uint32_t *depth_out) {
+  if (match_terminal_sym(kinds, syms, node_id, ARENA_SYM_B)) {
+    *depth_out = 1;
+    return true;
+  }
+
+  if (node_id < MAX_CAP && load_kind_pub(kinds, node_id) == ARENA_KIND_NON_TERM) {
+    uint32_t left = load_u32_payload(lefts, node_id);
+    uint32_t right = load_u32_payload(rights, node_id);
+    uint32_t sub_depth = 0;
+
+    if (match_sbi(kinds, syms, lefts, rights, left) &&
+        decode_bulk_b(kinds, syms, lefts, rights, right, &sub_depth) &&
+        sub_depth <= UINT32_MAX / 2) {
+      *depth_out = sub_depth * 2;
+      return true;
+    }
+
+    uint32_t sub = EMPTY;
+    if (match_bulk_odd_builder(kinds, syms, lefts, rights, node_id, ARENA_SYM_B,
+                               &sub) &&
+        decode_bulk_b(kinds, syms, lefts, rights, sub, &sub_depth) &&
+        sub_depth < UINT32_MAX / 2) {
+      *depth_out = sub_depth * 2 + 1;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool decode_bulk_s_core(atomic_uchar *kinds, atomic_uchar *syms,
+                               atomic_uint *lefts, atomic_uint *rights,
+                               uint32_t node_id, uint32_t *depth_out) {
+  if (match_terminal_sym(kinds, syms, node_id, ARENA_SYM_SPRIME)) {
+    *depth_out = 1;
+    return true;
+  }
+
+  if (node_id < MAX_CAP && load_kind_pub(kinds, node_id) == ARENA_KIND_NON_TERM) {
+    uint32_t left = load_u32_payload(lefts, node_id);
+    uint32_t right = load_u32_payload(rights, node_id);
+    uint32_t sub_depth = 0;
+
+    if (match_sbi(kinds, syms, lefts, rights, left) &&
+        decode_bulk_s_core(kinds, syms, lefts, rights, right, &sub_depth) &&
+        sub_depth <= UINT32_MAX / 2) {
+      *depth_out = sub_depth * 2;
+      return true;
+    }
+
+    uint32_t sub = EMPTY;
+    if (match_bulk_odd_builder(kinds, syms, lefts, rights, node_id,
+                               ARENA_SYM_SPRIME, &sub) &&
+        decode_bulk_s_core(kinds, syms, lefts, rights, sub, &sub_depth) &&
+        sub_depth < UINT32_MAX / 2) {
+      *depth_out = sub_depth * 2 + 1;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool decode_bulk_c_core(atomic_uchar *kinds, atomic_uchar *syms,
+                               atomic_uint *lefts, atomic_uint *rights,
+                               uint32_t node_id, uint32_t *depth_out) {
+  if (match_terminal_sym(kinds, syms, node_id, ARENA_SYM_CPRIME)) {
+    *depth_out = 1;
+    return true;
+  }
+
+  if (node_id < MAX_CAP && load_kind_pub(kinds, node_id) == ARENA_KIND_NON_TERM) {
+    uint32_t left = load_u32_payload(lefts, node_id);
+    uint32_t right = load_u32_payload(rights, node_id);
+    uint32_t sub_depth = 0;
+
+    if (match_sbi(kinds, syms, lefts, rights, left) &&
+        decode_bulk_c_core(kinds, syms, lefts, rights, right, &sub_depth) &&
+        sub_depth <= UINT32_MAX / 2) {
+      *depth_out = sub_depth * 2;
+      return true;
+    }
+
+    uint32_t sub = EMPTY;
+    if (match_bulk_odd_builder(kinds, syms, lefts, rights, node_id,
+                               ARENA_SYM_CPRIME, &sub) &&
+        decode_bulk_c_core(kinds, syms, lefts, rights, sub, &sub_depth) &&
+        sub_depth < UINT32_MAX / 2) {
+      *depth_out = sub_depth * 2 + 1;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+typedef enum {
+  BULK_NONE = 0,
+  BULK_S = 1,
+  BULK_B = 2,
+  BULK_C = 3,
+} BulkKind;
+
+static bool decode_bulk_comb(atomic_uchar *kinds, atomic_uchar *syms,
+                             atomic_uint *lefts, atomic_uint *rights,
+                             uint32_t node_id, BulkKind *kind_out,
+                             uint32_t *depth_out) {
+  uint32_t depth = 0;
+  if (decode_bulk_b(kinds, syms, lefts, rights, node_id, &depth)) {
+    *kind_out = BULK_B;
+    *depth_out = depth;
+    return true;
+  }
+  if (match_terminal_sym(kinds, syms, node_id, ARENA_SYM_S)) {
+    *kind_out = BULK_S;
+    *depth_out = 1;
+    return true;
+  }
+  if (match_terminal_sym(kinds, syms, node_id, ARENA_SYM_C)) {
+    *kind_out = BULK_C;
+    *depth_out = 1;
+    return true;
+  }
+  if (node_id < MAX_CAP && load_kind_pub(kinds, node_id) == ARENA_KIND_NON_TERM) {
+    uint32_t left = load_u32_payload(lefts, node_id);
+    uint32_t right = load_u32_payload(rights, node_id);
+    if (match_terminal_sym(kinds, syms, right, ARENA_SYM_I)) {
+      if (decode_bulk_s_core(kinds, syms, lefts, rights, left, &depth) &&
+          depth > 1) {
+        *kind_out = BULK_S;
+        *depth_out = depth;
+        return true;
+      }
+      if (decode_bulk_c_core(kinds, syms, lefts, rights, left, &depth) &&
+          depth > 1) {
+        *kind_out = BULK_C;
+        *depth_out = depth;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool looks_like_bulk_comb_root(atomic_uchar *kinds, atomic_uchar *syms,
+                                      atomic_uint *lefts, atomic_uint *rights,
+                                      uint32_t node_id) {
+  if (node_id >= MAX_CAP || load_kind_pub(kinds, node_id) != ARENA_KIND_NON_TERM) {
+    return false;
+  }
+
+  uint32_t left = load_u32_payload(lefts, node_id);
+  uint32_t right = load_u32_payload(rights, node_id);
+  if (match_terminal_sym(kinds, syms, right, ARENA_SYM_I)) {
+    return true;
+  }
+
+  return match_sbi(kinds, syms, lefts, rights, left) ||
+         match_bulk_odd_builder(kinds, syms, lefts, rights, node_id,
+                                ARENA_SYM_B, NULL);
+}
+
+static bool can_have_bulk_redex_root(atomic_uchar *kinds, atomic_uint *lefts,
+                                     uint32_t node_id) {
+  uint32_t head = node_id;
+  for (uint32_t i = 0; i < 4; i++) {
+    if (head >= MAX_CAP || load_kind_pub(kinds, head) != ARENA_KIND_NON_TERM) {
+      return false;
+    }
+    head = load_u32_payload(lefts, head);
+  }
+  return head < MAX_CAP && load_kind_pub(kinds, head) == ARENA_KIND_NON_TERM;
+}
+
+static uint32_t apply_arg_range(uint32_t base, const uint32_t *args,
+                                uint32_t start, uint32_t end) {
+  uint32_t result = base;
+  for (uint32_t i = start; i < end; i++) {
+    result = allocCons(result, args[i]);
+  }
+  return result;
+}
+
+static bool maybe_fuse_bulk_redex(WorkerState *ws, atomic_uchar *kinds,
+                                  atomic_uchar *syms, atomic_uint *lefts,
+                                  atomic_uint *rights) {
+  if (!worker_has_unlimited_steps(ws))
+    return false;
+
+  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  atomic_fetch_add_explicit(&h->bulk_fusion_checks, 1, memory_order_relaxed);
+
+  uint32_t reversed_args[BULK_FUSION_MAX_ARGS];
+  uint32_t arg_count = 0;
+  uint32_t head = ws->current_val;
+  BulkKind kind = BULK_NONE;
+  uint32_t depth = 0;
+  bool found = false;
+
+  while (head < MAX_CAP &&
+         load_kind_pub(kinds, head) == ARENA_KIND_NON_TERM &&
+         arg_count < BULK_FUSION_MAX_ARGS) {
+    bool candidate_root =
+        arg_count >= 4 &&
+        looks_like_bulk_comb_root(kinds, syms, lefts, rights, head);
+    if (candidate_root) {
+      atomic_fetch_add_explicit(&h->bulk_fusion_candidates, 1,
+                                memory_order_relaxed);
+    }
+    if (candidate_root &&
+        decode_bulk_comb(kinds, syms, lefts, rights, head, &kind, &depth) &&
+        depth > 1 && arg_count >= depth + 2) {
+      found = true;
+      break;
+    }
+
+    uint32_t next_left = load_u32_payload(lefts, head);
+    uint32_t next_right = load_u32_payload(rights, head);
+    debug_check_child_ptr(next_left);
+    debug_check_child_ptr(next_right);
+    reversed_args[arg_count++] = next_right;
+    head = next_left;
+  }
+
+  if (!found) {
+    return false;
+  }
+
+  uint32_t saturated_args = depth + 2;
+
+  uint32_t args[BULK_FUSION_MAX_ARGS];
+  for (uint32_t i = 0; i < arg_count; i++) {
+    args[i] = reversed_args[arg_count - 1 - i];
+  }
+
+  uint32_t a = args[0];
+  uint32_t b = args[1];
+  uint32_t reduced = EMPTY;
+
+  switch (kind) {
+  case BULK_B: {
+    uint32_t inner = apply_arg_range(b, args, 2, saturated_args);
+    reduced = allocCons(a, inner);
+    break;
+  }
+  case BULK_S: {
+    uint32_t left_app = apply_arg_range(a, args, 2, saturated_args);
+    uint32_t right_app = apply_arg_range(b, args, 2, saturated_args);
+    reduced = allocCons(left_app, right_app);
+    break;
+  }
+  case BULK_C: {
+    uint32_t left_app = apply_arg_range(a, args, 2, saturated_args);
+    reduced = allocCons(left_app, b);
+    break;
+  }
+  default:
+    return false;
+  }
+
+  for (uint32_t i = saturated_args; i < arg_count; i++) {
+    reduced = allocCons(reduced, args[i]);
+  }
+
+  atomic_fetch_add_explicit(&h->bulk_fusion_hits, 1, memory_order_relaxed);
+  ws->current_val = reduced;
+  ws->mode = MODE_DESCEND;
+  return true;
+}
+
 static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                                   uint32_t *gas, SabHeader *h,
                                   bool yield_on_gas, bool yield_on_step_limit,
@@ -2830,6 +3208,12 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
     uint32_t right = load_u32_payload(rights, cur);
     debug_check_child_ptr(left);
     debug_check_child_ptr(right);
+
+    if (worker_has_unlimited_steps(ws) &&
+        can_have_bulk_redex_root(kinds, lefts, cur) &&
+        maybe_fuse_bulk_redex(ws, kinds, syms, lefts, rights)) {
+      continue;
+    }
 
     uint8_t l_kind = (left < MAX_CAP) ? load_kind_pub(kinds, left) : 0;
 
@@ -3410,7 +3794,8 @@ void workerLoop(uint32_t worker_id) {
             (job.max_steps == 0xffffffffu) ? 0xffffffffu : job.max_steps,
         .mode = MODE_DESCEND,
         .status = WORKER_RUNNING,
-        .reserved = 0,
+        .reserved =
+            (job.max_steps == 0xffffffffu) ? WORKER_FLAG_UNLIMITED_STEPS : 0,
         .req_id = job.req_id,
     };
 
@@ -3514,4 +3899,3 @@ uint32_t debugLockState(void) {
   return atomic_load_explicit(&h->resize_seq, memory_order_relaxed);
 }
 uint32_t debugGetRingEntries(void) { return RING_ENTRIES; }
-

@@ -662,6 +662,9 @@ void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
                         unsigned long long *out_duplicate_lost_allocs,
                         unsigned long long *out_hashcons_hits,
                         unsigned long long *out_hashcons_misses,
+                        unsigned long long *out_bulk_fusion_checks,
+                        unsigned long long *out_bulk_fusion_candidates,
+                        unsigned long long *out_bulk_fusion_hits,
                         unsigned long long *out_events,
                         unsigned long long *out_dropped) {
   if (out_top)
@@ -686,6 +689,12 @@ void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
     *out_hashcons_hits = arena_hashcons_hits();
   if (out_hashcons_misses)
     *out_hashcons_misses = arena_hashcons_misses();
+  if (out_bulk_fusion_checks)
+    *out_bulk_fusion_checks = arena_bulk_fusion_checks();
+  if (out_bulk_fusion_candidates)
+    *out_bulk_fusion_candidates = arena_bulk_fusion_candidates();
+  if (out_bulk_fusion_hits)
+    *out_bulk_fusion_hits = arena_bulk_fusion_hits();
 
   if (out_events)
     *out_events =

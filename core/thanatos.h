@@ -58,6 +58,9 @@ void thanatos_get_stats(uint32_t *out_top, uint32_t *out_capacity,
                         unsigned long long *out_duplicate_lost_allocs,
                         unsigned long long *out_hashcons_hits,
                         unsigned long long *out_hashcons_misses,
+                        unsigned long long *out_bulk_fusion_checks,
+                        unsigned long long *out_bulk_fusion_candidates,
+                        unsigned long long *out_bulk_fusion_hits,
                         unsigned long long *out_events,
                         unsigned long long *out_dropped);
 void thanatos_debug_pending_requests(uint32_t *out_active, uint32_t *out_done);

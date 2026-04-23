@@ -310,6 +310,9 @@ describe("thanatos session suite", { skip: !thanatosAvailable() }, async () => {
             statsLine.includes("duplicate_lost_allocs=") &&
             statsLine.includes("hashcons_hits=") &&
             statsLine.includes("hashcons_misses=") &&
+            statsLine.includes("bulk_fusion_checks=") &&
+            statsLine.includes("bulk_fusion_candidates=") &&
+            statsLine.includes("bulk_fusion_hits=") &&
             statsLine.includes("events=") &&
             statsLine.includes("dropped="),
           "STATS missing expected fields: " + statsLine,

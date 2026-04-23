@@ -148,10 +148,7 @@ describe("Parser thanatos suite", { skip: !thanatosAvailable() }, async () => {
           await session.reset();
           const resultDag = await session.reduceDag(parserTest.dag);
           const resultExpr = fromTopoDagWire(resultDag);
-          const ok = await UnChurchBoolean(
-            resultExpr,
-            passthroughEvaluator,
-          );
+          const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
           assert.ok(ok, parserTest.assertion);
         }
       });

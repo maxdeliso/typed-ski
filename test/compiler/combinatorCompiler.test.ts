@@ -21,6 +21,15 @@ it("compileToCombinatorString links built-in imports", async () => {
   assert.strictEqual(await compileToCombinatorString(source), "I");
 });
 
+it("compileToCombinatorString preserves a stable exact shape for a K-like term", async () => {
+  const source = `module Main
+export main
+poly main = #X => #Y => \\x : X => \\y : Y => x
+`;
+
+  assert.strictEqual(await compileToCombinatorString(source), "((BI)K)");
+});
+
 it("bootstrappedCompile matches the TypeScript compiler", async () => {
   const source = loadCompilerInput("literalZero.trip");
 

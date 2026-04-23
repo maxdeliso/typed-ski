@@ -7,6 +7,8 @@ import { parseSKI } from "../parser/ski.ts";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { getPreludeObject } from "../prelude.ts";
 import { sortedStrings } from "../shared/canonical.ts";
+import { unparseSKI } from "../ski/expression.ts";
+import { optimizeSKI } from "../ski/optimizer.ts";
 import {
   loadTripModuleObject,
   loadTripSourceFile,
@@ -396,6 +398,10 @@ async function runHarness(source: string, workers = 1): Promise<string> {
   }
 }
 
+function normalizeCombinatorString(source: string): string {
+  return unparseSKI(optimizeSKI(parseSKI(source)));
+}
+
 /**
  * Compiles a TripLang module source string to the final linked combinator string
  * using the TypeScript compiler and built-in library modules.
@@ -441,12 +447,15 @@ export async function bootstrappedCompile(
 ): Promise<string> {
   assertBootstrappedCompileSupported(source);
 
-  const expected = await compileToCombinatorString(source);
-  const actual = await runHarness(source, options.workers ?? 1);
+  const expected = normalizeCombinatorString(
+    await compileToCombinatorString(source),
+  );
+  const rawActual = await runHarness(source, options.workers ?? 1);
 
-  if (actual.startsWith("ERR:")) {
-    throw new BootstrappedCompilerError(actual.slice(4));
+  if (rawActual.startsWith("ERR:")) {
+    throw new BootstrappedCompilerError(rawActual.slice(4));
   }
+  const actual = normalizeCombinatorString(rawActual);
   if (actual !== expected) {
     throw new BootstrappedCompilerMismatchError(expected, actual);
   }

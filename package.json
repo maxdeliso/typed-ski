@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.17.11",
+  "version": "0.17.12",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -41,6 +41,7 @@
   },
   "scripts": {
     "tripc": "node --disable-warning=ExperimentalWarning --experimental-transform-types bin/tripc.ts",
+    "bench:avl": "node --disable-warning=ExperimentalWarning --experimental-transform-types test/avlBenchmark.ts",
     "bundle:tripc": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.js --format=esm --platform=node",
     "bundle:tripc:minified": "esbuild bin/tripc.ts --bundle --minify --outfile=dist/tripc.min.js --format=esm --platform=node",
     "bundle:tripc:node": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.node.js --format=esm --platform=node",

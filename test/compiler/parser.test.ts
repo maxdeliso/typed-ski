@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
-import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
+import { fromTopoDagWire, toTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import {
   closeBatchThanatosSessions,
   passthroughEvaluator,
@@ -125,34 +125,31 @@ describe("Parser thanatos suite", { skip: !thanatosAvailable() }, async () => {
       const preludeObj = await getPreludeObjectCached();
       const natObj = await getNatObjectCached();
       const binObj = await getBinObjectCached();
+      const preparedTests = await Promise.all(
+        tests.map(async (parserTest) => {
+          const testObj = await compileTestProgram(parserTest.file);
+          const linked = linkModules([
+            { name: "Prelude", object: preludeObj },
+            { name: "Nat", object: natObj },
+            { name: "Bin", object: binObj },
+            { name: "Lexer", object: lexerObj },
+            { name: "Parser", object: parserObj },
+            { name: "Test", object: testObj },
+          ]);
+          return {
+            ...parserTest,
+            dag: toTopoDagWire(parseSKI(linked)),
+          };
+        }),
+      );
 
       await withBatchThanatosSession(async (session) => {
-        for (const parserTest of tests) {
-          const runOne = async () => {
-            await session.reset();
-            const testObj = await compileTestProgram(parserTest.file);
-            const linked = linkModules([
-              { name: "Prelude", object: preludeObj },
-              { name: "Nat", object: natObj },
-              { name: "Bin", object: binObj },
-              { name: "Lexer", object: lexerObj },
-              { name: "Parser", object: parserObj },
-              { name: "Test", object: testObj },
-            ]);
-            const expr = parseSKI(linked);
-            try {
-              const resultDag = await session.reduceExpr(expr);
-              const resultExpr = fromTopoDagWire(resultDag);
-              const ok = await UnChurchBoolean(
-                resultExpr,
-                passthroughEvaluator,
-              );
-              assert.ok(ok, parserTest.assertion);
-            } finally {
-              await session.reset();
-            }
-          };
-          await runOne();
+        for (const parserTest of preparedTests) {
+          await session.reset();
+          const resultDag = await session.reduceDag(parserTest.dag);
+          const resultExpr = fromTopoDagWire(resultDag);
+          const ok = await UnChurchBoolean(resultExpr, passthroughEvaluator);
+          assert.ok(ok, parserTest.assertion);
         }
       });
     });

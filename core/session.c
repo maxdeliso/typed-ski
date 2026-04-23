@@ -237,11 +237,14 @@ static void handle_stats(ThanatosSession *s) {
                      total_link_chase_hops = 0, total_cons_allocs = 0,
                      total_cont_allocs = 0, total_susp_allocs = 0,
                      duplicate_lost_allocs = 0, hashcons_hits = 0,
-                     hashcons_misses = 0;
+                     hashcons_misses = 0, bulk_fusion_checks = 0,
+                     bulk_fusion_candidates = 0, bulk_fusion_hits = 0;
   thanatos_get_stats(&top, &capacity, &total_nodes, &total_steps,
                      &total_link_chase_hops,
                      &total_cons_allocs, &total_cont_allocs, &total_susp_allocs,
                      &duplicate_lost_allocs, &hashcons_hits, &hashcons_misses,
+                     &bulk_fusion_checks, &bulk_fusion_candidates,
+                     &bulk_fusion_hits,
                      &events, &dropped);
   session_printf(
       s,
@@ -249,11 +252,14 @@ static void handle_stats(ThanatosSession *s) {
       "total_link_chase_hops=%llu events=%llu "
       "dropped=%llu total_cons_allocs=%llu total_cont_allocs=%llu "
       "total_susp_allocs=%llu duplicate_lost_allocs=%llu "
-      "hashcons_hits=%llu hashcons_misses=%llu\n",
+      "hashcons_hits=%llu hashcons_misses=%llu "
+      "bulk_fusion_checks=%llu bulk_fusion_candidates=%llu "
+      "bulk_fusion_hits=%llu\n",
       (unsigned)top, (unsigned)capacity, total_nodes, total_steps,
       total_link_chase_hops, events, dropped, total_cons_allocs,
       total_cont_allocs, total_susp_allocs, duplicate_lost_allocs,
-      hashcons_hits, hashcons_misses);
+      hashcons_hits, hashcons_misses, bulk_fusion_checks,
+      bulk_fusion_candidates, bulk_fusion_hits);
   session_fflush(s);
 }
 

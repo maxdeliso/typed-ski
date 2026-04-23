@@ -23,6 +23,7 @@ import {
   substituteTripLangTypeDirect,
 } from "../meta/frontend/substitution.ts";
 import { unparseSKI } from "../ski/expression.ts";
+import { optimizeSKI } from "../ski/optimizer.ts";
 import { toDeBruijn } from "../meta/frontend/deBruijn.ts";
 import { sccDependencyOrder } from "./graph.ts";
 import {
@@ -1191,7 +1192,7 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
   }
 
   // Extract the SKI expression and pretty print it
-  const skiExpression = current.term;
+  const skiExpression = optimizeSKI(current.term);
   return unparseSKI(skiExpression);
 }
 

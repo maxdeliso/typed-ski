@@ -55,6 +55,9 @@ typedef struct {
   unsigned long long duplicate_lost_allocs;
   unsigned long long hashcons_hits;
   unsigned long long hashcons_misses;
+  unsigned long long bulk_fusion_checks;
+  unsigned long long bulk_fusion_candidates;
+  unsigned long long bulk_fusion_hits;
   unsigned long long dispatcher_events;
   unsigned long long dispatcher_dropped;
   uint32_t pending_active;
@@ -83,7 +86,9 @@ static PerfStats capture_stats(void) {
                      &stats.total_cons_allocs,
                      &stats.total_cont_allocs, &stats.total_susp_allocs,
                      &stats.duplicate_lost_allocs, &stats.hashcons_hits,
-                     &stats.hashcons_misses, &stats.dispatcher_events,
+                     &stats.hashcons_misses, &stats.bulk_fusion_checks,
+                     &stats.bulk_fusion_candidates, &stats.bulk_fusion_hits,
+                     &stats.dispatcher_events,
                      &stats.dispatcher_dropped);
   thanatos_debug_pending_requests(&stats.pending_active, &stats.pending_done);
   arena_debug_ring_occupancy(&stats.sq_occupancy, &stats.cq_occupancy);

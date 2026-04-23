@@ -78,7 +78,11 @@ function formatRatio(
   }
   const numerator = Number(numeratorText);
   const denominator = Number(denominatorText);
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) {
+  if (
+    !Number.isFinite(numerator) ||
+    !Number.isFinite(denominator) ||
+    denominator === 0
+  ) {
     return "n/a";
   }
   return (numerator / denominator).toFixed(4);

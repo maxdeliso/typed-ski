@@ -10,10 +10,7 @@ import {
   type SKITerminalSymbol,
 } from "./terminal.ts";
 
-function isTerminal(
-  expr: SKIExpression,
-  sym: SKITerminalSymbol,
-): boolean {
+function isTerminal(expr: SKIExpression, sym: SKITerminalSymbol): boolean {
   return expr.kind === "terminal" && expr.sym === sym;
 }
 
@@ -57,9 +54,7 @@ function matchBK(
   return pair;
 }
 
-function matchK(
-  expr: SKIExpression,
-): SKIExpression | null {
+function matchK(expr: SKIExpression): SKIExpression | null {
   const parts = appParts(expr);
   if (parts === null || !isTerminal(parts[0], K.sym)) {
     return null;

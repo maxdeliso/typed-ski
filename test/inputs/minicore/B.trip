@@ -1,0 +1,3 @@
+module B
+export Foo
+data Foo = Bar

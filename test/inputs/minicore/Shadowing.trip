@@ -1,0 +1,11 @@
+module Shadowing
+import Nat Nat
+import Nat zero
+import Nat succ
+export main
+
+poly inner = \g : Nat -> Nat => \x : Nat =>
+  let g = zero in
+  x
+
+poly main = inner succ zero

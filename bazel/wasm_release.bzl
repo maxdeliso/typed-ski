@@ -28,11 +28,15 @@ _WASM_MAX_PAGES = 65535
 def _export_flags():
     return ["-Wl,--export=%s" % symbol for symbol in _WASM_EXPORTS]
 
-_ZIG_CACHE_PATH_LINUX = "/tmp/zig-cache"
-_ZIG_CACHE_PATH_WINDOWS = "C:/Temp/zig-cache"
+def _wasm_release_impl(ctx):
+    wasm = ctx.actions.declare_file(ctx.label.name + ".wasm")
+    zig_cache = ctx.actions.declare_directory(ctx.label.name + ".zig-cache")
 
-def wasm_release(name, srcs, hdrs = [], visibility = None):
-    flags = [
+    args = ctx.actions.args()
+    args.add("cc")
+    for header in ctx.files.hdrs:
+        args.add("-I%s" % header.dirname)
+    args.add_all([
         "-O3",
         "-DNDEBUG",
         "-std=c11",
@@ -46,39 +50,44 @@ def wasm_release(name, srcs, hdrs = [], visibility = None):
         "-Wl,--shared-memory",
         "-Wl,--initial-memory=0x%x" % (_WASM_INITIAL_PAGES * _WASM_PAGE_SIZE),
         "-Wl,--max-memory=0x%x" % (_WASM_MAX_PAGES * _WASM_PAGE_SIZE),
-    ] + _export_flags()
-    src_locations = " ".join(["$(location %s)" % src for src in srcs])
-    flag_string = " ".join(flags)
+    ])
+    args.add_all(_export_flags())
+    args.add("-o")
+    args.add(wasm)
+    args.add_all(ctx.files.srcs)
 
-    # We use dirname to get the directory of each header.
-    # On Linux, path/to/file/.. is an error (ENOTDIR) because the filesystem
-    # requires the component before /.. to be a directory.
-    include_flags_bash = " ".join(["-I$$(dirname $(location %s))" % hdr for hdr in hdrs])
-    include_flags_bat = " ".join(["-I$(location %s)\\..\\" % hdr for hdr in hdrs])
-
-    # We explicitly set ZIG_LOCAL_CACHE_DIR and ZIG_GLOBAL_CACHE_DIR to avoid
-    # AppDataDirUnavailable errors in CI environments where the default cache
-    # locations (like $HOME/.cache or %APPDATA%) might not be writable or available.
-    cmd_bash = "export ZIG_LOCAL_CACHE_DIR={cache} && export ZIG_GLOBAL_CACHE_DIR={cache} && \"$(execpath @zig_sdk//:zig)\" cc {includes} {flags} -o \"$@\" {srcs}".format(
-        cache = _ZIG_CACHE_PATH_LINUX,
-        includes = include_flags_bash,
-        flags = flag_string,
-        srcs = src_locations,
+    ctx.actions.run(
+        executable = ctx.file._zig,
+        arguments = [args],
+        inputs = ctx.files.srcs + ctx.files.hdrs,
+        outputs = [wasm, zig_cache],
+        env = {
+            "ZIG_GLOBAL_CACHE_DIR": "%s/global" % zig_cache.path,
+            "ZIG_LOCAL_CACHE_DIR": "%s/local" % zig_cache.path,
+        },
+        mnemonic = "WasmRelease",
+        progress_message = "Building WASM release %{output}",
     )
 
-    cmd_bat = "set ZIG_LOCAL_CACHE_DIR={cache}&& set ZIG_GLOBAL_CACHE_DIR={cache}&& $(execpath @zig_sdk//:zig) cc {includes} {flags} -o $@ {srcs}".format(
-        cache = _ZIG_CACHE_PATH_WINDOWS,
-        includes = include_flags_bat,
-        flags = flag_string,
-        srcs = src_locations,
-    )
+    return [DefaultInfo(files = depset([wasm]))]
 
-    native.genrule(
+_wasm_release = rule(
+    implementation = _wasm_release_impl,
+    attrs = {
+        "hdrs": attr.label_list(allow_files = [".h"]),
+        "srcs": attr.label_list(allow_files = [".c"]),
+        "_zig": attr.label(
+            default = "@zig_sdk//:zig",
+            allow_single_file = True,
+            cfg = "exec",
+        ),
+    },
+)
+
+def wasm_release(name, srcs, hdrs = [], visibility = None):
+    _wasm_release(
         name = name,
-        srcs = srcs + hdrs,
-        outs = [name + ".wasm"],
-        cmd_bash = cmd_bash,
-        cmd_bat = cmd_bat,
-        tools = ["@zig_sdk//:zig"],
+        srcs = srcs,
+        hdrs = hdrs,
         visibility = visibility,
     )

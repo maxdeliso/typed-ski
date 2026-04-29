@@ -1,0 +1,3 @@
+module AmbiguousA
+export Bar
+data K = Bar

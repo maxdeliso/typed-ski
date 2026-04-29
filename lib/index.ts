@@ -147,6 +147,17 @@ export {
   type TripCObject,
 } from "./compiler/index.ts";
 
+export {
+  compileMiniCoreModules,
+  evaluateMiniCore,
+  MiniCoreCompileError,
+  type MiniCoreEvalResult,
+  type MiniCoreModuleSource,
+  type MiniCoreTelemetry,
+  type Program as MiniCoreProgram,
+  valueToNat,
+} from "./minicore/index.ts";
+
 // Additional utility exports
 export {
   /** Creates a Church-encoded number from a JavaScript number. */

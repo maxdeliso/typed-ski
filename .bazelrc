@@ -11,14 +11,6 @@ test:windows --test_env=LOCALAPPDATA
 test:windows --test_env=TEMP
 test:windows --test_env=TMP
 test:windows --test_env=USERPROFILE
-
-build:linux --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
-build:linux --sandbox_add_mount_pair=/tmp
-build:linux --sandbox_writable_path=/tmp/zig-cache
-
-build:windows --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=C:/Temp/zig-cache
-build:windows --sandbox_add_mount_pair=C:\Temp
-build:windows --sandbox_writable_path=C:/Temp/zig-cache
 build:windows --action_env=APPDATA
 build:windows --action_env=LOCALAPPDATA
 build:windows --action_env=TEMP

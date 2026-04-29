@@ -42,15 +42,6 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Prepare hermetic Zig cache (Linux)
-        if: runner.os == 'Linux'
-        run: mkdir -p /tmp/zig-cache
-
-      - name: Prepare hermetic Zig cache (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force C:\Temp\zig-cache | Out-Null
-
       - name: Build native Bazel targets
         run: bazel build //:thanatos //:performance_test //:release_wasm
 
@@ -66,17 +57,13 @@ jobs:
       - name: Run typecheck
         run: bazel run //:typecheck
 
-      - name: Build distributable artifacts
-        run: bazel run //:dist
-
-      - name: Run Node tests (Windows)
-        if: matrix.os == 'windows-2025'
+      - name: Run Node tests
         run: bazel test //:node_tests --test_output=errors
 
-      - name: Run Node tests and collect coverage (Ubuntu)
+      - name: Collect Node test coverage (Ubuntu)
         if: matrix.os == 'ubuntu-24.04'
         run: |
-          bazel coverage //:node_tests --test_output=errors
+          bazel coverage //:node_tests --test_output=errors --nocache_test_results
           echo "Found coverage files:"
           find -L bazel-testlogs -name "coverage.dat" -print || true
           find -L bazel-testlogs -name "coverage.dat" -exec cat {} + > coverage.lcov
@@ -106,6 +93,13 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+
+      - name: Stage Bazel dist artifacts for JSR dry run
+        if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          cp -a bazel-bin/dist_artifacts/. dist/
 
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'

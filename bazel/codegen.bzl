@@ -1,6 +1,5 @@
 def _codegen_impl(ctx):
     node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
-    node_path = node_toolchain.nodeinfo.target_tool_path
 
     args = ctx.actions.args()
     args.add("--experimental-transform-types")

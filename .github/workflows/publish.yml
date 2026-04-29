@@ -35,9 +35,6 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Prepare hermetic Zig cache
-        run: mkdir -p /tmp/zig-cache
-
       - name: Build native Bazel targets
         run: bazel build //:thanatos //:release_wasm
 

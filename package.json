@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.17.16",
+  "version": "0.17.17",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -34,6 +34,7 @@
   "engines": {
     "node": "25.x"
   },
+  "packageManager": "pnpm@10.33.2",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
@@ -46,7 +47,7 @@
     "bundle:tripc": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.js --format=esm --platform=node",
     "bundle:tripc:minified": "esbuild bin/tripc.ts --bundle --minify --outfile=dist/tripc.min.js --format=esm --platform=node",
     "bundle:tripc:node": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.node.js --format=esm --platform=node",
-    "dist": "mkdir -p dist && npm run bundle:tripc && npm run bundle:tripc:minified && npm run bundle:tripc:node",
+    "dist": "mkdir -p dist && pnpm run bundle:tripc && pnpm run bundle:tripc:minified && pnpm run bundle:tripc:node",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts test"
   },
@@ -61,6 +62,7 @@
     "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
     "globals": "^17.5.0",
+    "pnpm": "10.33.2",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0"

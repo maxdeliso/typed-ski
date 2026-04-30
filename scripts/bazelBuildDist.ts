@@ -21,13 +21,7 @@ async function copyListedFiles(
     if (!sourcePath) continue;
     const targetPath = join(targetRoot, relativePath || sourcePath);
     try {
-      const stat = await fsp.stat(sourcePath);
-      if (!stat.isFile()) continue;
-      await fsp.mkdir(dirname(targetPath), { recursive: true });
-      await fsp.copyFile(sourcePath, targetPath);
-      if (process.platform !== "win32") {
-        await fsp.chmod(targetPath, stat.mode);
-      }
+      await copyInput(sourcePath, targetPath);
     } catch (e) {
       console.error(`Failed to copy ${sourcePath} to ${targetPath}:`, e);
       throw e;
@@ -44,6 +38,29 @@ async function copyOutput(
   await fsp.copyFile(sourcePath, targetPath);
   if (process.platform !== "win32") {
     await fsp.chmod(targetPath, stat.mode);
+  }
+}
+
+async function copyInput(
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  const stat = await fsp.stat(sourcePath);
+  if (stat.isFile()) {
+    await fsp.mkdir(dirname(targetPath), { recursive: true });
+    await fsp.copyFile(sourcePath, targetPath);
+    if (process.platform !== "win32") {
+      await fsp.chmod(targetPath, stat.mode);
+    }
+    return;
+  }
+  if (stat.isDirectory()) {
+    await fsp.rm(targetPath, { recursive: true, force: true });
+    await fsp.mkdir(dirname(targetPath), { recursive: true });
+    await fsp.cp(sourcePath, targetPath, {
+      dereference: true,
+      recursive: true,
+    });
   }
 }
 

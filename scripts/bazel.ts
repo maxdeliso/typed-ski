@@ -50,14 +50,13 @@ const NODE = process.execPath;
 const BAZELISK = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
 const NODE_DISABLE_EXPERIMENTAL_WARNING_ARG =
   "--disable-warning=ExperimentalWarning";
-const NPM =
-  process.platform === "win32"
-    ? [NODE, join(dirname(NODE), "node_modules", "npm", "bin", "npm-cli.js")]
-    : ["npm"];
-const NPX =
-  process.platform === "win32"
-    ? [NODE, join(dirname(NODE), "node_modules", "npm", "bin", "npx-cli.js")]
-    : ["npx"];
+const LOCAL_PNPM_ENTRY = join(
+  PROJECT_ROOT,
+  "node_modules",
+  "pnpm",
+  "bin",
+  "pnpm.cjs",
+);
 const LOCAL_TSC_ENTRY = join(
   PROJECT_ROOT,
   "node_modules",
@@ -94,6 +93,21 @@ const WASM_BUILD_INPUT_EXCLUDES = new Set([
 ]);
 let ensuredFreshBazelWasmArtifactPromise: Promise<void> | null = null;
 
+function pnpmCommand(...args: string[]): string[] {
+  const configuredPnpmPath = process.env["TYPED_SKI_PNPM_PATH"];
+  if (configuredPnpmPath) {
+    return [NODE, configuredPnpmPath, ...args];
+  }
+  if (fs.existsSync(LOCAL_PNPM_ENTRY)) {
+    return [NODE, LOCAL_PNPM_ENTRY, ...args];
+  }
+  return ["pnpm", ...args];
+}
+
+function esbuildCommand(...args: string[]): string[] {
+  return pnpmCommand("dlx", "esbuild@0.28.0", ...args);
+}
+
 function splitSpawnArgs(args: string[]): [string, string[]] {
   const [command, ...rest] = args;
   if (!command) {
@@ -102,10 +116,10 @@ function splitSpawnArgs(args: string[]): [string, string[]] {
   return [command, rest];
 }
 
-async function ensureNpmCache(): Promise<string> {
-  const cacheDir = join(PROJECT_ROOT, ".tmp", "npm-cache");
-  await fsp.mkdir(cacheDir, { recursive: true });
-  return cacheDir;
+async function ensurePnpmStore(): Promise<string> {
+  const storeDir = join(PROJECT_ROOT, ".tmp", "pnpm-store");
+  await fsp.mkdir(storeDir, { recursive: true });
+  return storeDir;
 }
 const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
 const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
@@ -321,7 +335,7 @@ async function ensureFreshBazelWasmArtifact(): Promise<void> {
 
 async function run(args: string[], options: any = {}): Promise<void> {
   const { env: extraEnv, timeoutMs, ...rest } = options;
-  const npmCache = await ensureNpmCache();
+  const pnpmStore = await ensurePnpmStore();
   return new Promise((resolve, reject) => {
     const [command, commandArgs] = splitSpawnArgs(args);
     const child = spawn(command, commandArgs, {
@@ -329,7 +343,7 @@ async function run(args: string[], options: any = {}): Promise<void> {
       stdio: "inherit",
       env: {
         ...process.env,
-        npm_config_cache: npmCache,
+        pnpm_config_store_dir: pnpmStore,
         ...extraEnv,
       },
       ...rest,
@@ -380,7 +394,7 @@ async function run(args: string[], options: any = {}): Promise<void> {
 
 async function runCapture(args: string[], options: any = {}): Promise<string> {
   const { env: extraEnv, ...rest } = options;
-  const npmCache = await ensureNpmCache();
+  const pnpmStore = await ensurePnpmStore();
   return new Promise((resolve, reject) => {
     const [command, commandArgs] = splitSpawnArgs(args);
     const child = spawn(command, commandArgs, {
@@ -388,7 +402,7 @@ async function runCapture(args: string[], options: any = {}): Promise<string> {
       stdio: ["ignore", "piped", "inherit"],
       env: {
         ...process.env,
-        npm_config_cache: npmCache,
+        pnpm_config_store_dir: pnpmStore,
         ...extraEnv,
       },
       ...rest,
@@ -450,8 +464,7 @@ async function syncGenerated(): Promise<void> {
     "--ts-out",
     repo("lib", "evaluator", "arenaHeader.generated.ts"),
   ]);
-  await run([...NPX, "--yes", "pnpm", "install", "--lockfile-only"]);
-  await run([...NPM, "install", "--package-lock-only"]);
+  await run(pnpmCommand("install", "--lockfile-only"));
 }
 
 async function verifyGenerated(): Promise<void> {
@@ -484,47 +497,43 @@ async function verifyGenerated(): Promise<void> {
 
 export async function buildDist(): Promise<void> {
   await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "bin/tripc.ts",
-    "--bundle",
-    "--outfile=dist/tripc.js",
-    "--format=esm",
-    "--platform=node",
-  ]);
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "bin/tripc.ts",
-    "--bundle",
-    "--minify",
-    "--outfile=dist/tripc.min.js",
-    "--format=esm",
-    "--platform=node",
-  ]);
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "bin/tripc.ts",
-    "--bundle",
-    "--outfile=dist/tripc.node.js",
-    "--format=esm",
-    "--platform=node",
-  ]);
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "lib/evaluator/arenaWorker.ts",
-    "--bundle",
-    "--outfile=dist/arenaWorker.js",
-    "--format=esm",
-    "--platform=node",
-  ]);
+  await run(
+    esbuildCommand(
+      "bin/tripc.ts",
+      "--bundle",
+      "--outfile=dist/tripc.js",
+      "--format=esm",
+      "--platform=node",
+    ),
+  );
+  await run(
+    esbuildCommand(
+      "bin/tripc.ts",
+      "--bundle",
+      "--minify",
+      "--outfile=dist/tripc.min.js",
+      "--format=esm",
+      "--platform=node",
+    ),
+  );
+  await run(
+    esbuildCommand(
+      "bin/tripc.ts",
+      "--bundle",
+      "--outfile=dist/tripc.node.js",
+      "--format=esm",
+      "--platform=node",
+    ),
+  );
+  await run(
+    esbuildCommand(
+      "lib/evaluator/arenaWorker.ts",
+      "--bundle",
+      "--outfile=dist/arenaWorker.js",
+      "--format=esm",
+      "--platform=node",
+    ),
+  );
 
   const compileTempDir =
     process.env["TYPED_SKI_BUILD_TEMP_DIR"] ??
@@ -555,36 +564,33 @@ async function buildHephaestusAssets(): Promise<void> {
   await ensureFreshBazelWasmArtifact();
   await stageBazelWasmArtifactIfPresent();
   await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "server/workbench.js",
-    "--bundle",
-    "--outfile=dist/workbench.js",
-    "--format=esm",
-    "--platform=browser",
-  ]);
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "server/webglForest.ts",
-    "--bundle",
-    "--outfile=dist/webglForest.js",
-    "--format=esm",
-    "--platform=browser",
-  ]);
-  await run([
-    ...NPX,
-    "--yes",
-    "esbuild",
-    "lib/evaluator/arenaWorker.ts",
-    "--bundle",
-    "--outfile=dist/arenaWorker.js",
-    "--format=esm",
-    "--platform=browser",
-  ]);
+  await run(
+    esbuildCommand(
+      "server/workbench.js",
+      "--bundle",
+      "--outfile=dist/workbench.js",
+      "--format=esm",
+      "--platform=browser",
+    ),
+  );
+  await run(
+    esbuildCommand(
+      "server/webglForest.ts",
+      "--bundle",
+      "--outfile=dist/webglForest.js",
+      "--format=esm",
+      "--platform=browser",
+    ),
+  );
+  await run(
+    esbuildCommand(
+      "lib/evaluator/arenaWorker.ts",
+      "--bundle",
+      "--outfile=dist/arenaWorker.js",
+      "--format=esm",
+      "--platform=browser",
+    ),
+  );
 }
 
 function getBazelWasmArtifactUrl(): string | undefined {
@@ -625,13 +631,13 @@ async function serveHephaestus(): Promise<void> {
 }
 
 async function formatCheck(): Promise<void> {
-  console.log("Format check using npx prettier --check .");
-  await run([...NPX, "--yes", "prettier", "--check", "."]);
+  console.log("Format check using pnpm exec prettier --check .");
+  await run(pnpmCommand("exec", "prettier", "--check", "."));
 }
 
 async function lint(): Promise<void> {
-  console.log("Lint using npx eslint .");
-  await run([...NPX, "--yes", "eslint", "."]);
+  console.log("Lint using pnpm exec eslint .");
+  await run(pnpmCommand("exec", "eslint", "."));
 }
 
 async function collectTests(): Promise<string[]> {
@@ -691,7 +697,7 @@ async function typecheckTests(files: string[]): Promise<void> {
   console.log(`Type checking project...`);
   if (!fs.existsSync(LOCAL_TSC_ENTRY)) {
     throw new Error(
-      `Local TypeScript compiler not found at ${LOCAL_TSC_ENTRY}. Run npm install first.`,
+      `Local TypeScript compiler not found at ${LOCAL_TSC_ENTRY}. Run pnpm install first.`,
     );
   }
   await run([NODE, LOCAL_TSC_ENTRY, "--noEmit"]);

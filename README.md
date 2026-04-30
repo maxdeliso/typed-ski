@@ -234,6 +234,24 @@ native binary keeps the SKI evaluator on-metal by managing worker dispatch and
 completion queues directly, which avoids Node.js/WASM bridge overhead and improves
 throughput and runtime stability for long-running workloads.
 
+## MiniCore ANF
+
+MiniCore ANF is a strict, backend-oriented normalization layer for the current
+first-order MiniCore AST. It makes evaluation order explicit by naming
+non-atomic operands left-to-right before calls, primitive operations,
+constructor applications, and case dispatch. This is intentionally suitable for
+Block IR, MLIR, native, and WASM lowering; the SKI path remains the lazy
+reference-oriented route.
+
+ANF v0 supports only direct known-symbol calls. Higher-order or closure calls
+will need an explicit later representation, such as a separate closure-call node
+after closure conversion support exists. MiniCore and ANF `LocalId`s are also
+expected to be globally unique within a function; source-level shadowing must be
+alpha-renamed before ANF. The current ANF nodes preserve shape but do not yet
+carry type or constructor-family metadata, so serious Block IR and ADT lowering
+must add typed locals/symbols and datatype-aware constructor validation before
+lowering cases into tags and switches.
+
 ## Works Referenced
 
 ### Books
@@ -254,6 +272,10 @@ throughput and runtime stability for long-running workloads.
 - H. G. Baker, "CONS should not CONS its arguments, or, a lazy alloc is a smart
   alloc," _ACM SIGPLAN Notices_, vol. 27, no. 3, pp. 24-34, 1992. DOI:
   10.1145/130854.130858
+- C. Flanagan, A. Sabry, B. F. Duba, and M. Felleisen, "The essence of
+  compiling with continuations," in _Proceedings of the ACM SIGPLAN 1993
+  Conference on Programming Language Design and Implementation_ (PLDI '93),
+  ACM, New York, NY, USA, pp. 237-247, 1993. DOI: 10.1145/155090.155113
 
 ## CI/CD
 

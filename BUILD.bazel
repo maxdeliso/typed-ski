@@ -3,10 +3,6 @@ load("//bazel:node_sharded_test.bzl", "node_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
 load("//bazel:codegen.bzl", "codegen_rule")
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load(
-    "@@aspect_rules_js++npm+npm__json-stringify-safe__5.0.1__links//:defs.bzl",
-    link_json_stringify_safe = "npm_link_imported_package_store_internal",
-)
 
 load("@aspect_rules_js//js:defs.bzl", "js_library")
 
@@ -35,7 +31,6 @@ codegen_rule(
 npm_link_all_packages(
     name = "node_modules",
 )
-link_json_stringify_safe(link_name = "json-stringify-safe")
 
 NODE_TEST_DATA = glob(
     [
@@ -59,6 +54,7 @@ NODE_TEST_DATA = glob(
     "//lib/shared",
     "//lib/evaluator",
     "//core",
+    ":node_modules/pnpm",
     "//lib/evaluator:arena_header_generated",
     "//lib/shared:version_generated",
 ]
@@ -83,6 +79,7 @@ NODE_DIST_DATA = glob(
     "//lib/shared",
     "//lib/evaluator",
     "//core",
+    ":node_modules/pnpm",
     "//lib/evaluator:arena_header_generated",
     "//lib/shared:version_generated",
 ]
@@ -122,7 +119,6 @@ node_sharded_test(
     name = "node_tests",
     data = NODE_TEST_DATA + [
         ":node_modules",
-        ":node_modules/json-stringify-safe",
     ],
     dist = ":dist_artifacts",
     generated_jsr = ":jsr.generated.json",

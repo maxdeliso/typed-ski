@@ -6,6 +6,7 @@ An implementation of a parser, evaluator, printer, and visualizer for
 ## Project Dependencies
 
 - [TypeScript](https://www.typescriptlang.org/)
+- [pnpm](https://pnpm.io/) for dependency management (repo-pinned as a `devDependency`)
 - [Node.js](https://nodejs.org/) as a bootstrap for the repo-pinned toolchain
 - [C](<https://en.wikipedia.org/wiki/C_(programming_language)>) (compiled to
   WebAssembly)
@@ -40,11 +41,13 @@ If Bazelisk is installed as `bazel` on your machine, the same commands work with
 ### Installation
 
 1. Install `Node.js`
-2. Install `Bazelisk`
-3. Clone the repository
-4. Run `bazelisk build //:thanatos //:release_wasm`
-5. Run `bazelisk run //:build`
-6. Open the project in VS Code
+2. Install `pnpm` (system-wide or use `npm install -g pnpm`)
+3. Install `Bazelisk`
+4. Clone the repository
+5. Run `pnpm install`
+6. Run `bazelisk build //:thanatos //:release_wasm`
+7. Run `bazelisk run //:build`
+8. Open the project in VS Code
 
 The required Node.js toolchain version is pinned in the repository configuration.
 Bazelisk commands use your installed Node.js only as a bootstrap shim, then run
@@ -52,6 +55,10 @@ the repo-pinned Node.js version for the actual build/test command.
 If your system Node.js does not match, the first Bazelisk run will install the
 exact pinned binary into a local toolchain cache. Set
 `TYPED_SKI_NODE_TOOLCHAIN_DIR` if you want that cache in a specific location.
+
+This repository uses a local installation of `pnpm` pinned in `package.json`.
+Helper scripts in `scripts/` automatically use the local `pnpm` binary found in
+`node_modules/pnpm`.
 
 ### Running Tests
 

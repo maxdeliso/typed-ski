@@ -11,7 +11,9 @@ export function typeOfMiniCoreExpr(
   expr: Expr,
   fnId: SymbolId,
   metadata: MiniCoreMetadata,
-  localTypes = metadata.localTypesByFunction.get(fnId) ?? new Map(),
+  localTypes: Map<LocalId, MiniType> = metadata.localTypesByFunction.get(
+    fnId,
+  ) ?? new Map(),
 ): MiniType {
   switch (expr.kind) {
     case "var":

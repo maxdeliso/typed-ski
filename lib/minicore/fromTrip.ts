@@ -6,6 +6,7 @@ import type {
 } from "../meta/trip.ts";
 import { parseTripLang } from "../parser/tripLang.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
+import type { BaseType } from "../types/types.ts";
 import type {
   ConstructorDef,
   Expr,
@@ -17,6 +18,16 @@ import type {
   SymbolDef,
   SymbolId,
 } from "./ast.ts";
+import {
+  emptyMiniCoreMetadata,
+  miniTypeEquals,
+  miniTypeFromBaseType,
+  miniTypeToString,
+  type MiniCoreMetadata,
+  type MiniType,
+  type TypeId,
+} from "./metadata.ts";
+import { typeOfMiniCoreExpr } from "./typeOf.ts";
 import { validateMiniCoreProgram } from "./validator.ts";
 
 export interface MiniCoreModuleSource {
@@ -44,8 +55,11 @@ type FunctionState = "declared" | "compiling" | "compiled";
 interface LoweringContext {
   moduleName: string;
   locals: Map<string, LocalId>;
+  localTypes: Map<LocalId, MiniType>;
+  localTypesByName: Map<string, MiniType>;
   functionLocals: Map<string, SymbolId>;
   nextLocalId: number;
+  fnSymbol: SymbolId;
 }
 
 type StaticBinding = {
@@ -174,15 +188,18 @@ function stripTypeAbs(term: SystemFTerm): SystemFTerm {
 
 function collectTopLevelParams(term: SystemFTerm): {
   params: string[];
+  paramTypes: BaseType[];
   body: SystemFTerm;
 } {
   const params: string[] = [];
+  const paramTypes: BaseType[] = [];
   let current = stripTypeAbs(term);
   while (current.kind === "systemF-abs") {
     params.push(current.name);
+    paramTypes.push(current.typeAnnotation);
     current = stripTypeAbs(current.body);
   }
-  return { params, body: current };
+  return { params, paramTypes, body: current };
 }
 
 function flattenApplication(term: SystemFTerm): {
@@ -198,6 +215,13 @@ function flattenApplication(term: SystemFTerm): {
   return { head, args };
 }
 
+function applyTermArgs(head: SystemFTerm, args: SystemFTerm[]): SystemFTerm {
+  return args.reduce<SystemFTerm>(
+    (lft, rgt) => ({ kind: "non-terminal", lft, rgt }),
+    head,
+  );
+}
+
 class MiniCoreBuilder {
   private readonly modules: Map<string, SourceModule>;
   private readonly exportModulesByName = new Map<string, Set<string>>();
@@ -205,6 +229,9 @@ class MiniCoreBuilder {
   private readonly symbolsByName = new Map<string, SymbolId>();
   private readonly callableSymbolsByQName = new Map<string, SymbolId>();
   private readonly functionStates = new Map<SymbolId, FunctionState>();
+  private readonly metadata: MiniCoreMetadata = emptyMiniCoreMetadata();
+  private readonly dataTypeByQName = new Map<string, TypeId>();
+  private nextTypeId: TypeId = 0;
   private readonly constructorByQName = new Map<string, SymbolId>();
   private readonly constructorAliasByQName = new Map<
     string,
@@ -237,6 +264,7 @@ class MiniCoreBuilder {
       symbols: this.symbols,
       entry,
       symbolsByName: this.symbolsByName,
+      metadata: this.metadata,
     };
   }
 
@@ -254,7 +282,8 @@ class MiniCoreBuilder {
     qName: string,
     localName: string,
     tag: number,
-    arity: number,
+    fieldTypes: MiniType[],
+    dataType: TypeId,
   ): SymbolId {
     const existing = this.constructorByQName.get(qName);
     if (existing !== undefined) {
@@ -264,7 +293,18 @@ class MiniCoreBuilder {
       kind: "constructor",
       name: qName,
       tag,
-      arity,
+      arity: fieldTypes.length,
+    });
+    const dataDef = this.metadata.dataTypes.get(dataType);
+    if (dataDef) {
+      dataDef.constructors.push(id);
+    }
+    this.metadata.constructors.set(id, {
+      symbol: id,
+      dataType,
+      tag,
+      fieldTypes,
+      resultType: this.resultTypeForDataType(dataType),
     });
     this.constructorByQName.set(qName, id);
     let localSet = this.constructorsByLocalName.get(localName);
@@ -277,15 +317,50 @@ class MiniCoreBuilder {
   }
 
   private addPseudoConstructors(): void {
-    this.addConstructor("Prelude.false", "false", 0, 0);
-    this.addConstructor("Prelude.true", "true", 1, 0);
-    this.addConstructor("Prelude.nil", "nil", 0, 0);
-    this.addConstructor("Prelude.cons", "cons", 1, 2);
+    const bool = this.addDataType("Prelude.Bool", "Bool", []);
+    const list = this.addDataType("Prelude.List", "List", ["A"]);
+    const falseConstructor = this.addConstructor(
+      "Prelude.false",
+      "false",
+      0,
+      [],
+      bool,
+    );
+    const trueConstructor = this.addConstructor(
+      "Prelude.true",
+      "true",
+      1,
+      [],
+      bool,
+    );
+    this.metadata.bool = {
+      type: { kind: "bool" },
+      dataType: bool,
+      trueConstructor,
+      falseConstructor,
+    };
+    this.addConstructor("Prelude.nil", "nil", 0, [], list);
+    this.addConstructor(
+      "Prelude.cons",
+      "cons",
+      1,
+      [{ kind: "unknown" }, this.resultTypeForDataType(list)],
+      list,
+    );
   }
 
   private addDataConstructors(modules: SourceModule[]): void {
     for (const module of modules) {
       for (const dataDef of module.dataDefinitions) {
+        this.addDataType(`${module.name}.${dataDef.name}`, dataDef.name, [
+          ...dataDef.typeParams,
+        ]);
+      }
+    }
+
+    for (const module of modules) {
+      for (const dataDef of module.dataDefinitions) {
+        const dataType = this.requireDataType(`${module.name}.${dataDef.name}`);
         dataDef.constructors.forEach((ctor, index) => {
           const qName = `${module.name}.${dataDef.name}.${ctor.name}`;
           const moduleQName = `${module.name}.${ctor.name}`;
@@ -293,7 +368,10 @@ class MiniCoreBuilder {
             qName,
             ctor.name,
             index,
-            ctor.fields.length,
+            ctor.fields.map((field) =>
+              this.miniTypeFromBaseType(field, module.name),
+            ),
+            dataType,
           );
 
           const existingAlias = this.constructorAliasByQName.get(moduleQName);
@@ -309,17 +387,130 @@ class MiniCoreBuilder {
     }
   }
 
+  private addDataType(
+    qName: string,
+    localName: string,
+    typeParams: string[],
+  ): TypeId {
+    const existing = this.dataTypeByQName.get(qName);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const id = this.nextTypeId++;
+    this.metadata.dataTypes.set(id, {
+      id,
+      name: qName,
+      typeParams,
+      constructors: [],
+    });
+    this.dataTypeByQName.set(qName, id);
+    if (!this.dataTypeByQName.has(localName)) {
+      this.dataTypeByQName.set(localName, id);
+    }
+    return id;
+  }
+
+  private requireDataType(qName: string): TypeId {
+    const id = this.dataTypeByQName.get(qName);
+    if (id === undefined) {
+      throw new MiniCoreCompileError(`Unknown MiniCore datatype ${qName}`);
+    }
+    return id;
+  }
+
+  private resultTypeForDataType(dataType: TypeId): MiniType {
+    const def = this.metadata.dataTypes.get(dataType);
+    if (!def) {
+      return { kind: "unknown" };
+    }
+    if (
+      this.metadata.bool?.dataType === dataType ||
+      def.name === "Prelude.Bool"
+    ) {
+      return { kind: "bool" };
+    }
+    return {
+      kind: "data",
+      id: dataType,
+      args: def.typeParams.map((param) => ({ kind: "var", name: param })),
+    };
+  }
+
+  private miniTypeFromBaseType(type: BaseType, moduleName?: string): MiniType {
+    return miniTypeFromBaseType(type, (name) =>
+      this.resolveDataTypeName(name, moduleName),
+    );
+  }
+
+  private resolveDataTypeName(
+    name: string,
+    moduleName?: string,
+  ): TypeId | undefined {
+    if (moduleName) {
+      const local = this.dataTypeByQName.get(`${moduleName}.${name}`);
+      if (local !== undefined) {
+        return local;
+      }
+    }
+    return this.dataTypeByQName.get(name);
+  }
+
   private addPrimitiveSymbols(): void {
     for (const [name, arity, cls] of MINI_PRIMITIVES) {
+      const strict = Array.from({ length: arity }, () => true);
       const id = this.addSymbol({
         kind: "primitive",
         name,
         arity,
-        strict: Array.from({ length: arity }, () => true),
+        strict,
         class: cls,
+      });
+      const signature = this.primitiveSignature(name, arity);
+      this.metadata.primitives.set(id, {
+        symbol: id,
+        argTypes: signature.args,
+        resultType: signature.result,
+        strict,
+        effects: name === "Prelude.error" ? "trap" : "pure",
       });
       this.callableSymbolsByQName.set(name, id);
       this.functionStates.set(id, "compiled");
+    }
+  }
+
+  private primitiveSignature(
+    name: string,
+    arity: number,
+  ): { args: MiniType[]; result: MiniType } {
+    const nat = { kind: "nat" } as MiniType;
+    const u8 = { kind: "u8" } as MiniType;
+    const bool = { kind: "bool" } as MiniType;
+    switch (name) {
+      case "Nat.succ":
+        return { args: [nat], result: nat };
+      case "Nat.add":
+      case "Nat.mul":
+        return { args: [nat, nat], result: nat };
+      case "Nat.lte":
+      case "Bin.lteBin":
+        return { args: Array.from({ length: arity }, () => nat), result: bool };
+      case "Nat.fromBin":
+        return { args: [{ kind: "unknown" }], result: nat };
+      case "Prelude.not":
+        return { args: [bool], result: bool };
+      case "Prelude.eqU8":
+      case "Prelude.ltU8":
+        return { args: [u8, u8], result: bool };
+      case "Prelude.addU8":
+      case "Prelude.subU8":
+      case "Prelude.divU8":
+      case "Prelude.modU8":
+        return { args: [u8, u8], result: u8 };
+      default:
+        return {
+          args: Array.from({ length: arity }, () => ({ kind: "unknown" })),
+          result: { kind: "unknown" },
+        };
     }
   }
 
@@ -526,6 +717,14 @@ class MiniCoreBuilder {
     );
   }
 
+  private isConditionAsCalleeBoolEliminator(
+    type: MiniType | undefined,
+    hadTypeApplication: boolean,
+    argCount: number,
+  ): boolean {
+    return type?.kind === "bool" && hadTypeApplication && argCount >= 2;
+  }
+
   private analyzeCallableParams(qName: string): Set<string> {
     const cached = this.callableParamsCache.get(qName);
     if (cached) return cached;
@@ -562,7 +761,15 @@ class MiniCoreBuilder {
     this.analyzingCallableParams.add(qName);
     try {
       const { definition, module } = this.functionSource(qName);
-      const { params, body } = collectTopLevelParams(definition.term);
+      const { params, paramTypes, body } = collectTopLevelParams(
+        definition.term,
+      );
+      const paramTypeByName = new Map(
+        params.map((param, index) => [
+          param,
+          this.miniTypeFromBaseType(paramTypes[index]!, module.name),
+        ]),
+      );
       const callable = new Set<string>();
 
       const visit = (term: SystemFTerm, shadowed: Set<string>) => {
@@ -572,23 +779,17 @@ class MiniCoreBuilder {
             const stripped = stripTypeApps(head);
             const strippedHead = stripped.term;
 
-            /**
-             * Boolean Eliminator Heuristic (MiniCore v0):
-             *
-             * This heuristic identifies expressions that appear to be encoded boolean
-             * eliminators (e.g., Prelude.if) by checking if a type-applied variable
-             * is applied to exactly two term arguments.
-             *
-             * WARNING: This is a fragile, non-general heuristic suitable only for
-             * MiniCore v0's limited subset. It may miscompile other polymorphic
-             * functions that take exactly two arguments. A symbol-aware or
-             * type-aware check is required for general correctness.
-             */
             if (strippedHead.kind === "systemF-var") {
               const isShadowed = shadowed.has(strippedHead.name);
               if (params.includes(strippedHead.name) && !isShadowed) {
-                const isBoolElim = stripped.stripped && args.length === 2;
-                if (!isBoolElim) {
+                const headType = paramTypeByName.get(strippedHead.name);
+                if (
+                  !this.isConditionAsCalleeBoolEliminator(
+                    headType,
+                    stripped.stripped,
+                    args.length,
+                  )
+                ) {
                   callable.add(strippedHead.name);
                 }
               }
@@ -724,6 +925,23 @@ class MiniCoreBuilder {
       params: [],
       body: { kind: "lit", value: { kind: "nat", value: 0n } },
     });
+    this.metadata.functions.set(id, {
+      symbol: id,
+      paramTypes: Array.from({ length: params.length }, () => ({
+        kind: "unknown",
+      })),
+      resultType: { kind: "unknown" },
+      loweringHint:
+        qName === "Prelude.if"
+          ? {
+              kind: "boolEliminator",
+              mode: "functionStyle",
+              conditionArg: 0,
+              thenArg: 1,
+              elseArg: 2,
+            }
+          : undefined,
+    });
     if (!specialization) {
       this.callableSymbolsByQName.set(qName, id);
     } else {
@@ -746,13 +964,17 @@ class MiniCoreBuilder {
     this.functionStates.set(id, "compiling");
 
     const { module, definition } = this.functionSource(qName);
-    const { params, body } = collectTopLevelParams(definition.term);
+    const { params, paramTypes, body } = collectTopLevelParams(definition.term);
     const locals = new Map<string, LocalId>();
+    const localTypesByName = new Map<string, MiniType>();
+    const localTypes = new Map<LocalId, MiniType>();
     const functionLocals = new Map<string, SymbolId>();
     const paramIds: LocalId[] = [];
     let nextLocalId = 0;
 
-    for (const param of params) {
+    for (let i = 0; i < params.length; i++) {
+      const param = params[i]!;
+      const paramType = this.miniTypeFromBaseType(paramTypes[i]!, module.name);
       const binding = specialization?.staticBindings.find(
         (b) => b.paramName === param,
       );
@@ -762,12 +984,17 @@ class MiniCoreBuilder {
       }
       const localId = nextLocalId++;
       locals.set(param, localId);
+      localTypes.set(localId, paramType);
+      localTypesByName.set(param, paramType);
       paramIds.push(localId);
     }
 
     const ctx: LoweringContext = {
+      fnSymbol: id,
       moduleName: module.name,
       locals,
+      localTypes,
+      localTypesByName,
       functionLocals,
       nextLocalId,
     };
@@ -779,28 +1006,61 @@ class MiniCoreBuilder {
     def.params = paramIds;
     def.arity = paramIds.length;
     def.body = this.lowerTerm(body, ctx);
+    this.metadata.localTypesByFunction.set(id, ctx.localTypes);
+    this.metadata.functions.set(id, {
+      ...(this.metadata.functions.get(id) ?? { symbol: id }),
+      symbol: id,
+      paramTypes: paramIds.map(
+        (paramId) => ctx.localTypes.get(paramId) ?? { kind: "unknown" },
+      ),
+      resultType: typeOfMiniCoreExpr(
+        def.body,
+        id,
+        this.metadata,
+        ctx.localTypes,
+      ),
+      typeScheme: definition.type
+        ? this.miniTypeFromBaseType(definition.type, module.name)
+        : undefined,
+      loweringHint: this.metadata.functions.get(id)?.loweringHint,
+    });
     this.functionStates.set(id, "compiled");
   }
 
-  private allocLocal(ctx: LoweringContext, name: string): LocalId {
+  private allocLocal(
+    ctx: LoweringContext,
+    name: string,
+    type: MiniType = { kind: "unknown" },
+  ): LocalId {
     const id = ctx.nextLocalId++;
     if (name !== "_") {
       ctx.locals.set(name, id);
+      ctx.localTypesByName.set(name, type);
     }
+    ctx.localTypes.set(id, type);
     return id;
   }
 
   private withLocalScope<T>(
     ctx: LoweringContext,
     names: string[],
-    fn: (ids: LocalId[]) => T,
+    typesOrFn: MiniType[] | ((ids: LocalId[]) => T),
+    maybeFn?: (ids: LocalId[]) => T,
   ): T {
+    const types = Array.isArray(typesOrFn)
+      ? typesOrFn
+      : names.map(() => ({ kind: "unknown" }) as MiniType);
+    const fn = Array.isArray(typesOrFn) ? maybeFn! : typesOrFn;
     const previous = new Map(ctx.locals);
-    const ids = names.map((name) => this.allocLocal(ctx, name));
+    const previousTypesByName = new Map(ctx.localTypesByName);
+    const ids = names.map((name, index) =>
+      this.allocLocal(ctx, name, types[index] ?? { kind: "unknown" }),
+    );
     try {
       return fn(ids);
     } finally {
       ctx.locals = previous;
+      ctx.localTypesByName = previousTypesByName;
     }
   }
 
@@ -813,7 +1073,15 @@ class MiniCoreBuilder {
         return this.lowerTerm(stripTypeAbs(stripTypeApps(term).term), ctx);
       case "systemF-let": {
         const value = this.lowerTerm(term.value, ctx);
-        return this.withLocalScope(ctx, [term.name], (ids) => {
+        const valueType = term.typeAnnotation
+          ? this.miniTypeFromBaseType(term.typeAnnotation, ctx.moduleName)
+          : typeOfMiniCoreExpr(
+              value,
+              ctx.fnSymbol,
+              this.metadata,
+              ctx.localTypes,
+            );
+        return this.withLocalScope(ctx, [term.name], [valueType], (ids) => {
           const id = ids[0]!;
           const body = this.lowerTerm(term.body, ctx);
           return { kind: "let", bindings: [{ id, value }], body };
@@ -833,11 +1101,17 @@ class MiniCoreBuilder {
                 `Unknown constructor ${arm.constructorName}`,
               );
             }
-            return this.withLocalScope(ctx, arm.params, (binders) => ({
-              constructor,
-              binders,
-              body: this.lowerTerm(arm.body, ctx),
-            }));
+            const ctorInfo = this.metadata.constructors.get(constructor);
+            return this.withLocalScope(
+              ctx,
+              arm.params,
+              ctorInfo?.fieldTypes ?? [],
+              (binders) => ({
+                constructor,
+                binders,
+                body: this.lowerTerm(arm.body, ctx),
+              }),
+            );
           }),
         };
       case "non-terminal":
@@ -921,6 +1195,21 @@ class MiniCoreBuilder {
         return this.lowerKnownCallable(localFunction, args, ctx);
       }
 
+      const localType = ctx.localTypesByName.get(strippedHead.term.name);
+      if (
+        this.isConditionAsCalleeBoolEliminator(
+          localType,
+          strippedHead.stripped,
+          args.length,
+        )
+      ) {
+        return this.lowerConditionAsCalleeBoolEliminatorExpr(
+          this.lowerTerm(strippedHead.term, ctx),
+          args,
+          ctx,
+        );
+      }
+
       const constructor = this.resolveConstructorId(
         ctx.moduleName,
         strippedHead.term.name,
@@ -957,17 +1246,21 @@ class MiniCoreBuilder {
       }
     }
 
-    /**
-     * Boolean Eliminator Heuristic (MiniCore v0):
-     * See 'analyzeCallableParams' for a detailed warning about this heuristic.
-     */
-    if (strippedHead.stripped && args.length === 2) {
-      return this.lowerBoolEliminator(
-        strippedHead.term,
-        args[0]!,
-        args[1]!,
-        ctx,
+    if (strippedHead.stripped && args.length >= 2) {
+      const condition = this.lowerTerm(strippedHead.term, ctx);
+      const conditionType = typeOfMiniCoreExpr(
+        condition,
+        ctx.fnSymbol,
+        this.metadata,
+        ctx.localTypes,
       );
+      if (conditionType.kind === "bool") {
+        return this.lowerConditionAsCalleeBoolEliminatorExpr(
+          condition,
+          args,
+          ctx,
+        );
+      }
     }
 
     throw new MiniCoreCompileError(
@@ -990,6 +1283,7 @@ class MiniCoreBuilder {
         this.lowerTerm(args[0]!, ctx),
         this.lowerThunkBody(args[1]!, ctx),
         this.lowerThunkBody(args[2]!, ctx),
+        ctx,
       );
     }
 
@@ -1095,20 +1389,70 @@ class MiniCoreBuilder {
     );
   }
 
-  private lowerBoolEliminator(
-    scrutineeTerm: SystemFTerm,
-    trueTerm: SystemFTerm,
-    falseTerm: SystemFTerm,
+  private lowerConditionAsCalleeBoolEliminatorExpr(
+    condition: Expr,
+    args: SystemFTerm[],
     ctx: LoweringContext,
   ): Expr {
+    const thenTerm = args[0];
+    const elseTerm = args[1];
+    if (thenTerm === undefined || elseTerm === undefined) {
+      throw new MiniCoreCompileError(
+        "Bool eliminator expects then and else arguments",
+      );
+    }
+    const rest = args.slice(2);
     return this.lowerBoolCase(
-      this.lowerTerm(scrutineeTerm, ctx),
-      this.lowerTerm(trueTerm, ctx),
-      this.lowerTerm(falseTerm, ctx),
+      condition,
+      this.lowerTerm(applyTermArgs(thenTerm, rest), ctx),
+      this.lowerTerm(applyTermArgs(elseTerm, rest), ctx),
+      ctx,
     );
   }
 
-  private lowerBoolCase(scrutinee: Expr, ifTrue: Expr, ifFalse: Expr): Expr {
+  private lowerBoolCase(
+    scrutinee: Expr,
+    ifTrue: Expr,
+    ifFalse: Expr,
+    ctx?: LoweringContext,
+  ): Expr {
+    if (ctx) {
+      const scrutineeType = typeOfMiniCoreExpr(
+        scrutinee,
+        ctx.fnSymbol,
+        this.metadata,
+        ctx.localTypes,
+      );
+      const boolType = this.metadata.bool?.type ?? { kind: "bool" };
+      if (!miniTypeEquals(scrutineeType, boolType)) {
+        throw new MiniCoreCompileError(
+          `Bool eliminator condition must be Bool, got ${miniTypeToString(
+            scrutineeType,
+          )}`,
+        );
+      }
+
+      const trueType = typeOfMiniCoreExpr(
+        ifTrue,
+        ctx.fnSymbol,
+        this.metadata,
+        ctx.localTypes,
+      );
+      const falseType = typeOfMiniCoreExpr(
+        ifFalse,
+        ctx.fnSymbol,
+        this.metadata,
+        ctx.localTypes,
+      );
+      if (!miniTypeEquals(trueType, falseType)) {
+        throw new MiniCoreCompileError(
+          `Bool eliminator branches must have matching types, got ${miniTypeToString(
+            trueType,
+          )} and ${miniTypeToString(falseType)}`,
+        );
+      }
+    }
+
     return {
       kind: "case",
       scrutinee,

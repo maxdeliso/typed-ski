@@ -2,9 +2,18 @@ import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import {
   anfToMiniCoreProgram,
+  assertMiniTypeEquals,
+  emptyMiniCoreMetadata,
   evaluateMiniCore,
   MiniCoreAnfValidationError,
+  miniTypeEquals,
+  miniTypeFromBaseType,
+  miniTypeToString,
   toAnfProgram,
+  typeOfAnfAtom,
+  typeOfAnfExpr,
+  typeOfAnfValue,
+  typeOfMiniCoreExpr,
   unparseAnfProgram,
   unparseAnfExpr,
   validateAnfExecutable,
@@ -13,6 +22,8 @@ import {
   valueToNat,
   type AnfExpr,
   type AnfProgram,
+  type MiniCoreMetadata,
+  type MiniType,
 } from "../../lib/minicore/index.ts";
 import type {
   ConstructorDef,
@@ -52,6 +63,17 @@ function program(symbols: SymbolDef[], entry = 0): Program {
     symbols,
     entry,
     symbolsByName: new Map(symbols.map((symbol) => [symbol.name, symbol.id])),
+  };
+}
+
+function metadataBackedProgram(
+  symbols: SymbolDef[],
+  metadata: MiniCoreMetadata,
+  entry = 0,
+): Program {
+  return {
+    ...program(symbols, entry),
+    metadata,
   };
 }
 
@@ -420,6 +442,195 @@ describe("MiniCore ANF", () => {
         "  in",
         "  Main.const 1 %0",
       ].join("\n"),
+    );
+  });
+
+  it("records metadata types for generated ANF temporaries", () => {
+    const metadata = emptyMiniCoreMetadata();
+    metadata.functions.set(0, {
+      symbol: 0,
+      paramTypes: [],
+      resultType: { kind: "nat" },
+    });
+    metadata.primitives.set(1, {
+      symbol: 1,
+      argTypes: [{ kind: "nat" }, { kind: "nat" }],
+      resultType: { kind: "nat" },
+      strict: [true, true],
+      effects: "pure",
+    });
+    metadata.primitives.set(2, {
+      symbol: 2,
+      argTypes: [{ kind: "nat" }],
+      resultType: { kind: "nat" },
+      strict: [true],
+      effects: "pure",
+    });
+    metadata.localTypesByFunction.set(0, new Map());
+
+    const source = metadataBackedProgram(
+      [
+        fn(0, "Main.main", 0, [], {
+          kind: "prim",
+          target: 1,
+          args: [
+            {
+              kind: "prim",
+              target: 2,
+              args: [{ kind: "lit", value: { kind: "nat", value: 1n } }],
+            },
+            { kind: "lit", value: { kind: "nat", value: 2n } },
+          ],
+        }),
+        prim(1, "Nat.add", 2),
+        prim(2, "Nat.succ", 1),
+      ],
+      metadata,
+    );
+
+    const anf = toAnfProgram(source);
+
+    validateAnfProgram(anf);
+    assert.ok(anf.metadata);
+    assert.deepStrictEqual(anf.metadata.localTypesByFunction.get(0)?.get(0), {
+      kind: "nat",
+    });
+    assert.ok(
+      miniTypeEquals(typeOfAnfAtom({ kind: "var", id: 0 }, 0, anf.metadata), {
+        kind: "nat",
+      }),
+    );
+  });
+
+  it("covers MiniCore metadata type utilities", () => {
+    const nat: MiniType = { kind: "nat" };
+    const u8: MiniType = { kind: "u8" };
+    const fnType: MiniType = { kind: "fn", params: [nat], result: u8 };
+    const listType: MiniType = {
+      kind: "data",
+      id: 42,
+      args: [nat],
+    };
+
+    assert.strictEqual(miniTypeToString(fnType), "(nat -> u8)");
+    assert.strictEqual(miniTypeToString({ kind: "var", name: "A" }), "A");
+    assert.strictEqual(miniTypeToString(listType), "data#42<nat>");
+    assert.strictEqual(
+      miniTypeToString({ kind: "forall", params: ["A"], body: fnType }),
+      "forall A. (nat -> u8)",
+    );
+    assert.ok(miniTypeEquals({ kind: "unknown" }, fnType));
+    assert.ok(
+      miniTypeEquals(
+        { kind: "data", id: 42, args: [nat] },
+        { kind: "data", id: 42, args: [nat] },
+      ),
+    );
+    assert.ok(
+      !miniTypeEquals(
+        { kind: "fn", params: [nat], result: nat },
+        { kind: "fn", params: [nat], result: u8 },
+      ),
+    );
+    assert.throws(
+      () => assertMiniTypeEquals(nat, u8, "type mismatch"),
+      /type mismatch: expected u8, got nat/,
+    );
+    assert.deepStrictEqual(
+      miniTypeFromBaseType({
+        kind: "non-terminal",
+        lft: { kind: "type-var", typeName: "Nat" },
+        rgt: { kind: "type-var", typeName: "U8" },
+      }),
+      fnType,
+    );
+    assert.deepStrictEqual(
+      miniTypeFromBaseType(
+        {
+          kind: "type-app",
+          fn: { kind: "type-var", typeName: "List" },
+          arg: { kind: "type-var", typeName: "Nat" },
+        },
+        (name) => (name === "List" ? 42 : undefined),
+      ),
+      listType,
+    );
+    assert.deepStrictEqual(
+      miniTypeFromBaseType(
+        {
+          kind: "type-app",
+          fn: { kind: "type-var", typeName: "List" },
+          arg: { kind: "type-var", typeName: "Nat" },
+        },
+        (name) => (name === "Prelude.List" ? 42 : undefined),
+      ),
+      listType,
+    );
+    assert.deepStrictEqual(
+      miniTypeFromBaseType({
+        kind: "type-app",
+        fn: { kind: "type-var", typeName: "Mystery" },
+        arg: { kind: "type-var", typeName: "Nat" },
+      }),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      miniTypeFromBaseType({
+        kind: "forall",
+        typeVar: "A",
+        body: { kind: "type-var", typeName: "A" },
+      }),
+      { kind: "forall", params: ["A"], body: { kind: "var", name: "A" } },
+    );
+  });
+
+  it("covers MiniCore and ANF type lookup fallbacks", () => {
+    const metadata = emptyMiniCoreMetadata();
+    metadata.localTypesByFunction.set(0, new Map([[0, { kind: "nat" }]]));
+
+    assert.deepStrictEqual(
+      typeOfMiniCoreExpr({ kind: "call", target: 99, args: [] }, 0, metadata),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      typeOfMiniCoreExpr({ kind: "prim", target: 99, args: [] }, 0, metadata),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      typeOfMiniCoreExpr({ kind: "con", target: 99, fields: [] }, 0, metadata),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      typeOfAnfValue({ kind: "call", target: 99, args: [] }, 0, metadata),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      typeOfAnfValue({ kind: "prim", target: 99, args: [] }, 0, metadata),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      typeOfAnfValue({ kind: "con", target: 99, fields: [] }, 0, metadata),
+      { kind: "unknown" },
+    );
+    assert.deepStrictEqual(
+      typeOfAnfExpr(
+        {
+          kind: "let",
+          id: 1,
+          value: {
+            kind: "atom",
+            atom: { kind: "lit", value: { kind: "nat", value: 1n } },
+          },
+          body: { kind: "atom", atom: { kind: "var", id: 0 } },
+        },
+        0,
+        metadata,
+      ),
+      { kind: "nat" },
+    );
+    assert.throws(
+      () => typeOfAnfAtom({ kind: "var", id: 77 }, 0, metadata),
+      /No type recorded for local 77/,
     );
   });
 
@@ -853,5 +1064,85 @@ describe("MiniCore ANF", () => {
       ],
     };
     assertAnfValidationError(rebindsParam, /rebinds local 0/);
+  });
+
+  it("rejects case alternatives from different datatype families", () => {
+    const metadata = emptyMiniCoreMetadata();
+    metadata.dataTypes.set(0, {
+      id: 0,
+      name: "Main.MaybeU8",
+      typeParams: [],
+      constructors: [1, 2],
+    });
+    metadata.dataTypes.set(1, {
+      id: 1,
+      name: "Main.Color",
+      typeParams: [],
+      constructors: [3],
+    });
+    metadata.constructors.set(1, {
+      symbol: 1,
+      dataType: 0,
+      tag: 0,
+      fieldTypes: [],
+      resultType: { kind: "data", id: 0, args: [] },
+    });
+    metadata.constructors.set(2, {
+      symbol: 2,
+      dataType: 0,
+      tag: 1,
+      fieldTypes: [{ kind: "u8" }],
+      resultType: { kind: "data", id: 0, args: [] },
+    });
+    metadata.constructors.set(3, {
+      symbol: 3,
+      dataType: 1,
+      tag: 0,
+      fieldTypes: [],
+      resultType: { kind: "data", id: 1, args: [] },
+    });
+    metadata.functions.set(0, {
+      symbol: 0,
+      paramTypes: [],
+      resultType: { kind: "nat" },
+    });
+    metadata.localTypesByFunction.set(
+      0,
+      new Map([[0, { kind: "data", id: 0, args: [] }]]),
+    );
+
+    const invalid = metadataBackedProgram(
+      [
+        fn(0, "Main.main", 0, [], {
+          kind: "let",
+          bindings: [{ id: 0, value: { kind: "con", target: 1, fields: [] } }],
+          body: {
+            kind: "case",
+            scrutinee: { kind: "var", id: 0 },
+            alts: [
+              {
+                constructor: 1,
+                binders: [],
+                body: { kind: "lit", value: { kind: "nat", value: 0n } },
+              },
+              {
+                constructor: 3,
+                binders: [],
+                body: { kind: "lit", value: { kind: "nat", value: 1n } },
+              },
+            ],
+          },
+        }),
+        ctor(1, "Main.MaybeU8.None", 0, 0),
+        ctor(2, "Main.MaybeU8.Some", 1, 1),
+        ctor(3, "Main.Color.Red", 0, 0),
+      ],
+      metadata,
+    );
+
+    assertAnfValidationError(
+      toAnfProgram(invalid),
+      /Case mixes constructors from multiple datatypes/,
+    );
   });
 });

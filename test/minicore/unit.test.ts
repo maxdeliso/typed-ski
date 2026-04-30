@@ -640,6 +640,35 @@ describe("MiniCore from Trip lowering", () => {
     );
   });
 
+  it("does not treat arbitrary two-argument type applications as Bool eliminators", async () => {
+    const modules = [
+      ...(await baseModules()),
+      {
+        name: "Main",
+        source: `
+          module Main
+          import Nat Nat
+          import Nat zero
+          import Nat succ
+          export main
+          poly impostor = #A => \\x : A => \\y : A => x
+          poly use = \\f : #A -> A -> A -> A =>
+            f [Nat] zero (succ zero)
+          poly main = use impostor
+        `,
+      },
+    ];
+
+    const program = compileMiniCoreModules(modules, "Main");
+    const useSymbol = program.symbols.find((symbol) =>
+      symbol.name.startsWith("Main.use$"),
+    );
+
+    assert.ok(useSymbol && useSymbol.kind === "function");
+    assert.strictEqual(useSymbol.body.kind, "call");
+    assert.strictEqual(valueToNat(evaluateMiniCore(program).value), 0n);
+  });
+
   it("lowers matchList, pairs, u8 literals, exported constructors, and if thunks", async () => {
     const modules = [
       ...(await baseModules()),

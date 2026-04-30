@@ -15,6 +15,7 @@ export function anfToMiniCoreProgram(program: AnfProgram): Program {
     symbols,
     entry: program.entry,
     symbolsByName: program.symbolsByName,
+    metadata: program.metadata,
   };
 }
 

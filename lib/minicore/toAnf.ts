@@ -1,4 +1,10 @@
 import type { Binding, Expr, FunctionDef, LocalId, Program } from "./ast.ts";
+import {
+  cloneMiniCoreMetadata,
+  type MiniCoreMetadata,
+  type MiniType,
+} from "./metadata.ts";
+import { typeOfMiniCoreExpr } from "./typeOf.ts";
 import type {
   AnfAtom,
   AnfAtomExpr,
@@ -10,7 +16,10 @@ import type {
 } from "./anfAst.ts";
 
 interface AnfState {
+  fnSymbol: number;
   nextLocalId: LocalId;
+  metadata?: MiniCoreMetadata;
+  localTypes: Map<LocalId, MiniType>;
 }
 
 type AtomCont = (atom: AnfAtom) => AnfExpr;
@@ -18,23 +27,39 @@ type AtomsCont = (atoms: AnfAtom[]) => AnfExpr;
 type ValueCont = (value: AnfValue) => AnfExpr;
 
 export function toAnfProgram(program: Program): AnfProgram {
+  const metadata = program.metadata
+    ? cloneMiniCoreMetadata(program.metadata)
+    : undefined;
   const symbols: AnfSymbolDef[] = program.symbols.map((symbol) =>
-    symbol.kind === "function" ? toAnfFunction(symbol) : symbol,
+    symbol.kind === "function"
+      ? toAnfFunction(symbol, { ...program, metadata })
+      : symbol,
   );
   return {
     symbols,
     entry: program.entry,
     symbolsByName: program.symbolsByName,
+    metadata,
   };
 }
 
-export function toAnfFunction(fn: FunctionDef): AnfFunctionDef {
+export function toAnfFunction(
+  fn: FunctionDef,
+  program?: Program,
+): AnfFunctionDef {
+  const metadata = program?.metadata;
+  const localTypes = new Map(metadata?.localTypesByFunction.get(fn.id) ?? []);
   const state: AnfState = {
+    fnSymbol: fn.id,
     nextLocalId: maxLocalIdInFunction(fn) + 1,
+    metadata,
+    localTypes,
   };
+  const body = normalizeTail(fn.body, state);
+  metadata?.localTypesByFunction.set(fn.id, state.localTypes);
   return {
     ...fn,
-    body: normalizeTail(fn.body, state),
+    body,
   };
 }
 
@@ -105,6 +130,7 @@ function normalizeAtom(expr: Expr, state: AnfState, k: AtomCont): AnfExpr {
   return normalizeBinding(expr, state, (value) => {
     const tmpId = state.nextLocalId++;
     const tmp: AnfAtom = { kind: "var", id: tmpId };
+    recordLocalType(state, tmpId, expr);
     const body = k(tmp);
     return {
       kind: "let",
@@ -176,14 +202,27 @@ function normalizeBindings(
       return body();
     }
     const binding = bindings[index]!;
-    return normalizeBinding(binding.value, state, (value) => ({
-      kind: "let",
-      id: binding.id,
-      value,
-      body: loop(index + 1),
-    }));
+    return normalizeBinding(binding.value, state, (value) => {
+      recordLocalType(state, binding.id, binding.value);
+      return {
+        kind: "let",
+        id: binding.id,
+        value,
+        body: loop(index + 1),
+      };
+    });
   };
   return loop(0);
+}
+
+function recordLocalType(state: AnfState, id: LocalId, expr: Expr): void {
+  if (!state.metadata || state.localTypes.has(id)) {
+    return;
+  }
+  state.localTypes.set(
+    id,
+    typeOfMiniCoreExpr(expr, state.fnSymbol, state.metadata, state.localTypes),
+  );
 }
 
 function maxLocalIdInFunction(fn: FunctionDef): LocalId {

@@ -1,3 +1,5 @@
+import type { MiniCoreMetadata } from "./metadata.ts";
+
 export type SymbolId = number;
 export type LocalId = number;
 
@@ -9,6 +11,7 @@ export interface Program {
   symbols: SymbolDef[];
   entry: SymbolId;
   symbolsByName: ReadonlyMap<string, SymbolId>;
+  metadata?: MiniCoreMetadata;
 }
 
 export type SymbolDef = FunctionDef | ConstructorDef | PrimitiveDef;

@@ -47,11 +47,17 @@ type AqueryResponse = {
 };
 
 const NODE = process.execPath;
-const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
-const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
 const BAZELISK = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
 const NODE_DISABLE_EXPERIMENTAL_WARNING_ARG =
   "--disable-warning=ExperimentalWarning";
+const NPM =
+  process.platform === "win32"
+    ? [NODE, join(dirname(NODE), "node_modules", "npm", "bin", "npm-cli.js")]
+    : ["npm"];
+const NPX =
+  process.platform === "win32"
+    ? [NODE, join(dirname(NODE), "node_modules", "npm", "bin", "npx-cli.js")]
+    : ["npx"];
 const LOCAL_TSC_ENTRY = join(
   PROJECT_ROOT,
   "node_modules",
@@ -87,6 +93,14 @@ const WASM_BUILD_INPUT_EXCLUDES = new Set([
   join(PROJECT_ROOT, "wasm", "release.wasm"),
 ]);
 let ensuredFreshBazelWasmArtifactPromise: Promise<void> | null = null;
+
+function splitSpawnArgs(args: string[]): [string, string[]] {
+  const [command, ...rest] = args;
+  if (!command) {
+    throw new Error("Cannot spawn an empty command.");
+  }
+  return [command, rest];
+}
 
 async function ensureNpmCache(): Promise<string> {
   const cacheDir = join(PROJECT_ROOT, ".tmp", "npm-cache");
@@ -309,23 +323,17 @@ async function run(args: string[], options: any = {}): Promise<void> {
   const { env: extraEnv, timeoutMs, ...rest } = options;
   const npmCache = await ensureNpmCache();
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.platform === "win32" && args[0]!.includes(" ")
-        ? `"${args[0]!}"`
-        : args[0]!,
-      args.slice(1),
-      {
-        cwd: PROJECT_ROOT,
-        stdio: "inherit",
-        shell: process.platform === "win32",
-        env: {
-          ...process.env,
-          npm_config_cache: npmCache,
-          ...extraEnv,
-        },
-        ...rest,
+    const [command, commandArgs] = splitSpawnArgs(args);
+    const child = spawn(command, commandArgs, {
+      cwd: PROJECT_ROOT,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        npm_config_cache: npmCache,
+        ...extraEnv,
       },
-    );
+      ...rest,
+    });
 
     let didTimeout = false;
     const timeoutId =
@@ -374,23 +382,17 @@ async function runCapture(args: string[], options: any = {}): Promise<string> {
   const { env: extraEnv, ...rest } = options;
   const npmCache = await ensureNpmCache();
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.platform === "win32" && args[0]!.includes(" ")
-        ? `"${args[0]!}"`
-        : args[0]!,
-      args.slice(1),
-      {
-        cwd: PROJECT_ROOT,
-        stdio: ["ignore", "piped", "inherit"],
-        shell: process.platform === "win32",
-        env: {
-          ...process.env,
-          npm_config_cache: npmCache,
-          ...extraEnv,
-        },
-        ...rest,
+    const [command, commandArgs] = splitSpawnArgs(args);
+    const child = spawn(command, commandArgs, {
+      cwd: PROJECT_ROOT,
+      stdio: ["ignore", "piped", "inherit"],
+      env: {
+        ...process.env,
+        npm_config_cache: npmCache,
+        ...extraEnv,
       },
-    );
+      ...rest,
+    });
 
     let stdout = "";
     child.stdout!.on("data", (data) => {
@@ -448,8 +450,8 @@ async function syncGenerated(): Promise<void> {
     "--ts-out",
     repo("lib", "evaluator", "arenaHeader.generated.ts"),
   ]);
-  await run([NPX, "--yes", "pnpm", "install", "--lockfile-only"]);
-  await run([NPM, "install", "--package-lock-only"]);
+  await run([...NPX, "--yes", "pnpm", "install", "--lockfile-only"]);
+  await run([...NPM, "install", "--package-lock-only"]);
 }
 
 async function verifyGenerated(): Promise<void> {
@@ -483,7 +485,7 @@ async function verifyGenerated(): Promise<void> {
 export async function buildDist(): Promise<void> {
   await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "bin/tripc.ts",
@@ -493,7 +495,7 @@ export async function buildDist(): Promise<void> {
     "--platform=node",
   ]);
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "bin/tripc.ts",
@@ -504,7 +506,7 @@ export async function buildDist(): Promise<void> {
     "--platform=node",
   ]);
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "bin/tripc.ts",
@@ -514,7 +516,7 @@ export async function buildDist(): Promise<void> {
     "--platform=node",
   ]);
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "lib/evaluator/arenaWorker.ts",
@@ -554,7 +556,7 @@ async function buildHephaestusAssets(): Promise<void> {
   await stageBazelWasmArtifactIfPresent();
   await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "server/workbench.js",
@@ -564,7 +566,7 @@ async function buildHephaestusAssets(): Promise<void> {
     "--platform=browser",
   ]);
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "server/webglForest.ts",
@@ -574,7 +576,7 @@ async function buildHephaestusAssets(): Promise<void> {
     "--platform=browser",
   ]);
   await run([
-    NPX,
+    ...NPX,
     "--yes",
     "esbuild",
     "lib/evaluator/arenaWorker.ts",
@@ -624,12 +626,12 @@ async function serveHephaestus(): Promise<void> {
 
 async function formatCheck(): Promise<void> {
   console.log("Format check using npx prettier --check .");
-  await run([NPX, "--yes", "prettier", "--check", "."]);
+  await run([...NPX, "--yes", "prettier", "--check", "."]);
 }
 
 async function lint(): Promise<void> {
   console.log("Lint using npx eslint .");
-  await run([NPX, "--yes", "eslint", "."]);
+  await run([...NPX, "--yes", "eslint", "."]);
 }
 
 async function collectTests(): Promise<string[]> {
@@ -689,7 +691,7 @@ async function typecheckTests(files: string[]): Promise<void> {
   console.log(`Type checking project...`);
   if (!fs.existsSync(LOCAL_TSC_ENTRY)) {
     throw new Error(
-      `Local TypeScript compiler not found at ${LOCAL_TSC_ENTRY}. Run ${NPM} install first.`,
+      `Local TypeScript compiler not found at ${LOCAL_TSC_ENTRY}. Run npm install first.`,
     );
   }
   await run([NODE, LOCAL_TSC_ENTRY, "--noEmit"]);

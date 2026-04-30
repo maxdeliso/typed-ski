@@ -3,6 +3,8 @@ import type { Literal, LocalId, SymbolId } from "./ast.ts";
 
 export type TypeId = number;
 
+export type EffectKind = "pure" | "io" | "alloc" | "trap" | "unknown";
+
 export type MiniType =
   | { kind: "nat" }
   | { kind: "u8" }
@@ -52,7 +54,7 @@ export interface PrimitiveInfo {
   argTypes: MiniType[];
   resultType: MiniType;
   strict: boolean[];
-  effects: "pure" | "io" | "alloc" | "trap" | "unknown";
+  effects: EffectKind;
 }
 
 export interface MiniCoreMetadata {

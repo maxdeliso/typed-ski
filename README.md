@@ -239,18 +239,43 @@ throughput and runtime stability for long-running workloads.
 MiniCore ANF is a strict, backend-oriented normalization layer for the current
 first-order MiniCore AST. It makes evaluation order explicit by naming
 non-atomic operands left-to-right before calls, primitive operations,
-constructor applications, and case dispatch. This is intentionally suitable for
-Block IR, MLIR, native, and WASM lowering; the SKI path remains the lazy
-reference-oriented route.
+constructor applications, and case dispatch. This is intended to feed Block IR;
+the SKI path remains the lazy reference-oriented route.
 
-ANF v0 supports only direct known-symbol calls. Higher-order or closure calls
-will need an explicit later representation, such as a separate closure-call node
-after closure conversion support exists. MiniCore and ANF `LocalId`s are also
-expected to be globally unique within a function; source-level shadowing must be
-alpha-renamed before ANF. The current ANF nodes preserve shape but do not yet
-carry type or constructor-family metadata, so serious Block IR and ADT lowering
-must add typed locals/symbols and datatype-aware constructor validation before
-lowering cases into tags and switches.
+ANF supports only direct known-symbol calls. Higher-order or closure calls will
+need an explicit later representation, such as a separate closure-call node after
+closure conversion support exists. MiniCore and ANF `LocalId`s are expected to
+be unique within a function; source-level shadowing is handled before ANF.
+
+The ANF nodes themselves stay compact and shape-preserving, while
+`MiniCoreMetadata` carries the typed context needed by downstream passes:
+function signatures, primitive signatures and effects, constructor-family
+metadata, and per-function local types. ANF conversion records types for
+generated temporaries, and ANF validation uses the metadata to check case
+scrutinees, constructor families, binder field types, and branch result types.
+Block IR can therefore consume ANF as a typed source without first lowering ADTs
+to tags, switches, or concrete data layouts.
+
+## MiniCore Block IR
+
+MiniCore Block IR is the backend-neutral typed control-flow contract after ANF.
+It keeps Trip-level `MiniType`s, explicit basic blocks, block parameters for
+join values, typed value references, effect-tagged instructions, and explicit
+terminators. It is intentionally not shaped around any specific backend.
+`BlockModule` requires `MiniCoreMetadata`; symbol summaries in the block module
+are not authoritative unless they agree with that metadata.
+
+Block IR keeps local definitions explicit. Function params, block params, and
+instruction results define locals; when a value is needed in a successor block,
+the terminator passes the source value to a target block param. Captured values
+use fresh target params, which preserves explicit control-flow transfer without
+reusing a source local id as a second definition.
+
+The core instruction surface distinguishes pure Trip primitives, direct Trip
+calls, backend runtime calls, high-level constructor creation, and moves.
+Runtime calls use a small compiler-facing ABI, currently `trip_read_one : () ->
+U8` and `trip_write_one : U8 -> Unit`. General ADT `case` also stays high-level
+in Block IR, so later representation passes can choose an implementation layout.
 
 ## Works Referenced
 

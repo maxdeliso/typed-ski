@@ -493,11 +493,13 @@ async function verifyGenerated(): Promise<void> {
   console.log("Generated files are up to date.");
 }
 
-async function ensurePreconditions(options: {
-  sync?: boolean;
-  freshWasm?: boolean;
-  stageWasm?: boolean;
-} = {}): Promise<void> {
+async function ensurePreconditions(
+  options: {
+    sync?: boolean;
+    freshWasm?: boolean;
+    stageWasm?: boolean;
+  } = {},
+): Promise<void> {
   if (options.sync) {
     await syncGenerated();
   }

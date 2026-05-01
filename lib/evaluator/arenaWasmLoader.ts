@@ -72,7 +72,8 @@ function getNodeFs() {
       }
       return new Uint8Array(fs.readFileSync(path));
     },
-    execPath: () => (typeof process !== "undefined" ? process.execPath : undefined),
+    execPath: () =>
+      typeof process !== "undefined" ? process.execPath : undefined,
   };
 }
 

@@ -97,12 +97,9 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Stage Bazel dist artifacts for JSR dry run
+      - name: Build and stage distribution artifacts for JSR dry run
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        run: |
-          rm -rf dist
-          mkdir -p dist
-          cp -a bazel-bin/dist_artifacts/. dist/
+        run: pnpm run dist
 
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'

@@ -6,6 +6,7 @@ import {
   type MiniCoreMetadata,
   type MiniType,
 } from "./metadata.ts";
+import { getRuntimeSymbolSignature } from "./runtimeSymbols.ts";
 
 export function typeOfMiniCoreExpr(
   expr: Expr,
@@ -32,6 +33,8 @@ export function typeOfMiniCoreExpr(
           kind: "unknown",
         }
       );
+    case "runtimeCall":
+      return getRuntimeSymbolSignature(expr.name).result;
     case "con":
       return (
         metadata.constructors.get(expr.target)?.resultType ?? {
@@ -94,6 +97,8 @@ export function typeOfAnfValue(
           kind: "unknown",
         }
       );
+    case "runtimeCall":
+      return getRuntimeSymbolSignature(value.name).result;
     case "con":
       return (
         metadata.constructors.get(value.target)?.resultType ?? {
@@ -119,6 +124,7 @@ export function typeOfAnfExpr(
     case "call":
     case "con":
     case "prim":
+    case "runtimeCall":
     case "case":
       return typeOfAnfValue(expr, fnId, metadata);
   }

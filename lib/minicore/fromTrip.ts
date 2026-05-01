@@ -714,7 +714,9 @@ class MiniCoreBuilder {
       qName === "Prelude.or" ||
       qName === "Prelude.matchList" ||
       qName === "Prelude.fst" ||
-      qName === "Prelude.snd"
+      qName === "Prelude.snd" ||
+      qName === "Prelude.readOne" ||
+      qName === "Prelude.writeOne"
     );
   }
 
@@ -1189,6 +1191,11 @@ class MiniCoreBuilder {
   }
 
   private lowerApplication(term: SystemFTerm, ctx: LoweringContext): Expr {
+    const runtimeIo = this.lowerRuntimeIoApplication(term, ctx);
+    if (runtimeIo) {
+      return runtimeIo;
+    }
+
     const { head, args } = flattenApplication(term);
     const strippedHead = stripTypeApps(head);
 
@@ -1278,6 +1285,153 @@ class MiniCoreBuilder {
     throw new MiniCoreCompileError(
       `Unsupported MiniCore application with head ${strippedHead.term.kind}`,
     );
+  }
+
+  private lowerRuntimeIoApplication(
+    term: SystemFTerm,
+    ctx: LoweringContext,
+  ): Expr | undefined {
+    const readOne = this.matchReadOneApplication(term, ctx);
+    if (readOne) {
+      return this.lowerReadOneContinuation(readOne.continuation, ctx);
+    }
+
+    const writeOne = this.matchWriteOneApplication(term, ctx);
+    if (writeOne) {
+      return this.lowerWriteOneContinuation(
+        writeOne.byte,
+        writeOne.continuation,
+        ctx,
+      );
+    }
+
+    return undefined;
+  }
+
+  private matchReadOneApplication(
+    term: SystemFTerm,
+    ctx: LoweringContext,
+  ): { continuation: SystemFTerm } | undefined {
+    if (term.kind !== "non-terminal") return undefined;
+    const head = stripTypeApps(term.lft).term;
+    if (head.kind !== "systemF-var") return undefined;
+    if (
+      this.resolveTermQName(ctx.moduleName, head.name) !== "Prelude.readOne"
+    ) {
+      return undefined;
+    }
+    return { continuation: term.rgt };
+  }
+
+  private matchWriteOneApplication(
+    term: SystemFTerm,
+    ctx: LoweringContext,
+  ): { byte: SystemFTerm; continuation: SystemFTerm } | undefined {
+    if (term.kind !== "non-terminal") return undefined;
+    const applied = stripTypeApps(term.lft).term;
+    if (applied.kind !== "non-terminal") return undefined;
+
+    const { head, args } = flattenApplication(applied);
+    const strippedHead = stripTypeApps(head).term;
+    if (strippedHead.kind !== "systemF-var") return undefined;
+    if (
+      this.resolveTermQName(ctx.moduleName, strippedHead.name) !==
+      "Prelude.writeOne"
+    ) {
+      return undefined;
+    }
+    if (args.length !== 1) {
+      throw new MiniCoreCompileError(
+        `Prelude.writeOne expects one byte argument before its continuation, got ${args.length}`,
+      );
+    }
+    return { byte: args[0]!, continuation: term.rgt };
+  }
+
+  private lowerReadOneContinuation(
+    continuation: SystemFTerm,
+    ctx: LoweringContext,
+  ): Expr {
+    const lambda = stripTypeAbs(continuation);
+    if (lambda.kind !== "systemF-abs") {
+      throw new MiniCoreCompileError(
+        "Prelude.readOne continuation must be a lambda",
+      );
+    }
+    this.assertU8Type(
+      this.miniTypeFromBaseType(lambda.typeAnnotation, ctx.moduleName),
+      "Prelude.readOne continuation parameter",
+    );
+    return this.withLocalScope(
+      ctx,
+      [lambda.name],
+      [{ kind: "u8" }],
+      ([byte]) => ({
+        kind: "let",
+        bindings: [
+          {
+            id: byte!,
+            value: { kind: "runtimeCall", name: "trip_read_one", args: [] },
+          },
+        ],
+        body: this.lowerTerm(lambda.body, ctx),
+      }),
+    );
+  }
+
+  private lowerWriteOneContinuation(
+    byteTerm: SystemFTerm,
+    continuation: SystemFTerm,
+    ctx: LoweringContext,
+  ): Expr {
+    const byteExpr = this.lowerTerm(byteTerm, ctx);
+    this.assertU8Type(
+      typeOfMiniCoreExpr(byteExpr, ctx.fnSymbol, this.metadata, ctx.localTypes),
+      "Prelude.writeOne byte argument",
+    );
+
+    const lambda = stripTypeAbs(continuation);
+    if (lambda.kind !== "systemF-abs") {
+      throw new MiniCoreCompileError(
+        "Prelude.writeOne continuation must be a lambda",
+      );
+    }
+    this.assertU8Type(
+      this.miniTypeFromBaseType(lambda.typeAnnotation, ctx.moduleName),
+      "Prelude.writeOne continuation parameter",
+    );
+
+    return this.withLocalScope(
+      ctx,
+      [lambda.name],
+      [{ kind: "u8" }],
+      ([byte]) => {
+        const writeResult = this.allocLocal(ctx, "_", { kind: "unit" });
+        return {
+          kind: "let",
+          bindings: [
+            { id: byte!, value: byteExpr },
+            {
+              id: writeResult,
+              value: {
+                kind: "runtimeCall",
+                name: "trip_write_one",
+                args: [{ kind: "var", id: byte! }],
+              },
+            },
+          ],
+          body: this.lowerTerm(lambda.body, ctx),
+        };
+      },
+    );
+  }
+
+  private assertU8Type(type: MiniType, context: string): void {
+    if (!miniTypeEquals(type, { kind: "u8" })) {
+      throw new MiniCoreCompileError(
+        `${context} must be U8, got ${miniTypeToString(type)}`,
+      );
+    }
   }
 
   private lowerSpecialApplication(

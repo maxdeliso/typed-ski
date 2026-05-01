@@ -1,4 +1,5 @@
 import type { MiniCoreMetadata } from "./metadata.ts";
+import type { RuntimeSymbol } from "./runtimeSymbols.ts";
 
 export type SymbolId = number;
 export type LocalId = number;
@@ -54,6 +55,7 @@ export type Expr =
   | { kind: "call"; target: SymbolId; args: Expr[] }
   | { kind: "con"; target: SymbolId; fields: Expr[] }
   | { kind: "prim"; target: SymbolId; args: Expr[] }
+  | { kind: "runtimeCall"; name: RuntimeSymbol; args: Expr[] }
   | { kind: "case"; scrutinee: Expr; alts: Alt[] }
   | { kind: "let"; bindings: Binding[]; body: Expr };
 

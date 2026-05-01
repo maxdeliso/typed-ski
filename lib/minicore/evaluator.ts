@@ -249,6 +249,10 @@ function evalExpr(
       );
       return executePrimitive(def, args, program);
     }
+    case "runtimeCall":
+      throw new Error(
+        `MiniCore evaluator does not execute runtime call ${expr.name}`,
+      );
     case "case": {
       const scrutinee = evalExpr(
         expr.scrutinee,

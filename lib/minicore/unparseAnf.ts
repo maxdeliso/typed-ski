@@ -32,6 +32,7 @@ export function unparseAnfExpr(expr: AnfExpr, program?: AnfProgram): string {
     case "call":
     case "con":
     case "prim":
+    case "runtimeCall":
     case "case":
       return unparseAnfValue(expr, program);
   }
@@ -47,6 +48,8 @@ function unparseAnfValue(value: AnfValue, program?: AnfProgram): string {
       return unparseApply(symbolName(value.target, program), value.fields);
     case "prim":
       return unparseApply(symbolName(value.target, program), value.args);
+    case "runtimeCall":
+      return unparseApply(`runtimeCall ${value.name}`, value.args);
     case "case":
       return [
         `case ${unparseAtom(value.scrutinee)} of`,

@@ -10,6 +10,7 @@ export type {
   AnfLet,
   AnfPrim,
   AnfProgram,
+  AnfRuntimeCall,
   AnfSymbolDef,
   AnfValue,
 } from "./anfAst.ts";

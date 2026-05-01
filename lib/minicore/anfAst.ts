@@ -7,6 +7,7 @@ import type {
   Program,
   SymbolId,
 } from "./ast.ts";
+import type { RuntimeSymbol } from "./runtimeSymbols.ts";
 
 export type AnfAtom =
   | { kind: "var"; id: LocalId }
@@ -18,9 +19,16 @@ export type AnfExpr =
   | AnfCall
   | AnfCon
   | AnfPrim
+  | AnfRuntimeCall
   | AnfCase;
 
-export type AnfValue = AnfAtomExpr | AnfCall | AnfCon | AnfPrim | AnfCase;
+export type AnfValue =
+  | AnfAtomExpr
+  | AnfCall
+  | AnfCon
+  | AnfPrim
+  | AnfRuntimeCall
+  | AnfCase;
 
 export interface AnfAtomExpr {
   kind: "atom";
@@ -49,6 +57,12 @@ export interface AnfCon {
 export interface AnfPrim {
   kind: "prim";
   target: SymbolId;
+  args: AnfAtom[];
+}
+
+export interface AnfRuntimeCall {
+  kind: "runtimeCall";
+  name: RuntimeSymbol;
   args: AnfAtom[];
 }
 

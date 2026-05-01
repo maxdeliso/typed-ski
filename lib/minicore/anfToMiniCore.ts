@@ -39,6 +39,7 @@ export function anfToMiniCoreExpr(expr: AnfExpr): Expr {
     case "call":
     case "con":
     case "prim":
+    case "runtimeCall":
     case "case":
       return valueToMiniCore(expr);
   }
@@ -64,6 +65,12 @@ function valueToMiniCore(value: AnfValue): Expr {
       return {
         kind: "prim",
         target: value.target,
+        args: value.args.map(atomToMiniCore),
+      };
+    case "runtimeCall":
+      return {
+        kind: "runtimeCall",
+        name: value.name,
         args: value.args.map(atomToMiniCore),
       };
     case "case":

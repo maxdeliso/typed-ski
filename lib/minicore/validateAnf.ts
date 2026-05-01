@@ -6,6 +6,7 @@ import {
   type MiniType,
   type TypeId,
 } from "./metadata.ts";
+import { getRuntimeSymbolSignature } from "./runtimeSymbols.ts";
 import { typeOfAnfAtom, typeOfAnfExpr } from "./typeOf.ts";
 import type {
   AnfAlt,
@@ -128,6 +129,7 @@ function validateExpr(
     case "call":
     case "con":
     case "prim":
+    case "runtimeCall":
     case "case":
       validateValue(expr, boundLocals, program, fn);
       break;
@@ -196,6 +198,16 @@ function validateValue(
       if (value.args.length !== target.arity) {
         throw new MiniCoreAnfValidationError(
           `Primitive ${target.name} in ${fn.name} has wrong arity: expected ${target.arity}, got ${value.args.length}`,
+        );
+      }
+      validateAtoms(value.args, boundLocals, fn.name);
+      break;
+    }
+    case "runtimeCall": {
+      const signature = runtimeSignature(value.name);
+      if (value.args.length !== signature.args.length) {
+        throw new MiniCoreAnfValidationError(
+          `Runtime call ${value.name} in ${fn.name} has wrong arity: expected ${signature.args.length}, got ${value.args.length}`,
         );
       }
       validateAtoms(value.args, boundLocals, fn.name);
@@ -411,6 +423,18 @@ function readType(fn: () => MiniType): MiniType {
   } catch (error) {
     throw new MiniCoreAnfValidationError(
       error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+function runtimeSignature(
+  name: Parameters<typeof getRuntimeSymbolSignature>[0],
+) {
+  try {
+    return getRuntimeSymbolSignature(name);
+  } catch {
+    throw new MiniCoreAnfValidationError(
+      `Unknown Trip runtime symbol ${String(name)}`,
     );
   }
 }

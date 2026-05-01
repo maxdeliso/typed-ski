@@ -105,6 +105,12 @@ function normalizeTail(expr: Expr, state: AnfState): AnfExpr {
         target: expr.target,
         args,
       }));
+    case "runtimeCall":
+      return normalizeAtoms(expr.args, state, (args) => ({
+        kind: "runtimeCall",
+        name: expr.name,
+        args,
+      }));
     case "case":
       return normalizeAtom(expr.scrutinee, state, (scrutinee) => ({
         kind: "case",
@@ -172,6 +178,10 @@ function normalizeBinding(expr: Expr, state: AnfState, k: ValueCont): AnfExpr {
     case "prim":
       return normalizeAtoms(expr.args, state, (args) =>
         k({ kind: "prim", target: expr.target, args }),
+      );
+    case "runtimeCall":
+      return normalizeAtoms(expr.args, state, (args) =>
+        k({ kind: "runtimeCall", name: expr.name, args }),
       );
     case "case":
       return normalizeAtom(expr.scrutinee, state, (scrutinee) =>
@@ -245,6 +255,7 @@ function visitExprLocals(expr: Expr, visit: (id: LocalId) => void): void {
       break;
     case "call":
     case "prim":
+    case "runtimeCall":
       for (const arg of expr.args) {
         visitExprLocals(arg, visit);
       }

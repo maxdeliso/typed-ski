@@ -34,6 +34,7 @@ import {
   type MiniCoreMetadata,
   type MiniType,
 } from "./metadata.ts";
+import { getRuntimeSymbolSignature } from "./runtimeSymbols.ts";
 import { typeOfAnfAtom, typeOfAnfExpr, typeOfAnfValue } from "./typeOf.ts";
 
 export class MiniCoreBlockLoweringError extends Error {
@@ -164,7 +165,8 @@ function lowerExprToReturn(
     }
     case "call":
     case "con":
-    case "prim": {
+    case "prim":
+    case "runtimeCall": {
       const resultType = typeOfAnfValue(expr, state.fn.id, state.metadata);
       if (resultType.kind === "unit") {
         if (functionReturnType(state).kind !== "unit") {
@@ -177,6 +179,11 @@ function lowerExprToReturn(
         return;
       }
       const result = emitInstruction(expr, block, state, env);
+      if (!result) {
+        throw new MiniCoreBlockLoweringError(
+          `Cannot return Unit from non-Unit function ${state.fn.name}`,
+        );
+      }
       block.terminator = { kind: "return", value: result };
       return;
     }
@@ -209,12 +216,20 @@ function lowerExprToJump(
     case "call":
     case "con":
     case "prim":
+    case "runtimeCall": {
+      const result = emitInstruction(expr, block, state, env);
+      if (!result) {
+        throw new MiniCoreBlockLoweringError(
+          `Cannot pass Unit value to block ${target} from ${state.fn.name}`,
+        );
+      }
       block.terminator = {
         kind: "jump",
         target,
-        args: [emitInstruction(expr, block, state, env)],
+        args: [result],
       };
       return;
+    }
   }
 }
 
@@ -241,6 +256,12 @@ function lowerLet(
     );
     state.blocks.push(join);
     continueWith(join, withoutLocal(env, id));
+    return;
+  }
+
+  if (typeOfAnfValue(value, state.fn.id, state.metadata).kind === "unit") {
+    emitInstruction(value, block, state, env);
+    continueWith(block, withoutLocal(env, id));
     return;
   }
 
@@ -414,13 +435,21 @@ function emitInstruction(
   state: FunctionLoweringState,
   env: LocalEnv,
   resultId?: LocalId,
-): BlockValueRef {
+): BlockValueRef | undefined {
   const resultType = typeOfAnfValue(value, state.fn.id, state.metadata);
-  const result = blockParam(state, resultId ?? allocLocal(state, resultType));
+  const result =
+    resultType.kind === "unit"
+      ? undefined
+      : blockParam(state, resultId ?? allocLocal(state, resultType));
   let instruction: BlockInstruction;
 
   switch (value.kind) {
     case "atom":
+      if (!result) {
+        throw new MiniCoreBlockLoweringError(
+          `Cannot emit Unit atom in ${state.fn.name}`,
+        );
+      }
       instruction = {
         result,
         resultType,
@@ -445,6 +474,11 @@ function emitInstruction(
     }
     case "con": {
       const target = requireSymbol(state, value.target, "constructor");
+      if (!result) {
+        throw new MiniCoreBlockLoweringError(
+          `Cannot emit Unit constructor in ${state.fn.name}`,
+        );
+      }
       instruction = {
         result,
         resultType,
@@ -461,6 +495,11 @@ function emitInstruction(
     case "prim": {
       const target = requireSymbol(state, value.target, "primitive");
       const primitive = state.metadata.primitives.get(value.target);
+      if (!result) {
+        throw new MiniCoreBlockLoweringError(
+          `Cannot emit Unit primitive ${target.name} in ${state.fn.name}`,
+        );
+      }
       instruction = {
         result,
         resultType,
@@ -474,9 +513,24 @@ function emitInstruction(
       };
       break;
     }
+    case "runtimeCall": {
+      const signature = getRuntimeSymbolSignature(value.name);
+      instruction = {
+        result,
+        resultType,
+        effects: signature.effects,
+        op: {
+          kind: "runtimeCall",
+          name: value.name,
+          args: value.args.map((arg) => atomRef(arg, state, env)),
+        },
+      };
+      break;
+    }
   }
 
   block.instructions.push(instruction);
+  if (!result) return undefined;
   return { kind: "local", id: result.id, name: result.name, type: result.type };
 }
 
@@ -580,6 +634,7 @@ function freeLocals(expr: AnfExpr, bound: Set<LocalId>): LocalId[] {
         break;
       case "call":
       case "prim":
+      case "runtimeCall":
         value.args.forEach((arg) => visitAtom(arg, currentBound));
         break;
       case "con":
@@ -603,6 +658,7 @@ function freeLocals(expr: AnfExpr, bound: Set<LocalId>): LocalId[] {
       case "call":
       case "con":
       case "prim":
+      case "runtimeCall":
       case "case":
         visitValue(value, currentBound);
         break;
@@ -626,6 +682,7 @@ function maxLocalIdInFunction(fn: AnfFunctionDef): LocalId {
         break;
       case "call":
       case "prim":
+      case "runtimeCall":
         value.args.forEach(visitAtom);
         break;
       case "con":
@@ -653,6 +710,7 @@ function maxLocalIdInFunction(fn: AnfFunctionDef): LocalId {
       case "call":
       case "con":
       case "prim":
+      case "runtimeCall":
       case "case":
         visitValue(expr);
         break;

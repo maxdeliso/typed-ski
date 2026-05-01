@@ -6,6 +6,7 @@ import type {
   Program,
   SymbolId,
 } from "./ast.ts";
+import { getRuntimeSymbolSignature } from "./runtimeSymbols.ts";
 
 export class MiniCoreValidationError extends Error {
   constructor(message: string) {
@@ -156,6 +157,18 @@ function validateExpr(
       }
       break;
     }
+    case "runtimeCall": {
+      const signature = runtimeSignature(expr.name);
+      if (expr.args.length !== signature.args.length) {
+        throw new MiniCoreValidationError(
+          `Runtime call ${expr.name} in ${context} has wrong arity: expected ${signature.args.length}, got ${expr.args.length}`,
+        );
+      }
+      for (const arg of expr.args) {
+        validateExpr(arg, boundLocals, program, context);
+      }
+      break;
+    }
     case "case": {
       validateExpr(expr.scrutinee, boundLocals, program, context);
       const constructors = new Set<SymbolId>();
@@ -182,6 +195,18 @@ function validateExpr(
       validateExpr(expr.body, currentLocals, program, context);
       break;
     }
+  }
+}
+
+function runtimeSignature(
+  name: Parameters<typeof getRuntimeSymbolSignature>[0],
+) {
+  try {
+    return getRuntimeSymbolSignature(name);
+  } catch {
+    throw new MiniCoreValidationError(
+      `Unknown Trip runtime symbol ${String(name)}`,
+    );
   }
 }
 

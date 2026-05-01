@@ -70,7 +70,15 @@ function getNodeFs() {
           "readFileSync is not supported when bundled for the browser.",
         );
       }
-      return new Uint8Array(fs.readFileSync(path));
+      const url =
+        typeof process !== "undefined" && "getBuiltinModule" in process
+          ? process.getBuiltinModule("node:url")
+          : undefined;
+      const p =
+        path instanceof URL && path.protocol === "file:" && url
+          ? url.fileURLToPath(path as any)
+          : path.toString();
+      return new Uint8Array(fs.readFileSync(p));
     },
     execPath: () =>
       typeof process !== "undefined" ? process.execPath : undefined,

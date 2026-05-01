@@ -3,6 +3,8 @@ import type { Literal, LocalId, SymbolId } from "./ast.ts";
 
 export type TypeId = number;
 
+export type EffectKind = "pure" | "io" | "alloc" | "trap" | "unknown";
+
 export type MiniType =
   | { kind: "nat" }
   | { kind: "u8" }
@@ -52,7 +54,7 @@ export interface PrimitiveInfo {
   argTypes: MiniType[];
   resultType: MiniType;
   strict: boolean[];
-  effects: "pure" | "io" | "alloc" | "trap" | "unknown";
+  effects: EffectKind;
 }
 
 export interface MiniCoreMetadata {
@@ -61,6 +63,8 @@ export interface MiniCoreMetadata {
   functions: Map<SymbolId, FunctionInfo>;
   primitives: Map<SymbolId, PrimitiveInfo>;
   localTypesByFunction: Map<SymbolId, Map<LocalId, MiniType>>;
+  /** Symbols exported by source modules; Block IR uses this for visibility. */
+  exportedSymbols: Set<SymbolId>;
   bool?: {
     type: MiniType;
     dataType: TypeId;
@@ -76,6 +80,7 @@ export function emptyMiniCoreMetadata(): MiniCoreMetadata {
     functions: new Map(),
     primitives: new Map(),
     localTypesByFunction: new Map(),
+    exportedSymbols: new Set(),
   };
 }
 
@@ -93,6 +98,7 @@ export function cloneMiniCoreMetadata(
         new Map(locals),
       ]),
     ),
+    exportedSymbols: new Set(metadata.exportedSymbols),
     bool: metadata.bool,
   };
 }

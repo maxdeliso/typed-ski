@@ -260,6 +260,7 @@ class MiniCoreBuilder {
 
   build(entryQName: string): Program {
     const entry = this.ensureCallable(entryQName);
+    this.markExportedSymbols();
     return {
       symbols: this.symbols,
       entry,
@@ -1025,6 +1026,17 @@ class MiniCoreBuilder {
       loweringHint: this.metadata.functions.get(id)?.loweringHint,
     });
     this.functionStates.set(id, "compiled");
+  }
+
+  private markExportedSymbols(): void {
+    for (const module of this.modules.values()) {
+      for (const localName of module.exports) {
+        const id = this.symbolsByName.get(`${module.name}.${localName}`);
+        if (id !== undefined) {
+          this.metadata.exportedSymbols.add(id);
+        }
+      }
+    }
   }
 
   private allocLocal(

@@ -19,6 +19,32 @@ export {
   anfToMiniCoreProgram,
 } from "./anfToMiniCore.ts";
 export type {
+  Block,
+  BlockBranchTerminator,
+  BlockCallOp,
+  BlockCaseAlt,
+  BlockCaseTerminator,
+  BlockConstructOp,
+  BlockFunctionDef,
+  BlockInstruction,
+  BlockInstructionOp,
+  BlockJumpTerminator,
+  BlockLabel,
+  BlockLiteralRef,
+  BlockLocalRef,
+  BlockModule,
+  BlockMoveOp,
+  BlockParam,
+  BlockPrimOp,
+  BlockReturnTerminator,
+  BlockRuntimeCallOp,
+  BlockSymbolDef,
+  BlockTerminator,
+  BlockUnreachableTerminator,
+  BlockValueRef,
+  BlockVisibility,
+} from "./blockAst.ts";
+export type {
   Alt,
   Binding,
   ConstructorDef,
@@ -44,6 +70,11 @@ export {
   type MiniCoreModuleSource,
 } from "./fromTrip.ts";
 export {
+  anfToBlockFunction,
+  anfToBlockModule,
+  MiniCoreBlockLoweringError,
+} from "./fromAnf.ts";
+export {
   assertMiniTypeEquals,
   cloneMiniCoreMetadata,
   emptyMiniCoreMetadata,
@@ -54,6 +85,7 @@ export {
   type BoolEliminatorLoweringHint,
   type ConstructorInfo,
   type DataTypeDef,
+  type EffectKind,
   type FunctionInfo,
   type LoweringHint,
   type MiniCoreMetadata,
@@ -61,6 +93,12 @@ export {
   type PrimitiveInfo,
   type TypeId,
 } from "./metadata.ts";
+export {
+  getRuntimeSymbolSignature,
+  TRIP_RUNTIME_SYMBOLS,
+  type RuntimeSymbol,
+  type RuntimeSymbolSignature,
+} from "./runtimeSymbols.ts";
 export { toAnfFunction, toAnfProgram } from "./toAnf.ts";
 export {
   maybeTypeOfLocal,
@@ -70,6 +108,7 @@ export {
   typeOfAnfValue,
   typeOfMiniCoreExpr,
 } from "./typeOf.ts";
+export { unparseBlock, unparseBlockModule } from "./unparseBlock.ts";
 export { unparseAnfExpr, unparseAnfProgram } from "./unparseAnf.ts";
 export {
   MiniCoreAnfValidationError,

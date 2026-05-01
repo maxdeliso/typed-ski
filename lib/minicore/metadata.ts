@@ -63,6 +63,8 @@ export interface MiniCoreMetadata {
   functions: Map<SymbolId, FunctionInfo>;
   primitives: Map<SymbolId, PrimitiveInfo>;
   localTypesByFunction: Map<SymbolId, Map<LocalId, MiniType>>;
+  /** Symbols exported by source modules; Block IR uses this for visibility. */
+  exportedSymbols: Set<SymbolId>;
   bool?: {
     type: MiniType;
     dataType: TypeId;
@@ -78,6 +80,7 @@ export function emptyMiniCoreMetadata(): MiniCoreMetadata {
     functions: new Map(),
     primitives: new Map(),
     localTypesByFunction: new Map(),
+    exportedSymbols: new Set(),
   };
 }
 
@@ -95,6 +98,7 @@ export function cloneMiniCoreMetadata(
         new Map(locals),
       ]),
     ),
+    exportedSymbols: new Set(metadata.exportedSymbols),
     bool: metadata.bool,
   };
 }

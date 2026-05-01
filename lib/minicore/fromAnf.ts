@@ -72,7 +72,7 @@ export function anfToBlockModule(program: AnfProgram): BlockModule {
   const symbols = withMetadata.symbols.map((symbol): BlockSymbolDef => {
     switch (symbol.kind) {
       case "function":
-        return anfToBlockFunction(symbol, withMetadata, visibilityFor(symbol));
+        return anfToBlockFunction(symbol, withMetadata);
       case "constructor":
         return blockConstructor(symbol);
       case "primitive":
@@ -91,7 +91,7 @@ export function anfToBlockModule(program: AnfProgram): BlockModule {
 export function anfToBlockFunction(
   fn: AnfFunctionDef,
   program: AnfProgram,
-  visibility: BlockVisibility = visibilityFor(fn),
+  visibility: BlockVisibility = visibilityFor(fn, program),
 ): BlockFunctionDef {
   if (!program.metadata) {
     throw new MiniCoreBlockLoweringError(
@@ -694,8 +694,11 @@ function blockPrimitive(symbol: PrimitiveDef) {
   };
 }
 
-function visibilityFor(fn: AnfFunctionDef): BlockVisibility {
-  return fn.name.endsWith(".main") ? "exported" : "private";
+function visibilityFor(
+  fn: AnfFunctionDef,
+  program: AnfProgram,
+): BlockVisibility {
+  return program.metadata?.exportedSymbols.has(fn.id) ? "exported" : "private";
 }
 
 function labelSuffix(name: string): string {

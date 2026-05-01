@@ -325,4 +325,67 @@ describe("MiniCore Block IR from ANF", () => {
       ].join("\n"),
     );
   });
+
+  it("derives function visibility from metadata exports", () => {
+    const metadata = emptyMiniCoreMetadata();
+    metadata.functions.set(0, {
+      symbol: 0,
+      paramTypes: [],
+      resultType: nat,
+    });
+    metadata.functions.set(1, {
+      symbol: 1,
+      paramTypes: [],
+      resultType: nat,
+    });
+    metadata.exportedSymbols.add(0);
+
+    const program: AnfProgram = {
+      entry: 0,
+      symbolsByName: new Map([
+        ["Main.worker", 0],
+        ["Main.main", 1],
+      ]),
+      metadata,
+      symbols: [
+        {
+          kind: "function",
+          id: 0,
+          name: "Main.worker",
+          arity: 0,
+          params: [],
+          body: {
+            kind: "atom",
+            atom: { kind: "lit", value: { kind: "nat", value: 1n } },
+          },
+        },
+        {
+          kind: "function",
+          id: 1,
+          name: "Main.main",
+          arity: 0,
+          params: [],
+          body: {
+            kind: "atom",
+            atom: { kind: "lit", value: { kind: "nat", value: 2n } },
+          },
+        },
+      ],
+    };
+
+    assert.strictEqual(
+      unparseBlockModule(anfToBlockModule(program)),
+      [
+        "function Main.worker() -> nat [exported] {",
+        "  entry:",
+        "    return 1",
+        "}",
+        "",
+        "function Main.main() -> nat [private] {",
+        "  entry:",
+        "    return 2",
+        "}",
+      ].join("\n"),
+    );
+  });
 });

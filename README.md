@@ -263,7 +263,9 @@ It keeps Trip-level `MiniType`s, explicit basic blocks, block parameters for
 join values, typed value references, effect-tagged instructions, and explicit
 terminators. It is intentionally not shaped around any specific backend.
 `BlockModule` requires `MiniCoreMetadata`; symbol summaries in the block module
-are not authoritative unless they agree with that metadata.
+are not authoritative unless they agree with that metadata. Block function
+visibility is derived from `MiniCoreMetadata.exportedSymbols`, which the
+MiniCore module lowering fills from Trip `export` declarations.
 
 Block IR keeps local definitions explicit. Function params, block params, and
 instruction results define locals; when a value is needed in a successor block,

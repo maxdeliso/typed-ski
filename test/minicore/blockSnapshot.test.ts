@@ -50,7 +50,7 @@ describe("MiniCore Block IR snapshots", () => {
     assert.strictEqual(
       unparseBlockModule({ ...block, symbols: [height, size] }),
       [
-        "function Avl.height(%0: Avl.Avl<K, V>) -> nat [private] {",
+        "function Avl.height(%0: Avl.Avl<K, V>) -> nat [exported] {",
         "  entry(%0: Avl.Avl<K, V>):",
         "    case %0 of",
         "      Avl.Avl.Empty -> case0_alt0_Empty()",
@@ -63,7 +63,7 @@ describe("MiniCore Block IR snapshots", () => {
         "    return %4",
         "}",
         "",
-        "function Avl.size(%0: Avl.Avl<K, V>) -> nat [private] {",
+        "function Avl.size(%0: Avl.Avl<K, V>) -> nat [exported] {",
         "  entry(%0: Avl.Avl<K, V>):",
         "    case %0 of",
         "      Avl.Avl.Empty -> case0_alt0_Empty()",

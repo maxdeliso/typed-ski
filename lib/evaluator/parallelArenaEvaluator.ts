@@ -512,7 +512,7 @@ export class ParallelArenaEvaluatorWasm
 
     const isBrowser = typeof globalThis.document !== "undefined";
     const workerUrl = isBrowser
-      ? "/dist/arenaWorker.js"
+      ? "/dist/arenaWorker.browser.js"
       : resolveArenaWorkerUrl();
 
     const workers = await WorkerManager.spawnWorkers(

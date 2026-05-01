@@ -18,6 +18,7 @@ def _node_dist_impl(ctx):
     tripc_min_js = ctx.actions.declare_file(ctx.label.name + "/tripc.min.js")
     tripc_node_js = ctx.actions.declare_file(ctx.label.name + "/tripc.node.js")
     arena_worker_js = ctx.actions.declare_file(ctx.label.name + "/arenaWorker.js")
+    arena_worker_browser_js = ctx.actions.declare_file(ctx.label.name + "/arenaWorker.browser.js")
     tripc_bin = ctx.actions.declare_file(
         ctx.label.name + ("/tripc.cmd" if is_windows else "/tripc"),
     )
@@ -37,6 +38,7 @@ def _node_dist_impl(ctx):
             _batch_quote(tripc_min_js.path),
             _batch_quote(tripc_node_js.path),
             _batch_quote(arena_worker_js.path),
+            _batch_quote(arena_worker_browser_js.path),
             _batch_quote(tripc_bin.path),
         ])
         content = "\r\n".join([
@@ -57,6 +59,7 @@ def _node_dist_impl(ctx):
             _shell_quote(tripc_min_js.path),
             _shell_quote(tripc_node_js.path),
             _shell_quote(arena_worker_js.path),
+            _shell_quote(arena_worker_browser_js.path),
             _shell_quote(tripc_bin.path),
         ])
         content = "\n".join([
@@ -68,7 +71,7 @@ def _node_dist_impl(ctx):
         ])
 
     ctx.actions.write(launcher, content, is_executable = True)
-    outputs = [tripc_js, tripc_min_js, tripc_node_js, arena_worker_js, tripc_bin]
+    outputs = [tripc_js, tripc_min_js, tripc_node_js, arena_worker_js, arena_worker_browser_js, tripc_bin]
 
     ctx.actions.run(
         executable = launcher,

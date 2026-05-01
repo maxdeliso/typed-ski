@@ -57,6 +57,7 @@ NODE_TEST_DATA = glob(
     ":node_modules/pnpm",
     "//lib/evaluator:arena_header_generated",
     "//lib/shared:version_generated",
+    "//wasm:release",
 ]
 
 NODE_DIST_DATA = glob(
@@ -82,6 +83,7 @@ NODE_DIST_DATA = glob(
     ":node_modules/pnpm",
     "//lib/evaluator:arena_header_generated",
     "//lib/shared:version_generated",
+    "//wasm:release",
 ]
 
 alias(
@@ -177,9 +179,4 @@ workspace_command(
 workspace_command(
     name = "typecheck",
     subcommand = "typecheck",
-)
-
-workspace_command(
-    name = "vs_project",
-    subcommand = "vs-project",
 )

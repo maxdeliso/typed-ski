@@ -12,9 +12,6 @@
  */
 
 import { VERSION } from "../shared/version.generated.ts";
-import fs from "node:fs";
-import fsPromises from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 let cachedReleaseBytes: Uint8Array | null = null;
 let releaseBytesPromise: Promise<ArrayBuffer> | null = null;
@@ -53,20 +50,38 @@ function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 function getNodeFs() {
   return {
     readFile: async (path: string | URL): Promise<Uint8Array> => {
+      const [fsPromises, url] = await Promise.all([
+        import("node:fs/promises"),
+        import("node:url"),
+      ]);
       const p =
         path instanceof URL && path.protocol === "file:"
-          ? fileURLToPath(path as any)
+          ? url.fileURLToPath(path as any)
           : path.toString();
-      return new Uint8Array(await fsPromises.readFile(p));
+      return new Uint8Array(await fsPromises.default.readFile(p));
     },
     readFileSync: (path: string | URL): Uint8Array => {
+      const fs =
+        typeof process !== "undefined" && "getBuiltinModule" in process
+          ? process.getBuiltinModule("node:fs")
+          : undefined;
+      if (!fs) {
+        throw new Error(
+          "readFileSync is not supported when bundled for the browser.",
+        );
+      }
+      const url =
+        typeof process !== "undefined" && "getBuiltinModule" in process
+          ? process.getBuiltinModule("node:url")
+          : undefined;
       const p =
-        path instanceof URL && path.protocol === "file:"
-          ? fileURLToPath(path as any)
+        path instanceof URL && path.protocol === "file:" && url
+          ? url.fileURLToPath(path as any)
           : path.toString();
       return new Uint8Array(fs.readFileSync(p));
     },
-    execPath: () => process.execPath,
+    execPath: () =>
+      typeof process !== "undefined" ? process.execPath : undefined,
   };
 }
 
@@ -74,8 +89,10 @@ function getReleaseWasmCandidates(): ReleaseWasmCandidate[] {
   let envWasmPath: string | undefined;
   let envWasmUrl: string | undefined;
   try {
-    envWasmPath = process.env["TYPED_SKI_WASM_PATH"];
-    envWasmUrl = process.env["TYPED_SKI_WASM_URL"];
+    if (typeof process !== "undefined" && process.env) {
+      envWasmPath = process.env["TYPED_SKI_WASM_PATH"];
+      envWasmUrl = process.env["TYPED_SKI_WASM_URL"];
+    }
   } catch {
     // Ignore env access errors.
   }
@@ -90,7 +107,8 @@ function getReleaseWasmCandidates(): ReleaseWasmCandidate[] {
 
 function getExecPath(): string | undefined {
   try {
-    return getNodeFs().execPath();
+    const ep = getNodeFs().execPath();
+    return typeof ep === "function" ? (ep as any)() : ep;
   } catch {
     return undefined;
   }

@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.17.20",
+  "version": "0.17.21",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -43,11 +43,7 @@
   "scripts": {
     "tripc": "node --disable-warning=ExperimentalWarning --experimental-transform-types bin/tripc.ts",
     "bench:avl": "node --disable-warning=ExperimentalWarning --experimental-transform-types test/avlBenchmark.ts",
-    "bench:avl:minicore": "node --disable-warning=ExperimentalWarning --experimental-transform-types test/avlMiniCoreBenchmark.ts",
-    "bundle:tripc": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.js --format=esm --platform=node",
-    "bundle:tripc:minified": "esbuild bin/tripc.ts --bundle --minify --outfile=dist/tripc.min.js --format=esm --platform=node",
-    "bundle:tripc:node": "esbuild bin/tripc.ts --bundle --outfile=dist/tripc.node.js --format=esm --platform=node",
-    "dist": "mkdir -p dist && pnpm run bundle:tripc && pnpm run bundle:tripc:minified && pnpm run bundle:tripc:node",
+    "dist": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts dist",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts test"
   },

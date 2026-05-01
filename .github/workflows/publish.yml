@@ -44,8 +44,8 @@ jobs:
       - name: Run native Bazel tests
         run: bazel test //:native_tests
 
-      - name: Build artifacts
-        run: bazel run //:build
+      - name: Build and stage distribution artifacts
+        run: pnpm run dist
 
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors

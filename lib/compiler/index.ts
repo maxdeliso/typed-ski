@@ -27,3 +27,15 @@ export {
   BootstrappedCompilerMismatchError,
   compileToCombinatorString,
 } from "./combinatorCompiler.ts";
+
+// LLVM textual IR backend
+export {
+  emitLlvmModule,
+  LlvmEmissionError,
+  LlvmV0ValidationError,
+  validateLlvmV0,
+  type EmitLlvmOptions,
+  type LlvmIncomingEdge,
+  type LlvmIncomingEdges,
+  type LlvmTargetProfile,
+} from "./llvm/index.ts";

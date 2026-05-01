@@ -1,4 +1,5 @@
 load("//bazel:node_dist.bzl", "node_dist")
+load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
 load("//bazel:workspace_command.bzl", "workspace_command")
 load("//bazel:codegen.bzl", "codegen_rule")
@@ -13,6 +14,30 @@ exports_files(["package.json"])
 js_library(
     name = "package_json",
     srcs = ["package.json"],
+)
+
+config_setting(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "macos_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "windows_x86_64",
+    constraint_values = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
 )
 
 codegen_rule(
@@ -86,6 +111,27 @@ NODE_DIST_DATA = glob(
     "//wasm:release",
 ]
 
+LLVM_AS_BIN = select({
+    ":linux_x86_64": "@typed_ski_llvm_linux_x64//:llvm_as",
+    ":macos_arm64": "@typed_ski_llvm_macos_arm64//:llvm_as",
+    ":windows_x86_64": "@typed_ski_llvm_windows_x64//:llvm_as",
+    "//conditions:default": "//bazel:empty.txt",
+})
+
+LLVM_AS_DATA = select({
+    ":linux_x86_64": ["@typed_ski_llvm_linux_x64//:dist"],
+    ":macos_arm64": ["@typed_ski_llvm_macos_arm64//:dist"],
+    ":windows_x86_64": ["@typed_ski_llvm_windows_x64//:dist"],
+    "//conditions:default": [],
+})
+
+LLVM_AS_COMPATIBILITY = select({
+    ":linux_x86_64": [],
+    ":macos_arm64": [],
+    ":windows_x86_64": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 alias(
     name = "thanatos",
     actual = "//core:thanatos",
@@ -129,6 +175,15 @@ node_sharded_test(
     timeout = "long",
     thanatos = "//core:thanatos",
     wasm = "//wasm:release",
+)
+
+node_llvm_as_test(
+    name = "llvm_as_smoke_test",
+    data = NODE_TEST_DATA + LLVM_AS_DATA + [
+        ":node_modules",
+    ],
+    llvm_as = LLVM_AS_BIN,
+    target_compatible_with = LLVM_AS_COMPATIBILITY,
 )
 
 workspace_command(

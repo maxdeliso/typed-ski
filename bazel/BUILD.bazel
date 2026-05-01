@@ -1,4 +1,8 @@
-exports_files(["workspace_command.bzl"])
+exports_files([
+    "empty.txt",
+    "node_llvm_as_test.bzl",
+    "workspace_command.bzl",
+])
 
 toolchain(
     name = "node25_linux_amd64_toolchain",

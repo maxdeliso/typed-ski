@@ -10,6 +10,57 @@ bazel_dep(name = "rules_nodejs", version = "6.7.4")
 bazel_dep(name = "aspect_rules_js", version = "3.0.3")
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
+http_archive = use_repo_rule(
+    "@bazel_tools//tools/build_defs/repo:http.bzl",
+    "http_archive",
+)
+
+LLVM_VERSION = "22.1.4"
+
+LLVM_ARCHIVE_BUILD_FILE = """
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "dist",
+    srcs = glob(["**"]),
+)
+
+filegroup(
+    name = "llvm_as",
+    srcs = ["bin/llvm-as{exe_suffix}"],
+)
+"""
+
+http_archive(
+    name = "typed_ski_llvm_linux_x64",
+    build_file_content = LLVM_ARCHIVE_BUILD_FILE.format(exe_suffix = ""),
+    sha256 = "cdf232e3bc5d9909ddcf8cb7016802c6745a01e69a596747c684caa894a11567",
+    strip_prefix = "LLVM-22.1.4-Linux-X64",
+    urls = [
+        "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/LLVM-22.1.4-Linux-X64.tar.xz",
+    ],
+)
+
+http_archive(
+    name = "typed_ski_llvm_macos_arm64",
+    build_file_content = LLVM_ARCHIVE_BUILD_FILE.format(exe_suffix = ""),
+    sha256 = "45e0dfc0453624caed5e7b20e224ce8343af9c511c7f59803753a586620d6ad1",
+    strip_prefix = "LLVM-22.1.4-macOS-ARM64",
+    urls = [
+        "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/LLVM-22.1.4-macOS-ARM64.tar.xz",
+    ],
+)
+
+http_archive(
+    name = "typed_ski_llvm_windows_x64",
+    build_file_content = LLVM_ARCHIVE_BUILD_FILE.format(exe_suffix = ".exe"),
+    sha256 = "ed775bdaea7087c6c1aeac9498352cfcd8610d92dc4fe9eda9aecb15ce712a2c",
+    strip_prefix = "clang+llvm-22.1.4-x86_64-pc-windows-msvc",
+    urls = [
+        "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang%2Bllvm-22.1.4-x86_64-pc-windows-msvc.tar.xz",
+    ],
+)
+
 NODE_25_VERSION = "25.6.0"
 
 NODE_25_REPOSITORIES = {

@@ -22,6 +22,7 @@ export type {
   Block,
   BlockBranchTerminator,
   BlockCallOp,
+  BlockConstructorDef,
   BlockCaseAlt,
   BlockCaseTerminator,
   BlockConstructOp,
@@ -36,6 +37,7 @@ export type {
   BlockMoveOp,
   BlockParam,
   BlockPrimOp,
+  BlockPrimitiveDef,
   BlockReturnTerminator,
   BlockRuntimeCallOp,
   BlockSymbolDef,
@@ -116,3 +118,7 @@ export {
   validateAnfModule,
   validateAnfProgram,
 } from "./validateAnf.ts";
+export {
+  MiniCoreBlockValidationError,
+  validateBlockModule,
+} from "./validateBlock.ts";

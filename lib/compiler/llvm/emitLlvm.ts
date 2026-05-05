@@ -124,6 +124,7 @@ function emitMainWrapper(
   }
 
   const entryName = context.functionNames.get(entry.id);
+  /* node:coverage ignore next 3 */
   if (!entryName) {
     throw new LlvmEmissionError(`Cannot emit C main wrapper for ${entry.name}`);
   }

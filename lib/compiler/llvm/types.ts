@@ -1,6 +1,7 @@
 export type LlvmScalarType = "i1" | "i8";
 export type LlvmReturnType = LlvmScalarType | "void";
 
+/* node:coverage disable */
 export type LlvmTargetProfile =
   | { kind: "generic" }
   | { kind: "x86_64-unknown-linux-gnu" }
@@ -12,6 +13,7 @@ export interface EmitLlvmOptions {
   target?: LlvmTargetProfile;
   emitMainWrapper?: boolean;
 }
+/* node:coverage enable */
 
 export type LlvmV0PrimitiveKind = "addU8" | "subU8" | "eqU8" | "ltU8";
 export type LlvmV0RejectedPrimitiveKind = "divU8" | "modU8";

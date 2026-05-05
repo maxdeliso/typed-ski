@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "../../util/test_shim.ts";
-import { emitLlvmModule } from "../../../lib/compiler/llvm/index.ts";
-import { block, fn, litU8, moduleOf, u8, unit } from "./helpers.ts";
+import {
+  emitLlvmModule,
+  LlvmEmissionError,
+} from "../../../lib/compiler/llvm/index.ts";
+import { block, fn, litU8, moduleOf, param, u8, unit } from "./helpers.ts";
 
 describe("LLVM emitter - executable wrapper", () => {
   it("emits a Linux target triple and C main wrapper", () => {
@@ -84,5 +87,31 @@ describe("LLVM emitter - executable wrapper", () => {
         "}",
       ].join("\n"),
     );
+  });
+
+  it("rejects a C main wrapper when no entry function exists", () => {
+    assert.throws(
+      () => emitLlvmModule(moduleOf([]), { emitMainWrapper: true }),
+      {
+        name: LlvmEmissionError.name,
+        message: "Cannot emit C main wrapper without an entry",
+      },
+    );
+  });
+
+  it("rejects a C main wrapper for a parameterized entry", () => {
+    const module = moduleOf([
+      fn(0, "Main.main", [param(0)], u8, [
+        block("entry", [param(0)], [], {
+          kind: "return",
+          value: litU8(0),
+        }),
+      ]),
+    ]);
+
+    assert.throws(() => emitLlvmModule(module, { emitMainWrapper: true }), {
+      name: LlvmEmissionError.name,
+      message: "Cannot emit C main wrapper for parameterized entry Main.main",
+    });
   });
 });

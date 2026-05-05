@@ -1,11 +1,12 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//bazel:codegen.bzl", "codegen_rule")
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
+load("//bazel:trip_llvm.bzl", "trip_executable_stdout_test", "trip_llvm_object")
 load("//bazel:workspace_command.bzl", "workspace_command")
-load("//bazel:codegen.bzl", "codegen_rule")
-load("@npm//:defs.bzl", "npm_link_all_packages")
-
-load("@aspect_rules_js//js:defs.bzl", "js_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -42,6 +43,7 @@ config_setting(
 
 codegen_rule(
     name = "jsr_generated_src",
+    outs = ["jsr.generated.json"],
     args = [
         "--package-json",
         "$(location :package.json)",
@@ -49,7 +51,6 @@ codegen_rule(
         "$(location jsr.generated.json)",
     ],
     data = [":package.json"],
-    outs = ["jsr.generated.json"],
     script = "//scripts:generate_version.mjs",
 )
 
@@ -69,11 +70,11 @@ NODE_TEST_DATA = glob(
         "server/**",
         "test/**",
     ],
+    allow_empty = True,
     exclude = [
         "coverage/**",
         "dist/**",
     ],
-    allow_empty = True,
 ) + [
     "//scripts",
     "//lib/shared",
@@ -95,11 +96,11 @@ NODE_DIST_DATA = glob(
         "compiler/**",
         "lib/**",
     ],
+    allow_empty = True,
     exclude = [
         "coverage/**",
         "dist/**",
     ],
-    allow_empty = True,
 ) + [
     "//scripts",
     "//lib/shared",
@@ -118,11 +119,23 @@ LLVM_AS_BIN = select({
     "//conditions:default": "//bazel:empty.txt",
 })
 
-LLVM_AS_DATA = select({
+LLVM_LLC_BIN = select({
+    ":linux_x86_64": "@typed_ski_llvm_linux_x64//:llvm_llc",
+    ":macos_arm64": "@typed_ski_llvm_macos_arm64//:llvm_llc",
+    ":windows_x86_64": "@typed_ski_llvm_windows_x64//:llvm_llc",
+    "//conditions:default": "//bazel:empty.txt",
+})
+
+LLVM_DIST_DATA = select({
     ":linux_x86_64": ["@typed_ski_llvm_linux_x64//:dist"],
     ":macos_arm64": ["@typed_ski_llvm_macos_arm64//:dist"],
     ":windows_x86_64": ["@typed_ski_llvm_windows_x64//:dist"],
     "//conditions:default": [],
+})
+
+WINDOWS_X86_64_COMPATIBILITY = select({
+    ":windows_x86_64": [],
+    "//conditions:default": ["@platforms//:incompatible"],
 })
 
 LLVM_AS_COMPATIBILITY = select({
@@ -155,6 +168,7 @@ test_suite(
         "//core:session_test",
         "//core:ski_io_test",
         "//core:util_test",
+        "//:trip_hello_world_test",
     ],
 )
 
@@ -165,25 +179,59 @@ node_dist(
 
 node_sharded_test(
     name = "node_tests",
+    size = "large",
+    timeout = "long",
     data = NODE_TEST_DATA + [
         ":node_modules",
     ],
     dist = ":dist_artifacts",
     generated_jsr = ":jsr.generated.json",
     shard_count = 8,
-    size = "large",
-    timeout = "long",
     thanatos = "//core:thanatos",
     wasm = "//wasm:release",
 )
 
 node_llvm_as_test(
     name = "llvm_as_smoke_test",
-    data = NODE_TEST_DATA + LLVM_AS_DATA + [
+    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
         ":node_modules",
     ],
     llvm_as = LLVM_AS_BIN,
     target_compatible_with = LLVM_AS_COMPATIBILITY,
+)
+
+trip_llvm_object(
+    name = "trip_hello_world_obj",
+    src = "test/compiler/llvm/helloWorld.trip",
+    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
+        ":node_modules",
+    ],
+    entry_module = "Main",
+    llvm_dist = LLVM_DIST_DATA,
+    llvm_llc = LLVM_LLC_BIN,
+    module_source_files = ["lib/prelude.trip"],
+    module_source_names = ["Prelude"],
+    tags = ["manual"],
+    target_compatible_with = WINDOWS_X86_64_COMPATIBILITY,
+)
+
+cc_binary(
+    name = "trip_hello_world",
+    srcs = [":trip_hello_world_obj"],
+    tags = ["manual"],
+    target_compatible_with = WINDOWS_X86_64_COMPATIBILITY,
+    deps = [
+        "//core:trip_runtime_io",
+        "@msvc_toolchains//lib:kernel32",
+    ],
+)
+
+trip_executable_stdout_test(
+    name = "trip_hello_world_test",
+    binary = ":trip_hello_world",
+    expected_stdout = "Hello, world!\n",
+    tags = ["requires-msvc-eula"],
+    target_compatible_with = WINDOWS_X86_64_COMPATIBILITY,
 )
 
 workspace_command(

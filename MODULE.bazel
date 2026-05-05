@@ -9,6 +9,14 @@ bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_nodejs", version = "6.7.4")
 bazel_dep(name = "aspect_rules_js", version = "3.0.3")
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
+bazel_dep(name = "toolchains_msvc", version = "0.1.0")
+git_override(
+    module_name = "toolchains_msvc",
+    commit = "e5b8d113480ce43970bdb034c939eb19a721b244",
+    patch_strip = 1,
+    patches = ["//third_party/toolchains_msvc/patches:0001-merge-msvc-vsix-payloads.patch"],
+    remote = "https://github.com/Dragnalith/toolchains_msvc.git",
+)
 
 http_archive = use_repo_rule(
     "@bazel_tools//tools/build_defs/repo:http.bzl",
@@ -28,6 +36,21 @@ filegroup(
 filegroup(
     name = "llvm_as",
     srcs = ["bin/llvm-as{exe_suffix}"],
+)
+
+filegroup(
+    name = "llvm_llc",
+    srcs = ["bin/llc{exe_suffix}"],
+)
+
+filegroup(
+    name = "llvm_clang",
+    srcs = ["bin/clang{exe_suffix}"],
+)
+
+filegroup(
+    name = "llvm_lld_link",
+    srcs = ["bin/lld-link{exe_suffix}"],
 )
 """
 
@@ -183,6 +206,26 @@ use_repo(npm, "npm")
 
 pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
 use_repo(pnpm, "pnpm")
+
+msvc_toolchain = use_extension("@toolchains_msvc//:extensions.bzl", "toolchain")
+msvc_toolchain.repo_name(name = "msvc_toolchains")
+msvc_toolchain.toolchain_set(
+    name = "default",
+    features = ["console_subsystem"],
+    hosts = ["x64"],
+    msvc_versions = ["14.44"],
+    targets = ["x64"],
+    winsdk_versions = ["26100"],
+)
+msvc_toolchain.default_toolchain_set(name = "default")
+msvc_toolchain.default_msvc_version(version = "14.44")
+msvc_toolchain.default_winsdk_version(version = "26100")
+msvc_toolchain.default_compiler(compiler = "msvc-cl")
+use_repo(msvc_toolchain, "msvc_toolchains")
+
+register_toolchains(
+    "@msvc_toolchains//:all",
+)
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 toolchains.exec_platform(

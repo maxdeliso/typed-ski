@@ -31,7 +31,7 @@ static HostWakeByAddressSingleFn host_wake_by_address_single_fn = NULL;
 static HostWakeByAddressAllFn host_wake_by_address_all_fn = NULL;
 static volatile long host_wait_on_address_initialized = 0;
 
-static void host_winapi_fail(const char *op) {
+static HOST_NORETURN void host_winapi_fail(const char *op) {
   fprintf(stderr, "host_platform_windows: %s failed (err=%lu)\n", op,
           (unsigned long)GetLastError());
   abort();
@@ -173,7 +173,6 @@ bool host_event_wait(HostEvent *event, uint32_t timeout_ms) {
     return false;
   }
   host_winapi_fail("WaitForSingleObject");
-  return false;
 }
 
 int host_thread_create(HostThread *thread, HostThreadFn fn, void *arg) {

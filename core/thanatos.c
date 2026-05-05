@@ -351,7 +351,7 @@ static uint32_t io_wait_remove(uint32_t node_id) {
 
 extern uint8_t *ARENA_BASE_ADDR;
 
-__attribute__((no_sanitize("address"))) static void *
+HOST_NO_SANITIZE_ADDRESS static void *
 dispatcher_thread_main(void *arg) {
   (void)arg;
   fprintf(stderr, "Dispatcher: started, base=%p\n", (void *)ARENA_BASE_ADDR);

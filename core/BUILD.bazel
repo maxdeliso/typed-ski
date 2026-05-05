@@ -3,11 +3,17 @@ load("//bazel:codegen.bzl", "codegen_rule")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(glob(["**"], exclude = ["*.generated.*"]))
+exports_files(glob(
+    ["**"],
+    exclude = ["*.generated.*"],
+))
 
 filegroup(
     name = "core",
-    srcs = glob(["**"], exclude = ["*.generated.*"]),
+    srcs = glob(
+        ["**"],
+        exclude = ["*.generated.*"],
+    ),
 )
 
 config_setting(
@@ -23,6 +29,24 @@ COMMON_COPTS = [
     "-Wstrict-prototypes",
     "-Werror",
 ]
+
+MSVC_COPTS = [
+    "/std:c11",
+    "/experimental:c11atomics",
+    "/W4",
+    "/WX",
+    "/wd4100",  # unreferenced formal parameter
+    "/wd4200",  # nonstandard extension used: zero-sized array in struct/union
+    "/wd4201",  # nonstandard extension used: nameless struct/union
+    "/wd4204",  # nonstandard extension used: non-constant aggregate initializer
+    "/wd4214",  # nonstandard extension used: bit field types other than int
+    "/wd4456",  # declaration hides previous local declaration
+]
+
+COPTS = select({
+    ":windows": MSVC_COPTS,
+    "//conditions:default": COMMON_COPTS,
+})
 
 POSIX_PTHREAD_FLAGS = select({
     ":windows": [],
@@ -40,6 +64,7 @@ HOST_PLATFORM_SRCS = select({
 
 codegen_rule(
     name = "arena_layout_header_gen",
+    outs = ["arena_layout.generated.h"],
     args = [
         "--input",
         "$(location arena_layout.def)",
@@ -47,7 +72,6 @@ codegen_rule(
         "$(location arena_layout.generated.h)",
     ],
     data = ["arena_layout.def"],
-    outs = ["arena_layout.generated.h"],
     script = "//scripts:generate_layouts.mjs",
 )
 
@@ -56,13 +80,19 @@ cc_library(
     hdrs = [":arena_layout.generated.h"],
 )
 
+WIN32_LIBS = select({
+    ":windows": ["@msvc_toolchains//lib:kernel32"],
+    "//conditions:default": [],
+})
+
 cc_library(
     name = "util",
     srcs = ["util.c"],
     hdrs = ["util.h"],
-    copts = COMMON_COPTS,
-    tags = ["no-coverage"],
+    copts = COPTS,
     features = ["-coverage"],
+    tags = ["no-coverage"],
+    deps = WIN32_LIBS,
 )
 
 cc_library(
@@ -72,27 +102,36 @@ cc_library(
     ] + HOST_PLATFORM_SRCS,
     hdrs = [
         "arena.h",
-        ":arena_layout.generated.h",
         "host_platform.h",
+        ":arena_layout.generated.h",
     ],
-    includes = ["."],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
-    tags = ["no-coverage"],
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    deps = [":arena_layout_header"],
+    includes = ["."],
+    tags = ["no-coverage"],
+    deps = [":arena_layout_header"] + WIN32_LIBS,
 )
 
 cc_library(
     name = "ski_io",
     srcs = ["ski_io.c"],
     hdrs = ["ski_io.h"],
-    copts = COMMON_COPTS,
-    tags = ["no-coverage"],
+    copts = COPTS,
     features = ["-coverage"],
+    tags = ["no-coverage"],
     deps = [
         ":arena_runtime",
         ":util",
     ],
+)
+
+cc_library(
+    name = "trip_runtime_io",
+    srcs = ["trip_runtime.c"],
+    hdrs = ["trip_runtime.h"],
+    copts = COPTS,
+    features = ["-coverage"],
+    tags = ["no-coverage"],
 )
 
 cc_library(
@@ -105,9 +144,9 @@ cc_library(
         "session.h",
         "thanatos.h",
     ],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
-    tags = ["no-coverage"],
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
+    tags = ["no-coverage"],
     deps = [
         ":arena_runtime",
         ":ski_io",
@@ -118,22 +157,22 @@ cc_library(
 cc_binary(
     name = "thanatos",
     srcs = ["main.c"],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [":thanatos_lib"],
 )
 
 cc_test(
     name = "arena_test",
     srcs = ["arena_test.c"],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [
         ":arena_runtime",
         ":ski_io",
@@ -143,11 +182,11 @@ cc_test(
 cc_test(
     name = "dag_codec_test",
     srcs = ["dag_codec_test.c"],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [
         ":arena_runtime",
         ":ski_io",
@@ -158,42 +197,42 @@ cc_test(
 cc_test(
     name = "session_test",
     srcs = ["session_test.c"],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [":thanatos_lib"],
 )
 
 cc_test(
     name = "ski_io_test",
     srcs = ["ski_io_test.c"],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [":thanatos_lib"],
 )
 
 cc_test(
     name = "util_test",
     srcs = ["util_test.c"],
-    copts = COMMON_COPTS,
+    copts = COPTS,
+    features = ["-coverage"],
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [":util"],
 )
 
 cc_binary(
     name = "performance_test",
     srcs = ["performance_test.c"],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    copts = COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
     linkopts = POSIX_PTHREAD_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
-    features = ["-coverage"],
     deps = [":thanatos_lib"],
 )

@@ -233,7 +233,7 @@ static void ring_init_at(void *ptr, uint32_t entries, uint32_t slot_size) {
 }
 
 /** AoS node: 32 bytes (id<<5 indexing); fixed address across grow(). */
-typedef struct {
+typedef HOST_ALIGNED(32) struct {
   atomic_uint left;
   atomic_uint right;
   atomic_uint hash32;
@@ -241,7 +241,7 @@ typedef struct {
   atomic_uchar kind;
   atomic_uchar sym;
   uint8_t padding[14];
-} __attribute__((aligned(32))) ArenaNode;
+} ArenaNode;
 
 enum {
   /*
@@ -342,9 +342,9 @@ typedef struct {
 } WorkerTraceState;
 
 #ifdef __wasm__
-static WorkerTraceState WORKER_TRACE[MAX_WORKERS] __attribute__((unused));
-static atomic_uint TRACE_REQUESTED_EPOCH __attribute__((unused));
-static uint32_t TRACE_WORKER_COUNT __attribute__((unused)) = 0;
+static WorkerTraceState WORKER_TRACE[MAX_WORKERS] HOST_UNUSED;
+static atomic_uint TRACE_REQUESTED_EPOCH HOST_UNUSED;
+static uint32_t TRACE_WORKER_COUNT HOST_UNUSED = 0;
 #else
 static WorkerTraceState WORKER_TRACE[MAX_WORKERS];
 static atomic_uint TRACE_REQUESTED_EPOCH;
@@ -461,7 +461,7 @@ static inline uint32_t freelist_head_version(uint64_t head) {
 
 static inline void trap_invariant(void) {
 #ifdef __wasm__
-  __builtin_trap();
+  HOST_TRAP();
 #else
   abort();
 #endif
@@ -795,7 +795,7 @@ static inline void ensure_arena(void) {
     return;
   if (ARENA_MODE == 1) {
 #ifdef __wasm__
-    __builtin_trap();
+    HOST_TRAP();
 #else
     abort();
 #endif
@@ -912,7 +912,7 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
     uint32_t seq = atomic_load_explicit(&h->resize_seq, memory_order_acquire);
     if (seq == POISON_SEQ) {
 #ifdef __wasm__
-      __builtin_trap();
+      HOST_TRAP();
 #else
       abort();
 #endif
@@ -931,9 +931,9 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
       /* Spin until the resize finishes */
       while ((atomic_load_explicit(&h->resize_seq, memory_order_acquire) & 1)) {
 #if defined(__linux__) && !defined(__wasm__)
-        __builtin_ia32_pause();
+        HOST_PAUSE();
 #elif defined(__x86_64__) || defined(_M_X64)
-        __builtin_ia32_pause();
+        HOST_PAUSE();
 #else
         (void)0;
 #endif
@@ -1310,11 +1310,11 @@ uint32_t allocU8(uint8_t value) {
 #define ARENA_HASH_BUCKET_MODE 0
 #endif
 
-static inline __attribute__((unused)) uint32_t rotl32(uint32_t x, uint32_t r) {
+static inline HOST_UNUSED uint32_t rotl32(uint32_t x, uint32_t r) {
   return (x << r) | (x >> (32 - r));
 }
 
-static inline __attribute__((unused)) uint32_t avalanche32(uint32_t x) {
+static inline HOST_UNUSED uint32_t avalanche32(uint32_t x) {
   x ^= x >> 16;
   x *= 0x7feb352d;
   x ^= x >> 15;
@@ -1323,7 +1323,7 @@ static inline __attribute__((unused)) uint32_t avalanche32(uint32_t x) {
   return x;
 }
 
-static inline __attribute__((unused)) uint32_t fmix32(uint32_t x) {
+static inline HOST_UNUSED uint32_t fmix32(uint32_t x) {
   x ^= x >> 16;
   x *= 0x85ebca6b;
   x ^= x >> 13;
@@ -1332,7 +1332,7 @@ static inline __attribute__((unused)) uint32_t fmix32(uint32_t x) {
   return x;
 }
 
-static inline __attribute__((unused)) uint64_t fmix64(uint64_t x) {
+static inline HOST_UNUSED uint64_t fmix64(uint64_t x) {
   x ^= x >> 33;
   x *= 0xff51afd7ed558ccdULL;
   x ^= x >> 33;
@@ -2433,13 +2433,13 @@ uint32_t controlSuspensionRemainingSteps(uint32_t ptr) {
   return (cont == NULL) ? 0 : cont->remaining_steps;
 }
 
-__attribute__((no_sanitize("address"), noinline)) static void
+HOST_NO_SANITIZE_ADDRESS HOST_NOINLINE static void
 zero_buckets(atomic_uint *buckets, uint32_t n) {
   for (uint32_t i = 0; i < n; i++)
     atomic_store_explicit(&buckets[i], EMPTY, memory_order_release);
 }
 
-__attribute__((no_sanitize("address"))) static void grow(void) {
+HOST_NO_SANITIZE_ADDRESS static void grow(void) {
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   uint32_t expected =
       atomic_load_explicit(&h->resize_seq, memory_order_acquire);
@@ -2467,9 +2467,9 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
       if (w_epoch == 0 || w_epoch >= new_epoch)
         break;
 #if defined(__linux__) && !defined(__wasm__)
-      __builtin_ia32_pause();
+      HOST_PAUSE();
 #elif defined(__x86_64__) || defined(_M_X64)
-      __builtin_ia32_pause();
+      HOST_PAUSE();
 #else
       /* Yield so reader can finish its batch. */
       (void)0;
@@ -2534,7 +2534,7 @@ __attribute__((no_sanitize("address"))) static void grow(void) {
     size_t previous_pages = __builtin_wasm_memory_grow(0, pages);
     if (previous_pages == (size_t)-1) {
       atomic_store_explicit(&h->resize_seq, POISON_SEQ, memory_order_release);
-      __builtin_trap();
+      HOST_TRAP();
     }
   }
 #else
@@ -3650,7 +3650,7 @@ uint32_t reduce(uint32_t expr, uint32_t max) {
   return cur;
 }
 
-__attribute__((no_sanitize("address"))) int64_t hostPullV2(void) {
+HOST_NO_SANITIZE_ADDRESS int64_t hostPullV2(void) {
   if (ARENA_BASE_ADDR == NULL)
     return -1;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
@@ -3666,7 +3666,7 @@ __attribute__((no_sanitize("address"))) int64_t hostPullV2(void) {
   return -1;
 }
 
-__attribute__((no_sanitize("address"))) void hostCqDequeueBlocking(Cqe *cqe) {
+HOST_NO_SANITIZE_ADDRESS void hostCqDequeueBlocking(Cqe *cqe) {
   if (ARENA_BASE_ADDR == NULL || cqe == NULL)
     return;
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
@@ -3674,7 +3674,7 @@ __attribute__((no_sanitize("address"))) void hostCqDequeueBlocking(Cqe *cqe) {
   dequeue_blocking(cq, cqe, sizeof(Cqe));
 }
 
-__attribute__((no_sanitize("address"))) void
+HOST_NO_SANITIZE_ADDRESS void
 arena_cq_enqueue_shutdown_sentinel(void) {
   if (ARENA_BASE_ADDR == NULL)
     return;

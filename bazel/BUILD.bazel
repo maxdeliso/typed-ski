@@ -1,6 +1,7 @@
 exports_files([
     "empty.txt",
     "node_llvm_as_test.bzl",
+    "trip_llvm.bzl",
     "workspace_command.bzl",
 ])
 

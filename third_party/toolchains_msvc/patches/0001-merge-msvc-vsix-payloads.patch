@@ -1,0 +1,128 @@
+diff --git a/private/msvc_repo.bzl b/private/msvc_repo.bzl
+index 0770a92..5c1ffff 100644
+--- a/private/msvc_repo.bzl
++++ b/private/msvc_repo.bzl
+@@ -7,6 +7,42 @@ def _package_url(package_urls, pkg):
+         fail("Missing URL for MSVC package '{}' ({})".format(pkg.get("filename"), sha256))
+     return url
+ 
++def _run_or_fail(ctx, args, message):
++    result = ctx.execute(args, quiet = True)
++    if result.return_code == 0:
++        return
++
++    details = ""
++    if result.stdout:
++        details += "\nstdout:\n{}".format(result.stdout)
++    if result.stderr:
++        details += "\nstderr:\n{}".format(result.stderr)
++    fail("{} failed (exit {}){}".format(message, result.return_code, details))
++
++def _merge_msvc_payload_dir(ctx, merge_script, package_root, payload_dir, destination):
++    source = str(ctx.path("{}/Contents/VC/{}/MSVC".format(package_root, payload_dir))).replace("/", "\\")
++    destination = str(ctx.path(destination)).replace("/", "\\")
++    _run_or_fail(
++        ctx,
++        [
++            "powershell",
++            "-NoProfile",
++            "-ExecutionPolicy",
++            "Bypass",
++            "-File",
++            str(ctx.path(merge_script)).replace("/", "\\"),
++            "-Source",
++            source,
++            "-Destination",
++            destination,
++        ],
++        "Merging {} from {}".format(payload_dir, package_root),
++    )
++
++def _require_extracted_path(ctx, path):
++    if not ctx.path(path).exists:
++        fail("Expected MSVC payload path missing after extraction: {}".format(path))
++
+ def _msvc_repo_impl(ctx):
+     """Implementation of the msvc_repo rule."""
+     if ctx.attr.error:
+@@ -16,19 +52,45 @@ def _msvc_repo_impl(ctx):
+     package_urls = json.decode(ctx.attr.package_urls)
+     extracted_package_filenames = []
+ 
++    merge_script = "tmp/Merge-MsvcPayload.ps1"
++    ctx.file(
++        merge_script,
++        """param(
++  [Parameter(Mandatory=$true)][string]$Source,
++  [Parameter(Mandatory=$true)][string]$Destination
++)
++$ErrorActionPreference = "Stop"
++if (-not (Test-Path -LiteralPath $Source)) {
++  exit 0
++}
++New-Item -ItemType Directory -Force -Path $Destination | Out-Null
++$versionDirs = @(Get-ChildItem -LiteralPath $Source -Force -Directory)
++foreach ($versionDir in $versionDirs) {
++  & robocopy $versionDir.FullName $Destination /E /NFL /NDL /NJH /NJS /NP
++  if ($LASTEXITCODE -ge 8) {
++    throw "robocopy failed with exit code $LASTEXITCODE while copying $($versionDir.FullName)"
++  }
++}
++exit 0
++""",
++    )
++
+     for pkg in packages:
+         sha256 = pkg.get("sha256")
+         filename = pkg.get("filename")
++        package_root = "tmp/packages/{}".format(sha256)
+ 
+         ctx.report_progress("Downloading and Extracting {}".format(filename))
+ 
+         ctx.download_and_extract(
+             url = _package_url(package_urls, pkg),
+             sha256 = sha256,
+-            output = "tmp",
++            output = package_root,
+             type = "zip",
+         )
+ 
++        _merge_msvc_payload_dir(ctx, merge_script, package_root, "Tools", "Tools")
++        _merge_msvc_payload_dir(ctx, merge_script, package_root, "Redist", "Redist")
+         extracted_package_filenames.append(filename)
+ 
+     ctx.file(
+@@ -36,11 +98,6 @@ def _msvc_repo_impl(ctx):
+         "\n".join(extracted_package_filenames) + ("\n" if extracted_package_filenames else ""),
+     )
+ 
+-    tools_dir = ctx.path("tmp/Contents/VC/Tools/MSVC").readdir()[0]
+-    redist_dir = ctx.path("tmp/Contents/VC/Redist/MSVC").readdir()[0]
+-
+-    ctx.execute(["cmd", "/c", "move", str(tools_dir).replace("/", "\\"), "Tools"])
+-    ctx.execute(["cmd", "/c", "move", str(redist_dir).replace("/", "\\"), "Redist"])
+     ctx.delete("tmp")
+ 
+     # Add cl_wrapper.bat next to cl.exe in every host/target config so EXECROOT can be
+@@ -57,6 +114,21 @@ set EXECROOT=%CD%
+                 cl_wrapper_content,
+             )
+ 
++            _require_extracted_path(
++                ctx,
++                "Tools/bin/Host{host}/{target}/cl.exe".format(host = host, target = target),
++            )
++            _require_extracted_path(
++                ctx,
++                "Tools/bin/Host{host}/{target}/link.exe".format(host = host, target = target),
++            )
++            _require_extracted_path(
++                ctx,
++                "Tools/bin/Host{host}/{target}/lib.exe".format(host = host, target = target),
++            )
++
++    _require_extracted_path(ctx, "Tools/include/stdint.h")
++
+     # Generate a BUILD file
+     ctx.template(
+         "BUILD.bazel",

@@ -73,6 +73,10 @@ export function emitLlvmModule(
     if (index > 0) writer.blank();
     emitFunction(writer, fn, context);
   });
+  if (options.emitMainWrapper) {
+    writer.blank();
+    emitMainWrapper(writer, module, context);
+  }
 
   return writer.toString();
 }
@@ -81,6 +85,8 @@ function emitTargetTriple(writer: LlvmWriter, target: LlvmTargetProfile): void {
   switch (target.kind) {
     case "generic":
       return;
+    case "x86_64-unknown-linux-gnu":
+    case "x86_64-pc-windows-msvc":
     case "wasm32-unknown-unknown":
     case "wasm32-wasi":
       writer.line(`target triple = "${target.kind}"`);
@@ -97,6 +103,42 @@ function collectFunctionNames(module: BlockModule): Map<SymbolId, string> {
     }
   }
   return names;
+}
+
+function emitMainWrapper(
+  writer: LlvmWriter,
+  module: BlockModule,
+  context: ModuleEmitContext,
+): void {
+  const entry = module.symbols.find(
+    (symbol): symbol is BlockFunctionDef =>
+      symbol.kind === "function" && symbol.id === module.entry,
+  );
+  if (!entry) {
+    throw new LlvmEmissionError("Cannot emit C main wrapper without an entry");
+  }
+  if (entry.params.length !== 0) {
+    throw new LlvmEmissionError(
+      `Cannot emit C main wrapper for parameterized entry ${entry.name}`,
+    );
+  }
+
+  const entryName = context.functionNames.get(entry.id);
+  /* node:coverage ignore next 3 */
+  if (!entryName) {
+    throw new LlvmEmissionError(`Cannot emit C main wrapper for ${entry.name}`);
+  }
+
+  const entryReturnType = lowerLlvmReturnType(entry.returnType);
+  writer.line("define i32 @main() {");
+  writer.line("entry:");
+  if (entryReturnType === "void") {
+    writer.indented(`call void ${entryName}()`);
+  } else {
+    writer.indented(`%trip_result = call ${entryReturnType} ${entryName}()`);
+  }
+  writer.indented("ret i32 0");
+  writer.line("}");
 }
 
 function emitFunction(

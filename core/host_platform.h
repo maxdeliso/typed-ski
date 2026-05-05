@@ -1,39 +1,28 @@
 #ifndef HOST_PLATFORM_H
 #define HOST_PLATFORM_H
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdatomic.h>
 
-#if defined(__wasm__)
-typedef struct {
-  int unused;
-} HostMutex;
-
-typedef struct {
-  int unused;
-} HostCond;
-
-typedef int HostThread;
-
-typedef struct {
-  int unused;
-} HostEvent;
-
-typedef struct {
-  void *data;
-  size_t size;
-  bool writable;
-} HostFileMapping;
-#elif defined(_WIN32)
+#ifdef _WIN32
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#include <intrin.h>
 #include <windows.h>
+
+#define HOST_ALIGNED(n) __declspec(align(n))
+#define HOST_UNUSED
+#define HOST_NO_SANITIZE_ADDRESS
+#define HOST_NOINLINE __declspec(noinline)
+#define HOST_NORETURN __declspec(noreturn)
+#define HOST_PAUSE() _mm_pause()
+#define HOST_TRAP() __debugbreak()
 
 typedef struct {
   CRITICAL_SECTION cs;
@@ -53,8 +42,45 @@ typedef struct {
   HANDLE mapping_handle;
   bool writable;
 } HostFileMapping;
+
+#elif defined(__wasm__)
+#define HOST_ALIGNED(n) __attribute__((aligned(n)))
+#define HOST_UNUSED __attribute__((unused))
+#define HOST_NO_SANITIZE_ADDRESS
+#define HOST_NOINLINE __attribute__((noinline))
+#define HOST_NORETURN __attribute__((noreturn))
+#define HOST_PAUSE() ((void)0)
+#define HOST_TRAP() __builtin_trap()
+
+typedef struct {
+  int unused;
+} HostMutex;
+
+typedef struct {
+  int unused;
+} HostCond;
+
+typedef int HostThread;
+
+typedef struct {
+  int unused;
+} HostEvent;
+
+typedef struct {
+  void *data;
+  size_t size;
+  bool writable;
+} HostFileMapping;
 #else
 #include <pthread.h>
+
+#define HOST_ALIGNED(n) __attribute__((aligned(n)))
+#define HOST_UNUSED __attribute__((unused))
+#define HOST_NO_SANITIZE_ADDRESS __attribute__((no_sanitize("address")))
+#define HOST_NOINLINE __attribute__((noinline))
+#define HOST_NORETURN __attribute__((noreturn))
+#define HOST_PAUSE() __builtin_ia32_pause()
+#define HOST_TRAP() __builtin_trap()
 
 typedef pthread_mutex_t HostMutex;
 typedef pthread_cond_t HostCond;
@@ -75,7 +101,6 @@ typedef struct {
 #endif
 
 #ifdef _WIN32
-#include <windows.h>
 wchar_t *host_utf8_to_wide(const char *text);
 #endif
 

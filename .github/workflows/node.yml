@@ -7,6 +7,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  BAZEL_TOOLCHAINS_MSVC_ACCEPT_MICROSOFT_VISUAL_STUDIO_BUILDTOOLS_EULA: "1"
 
 permissions:
   contents: read
@@ -46,7 +47,7 @@ jobs:
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       - name: Build native Bazel targets
-        run: bazel build //:thanatos //:performance_test //:release_wasm
+        run: bazel build //:thanatos //:performance_test //:release_wasm //:trip_hello_world
 
       - name: Run native Bazel tests
         run: bazel test //:native_tests

@@ -29,9 +29,16 @@ def _trip_llvm_object_impl(ctx):
     llvm_ir = ctx.actions.declare_file(ctx.label.name + ".ll")
     obj = ctx.actions.declare_file(ctx.label.name + ctx.attr.object_extension)
 
+    tripc_js = None
+    for f in ctx.attr.compiler_dist[DefaultInfo].files.to_list():
+        if f.basename == "tripc.node.js":
+            tripc_js = f
+            break
+    if not tripc_js:
+        fail("Could not find tripc.node.js in compiler_dist")
+
     emit_args = ctx.actions.args()
-    emit_args.add("--experimental-transform-types")
-    emit_args.add(ctx.file._script)
+    emit_args.add(tripc_js)
     emit_args.add("--emit")
     emit_args.add("llvm")
     emit_args.add(ctx.file.src)
@@ -57,7 +64,7 @@ def _trip_llvm_object_impl(ctx):
             ctx.files.module_source_files +
             [
                 ctx.file.src,
-                ctx.file._script,
+                tripc_js,
                 node_toolchain.nodeinfo.node,
             ],
         ),
@@ -111,9 +118,8 @@ trip_llvm_object = rule(
             mandatory = True,
         ),
         "target_triple": attr.string(default = "x86_64-pc-windows-msvc"),
-        "_script": attr.label(
-            allow_single_file = True,
-            default = "//:bin/tripc.ts",
+        "compiler_dist": attr.label(
+            default = "//:dist_artifacts",
         ),
     },
     toolchains = ["@rules_nodejs//nodejs:toolchain_type"],

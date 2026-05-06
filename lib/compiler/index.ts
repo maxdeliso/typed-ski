@@ -19,15 +19,6 @@ export {
   compileToObjectFileString,
 } from "./singleFileCompiler.ts";
 
-// Final combinator compiler helpers
-export {
-  bootstrappedCompile,
-  type BootstrappedCompileOptions,
-  BootstrappedCompilerError,
-  BootstrappedCompilerMismatchError,
-  compileToCombinatorString,
-} from "./combinatorCompiler.ts";
-
 // LLVM textual IR backend
 export {
   emitLlvmModule,

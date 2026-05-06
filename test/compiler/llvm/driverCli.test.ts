@@ -24,27 +24,10 @@ function runNodeScript(script: string, args: string[]) {
 }
 
 describe("tripc LLVM driver", () => {
-  it("emits the same LLVM as the compatibility script", () => {
+  it("emits LLVM to a file", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "typed-ski-tripc-llvm-"));
     try {
       const tripcOut = join(tempDir, "tripc.ll");
-      const scriptOut = join(tempDir, "script.ll");
-      const args = [
-        "--input",
-        "test/compiler/llvm/helloWorld.trip",
-        "--output",
-        scriptOut,
-        "--entry-module",
-        "Main",
-        "--module-source",
-        "Prelude=lib/prelude.trip",
-        "--target",
-        "x86_64-unknown-linux-gnu",
-        "--emit-main-wrapper",
-      ];
-
-      const script = runNodeScript("scripts/trip_to_llvm.ts", args);
-      assert.equal(script.status, 0, script.stderr);
 
       const tripc = runNodeScript(tripcScriptPath, [
         "--emit",
@@ -61,10 +44,8 @@ describe("tripc LLVM driver", () => {
       ]);
       assert.equal(tripc.status, 0, tripc.stderr);
 
-      assert.equal(
-        readFileSync(tripcOut, "utf8"),
-        readFileSync(scriptOut, "utf8"),
-      );
+      const outContent = readFileSync(tripcOut, "utf8");
+      assert.match(outContent, /define i8 @trip_fn_Main_main\(\)/);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

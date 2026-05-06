@@ -23,8 +23,8 @@
  *   tripc --help
  */
 
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   compileTripSourceToLlvm,
@@ -419,6 +419,8 @@ async function emitLlvmFile(
     }
 
     const finalOutputPath = outputPath || inputPath.replace(/\.trip$/, ".ll");
+
+    await mkdir(dirname(finalOutputPath), { recursive: true });
 
     if (options.verbose) {
       console.log(`Writing LLVM IR to ${finalOutputPath}...`);

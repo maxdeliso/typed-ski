@@ -32,9 +32,9 @@ def _trip_llvm_object_impl(ctx):
     emit_args = ctx.actions.args()
     emit_args.add("--experimental-transform-types")
     emit_args.add(ctx.file._script)
-    emit_args.add("--input")
+    emit_args.add("--emit")
+    emit_args.add("llvm")
     emit_args.add(ctx.file.src)
-    emit_args.add("--output")
     emit_args.add(llvm_ir)
     emit_args.add("--target")
     emit_args.add(ctx.attr.target_triple)
@@ -113,7 +113,7 @@ trip_llvm_object = rule(
         "target_triple": attr.string(default = "x86_64-pc-windows-msvc"),
         "_script": attr.label(
             allow_single_file = True,
-            default = "//scripts:trip_to_llvm.ts",
+            default = "//:bin/tripc.ts",
         ),
     },
     toolchains = ["@rules_nodejs//nodejs:toolchain_type"],

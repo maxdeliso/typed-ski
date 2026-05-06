@@ -109,7 +109,10 @@ describe("MiniCore Correctness", () => {
     const program = compileMiniCoreModules(modules, "ShortCircuit");
     const result = evaluateMiniCore(program);
     const trueConstructorId = program.symbolsByName.get("Prelude.true");
-    assert.ok(trueConstructorId !== undefined, "Missing Prelude.true constructor");
+    assert.ok(
+      trueConstructorId !== undefined,
+      "Missing Prelude.true constructor",
+    );
     assert.strictEqual(result.value.kind, "con");
     assert.strictEqual(result.value.tag, trueConstructorId);
   });

@@ -17,10 +17,6 @@ export interface AvlMiniCoreRunResult {
   program: Program;
 }
 
-export function expectedAvlMiniCoreNat(testCase: AvlCase): bigint {
-  return testCase.expectedMiniCore ?? testCase.expected;
-}
-
 const PRELUDE_SOURCE_FILE = new URL("../lib/prelude.trip", import.meta.url);
 const BIN_SOURCE_FILE = new URL("../lib/bin.trip", import.meta.url);
 const NAT_SOURCE_FILE = new URL("../lib/nat.trip", import.meta.url);

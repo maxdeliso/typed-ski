@@ -29,12 +29,19 @@ def _trip_llvm_object_impl(ctx):
     llvm_ir = ctx.actions.declare_file(ctx.label.name + ".ll")
     obj = ctx.actions.declare_file(ctx.label.name + ctx.attr.object_extension)
 
+    tripc_js = None
+    for f in ctx.attr.compiler_dist[DefaultInfo].files.to_list():
+        if f.basename == "tripc.node.js":
+            tripc_js = f
+            break
+    if not tripc_js:
+        fail("Could not find tripc.node.js in compiler_dist")
+
     emit_args = ctx.actions.args()
-    emit_args.add("--experimental-transform-types")
-    emit_args.add(ctx.file._script)
-    emit_args.add("--input")
+    emit_args.add(tripc_js)
+    emit_args.add("--emit")
+    emit_args.add("llvm")
     emit_args.add(ctx.file.src)
-    emit_args.add("--output")
     emit_args.add(llvm_ir)
     emit_args.add("--target")
     emit_args.add(ctx.attr.target_triple)
@@ -57,7 +64,7 @@ def _trip_llvm_object_impl(ctx):
             ctx.files.module_source_files +
             [
                 ctx.file.src,
-                ctx.file._script,
+                tripc_js,
                 node_toolchain.nodeinfo.node,
             ],
         ),
@@ -111,9 +118,8 @@ trip_llvm_object = rule(
             mandatory = True,
         ),
         "target_triple": attr.string(default = "x86_64-pc-windows-msvc"),
-        "_script": attr.label(
-            allow_single_file = True,
-            default = "//scripts:trip_to_llvm.ts",
+        "compiler_dist": attr.label(
+            default = "//:dist_artifacts",
         ),
     },
     toolchains = ["@rules_nodejs//nodejs:toolchain_type"],
@@ -142,6 +148,7 @@ def _trip_executable_stdout_test_impl(ctx):
             '$ErrorActionPreference = "Stop"',
             "$exe = $args[0]",
             "$expected = " + _powershell_dquote_literal(ctx.attr.expected_stdout),
+            "$expectedExitCode = " + str(ctx.attr.expected_exit_code),
             "if (-not (Test-Path -LiteralPath $exe)) {",
             "  # If not found directly, try to resolve via manifest",
             '  $manifest = $env:RUNFILES_MANIFEST_FILE',
@@ -166,8 +173,8 @@ def _trip_executable_stdout_test_impl(ctx):
             "$stdout = $process.StandardOutput.ReadToEnd()",
             "$stderr = $process.StandardError.ReadToEnd()",
             "$process.WaitForExit()",
-            "if ($process.ExitCode -ne 0) {",
-            '  Write-Error "Executable exited with code $($process.ExitCode). stderr: $stderr"',
+            "if ($process.ExitCode -ne $expectedExitCode) {",
+            '  Write-Error "Executable exited with code $($process.ExitCode). Expected: $expectedExitCode. stderr: $stderr"',
             "  exit 1",
             "}",
             "if ($stdout -ne $expected) {",
@@ -223,6 +230,7 @@ def _trip_executable_stdout_test_impl(ctx):
             "set -euo pipefail",
             "binary=" + _sh_single_quote_literal(binary_rootpath),
             "expected=" + _sh_single_quote_literal(ctx.attr.expected_stdout),
+            "expected_exit_code=" + str(ctx.attr.expected_exit_code),
             "if [[ ! -x \"$binary\" && -n \"${TEST_SRCDIR:-}\" && -n \"${TEST_WORKSPACE:-}\" ]]; then",
             "  candidate=\"$TEST_SRCDIR/$TEST_WORKSPACE/$binary\"",
             "  if [[ -x \"$candidate\" ]]; then",
@@ -236,9 +244,14 @@ def _trip_executable_stdout_test_impl(ctx):
             "stdout_file=\"$(mktemp)\"",
             "stderr_file=\"$(mktemp)\"",
             "trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT",
-            "if ! \"$binary\" >\"$stdout_file\" 2>\"$stderr_file\"; then",
+            "code=0",
+            "if \"$binary\" >\"$stdout_file\" 2>\"$stderr_file\"; then",
+            "  code=0",
+            "else",
             "  code=$?",
-            "  echo \"Executable exited with code $code. stderr:\" >&2",
+            "fi",
+            "if [[ $code -ne $expected_exit_code ]]; then",
+            "  echo \"Executable exited with code $code. Expected: $expected_exit_code. stderr:\" >&2",
             "  cat \"$stderr_file\" >&2",
             "  exit 1",
             "fi",
@@ -267,6 +280,7 @@ trip_executable_stdout_test = rule(
             executable = True,
             mandatory = True,
         ),
+        "expected_exit_code": attr.int(default = 0),
         "expected_stdout": attr.string(mandatory = True),
         "_linux_constraint": attr.label(
             default = "@platforms//os:linux",

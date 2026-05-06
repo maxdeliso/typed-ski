@@ -4,13 +4,11 @@ import Prelude true
 import Prelude false
 import Prelude and
 import Prelude or
-import Nat Nat
-import Nat zero
-import Nat succ
+import Prelude not
 import Prelude U8
 export main
-poly fail = \u : U8 => succ (fail u)
+poly fail = \u : U8 => not (fail u)
 poly main =
   let a = and false (fail #u8(0)) in
   let b = or true (fail #u8(0)) in
-  succ zero
+  true

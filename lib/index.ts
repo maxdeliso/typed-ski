@@ -138,6 +138,9 @@ export {
   BootstrappedCompilerMismatchError,
   /** Compiles a TripLang source string to the final linked combinator string. */
   compileToCombinatorString,
+} from "./compiler/combinatorCompiler.ts";
+
+export {
   /** Compiles a single TripLang source string to a TripCObject. */
   compileToObjectFile,
   /** Compiles a single TripLang source string to a serialized .tripc object file. */

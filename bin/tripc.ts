@@ -23,10 +23,17 @@
  *   tripc --help
  */
 
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SingleFileCompilerError } from "../lib/compiler/index.ts";
+import {
+  compileTripSourceToLlvm,
+  parseLlvmTarget,
+  readModuleSourceSpec,
+  SingleFileCompilerError,
+  type EmitLlvmOptions,
+  type LlvmTargetProfile,
+} from "../lib/compiler/index.ts";
 import {
   deserializeTripCObject,
   serializeTripCObject,
@@ -38,13 +45,20 @@ import { getPreludeObject } from "../lib/prelude.ts";
 import { loadTripModuleObject } from "../lib/tripSourceLoader.ts";
 
 type Mode = "compile" | "link";
+type EmitKind = "tripc" | "llvm";
 
 interface CLIOptions {
   help: boolean;
   version: boolean;
   verbose: boolean;
   mode: Mode;
+  emit: EmitKind;
   stdout: boolean;
+  moduleSources: string[];
+  entryModule?: string;
+  target: LlvmTargetProfile;
+  emitMainWrapper: boolean;
+  mainWrapper?: EmitLlvmOptions["mainWrapper"];
 }
 
 function parseArgs(args: string[]): {
@@ -58,7 +72,11 @@ function parseArgs(args: string[]): {
     version: false,
     verbose: false,
     mode: "compile", // Default to compile mode
+    emit: "tripc",
     stdout: false,
+    moduleSources: [],
+    target: { kind: "generic" },
+    emitMainWrapper: false,
   };
 
   let inputPath: string | undefined;
@@ -95,6 +113,54 @@ function parseArgs(args: string[]): {
       case "-s":
         options.stdout = true;
         break;
+      case "--emit": {
+        const value = requireValue(args, ++i, arg);
+        if (value !== "tripc" && value !== "llvm") {
+          console.error(`Unsupported emit target: ${value}`);
+          console.error("Use --emit tripc or --emit llvm.");
+          process.exit(1);
+        }
+        options.emit = value;
+        options.mode = "compile";
+        break;
+      }
+      case "--module-source":
+        options.moduleSources.push(requireValue(args, ++i, arg));
+        break;
+      case "--entry-module":
+        options.entryModule = requireValue(args, ++i, arg);
+        break;
+      case "--target":
+        try {
+          options.target = parseLlvmTarget(requireValue(args, ++i, arg));
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : String(error));
+          process.exit(1);
+        }
+        break;
+      case "--emit-main-wrapper":
+        options.emitMainWrapper = true;
+        break;
+      case "--main-wrapper": {
+        const value = requireValue(args, ++i, arg);
+        switch (value) {
+          case "none":
+            options.mainWrapper = undefined;
+            options.emitMainWrapper = false;
+            break;
+          case "c-main":
+            options.mainWrapper = { kind: "c-main" };
+            break;
+          case "stdin-list-u8":
+            options.mainWrapper = { kind: "stdin-list-u8" };
+            break;
+          default:
+            console.error(`Unsupported main wrapper: ${value}`);
+            console.error("Use --main-wrapper none|c-main|stdin-list-u8.");
+            process.exit(1);
+        }
+        break;
+      }
       default:
         if (arg.startsWith("-")) {
           console.error(`Unknown option: ${arg}`);
@@ -123,6 +189,15 @@ function parseArgs(args: string[]): {
   return { options, inputPath, outputPath, inputFiles };
 }
 
+function requireValue(args: string[], index: number, option: string): string {
+  const value = args[index];
+  if (!value || value.startsWith("--")) {
+    console.error(`${option} requires a value`);
+    process.exit(1);
+  }
+  return value;
+}
+
 function showHelp(): void {
   console.log(`
 TripLang Compiler & Linker (tripc) v${VERSION}
@@ -130,6 +205,7 @@ TripLang Compiler & Linker (tripc) v${VERSION}
 USAGE:
     tripc <input.trip> [output.tripc]           # Compile mode (default)
     tripc --compile <input.trip> [output.tripc]  # Explicit compile mode
+    tripc --emit llvm <input.trip> [output.ll]   # Emit LLVM IR
     tripc --link <input1.tripc> [input2.tripc]... # Link mode
     tripc -l <input1.tripc> [input2.tripc]...    # Short link mode
     tripc [OPTIONS]
@@ -137,6 +213,19 @@ USAGE:
 COMPILATION MODE:
     <input.trip>     Input TripLang source file
     [output.tripc]   Output object file (optional, defaults to input.tripc)
+
+LLVM EMIT MODE:
+    --emit llvm      Emit textual LLVM IR instead of a .tripc object file
+    --module-source <name=path>
+                     Additional source module, repeatable
+    --entry-module <name>
+                     Entry module name; defaults to the input module declaration
+    --target <triple>
+                     generic | x86_64-unknown-linux-gnu | x86_64-pc-windows-msvc | wasm32-unknown-unknown | wasm32-wasi
+    --emit-main-wrapper
+                     Emit an int main() wrapper that calls the Trip entry
+    --main-wrapper <kind>
+                     none | c-main | stdin-list-u8
 
 LINKING MODE:
     <input1.tripc>   First object file to link
@@ -152,6 +241,7 @@ OPTIONS:
 
 EXAMPLES:
     tripc mymodule.trip                           # Compile to mymodule.tripc
+    tripc --emit llvm mymodule.trip mymodule.ll   # Emit LLVM IR
     tripc --link module1.tripc module2.tripc      # Link modules
     tripc --help
     tripc --version
@@ -296,6 +386,59 @@ async function compileFile(
   }
 }
 
+async function emitLlvmFile(
+  inputPath: string,
+  outputPath: string | undefined,
+  options: CLIOptions,
+): Promise<void> {
+  try {
+    if (options.verbose) {
+      console.log(`Loading ${inputPath}...`);
+    }
+
+    const [inputSource, moduleSources] = await Promise.all([
+      readFile(inputPath, "utf8"),
+      Promise.all(options.moduleSources.map(readModuleSourceSpec)),
+    ]);
+
+    if (options.verbose) {
+      console.log("Lowering TripLang program to LLVM IR...");
+    }
+
+    const llvm = compileTripSourceToLlvm(inputSource, {
+      entryModule: options.entryModule,
+      moduleSources,
+      target: options.target,
+      emitMainWrapper: options.emitMainWrapper,
+      mainWrapper: options.mainWrapper,
+    });
+
+    if (options.stdout) {
+      process.stdout.write(llvm + "\n");
+      return;
+    }
+
+    const finalOutputPath = outputPath || inputPath.replace(/\.trip$/, ".ll");
+
+    await mkdir(dirname(finalOutputPath), { recursive: true });
+
+    if (options.verbose) {
+      console.log(`Writing LLVM IR to ${finalOutputPath}...`);
+    }
+
+    await writeFile(finalOutputPath, llvm + "\n", "utf8");
+  } catch (error: any) {
+    if (error.code === "ENOENT") {
+      console.error(`File not found: ${inputPath}`);
+      process.exit(1);
+    }
+    console.error(
+      `LLVM emission error: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { options, inputPath, outputPath, inputFiles } = parseArgs(args);
@@ -350,12 +493,16 @@ async function main(): Promise<void> {
       }
 
       const resolvedOutputPath = outputPath ? resolve(outputPath) : undefined;
-      await compileFile(
-        resolvedInputPath,
-        resolvedOutputPath,
-        options.verbose,
-        options.stdout,
-      );
+      if (options.emit === "llvm") {
+        await emitLlvmFile(resolvedInputPath, resolvedOutputPath, options);
+      } else {
+        await compileFile(
+          resolvedInputPath,
+          resolvedOutputPath,
+          options.verbose,
+          options.stdout,
+        );
+      }
     }
   } catch (error) {
     console.error(

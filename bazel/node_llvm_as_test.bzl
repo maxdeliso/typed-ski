@@ -1,3 +1,5 @@
+"""Bazel rule for node_llvm_as_test."""
+
 def _shell_dquote_literal(value):
     escaped = value.replace("\\", "\\\\")
     escaped = escaped.replace('"', '\\"')

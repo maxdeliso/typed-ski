@@ -6,7 +6,7 @@ import {
   bootstrappedCompile,
   BootstrappedCompilerError,
   compileToCombinatorString,
-} from "../../lib/compiler/index.ts";
+} from "../../lib/compiler/combinatorCompiler.ts";
 import { loadInput } from "../util/fileLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

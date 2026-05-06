@@ -2,11 +2,11 @@ import type { BlockModule, RuntimeSymbol } from "../../minicore/index.ts";
 import { getRuntimeSymbolSignature } from "../../minicore/index.ts";
 import { lowerLlvmReturnType, lowerLlvmValueType } from "./lowerTypes.ts";
 import { llvmRuntimeName } from "./llvmNames.ts";
-import type { LlvmReturnType, LlvmScalarType } from "./types.ts";
+import type { LlvmReturnType, LlvmValueType } from "./types.ts";
 
 export interface LlvmRuntimeSignature {
   name: RuntimeSymbol;
-  args: LlvmScalarType[];
+  args: LlvmValueType[];
   result: LlvmReturnType;
 }
 

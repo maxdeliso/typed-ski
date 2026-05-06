@@ -12,6 +12,8 @@ import type {
 import {
   miniTypeEquals,
   miniTypeToString,
+  miniTypeUnify,
+  substituteMiniType,
   typeOfLiteral,
   type MiniType,
 } from "./metadata.ts";
@@ -30,6 +32,7 @@ interface FunctionValidationContext {
   fn: BlockFunctionDef;
   blocksByLabel: ReadonlyMap<string, Block>;
   localTypes: ReadonlyMap<number, MiniType>;
+  dominatorLocalIdsByBlock: ReadonlyMap<string, ReadonlySet<number>>;
 }
 
 export function validateBlockModule(module: BlockModule): void {
@@ -123,6 +126,12 @@ function validateBlockFunction(
 
   const blocksByLabel = collectBlocks(fn);
   const localTypes = collectLocalDefinitions(fn);
+  const predecessorsByLabel = collectPredecessors(fn, blocksByLabel);
+  const dominatorsByLabel = collectDominators(fn, predecessorsByLabel);
+  const dominatorLocalIdsByBlock = collectDominatorLocalIds(
+    fn,
+    dominatorsByLabel,
+  );
   validateEntryBlock(fn);
 
   const context: FunctionValidationContext = {
@@ -131,6 +140,7 @@ function validateBlockFunction(
     fn,
     blocksByLabel,
     localTypes,
+    dominatorLocalIdsByBlock,
   };
 
   for (const block of fn.blocks) {
@@ -200,6 +210,147 @@ function collectLocalDefinitions(
   return localTypes;
 }
 
+function collectPredecessors(
+  fn: BlockFunctionDef,
+  blocksByLabel: ReadonlyMap<string, Block>,
+): Map<string, Set<string>> {
+  const predecessorsByLabel = new Map<string, Set<string>>();
+  for (const block of fn.blocks) {
+    predecessorsByLabel.set(block.label, new Set());
+  }
+
+  for (const block of fn.blocks) {
+    for (const successor of terminatorSuccessors(block.terminator)) {
+      if (!blocksByLabel.has(successor)) {
+        continue;
+      }
+      predecessorsByLabel.get(successor)?.add(block.label);
+    }
+  }
+
+  return predecessorsByLabel;
+}
+
+function terminatorSuccessors(terminator: BlockTerminator): string[] {
+  switch (terminator.kind) {
+    case "jump":
+      return [terminator.target];
+    case "branch":
+      return [terminator.thenTarget, terminator.elseTarget];
+    case "case":
+      return terminator.alts.map((alt) => alt.target);
+    case "return":
+    case "unreachable":
+      return [];
+  }
+}
+
+function collectDominators(
+  fn: BlockFunctionDef,
+  predecessorsByLabel: ReadonlyMap<string, ReadonlySet<string>>,
+): Map<string, Set<string>> {
+  const entryLabel = fn.blocks[0]!.label;
+  const allLabels = fn.blocks.map((block) => block.label);
+  const dominatorsByLabel = new Map<string, Set<string>>();
+
+  for (const label of allLabels) {
+    dominatorsByLabel.set(
+      label,
+      label === entryLabel ? new Set([label]) : new Set(allLabels),
+    );
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const label of allLabels) {
+      if (label === entryLabel) {
+        continue;
+      }
+
+      const predecessors = [...(predecessorsByLabel.get(label) ?? [])];
+      const next =
+        predecessors.length === 0
+          ? new Set<string>()
+          : intersectSets(
+              predecessors.map(
+                (predecessor) =>
+                  dominatorsByLabel.get(predecessor) ?? new Set<string>(),
+              ),
+            );
+      next.add(label);
+
+      const previous = dominatorsByLabel.get(label) ?? new Set<string>();
+      if (!setsEqual(previous, next)) {
+        dominatorsByLabel.set(label, next);
+        changed = true;
+      }
+    }
+  }
+
+  return dominatorsByLabel;
+}
+
+function collectDominatorLocalIds(
+  fn: BlockFunctionDef,
+  dominatorsByLabel: ReadonlyMap<string, ReadonlySet<string>>,
+): Map<string, Set<number>> {
+  const localIdsByBlock = new Map<string, Set<number>>();
+  for (const block of fn.blocks) {
+    const ids = new Set(block.params.map((param) => param.id));
+    for (const instruction of block.instructions) {
+      if (instruction.result) {
+        ids.add(instruction.result.id);
+      }
+    }
+    localIdsByBlock.set(block.label, ids);
+  }
+
+  const result = new Map<string, Set<number>>();
+  for (const block of fn.blocks) {
+    const ids = new Set<number>();
+    for (const dominatorLabel of dominatorsByLabel.get(block.label) ?? []) {
+      if (dominatorLabel === block.label) {
+        continue;
+      }
+      for (const id of localIdsByBlock.get(dominatorLabel) ?? []) {
+        ids.add(id);
+      }
+    }
+    result.set(block.label, ids);
+  }
+  return result;
+}
+
+function intersectSets(sets: ReadonlyArray<ReadonlySet<string>>): Set<string> {
+  if (sets.length === 0) {
+    return new Set();
+  }
+
+  const first = sets[0]!;
+  const rest = sets.slice(1);
+  const result = new Set(first);
+  for (const candidate of first) {
+    if (!rest.every((set) => set.has(candidate))) {
+      result.delete(candidate);
+    }
+  }
+  return result;
+}
+
+function setsEqual<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function validateEntryBlock(fn: BlockFunctionDef): void {
   const entry = fn.blocks[0]!;
   if (entry.params.length !== fn.params.length) {
@@ -222,7 +373,12 @@ function validateEntryBlock(fn: BlockFunctionDef): void {
 }
 
 function validateBlock(block: Block, context: FunctionValidationContext): void {
-  const scope = new Set(block.params.map((param) => param.id));
+  const scope = new Set(
+    context.dominatorLocalIdsByBlock.get(block.label) ?? [],
+  );
+  for (const param of block.params) {
+    scope.add(param.id);
+  }
 
   for (const instruction of block.instructions) {
     validateInstruction(instruction, block, scope, context);
@@ -263,16 +419,38 @@ function validateInstruction(
     case "call": {
       const target = requireSymbol(context, op.target, "function", location);
       assertTargetName(op.name, target.name, location);
+      const info = context.module.metadata.functions.get(op.target);
+
+      let expectedParams = target.params.map((param) => param.type);
+      let expectedResult = target.returnType;
+
+      if (info?.typeScheme && info.typeScheme.kind === "forall") {
+        const typeArgs = op.typeArgs ?? [];
+        if (typeArgs.length !== info.typeScheme.params.length) {
+          throw new MiniCoreBlockValidationError(
+            `${op.name} expects ${info.typeScheme.params.length} type arg(s), got ${typeArgs.length}`,
+          );
+        }
+        const subst = new Map<string, MiniType>();
+        info.typeScheme.params.forEach((name, i) => {
+          subst.set(name, typeArgs[i]!);
+        });
+        expectedParams = info.paramTypes.map((p) =>
+          substituteMiniType(p, subst),
+        );
+        expectedResult = substituteMiniType(info.resultType, subst);
+      }
+
       validateValueArgs(
         op.args,
-        target.params.map((param) => param.type),
+        expectedParams,
         scope,
         context,
         `call ${op.name} in ${location}`,
       );
       assertType(
         instruction.resultType,
-        target.returnType,
+        expectedResult,
         `Call ${op.name} result in ${location}`,
       );
       return;
@@ -287,16 +465,22 @@ function validateInstruction(
       }
       const primitiveInfo = context.module.metadata.primitives.get(op.target);
       if (primitiveInfo) {
+        let expectedArgs = primitiveInfo.argTypes;
+        let expectedResult = primitiveInfo.resultType;
+
+        // Note: primitives currently don't use typeScheme in metadata,
+        // but if they did, we would specialized here using op.typeArgs.
+
         validateValueArgs(
           op.args,
-          primitiveInfo.argTypes,
+          expectedArgs,
           scope,
           context,
           `primitive ${op.name} in ${location}`,
         );
         assertType(
           instruction.resultType,
-          primitiveInfo.resultType,
+          expectedResult,
           `Primitive ${op.name} result in ${location}`,
         );
       } else {
@@ -339,16 +523,42 @@ function validateInstruction(
         op.target,
       );
       if (constructorInfo) {
+        let expectedFields = constructorInfo.fieldTypes;
+        let expectedResult = constructorInfo.resultType;
+
+        const typeArgs = op.typeArgs ?? [];
+        const dataDef = context.module.metadata.dataTypes.get(
+          constructorInfo.dataType,
+        );
+        if (dataDef) {
+          if (typeArgs.length !== dataDef.typeParams.length) {
+            throw new MiniCoreBlockValidationError(
+              `${op.name} expects ${dataDef.typeParams.length} type arg(s), got ${typeArgs.length}`,
+            );
+          }
+          const subst = new Map<string, MiniType>();
+          dataDef.typeParams.forEach((name, i) => {
+            subst.set(name, typeArgs[i]!);
+          });
+          expectedFields = constructorInfo.fieldTypes.map((f) =>
+            substituteMiniType(f, subst),
+          );
+          expectedResult = substituteMiniType(
+            constructorInfo.resultType,
+            subst,
+          );
+        }
+
         validateValueArgs(
           op.args,
-          constructorInfo.fieldTypes,
+          expectedFields,
           scope,
           context,
           `construct ${op.name} in ${location}`,
         );
         assertType(
           instruction.resultType,
-          constructorInfo.resultType,
+          expectedResult,
           `Construct ${op.name} result in ${location}`,
         );
       } else {
@@ -525,15 +735,30 @@ function validateCaseTerminator(
       }
       seenTags.add(constructorInfo.tag);
 
-      assertType(
-        terminator.scrutinee.type,
-        constructorInfo.resultType,
-        `Case scrutinee in ${location}`,
-      );
+      // Use unification to specialize constructor types for the scrutinee
+      const subst = new Map<string, MiniType>();
+      try {
+        miniTypeUnify(
+          terminator.scrutinee.type,
+          constructorInfo.resultType,
+          subst,
+        );
+      } catch (e) {
+        throw new MiniCoreBlockValidationError(
+          `Case scrutinee in ${location} type mismatch: expected compatible with ${miniTypeToString(
+            constructorInfo.resultType,
+          )}, got ${miniTypeToString(terminator.scrutinee.type)}`,
+        );
+      }
+
       alt.binders.forEach((binder, index) => {
+        const expected = substituteMiniType(
+          constructorInfo.fieldTypes[index]!,
+          subst,
+        );
         assertType(
           binder.type,
-          constructorInfo.fieldTypes[index]!,
+          expected,
           `Case binder %${binder.id} for ${alt.constructorName} in ${location}`,
         );
       });
@@ -556,16 +781,7 @@ function validateCaseTerminator(
       `case alternative ${alt.constructorName} from ${location}`,
     );
   }
-
-  if (caseResultType) {
-    assertType(
-      terminator.scrutinee.type,
-      caseResultType,
-      `Case scrutinee in ${location}`,
-    );
-  }
 }
-
 function validateCaseTarget(
   targetLabel: string,
   binders: BlockParam[],

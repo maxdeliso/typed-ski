@@ -615,7 +615,7 @@ describe("MiniCore from Trip lowering", () => {
 
     assert.throws(
       () => compileMiniCoreModules(withMain("poly main = succ"), "Main"),
-      /Bare function Nat.succ has arity 1/,
+      /Nat.succ expects 1 argument\(s\), got 0/,
     );
     assert.throws(
       () => compileMiniCoreModules(withMain("poly main = zero zero"), "Main"),
@@ -625,13 +625,8 @@ describe("MiniCore from Trip lowering", () => {
       () => compileMiniCoreModules(withMain("poly main = if true"), "Main"),
       /Prelude.if expects 3 term arguments/,
     );
-    assert.throws(
-      () =>
-        compileMiniCoreModules(
-          withMain("poly main = if true zero zero"),
-          "Main",
-        ),
-      /Expected unary branch thunk/,
+    assert.doesNotThrow(() =>
+      compileMiniCoreModules(withMain("poly main = if true zero zero"), "Main"),
     );
     assert.throws(
       () =>

@@ -1,4 +1,4 @@
-import type { MiniCoreMetadata } from "./metadata.ts";
+import type { MiniCoreMetadata, MiniType } from "./metadata.ts";
 import type { RuntimeSymbol } from "./runtimeSymbols.ts";
 
 export type SymbolId = number;
@@ -52,9 +52,9 @@ export interface PrimitiveDef {
 export type Expr =
   | { kind: "var"; id: LocalId }
   | { kind: "lit"; value: Literal }
-  | { kind: "call"; target: SymbolId; args: Expr[] }
-  | { kind: "con"; target: SymbolId; fields: Expr[] }
-  | { kind: "prim"; target: SymbolId; args: Expr[] }
+  | { kind: "call"; target: SymbolId; args: Expr[]; typeArgs?: MiniType[] }
+  | { kind: "con"; target: SymbolId; fields: Expr[]; typeArgs?: MiniType[] }
+  | { kind: "prim"; target: SymbolId; args: Expr[]; typeArgs?: MiniType[] }
   | { kind: "runtimeCall"; name: RuntimeSymbol; args: Expr[] }
   | { kind: "case"; scrutinee: Expr; alts: Alt[] }
   | { kind: "let"; bindings: Binding[]; body: Expr };

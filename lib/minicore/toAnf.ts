@@ -49,9 +49,13 @@ export function toAnfFunction(
 ): AnfFunctionDef {
   const metadata = program?.metadata;
   const localTypes = new Map(metadata?.localTypesByFunction.get(fn.id) ?? []);
+  let maxId = maxLocalIdInFunction(fn);
+  for (const id of localTypes.keys()) {
+    if (id > maxId) maxId = id;
+  }
   const state: AnfState = {
     fnSymbol: fn.id,
-    nextLocalId: maxLocalIdInFunction(fn) + 1,
+    nextLocalId: maxId + 1,
     metadata,
     localTypes,
   };
@@ -92,18 +96,21 @@ function normalizeTail(expr: Expr, state: AnfState): AnfExpr {
         kind: "call",
         target: expr.target,
         args,
+        typeArgs: expr.typeArgs,
       }));
     case "con":
       return normalizeAtoms(expr.fields, state, (fields) => ({
         kind: "con",
         target: expr.target,
         fields,
+        typeArgs: expr.typeArgs,
       }));
     case "prim":
       return normalizeAtoms(expr.args, state, (args) => ({
         kind: "prim",
         target: expr.target,
         args,
+        typeArgs: expr.typeArgs,
       }));
     case "runtimeCall":
       return normalizeAtoms(expr.args, state, (args) => ({
@@ -169,15 +176,20 @@ function normalizeBinding(expr: Expr, state: AnfState, k: ValueCont): AnfExpr {
       return k(atomExpr(toAtom(expr)));
     case "call":
       return normalizeAtoms(expr.args, state, (args) =>
-        k({ kind: "call", target: expr.target, args }),
+        k({ kind: "call", target: expr.target, args, typeArgs: expr.typeArgs }),
       );
     case "con":
       return normalizeAtoms(expr.fields, state, (fields) =>
-        k({ kind: "con", target: expr.target, fields }),
+        k({
+          kind: "con",
+          target: expr.target,
+          fields,
+          typeArgs: expr.typeArgs,
+        }),
       );
     case "prim":
       return normalizeAtoms(expr.args, state, (args) =>
-        k({ kind: "prim", target: expr.target, args }),
+        k({ kind: "prim", target: expr.target, args, typeArgs: expr.typeArgs }),
       );
     case "runtimeCall":
       return normalizeAtoms(expr.args, state, (args) =>
@@ -226,13 +238,19 @@ function normalizeBindings(
 }
 
 function recordLocalType(state: AnfState, id: LocalId, expr: Expr): void {
-  if (!state.metadata || state.localTypes.has(id)) {
+  if (!state.metadata) {
     return;
   }
-  state.localTypes.set(
-    id,
-    typeOfMiniCoreExpr(expr, state.fnSymbol, state.metadata, state.localTypes),
+  const inferred = typeOfMiniCoreExpr(
+    expr,
+    state.fnSymbol,
+    state.metadata,
+    state.localTypes,
   );
+  const existing = state.localTypes.get(id);
+  if (!existing || existing.kind === "unknown") {
+    state.localTypes.set(id, inferred);
+  }
 }
 
 function maxLocalIdInFunction(fn: FunctionDef): LocalId {

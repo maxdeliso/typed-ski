@@ -96,7 +96,7 @@ describe("MiniCore Correctness", () => {
     // term resolution and callable parameter analysis.
     assert.throws(
       () => compileMiniCoreModules(modules, "Shadowing"),
-      /Bare function Nat.succ has arity 1/,
+      /Nat.succ expects 1 argument\(s\), got 0/,
     );
   });
 
@@ -108,7 +108,13 @@ describe("MiniCore Correctness", () => {
 
     const program = compileMiniCoreModules(modules, "ShortCircuit");
     const result = evaluateMiniCore(program);
-    assert.strictEqual(valueToNat(result.value), 1n);
+    const trueConstructorId = program.symbolsByName.get("Prelude.true");
+    assert.ok(
+      trueConstructorId !== undefined,
+      "Missing Prelude.true constructor",
+    );
+    assert.strictEqual(result.value.kind, "con");
+    assert.strictEqual(result.value.tag, trueConstructorId);
   });
 
   it("provides detailed specialization failure diagnostics (Issue 5)", async () => {

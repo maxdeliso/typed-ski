@@ -44,6 +44,10 @@ const COMPILER_SOURCE_FILE = new URL(
   "../../lib/compiler/index.trip",
   import.meta.url,
 );
+const LLVM_SOURCE_FILE = new URL(
+  "../../lib/compiler/llvm.trip",
+  import.meta.url,
+);
 const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
 const BIN_SOURCE_FILE = new URL("../../lib/bin.trip", import.meta.url);
 const NAT_SOURCE_FILE = new URL("../../lib/nat.trip", import.meta.url);
@@ -58,6 +62,7 @@ interface CompilerModules {
   lowering: TripCObject;
   coreToLower: TripCObject;
   bridge: TripCObject;
+  llvm: TripCObject;
   compiler: TripCObject;
   avl: TripCObject;
   bin: TripCObject;
@@ -68,6 +73,20 @@ let compilerModulesPromise: Promise<CompilerModules> | null = null;
 
 function tripStringLiteral(text: string): string {
   return JSON.stringify(text);
+}
+
+function compilerCombOnly(object: TripCObject): TripCObject {
+  const omittedDefinitions = new Set(["main", "compileToLlvm", "writeAll"]);
+  return {
+    ...object,
+    exports: object.exports.filter((name) => !omittedDefinitions.has(name)),
+    imports: object.imports.filter((imp) => imp.from !== "Llvm"),
+    definitions: Object.fromEntries(
+      Object.entries(object.definitions).filter(
+        ([name]) => !omittedDefinitions.has(name),
+      ),
+    ),
+  };
 }
 
 async function getCompilerModules(): Promise<CompilerModules> {
@@ -83,6 +102,7 @@ async function getCompilerModules(): Promise<CompilerModules> {
         lowering,
         coreToLower,
         bridge,
+        llvm,
         compiler,
         avl,
         bin,
@@ -97,6 +117,7 @@ async function getCompilerModules(): Promise<CompilerModules> {
         loadTripModuleObject(LOWERING_SOURCE_FILE),
         loadTripModuleObject(CORE_TO_LOWER_SOURCE_FILE),
         loadTripModuleObject(BRIDGE_SOURCE_FILE),
+        loadTripModuleObject(LLVM_SOURCE_FILE),
         loadTripModuleObject(COMPILER_SOURCE_FILE),
         loadTripModuleObject(AVL_SOURCE_FILE),
         loadTripModuleObject(BIN_SOURCE_FILE),
@@ -113,6 +134,7 @@ async function getCompilerModules(): Promise<CompilerModules> {
         lowering,
         coreToLower,
         bridge,
+        llvm,
         compiler,
         avl,
         bin,
@@ -167,10 +189,7 @@ poly main =
 
 async function buildCompilerHarnessExpression(source: string) {
   const modules = await getCompilerModules();
-  const compilerForHarness: TripCObject = {
-    ...modules.compiler,
-    exports: modules.compiler.exports.filter((name) => name !== "main"),
-  };
+  const compilerForHarness = compilerCombOnly(modules.compiler);
   const testObject = compileToObjectFile(source, {
     importedModules: [
       modules.prelude,

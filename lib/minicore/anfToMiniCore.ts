@@ -54,18 +54,21 @@ function valueToMiniCore(value: AnfValue): Expr {
         kind: "call",
         target: value.target,
         args: value.args.map(atomToMiniCore),
+        typeArgs: value.typeArgs,
       };
     case "con":
       return {
         kind: "con",
         target: value.target,
         fields: value.fields.map(atomToMiniCore),
+        typeArgs: value.typeArgs,
       };
     case "prim":
       return {
         kind: "prim",
         target: value.target,
         args: value.args.map(atomToMiniCore),
+        typeArgs: value.typeArgs,
       };
     case "runtimeCall":
       return {

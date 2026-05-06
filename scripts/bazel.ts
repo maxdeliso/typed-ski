@@ -749,10 +749,22 @@ async function collectTests(): Promise<string[]> {
   return files;
 }
 
-function readNodeTestArgs(args: string[]): string[] {
-  return args
-    .map((arg) => arg.trim())
-    .filter((arg) => arg.length > 0 && arg !== "--" && arg.startsWith("-"));
+function parseTestArgs(args: string[]): {
+  nodeArgs: string[];
+  filters: string[];
+} {
+  const nodeArgs: string[] = [];
+  const filters: string[] = [];
+  for (const arg of args) {
+    const trimmed = arg.trim();
+    if (trimmed.length === 0 || trimmed === "--") continue;
+    if (trimmed.startsWith("-")) {
+      nodeArgs.push(trimmed);
+    } else {
+      filters.push(trimmed);
+    }
+  }
+  return { nodeArgs, filters };
 }
 
 async function typecheckTests(files: string[]): Promise<void> {
@@ -911,9 +923,13 @@ export async function runTests(
   withCoverage: boolean,
   args: string[] = [],
 ): Promise<void> {
-  const files = await collectTests();
+  const { nodeArgs, filters } = parseTestArgs(args);
+  let files = await collectTests();
+  if (filters.length > 0) {
+    files = files.filter((f) => filters.some((filter) => f.includes(filter)));
+  }
+
   const env = await typecheckAndPrepareTestExecution(files);
-  const nodeArgs = readNodeTestArgs(args);
 
   if (withCoverage) {
     await fsp
@@ -927,10 +943,14 @@ export async function runTests(
 }
 
 export async function runBazelShardTests(args: string[] = []): Promise<void> {
-  const files = await collectTests();
+  const { nodeArgs, filters } = parseTestArgs(args);
+  let files = await collectTests();
+  if (filters.length > 0) {
+    files = files.filter((f) => filters.some((filter) => f.includes(filter)));
+  }
+
   const shard = readShardConfig();
   acknowledgeShardSupport(shard);
-  const nodeArgs = readNodeTestArgs(args);
   const coverageReporterDestination = getBazelCoverageOutputFile();
 
   console.log(

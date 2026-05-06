@@ -248,7 +248,7 @@ describe("MiniCore Block validation", () => {
 
     assert.throws(
       () => validateBlockModule(module),
-      /Case scrutinee.*expected data#0, got data#1/,
+      /Case scrutinee.*expected compatible with data#0, got data#1/,
     );
   });
 

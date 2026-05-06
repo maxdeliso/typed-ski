@@ -7,6 +7,8 @@ import Prelude Result
 import Prelude Ok
 import Prelude Err
 import Prelude U8
+import Prelude append
+import Prelude writeOne
 import Prelude Pair
 import Prelude MkPair
 import Prelude fst
@@ -29,8 +31,10 @@ import Unparse C_Term
 import Unparse C_App
 import Unparse T_I
 import Unparse unparseCombinator
+import Llvm compileSourceToLlvm
 
 export compileToComb
+export compileToLlvm
 export main
 
 poly compileToComb = \source : List U8 =>
@@ -55,13 +59,17 @@ poly compileToComb = \source : List U8 =>
         }
   }
 
-poly main =
-  let source = "module Test export id poly id = \\x => x" in
-  match (compileToComb source) [Comb] {
-    | Err e => C_Term T_I
-    | Ok results =>
-        matchList [Pair (List U8) Comb] [Comb] results
-          (C_Term T_I)
-          (\h : Pair (List U8) Comb => \t : List (Pair (List U8) Comb) =>
-             snd [List U8] [Comb] h)
+poly compileToLlvm = \source : List U8 =>
+  compileSourceToLlvm source
+
+poly rec writeAll = \bytes : List U8 =>
+  matchList [U8] [U8] bytes
+    #u8(0)
+    (\h : U8 => \t : List U8 =>
+      writeOne h [U8] (\u : U8 => writeAll t))
+
+poly main = \source : List U8 =>
+  match (compileToLlvm source) [U8] {
+    | Err e => writeAll (append [U8] "ERR:" e)
+    | Ok llvm => writeAll llvm
   }

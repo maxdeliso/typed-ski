@@ -19,15 +19,6 @@ export {
   compileToObjectFileString,
 } from "./singleFileCompiler.ts";
 
-// Final combinator compiler helpers
-export {
-  bootstrappedCompile,
-  type BootstrappedCompileOptions,
-  BootstrappedCompilerError,
-  BootstrappedCompilerMismatchError,
-  compileToCombinatorString,
-} from "./combinatorCompiler.ts";
-
 // LLVM textual IR backend
 export {
   emitLlvmModule,
@@ -37,5 +28,16 @@ export {
   type EmitLlvmOptions,
   type LlvmIncomingEdge,
   type LlvmIncomingEdges,
+  type LlvmMainWrapper,
+  type LlvmRepresentation,
   type LlvmTargetProfile,
 } from "./llvm/index.ts";
+export {
+  compileTripSourceToLlvm,
+  moduleNameOfTripSource,
+  parseLlvmTarget,
+  parseModuleSourceSpec,
+  readModuleSourceSpec,
+  type CompileTripSourceToLlvmOptions,
+  type TripModuleSourceFileSpec,
+} from "./llvmCompiler.ts";

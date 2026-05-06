@@ -303,7 +303,7 @@ function evalExpr(
 export function evaluateMiniCore(program: Program): MiniCoreEvalResult {
   const telemetry = emptyTelemetry();
   const value = evalExpr(
-    { kind: "call", target: program.entry, args: [] },
+    { kind: "call", target: program.entry, args: [], typeArgs: [] },
     [],
     program,
     telemetry,

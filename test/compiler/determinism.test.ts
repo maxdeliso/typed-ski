@@ -1,4 +1,4 @@
-import { describe, it } from "../util/test_shim.ts";
+import { it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";

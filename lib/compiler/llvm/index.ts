@@ -6,4 +6,9 @@ export {
   type LlvmIncomingEdge,
   type LlvmIncomingEdges,
 } from "./validateLlvmV0.ts";
-export type { EmitLlvmOptions, LlvmTargetProfile } from "./types.ts";
+export type {
+  EmitLlvmOptions,
+  LlvmMainWrapper,
+  LlvmRepresentation,
+  LlvmTargetProfile,
+} from "./types.ts";

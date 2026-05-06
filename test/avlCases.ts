@@ -7,8 +7,6 @@ export type AvlCase = {
   moduleName: string;
   loadSource: () => Promise<string>;
   expected: bigint;
-  expectedMiniCore?: bigint;
-  knownBackendMismatch?: string;
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -128,9 +126,6 @@ export const AVL_CASES: AvlCase[] = [
     loadSource: () =>
       Promise.resolve(buildAvlBinBoolProbeSource("size [Bin] [Bool] t4")),
     expected: 4n,
-    expectedMiniCore: 3n,
-    knownBackendMismatch:
-      "MiniCore direct map semantics replace duplicate key; existing SKI fixture observes size 4.",
   },
   {
     name: "AvlInsertTraversalTest",

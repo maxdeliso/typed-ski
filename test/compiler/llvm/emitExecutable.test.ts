@@ -30,7 +30,8 @@ describe("LLVM emitter - executable wrapper", () => {
         "define i32 @main() {",
         "entry:",
         "  %trip_result = call i8 @trip_fn_Main_main()",
-        "  ret i32 0",
+        "  %exit_code = zext i8 %trip_result to i32",
+        "  ret i32 %exit_code",
         "}",
       ].join("\n"),
     );
@@ -59,7 +60,8 @@ describe("LLVM emitter - executable wrapper", () => {
         "define i32 @main() {",
         "entry:",
         "  %trip_result = call i8 @trip_fn_Main_main()",
-        "  ret i32 0",
+        "  %exit_code = zext i8 %trip_result to i32",
+        "  ret i32 %exit_code",
         "}",
       ].join("\n"),
     );

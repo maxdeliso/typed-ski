@@ -99,32 +99,32 @@ poly lteU8 = \a : U8 => \b : U8 => or (eqU8 a b) (ltU8 a b)
 poly if = #A => \b : Bool => \t : U8 -> A => \f : U8 -> A =>
   b [U8 -> A] t f #u8(0)
 
-poly nil = #A => #R => \n : R => \c : (A -> List -> R) => n
+poly nil = #A => #R => \n : R => \c : (A -> List A -> R) => n
 
-poly cons = #A => \x : A => \xs : List =>
-  #R => \n : R => \c : (A -> List -> R) => c x xs
+poly cons = #A => \x : A => \xs : List A =>
+  #R => \n : R => \c : (A -> List A -> R) => c x xs
 
-poly matchList = #A => #R => \l : List => \onNil : R =>
-  \onCons : (A -> List -> R) =>
+poly matchList = #A => #R => \l : List A => \onNil : R =>
+  \onCons : (A -> List A -> R) =>
     l [R] onNil onCons
 
-poly head = #A => \l : List =>
-  l [A] error (\h : A => \t : List => h)
+poly head = #A => \l : List A =>
+  l [A] (error [A]) (\h : A => \t : List A => h)
 
-poly tail = #A => \l : List =>
-  l [List] (nil [A]) (\h : A => \t : List => t)
+poly tail = #A => \l : List A =>
+  l [List A] (nil [A]) (\h : A => \t : List A => t)
 
-poly rec append = #A => \xs : List => \ys : List =>
-  matchList [A] [List] xs ys
-    (\h : A => \t : List => cons [A] h (append [A] t ys))
+poly rec append = #A => \xs : List A => \ys : List A =>
+  matchList [A] [List A] xs ys
+    (\h : A => \t : List A => cons [A] h (append [A] t ys))
 
-poly rec map = #A => #B => \f : A -> B => \l : List =>
-  matchList [A] [List] l (nil [B])
-    (\h : A => \t : List => cons [B] (f h) (map [A] [B] f t))
+poly rec map = #A => #B => \f : A -> B => \l : List A =>
+  matchList [A] [List B] l (nil [B])
+    (\h : A => \t : List A => cons [B] (f h) (map [A] [B] f t))
 
-poly rec foldl = #A => #B => \f : B -> A -> B => \acc : B => \l : List =>
+poly rec foldl = #A => #B => \f : B -> A -> B => \acc : B => \l : List A =>
   matchList [A] [B] l acc
-    (\h : A => \t : List => foldl [A] [B] f (f acc h) t)
+    (\h : A => \t : List A => foldl [A] [B] f (f acc h) t)
 
 poly rec takeWhile = #A => \p : A -> Bool => \l : List A =>
   matchList [A] [List A] l (nil [A])
@@ -151,6 +151,10 @@ poly rec span = #A => \p : A -> Bool => \l : List A =>
             (cons [A] h (fst [List A] [List A] res))
             (snd [List A] [List A] res))
         (\u : U8 => MkPair [List A] [List A] (nil [A]) l))
+
+poly rec reverseAcc = #A => \xs : List A => \acc : List A =>
+  matchList [A] [List A] xs acc
+    (\h : A => \t : List A => reverseAcc [A] t (cons [A] h acc))
 
 poly reverse = #A => \xs : List A =>
   foldl [A] [List A]

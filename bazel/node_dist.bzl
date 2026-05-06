@@ -1,3 +1,5 @@
+"""Bazel rule implementation for generating Node distribution artifacts."""
+
 def _shell_quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
 

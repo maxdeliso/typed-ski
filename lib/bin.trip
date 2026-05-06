@@ -1,5 +1,9 @@
 module Bin
 
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
 import Prelude Bool
 import Prelude true
 import Prelude false
@@ -24,8 +28,6 @@ export isZeroBin
 export eqBin
 export lteBin
 export gteBin
-
-data Bin = BZ | B0 Bin | B1 Bin
 
 poly rec isZeroBin = \b : Bin =>
   match b [Bool] {

@@ -7,7 +7,7 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
 import { fromTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
-import { describe, it } from "../util/test_shim.ts";
+import { it } from "../util/test_shim.ts";
 import { readFile } from "node:fs/promises";
 import {
   closeBatchThanatosSessions,

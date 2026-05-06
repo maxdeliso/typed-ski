@@ -101,6 +101,7 @@ export interface BlockPrimOp {
   target: SymbolId;
   name: string;
   args: BlockValueRef[];
+  typeArgs?: MiniType[];
 }
 
 export interface BlockCallOp {
@@ -108,6 +109,7 @@ export interface BlockCallOp {
   target: SymbolId;
   name: string;
   args: BlockValueRef[];
+  typeArgs?: MiniType[];
 }
 
 export interface BlockRuntimeCallOp {
@@ -121,6 +123,7 @@ export interface BlockConstructOp {
   target: SymbolId;
   name: string;
   args: BlockValueRef[];
+  typeArgs?: MiniType[];
 }
 
 export interface BlockMoveOp {

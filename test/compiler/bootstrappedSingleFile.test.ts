@@ -38,6 +38,7 @@ async function compileAndLinkCompiler() {
     join(compilerLibDir, "unparse.trip"),
     join(compilerLibDir, "lowering.trip"),
     join(compilerLibDir, "bridge.trip"),
+    join(compilerLibDir, "llvm.trip"),
     join(compilerLibDir, "index.trip"),
     join(compilerLibDir, "telemetry.trip"),
   ];

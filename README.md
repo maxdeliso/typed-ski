@@ -90,6 +90,27 @@ bazelisk build //:thanatos //:release_wasm
 bazelisk test //:native_tests
 ```
 
+#### Running Singular Tests
+
+To run a single test file with Node directly:
+
+```powershell
+$env:TYPED_SKI_WASM_PATH = "$(pwd)\bazel-bin\wasm\release.wasm"
+node --experimental-transform-types --test-global-setup test/globalSetup.ts --test test/path/to/test.ts
+```
+
+To run a single test with Bazel:
+
+```bash
+bazelisk test //:node_tests --test_arg=test/path/to/test.ts
+```
+
+Or run a specific test by its full path:
+
+```bash
+bazelisk run //:test -- test/path/to/test.ts
+```
+
 Check which repo-pinned Node.js version Bazelisk will use with:
 
 ```bash

@@ -3,16 +3,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
-  anfToBlockModule,
-  compileMiniCoreModules,
-  toAnfProgram,
-  type MiniCoreModuleSource,
-} from "../lib/minicore/index.ts";
-import {
-  emitLlvmModule,
+  compileTripSourceToLlvm,
+  parseLlvmTarget,
+  readModuleSourceSpec,
   type LlvmTargetProfile,
-} from "../lib/compiler/llvm/index.ts";
-import { parseTripLang } from "../lib/parser/tripLang.ts";
+} from "../lib/compiler/index.ts";
 
 interface Options {
   input?: string;
@@ -57,7 +52,7 @@ function parseArgs(args: string[]): Options {
         options.moduleSources.push(requireValue(args, ++i, arg));
         break;
       case "--target":
-        options.target = parseTarget(requireValue(args, ++i, arg));
+        options.target = parseLlvmTarget(requireValue(args, ++i, arg));
         break;
       case "--emit-main-wrapper":
         options.emitMainWrapper = true;
@@ -83,64 +78,17 @@ function requireValue(args: string[], index: number, option: string): string {
   return value;
 }
 
-function parseTarget(value: string): LlvmTargetProfile {
-  switch (value) {
-    case "generic":
-    case "x86_64-unknown-linux-gnu":
-    case "x86_64-pc-windows-msvc":
-    case "wasm32-unknown-unknown":
-    case "wasm32-wasi":
-      return { kind: value };
-    default:
-      throw new Error(`Unsupported LLVM target: ${value}`);
-  }
-}
-
-async function readModuleSource(spec: string): Promise<MiniCoreModuleSource> {
-  const equals = spec.indexOf("=");
-  if (equals <= 0 || equals === spec.length - 1) {
-    throw new Error(`Invalid --module-source value: ${spec}`);
-  }
-  const name = spec.slice(0, equals);
-  const path = resolve(spec.slice(equals + 1));
-  return { name, source: await readFile(path, "utf8") };
-}
-
-function moduleNameOf(source: string): string {
-  const moduleTerm = parseTripLang(source).terms.find(
-    (term) => term.kind === "module",
-  );
-  if (!moduleTerm || moduleTerm.kind !== "module") {
-    throw new Error("Input Trip source has no module declaration");
-  }
-  return moduleTerm.name;
-}
-
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const inputPath = resolve(options.input!);
   const outputPath = resolve(options.output!);
   const inputSource = await readFile(inputPath, "utf8");
-  const entryModule = options.entryModule ?? moduleNameOf(inputSource);
   const modules = await Promise.all(
-    options.moduleSources.map(readModuleSource),
+    options.moduleSources.map(readModuleSourceSpec),
   );
-
-  if (modules.some((module) => module.name === entryModule)) {
-    throw new Error(
-      `Entry module ${entryModule} was also passed as a module source`,
-    );
-  }
-
-  const blockModule = anfToBlockModule(
-    toAnfProgram(
-      compileMiniCoreModules(
-        [...modules, { name: entryModule, source: inputSource }],
-        entryModule,
-      ),
-    ),
-  );
-  const llvm = emitLlvmModule(blockModule, {
+  const llvm = compileTripSourceToLlvm(inputSource, {
+    entryModule: options.entryModule,
+    moduleSources: modules,
     target: options.target,
     emitMainWrapper: options.emitMainWrapper,
   });

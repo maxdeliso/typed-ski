@@ -34,6 +34,7 @@ const CORE_TO_LOWER_SOURCE_FILE = new URL(
 const UNPARSE_SOURCE_FILE = new URL("./unparse.trip", import.meta.url);
 const LOWERING_SOURCE_FILE = new URL("./lowering.trip", import.meta.url);
 const BRIDGE_SOURCE_FILE = new URL("./bridge.trip", import.meta.url);
+const LLVM_SOURCE_FILE = new URL("./llvm.trip", import.meta.url);
 const COMPILER_SOURCE_FILE = new URL("./index.trip", import.meta.url);
 const TELEMETRY_SOURCE_FILE = new URL("./telemetry.trip", import.meta.url);
 
@@ -104,6 +105,13 @@ const BUILTIN_MODULES = new Map<string, BuiltinModuleSpec>([
     },
   ],
   [
+    "Llvm",
+    {
+      source: LLVM_SOURCE_FILE,
+      load: () => loadTripModuleObject(LLVM_SOURCE_FILE),
+    },
+  ],
+  [
     "Compiler",
     {
       source: COMPILER_SOURCE_FILE,
@@ -167,12 +175,19 @@ function sanitizeImportedModule(
   moduleName: string,
   object: TripCObject,
 ): TripCObject {
-  if (moduleName !== "Compiler" || !object.exports.includes("main")) {
+  if (moduleName !== "Compiler") {
     return object;
   }
+  const omittedDefinitions = new Set(["main", "compileToLlvm", "writeAll"]);
   return {
     ...object,
-    exports: object.exports.filter((name) => name !== "main"),
+    exports: object.exports.filter((name) => !omittedDefinitions.has(name)),
+    imports: object.imports.filter((imp) => imp.from !== "Llvm"),
+    definitions: Object.fromEntries(
+      Object.entries(object.definitions).filter(
+        ([name]) => !omittedDefinitions.has(name),
+      ),
+    ),
   };
 }
 
@@ -212,6 +227,9 @@ async function loadBuiltinModuleGraph(
     try {
       const source = await loadTripSourceFile(spec.source);
       for (const importedModuleName of importedModuleNames(source)) {
+        if (moduleName === "Compiler" && importedModuleName === "Llvm") {
+          continue;
+        }
         await visit(importedModuleName);
       }
       loaded.set(

@@ -2,6 +2,7 @@ import type { Expr, LocalId, SymbolId } from "./ast.ts";
 import type { AnfAtom, AnfExpr, AnfValue } from "./anfAst.ts";
 import {
   miniTypeEquals,
+  substituteMiniType,
   typeOfLiteral,
   type MiniCoreMetadata,
   type MiniType,
@@ -21,26 +22,50 @@ export function typeOfMiniCoreExpr(
       return requireLocalType(localTypes, expr.id);
     case "lit":
       return typeOfLiteral(expr.value);
-    case "call":
-      return (
-        metadata.functions.get(expr.target)?.resultType ?? {
-          kind: "unknown",
+    case "call": {
+      const info = metadata.functions.get(expr.target);
+      if (!info) return { kind: "unknown" };
+      const typeArgs = expr.typeArgs ?? [];
+      if (info.typeScheme?.kind === "forall") {
+        if (typeArgs.length !== info.typeScheme.params.length) {
+          throw new Error(
+            `Function ${expr.target} expects ${info.typeScheme.params.length} type arg(s), got ${typeArgs.length}`,
+          );
         }
-      );
-    case "prim":
-      return (
-        metadata.primitives.get(expr.target)?.resultType ?? {
-          kind: "unknown",
-        }
-      );
+        const subst = new Map<string, MiniType>();
+        info.typeScheme.params.forEach((name, i) => {
+          subst.set(name, typeArgs[i]!);
+        });
+        return substituteMiniType(info.resultType, subst);
+      }
+      return info.resultType;
+    }
+    case "prim": {
+      const info = metadata.primitives.get(expr.target);
+      if (!info) return { kind: "unknown" };
+      return info.resultType;
+    }
     case "runtimeCall":
       return getRuntimeSymbolSignature(expr.name).result;
-    case "con":
-      return (
-        metadata.constructors.get(expr.target)?.resultType ?? {
-          kind: "unknown",
+    case "con": {
+      const info = metadata.constructors.get(expr.target);
+      if (!info) return { kind: "unknown" };
+      const typeArgs = expr.typeArgs ?? [];
+      const dataDef = metadata.dataTypes.get(info.dataType);
+      if (dataDef) {
+        if (typeArgs.length !== dataDef.typeParams.length) {
+          throw new Error(
+            `Constructor ${expr.target} expects ${dataDef.typeParams.length} type arg(s), got ${typeArgs.length}`,
+          );
         }
-      );
+        const subst = new Map<string, MiniType>();
+        dataDef.typeParams.forEach((name, i) => {
+          subst.set(name, typeArgs[i]!);
+        });
+        return substituteMiniType(info.resultType, subst);
+      }
+      return info.resultType;
+    }
     case "case":
       return expr.alts.length === 0
         ? { kind: "unknown" }
@@ -85,26 +110,50 @@ export function typeOfAnfValue(
   switch (value.kind) {
     case "atom":
       return typeOfAnfAtom(value.atom, fnId, metadata);
-    case "call":
-      return (
-        metadata.functions.get(value.target)?.resultType ?? {
-          kind: "unknown",
+    case "call": {
+      const info = metadata.functions.get(value.target);
+      if (!info) return { kind: "unknown" };
+      const typeArgs = value.typeArgs ?? [];
+      if (info.typeScheme?.kind === "forall") {
+        if (typeArgs.length !== info.typeScheme.params.length) {
+          throw new Error(
+            `Function ${value.target} expects ${info.typeScheme.params.length} type arg(s), got ${typeArgs.length}`,
+          );
         }
-      );
-    case "prim":
-      return (
-        metadata.primitives.get(value.target)?.resultType ?? {
-          kind: "unknown",
-        }
-      );
+        const subst = new Map<string, MiniType>();
+        info.typeScheme.params.forEach((name, i) => {
+          subst.set(name, typeArgs[i]!);
+        });
+        return substituteMiniType(info.resultType, subst);
+      }
+      return info.resultType;
+    }
+    case "prim": {
+      const info = metadata.primitives.get(value.target);
+      if (!info) return { kind: "unknown" };
+      return info.resultType;
+    }
     case "runtimeCall":
       return getRuntimeSymbolSignature(value.name).result;
-    case "con":
-      return (
-        metadata.constructors.get(value.target)?.resultType ?? {
-          kind: "unknown",
+    case "con": {
+      const info = metadata.constructors.get(value.target);
+      if (!info) return { kind: "unknown" };
+      const typeArgs = value.typeArgs ?? [];
+      const dataDef = metadata.dataTypes.get(info.dataType);
+      if (dataDef) {
+        if (typeArgs.length !== dataDef.typeParams.length) {
+          throw new Error(
+            `Constructor ${value.target} expects ${dataDef.typeParams.length} type arg(s), got ${typeArgs.length}`,
+          );
         }
-      );
+        const subst = new Map<string, MiniType>();
+        dataDef.typeParams.forEach((name, i) => {
+          subst.set(name, typeArgs[i]!);
+        });
+        return substituteMiniType(info.resultType, subst);
+      }
+      return info.resultType;
+    }
     case "case":
       return value.alts.length === 0
         ? { kind: "unknown" }

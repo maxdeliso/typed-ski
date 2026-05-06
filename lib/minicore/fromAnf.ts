@@ -29,7 +29,9 @@ import type {
 } from "./blockAst.ts";
 import {
   cloneMiniCoreMetadata,
+  miniTypeUnify,
   miniTypeEquals,
+  substituteMiniType,
   typeOfLiteral,
   type MiniCoreMetadata,
   type MiniType,
@@ -345,6 +347,11 @@ function boolBranchTargets(
   state: FunctionLoweringState,
   env: LocalEnv,
 ): BlockTerminator | undefined {
+  // Attempt to lower Bool case expressions to branch instructions (br i1).
+  // This ensures Bool cases never reach emitCaseTerminator in boxed-runtime,
+  // which would incorrectly try to call @trip_obj_tag(ptr %scrutinee).
+  // Bool is represented as i1, not a boxed object.
+
   const bool = state.metadata.bool;
   if (!bool || expr.alts.length !== 2) return undefined;
 
@@ -396,6 +403,7 @@ function buildCaseTargets(
     const captures = freeLocals(alt.body, new Set(alt.binders)).filter(
       (id) => !alt.binders.includes(id),
     );
+    specializeCaseBinderTypes(expr.scrutinee, alt, state);
     const binders = alt.binders.map((id) => blockParam(state, id));
     const captureBindings = captures.map((id) => {
       const source = localRef(state, env, id);
@@ -427,6 +435,31 @@ function buildCaseTargets(
   });
 
   return { alts, altBlocks };
+}
+
+function specializeCaseBinderTypes(
+  scrutinee: AnfAtom,
+  alt: AnfAlt,
+  state: FunctionLoweringState,
+): void {
+  const constructorInfo = state.metadata.constructors.get(alt.constructor);
+  if (!constructorInfo) return;
+
+  const scrutineeType = typeOfAnfAtom(scrutinee, state.fn.id, state.metadata);
+  if (scrutineeType.kind === "unknown") return;
+
+  const subst = new Map<string, MiniType>();
+  try {
+    miniTypeUnify(scrutineeType, constructorInfo.resultType, subst);
+  } catch {
+    return;
+  }
+
+  alt.binders.forEach((id, index) => {
+    const fieldType = constructorInfo.fieldTypes[index];
+    if (!fieldType) return;
+    state.localTypes.set(id, substituteMiniType(fieldType, subst));
+  });
 }
 
 function emitInstruction(
@@ -468,6 +501,7 @@ function emitInstruction(
           target: value.target,
           name: target.name,
           args: value.args.map((arg) => atomRef(arg, state, env)),
+          typeArgs: value.typeArgs,
         },
       };
       break;
@@ -488,6 +522,7 @@ function emitInstruction(
           target: value.target,
           name: target.name,
           args: value.fields.map((field) => atomRef(field, state, env)),
+          typeArgs: value.typeArgs,
         },
       };
       break;
@@ -509,6 +544,7 @@ function emitInstruction(
           target: value.target,
           name: target.name,
           args: value.args.map((arg) => atomRef(arg, state, env)),
+          typeArgs: value.typeArgs,
         },
       };
       break;

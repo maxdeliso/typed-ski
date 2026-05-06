@@ -1,0 +1,207 @@
+module Llvm
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude append
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Prelude or
+import Prelude U8
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+import Prelude ltU8
+import Lexer tokenize
+import Lexer eqListU8
+import Parser parseProgram
+import Parser Decl
+import Parser D_Module
+import Parser D_Import
+import Parser D_Export
+import Parser D_Type
+import Parser D_Data
+import Parser D_Def
+import Parser Expr
+import Parser E_Var
+import Parser E_App
+import Parser E_Lam
+import Parser E_Let
+import Parser E_Nat
+import Parser E_Match
+
+export compileSourceToLlvm
+export emitLlvmForWriteBytes
+export collectWriteBytes
+export findMainBody
+
+poly digitToAscii = \d : U8 =>
+  addU8 d #u8(48)
+
+poly singletonU8 = \b : U8 =>
+  cons [U8] b (nil [U8])
+
+poly u8ToDigits = \n : U8 =>
+  if [List U8] (ltU8 n #u8(10))
+    (\u : U8 => singletonU8 (digitToAscii n))
+    (\u : U8 =>
+      if [List U8] (ltU8 n #u8(100))
+        (\u : U8 =>
+          cons [U8]
+            (digitToAscii (divU8 n #u8(10)))
+            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
+        (\u : U8 =>
+          let hundreds = divU8 n #u8(100) in
+          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+          let ones = modU8 n #u8(10) in
+          cons [U8]
+            (digitToAscii hundreds)
+            (cons [U8]
+              (digitToAscii tens)
+              (singletonU8 (digitToAscii ones))))
+    )
+
+poly digitValue = \c : U8 =>
+  modU8 c #u8(16)
+
+poly mul10U8 = \n : U8 =>
+  let two = addU8 n n in
+  let four = addU8 two two in
+  let eight = addU8 four four in
+  addU8 eight two
+
+poly rec parseByteDigitsAcc = \digits : List U8 => \acc : U8 =>
+  matchList [U8] [U8] digits acc
+    (\h : U8 => \t : List U8 =>
+      parseByteDigitsAcc t (addU8 (mul10U8 acc) (digitValue h)))
+
+poly parseByteDigits = \digits : List U8 =>
+  parseByteDigitsAcc digits #u8(0)
+
+poly isWriteOneName = \name : List U8 =>
+  or (eqListU8 name "writeOne") (eqListU8 name ".")
+
+poly rec collectWriteBytes = \expr : Expr =>
+  match expr [Result (List U8) (List U8)] {
+    | E_Var name => Ok [List U8] [List U8] (nil [U8])
+    | E_Nat digits => Err [List U8] [List U8] "Unsupported LLVM expression"
+    | E_Lam name body => collectWriteBytes body
+    | E_Let name value body => collectWriteBytes body
+    | E_Match scrutinee arms => Err [List U8] [List U8] "Unsupported LLVM expression"
+    | E_App fn cont =>
+        match fn [Result (List U8) (List U8)] {
+          | E_App head byteExpr =>
+              match head [Result (List U8) (List U8)] {
+                | E_Var callee =>
+                    if [Result (List U8) (List U8)] (isWriteOneName callee)
+                      (\u : U8 =>
+                        match byteExpr [Result (List U8) (List U8)] {
+                          | E_Nat digits =>
+                              match cont [Result (List U8) (List U8)] {
+                                | E_Lam name body =>
+                                    match (collectWriteBytes body) [Result (List U8) (List U8)] {
+                                      | Err e => Err [List U8] [List U8] e
+                                      | Ok rest =>
+                                          Ok [List U8] [List U8]
+                                            (cons [U8] (parseByteDigits digits) rest)
+                                    }
+                                | E_Var name => Ok [List U8] [List U8] (singletonU8 (parseByteDigits digits))
+                                | E_App a b => Err [List U8] [List U8] "Expected writeOne continuation"
+                                | E_Let name value body => Err [List U8] [List U8] "Expected writeOne continuation"
+                                | E_Nat digits => Err [List U8] [List U8] "Expected writeOne continuation"
+                                | E_Match scrutinee arms => Err [List U8] [List U8] "Expected writeOne continuation"
+                              }
+                          | E_Var name => Err [List U8] [List U8] "Expected literal byte"
+                          | E_App a b => Err [List U8] [List U8] "Expected literal byte"
+                          | E_Lam name body => Err [List U8] [List U8] "Expected literal byte"
+                          | E_Let name value body => Err [List U8] [List U8] "Expected literal byte"
+                          | E_Match scrutinee arms => Err [List U8] [List U8] "Expected literal byte"
+                        })
+                      (\u : U8 => Err [List U8] [List U8] "Unsupported LLVM expression")
+                | E_App a b => Err [List U8] [List U8] "Unsupported LLVM expression"
+                | E_Lam name body => Err [List U8] [List U8] "Unsupported LLVM expression"
+                | E_Let name value body => Err [List U8] [List U8] "Unsupported LLVM expression"
+                | E_Nat digits => Err [List U8] [List U8] "Unsupported LLVM expression"
+                | E_Match scrutinee arms => Err [List U8] [List U8] "Unsupported LLVM expression"
+              }
+          | E_Var name => Err [List U8] [List U8] "Unsupported LLVM expression"
+          | E_Lam name body => Err [List U8] [List U8] "Unsupported LLVM expression"
+          | E_Let name value body => Err [List U8] [List U8] "Unsupported LLVM expression"
+          | E_Nat digits => Err [List U8] [List U8] "Unsupported LLVM expression"
+          | E_Match scrutinee arms => Err [List U8] [List U8] "Unsupported LLVM expression"
+        }
+  }
+
+poly rec findMainBody = \decls : List Decl =>
+  matchList [Decl] [Maybe Expr] decls
+    (None [Expr])
+    (\h : Decl => \t : List Decl =>
+      match h [Maybe Expr] {
+        | D_Def kind isRec name body =>
+            if [Maybe Expr] (eqListU8 name "main")
+              (\u : U8 => Some [Expr] body)
+              (\u : U8 => findMainBody t)
+        | D_Module name => findMainBody t
+        | D_Import moduleName symbolName => findMainBody t
+        | D_Export name => findMainBody t
+        | D_Type name => findMainBody t
+        | D_Data name ctors => findMainBody t
+      })
+
+poly emitWriteCall = \byte : U8 =>
+  append [U8]
+    "  call void @trip_write_one(i8 "
+    (append [U8] (u8ToDigits byte) ")\n")
+
+poly rec emitWriteCalls = \bytes : List U8 =>
+  matchList [U8] [List U8] bytes
+    (nil [U8])
+    (\h : U8 => \t : List U8 =>
+      append [U8] (emitWriteCall h) (emitWriteCalls t))
+
+poly rec lastByteOrZero = \bytes : List U8 => \last : U8 =>
+  matchList [U8] [U8] bytes
+    last
+    (\h : U8 => \t : List U8 => lastByteOrZero t h)
+
+poly emitLlvmForWriteBytes = \bytes : List U8 =>
+  append [U8]
+    "declare void @trip_write_one(i8)\n\n"
+    (append [U8]
+      "define i8 @trip_fn_Main_main() {\nentry:\n"
+      (append [U8]
+        (emitWriteCalls bytes)
+        (append [U8]
+          "  ret i8 "
+          (append [U8]
+            (u8ToDigits (lastByteOrZero bytes #u8(0)))
+            (append [U8]
+              "\n}\n\n"
+              "define i32 @main() {\nentry:\n  %trip_result = call i8 @trip_fn_Main_main()\n  ret i32 0\n}\n")))))
+
+poly compileSourceToLlvm = \source : List U8 =>
+  match (tokenize source) [Result (List U8) (List U8)] {
+    | Err e => Err [List U8] [List U8] "Lex error"
+    | Ok toks =>
+        match (parseProgram toks) [Result (List U8) (List U8)] {
+          | Err e => Err [List U8] [List U8] "Parse error"
+          | Ok decls =>
+              match (findMainBody decls) [Result (List U8) (List U8)] {
+                | None => Err [List U8] [List U8] "Missing main"
+                | Some body =>
+                    match (collectWriteBytes body) [Result (List U8) (List U8)] {
+                      | Err e => Err [List U8] [List U8] e
+                      | Ok bytes => Ok [List U8] [List U8] (emitLlvmForWriteBytes bytes)
+                    }
+              }
+        }
+  }

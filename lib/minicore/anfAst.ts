@@ -7,6 +7,7 @@ import type {
   Program,
   SymbolId,
 } from "./ast.ts";
+import type { MiniType } from "./metadata.ts";
 import type { RuntimeSymbol } from "./runtimeSymbols.ts";
 
 export type AnfAtom =
@@ -46,18 +47,21 @@ export interface AnfCall {
   kind: "call";
   target: SymbolId;
   args: AnfAtom[];
+  typeArgs?: MiniType[];
 }
 
 export interface AnfCon {
   kind: "con";
   target: SymbolId;
   fields: AnfAtom[];
+  typeArgs?: MiniType[];
 }
 
 export interface AnfPrim {
   kind: "prim";
   target: SymbolId;
   args: AnfAtom[];
+  typeArgs?: MiniType[];
 }
 
 export interface AnfRuntimeCall {

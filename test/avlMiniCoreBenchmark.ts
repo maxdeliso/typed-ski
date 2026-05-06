@@ -1,9 +1,6 @@
 import { strictEqual as assertEquals } from "node:assert/strict";
 import { AVL_CASES } from "./avlCases.ts";
-import {
-  expectedAvlMiniCoreNat,
-  runAvlMiniCoreCase,
-} from "./avlMiniCoreHarness.ts";
+import { runAvlMiniCoreCase } from "./avlMiniCoreHarness.ts";
 
 type AvlMiniCoreBenchmarkResult = {
   name: string;
@@ -29,7 +26,7 @@ async function main(): Promise<void> {
 
   for (const testCase of AVL_CASES) {
     const result = await runAvlMiniCoreCase(testCase);
-    const expected = expectedAvlMiniCoreNat(testCase);
+    const expected = testCase.expected;
     assertEquals(
       result.actual,
       expected,

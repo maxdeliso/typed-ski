@@ -1,0 +1,235 @@
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  compileTripSourceToLlvm,
+  type CompileTripSourceToLlvmOptions,
+} from "../../../lib/compiler/index.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(__dirname, "../../../");
+
+export interface RunResult {
+  stdout: string;
+  stderr: string;
+  status: number | null;
+}
+
+export interface HarnessOptions extends CompileTripSourceToLlvmOptions {
+  cleanup?: boolean;
+  runtimeSources?: string[];
+}
+
+const CLANG = process.env["TYPED_SKI_CLANG"];
+
+/**
+ * Compiles Trip source to LLVM IR using the host (TypeScript) compiler.
+ */
+export async function compileTripToLlvm(
+  source: string,
+  options: CompileTripSourceToLlvmOptions,
+): Promise<string> {
+  return compileTripSourceToLlvm(source, options);
+}
+
+/**
+ * Compiles LLVM IR to a native executable using Clang.
+ */
+export async function compileLlvmToExecutable(
+  llPath: string,
+  runtimeSources: string[] = [],
+): Promise<string> {
+  if (!CLANG) {
+    throw new Error(
+      "TYPED_SKI_CLANG environment variable is not set. Ensure you are running through a Bazel rule that provides it.",
+    );
+  }
+
+  const exePath = llPath.replace(
+    /\.ll$/,
+    process.platform === "win32" ? ".exe" : "",
+  );
+  const allRuntimeSources =
+    runtimeSources.length > 0
+      ? runtimeSources
+      : [join(PROJECT_ROOT, "core/trip_runtime.c")];
+
+  const args = [
+    llPath,
+    ...allRuntimeSources,
+    "-I",
+    join(PROJECT_ROOT, "core"),
+    "-o",
+    exePath,
+    ...(process.platform !== "win32"
+      ? ["-lm", "-lpthread", "-D_POSIX_C_SOURCE=200809L", "-D_GNU_SOURCE"]
+      : []),
+  ];
+
+  const result = spawnSync(CLANG, args, { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(
+      `Clang failed:\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+  }
+
+  return exePath;
+}
+
+/**
+ * Runs a native executable and returns its output.
+ */
+export function runExecutable(exePath: string, input?: string): RunResult {
+  const result = spawnSync(exePath, [], {
+    input,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+  };
+}
+
+/**
+ * Orchestrates compiling Trip source and running the resulting executable.
+ */
+export async function compileTripAndRun(
+  source: string,
+  options: HarnessOptions = {},
+): Promise<RunResult> {
+  const tempDir = await mkdtemp(join(tmpdir(), "trip-llvm-test-"));
+  try {
+    const llvm = await compileTripToLlvm(source, {
+      ...options,
+      emitMainWrapper: options.emitMainWrapper ?? true,
+    });
+    const llPath = join(tempDir, "main.ll");
+    await writeFile(llPath, llvm, "utf8");
+
+    const exePath = await compileLlvmToExecutable(
+      llPath,
+      options.runtimeSources,
+    );
+    return runExecutable(exePath);
+  } finally {
+    if (options.cleanup !== false) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Bootstrapped execution mode helpers.
+ */
+export const bootstrap = {
+  /**
+   * Compiles the Trip compiler itself to a native executable.
+   */
+  async compileCompilerToNative(): Promise<{
+    exePath: string;
+    cleanup: () => Promise<void>;
+  }> {
+    const tempDir = await mkdtemp(join(tmpdir(), "trip-compiler-bootstrap-"));
+    const cleanup = () => rm(tempDir, { recursive: true, force: true });
+
+    try {
+      const libDir = join(PROJECT_ROOT, "lib");
+      const compilerLibDir = join(libDir, "compiler");
+
+      const moduleNames = [
+        "Prelude",
+        "Nat",
+        "Bin",
+        "Avl",
+        "Lexer",
+        "Parser",
+        "Core",
+        "DataEnv",
+        "CoreToLower",
+        "Unparse",
+        "Lowering",
+        "Bridge",
+        "Llvm",
+      ];
+      const moduleSources = await Promise.all(
+        moduleNames.map(async (name) => {
+          let path = join(libDir, `${name.toLowerCase()}.trip`);
+          try {
+            await readFile(path);
+          } catch {
+            path = join(
+              compilerLibDir,
+              `${name.charAt(0).toLowerCase() + name.slice(1)}.trip`,
+            );
+          }
+          return { name, source: await readFile(path, "utf8") };
+        }),
+      );
+
+      const compilerSource = await readFile(
+        join(compilerLibDir, "index.trip"),
+        "utf8",
+      );
+
+      const llvm = await compileTripToLlvm(compilerSource, {
+        entryModule: "Compiler",
+        moduleSources,
+        mainWrapper: { kind: "stdin-list-u8" },
+      });
+
+      const llPath = join(tempDir, "compiler.ll");
+      await writeFile(llPath, llvm, "utf8");
+
+      const exePath = await compileLlvmToExecutable(llPath);
+      return { exePath, cleanup };
+    } catch (e) {
+      await cleanup();
+      throw e;
+    }
+  },
+
+  /**
+   * Runs the native compiler on a fixture to produce stage-1 LLVM.
+   */
+  async runNativeCompiler(
+    compilerExePath: string,
+    fixtureSource: string,
+  ): Promise<string> {
+    const result = runExecutable(compilerExePath, fixtureSource);
+    if (result.status !== 0) {
+      throw new Error(
+        `Native compiler failed:\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+      );
+    }
+    return result.stdout;
+  },
+};
+
+/**
+ * Loads common library modules for testing.
+ */
+export async function loadCommonModules(
+  names: string[],
+): Promise<Array<{ name: string; source: string }>> {
+  const libDir = join(PROJECT_ROOT, "lib");
+  const compilerLibDir = join(libDir, "compiler");
+
+  return Promise.all(
+    names.map(async (name) => {
+      let path = join(libDir, `${name.toLowerCase()}.trip`);
+      try {
+        await readFile(path);
+      } catch {
+        path = join(
+          compilerLibDir,
+          `${name.charAt(0).toLowerCase() + name.slice(1)}.trip`,
+        );
+      }
+      return { name, source: await readFile(path, "utf8") };
+    }),
+  );
+}

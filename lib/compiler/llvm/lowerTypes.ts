@@ -1,5 +1,5 @@
 import { miniTypeToString, type MiniType } from "../../minicore/index.ts";
-import type { LlvmReturnType, LlvmScalarType } from "./types.ts";
+import type { LlvmReturnType, LlvmValueType } from "./types.ts";
 
 export class LlvmTypeLoweringError extends Error {
   constructor(message: string) {
@@ -9,24 +9,31 @@ export class LlvmTypeLoweringError extends Error {
 }
 
 export function lowerLlvmReturnType(type: MiniType): LlvmReturnType {
-  switch (type.kind) {
-    case "u8":
-      return "i8";
-    case "bool":
-      return "i1";
-    case "unit":
-      return "void";
-    default:
-      throw unsupportedType(type);
+  if (type.kind === "unit") {
+    return "void";
   }
+  return lowerLlvmValueType(type);
 }
 
-export function lowerLlvmValueType(type: MiniType): LlvmScalarType {
+export function lowerLlvmValueType(type: MiniType): LlvmValueType {
   switch (type.kind) {
     case "u8":
       return "i8";
     case "bool":
       return "i1";
+    case "nat":
+      return "i64";
+    case "data":
+    // Boxed-runtime placeholder: non-scalar values are represented as ptr.
+    // Function values are not first-class closures yet; this only supports values
+    // that are already lowered away or treated opaquely.
+    case "fn":
+    case "forall":
+    case "var":
+    case "unknown":
+      return "ptr";
+    case "unit":
+      throw unsupportedType(type);
     default:
       throw unsupportedType(type);
   }

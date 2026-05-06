@@ -126,6 +126,13 @@ LLVM_LLC_BIN = select({
     "//conditions:default": "//bazel:empty.txt",
 })
 
+LLVM_CLANG_BIN = select({
+    ":linux_x86_64": "@typed_ski_llvm_linux_x64//:llvm_clang",
+    ":macos_arm64": "@typed_ski_llvm_macos_arm64//:llvm_clang",
+    ":windows_x86_64": "@typed_ski_llvm_windows_x64//:llvm_clang",
+    "//conditions:default": "//bazel:empty.txt",
+})
+
 LLVM_DIST_DATA = select({
     ":linux_x86_64": ["@typed_ski_llvm_linux_x64//:dist"],
     ":macos_arm64": ["@typed_ski_llvm_macos_arm64//:dist"],
@@ -192,11 +199,13 @@ node_sharded_test(
     name = "node_tests",
     size = "large",
     timeout = "long",
+    clang = LLVM_CLANG_BIN,
     data = NODE_TEST_DATA + [
         ":node_modules",
     ],
     dist = ":dist_artifacts",
     generated_jsr = ":jsr.generated.json",
+    llvm_dist = LLVM_DIST_DATA,
     shard_count = 8,
     thanatos = "//core:thanatos",
     wasm = "//wasm:release",
@@ -261,6 +270,7 @@ cc_binary(
 trip_executable_stdout_test(
     name = "trip_hello_world_test",
     binary = ":trip_hello_world",
+    expected_exit_code = 10,
     expected_stdout = "Hello, world!\n",
     tags = ["requires-msvc-eula"],
     target_compatible_with = HELLO_WORLD_COMPATIBILITY,

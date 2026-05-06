@@ -1,5 +1,4 @@
-def _shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
+"""Bazel rule for running Node.js sharded tests."""
 
 def _shell_dquote_literal(value):
     escaped = value.replace("\\", "\\\\")
@@ -7,12 +6,6 @@ def _shell_dquote_literal(value):
     escaped = escaped.replace("$", "\\$")
     escaped = escaped.replace("`", "\\`")
     return escaped
-
-def _batch_quote(value):
-    escaped = value.replace("^", "^^")
-    escaped = escaped.replace("%", "%%")
-    escaped = escaped.replace('"', '""')
-    return '"' + escaped + '"'
 
 def _normalize_runfiles_path(path):
     if path.startswith("../"):
@@ -44,6 +37,14 @@ def _node_sharded_test_impl(ctx):
         "$(rootpath %s)" % str(ctx.attr.wasm.label),
         [ctx.attr.wasm],
     )
+
+    clang_rootpath = ""
+    if ctx.attr.clang:
+        clang_rootpath = ctx.expand_location(
+            "$(rootpath %s)" % str(ctx.attr.clang.label),
+            [ctx.attr.clang],
+        )
+
     dist_files = {f.basename: f for f in ctx.attr.dist[DefaultInfo].files.to_list()}
     dist_bin_name = "tripc.cmd" if is_windows else "tripc"
     arena_worker_js_rootpath = dist_files["arenaWorker.js"].short_path
@@ -55,7 +56,7 @@ def _node_sharded_test_impl(ctx):
     if is_windows:
         node_bin = node_path.replace("/", "\\")
         command = "\"%NODE_BIN%\" \"--experimental-transform-types\" \"--preserve-symlinks\" \"scripts/bazel.ts\" \"bazel-test-shard\" %*"
-        content = "\r\n".join([
+        content_lines = [
             "@echo off",
             "setlocal",
             "if \"%TEST_SRCDIR%\"==\"\" (",
@@ -89,15 +90,21 @@ def _node_sharded_test_impl(ctx):
             "set \"TYPED_SKI_ARENA_WORKER_JS_PATH=%RUNFILES_ROOT%\\" + arena_worker_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_BIN_PATH=%RUNFILES_ROOT%\\" + dist_bin_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_READY=1\"",
+        ]
+        if clang_rootpath:
+            content_lines.append("set \"TYPED_SKI_CLANG=%RUNFILES_ROOT%\\" + clang_rootpath.replace("/", "\\") + "\"")
+
+        content_lines.extend([
             "if not \"%TEST_SHARD_STATUS_FILE%\"==\"\" type nul > \"%TEST_SHARD_STATUS_FILE%\"",
             command,
             "exit /b %ERRORLEVEL%",
             "",
         ])
+        content = "\r\n".join(content_lines)
     else:
         node_bin = _shell_dquote_literal(node_path)
         command = "\"$node_bin\" --experimental-transform-types --preserve-symlinks scripts/bazel.ts bazel-test-shard \"$@\""
-        content = "\n".join([
+        content_lines = [
             "#!/usr/bin/env bash",
             "set -euo pipefail",
             "if [[ -z \"${TEST_SRCDIR:-}\" ]]; then",
@@ -131,10 +138,16 @@ def _node_sharded_test_impl(ctx):
             "export TYPED_SKI_ARENA_WORKER_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(arena_worker_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_BIN_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_bin_rootpath) + "\"",
             "export TYPED_SKI_DIST_READY=1",
+        ]
+        if clang_rootpath:
+            content_lines.append("export TYPED_SKI_CLANG=\"$runfiles_root/" + _shell_dquote_literal(clang_rootpath) + "\"")
+
+        content_lines.extend([
             "[[ -n \"${TEST_SHARD_STATUS_FILE:-}\" ]] && touch \"$TEST_SHARD_STATUS_FILE\"",
             command,
             "",
         ])
+        content = "\n".join(content_lines)
 
     ctx.actions.write(launcher, content, is_executable = True)
 
@@ -142,20 +155,33 @@ def _node_sharded_test_impl(ctx):
     if ctx.file.generated_jsr:
         symlinks["jsr.json"] = ctx.file.generated_jsr
 
+    runfiles_files = ctx.files.data + [ctx.executable.thanatos, ctx.file.wasm, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
+    if ctx.attr.clang:
+        runfiles_files.append(ctx.executable.clang)
+    if ctx.attr.llvm_dist:
+        runfiles_files.extend(ctx.files.llvm_dist)
+
     runfiles = ctx.runfiles(
-        files = ctx.files.data + [ctx.executable.thanatos, ctx.file.wasm, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else []),
+        files = runfiles_files,
         symlinks = symlinks,
     )
     runfiles = _merge_target_runfiles(runfiles, ctx.attr.data)
     runfiles = runfiles.merge(ctx.attr.thanatos[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.wasm[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.dist[DefaultInfo].default_runfiles)
+    if ctx.attr.clang:
+        runfiles = runfiles.merge(ctx.attr.clang[DefaultInfo].default_runfiles)
+        runfiles = runfiles.merge(ctx.attr.clang[DefaultInfo].data_runfiles)
 
     return [DefaultInfo(executable = launcher, runfiles = runfiles)]
 
 node_sharded_test = rule(
     implementation = _node_sharded_test_impl,
     attrs = {
+        "clang": attr.label(
+            executable = True,
+            cfg = "exec",
+        ),
         "data": attr.label_list(
             allow_files = True,
         ),
@@ -164,6 +190,10 @@ node_sharded_test = rule(
         ),
         "generated_jsr": attr.label(
             allow_single_file = True,
+        ),
+        "llvm_dist": attr.label_list(
+            allow_files = True,
+            cfg = "exec",
         ),
         "thanatos": attr.label(
             executable = True,

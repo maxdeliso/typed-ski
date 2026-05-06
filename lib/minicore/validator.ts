@@ -15,7 +15,15 @@ export class MiniCoreValidationError extends Error {
   }
 }
 
-export function validateMiniCoreProgram(program: Program): void {
+export interface MiniCoreValidationOptions {
+  requireNullaryEntry?: boolean;
+}
+
+export function validateMiniCoreProgram(
+  program: Program,
+  options: MiniCoreValidationOptions = {},
+): void {
+  const requireNullaryEntry = options.requireNullaryEntry ?? true;
   const entrySymbol = program.symbols[program.entry];
   if (entrySymbol === undefined) {
     throw new MiniCoreValidationError(
@@ -27,7 +35,7 @@ export function validateMiniCoreProgram(program: Program): void {
       `Entry symbol ${entrySymbol.name} must be a function`,
     );
   }
-  if (entrySymbol.arity !== 0) {
+  if (requireNullaryEntry && entrySymbol.arity !== 0) {
     throw new MiniCoreValidationError(
       `Entry function ${entrySymbol.name} must have arity 0`,
     );

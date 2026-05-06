@@ -37,5 +37,16 @@ export {
   type EmitLlvmOptions,
   type LlvmIncomingEdge,
   type LlvmIncomingEdges,
+  type LlvmMainWrapper,
+  type LlvmRepresentation,
   type LlvmTargetProfile,
 } from "./llvm/index.ts";
+export {
+  compileTripSourceToLlvm,
+  moduleNameOfTripSource,
+  parseLlvmTarget,
+  parseModuleSourceSpec,
+  readModuleSourceSpec,
+  type CompileTripSourceToLlvmOptions,
+  type TripModuleSourceFileSpec,
+} from "./llvmCompiler.ts";

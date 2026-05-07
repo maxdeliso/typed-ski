@@ -25,7 +25,6 @@ bazelisk run //:dist
 bazelisk run //:test
 bazelisk run //:coverage
 bazelisk run //:ci
-bazelisk run //:serve_hephaestus
 ```
 
 Alternatively, use `pnpm` directly for common distribution tasks:
@@ -125,44 +124,6 @@ Other useful commands:
 - `bazelisk run //:coverage` runs the tests with coverage output
 - `bazelisk run //:ci` runs formatting, lint, type checking, build, and a single
   coverage-producing local test pass
-
-### Running Hephaestus
-
-Build the browser assets for the workbench with:
-
-```bash
-bazelisk run //:hephaestus_assets
-```
-
-Start the server with:
-
-```bash
-bazelisk run //:serve_hephaestus
-```
-
-Then open `http://127.0.0.1:8080/workbench.html`.
-
-To use a different port:
-
-```bash
-PORT=9000 bazelisk run //:serve_hephaestus
-```
-
-On PowerShell:
-
-```powershell
-$env:PORT = "9000"
-bazelisk run //:serve_hephaestus
-```
-
-Notes:
-
-- `//:serve_hephaestus` builds `dist/workbench.js`, `dist/webglForest.js`, and
-  `dist/arenaWorker.browser.js` before starting the server.
-- `bazelisk build //:release_wasm` writes the hermetic wasm artifact to
-  `bazel-bin/wasm/release.wasm`. The Node.js-side build flow stages that artifact
-  into `wasm/release.wasm` when present so browser and publish paths can use the
-  Bazel-built module.
 
 ## Artifacts
 

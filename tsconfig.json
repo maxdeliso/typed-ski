@@ -21,5 +21,5 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["bin", "compiler", "lib", "scripts", "server", "test"]
+  "include": ["bin", "compiler", "lib", "scripts", "test"]
 }

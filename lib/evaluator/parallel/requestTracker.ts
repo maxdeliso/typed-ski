@@ -45,7 +45,7 @@ type RequestResolver = {
 
 /**
  * @internal
- * Optional instrumentation hooks (used by `server/workbench.js`).
+ * Optional instrumentation hooks for monitoring request lifecycle events.
  *
  * Notes:
  * - `workerIndex` is a logical assignment (round-robin at submit time).

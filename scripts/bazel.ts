@@ -21,8 +21,6 @@ type CommandName =
   | "verify-generated"
   | "dist"
   | "build"
-  | "hephaestus-assets"
-  | "serve-hephaestus"
   | "fmt-check"
   | "lint"
   | "typecheck"
@@ -192,8 +190,6 @@ Commands:
   verify-generated
   dist
   build
-  hephaestus-assets
-  serve-hephaestus
   fmt-check
   lint
   typecheck
@@ -616,45 +612,6 @@ export async function buildDist(
   await validateDist();
 }
 
-async function buildHephaestusAssets(
-  options: {
-    sync?: boolean;
-    freshWasm?: boolean;
-    stageWasm?: boolean;
-  } = { sync: true, freshWasm: true, stageWasm: true },
-): Promise<void> {
-  await ensurePreconditions(options);
-  await fsp.mkdir(join(PROJECT_ROOT, "dist"), { recursive: true });
-  await run(
-    esbuildCommand(
-      "server/workbench.js",
-      "--bundle",
-      "--outfile=dist/workbench.js",
-      "--format=esm",
-      "--platform=browser",
-    ),
-  );
-  await run(
-    esbuildCommand(
-      "server/webglForest.ts",
-      "--bundle",
-      "--outfile=dist/webglForest.js",
-      "--format=esm",
-      "--platform=browser",
-    ),
-  );
-  await run(
-    esbuildCommand(
-      "lib/evaluator/arenaWorker.ts",
-      "--bundle",
-      "--outfile=dist/arenaWorker.browser.js",
-      "--format=esm",
-      "--platform=browser",
-      "--external:node:*",
-    ),
-  );
-}
-
 function getBazelWasmArtifactUrl(): string | undefined {
   for (const candidate of getBazelWasmArtifactCandidates()) {
     try {
@@ -678,18 +635,6 @@ async function stageBazelWasmArtifactIfPresent(): Promise<void> {
       return;
     } catch {}
   }
-}
-
-async function serveHephaestus(): Promise<void> {
-  await buildHephaestusAssets();
-  const port = process.env["PORT"] ?? "8080";
-  await run([
-    NODE,
-    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
-    NODE_TRANSFORM_TYPES_ARG,
-    "server/serveWorkbench.ts",
-    port,
-  ]);
 }
 
 async function formatCheck(): Promise<void> {
@@ -993,12 +938,6 @@ export async function main(
       break;
     case "build":
       await build();
-      break;
-    case "hephaestus-assets":
-      await buildHephaestusAssets();
-      break;
-    case "serve-hephaestus":
-      await serveHephaestus();
       break;
     case "fmt-check":
       await formatCheck();

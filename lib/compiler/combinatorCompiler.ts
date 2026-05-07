@@ -1,6 +1,6 @@
 import { getAvlObject } from "../avl.ts";
 import { getBinObject } from "../bin.ts";
-import { ParallelArenaEvaluatorWasm } from "../evaluator/parallelArenaEvaluator.ts";
+import { createThanatosEvaluator } from "../evaluator/thanatosEvaluator.ts";
 import { linkModules } from "../linker/moduleLinker.ts";
 import { getNatObject } from "../nat.ts";
 import { parseSKI } from "../parser/ski.ts";
@@ -361,59 +361,9 @@ function requireModule(
 
 async function runHarness(source: string, workers = 1): Promise<string> {
   const expression = await buildBootstrappedCompileExpression(source);
-  const evaluator = await ParallelArenaEvaluatorWasm.create(workers);
-
-  try {
-    const chunks: Uint8Array[] = [];
-    let totalBytes = 0;
-    let finished = false;
-    let failure: unknown;
-
-    const reduction = evaluator
-      .reduceAsync(expression)
-      .then(() => {
-        finished = true;
-      })
-      .catch((error) => {
-        finished = true;
-        failure = error;
-      });
-
-    while (!finished) {
-      const chunk = await evaluator.readStdout(4096);
-      if (chunk.length > 0) {
-        chunks.push(chunk);
-        totalBytes += chunk.length;
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 1));
-      }
-    }
-
-    await reduction;
-    while (true) {
-      const chunk = await evaluator.readStdout(4096);
-      if (chunk.length === 0) {
-        break;
-      }
-      chunks.push(chunk);
-      totalBytes += chunk.length;
-    }
-
-    if (failure) {
-      throw failure;
-    }
-
-    const bytes = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return new TextDecoder().decode(bytes);
-  } finally {
-    evaluator.terminate();
-  }
+  const evaluator = await createThanatosEvaluator({ workers });
+  const { stdout } = await evaluator.reduceWithIo(expression);
+  return new TextDecoder().decode(stdout);
 }
 
 function normalizeCombinatorString(source: string): string {

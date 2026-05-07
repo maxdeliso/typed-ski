@@ -101,13 +101,10 @@ it("thanatos harness helpers cover U8 DAG and passthrough evaluator", async () =
   assert.deepEqual(await runThanatosBatch([]), []);
 
   const expr = parseSKI("I");
-  const stepped = passthroughEvaluator.stepOnce(expr);
+  const stepped = await passthroughEvaluator.step(expr);
   assert.equal(stepped.altered, false);
   assert.equal(stepped.expr, expr);
-  assert.equal(passthroughEvaluator.reduce(expr), expr);
-  const reduceAsync = passthroughEvaluator.reduceAsync;
-  assert.ok(reduceAsync);
-  assert.equal(await reduceAsync(expr), expr);
+  assert.equal(await passthroughEvaluator.reduce(expr), expr);
 });
 
 it(
@@ -165,8 +162,8 @@ it(
     const outputPath = join(tempDir, "stdout.bin");
     const traceDir = await mkdtemp(join(tmpdir(), "thanatos-trace-"));
 
-    let brokerUrl = "";
-    let brokerToken = "";
+    let brokerUrl: string;
+    let brokerToken: string;
     let started:
       | Awaited<ReturnType<typeof startThanatosBatchBroker>>
       | undefined;

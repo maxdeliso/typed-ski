@@ -8,8 +8,8 @@ An implementation of a parser, evaluator, printer, and visualizer for
 - [TypeScript](https://www.typescriptlang.org/)
 - [pnpm](https://pnpm.io/) for dependency management (repo-pinned as a `devDependency`)
 - [Node.js](https://nodejs.org/) as a bootstrap for the repo-pinned toolchain
-- [C](<https://en.wikipedia.org/wiki/C_(programming_language)>) (compiled to
-  WebAssembly)
+- [C](<https://en.wikipedia.org/wiki/C_(programming_language)>) for the native
+  Thanatos evaluator
 - [Bazelisk](https://github.com/bazelbuild/bazelisk), which downloads the
   hermetic Zig-based C/C++ toolchain on first native build
 
@@ -18,7 +18,7 @@ An implementation of a parser, evaluator, printer, and visualizer for
 This project uses Bazelisk for common development tasks:
 
 ```bash
-bazelisk build //:thanatos //:release_wasm
+bazelisk build //:thanatos
 bazelisk test //:native_tests
 bazelisk test //:node_tests
 bazelisk run //:dist
@@ -33,9 +33,9 @@ Alternatively, use `pnpm` directly for common distribution tasks:
 pnpm run dist
 ```
 
-The Bazel graph now includes hermetic native `thanatos` and `wasm/release.wasm`
-targets alongside the Node.js-based build, lint, coverage, and packaging flows,
-without requiring WSL, Nix, or Visual Studio Build Tools on Windows.
+The Bazel graph includes a hermetic native `thanatos` target alongside the
+Node.js-based build, lint, coverage, and packaging flows, without requiring WSL,
+Nix, or Visual Studio Build Tools on Windows.
 
 If Bazelisk is installed as `bazel` on your machine, the same commands work with
 `bazel` in place of `bazelisk`. The Bazel version is pinned in `.bazelversion`.
@@ -49,7 +49,7 @@ If Bazelisk is installed as `bazel` on your machine, the same commands work with
 3. Install `Bazelisk`
 4. Clone the repository
 5. Run `pnpm install`
-6. Run `bazelisk build //:thanatos //:release_wasm`
+6. Run `bazelisk build //:thanatos`
 7. Run `bazelisk run //:dist`
 8. Open the project in VS Code
 
@@ -85,7 +85,7 @@ Bazel setup does not expose a runfiles tree by default.
 Run the native C targets with:
 
 ```bash
-bazelisk build //:thanatos //:release_wasm
+bazelisk build //:thanatos
 bazelisk test //:native_tests
 ```
 
@@ -94,7 +94,7 @@ bazelisk test //:native_tests
 To run a single test file with Node directly:
 
 ```powershell
-$env:TYPED_SKI_WASM_PATH = "$(pwd)\bazel-bin\wasm\release.wasm"
+$env:THANATOS_BIN = "$(pwd)\bazel-bin\core\thanatos.exe"
 node --experimental-transform-types --test-global-setup test/globalSetup.ts --test test/path/to/test.ts
 ```
 
@@ -118,7 +118,7 @@ bazelisk run //:verify_version
 
 Other useful commands:
 
-- `bazelisk run //:dist` performs an atomic, validated build of all distributable artifacts (CLI, Workers, WASM)
+- `bazelisk run //:dist` performs an atomic, validated build of distributable CLI artifacts
 - `bazelisk run //:build` is an alias for `//:dist` that also verifies the repo version
 - `bazelisk run //:typecheck` runs TypeScript type checking over the test suite
 - `bazelisk run //:coverage` runs the tests with coverage output
@@ -152,14 +152,13 @@ ASCII-only outputs:
 
 ## Performance and Parallelism
 
-This project implements a high-performance, multi-threaded SKI reducer:
+This project evaluates SKI expressions through Thanatos, a native
+multi-threaded daemon:
 
-- **Parallel Request Execution**: Multiple Web Workers reduce independent
-  requests against a shared arena.
-- **Preemptive Yielding**: Workers yield suspended computations so long-running
-  jobs do not monopolize execution.
-- **Lock-Free Communication**: io_uring-style submission and completion rings
-  enable low-latency communication between the main thread and workers.
+- **Parallel Native Execution**: Thanatos dispatches reductions to native worker
+  threads.
+- **Daemon Delegation**: TypeScript evaluator APIs submit topo-DAG requests to
+  the daemon and decode topo-DAG responses.
 - **Structural Sharing**: Global hash-consing ensures that identical
   sub-expressions share the same memory, significantly reducing the memory
   footprint of large reductions.
@@ -167,12 +166,32 @@ This project implements a high-performance, multi-threaded SKI reducer:
 ### Thanatos (Native Orchestrator)
 
 Thanatos is the native C11/pthreads orchestrator for compute-heavy reductions.
-The same C core (arena and reduction logic) is compiled in two ways: as the
-native `thanatos` binary for CLI/batch use, and to WebAssembly
-(`wasm/release.wasm`) for use by the parallel arena evaluator in Node.js. The
-native binary keeps the SKI evaluator on-metal by managing worker dispatch and
-completion queues directly, which avoids Node.js/WASM bridge overhead and improves
-throughput and runtime stability for long-running workloads.
+The TypeScript evaluator is a daemon forwarder: it serializes SKI expressions to
+the topo-DAG wire format, submits requests to `thanatos`, and decodes the
+daemon's response. Keeping evaluation native avoids JavaScript runtime overhead
+and improves throughput and runtime stability for long-running workloads.
+
+### Topo-DAG Wire Format
+
+The TypeScript evaluator and Thanatos communicate using the **Topo-DAG** wire format, an ASCII-based serialization of the SKI graph. It's designed to be simple, fast to parse natively, and natively structural-sharing aware.
+
+A Topo-DAG string consists of a series of fixed-width records separated by `|`. Each record is exactly 19 characters wide (making the stride 20 characters including the separator), and represents a single node in the DAG.
+
+```text
+[Term: 3 chars][Left Pointer: 8 hex chars][Right Pointer: 8 hex chars]
+```
+
+- **Term Field (3 chars)**:
+  - Application nodes: `@00`
+  - Unsigned 8-bit integers: `U` followed by a 2-character hex value (e.g., `UFF`).
+  - Terminal symbols: The symbol character followed by `00` (e.g., `S00`, `K00`, `I00`).
+- **Left/Right Pointers (8 chars each)**:
+  - Encoded as 8-character, zero-padded uppercase hexadecimal strings.
+  - Represent the **absolute character offset** of the child record within the string.
+  - Because the DAG is topologically sorted, pointers strictly point **backwards** to previously defined records.
+  - Null pointers (used by leaves like terminals and `U8`s) are represented by `FFFFFFFF`.
+
+Because pointers point backward, the roots of the DAG are implicitly the last records in the string.
 
 ## MiniCore ANF
 
@@ -218,6 +237,20 @@ calls, backend runtime calls, high-level constructor creation, and moves.
 Runtime calls use a small compiler-facing ABI, currently `trip_read_one : () ->
 U8` and `trip_write_one : U8 -> Unit`. General ADT `case` also stays high-level
 in Block IR, so later representation passes can choose an implementation layout.
+
+## LLVM Compiler Backend
+
+In addition to the Thanatos SKI evaluator, the compiler features an ahead-of-time **LLVM Backend**. The pipeline lowers MiniCore Block IR modules into LLVM IR via the `emitLlvmModule` target. This backend supports generating generic LLVM IR as well as compiling for specific target profiles (e.g., `x86_64-unknown-linux-gnu`, `wasm32-wasi`). The emitted LLVM code utilizes a boxed-runtime representation to bridge Trip's data structures and semantics into native machine code.
+
+## TripC Object Files (`.tripc`)
+
+The compiler uses a standardized JSON-based intermediate object file format (`.tripc`) for modular compilation and linking. A `.tripc` object encapsulates a compiled Trip module, carrying:
+
+- **Module Identity & Linkage**: The module name, `exports`, and explicit `imports` mapping symbols to their providing modules.
+- **Definitions**: The compiled intermediate definitions (AST representations) indexed by symbol name.
+- **Data Definitions**: Canonicalized Abstract Data Type (ADT) metadata. This allows downstream compilation passes to robustly canonicalize and validate matches across module boundaries without relying on hardcoded built-ins.
+
+To guarantee determinism, `.tripc` serialization forces reproducible, canonical ASCII-ordered keys and safely encapsulates large numeric types using a dedicated `__trip_bigint__` representation.
 
 ## Works Referenced
 

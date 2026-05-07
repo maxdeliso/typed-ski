@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
 
 import { dirname, join, relative } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 
@@ -26,22 +26,6 @@ type CommandName =
   | "typecheck"
   | "test"
   | "bazel-test-shard";
-
-type AqueryTarget = {
-  id: number;
-  label: string;
-};
-
-type AqueryAction = {
-  targetId: number;
-  mnemonic: string;
-  arguments?: string[];
-};
-
-type AqueryResponse = {
-  targets?: AqueryTarget[];
-  actions?: AqueryAction[];
-};
 
 const NODE = process.execPath;
 const BAZELISK = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
@@ -77,18 +61,6 @@ const TEMP_ROOT =
 
 const COMPILED_TRIPC_NAME =
   process.platform === "win32" ? "tripc.cmd" : "tripc";
-const WASM_BUILD_INPUT_PATHS = [
-  join(PROJECT_ROOT, "core"),
-  join(PROJECT_ROOT, "wasm"),
-  join(PROJECT_ROOT, "bazel"),
-  join(PROJECT_ROOT, "BUILD.bazel"),
-  join(PROJECT_ROOT, "MODULE.bazel"),
-  join(PROJECT_ROOT, ".bazelrc"),
-];
-const WASM_BUILD_INPUT_EXCLUDES = new Set([
-  join(PROJECT_ROOT, "wasm", "release.wasm"),
-]);
-let ensuredFreshBazelWasmArtifactPromise: Promise<void> | null = null;
 
 function pnpmCommand(...args: string[]): string[] {
   const configuredPnpmPath = process.env["TYPED_SKI_PNPM_PATH"];
@@ -118,7 +90,6 @@ async function ensurePnpmStore(): Promise<string> {
   await fsp.mkdir(storeDir, { recursive: true });
   return storeDir;
 }
-const BAZEL_RELEASE_WASM_FILENAMES = ["release.wasm", "release_wasm.wasm"];
 const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
 
 const repo = (...parts: string[]) => join(PROJECT_ROOT, ...parts);
@@ -196,135 +167,6 @@ Commands:
   test
   bazel-test-shard`);
   process.exit(1);
-}
-
-function getBazelWasmArtifactCandidates(): string[] {
-  const candidates = BAZEL_RELEASE_WASM_FILENAMES.map((filename) =>
-    join(PROJECT_ROOT, "bazel-bin", "wasm", filename),
-  );
-
-  try {
-    if (fs.existsSync(join(PROJECT_ROOT, "bazel-out"))) {
-      for (const entry of fs.readdirSync(join(PROJECT_ROOT, "bazel-out"), {
-        withFileTypes: true,
-      })) {
-        if (!entry.isDirectory()) continue;
-        for (const filename of BAZEL_RELEASE_WASM_FILENAMES) {
-          candidates.push(
-            join(
-              PROJECT_ROOT,
-              "bazel-out",
-              entry.name,
-              "bin",
-              "wasm",
-              filename,
-            ),
-          );
-        }
-      }
-    }
-  } catch {}
-
-  return [...new Set(candidates)];
-}
-
-async function getLatestModifiedTimeMs(path: string): Promise<number> {
-  if (WASM_BUILD_INPUT_EXCLUDES.has(path)) {
-    return 0;
-  }
-
-  let stat: fs.Stats;
-  try {
-    stat = await fsp.stat(path);
-  } catch {
-    return 0;
-  }
-
-  if (!stat.isDirectory()) {
-    return stat.mtimeMs;
-  }
-
-  let latest = stat.mtimeMs;
-  let entries: fs.Dirent[];
-  try {
-    entries = await fsp.readdir(path, { withFileTypes: true });
-  } catch {
-    return latest;
-  }
-
-  for (const entry of entries) {
-    const childPath = join(path, entry.name);
-    if (entry.isDirectory()) {
-      latest = Math.max(latest, await getLatestModifiedTimeMs(childPath));
-      continue;
-    }
-    if (entry.isFile()) {
-      latest = Math.max(latest, (await fsp.stat(childPath)).mtimeMs);
-      continue;
-    }
-    if (entry.isSymbolicLink()) {
-      latest = Math.max(latest, await getLatestModifiedTimeMs(childPath));
-    }
-  }
-
-  return latest;
-}
-
-async function getLatestWasmInputModifiedTimeMs(): Promise<number> {
-  let latest = 0;
-  for (const path of WASM_BUILD_INPUT_PATHS) {
-    latest = Math.max(latest, await getLatestModifiedTimeMs(path));
-  }
-  return latest;
-}
-
-async function getNewestBazelWasmArtifactModifiedTimeMs(): Promise<number> {
-  let newest = 0;
-  for (const candidate of getBazelWasmArtifactCandidates()) {
-    try {
-      const stat = await fsp.stat(candidate);
-      if (stat.isFile()) {
-        newest = Math.max(newest, stat.mtimeMs);
-      }
-    } catch {}
-  }
-  return newest;
-}
-
-async function ensureFreshBazelWasmArtifact(): Promise<void> {
-  if (ensuredFreshBazelWasmArtifactPromise) {
-    await ensuredFreshBazelWasmArtifactPromise;
-    return;
-  }
-
-  ensuredFreshBazelWasmArtifactPromise = (async () => {
-    await syncGenerated();
-    const [latestInputMtimeMs, newestArtifactMtimeMs] = await Promise.all([
-      getLatestWasmInputModifiedTimeMs(),
-      getNewestBazelWasmArtifactModifiedTimeMs(),
-    ]);
-
-    if (
-      newestArtifactMtimeMs !== 0 &&
-      newestArtifactMtimeMs >= latestInputMtimeMs
-    ) {
-      return;
-    }
-
-    console.log(
-      newestArtifactMtimeMs === 0
-        ? "Building Bazel release_wasm artifact..."
-        : "Refreshing stale Bazel release_wasm artifact...",
-    );
-    await run([BAZELISK, "build", "//:release_wasm"]);
-  })();
-
-  try {
-    await ensuredFreshBazelWasmArtifactPromise;
-  } catch (error) {
-    ensuredFreshBazelWasmArtifactPromise = null;
-    throw error;
-  }
 }
 
 async function run(args: string[], options: any = {}): Promise<void> {
@@ -447,17 +289,6 @@ async function syncGenerated(): Promise<void> {
     "--jsr-json",
     repo("jsr.json"),
   ]);
-  await run([
-    NODE,
-    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
-    repo("scripts", "generate_layouts.mjs"),
-    "--input",
-    repo("core", "arena_layout.def"),
-    "--c-out",
-    repo("core", "arena_layout.generated.h"),
-    "--ts-out",
-    repo("lib", "evaluator", "arenaHeader.generated.ts"),
-  ]);
   await run(pnpmCommand("install", "--lockfile-only"));
 }
 
@@ -474,36 +305,16 @@ async function verifyGenerated(): Promise<void> {
     repo("jsr.json"),
     "--verify",
   ]);
-  await run([
-    NODE,
-    NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
-    repo("scripts", "generate_layouts.mjs"),
-    "--input",
-    repo("core", "arena_layout.def"),
-    "--c-out",
-    repo("core", "arena_layout.generated.h"),
-    "--ts-out",
-    repo("lib", "evaluator", "arenaHeader.generated.ts"),
-    "--verify",
-  ]);
   console.log("Generated files are up to date.");
 }
 
 async function ensurePreconditions(
   options: {
     sync?: boolean;
-    freshWasm?: boolean;
-    stageWasm?: boolean;
   } = {},
 ): Promise<void> {
   if (options.sync) {
     await syncGenerated();
-  }
-  if (options.freshWasm) {
-    await ensureFreshBazelWasmArtifact();
-  }
-  if (options.stageWasm) {
-    await stageBazelWasmArtifactIfPresent();
   }
 }
 
@@ -512,8 +323,6 @@ async function validateDist(): Promise<void> {
     "dist/tripc.js",
     "dist/tripc.min.js",
     "dist/tripc.node.js",
-    "dist/arenaWorker.js",
-    "dist/arenaWorker.browser.js",
     process.platform === "win32" ? "dist/tripc.cmd" : "dist/tripc",
   ];
 
@@ -524,20 +333,13 @@ async function validateDist(): Promise<void> {
     }
   }
 
-  const wasmPath = join(PROJECT_ROOT, "wasm", "release.wasm");
-  if (!fs.existsSync(wasmPath)) {
-    console.warn("Warning: wasm/release.wasm is missing from the source tree.");
-  }
-
   console.log("Distribution validation successful.");
 }
 
 export async function buildDist(
   options: {
     sync?: boolean;
-    freshWasm?: boolean;
-    stageWasm?: boolean;
-  } = { sync: true, freshWasm: true, stageWasm: true },
+  } = { sync: true },
 ): Promise<void> {
   await ensurePreconditions(options);
 
@@ -570,26 +372,6 @@ export async function buildDist(
       "--platform=node",
     ),
   );
-  await run(
-    esbuildCommand(
-      "lib/evaluator/arenaWorker.ts",
-      "--bundle",
-      "--outfile=dist/arenaWorker.js",
-      "--format=esm",
-      "--platform=node",
-    ),
-  );
-  await run(
-    esbuildCommand(
-      "lib/evaluator/arenaWorker.ts",
-      "--bundle",
-      "--outfile=dist/arenaWorker.browser.js",
-      "--format=esm",
-      "--platform=browser",
-      "--external:node:*",
-    ),
-  );
-
   const wrapperPath = join(PROJECT_ROOT, "dist", COMPILED_TRIPC_NAME);
   if (process.platform === "win32") {
     await fsp.writeFile(
@@ -610,31 +392,6 @@ export async function buildDist(
   );
 
   await validateDist();
-}
-
-function getBazelWasmArtifactUrl(): string | undefined {
-  for (const candidate of getBazelWasmArtifactCandidates()) {
-    try {
-      const stat = fs.statSync(candidate);
-      if (stat.isFile()) return pathToFileURL(candidate).href;
-    } catch {}
-  }
-  return undefined;
-}
-
-async function stageBazelWasmArtifactIfPresent(): Promise<void> {
-  const stagedPath = join(PROJECT_ROOT, "wasm", "release.wasm");
-  for (const candidate of getBazelWasmArtifactCandidates()) {
-    try {
-      const stat = await fsp.stat(candidate);
-      if (!stat.isFile()) continue;
-      await fsp.mkdir(join(PROJECT_ROOT, "wasm"), { recursive: true });
-      const bytes = await fsp.readFile(candidate);
-      await fsp.rm(stagedPath, { force: true }).catch(() => {});
-      await fsp.writeFile(stagedPath, bytes);
-      return;
-    } catch {}
-  }
 }
 
 async function formatCheck(): Promise<void> {
@@ -688,9 +445,6 @@ async function collectTests(): Promise<string[]> {
   await walk(testRoot);
   files.sort();
   console.log(`Found ${files.length} test files.`);
-  if (files.length > 0) {
-    console.log(`Sample test paths: ${files.slice(0, 3).join(", ")}`);
-  }
   return files;
 }
 
@@ -832,10 +586,6 @@ async function prepareTestExecution(
       console.log(`[env] ${key}: ${process.env[key]}`);
     }
   }
-  const explicitWasmPath = process.env["TYPED_SKI_WASM_PATH"];
-  if (!explicitWasmPath) {
-    await ensureFreshBazelWasmArtifact();
-  }
   if (
     needsDistArtifacts(files) &&
     process.env["TYPED_SKI_DIST_READY"] !== "1"
@@ -844,17 +594,7 @@ async function prepareTestExecution(
     await buildDist();
   }
 
-  if (explicitWasmPath) {
-    console.log(`Using explicit WASM path: ${explicitWasmPath}`);
-    return { TYPED_SKI_WASM_PATH: explicitWasmPath };
-  }
-  const wasmUrl = getBazelWasmArtifactUrl();
-  if (wasmUrl) {
-    console.log(`Using detected WASM URL: ${wasmUrl}`);
-  } else {
-    console.log("No WASM artifact found.");
-  }
-  return wasmUrl ? { TYPED_SKI_WASM_PATH: wasmUrl } : {};
+  return {};
 }
 
 function getBazelCoverageOutputFile(): string | undefined {

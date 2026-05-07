@@ -8,11 +8,6 @@ filegroup(
 )
 
 filegroup(
-    name = "generate_layouts_runner",
-    srcs = ["generate_layouts_runner.sh"],
-)
-
-filegroup(
     name = "generate_version_runner",
     srcs = ["generate_version_runner.sh"],
 )

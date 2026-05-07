@@ -5,7 +5,7 @@ import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import type { SKIExpression } from "../../lib/ski/expression.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
+import type { ThanatosEvaluator } from "../../lib/index.ts";
 
 interface TripHarnessOptions {
   includePrelude?: boolean;
@@ -52,27 +52,31 @@ async function compileAndLink(
 
 export async function evaluateTrip(
   source: string,
-  evaluator: ParallelArenaEvaluatorWasm,
+  evaluator: ThanatosEvaluator,
   options: TripHarnessOptions = {},
 ): Promise<SKIExpression> {
   const skiExpression = await compileAndLink(source, options);
   const skiExpr = parseSKI(skiExpression);
-  return await evaluator.reduceAsync(skiExpr);
+  return await evaluator.reduce(skiExpr);
 }
 
 export async function evaluateTripWithIo(
   source: string,
-  evaluator: ParallelArenaEvaluatorWasm,
+  evaluator: ThanatosEvaluator,
   options: TripIoOptions = {},
 ): Promise<TripIoResult> {
   const verbose = options.verbose ?? false;
   const skiExpression = await compileAndLink(source, options, verbose);
   const skiExpr = parseSKI(skiExpression);
-  const resultPromise = evaluator.reduceAsync(skiExpr, options.stepLimit);
-  if (options.stdin && options.stdin.length > 0) {
-    await evaluator.writeStdin(options.stdin);
+  const { result, stdout } = await evaluator.reduceWithIo(
+    skiExpr,
+    options.stdin ?? new Uint8Array(0),
+  );
+  if (options.stepLimit !== undefined) {
+    return {
+      result: await evaluator.reduce(skiExpr, options.stepLimit),
+      stdout,
+    };
   }
-  const result = await resultPromise;
-  const stdout = await evaluator.readStdout(options.stdoutMaxBytes ?? 4096);
   return { result, stdout };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import rsexport, { type RandomSeed } from "random-seed";
 import { it } from "../util/test_shim.ts";
-import { createArenaEvaluator } from "../../lib/index.ts";
+import { createArenaEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { applyMany, unparseSKI } from "../../lib/ski/expression.ts";
 import { randExpression } from "../../lib/ski/generator.ts";
@@ -33,51 +33,55 @@ it("optimizes Sx(Ky) into Cxy", () => {
   assert.equal(optimize("((SB)(KI))"), "((CB)I)");
 });
 
-it("preserves semantics for optimized rewrite patterns under random pure arguments", async () => {
-  const evaluator = await createArenaEvaluator();
-  const random: RandomSeed = create("optimizer-semantics");
-  const rewriteSources = [
-    "((B(KI))S)",
-    "((S((BK)I))C)",
-    "((C((BK)I))S)",
-    "((S(KI))B)",
-    "((SB)(KI))",
-  ];
+it(
+  "preserves semantics for optimized rewrite patterns under random pure arguments",
+  { skip: !thanatosAvailable() },
+  async () => {
+    const evaluator = await createArenaEvaluator();
+    const random: RandomSeed = create("optimizer-semantics");
+    const rewriteSources = [
+      "((B(KI))S)",
+      "((S((BK)I))C)",
+      "((C((BK)I))S)",
+      "((S(KI))B)",
+      "((SB)(KI))",
+    ];
 
-  try {
-    for (const source of rewriteSources) {
-      const original = parseSKI(source);
-      const optimized = optimizeSKI(original);
+    try {
+      for (const source of rewriteSources) {
+        const original = parseSKI(source);
+        const optimized = optimizeSKI(original);
 
-      for (let sample = 0; sample < 6; sample++) {
-        const args = [
-          randExpression(random, 4 + sample),
-          randExpression(random, 5 + sample),
-          randExpression(random, 6 + sample),
-          randExpression(random, 7 + sample),
-        ];
-        const originalReduced = evaluator.reduce(
-          applyMany(original, ...args),
-          1000,
-        );
-        const optimizedReduced = evaluator.reduce(
-          applyMany(optimized, ...args),
-          1000,
-        );
+        for (let sample = 0; sample < 6; sample++) {
+          const args = [
+            randExpression(random, 4 + sample),
+            randExpression(random, 5 + sample),
+            randExpression(random, 6 + sample),
+            randExpression(random, 7 + sample),
+          ];
+          const originalReduced = await evaluator.reduce(
+            applyMany(original, ...args),
+            1000,
+          );
+          const optimizedReduced = await evaluator.reduce(
+            applyMany(optimized, ...args),
+            1000,
+          );
 
-        assert.equal(
-          unparseSKI(optimizedReduced),
-          unparseSKI(originalReduced),
-          `optimized form changed semantics for ${source}`,
-        );
+          assert.equal(
+            unparseSKI(optimizedReduced),
+            unparseSKI(originalReduced),
+            `optimized form changed semantics for ${source}`,
+          );
+        }
+      }
+    } finally {
+      const maybeTerminable = evaluator as unknown as {
+        terminate?: () => void;
+      };
+      if (typeof maybeTerminable.terminate === "function") {
+        await maybeTerminable.terminate();
       }
     }
-  } finally {
-    const maybeTerminable = evaluator as unknown as {
-      terminate?: () => void;
-    };
-    if (typeof maybeTerminable.terminate === "function") {
-      maybeTerminable.terminate();
-    }
-  }
-});
+  },
+);

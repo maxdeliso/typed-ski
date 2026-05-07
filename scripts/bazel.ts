@@ -8,12 +8,51 @@ import * as fsp from "node:fs/promises";
 import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
 
-import {
-  assertCurrentNodeVersion,
-  getRepoVersion,
-  getRequiredNodeVersion,
-  PROJECT_ROOT,
-} from "./repoNode.ts";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, "..");
+const PACKAGE_JSON_PATH = join(PROJECT_ROOT, "package.json");
+
+type PackageJson = {
+  version: string;
+  engines?: {
+    node?: string;
+  };
+};
+
+function readPackageJson(): PackageJson {
+  return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8")) as PackageJson;
+}
+
+function getRepoVersion(): string {
+  return readPackageJson().version;
+}
+
+function getRequiredNodeVersion(): string {
+  return readPackageJson().engines?.node ?? "25.x";
+}
+
+function getRequiredNodeMajor(): number | null {
+  const required = getRequiredNodeVersion();
+  const major = required.match(/(\d+)/)?.[1];
+  return major === undefined ? null : Number(major);
+}
+
+function assertCurrentNodeVersion(): void {
+  if (process.env["TYPED_SKI_SKIP_NODE_VERSION_CHECK"] === "1") {
+    return;
+  }
+
+  const current = process.version.replace("v", "");
+  const required = getRequiredNodeVersion();
+  const requiredMajor = getRequiredNodeMajor();
+  const currentMajor = Number(current.split(".")[0]);
+
+  if (requiredMajor !== null && currentMajor !== requiredMajor) {
+    console.warn(
+      `Warning: This repo expects Node ${required}, but found ${current}.`,
+    );
+  }
+}
 
 type CommandName =
   | "verify-version"
@@ -22,7 +61,6 @@ type CommandName =
   | "dist"
   | "build"
   | "fmt-check"
-  | "lint"
   | "typecheck"
   | "test"
   | "bazel-test-shard";
@@ -162,7 +200,6 @@ Commands:
   dist
   build
   fmt-check
-  lint
   typecheck
   test
   bazel-test-shard`);
@@ -397,11 +434,6 @@ export async function buildDist(
 async function formatCheck(): Promise<void> {
   console.log("Format check using pnpm exec prettier --check .");
   await run(pnpmCommand("exec", "prettier", "--check", "."));
-}
-
-async function lint(): Promise<void> {
-  console.log("Lint using pnpm exec eslint .");
-  await run(pnpmCommand("exec", "eslint", "."));
 }
 
 async function collectTests(): Promise<string[]> {
@@ -681,9 +713,6 @@ export async function main(
       break;
     case "fmt-check":
       await formatCheck();
-      break;
-    case "lint":
-      await lint();
       break;
     case "typecheck":
       await typecheck();

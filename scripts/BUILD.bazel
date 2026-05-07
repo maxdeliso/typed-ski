@@ -6,8 +6,3 @@ filegroup(
     name = "scripts",
     srcs = glob(["**"], exclude = ["*.generated.*"]),
 )
-
-filegroup(
-    name = "generate_version_runner",
-    srcs = ["generate_version_runner.sh"],
-)

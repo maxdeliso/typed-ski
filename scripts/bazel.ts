@@ -61,7 +61,6 @@ type CommandName =
   | "dist"
   | "build"
   | "fmt-check"
-  | "lint"
   | "typecheck"
   | "test"
   | "bazel-test-shard";
@@ -201,7 +200,6 @@ Commands:
   dist
   build
   fmt-check
-  lint
   typecheck
   test
   bazel-test-shard`);
@@ -436,11 +434,6 @@ export async function buildDist(
 async function formatCheck(): Promise<void> {
   console.log("Format check using pnpm exec prettier --check .");
   await run(pnpmCommand("exec", "prettier", "--check", "."));
-}
-
-async function lint(): Promise<void> {
-  console.log("Lint using pnpm exec eslint .");
-  await run(pnpmCommand("exec", "eslint", "."));
 }
 
 async function collectTests(): Promise<string[]> {
@@ -720,9 +713,6 @@ export async function main(
       break;
     case "fmt-check":
       await formatCheck();
-      break;
-    case "lint":
-      await lint();
       break;
     case "typecheck":
       await typecheck();

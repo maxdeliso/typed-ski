@@ -49,16 +49,12 @@
     "ts-morph": "^28.0.0"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/node": "^25.6.0",
     "@types/random-seed": "^0.3.5",
     "esbuild": "^0.28.0",
-    "eslint": "^10.2.1",
-    "globals": "^17.5.0",
     "json-stringify-safe": "5.0.1",
     "pnpm": "10.33.2",
     "prettier": "^3.8.3",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.0"
+    "typescript": "^6.0.3"
   }
 }

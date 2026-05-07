@@ -8,7 +8,7 @@ import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
+import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { loadInput } from "../util/fileLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,7 +39,7 @@ async function getPreludeObjectCached() {
   return preludeObject;
 }
 
-it("Unparse - Stage 1 Corpus", async () => {
+it("Unparse - Stage 1 Corpus", { skip: !thanatosAvailable() }, async () => {
   const unparseObj = await getUnparseObject();
   const preludeObj = await getPreludeObjectCached();
   const stage1Harness = loadUnparseStage1Input("harness.trip");
@@ -128,7 +128,7 @@ it("Unparse - Stage 1 Corpus", async () => {
     },
   ];
 
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+  const evaluator = await createThanatosEvaluator({ workers: 1 });
 
   try {
     for (const tc of testCases) {
@@ -144,15 +144,12 @@ it("Unparse - Stage 1 Corpus", async () => {
       ]);
 
       const expr = parseSKI(skiExpression);
-      await evaluator.reduceAsync(expr);
-      const stdout = await evaluator.readStdout(1024);
+      const { stdout } = await evaluator.reduceWithIo(expr);
       const result = new TextDecoder().decode(stdout);
 
       assert.strictEqual(result, tc.expected, `Test ${tc.name} failed`);
-
-      evaluator.reset();
     }
   } finally {
-    evaluator.terminate();
+    await evaluator.terminate();
   }
 });

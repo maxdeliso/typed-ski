@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 function usage(): never {
   console.error(
-    "Usage: node scripts/bazelBuildDist.js <manifest> <tripc.js> <tripc.min.js> <tripc.node.js> <arenaWorker.js> <arenaWorker.browser.js> <tripc-bin>",
+    "Usage: node scripts/bazelBuildDist.js <manifest> <tripc.js> <tripc.min.js> <tripc.node.js> <tripc-bin>",
   );
   process.exit(1);
 }
@@ -64,7 +64,7 @@ async function copyInput(
   }
 }
 
-if (process.argv.length !== 9) usage();
+if (process.argv.length !== 7) usage();
 
 const [
   ,
@@ -73,8 +73,6 @@ const [
   tripcJsOut,
   tripcMinJsOut,
   tripcNodeJsOut,
-  arenaWorkerJsOut,
-  arenaWorkerBrowserJsOut,
   tripcBinOut,
 ] = process.argv;
 
@@ -83,8 +81,6 @@ if (
   !tripcJsOut ||
   !tripcMinJsOut ||
   !tripcNodeJsOut ||
-  !arenaWorkerJsOut ||
-  !arenaWorkerBrowserJsOut ||
   !tripcBinOut
 ) {
   usage();
@@ -98,11 +94,6 @@ const buildTempDir = join(tempRoot, "build");
 const tripcJsOutputPath = resolve(sourceRoot, tripcJsOut);
 const tripcMinJsOutputPath = resolve(sourceRoot, tripcMinJsOut);
 const tripcNodeJsOutputPath = resolve(sourceRoot, tripcNodeJsOut);
-const arenaWorkerJsOutputPath = resolve(sourceRoot, arenaWorkerJsOut);
-const arenaWorkerBrowserJsOutputPath = resolve(
-  sourceRoot,
-  arenaWorkerBrowserJsOut,
-);
 const tripcBinOutputPath = resolve(sourceRoot, tripcBinOut);
 
 await fsp.mkdir(workspaceCopy, { recursive: true });
@@ -123,7 +114,7 @@ const importPath = pathToFileURL(
   join(workspaceCopy, "scripts", "bazel.ts"),
 ).href;
 const { buildDist } = (await import(importPath)) as typeof import("./bazel.ts");
-await buildDist({ sync: false, freshWasm: false, stageWasm: false });
+await buildDist({ sync: false });
 
 await copyOutput(join(workspaceCopy, "dist", "tripc.js"), tripcJsOutputPath);
 await copyOutput(
@@ -133,14 +124,6 @@ await copyOutput(
 await copyOutput(
   join(workspaceCopy, "dist", "tripc.node.js"),
   tripcNodeJsOutputPath,
-);
-await copyOutput(
-  join(workspaceCopy, "dist", "arenaWorker.js"),
-  arenaWorkerJsOutputPath,
-);
-await copyOutput(
-  join(workspaceCopy, "dist", "arenaWorker.browser.js"),
-  arenaWorkerBrowserJsOutputPath,
 );
 await copyOutput(
   join(

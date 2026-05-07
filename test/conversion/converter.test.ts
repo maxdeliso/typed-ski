@@ -13,9 +13,9 @@ import {
   type SystemFTerm,
 } from "../../lib/terms/systemF.ts";
 import { mkTypeVariable, typeApp } from "../../lib/types/types.ts";
-import { createArenaEvaluator } from "../../lib/index.ts";
+import { createArenaEvaluator, thanatosAvailable } from "../../lib/index.ts";
 
-describe("Lambda conversion", () => {
+describe("Lambda conversion", { skip: !thanatosAvailable() }, () => {
   let arenaEvaluator: any;
 
   before(async () => {
@@ -64,8 +64,8 @@ describe("Lambda conversion", () => {
   );
   const selfApply = untypedAbs("x", untypedApp(mkVar("x"), mkVar("x")));
 
-  const reduceToKey = (...exps: Parameters<typeof applyMany>) =>
-    arenaEvaluator.reduce(applyMany(...exps));
+  const reduceToKey = async (...exps: Parameters<typeof applyMany>) =>
+    await arenaEvaluator.reduce(applyMany(...exps));
 
   describe("basic combinators", () => {
     it("converts identity function (λx.x) to I combinator", () => {
@@ -77,7 +77,7 @@ describe("Lambda conversion", () => {
       for (let a = 0; a < N; a++) {
         for (let b = 0; b < N; b++) {
           const result = await UnChurchNumber(
-            arenaEvaluator.reduce(
+            await arenaEvaluator.reduce(
               applyMany(bracketLambda(konst), ChurchN(a), ChurchN(b)),
             ),
             arenaEvaluator,
@@ -89,30 +89,30 @@ describe("Lambda conversion", () => {
   });
 
   describe("combinator equivalences", () => {
-    it("lambda B behaves like B", () => {
+    it("lambda B behaves like B", async () => {
       const args = [I, K, S];
-      const reducedLambda = reduceToKey(bracketLambda(lambdaB), ...args);
-      const reducedB = reduceToKey(B, ...args);
+      const reducedLambda = await reduceToKey(bracketLambda(lambdaB), ...args);
+      const reducedB = await reduceToKey(B, ...args);
       assert.deepStrictEqual(reducedLambda, reducedB);
     });
 
-    it("lambda C behaves like C", () => {
+    it("lambda C behaves like C", async () => {
       const args = [K, S, I];
-      const reducedLambda = reduceToKey(bracketLambda(lambdaC), ...args);
-      const reducedC = reduceToKey(C, ...args);
+      const reducedLambda = await reduceToKey(bracketLambda(lambdaC), ...args);
+      const reducedC = await reduceToKey(C, ...args);
       assert.deepStrictEqual(reducedLambda, reducedC);
     });
 
-    it("lambda S behaves like S", () => {
+    it("lambda S behaves like S", async () => {
       const args = [B, C, K];
-      const reducedLambda = reduceToKey(bracketLambda(lambdaS), ...args);
-      const reducedS = reduceToKey(S, ...args);
+      const reducedLambda = await reduceToKey(bracketLambda(lambdaS), ...args);
+      const reducedS = await reduceToKey(S, ...args);
       assert.deepStrictEqual(reducedLambda, reducedS);
     });
 
-    it("self-application matches S I I", () => {
-      const reducedLambda = reduceToKey(bracketLambda(selfApply), K);
-      const reducedExpected = reduceToKey(applyMany(S, I, I), K);
+    it("self-application matches S I I", async () => {
+      const reducedLambda = await reduceToKey(bracketLambda(selfApply), K);
+      const reducedExpected = await reduceToKey(applyMany(S, I, I), K);
       assert.deepStrictEqual(reducedLambda, reducedExpected);
     });
   });
@@ -123,7 +123,7 @@ describe("Lambda conversion", () => {
         for (let b = 0; b < N; b++) {
           const expected = BigInt(a) ** BigInt(b);
           const result = await UnChurchNumber(
-            arenaEvaluator.reduce(
+            await arenaEvaluator.reduce(
               applyMany(bracketLambda(flip), ChurchN(a), ChurchN(b)),
             ),
             arenaEvaluator,

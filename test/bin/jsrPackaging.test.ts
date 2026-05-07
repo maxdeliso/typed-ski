@@ -251,11 +251,4 @@ describe("JSR Packaging Configuration", () => {
       }
     });
   });
-
-  describe("WASM build files", () => {
-    it("WASM files exist", () => {
-      // NOTE: wasm/release.wasm is no longer staged during tests to avoid ambiguity.
-      // It is only staged during the final build/publish flow.
-    });
-  });
 });

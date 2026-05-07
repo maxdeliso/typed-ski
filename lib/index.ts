@@ -2,26 +2,36 @@
  * Typed SKI: parsing, pretty-printing, evaluation, typing, and TripLang compiler.
  *
  * This module re-exports the public API:
- * - SKI parsing/printing/types and the hash-consing arena evaluator
+ * - SKI parsing/printing/types and the Thanatos-backed evaluator
  * - Untyped/typed lambda and System F term utilities
  * - Type utilities (pretty printing, inference)
  * - TripLang parsing and full compile pipeline (parse → index → elaborate → resolve → typecheck)
  *
  * @example
  * ```ts
- * import { parseSKI, arenaEvaluator } from "jsr:@maxdeliso/typed-ski";
+ * import { createArenaEvaluator, parseSKI } from "jsr:@maxdeliso/typed-ski";
  * const expr = parseSKI("(K S) I");
- * const nf = arenaEvaluator.reduce(expr);
+ * const evaluator = await createArenaEvaluator();
+ * const nf = await evaluator.reduce(expr);
  * ```
  *
  * @module
  */
-// Core evaluator exports
-export { ParallelArenaEvaluatorWasm } from "./evaluator/parallelArenaEvaluator.ts";
-
-// WebAssembly arena evaluator exports
-/** Creates a WebAssembly-based arena evaluator (release build). Returns a Promise. */
-export { createArenaEvaluator } from "./evaluator/arenaEvaluator.ts";
+// Thanatos evaluator exports
+export {
+  createArenaEvaluator,
+  createThanatosEvaluator,
+  defaultWorkerCount,
+  getBatchBrokerEnvVarNames,
+  ThanatosEvaluator,
+  ThanatosUnavailableError,
+  thanatosAvailable,
+} from "./evaluator/thanatosEvaluator.ts";
+export type {
+  ThanatosBrokerConfig,
+  ThanatosEvaluatorOptions,
+  ThanatosReduceIoResult,
+} from "./evaluator/thanatosEvaluator.ts";
 
 // Module provider exports
 export { getAvlObject } from "./avl.ts";

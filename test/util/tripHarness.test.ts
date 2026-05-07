@@ -5,7 +5,7 @@ import { describe, it } from "./test_shim.ts";
 import { evaluateTrip, evaluateTripWithIo } from "./tripHarness.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { loadInput } from "./fileLoader.ts";
-import { ParallelArenaEvaluatorWasm } from "../../lib/index.ts";
+import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -13,9 +13,9 @@ const linkerTestDir = fileURLToPath(
   new URL("../linker/", import.meta.url).href,
 );
 
-describe("TripHarness", () => {
+describe("TripHarness", { skip: !thanatosAvailable() }, () => {
   it("includeNat flag allows using Nat module", async () => {
-    const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+    const evaluator = await createThanatosEvaluator({ workers: 1 });
     try {
       const source = loadInput("includeNat.trip", __dirname);
 
@@ -27,33 +27,37 @@ describe("TripHarness", () => {
 
       assert.strictEqual(number, 2n);
     } finally {
-      evaluator.terminate();
+      await evaluator.terminate();
     }
   });
 });
 
-it("TripHarness evaluateTripWithIo reuses provided parallel evaluator", async () => {
-  const source = loadInput("echoOne.trip", linkerTestDir);
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
+it(
+  "TripHarness evaluateTripWithIo reuses provided evaluator",
+  { skip: !thanatosAvailable() },
+  async () => {
+    const source = loadInput("echoOne.trip", linkerTestDir);
+    const evaluator = await createThanatosEvaluator({ workers: 1 });
 
-  try {
-    const input = new Uint8Array([65]);
-    const { result, stdout } = await evaluateTripWithIo(source, evaluator, {
-      stdin: input,
-      stdoutMaxBytes: 1,
-    });
+    try {
+      const input = new Uint8Array([65]);
+      const { result, stdout } = await evaluateTripWithIo(source, evaluator, {
+        stdin: input,
+        stdoutMaxBytes: 1,
+      });
 
-    assert.equal(stdout.length, 1);
-    assert.equal(stdout[0], 65);
-    assert.equal((result as { value: number }).value, 65);
+      assert.equal(stdout.length, 1);
+      assert.equal(stdout[0], 65);
+      assert.equal((result as { value: number }).value, 65);
 
-    const reused = (await evaluator.reduceAsync(parseSKI("I"))) as any;
-    assert.equal(reused.kind, "terminal");
-    if (reused.kind !== "terminal") {
-      throw new Error(`expected terminal result, got ${reused.kind}`);
+      const reused = (await evaluator.reduce(parseSKI("I"))) as any;
+      assert.equal(reused.kind, "terminal");
+      if (reused.kind !== "terminal") {
+        throw new Error(`expected terminal result, got ${reused.kind}`);
+      }
+      assert.equal(reused.sym, "I");
+    } finally {
+      await evaluator.terminate();
     }
-    assert.equal(reused.sym, "I");
-  } finally {
-    evaluator.terminate();
-  }
-});
+  },
+);

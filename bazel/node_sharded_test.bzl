@@ -33,11 +33,6 @@ def _node_sharded_test_impl(ctx):
         "$(rootpath %s)" % str(ctx.attr.thanatos.label),
         [ctx.attr.thanatos],
     )
-    wasm_rootpath = ctx.expand_location(
-        "$(rootpath %s)" % str(ctx.attr.wasm.label),
-        [ctx.attr.wasm],
-    )
-
     clang_rootpath = ""
     if ctx.attr.clang:
         clang_rootpath = ctx.expand_location(
@@ -47,7 +42,6 @@ def _node_sharded_test_impl(ctx):
 
     dist_files = {f.basename: f for f in ctx.attr.dist[DefaultInfo].files.to_list()}
     dist_bin_name = "tripc.cmd" if is_windows else "tripc"
-    arena_worker_js_rootpath = dist_files["arenaWorker.js"].short_path
     dist_js_rootpath = dist_files["tripc.js"].short_path
     dist_min_js_rootpath = dist_files["tripc.min.js"].short_path
     dist_node_js_rootpath = dist_files["tripc.node.js"].short_path
@@ -83,11 +77,9 @@ def _node_sharded_test_impl(ctx):
             "  exit /b 1",
             ")",
             "set \"THANATOS_BIN=%RUNFILES_ROOT%\\" + thanatos_rootpath.replace("/", "\\") + "\"",
-            "set \"TYPED_SKI_WASM_PATH=%RUNFILES_ROOT%\\" + wasm_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_JS_PATH=%RUNFILES_ROOT%\\" + dist_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_MIN_JS_PATH=%RUNFILES_ROOT%\\" + dist_min_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_NODE_JS_PATH=%RUNFILES_ROOT%\\" + dist_node_js_rootpath.replace("/", "\\") + "\"",
-            "set \"TYPED_SKI_ARENA_WORKER_JS_PATH=%RUNFILES_ROOT%\\" + arena_worker_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_BIN_PATH=%RUNFILES_ROOT%\\" + dist_bin_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_READY=1\"",
         ]
@@ -131,11 +123,9 @@ def _node_sharded_test_impl(ctx):
             "  exit 1",
             "fi",
             "export THANATOS_BIN=\"$runfiles_root/" + _shell_dquote_literal(thanatos_rootpath) + "\"",
-            "export TYPED_SKI_WASM_PATH=\"$runfiles_root/" + _shell_dquote_literal(wasm_rootpath) + "\"",
             "export TYPED_SKI_DIST_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_MIN_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_min_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_NODE_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_node_js_rootpath) + "\"",
-            "export TYPED_SKI_ARENA_WORKER_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(arena_worker_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_BIN_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_bin_rootpath) + "\"",
             "export TYPED_SKI_DIST_READY=1",
         ]
@@ -155,7 +145,7 @@ def _node_sharded_test_impl(ctx):
     if ctx.file.generated_jsr:
         symlinks["jsr.json"] = ctx.file.generated_jsr
 
-    runfiles_files = ctx.files.data + [ctx.executable.thanatos, ctx.file.wasm, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
+    runfiles_files = ctx.files.data + [ctx.executable.thanatos, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
     if ctx.attr.clang:
         runfiles_files.append(ctx.executable.clang)
     if ctx.attr.llvm_dist:
@@ -167,7 +157,6 @@ def _node_sharded_test_impl(ctx):
     )
     runfiles = _merge_target_runfiles(runfiles, ctx.attr.data)
     runfiles = runfiles.merge(ctx.attr.thanatos[DefaultInfo].default_runfiles)
-    runfiles = runfiles.merge(ctx.attr.wasm[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.dist[DefaultInfo].default_runfiles)
     if ctx.attr.clang:
         runfiles = runfiles.merge(ctx.attr.clang[DefaultInfo].default_runfiles)
@@ -198,10 +187,6 @@ node_sharded_test = rule(
         "thanatos": attr.label(
             executable = True,
             cfg = "target",
-            mandatory = True,
-        ),
-        "wasm": attr.label(
-            allow_single_file = True,
             mandatory = True,
         ),
         "_windows_constraint": attr.label(

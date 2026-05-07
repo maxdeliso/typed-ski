@@ -1,6 +1,6 @@
 import { describe, it } from "./util/test_shim.ts";
 import assert from "node:assert/strict";
-import { ParallelArenaEvaluatorWasm } from "../lib/index.ts";
+import { createThanatosEvaluator, thanatosAvailable } from "../lib/index.ts";
 import { compileToObjectFile } from "../lib/compiler/singleFileCompiler.ts";
 import { getBinObject } from "../lib/bin.ts";
 import { getPreludeObject } from "../lib/prelude.ts";
@@ -9,7 +9,7 @@ import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { UnChurchNumber } from "../lib/ski/church.ts";
 
-async function runTripWithParallelEvaluator(
+async function runTripWithThanatosEvaluator(
   source: string,
   stdin?: Uint8Array,
 ) {
@@ -24,19 +24,15 @@ async function runTripWithParallelEvaluator(
     { name: "Main", object: moduleObject },
   ]);
   const skiExpr = parseSKI(skiExpression);
-  const evaluator = await ParallelArenaEvaluatorWasm.create(1);
-
-  if (stdin) {
-    await evaluator.writeStdin(stdin);
-  }
-
-  const resultExpr = await evaluator.reduceAsync(skiExpr);
-  const stdout = await evaluator.readStdout(4096);
-
-  return { result: resultExpr, stdout, evaluator };
+  const evaluator = await createThanatosEvaluator({ workers: 1 });
+  const { result, stdout } = await evaluator.reduceWithIo(
+    skiExpr,
+    stdin ?? new Uint8Array(0),
+  );
+  return { result, stdout, evaluator };
 }
 
-it("IO Integration - Hello World", async () => {
+it("IO Integration - Hello World", { skip: !thanatosAvailable() }, async () => {
   const source = `
 module Main
 import Prelude writeOne
@@ -52,17 +48,20 @@ poly main =
   writeOne #u8(65) [U8] (\\x : U8 => x)
   `;
 
-  const { stdout, evaluator } = await runTripWithParallelEvaluator(source);
+  const { stdout, evaluator } = await runTripWithThanatosEvaluator(source);
   try {
     const decoder = new TextDecoder();
     assert.deepStrictEqual(decoder.decode(stdout), "A");
   } finally {
-    evaluator.terminate();
+    await evaluator.terminate();
   }
 });
 
-it("IO Integration - ReadLine and StrLen", async () => {
-  const source = `
+it(
+  "IO Integration - ReadLine and StrLen",
+  { skip: !thanatosAvailable() },
+  async () => {
+    const source = `
 module Main
 import Prelude readOne
 import Prelude writeOne
@@ -96,16 +95,17 @@ poly main =
   readLine [Nat] (\\line : List U8 => length [U8] line)
   `;
 
-  const stdin = new TextEncoder().encode("trip\n");
-  const { result, evaluator } = await runTripWithParallelEvaluator(
-    source,
-    stdin,
-  );
+    const stdin = new TextEncoder().encode("trip\n");
+    const { result, evaluator } = await runTripWithThanatosEvaluator(
+      source,
+      stdin,
+    );
 
-  try {
-    const len = await UnChurchNumber(result, evaluator);
-    assert.deepStrictEqual(len, 4n);
-  } finally {
-    evaluator.terminate();
-  }
-});
+    try {
+      const len = await UnChurchNumber(result, evaluator);
+      assert.deepStrictEqual(len, 4n);
+    } finally {
+      await evaluator.terminate();
+    }
+  },
+);

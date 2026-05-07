@@ -62,24 +62,6 @@ HOST_PLATFORM_SRCS = select({
     "//conditions:default": ["host_platform_posix.c"],
 })
 
-codegen_rule(
-    name = "arena_layout_header_gen",
-    outs = ["arena_layout.generated.h"],
-    args = [
-        "--input",
-        "$(location arena_layout.def)",
-        "--c-out",
-        "$(location arena_layout.generated.h)",
-    ],
-    data = ["arena_layout.def"],
-    script = "//scripts:generate_layouts.mjs",
-)
-
-cc_library(
-    name = "arena_layout_header",
-    hdrs = [":arena_layout.generated.h"],
-)
-
 WIN32_LIBS = select({
     ":windows": ["@msvc_toolchains//lib:kernel32"],
     "//conditions:default": [],
@@ -103,13 +85,12 @@ cc_library(
     hdrs = [
         "arena.h",
         "host_platform.h",
-        ":arena_layout.generated.h",
     ],
     copts = COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
     includes = ["."],
     tags = ["no-coverage"],
-    deps = [":arena_layout_header"] + WIN32_LIBS,
+    deps = WIN32_LIBS,
 )
 
 cc_library(

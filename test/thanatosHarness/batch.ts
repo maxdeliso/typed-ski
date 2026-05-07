@@ -6,9 +6,8 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { withBatchThanatosSession } from "./session.ts";
 
 export const passthroughEvaluator: Evaluator = {
-  stepOnce: (expr: SKIExpression) => ({ altered: false, expr }),
-  reduce: (expr: SKIExpression) => expr,
-  reduceAsync: (expr: SKIExpression) => Promise.resolve(expr),
+  step: (expr: SKIExpression) => Promise.resolve({ altered: false, expr }),
+  reduce: (expr: SKIExpression) => Promise.resolve(expr),
 };
 
 export async function runThanatosBatch(exprLines: string[]): Promise<string[]> {

@@ -17,7 +17,58 @@ typedef _Bool bool;
 #include <stdatomic.h>
 #include <stddef.h>
 
-#include "arena_layout.generated.h"
+#define MAX_WORKERS 64
+#define SAB_ABI_VERSION 1
+#define SAB_LAYOUT_HASH 1865316445u
+
+typedef struct {
+  uint32_t magic;
+  uint32_t abi_version;
+  uint32_t layout_hash;
+  uint32_t ring_entries;
+  uint32_t ring_mask;
+  uint32_t offset_sq;
+  uint32_t offset_cq;
+  uint32_t offset_stdin;
+  uint32_t offset_stdout;
+  uint32_t offset_stdin_wait;
+  uint32_t offset_stdout_wait;
+  uint32_t offset_control;
+  uint32_t control_bytes;
+  uint32_t offset_term_cache;
+  uint64_t offset_node_left;
+  uint64_t offset_node_right;
+  uint64_t offset_node_hash32;
+  uint64_t offset_node_next_idx;
+  uint64_t offset_node_link;
+  uint64_t offset_node_kind;
+  uint64_t offset_node_sym;
+  uint64_t offset_buckets;
+  uint32_t max_capacity;
+  _Atomic uint32_t capacity;
+  uint32_t bucket_mask;
+  _Atomic uint32_t resize_seq;
+  _Atomic uint32_t top;
+  uint32_t pad_0;
+  _Atomic uint64_t total_nodes;
+  _Atomic uint64_t total_steps;
+  _Atomic uint64_t total_link_chase_hops;
+  _Atomic uint64_t total_cons_allocs;
+  _Atomic uint64_t total_cont_allocs;
+  _Atomic uint64_t total_susp_allocs;
+  _Atomic uint64_t duplicate_lost_allocs;
+  _Atomic uint64_t hashcons_hits;
+  _Atomic uint64_t hashcons_misses;
+  _Atomic uint64_t bulk_fusion_checks;
+  _Atomic uint64_t bulk_fusion_candidates;
+  _Atomic uint64_t bulk_fusion_hits;
+  _Atomic uint32_t global_epoch;
+  _Atomic uint32_t worker_epochs[MAX_WORKERS];
+  _Atomic uint32_t grow_count;
+  uint32_t true_id;
+  uint32_t false_id;
+  _Atomic uint32_t u8_cache[256];
+} SabHeader;
 
 typedef enum {
   ARENA_KIND_TERMINAL = 1,

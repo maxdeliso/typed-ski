@@ -335,9 +335,7 @@ export const UnChurchNumber = async (
   exp: SKIExpression,
   evaluator: Evaluator,
 ): Promise<bigint> => {
-  const normalized = evaluator.reduceAsync
-    ? await evaluator.reduceAsync(exp)
-    : evaluator.reduce(exp);
+  const normalized = await evaluator.reduce(exp);
 
   if (normalized.kind === "u8") {
     return BigInt(normalized.value);
@@ -371,9 +369,7 @@ export const UnChurchBoolean = async (
 ): Promise<boolean> => {
   // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
   const applied = applyMany(expr, ChurchN(1), ChurchN(0));
-  const testExpr = evaluator.reduceAsync
-    ? await evaluator.reduceAsync(applied)
-    : evaluator.reduce(applied);
+  const testExpr = await evaluator.reduce(applied);
   return (await UnChurchNumber(testExpr, evaluator)) === 1n;
 };
 

@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.18.1",
+  "version": "0.18.2",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -12,8 +12,7 @@
     "SECURITY.md",
     "lib/**/*",
     "bin/**/*",
-    "dist/**/*",
-    "wasm/release.wasm"
+    "dist/**/*"
   ],
   "jsr": {
     "publish": {
@@ -22,12 +21,10 @@
         "SECURITY.md",
         "lib/**",
         "bin/**",
-        "dist/**",
-        "wasm/release.wasm"
+        "dist/**"
       ],
       "exclude": [
-        "!lib/**/*.generated.ts",
-        "!lib/evaluator/arenaHeader.generated.ts"
+        "!lib/**/*.generated.ts"
       ]
     }
   },

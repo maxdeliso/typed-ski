@@ -80,9 +80,7 @@ NODE_TEST_DATA = glob(
     "//lib/evaluator",
     "//core",
     ":node_modules/pnpm",
-    "//lib/evaluator:arena_header_generated",
     "//lib/shared:version_generated",
-    "//wasm:release",
 ]
 
 NODE_DIST_DATA = glob(
@@ -106,9 +104,7 @@ NODE_DIST_DATA = glob(
     "//lib/evaluator",
     "//core",
     ":node_modules/pnpm",
-    "//lib/evaluator:arena_header_generated",
     "//lib/shared:version_generated",
-    "//wasm:release",
 ]
 
 LLVM_AS_BIN = select({
@@ -172,11 +168,6 @@ alias(
     actual = "//core:performance_test",
 )
 
-alias(
-    name = "release_wasm",
-    actual = "//wasm:release",
-)
-
 test_suite(
     name = "native_tests",
     tests = [
@@ -207,7 +198,6 @@ node_sharded_test(
     llvm_dist = LLVM_DIST_DATA,
     shard_count = 8,
     thanatos = "//core:thanatos",
-    wasm = "//wasm:release",
 )
 
 node_llvm_as_test(

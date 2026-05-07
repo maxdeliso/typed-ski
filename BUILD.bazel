@@ -67,7 +67,6 @@ NODE_TEST_DATA = glob(
         "bin/**",
         "compiler/**",
         "lib/**",
-        "server/**",
         "test/**",
     ],
     allow_empty = True,
@@ -294,16 +293,6 @@ workspace_command(
 workspace_command(
     name = "build",
     subcommand = "build",
-)
-
-workspace_command(
-    name = "hephaestus_assets",
-    subcommand = "hephaestus-assets",
-)
-
-workspace_command(
-    name = "serve_hephaestus",
-    subcommand = "serve-hephaestus",
 )
 
 workspace_command(

@@ -13,13 +13,7 @@ import type { SKIExpression } from "../ski/expression.ts";
 import type { Evaluator } from "./evaluator.ts";
 import { SabHeaderField } from "./arenaHeader.generated.ts";
 import { ArenaEvaluatorWasm, type ArenaWasmExports } from "./arenaEvaluator.ts";
-import {
-  formatReleaseWasmLoadInfo,
-  getLastReleaseWasmLoadInfo,
-  getReleaseWasmBytes,
-} from "./arenaWasmLoader.ts";
-/** @internal */
-export { formatReleaseWasmLoadInfo, getLastReleaseWasmLoadInfo };
+import { getReleaseWasmBytes } from "./arenaWasmLoader.ts";
 import { sleep } from "./async.ts";
 import { IoManager } from "./io/ioManager.ts";
 import { validateIoRingsConfiguration } from "./io/ioRingsValidator.ts";
@@ -28,18 +22,10 @@ import { CompletionPoller } from "./parallel/completionPoller.ts";
 import {
   DEFAULT_MAX_RESUBMITS,
   RequestTracker,
-  type RequestTrackerHooks,
 } from "./parallel/requestTracker.ts";
 import { WorkerManager } from "./parallel/workerManager.ts";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-
-/**
- * @internal
- * Re-export for external use
- */
-export { ResubmissionLimitExceededError } from "./parallel/requestTracker.ts";
-/** @internal */
 
 const activeParallelArenaMemoryLeases = new WeakMap<
   WebAssembly.Memory,
@@ -100,38 +86,6 @@ export class ParallelArenaEvaluatorWasm
 {
   public readonly workers: any[] = [];
 
-  /**
-   * Optional instrumentation hooks (used by `server/workbench.js`).
-   *
-   * Notes:
-   * - `workerIndex` is a logical assignment (round-robin at submit time).
-   *   CQ completions don't encode the physical worker thread id.
-   */
-  public onRequestQueued?: (
-    reqId: number,
-    workerIndex: number,
-    expr?: SKIExpression,
-  ) => void;
-  public onRequestCompleted?: (
-    reqId: number,
-    workerIndex: number,
-    expr: SKIExpression | undefined,
-    arenaNodeId: number,
-  ) => void;
-  public onRequestError?: (
-    reqId: number,
-    workerIndex: number,
-    expr: SKIExpression | undefined,
-    error: string,
-  ) => void;
-  public onRequestYield?: (
-    reqId: number,
-    workerIndex: number,
-    expr: SKIExpression | undefined,
-    suspensionNodeId: number,
-    resubmitCount: number,
-  ) => void;
-
   // Subcomponents
   private readonly requestTracker: RequestTracker;
   private readonly ioManager: IoManager;
@@ -156,35 +110,8 @@ export class ParallelArenaEvaluatorWasm
 
     try {
       // Initialize subcomponents
-      const hooks: RequestTrackerHooks = {
-        onRequestQueued: (reqId, workerIndex, expr) => {
-          this.onRequestQueued?.(reqId, workerIndex, expr);
-        },
-        onRequestCompleted: (reqId, workerIndex, expr, arenaNodeId) => {
-          this.onRequestCompleted?.(reqId, workerIndex, expr, arenaNodeId);
-        },
-        onRequestError: (reqId, workerIndex, expr, error) => {
-          this.onRequestError?.(reqId, workerIndex, expr, error);
-        },
-        onRequestYield: (
-          reqId,
-          workerIndex,
-          expr,
-          suspensionNodeId,
-          resubmitCount,
-        ) => {
-          this.onRequestYield?.(
-            reqId,
-            workerIndex,
-            expr,
-            suspensionNodeId,
-            resubmitCount,
-          );
-        },
-      };
-
       const maxResubmits = options.maxResubmits ?? DEFAULT_MAX_RESUBMITS;
-      this.requestTracker = new RequestTracker(hooks, maxResubmits);
+      this.requestTracker = new RequestTracker(undefined, maxResubmits);
       this.ringStats = new RingStats();
       this.ioManager = new IoManager(exports, memory, () => this.aborted);
       this.completionPoller = new CompletionPoller(
@@ -219,22 +146,6 @@ export class ParallelArenaEvaluatorWasm
     this.completionPoller.stop();
     WorkerManager.terminate(this.workers);
     releaseParallelArenaMemoryLease(this.memory, this.memoryLease);
-  }
-
-  /**
-   * Workbench UI helper.
-   * Returns per-worker pending counts (best-effort logical assignment).
-   */
-  getPendingCounts(): number[] {
-    return this.requestTracker.getPendingCounts();
-  }
-
-  /**
-   * Returns the total number of pending requests.
-   * This is the authoritative count based on the pending Map.
-   */
-  getTotalPending(): number {
-    return this.requestTracker.getTotalPending();
   }
 
   getRingStatsSnapshot(): ArenaRingStatsSnapshot {

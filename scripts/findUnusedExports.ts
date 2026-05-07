@@ -8,7 +8,7 @@ const project = new Project({
   useInMemoryFileSystem: true,
 });
 
-const dirs = ["lib", "bin", "test", "server"];
+const dirs = ["lib", "bin", "test"];
 const files: string[] = [];
 
 function normalizeFilePath(path: string): string {
@@ -20,11 +20,7 @@ function findFiles(dir: string, depth = 0) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = join(dir, entry.name);
       if (entry.isFile()) {
-        if (
-          entry.name.endsWith(".ts") ||
-          entry.name.endsWith(".tsx") ||
-          (dir.startsWith("server") && entry.name.endsWith(".js"))
-        ) {
+        if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
           files.push(normalizeFilePath(fullPath));
         }
       } else if (entry.isDirectory()) {
@@ -51,12 +47,7 @@ for (const file of files) {
   }
 }
 
-const PROD_ROOTS = [
-  "lib/index.ts",
-  "bin/tripc.ts",
-  "server/serveWorkbench.ts",
-  "server/webglForest.ts",
-];
+const PROD_ROOTS = ["lib/index.ts", "bin/tripc.ts"];
 const TEST_ROOTS = files.filter(
   (f) => f.startsWith("test/") && f.endsWith(".test.ts"),
 );
@@ -158,7 +149,6 @@ const stats = {
   wellBehavedInternal: [] as string[],
   publicApi: [] as string[],
   prodInternalExport: [] as string[],
-  serverOnly: [] as string[],
 };
 
 for (const sourceFile of project.getSourceFiles()) {
@@ -180,14 +170,7 @@ for (const sourceFile of project.getSourceFiles()) {
       });
 
       if (!isProd && !isTest) {
-        const isServer = files
-          .filter((f) => f.startsWith("server/"))
-          .some((f) => {
-            const content = fs.readFileSync(f, "utf8");
-            return content.includes(name);
-          });
-        if (isServer) stats.serverOnly.push(location);
-        else stats.totallyDead.push(location);
+        stats.totallyDead.push(location);
       } else if (isProd && tagged) {
         if (isExportedFromRoot) {
           stats.leakedInternal.push(location);
@@ -235,13 +218,6 @@ const missing = unique(stats.missingInternalTag);
 if (missing.length > 0) {
   console.log("MISSING @internal TAG (Used only by TESTS):");
   missing.forEach((e) => console.log(`  - ${e}`));
-  console.log("");
-}
-
-const server = unique(stats.serverOnly);
-if (server.length > 0) {
-  console.log("SERVER-ONLY (Used by workbench JS):");
-  server.forEach((e) => console.log(`  - ${e}`));
   console.log("");
 }
 

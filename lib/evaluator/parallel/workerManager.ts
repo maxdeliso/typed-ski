@@ -143,7 +143,7 @@ export class WorkerManager {
           "connectArenaComplete",
         );
         if (message.error) {
-          // High-signal diagnostic for the workbench/server: connection failures often look like "worker died".
+          // High-signal diagnostic: connection failures often look like "worker died".
           console.error(
             `[ParallelArenaEvaluatorWasm] worker ${workerIndex} connectArena failed: ${message.error}`,
           );

@@ -68,7 +68,6 @@ NODE_DATA_BASE = glob(
     [
         "package.json",
         "tsconfig.json",
-        "jsr.json",
         "*.jsonc",
         "*.md",
         "bin/**",
@@ -87,6 +86,7 @@ NODE_DATA_BASE = glob(
     "//core",
     ":node_modules/pnpm",
     "//lib/shared:version_generated",
+    ":jsr.json",
 ]
 
 NODE_TEST_DATA = NODE_DATA_BASE + glob(

@@ -13,9 +13,10 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <intrin.h>
 #include <windows.h>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
 #define HOST_ALIGNED(n) __declspec(align(n))
 #define HOST_UNUSED
 #define HOST_NO_SANITIZE_ADDRESS
@@ -23,6 +24,15 @@
 #define HOST_NORETURN __declspec(noreturn)
 #define HOST_PAUSE() _mm_pause()
 #define HOST_TRAP() __debugbreak()
+#else
+#define HOST_ALIGNED(n) __attribute__((aligned(n)))
+#define HOST_UNUSED __attribute__((unused))
+#define HOST_NO_SANITIZE_ADDRESS __attribute__((no_sanitize("address")))
+#define HOST_NOINLINE __attribute__((noinline))
+#define HOST_NORETURN __attribute__((noreturn))
+#define HOST_PAUSE() __builtin_ia32_pause()
+#define HOST_TRAP() __builtin_trap()
+#endif
 
 typedef struct {
   CRITICAL_SECTION cs;

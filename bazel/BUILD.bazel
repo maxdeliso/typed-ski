@@ -1,5 +1,7 @@
 exports_files([
     "empty.txt",
+    "windows/kernel32.def",
+    "windows/trip_nocrt_runtime.ll",
     "node_llvm_as_test.bzl",
     "trip_llvm.bzl",
     "workspace_command.bzl",

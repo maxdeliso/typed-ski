@@ -5,6 +5,7 @@ export type LlvmReturnType = LlvmValueType | "void";
 /* node:coverage disable */
 export type LlvmTargetProfile =
   | { kind: "generic" }
+  | { kind: "arm64-apple-darwin" }
   | { kind: "x86_64-unknown-linux-gnu" }
   | { kind: "x86_64-pc-windows-msvc" }
   | { kind: "wasm32-unknown-unknown" }

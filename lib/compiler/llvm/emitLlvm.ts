@@ -157,6 +157,7 @@ function emitTargetTriple(writer: LlvmWriter, target: LlvmTargetProfile): void {
   switch (target.kind) {
     case "generic":
       return;
+    case "arm64-apple-darwin":
     case "x86_64-unknown-linux-gnu":
     case "x86_64-pc-windows-msvc":
     case "wasm32-unknown-unknown":

@@ -151,14 +151,16 @@ static bool tracer_make_dump_path(uint32_t epoch, char *out, size_t out_cap) {
   if (out == NULL || out_cap == 0)
     return false;
 
-  char suffix[64];
-  int suffix_len = snprintf(suffix, sizeof(suffix),
 #ifdef _WIN32
-                            "\\thanatos-trace-pid%u-epoch%u.json",
+  const char *separator = "\\";
 #else
-                            "/thanatos-trace-pid%u-epoch%u.json",
+  const char *separator = "/";
 #endif
-                            host_process_id(), epoch);
+
+  char suffix[64];
+  int suffix_len =
+      snprintf(suffix, sizeof(suffix), "%sthanatos-trace-pid%u-epoch%u.json",
+               separator, host_process_id(), epoch);
   if (suffix_len < 0 || (size_t)suffix_len >= sizeof(suffix))
     return false;
 

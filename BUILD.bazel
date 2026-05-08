@@ -150,8 +150,14 @@ LINUX_X86_64_COMPATIBILITY = select({
     "//conditions:default": ["@platforms//:incompatible"],
 })
 
+MACOS_ARM64_COMPATIBILITY = select({
+    ":macos_arm64": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 HELLO_WORLD_COMPATIBILITY = select({
     ":linux_x86_64": [],
+    ":macos_arm64": [],
     ":windows_x86_64": [],
     "//conditions:default": ["@platforms//:incompatible"],
 })
@@ -232,6 +238,23 @@ trip_llvm_object(
 )
 
 trip_llvm_object(
+    name = "trip_hello_world_macos_obj",
+    src = "test/compiler/llvm/helloWorld.trip",
+    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
+        ":node_modules",
+    ],
+    entry_module = "Main",
+    llvm_dist = LLVM_DIST_DATA,
+    llvm_llc = LLVM_LLC_BIN,
+    module_source_files = ["lib/prelude.trip"],
+    module_source_names = ["Prelude"],
+    object_extension = ".o",
+    tags = ["manual"],
+    target_compatible_with = MACOS_ARM64_COMPATIBILITY,
+    target_triple = "arm64-apple-darwin",
+)
+
+trip_llvm_object(
     name = "trip_hello_world_windows_obj",
     src = "test/compiler/llvm/helloWorld.trip",
     data = NODE_TEST_DATA + LLVM_DIST_DATA + [
@@ -252,6 +275,14 @@ cc_binary(
     srcs = [":trip_hello_world_linux_obj"],
     tags = ["manual"],
     target_compatible_with = LINUX_X86_64_COMPATIBILITY,
+    deps = ["//core:trip_runtime_io"],
+)
+
+cc_binary(
+    name = "trip_hello_world_macos",
+    srcs = [":trip_hello_world_macos_obj"],
+    tags = ["manual"],
+    target_compatible_with = MACOS_ARM64_COMPATIBILITY,
     deps = ["//core:trip_runtime_io"],
 )
 
@@ -279,6 +310,7 @@ alias(
     name = "trip_hello_world",
     actual = select({
         ":linux_x86_64": ":trip_hello_world_linux",
+        ":macos_arm64": ":trip_hello_world_macos",
         ":windows_x86_64": ":trip_hello_world_windows",
     }),
     target_compatible_with = HELLO_WORLD_COMPATIBILITY,

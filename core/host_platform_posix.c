@@ -15,7 +15,9 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#if defined(__linux__)
 #include <sys/syscall.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -33,6 +35,7 @@ static void host_cond_clock_init(void) {
     return;
   }
 
+#if defined(__linux__)
   pthread_condattr_t attr;
   int rc = pthread_condattr_init(&attr);
   if (rc != 0) {
@@ -51,6 +54,7 @@ static void host_cond_clock_init(void) {
   if (rc != 0) {
     host_pthread_fail("pthread_condattr_destroy", rc);
   }
+#endif
 
   host_cond_clock_initialized = true;
 }
@@ -100,6 +104,7 @@ void host_mutex_unlock(HostMutex *mutex) {
 void host_cond_init(HostCond *cond) {
   host_cond_clock_init();
 
+#if defined(__linux__)
   pthread_condattr_t attr;
   int rc = pthread_condattr_init(&attr);
   if (rc != 0) {
@@ -121,6 +126,9 @@ void host_cond_init(HostCond *cond) {
   if (destroy_rc != 0) {
     host_pthread_fail("pthread_condattr_destroy", destroy_rc);
   }
+#else
+  int rc = pthread_cond_init(cond, NULL);
+#endif
   if (rc != 0) {
     host_pthread_fail("pthread_cond_init", rc);
   }

@@ -1,25 +1,4 @@
-def _normalize_runfiles_path(path):
-    if path.startswith("../"):
-        return path[3:]
-    return path
-
-def _powershell_dquote_literal(value):
-    escaped = value.replace("`", "``")
-    escaped = escaped.replace("$", "`$")
-    escaped = escaped.replace('"', '`"')
-    escaped = escaped.replace("\r", "`r")
-    escaped = escaped.replace("\n", "`n")
-    return '"' + escaped + '"'
-
-def _sh_single_quote_literal(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-def _merge_target_runfiles(runfiles, targets):
-    for target in targets:
-        default_info = target[DefaultInfo]
-        runfiles = runfiles.merge(default_info.default_runfiles)
-        runfiles = runfiles.merge(default_info.data_runfiles)
-    return runfiles
+load("//bazel:common.bzl", "normalize_runfiles_path", "powershell_dquote_literal", "sh_single_quote_literal", "merge_target_runfiles")
 
 def _single_output_file(target, attr_name):
     files = target[DefaultInfo].files.to_list()
@@ -261,7 +240,7 @@ def _trip_executable_stdout_test_impl(ctx):
     if not is_windows and not is_linux:
         fail("trip_executable_stdout_test only supports Windows and Linux; add target_compatible_with to the target.")
 
-    binary_rootpath = _normalize_runfiles_path(ctx.executable.binary.short_path)
+    binary_rootpath = normalize_runfiles_path(ctx.executable.binary.short_path)
     if is_windows:
         binary_path = binary_rootpath.replace("/", "\\")
         ps_script = ctx.actions.declare_file(ctx.label.name + ".ps1")
@@ -270,7 +249,7 @@ def _trip_executable_stdout_test_impl(ctx):
         ps_content = "\r\n".join([
             '$ErrorActionPreference = "Stop"',
             "$exe = $args[0]",
-            "$expected = " + _powershell_dquote_literal(ctx.attr.expected_stdout),
+            "$expected = " + powershell_dquote_literal(ctx.attr.expected_stdout),
             "$expectedExitCode = " + str(ctx.attr.expected_exit_code),
             "if (-not (Test-Path -LiteralPath $exe)) {",
             "  # If not found directly, try to resolve via manifest",
@@ -312,7 +291,7 @@ def _trip_executable_stdout_test_impl(ctx):
         ])
         ctx.actions.write(ps_script, ps_content)
 
-        ps_path = _normalize_runfiles_path(ps_script.short_path).replace("/", "\\")
+        ps_path = normalize_runfiles_path(ps_script.short_path).replace("/", "\\")
         content = "\r\n".join([
             "@echo off",
             "setlocal",
@@ -351,8 +330,8 @@ def _trip_executable_stdout_test_impl(ctx):
         content = "\n".join([
             "#!/usr/bin/env bash",
             "set -euo pipefail",
-            "binary=" + _sh_single_quote_literal(binary_rootpath),
-            "expected=" + _sh_single_quote_literal(ctx.attr.expected_stdout),
+            "binary=" + sh_single_quote_literal(binary_rootpath),
+            "expected=" + sh_single_quote_literal(ctx.attr.expected_stdout),
             "expected_exit_code=" + str(ctx.attr.expected_exit_code),
             "if [[ ! -x \"$binary\" && -n \"${TEST_SRCDIR:-}\" && -n \"${TEST_WORKSPACE:-}\" ]]; then",
             "  candidate=\"$TEST_SRCDIR/$TEST_WORKSPACE/$binary\"",
@@ -392,7 +371,7 @@ def _trip_executable_stdout_test_impl(ctx):
         ctx.actions.write(launcher, content, is_executable = True)
         runfiles = ctx.runfiles(files = [ctx.executable.binary])
 
-    runfiles = _merge_target_runfiles(runfiles, [ctx.attr.binary])
+    runfiles = merge_target_runfiles(runfiles, [ctx.attr.binary])
     return [DefaultInfo(executable = launcher, runfiles = runfiles)]
 
 trip_executable_stdout_test = rule(

@@ -1,11 +1,4 @@
-def _shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-def _batch_quote(value):
-    escaped = value.replace("^", "^^")
-    escaped = escaped.replace("%", "%%")
-    escaped = escaped.replace('"', '""')
-    return '"' + escaped + '"'
+load("//bazel:common.bzl", "shell_quote", "batch_quote")
 
 def _workspace_command_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
@@ -42,7 +35,7 @@ def _workspace_command_impl(ctx):
             ")",
             "for /f \"delims=\" %%i in (\"%NODE_BIN%\") do set \"NODE_BIN=%%~fi\"",
             "cd /d \"%BUILD_WORKSPACE_DIRECTORY%\"",
-            "\"%NODE_BIN%\" \"--experimental-transform-types\" \"scripts/bazel.ts\" " + " ".join([_batch_quote(arg) for arg in args]) + " %*",
+            "\"%NODE_BIN%\" \"--experimental-transform-types\" \"scripts/bazel.ts\" " + " ".join([batch_quote(arg) for arg in args]) + " %*",
             "exit /b %ERRORLEVEL%",
             "",
         ])
@@ -54,7 +47,7 @@ def _workspace_command_impl(ctx):
             "  echo \"BUILD_WORKSPACE_DIRECTORY is not set. Use bazel run for this target.\" >&2",
             "  exit 1",
             "fi",
-            "NODE_BIN=" + _shell_quote(node_short_path),
+            "NODE_BIN=" + shell_quote(node_short_path),
             "if [[ ! -f \"$NODE_BIN\" ]]; then",
             "  NODE_BIN=\"../$NODE_BIN\"",
             "fi",
@@ -67,7 +60,7 @@ def _workspace_command_impl(ctx):
             "fi",
             "NODE_BIN=$(cd \"$(dirname \"$NODE_BIN\")\" && pwd)/$(basename \"$NODE_BIN\")",
             "cd \"$BUILD_WORKSPACE_DIRECTORY\"",
-            "\"$NODE_BIN\" --experimental-transform-types scripts/bazel.ts " + " ".join([_shell_quote(arg) for arg in args]) + " \"$@\"",
+            "\"$NODE_BIN\" --experimental-transform-types scripts/bazel.ts " + " ".join([shell_quote(arg) for arg in args]) + " \"$@\"",
             "",
         ])
     ctx.actions.write(launcher, content, is_executable = True)

@@ -1,30 +1,13 @@
 """Bazel rule for node_llvm_as_test."""
 
-def _shell_dquote_literal(value):
-    escaped = value.replace("\\", "\\\\")
-    escaped = escaped.replace('"', '\\"')
-    escaped = escaped.replace("$", "\\$")
-    escaped = escaped.replace("`", "\\`")
-    return escaped
-
-def _normalize_runfiles_path(path):
-    if path.startswith("../"):
-        return path[3:]
-    return path
-
-def _merge_target_runfiles(runfiles, targets):
-    for target in targets:
-        default_info = target[DefaultInfo]
-        runfiles = runfiles.merge(default_info.default_runfiles)
-        runfiles = runfiles.merge(default_info.data_runfiles)
-    return runfiles
+load("//bazel:common.bzl", "shell_dquote_literal", "normalize_runfiles_path", "merge_target_runfiles")
 
 def _node_llvm_as_test_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
         ctx.attr._windows_constraint[platform_common.ConstraintValueInfo],
     )
     node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
-    node_path = _normalize_runfiles_path(node_toolchain.nodeinfo.node.short_path)
+    node_path = normalize_runfiles_path(node_toolchain.nodeinfo.node.short_path)
     llvm_as_rootpath = ctx.expand_location(
         "$(rootpath %s)" % str(ctx.attr.llvm_as.label),
         [ctx.attr.llvm_as],
@@ -69,8 +52,8 @@ def _node_llvm_as_test_impl(ctx):
             "",
         ])
     else:
-        node_bin = _shell_dquote_literal(node_path)
-        llvm_as_path = _shell_dquote_literal(llvm_as_rootpath)
+        node_bin = shell_dquote_literal(node_path)
+        llvm_as_path = shell_dquote_literal(llvm_as_rootpath)
         content = "\n".join([
             "#!/usr/bin/env bash",
             "set -euo pipefail",
@@ -108,7 +91,7 @@ def _node_llvm_as_test_impl(ctx):
     runfiles = ctx.runfiles(
         files = ctx.files.data + [node_toolchain.nodeinfo.node, ctx.file.llvm_as],
     )
-    runfiles = _merge_target_runfiles(runfiles, ctx.attr.data)
+    runfiles = merge_target_runfiles(runfiles, ctx.attr.data)
     runfiles = runfiles.merge(ctx.attr.llvm_as[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.llvm_as[DefaultInfo].data_runfiles)
 

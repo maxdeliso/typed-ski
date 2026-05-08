@@ -64,7 +64,7 @@ npm_link_all_packages(
     name = "node_modules",
 )
 
-NODE_TEST_DATA = glob(
+NODE_DATA_BASE = glob(
     [
         "package.json",
         "tsconfig.json",
@@ -73,7 +73,6 @@ NODE_TEST_DATA = glob(
         "bin/**",
         "compiler/**",
         "lib/**",
-        "test/**",
     ],
     allow_empty = True,
     exclude = [
@@ -89,28 +88,19 @@ NODE_TEST_DATA = glob(
     "//lib/shared:version_generated",
 ]
 
-NODE_DIST_DATA = glob(
+NODE_TEST_DATA = NODE_DATA_BASE + glob(
     [
-        "package.json",
-        "tsconfig.json",
-        "jsr.json",
-        "*.jsonc",
-        "bin/**",
-        "compiler/**",
-        "lib/**",
+        "test/**",
     ],
     allow_empty = True,
     exclude = [
         "coverage/**",
         "dist/**",
     ],
-) + [
-    "//scripts",
-    "//lib/shared",
-    "//lib/evaluator",
-    "//core",
-    ":node_modules/pnpm",
-    "//lib/shared:version_generated",
+)
+
+NODE_DIST_DATA = NODE_DATA_BASE + [
+    "jsr.json",
 ]
 
 LLVM_AS_BIN = select({

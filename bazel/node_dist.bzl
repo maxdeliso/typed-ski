@@ -1,13 +1,6 @@
 """Bazel rule implementation for generating Node distribution artifacts."""
 
-def _shell_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-def _batch_quote(value):
-    escaped = value.replace("^", "^^")
-    escaped = escaped.replace("%", "%%")
-    escaped = escaped.replace('"', '""')
-    return '"' + escaped + '"'
+load("//bazel:common.bzl", "shell_quote", "batch_quote")
 
 def _node_dist_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
@@ -30,14 +23,14 @@ def _node_dist_impl(ctx):
 
     if is_windows:
         command = " ".join([
-            _batch_quote(node_path),
-            _batch_quote("--experimental-transform-types"),
-            _batch_quote("scripts/bazelBuildDist.ts"),
-            _batch_quote(manifest.path),
-            _batch_quote(tripc_js.path),
-            _batch_quote(tripc_min_js.path),
-            _batch_quote(tripc_node_js.path),
-            _batch_quote(tripc_bin.path),
+            batch_quote(node_path),
+            batch_quote("--experimental-transform-types"),
+            batch_quote("scripts/bazelBuildDist.ts"),
+            batch_quote(manifest.path),
+            batch_quote(tripc_js.path),
+            batch_quote(tripc_min_js.path),
+            batch_quote(tripc_node_js.path),
+            batch_quote(tripc_bin.path),
         ])
         content = "\r\n".join([
             "@echo off",
@@ -49,14 +42,14 @@ def _node_dist_impl(ctx):
         ])
     else:
         command = " ".join([
-            _shell_quote(node_path),
-            _shell_quote("--experimental-transform-types"),
-            _shell_quote("scripts/bazelBuildDist.ts"),
-            _shell_quote(manifest.path),
-            _shell_quote(tripc_js.path),
-            _shell_quote(tripc_min_js.path),
-            _shell_quote(tripc_node_js.path),
-            _shell_quote(tripc_bin.path),
+            shell_quote(node_path),
+            shell_quote("--experimental-transform-types"),
+            shell_quote("scripts/bazelBuildDist.ts"),
+            shell_quote(manifest.path),
+            shell_quote(tripc_js.path),
+            shell_quote(tripc_min_js.path),
+            shell_quote(tripc_node_js.path),
+            shell_quote(tripc_bin.path),
         ])
         content = "\n".join([
             "#!/usr/bin/env bash",

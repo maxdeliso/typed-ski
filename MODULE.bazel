@@ -131,54 +131,24 @@ nodejs_repository = use_repo_rule(
     "_nodejs_repositories",
 )
 
-nodejs_repository(
-    name = "typed_ski_node25_darwin_amd64",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "darwin_amd64",
-)
-
-nodejs_repository(
-    name = "typed_ski_node25_darwin_arm64",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "darwin_arm64",
-)
-
-nodejs_repository(
-    name = "typed_ski_node25_linux_amd64",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "linux_amd64",
-)
-
-nodejs_repository(
-    name = "typed_ski_node25_linux_arm64",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "linux_arm64",
-)
-
-nodejs_repository(
-    name = "typed_ski_node25_linux_ppc64le",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "linux_ppc64le",
-)
-
-nodejs_repository(
-    name = "typed_ski_node25_linux_s390x",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "linux_s390x",
-)
-
-nodejs_repository(
-    name = "typed_ski_node25_windows_amd64",
-    node_repositories = NODE_25_REPOSITORIES,
-    node_version = NODE_25_VERSION,
-    platform = "windows_amd64",
-)
+# Define nodejs repositories for different platforms
+[
+    nodejs_repository(
+        name = name,
+        node_repositories = NODE_25_REPOSITORIES,
+        node_version = NODE_25_VERSION,
+        platform = platform,
+    )
+    for platform, name in [
+        ("darwin_amd64", "typed_ski_node25_darwin_amd64"),
+        ("darwin_arm64", "typed_ski_node25_darwin_arm64"),
+        ("linux_amd64", "typed_ski_node25_linux_amd64"),
+        ("linux_arm64", "typed_ski_node25_linux_arm64"),
+        ("linux_ppc64le", "typed_ski_node25_linux_ppc64le"),
+        ("linux_s390x", "typed_ski_node25_linux_s390x"),
+        ("windows_amd64", "typed_ski_node25_windows_amd64"),
+    ]
+]
 
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
 node.toolchain(node_version = "25.6.0")

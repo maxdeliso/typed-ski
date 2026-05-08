@@ -1,30 +1,13 @@
 """Bazel rule for running Node.js sharded tests."""
 
-def _shell_dquote_literal(value):
-    escaped = value.replace("\\", "\\\\")
-    escaped = escaped.replace('"', '\\"')
-    escaped = escaped.replace("$", "\\$")
-    escaped = escaped.replace("`", "\\`")
-    return escaped
-
-def _normalize_runfiles_path(path):
-    if path.startswith("../"):
-        return path[3:]
-    return path
-
-def _merge_target_runfiles(runfiles, targets):
-    for target in targets:
-        default_info = target[DefaultInfo]
-        runfiles = runfiles.merge(default_info.default_runfiles)
-        runfiles = runfiles.merge(default_info.data_runfiles)
-    return runfiles
+load("//bazel:common.bzl", "shell_dquote_literal", "normalize_runfiles_path", "merge_target_runfiles")
 
 def _node_sharded_test_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
         ctx.attr._windows_constraint[platform_common.ConstraintValueInfo],
     )
     node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
-    node_path = _normalize_runfiles_path(node_toolchain.nodeinfo.node.short_path)
+    node_path = normalize_runfiles_path(node_toolchain.nodeinfo.node.short_path)
 
     extension = ".bat" if is_windows else ".sh"
     launcher = ctx.actions.declare_file(ctx.label.name + extension)
@@ -94,7 +77,7 @@ def _node_sharded_test_impl(ctx):
         ])
         content = "\r\n".join(content_lines)
     else:
-        node_bin = _shell_dquote_literal(node_path)
+        node_bin = shell_dquote_literal(node_path)
         command = "\"$node_bin\" --experimental-transform-types --preserve-symlinks scripts/bazel.ts bazel-test-shard \"$@\""
         content_lines = [
             "#!/usr/bin/env bash",
@@ -122,15 +105,15 @@ def _node_sharded_test_impl(ctx):
             "  echo \"bazel.ts not found under $runfiles_root\" >&2",
             "  exit 1",
             "fi",
-            "export THANATOS_BIN=\"$runfiles_root/" + _shell_dquote_literal(thanatos_rootpath) + "\"",
-            "export TYPED_SKI_DIST_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_js_rootpath) + "\"",
-            "export TYPED_SKI_DIST_MIN_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_min_js_rootpath) + "\"",
-            "export TYPED_SKI_DIST_NODE_JS_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_node_js_rootpath) + "\"",
-            "export TYPED_SKI_DIST_BIN_PATH=\"$runfiles_root/" + _shell_dquote_literal(dist_bin_rootpath) + "\"",
+            "export THANATOS_BIN=\"$runfiles_root/" + shell_dquote_literal(thanatos_rootpath) + "\"",
+            "export TYPED_SKI_DIST_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_js_rootpath) + "\"",
+            "export TYPED_SKI_DIST_MIN_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_min_js_rootpath) + "\"",
+            "export TYPED_SKI_DIST_NODE_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_node_js_rootpath) + "\"",
+            "export TYPED_SKI_DIST_BIN_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_bin_rootpath) + "\"",
             "export TYPED_SKI_DIST_READY=1",
         ]
         if clang_rootpath:
-            content_lines.append("export TYPED_SKI_CLANG=\"$runfiles_root/" + _shell_dquote_literal(clang_rootpath) + "\"")
+            content_lines.append("export TYPED_SKI_CLANG=\"$runfiles_root/" + shell_dquote_literal(clang_rootpath) + "\"")
 
         content_lines.extend([
             "[[ -n \"${TEST_SHARD_STATUS_FILE:-}\" ]] && touch \"$TEST_SHARD_STATUS_FILE\"",
@@ -155,7 +138,7 @@ def _node_sharded_test_impl(ctx):
         files = runfiles_files,
         symlinks = symlinks,
     )
-    runfiles = _merge_target_runfiles(runfiles, ctx.attr.data)
+    runfiles = merge_target_runfiles(runfiles, ctx.attr.data)
     runfiles = runfiles.merge(ctx.attr.thanatos[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.dist[DefaultInfo].default_runfiles)
     if ctx.attr.clang:

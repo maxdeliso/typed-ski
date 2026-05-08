@@ -21,6 +21,12 @@ def _merge_target_runfiles(runfiles, targets):
         runfiles = runfiles.merge(default_info.data_runfiles)
     return runfiles
 
+def _single_output_file(target, attr_name):
+    files = target[DefaultInfo].files.to_list()
+    if len(files) != 1:
+        fail("{} must produce exactly one file, got {}".format(attr_name, len(files)))
+    return files[0]
+
 def _trip_llvm_object_impl(ctx):
     if len(ctx.attr.module_source_names) != len(ctx.files.module_source_files):
         fail("module_source_names and module_source_files must have the same length")
@@ -125,6 +131,126 @@ trip_llvm_object = rule(
     toolchains = ["@rules_nodejs//nodejs:toolchain_type"],
 )
 
+def _windows_import_library_impl(ctx):
+    import_lib = ctx.actions.declare_file(ctx.label.name + ".lib")
+
+    args = ctx.actions.args()
+    args.add("-m")
+    args.add("i386:x86-64")
+    args.add("-d")
+    args.add(ctx.file.def_file)
+    args.add("-l")
+    args.add(import_lib)
+
+    ctx.actions.run(
+        executable = ctx.executable.llvm_dlltool,
+        arguments = [args],
+        inputs = [ctx.file.def_file],
+        tools = [ctx.executable.llvm_dlltool],
+        outputs = [import_lib],
+        mnemonic = "TripWindowsImportLib",
+        progress_message = "Generating Windows import library %s" % import_lib.short_path,
+    )
+
+    return [DefaultInfo(files = depset([import_lib]))]
+
+windows_import_library = rule(
+    implementation = _windows_import_library_impl,
+    attrs = {
+        "def_file": attr.label(
+            allow_single_file = [".def"],
+            mandatory = True,
+        ),
+        "llvm_dlltool": attr.label(
+            allow_single_file = True,
+            cfg = "exec",
+            executable = True,
+            mandatory = True,
+        ),
+    },
+)
+
+def _trip_windows_executable_impl(ctx):
+    trip_obj = _single_output_file(ctx.attr.object, "object")
+    runtime_obj = ctx.actions.declare_file(ctx.label.name + "_runtime.obj")
+    exe = ctx.actions.declare_file(ctx.label.name + ".exe")
+    import_libs = [_single_output_file(lib, "import_libs") for lib in ctx.attr.import_libs]
+
+    runtime_args = ctx.actions.args()
+    runtime_args.add("-mtriple=x86_64-pc-windows-msvc")
+    runtime_args.add("-filetype=obj")
+    runtime_args.add(ctx.file.runtime_llvm)
+    runtime_args.add("-o")
+    runtime_args.add(runtime_obj)
+
+    ctx.actions.run(
+        executable = ctx.executable.llvm_llc,
+        arguments = [runtime_args],
+        inputs = [ctx.file.runtime_llvm],
+        tools = depset([ctx.executable.llvm_llc] + ctx.files.llvm_dist),
+        outputs = [runtime_obj],
+        mnemonic = "TripWindowsRuntimeObject",
+        progress_message = "Compiling no-CRT Windows runtime %s" % ctx.file.runtime_llvm.short_path,
+    )
+
+    link_args = ctx.actions.args()
+    link_args.add("/NOLOGO")
+    link_args.add("/MACHINE:X64")
+    link_args.add("/SUBSYSTEM:CONSOLE")
+    link_args.add("/ENTRY:trip_start")
+    link_args.add("/NODEFAULTLIB")
+    link_args.add("/OUT:" + exe.path)
+    link_args.add(trip_obj)
+    link_args.add(runtime_obj)
+    link_args.add_all(import_libs)
+
+    ctx.actions.run(
+        executable = ctx.executable.llvm_lld_link,
+        arguments = [link_args],
+        inputs = depset([trip_obj, runtime_obj] + import_libs),
+        tools = depset([ctx.executable.llvm_lld_link] + ctx.files.llvm_dist),
+        outputs = [exe],
+        mnemonic = "TripWindowsExecutable",
+        progress_message = "Linking no-CRT Windows executable %s" % exe.short_path,
+    )
+
+    return [DefaultInfo(
+        executable = exe,
+        files = depset([exe]),
+        runfiles = ctx.runfiles(files = [exe]),
+    )]
+
+trip_windows_executable = rule(
+    implementation = _trip_windows_executable_impl,
+    attrs = {
+        "import_libs": attr.label_list(mandatory = True),
+        "llvm_dist": attr.label_list(
+            allow_files = True,
+            cfg = "exec",
+        ),
+        "llvm_llc": attr.label(
+            allow_single_file = True,
+            cfg = "exec",
+            executable = True,
+            mandatory = True,
+        ),
+        "llvm_lld_link": attr.label(
+            allow_single_file = True,
+            cfg = "exec",
+            executable = True,
+            mandatory = True,
+        ),
+        "object": attr.label(
+            mandatory = True,
+        ),
+        "runtime_llvm": attr.label(
+            allow_single_file = [".ll"],
+            mandatory = True,
+        ),
+    },
+    executable = True,
+)
+
 def _trip_executable_stdout_test_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
         ctx.attr._windows_constraint[platform_common.ConstraintValueInfo],
@@ -135,10 +261,7 @@ def _trip_executable_stdout_test_impl(ctx):
     if not is_windows and not is_linux:
         fail("trip_executable_stdout_test only supports Windows and Linux; add target_compatible_with to the target.")
 
-    binary_rootpath = ctx.expand_location(
-        "$(rootpath %s)" % str(ctx.attr.binary.label),
-        [ctx.attr.binary],
-    )
+    binary_rootpath = _normalize_runfiles_path(ctx.executable.binary.short_path)
     if is_windows:
         binary_path = binary_rootpath.replace("/", "\\")
         ps_script = ctx.actions.declare_file(ctx.label.name + ".ps1")

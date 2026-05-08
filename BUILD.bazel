@@ -5,7 +5,13 @@ load("//bazel:codegen.bzl", "codegen_rule")
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
-load("//bazel:trip_llvm.bzl", "trip_executable_stdout_test", "trip_llvm_object")
+load(
+    "//bazel:trip_llvm.bzl",
+    "trip_executable_stdout_test",
+    "trip_llvm_object",
+    "trip_windows_executable",
+    "windows_import_library",
+)
 load("//bazel:workspace_command.bzl", "workspace_command")
 
 package(default_visibility = ["//visibility:public"])
@@ -128,6 +134,16 @@ LLVM_CLANG_BIN = select({
     "//conditions:default": "//bazel:empty.txt",
 })
 
+LLVM_LLD_LINK_BIN = select({
+    ":windows_x86_64": "@typed_ski_llvm_windows_x64//:llvm_lld_link",
+    "//conditions:default": "//bazel:empty.txt",
+})
+
+LLVM_DLLTOOL_BIN = select({
+    ":windows_x86_64": "@typed_ski_llvm_windows_x64//:llvm_dlltool",
+    "//conditions:default": "//bazel:empty.txt",
+})
+
 LLVM_DIST_DATA = select({
     ":linux_x86_64": ["@typed_ski_llvm_linux_x64//:dist"],
     ":macos_arm64": ["@typed_ski_llvm_macos_arm64//:dist"],
@@ -243,17 +259,40 @@ trip_llvm_object(
 )
 
 cc_binary(
-    name = "trip_hello_world",
-    srcs = select({
-        ":linux_x86_64": [":trip_hello_world_linux_obj"],
-        ":windows_x86_64": [":trip_hello_world_windows_obj"],
-    }),
+    name = "trip_hello_world_linux",
+    srcs = [":trip_hello_world_linux_obj"],
     tags = ["manual"],
-    target_compatible_with = HELLO_WORLD_COMPATIBILITY,
-    deps = ["//core:trip_runtime_io"] + select({
-        ":windows_x86_64": ["@msvc_toolchains//lib:kernel32"],
-        "//conditions:default": [],
+    target_compatible_with = LINUX_X86_64_COMPATIBILITY,
+    deps = ["//core:trip_runtime_io"],
+)
+
+windows_import_library(
+    name = "kernel32_import_lib",
+    def_file = "//bazel:windows/kernel32.def",
+    llvm_dlltool = LLVM_DLLTOOL_BIN,
+    tags = ["manual"],
+    target_compatible_with = WINDOWS_X86_64_COMPATIBILITY,
+)
+
+trip_windows_executable(
+    name = "trip_hello_world_windows",
+    import_libs = [":kernel32_import_lib"],
+    llvm_dist = LLVM_DIST_DATA,
+    llvm_llc = LLVM_LLC_BIN,
+    llvm_lld_link = LLVM_LLD_LINK_BIN,
+    object = ":trip_hello_world_windows_obj",
+    runtime_llvm = "//bazel:windows/trip_nocrt_runtime.ll",
+    tags = ["manual"],
+    target_compatible_with = WINDOWS_X86_64_COMPATIBILITY,
+)
+
+alias(
+    name = "trip_hello_world",
+    actual = select({
+        ":linux_x86_64": ":trip_hello_world_linux",
+        ":windows_x86_64": ":trip_hello_world_windows",
     }),
+    target_compatible_with = HELLO_WORLD_COMPATIBILITY,
 )
 
 trip_executable_stdout_test(
@@ -261,7 +300,6 @@ trip_executable_stdout_test(
     binary = ":trip_hello_world",
     expected_exit_code = 10,
     expected_stdout = "Hello, world!\n",
-    tags = ["requires-msvc-eula"],
     target_compatible_with = HELLO_WORLD_COMPATIBILITY,
 )
 

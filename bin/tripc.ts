@@ -27,6 +27,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  compileTripBundleV1ToLlvm,
   compileTripSourceToLlvm,
   parseLlvmTarget,
   readModuleSourceSpec,
@@ -59,6 +60,7 @@ interface CLIOptions {
   target: LlvmTargetProfile;
   emitMainWrapper: boolean;
   mainWrapper?: EmitLlvmOptions["mainWrapper"];
+  bundleV1: boolean;
 }
 
 function parseArgs(args: string[]): {
@@ -77,6 +79,7 @@ function parseArgs(args: string[]): {
     moduleSources: [],
     target: { kind: "generic" },
     emitMainWrapper: false,
+    bundleV1: false,
   };
 
   let inputPath: string | undefined;
@@ -126,6 +129,11 @@ function parseArgs(args: string[]): {
       }
       case "--module-source":
         options.moduleSources.push(requireValue(args, ++i, arg));
+        break;
+      case "--bundle-v1":
+        options.bundleV1 = true;
+        options.emit = "llvm";
+        options.mode = "compile";
         break;
       case "--entry-module":
         options.entryModule = requireValue(args, ++i, arg);
@@ -218,10 +226,11 @@ LLVM EMIT MODE:
     --emit llvm      Emit textual LLVM IR instead of a .tripc object file
     --module-source <name=path>
                      Additional source module, repeatable
+    --bundle-v1      Treat <input> as a deterministic bundle-v1 source bundle
     --entry-module <name>
                      Entry module name; defaults to the input module declaration
     --target <triple>
-                     generic | x86_64-unknown-linux-gnu | x86_64-pc-windows-msvc | wasm32-unknown-unknown | wasm32-wasi
+                     generic | arm64-apple-darwin | x86_64-unknown-linux-gnu | x86_64-pc-windows-msvc | wasm32-unknown-unknown | wasm32-wasi
     --emit-main-wrapper
                      Emit an int main() wrapper that calls the Trip entry
     --main-wrapper <kind>
@@ -242,6 +251,7 @@ OPTIONS:
 EXAMPLES:
     tripc mymodule.trip                           # Compile to mymodule.tripc
     tripc --emit llvm mymodule.trip mymodule.ll   # Emit LLVM IR
+    tripc --bundle-v1 compiler.tripbundle out.ll   # Emit LLVM IR from a bundle
     tripc --link module1.tripc module2.tripc      # Link modules
     tripc --help
     tripc --version
@@ -396,10 +406,33 @@ async function emitLlvmFile(
       console.log(`Loading ${inputPath}...`);
     }
 
-    const [inputSource, moduleSources] = await Promise.all([
-      readFile(inputPath, "utf8"),
-      Promise.all(options.moduleSources.map(readModuleSourceSpec)),
-    ]);
+    if (options.bundleV1) {
+      if (options.moduleSources.length > 0 || options.entryModule) {
+        throw new Error(
+          "--bundle-v1 cannot be combined with --module-source or --entry-module",
+        );
+      }
+      const inputBytes = await readFile(inputPath);
+      const llvm = compileTripBundleV1ToLlvm(inputBytes);
+      if (options.stdout) {
+        process.stdout.write(llvm + "\n");
+        return;
+      }
+      const finalOutputPath =
+        outputPath || inputPath.replace(/\.[^.]*$/, ".ll");
+      await mkdir(dirname(finalOutputPath), { recursive: true });
+      if (options.verbose) {
+        console.log(`Writing LLVM IR to ${finalOutputPath}...`);
+      }
+      await writeFile(finalOutputPath, llvm + "\n", "utf8");
+      return;
+    }
+
+    const inputSource = await readFile(inputPath, "utf8");
+
+    const moduleSources = await Promise.all(
+      options.moduleSources.map(readModuleSourceSpec),
+    );
 
     if (options.verbose) {
       console.log("Lowering TripLang program to LLVM IR...");
@@ -487,13 +520,13 @@ async function main(): Promise<void> {
         process.exit(1);
       }
 
-      if (!inputPath.endsWith(".trip")) {
+      if (!options.bundleV1 && !inputPath.endsWith(".trip")) {
         console.error(`Input file must have .trip extension: ${inputPath}`);
         process.exit(1);
       }
 
       const resolvedOutputPath = outputPath ? resolve(outputPath) : undefined;
-      if (options.emit === "llvm") {
+      if (options.emit === "llvm" || options.bundleV1) {
         await emitLlvmFile(resolvedInputPath, resolvedOutputPath, options);
       } else {
         await compileFile(

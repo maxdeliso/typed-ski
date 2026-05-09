@@ -247,6 +247,25 @@ in Block IR, so later representation passes can choose an implementation layout.
 
 In addition to the Thanatos SKI evaluator, the compiler features an ahead-of-time **LLVM Backend**. The pipeline lowers MiniCore Block IR modules into LLVM IR via the `emitLlvmModule` target. This backend supports generating generic LLVM IR as well as compiling for specific target profiles (e.g., `x86_64-unknown-linux-gnu`, `wasm32-wasi`). The emitted LLVM code utilizes a boxed-runtime representation to bridge Trip's data structures and semantics into native machine code.
 
+### Native-v1 Bootstrap Contract
+
+The first self-hosting target is LLVM IR self-hosting, not in-language object
+emission or linking. The native compiler consumes a deterministic `bundle-v1`
+source bundle, lowers the entry module through MiniCore/ANF/Block IR, and emits
+LLVM IR to stdout. External LLVM tooling still assembles and links the result.
+
+`bundle-v1` is an ASCII, byte-length-delimited source format with an entry
+module, target triple, main-wrapper kind, and module records sorted by ASCII
+module name. Parsing is byte-exact: non-ASCII source bytes, non-canonical module
+order, and any trailing byte are rejected. It intentionally avoids JSON so a
+first-order Trip implementation can decode it with byte-list parsing.
+
+The LLVM source path validates the native-v1 subset before emission. Runtime
+function values, escaping lambdas, function-typed constructor fields, dynamic
+callees, and unsupported higher-order values are rejected before Block IR/LLVM.
+The object language may still contain System-F terms and lambdas; the compiler
+implementation must represent and transform them as first-order AST data.
+
 ## TripC Object Files (`.tripc`)
 
 The compiler uses a standardized JSON-based intermediate object file format (`.tripc`) for modular compilation and linking. A `.tripc` object encapsulates a compiled Trip module, carrying:

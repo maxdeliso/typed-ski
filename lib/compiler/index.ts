@@ -33,11 +33,24 @@ export {
   type LlvmTargetProfile,
 } from "./llvm/index.ts";
 export {
+  compileTripBundleV1ToLlvm,
+  compileTripModulesToLlvm,
   compileTripSourceToLlvm,
   moduleNameOfTripSource,
   parseLlvmTarget,
   parseModuleSourceSpec,
   readModuleSourceSpec,
+  type CompileTripModulesToLlvmOptions,
   type CompileTripSourceToLlvmOptions,
   type TripModuleSourceFileSpec,
 } from "./llvmCompiler.ts";
+export {
+  parseTripBundleV1,
+  parseTripBundleV1String,
+  serializeTripBundleV1,
+  serializeTripBundleV1ToString,
+  TripBundleV1Error,
+  TRIP_BUNDLE_V1_MAGIC,
+  type TripBundleV1,
+  type TripBundleV1Module,
+} from "./bundleV1.ts";

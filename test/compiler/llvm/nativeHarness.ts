@@ -24,6 +24,26 @@ export interface HarnessOptions extends CompileTripSourceToLlvmOptions {
 
 const CLANG = process.env["TYPED_SKI_CLANG"];
 
+function macosSdkArgs(): string[] {
+  if (process.platform !== "darwin") {
+    return [];
+  }
+
+  const configuredSdk = process.env["SDKROOT"];
+  if (configuredSdk) {
+    return ["-isysroot", configuredSdk];
+  }
+
+  const xcrun = spawnSync("xcrun", ["--show-sdk-path"], { encoding: "utf8" });
+  if (xcrun.status !== 0) {
+    throw new Error(
+      `xcrun --show-sdk-path failed:\nstdout: ${xcrun.stdout}\nstderr: ${xcrun.stderr}`,
+    );
+  }
+
+  return ["-isysroot", xcrun.stdout.trim()];
+}
+
 /**
  * Compiles Trip source to LLVM IR using the host (TypeScript) compiler.
  */
@@ -61,6 +81,7 @@ export async function compileLlvmToExecutable(
     ...allRuntimeSources,
     "-I",
     join(PROJECT_ROOT, "core"),
+    ...macosSdkArgs(),
     "-o",
     exePath,
     ...(process.platform !== "win32"

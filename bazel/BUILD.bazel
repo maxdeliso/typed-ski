@@ -16,12 +16,8 @@ exports_files([
         toolchain_type = "@rules_nodejs//nodejs:toolchain_type",
     )
     for name, toolchain_ref, os_constraint, cpu_constraint in [
-        ("node25_darwin_amd64_toolchain", "@typed_ski_node25_darwin_amd64//:toolchain", "@platforms//os:macos", "@platforms//cpu:x86_64"),
         ("node25_darwin_arm64_toolchain", "@typed_ski_node25_darwin_arm64//:toolchain", "@platforms//os:macos", "@platforms//cpu:arm64"),
         ("node25_linux_amd64_toolchain", "@typed_ski_node25_linux_amd64//:toolchain", "@platforms//os:linux", "@platforms//cpu:x86_64"),
-        ("node25_linux_arm64_toolchain", "@typed_ski_node25_linux_arm64//:toolchain", "@platforms//os:linux", "@platforms//cpu:arm64"),
-        ("node25_linux_ppc64le_toolchain", "@typed_ski_node25_linux_ppc64le//:toolchain", "@platforms//os:linux", "@platforms//cpu:ppc"),
-        ("node25_linux_s390x_toolchain", "@typed_ski_node25_linux_s390x//:toolchain", "@platforms//os:linux", "@platforms//cpu:s390x"),
         ("node25_windows_amd64_toolchain", "@typed_ski_node25_windows_amd64//:toolchain", "@platforms//os:windows", "@platforms//cpu:x86_64"),
     ]
 ]

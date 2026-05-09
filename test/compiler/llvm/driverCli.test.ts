@@ -45,10 +45,32 @@ describe("tripc LLVM driver", () => {
       assert.equal(tripc.status, 0, tripc.stderr);
 
       const outContent = readFileSync(tripcOut, "utf8");
+      assert.match(outContent, /target triple = "x86_64-unknown-linux-gnu"/);
       assert.match(outContent, /define i8 @trip_fn_Main_main\(\)/);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("accepts the macOS ARM64 LLVM target", () => {
+    const result = runNodeScript(tripcScriptPath, [
+      "--emit",
+      "llvm",
+      "test/compiler/llvm/helloWorld.trip",
+      "--entry-module",
+      "Main",
+      "--module-source",
+      "Prelude=lib/prelude.trip",
+      "--target",
+      "arm64-apple-darwin",
+      "--emit-main-wrapper",
+      "--stdout",
+    ]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /target triple = "arm64-apple-darwin"/);
+    assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
+    assert.equal(result.stderr, "");
   });
 
   it("prints LLVM to stdout", () => {

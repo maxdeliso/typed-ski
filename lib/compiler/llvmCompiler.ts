@@ -30,6 +30,7 @@ export interface TripModuleSourceFileSpec {
 
 export function parseLlvmTarget(value: string): LlvmTargetProfile {
   switch (value) {
+    case "arm64-apple-darwin":
     case "generic":
     case "x86_64-unknown-linux-gnu":
     case "x86_64-pc-windows-msvc":

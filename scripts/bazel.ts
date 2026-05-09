@@ -124,7 +124,8 @@ function splitSpawnArgs(args: string[]): [string, string[]] {
 }
 
 async function ensurePnpmStore(): Promise<string> {
-  const storeDir = join(PROJECT_ROOT, ".tmp", "pnpm-store");
+  const tempRoot = process.env["TEST_TMPDIR"] ?? join(PROJECT_ROOT, ".tmp");
+  const storeDir = join(tempRoot, "pnpm-store");
   await fsp.mkdir(storeDir, { recursive: true });
   return storeDir;
 }
@@ -154,6 +155,7 @@ function nodeTestArgs(
   args.push("--experimental-test-module-mocks");
   args.push("--test-global-setup", NODE_TEST_GLOBAL_SETUP_PATH);
   args.push("--preserve-symlinks");
+  args.push("--preserve-symlinks-main");
   args.push("--test-timeout=60000");
 
   if (options.coverage) {
@@ -624,6 +626,18 @@ async function prepareTestExecution(
   ) {
     console.log("Building distribution artifacts for tests...");
     await buildDist();
+  }
+
+  if (process.env["TEST_SRCDIR"] && process.env["TEST_WORKSPACE"]) {
+    const nodeOptions = [
+      process.env["NODE_OPTIONS"],
+      "--preserve-symlinks",
+      "--preserve-symlinks-main",
+    ]
+      .filter((value) => value && value.length > 0)
+      .join(" ");
+
+    return { NODE_OPTIONS: nodeOptions };
   }
 
   return {};

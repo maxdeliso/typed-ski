@@ -237,8 +237,11 @@ def _trip_executable_stdout_test_impl(ctx):
     is_linux = ctx.target_platform_has_constraint(
         ctx.attr._linux_constraint[platform_common.ConstraintValueInfo],
     )
-    if not is_windows and not is_linux:
-        fail("trip_executable_stdout_test only supports Windows and Linux; add target_compatible_with to the target.")
+    is_macos = ctx.target_platform_has_constraint(
+        ctx.attr._macos_constraint[platform_common.ConstraintValueInfo],
+    )
+    if not is_windows and not is_linux and not is_macos:
+        fail("trip_executable_stdout_test only supports Windows, Linux, and macOS; add target_compatible_with to the target.")
 
     binary_rootpath = normalize_runfiles_path(ctx.executable.binary.short_path)
     if is_windows:
@@ -386,6 +389,9 @@ trip_executable_stdout_test = rule(
         "expected_stdout": attr.string(mandatory = True),
         "_linux_constraint": attr.label(
             default = "@platforms//os:linux",
+        ),
+        "_macos_constraint": attr.label(
+            default = "@platforms//os:macos",
         ),
         "_windows_constraint": attr.label(
             default = "@platforms//os:windows",

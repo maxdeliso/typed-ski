@@ -12,6 +12,9 @@ An implementation of a parser, evaluator, printer, and visualizer for
   Thanatos evaluator
 - [Bazelisk](https://github.com/bazelbuild/bazelisk), which downloads the
   hermetic Zig-based C/C++ toolchain on first native build
+- On macOS, Apple Silicon is supported. Install Xcode Command Line Tools so
+  `xcrun --show-sdk-path` can locate the macOS SDK used by native LLVM-backed
+  tests.
 
 ## Quick Start
 
@@ -35,7 +38,8 @@ pnpm run dist
 
 The Bazel graph includes a hermetic native `thanatos` target alongside the
 Node.js-based build, lint, coverage, and packaging flows, without requiring WSL,
-Nix, or Visual Studio Build Tools on Windows.
+Nix, or Visual Studio Build Tools on Windows. macOS support currently targets
+Apple Silicon; Intel macOS is not wired into the pinned LLVM toolchain set.
 
 If Bazelisk is installed as `bazel` on your machine, the same commands work with
 `bazel` in place of `bazelisk`. The Bazel version is pinned in `.bazelversion`.
@@ -47,11 +51,12 @@ If Bazelisk is installed as `bazel` on your machine, the same commands work with
 1. Install `Node.js`
 2. Install `pnpm` (system-wide or use `npm install -g pnpm`)
 3. Install `Bazelisk`
-4. Clone the repository
-5. Run `pnpm install`
-6. Run `bazelisk build //:thanatos`
-7. Run `bazelisk run //:dist`
-8. Open the project in VS Code
+4. On macOS, install Xcode Command Line Tools (`xcode-select --install`)
+5. Clone the repository
+6. Run `pnpm install`
+7. Run `bazelisk build //:thanatos`
+8. Run `bazelisk run //:dist`
+9. Open the project in VS Code
 
 The required Node.js toolchain version is pinned in the repository configuration.
 Bazelisk commands use your installed Node.js only as a bootstrap shim, then run
@@ -279,10 +284,12 @@ To guarantee determinism, `.tripc` serialization forces reproducible, canonical 
 
 ## CI/CD
 
-GitHub Actions use Bazel on both Ubuntu and native Windows. Native C targets run
-through ordinary Bazel build/test steps, and the Node.js suite runs through the
-sharded `//:node_tests` Bazel test target so each shard owns its own Thanatos
-session. See the workflow files in `.github/workflows/` for details.
+GitHub Actions use Bazel on Ubuntu, native Windows, and macOS Apple Silicon.
+Native C targets run through ordinary Bazel build/test steps, and the Node.js
+suite runs through the sharded `//:node_tests` Bazel test target so each shard
+owns its own Thanatos session. The hosted macOS runner includes Xcode tooling
+and the macOS SDK; local macOS setups need Xcode Command Line Tools installed.
+See the workflow files in `.github/workflows/` for details.
 
 ## Status
 

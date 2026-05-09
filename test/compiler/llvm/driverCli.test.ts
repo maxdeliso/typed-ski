@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "../../util/test_shim.ts";
+import { serializeTripBundleV1 } from "../../../lib/compiler/index.ts";
 import { projectRoot, tripcScriptPath } from "../../util/tripcHarness.ts";
 
 function runNodeScript(script: string, args: string[]) {
@@ -88,5 +89,43 @@ describe("tripc LLVM driver", () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
     assert.equal(result.stderr, "");
+  });
+
+  it("emits LLVM from a bundle-v1 input", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "typed-ski-tripc-bundle-v1-"));
+    try {
+      const bundlePath = join(tempDir, "compiler.bundle-v1");
+      writeFileSync(
+        bundlePath,
+        serializeTripBundleV1({
+          entryModule: "Main",
+          target: { kind: "x86_64-unknown-linux-gnu" },
+          mainWrapper: { kind: "c-main" },
+          modules: [
+            {
+              name: "Main",
+              source: `module Main
+export main
+poly main = #u8(7)
+`,
+            },
+          ],
+        }),
+      );
+
+      const result = runNodeScript(tripcScriptPath, [
+        "--bundle-v1",
+        bundlePath,
+        "--stdout",
+      ]);
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /target triple = "x86_64-unknown-linux-gnu"/);
+      assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
+      assert.match(result.stdout, /define i32 @main\(\)/);
+      assert.equal(result.stderr, "");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

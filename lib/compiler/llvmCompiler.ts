@@ -6,7 +6,10 @@ import {
   toAnfProgram,
   type MiniCoreModuleSource,
 } from "../minicore/index.ts";
+import { validateNativeV1Subset } from "../minicore/nativeV1Subset.ts";
 import { parseTripLang } from "../parser/tripLang.ts";
+import { compareAscii } from "../shared/canonical.ts";
+import { parseTripBundleV1 } from "./bundleV1.ts";
 import {
   emitLlvmModule,
   type EmitLlvmOptions,
@@ -21,6 +24,17 @@ export interface CompileTripSourceToLlvmOptions {
   representation?: LlvmRepresentation;
   emitMainWrapper?: boolean;
   mainWrapper?: EmitLlvmOptions["mainWrapper"];
+  validateNativeV1Subset?: boolean;
+}
+
+export interface CompileTripModulesToLlvmOptions {
+  modules: ReadonlyArray<MiniCoreModuleSource>;
+  entryModule: string;
+  target?: LlvmTargetProfile;
+  representation?: LlvmRepresentation;
+  emitMainWrapper?: boolean;
+  mainWrapper?: EmitLlvmOptions["mainWrapper"];
+  validateNativeV1Subset?: boolean;
 }
 
 export interface TripModuleSourceFileSpec {
@@ -70,6 +84,44 @@ export async function readModuleSourceSpec(
   return { name: parsed.name, source: await readFile(parsed.path, "utf8") };
 }
 
+export function compileTripModulesToLlvm(
+  options: CompileTripModulesToLlvmOptions,
+): string {
+  const names = new Set<string>();
+  let hasEntry = false;
+  for (const module of options.modules) {
+    if (names.has(module.name)) {
+      throw new Error(`Duplicate module source: ${module.name}`);
+    }
+    names.add(module.name);
+    if (module.name === options.entryModule) {
+      hasEntry = true;
+    }
+  }
+  if (!hasEntry) {
+    throw new Error(`Entry module ${options.entryModule} is not present`);
+  }
+
+  const program = compileMiniCoreModules(
+    [...options.modules],
+    options.entryModule,
+    { requireNullaryEntry: false },
+  );
+
+  if (options.validateNativeV1Subset ?? true) {
+    validateNativeV1Subset(program);
+  }
+
+  const blockModule = anfToBlockModule(toAnfProgram(program));
+
+  return emitLlvmModule(blockModule, {
+    target: options.target,
+    representation: options.representation ?? "boxed-runtime",
+    emitMainWrapper: options.emitMainWrapper,
+    mainWrapper: options.mainWrapper,
+  });
+}
+
 export function compileTripSourceToLlvm(
   inputSource: string,
   options: CompileTripSourceToLlvmOptions = {},
@@ -84,20 +136,41 @@ export function compileTripSourceToLlvm(
     );
   }
 
-  const blockModule = anfToBlockModule(
-    toAnfProgram(
-      compileMiniCoreModules(
-        [...moduleSources, { name: entryModule, source: inputSource }],
-        entryModule,
-        { requireNullaryEntry: false },
-      ),
-    ),
-  );
-
-  return emitLlvmModule(blockModule, {
+  return compileTripModulesToLlvm({
+    modules: [...moduleSources, { name: entryModule, source: inputSource }],
+    entryModule,
     target: options.target,
-    representation: options.representation ?? "boxed-runtime",
+    representation: options.representation,
     emitMainWrapper: options.emitMainWrapper,
     mainWrapper: options.mainWrapper,
+    validateNativeV1Subset: options.validateNativeV1Subset,
+  });
+}
+
+export function compileTripBundleV1ToLlvm(
+  bundleSource: Uint8Array,
+  options: Omit<
+    CompileTripModulesToLlvmOptions,
+    "modules" | "entryModule" | "target" | "emitMainWrapper" | "mainWrapper"
+  > = {},
+): string {
+  const bundle = parseTripBundleV1(bundleSource);
+  const modules = [...bundle.modules].sort((left, right) =>
+    compareAscii(left.name, right.name),
+  );
+  for (const module of modules) {
+    const declaredModule = moduleNameOfTripSource(module.source);
+    if (declaredModule !== module.name) {
+      throw new Error(
+        `Bundle-v1 module ${module.name} source declares module ${declaredModule}`,
+      );
+    }
+  }
+  return compileTripModulesToLlvm({
+    ...options,
+    modules,
+    entryModule: bundle.entryModule,
+    target: bundle.target,
+    mainWrapper: bundle.mainWrapper,
   });
 }

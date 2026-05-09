@@ -123,3 +123,9 @@ export {
   MiniCoreBlockValidationError,
   validateBlockModule,
 } from "./validateBlock.ts";
+export {
+  isNativeV1RuntimeSymbol,
+  NativeV1SubsetError,
+  validateNativeV1Subset,
+  type NativeV1SubsetValidationOptions,
+} from "./nativeV1Subset.ts";

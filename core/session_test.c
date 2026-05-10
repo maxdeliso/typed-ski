@@ -89,7 +89,6 @@ static void test_daemon_success_paths(void) {
   thanatos_session_handle_line(&s, "PING", 4);
   thanatos_session_handle_line(&s, "STATS", 5);
   thanatos_session_handle_line(&s, "RESET", 5);
-  thanatos_session_handle_line(&s, "TRACE_DUMP", 10);
 
   char command[2048];
   int n = snprintf(command, sizeof(command), "REDUCE %s", reduce_dag);
@@ -258,10 +257,7 @@ int main(void) {
   ThanatosConfig config = {
       .num_workers = 0,
       .arena_capacity = 0,
-      .stdin_path = NULL,
-      .trace_dir = NULL,
-      .trace_timeout_ms = 0,
-  };
+      .stdin_path = NULL};
   thanatos_init(config);
   thanatos_start_threads(true);
   thanatos_start_threads(true);

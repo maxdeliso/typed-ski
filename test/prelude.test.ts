@@ -20,15 +20,12 @@ it(
       new URL("./compiler/inputs/preludeTest.trip", import.meta.url),
     );
 
-    const skiExpression = linkModules(
-      [
-        { name: "Prelude", object: preludeObject },
-        { name: "Bin", object: binObject },
-        { name: "Nat", object: natObject },
-        { name: "TestPrelude", object: testObject },
-      ],
-      true,
-    );
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObject },
+      { name: "Bin", object: binObject },
+      { name: "Nat", object: natObject },
+      { name: "TestPrelude", object: testObject },
+    ]);
 
     const skiExpr = parseSKI(skiExpression);
     const evaluator = await createThanatosEvaluator();
@@ -52,13 +49,10 @@ it("subU8 primitive subtraction", { skip: !thanatosAvailable() }, async () => {
     new URL("./compiler/inputs/subU8Test.trip", import.meta.url),
   );
 
-  const skiExpression = linkModules(
-    [
-      { name: "Prelude", object: preludeObject },
-      { name: "SubU8Test", object: testObject },
-    ],
-    true,
-  );
+  const skiExpression = linkModules([
+    { name: "Prelude", object: preludeObject },
+    { name: "SubU8Test", object: testObject },
+  ]);
 
   const skiExpr = parseSKI(skiExpression);
   const evaluator = await createThanatosEvaluator();

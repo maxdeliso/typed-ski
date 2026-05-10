@@ -85,30 +85,6 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
     assert.match(stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
   });
 
-  it("accepts verbose flag", () => {
-    const {
-      stdout,
-      stderr,
-      status: code,
-    } = runLinkerCli(["--verbose", "cli_A.tripc"]);
-
-    assert.strictEqual(code, 0);
-    assert.strictEqual(typeof stdout, "string");
-    assert.ok(stderr.includes("Linking"));
-  });
-
-  it("accepts short verbose flag", () => {
-    const {
-      stdout,
-      stderr,
-      status: code,
-    } = runLinkerCli(["-V", "cli_A.tripc"]);
-
-    assert.strictEqual(code, 0);
-    assert.strictEqual(typeof stdout, "string");
-    assert.ok(stderr.includes("Linking"));
-  });
-
   it("links single .tripc file", () => {
     const { stdout, status: code } = runLinkerCli(["cli_A.tripc"]);
 

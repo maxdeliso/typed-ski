@@ -51,19 +51,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  const char *trace_dir = getenv("THANATOS_TRACE_DIR");
-  uint32_t trace_timeout_ms = 1000;
-  const char *trace_timeout_env = getenv("THANATOS_TRACE_TIMEOUT_MS");
-  if (trace_timeout_env && trace_timeout_env[0] != "\0"[0]) {
-    uint32_t parsed = 0;
-    if (!parse_u32_arg(trace_timeout_env, &parsed)) {
-      fprintf(stderr, "invalid THANATOS_TRACE_TIMEOUT_MS: %s\n",
-              trace_timeout_env);
-      return 1;
-    }
-    trace_timeout_ms = parsed;
-  }
-
   if (stdin_file && !host_path_openable_for_read(stdin_file)) {
     fprintf(stderr, "cannot open --stdin-file %s\n", stdin_file);
     return 1;
@@ -73,8 +60,6 @@ int main(int argc, char **argv) {
       .num_workers = num_workers,
       .arena_capacity = arena_capacity,
       .stdin_path = stdin_file,
-      .trace_dir = trace_dir,
-      .trace_timeout_ms = trace_timeout_ms,
   };
   thanatos_init(config);
   thanatos_start_threads(false);

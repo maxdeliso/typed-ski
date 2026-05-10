@@ -263,12 +263,6 @@ static void handle_stats(ThanatosSession *s) {
   session_fflush(s);
 }
 
-static void handle_trace_dump(ThanatosSession *s) {
-  thanatos_request_trace_dump();
-  session_printf(s, "OK\n");
-  session_fflush(s);
-}
-
 static void handle_reduce(ThanatosSession *s, const char *payload, size_t len) {
   while (len > 0 && (*payload == ' ' || *payload == '\t')) {
     payload++;
@@ -566,8 +560,6 @@ void thanatos_session_handle_line(ThanatosSession *s, const char *line,
     handle_reset(s);
   } else if (command_matches(line, len, "STATS", 5)) {
     handle_stats(s);
-  } else if (command_matches(line, len, "TRACE_DUMP", 10)) {
-    handle_trace_dump(s);
   } else if (command_matches(line, len, "REDUCE", 6)) {
     handle_reduce(s, line + 6, len - 6);
   } else if (command_matches(line, len, "REDUCE_IO", 9)) {

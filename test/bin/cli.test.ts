@@ -355,20 +355,6 @@ poly id = #a => \\x:a => x`;
         assert.strictEqual(parsed.module, "TestModule");
       });
 
-      it("verbose compilation", async () => {
-        const testFile = fixturePath("test.trip");
-
-        const result = await runCommand([
-          process.execPath,
-          "bin/tripc.ts",
-          testFile,
-          "--verbose",
-          "--stdout",
-        ]);
-
-        assert.strictEqual(result.success, true);
-      });
-
       it("error handling", async () => {
         const invalidFile = fixturePath("invalid_syntax.trip");
 
@@ -523,19 +509,6 @@ poly id = #a => \\x:a => x`;
         const parsed = JSON.parse(result.stdout);
         assert.strictEqual(parsed.module, "TestModule");
       });
-
-      it("verbose compilation", async () => {
-        const testFile = fixturePath("test.trip");
-
-        const command = [compiledTripcPath, testFile, "--verbose", "--stdout"];
-        const result = await runCommand(command);
-
-        assertCommandSuccess(
-          result,
-          command,
-          "Compiled Binary (dist/tripc) verbose compilation",
-        );
-      });
     });
   });
 
@@ -591,7 +564,7 @@ poly id = #a => \\x:a => x`;
       );
     });
 
-    it("short flags coverage (-h, -v, -V, -c)", async () => {
+    it("short flags coverage (-h, -v, -c)", async () => {
       // -h
       let result = await runCommand([process.execPath, "bin/tripc.ts", "-h"]);
       assert.strictEqual(result.success, true);
@@ -601,18 +574,6 @@ poly id = #a => \\x:a => x`;
       result = await runCommand([process.execPath, "bin/tripc.ts", "-v"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("tripc v"));
-
-      // -V (verbose)
-      const testFile = fixturePath("test.trip");
-      result = await runCommand([
-        process.execPath,
-        "bin/tripc.ts",
-        testFile,
-        "-V",
-        "--stdout",
-      ]);
-      assert.strictEqual(result.success, true);
-      assert.ok(result.stdout.includes("Compiling TripLang program"));
     });
 
     it("error when input path is a directory", async () => {

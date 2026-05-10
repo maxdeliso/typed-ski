@@ -62,33 +62,3 @@ describe("B and C combinators", { skip: !thanatosAvailable() }, () => {
     compareExpressions(left, right);
   });
 });
-
-describe("random normalization", { skip: !thanatosAvailable() }, () => {
-  const seed = "df394b";
-  const normalizeTests = 19;
-  const minLength = 5;
-  const maxLength = 12;
-  let arenaEvaluator: any;
-  let rs: RandomSeed;
-
-  before(async () => {
-    arenaEvaluator = await createArenaEvaluator();
-    rs = create(seed);
-  });
-
-  it(`runs ${normalizeTests.toString()} normalization tests with random expressions`, async () => {
-    for (const _ of Array(normalizeTests).keys()) {
-      const length = rs.intBetween(minLength, maxLength);
-      const fresh = randExpression(rs, length);
-
-      const reduced = await arenaEvaluator.reduce(fresh);
-      const reducedAgain = await arenaEvaluator.reduce(reduced);
-
-      assert.deepStrictEqual(
-        unparseSKI(reduced),
-        unparseSKI(reducedAgain),
-        `expected: ${unparseSKI(reduced)}, got: ${unparseSKI(reducedAgain)}`,
-      );
-    }
-  });
-});

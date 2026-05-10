@@ -47,7 +47,7 @@ async function compileAndLink(
   }
 
   modules.push({ name: moduleObject.module, object: moduleObject });
-  return linkModules(modules, verbose);
+  return linkModules(modules);
 }
 
 export async function evaluateTrip(

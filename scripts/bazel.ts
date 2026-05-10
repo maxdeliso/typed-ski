@@ -156,7 +156,6 @@ function nodeTestArgs(
   args.push("--test-global-setup", NODE_TEST_GLOBAL_SETUP_PATH);
   args.push("--preserve-symlinks");
   args.push("--preserve-symlinks-main");
-  args.push("--test-timeout=60000");
 
   if (options.coverage) {
     args.push("--experimental-test-coverage");
@@ -628,6 +627,8 @@ async function prepareTestExecution(
     await buildDist();
   }
 
+  const env: Record<string, string> = {};
+
   if (process.env["TEST_SRCDIR"] && process.env["TEST_WORKSPACE"]) {
     const nodeOptions = [
       process.env["NODE_OPTIONS"],
@@ -637,10 +638,10 @@ async function prepareTestExecution(
       .filter((value) => value && value.length > 0)
       .join(" ");
 
-    return { NODE_OPTIONS: nodeOptions };
+    env.NODE_OPTIONS = nodeOptions;
   }
 
-  return {};
+  return env;
 }
 
 function getBazelCoverageOutputFile(): string | undefined {
@@ -658,6 +659,14 @@ export async function runTests(
   let files = await collectTests();
   if (filters.length > 0) {
     files = files.filter((f) => filters.some((filter) => f.includes(filter)));
+  }
+
+  if (process.env["TYPED_SKI_SHUFFLE_TESTS"] === "1") {
+    console.log("Shuffling test files for randomized execution order...");
+    for (let i = files.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [files[i], files[j]] = [files[j]!, files[i]!];
+    }
   }
 
   const env = await typecheckAndPrepareTestExecution(files);

@@ -33,6 +33,9 @@ export type {
   ThanatosReduceIoResult,
 } from "./evaluator/thanatosEvaluator.ts";
 
+// Constants
+export { TEST_TIMEOUT_MS } from "./constants.ts";
+
 // Module provider exports
 export { getAvlObject } from "./avl.ts";
 export { getBinObject } from "./bin.ts";

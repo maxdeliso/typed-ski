@@ -2,7 +2,7 @@
  * Compiler tests that validate lowering (TripLang → SKI) behavior.
  */
 
-import { describe, it } from "../util/test_shim.ts";
+import { it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -45,7 +45,6 @@ poly main = 256
     { name: "Prelude", object: prelude },
     { name: "Test", object: obj256 },
   ]);
-  console.log("256 rep:", rep256.trim());
 
   assert.strictEqual(rep255.trim(), "#u8(255)", "255 should lower to U8");
   assert.notStrictEqual(

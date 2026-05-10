@@ -46,14 +46,11 @@ it(
     const preludeObj = await getPreludeObjectCached();
     const binObj = await getBinObjectCached();
 
-    const skiExpression = linkModules(
-      [
-        { name: "Prelude", object: preludeObj },
-        { name: "Bin", object: binObj },
-        { name: "Test", object: testObj },
-      ],
-      false,
-    );
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObj },
+      { name: "Bin", object: binObj },
+      { name: "Test", object: testObj },
+    ]);
 
     const evaluator = await createThanatosEvaluator();
     try {

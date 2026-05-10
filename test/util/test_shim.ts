@@ -2,6 +2,8 @@
  * Test shim to provide a consistent interface between Node.js and Bun.
  */
 
+import { TEST_TIMEOUT_MS } from "../../lib/constants.ts";
+
 let testRunner: any;
 
 const universalWaitFor = async (
@@ -9,7 +11,7 @@ const universalWaitFor = async (
   options?: { interval?: number; timeout?: number },
 ) => {
   const interval = options?.interval ?? 50;
-  const timeout = options?.timeout ?? 2000;
+  const timeout = options?.timeout ?? TEST_TIMEOUT_MS;
   const start = Date.now();
   while (Date.now() - start < timeout) {
     try {
@@ -23,7 +25,11 @@ const universalWaitFor = async (
 
 const parseArgs = (arg2: any, arg3?: any) => {
   let fn: any;
-  let options: any = { timeout: 60000 };
+  const defaultTimeout = parseInt(
+    process.env["THANATOS_TIMEOUT_MS"] ?? TEST_TIMEOUT_MS.toString(),
+    10,
+  );
+  let options: any = { timeout: defaultTimeout };
 
   if (typeof arg2 === "function") {
     fn = arg2;

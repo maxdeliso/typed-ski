@@ -12,10 +12,6 @@ typedef struct {
    * one byte lazily for each blocked READ_ONE suspension and owns the opened
    * handle for the lifetime of the runtime. */
   const char *stdin_path;
-  /** Optional directory for signal-triggered JSON trace dumps. NULL or empty disables tracing. */
-  const char *trace_dir;
-  /** Cooperative snapshot wait budget in milliseconds. */
-  uint32_t trace_timeout_ms;
 } ThanatosConfig;
 
 /* READ_ONE semantics now match JS/WASM more closely: if no byte is available
@@ -28,7 +24,6 @@ void thanatos_init(ThanatosConfig config);
 /** Set a callback for arena stdout bytes. If set, thanatos_reduce and the
  * pump will call this instead of putchar(). */
 void thanatos_set_stdout_handler(void (*handler)(uint8_t, void *), void *ctx);
-void thanatos_request_trace_dump(void);
 
 /** Start worker and dispatcher threads. If enable_stdout_pump is true, also
  * start the thread that forwards arena stdout to process stdout; set false

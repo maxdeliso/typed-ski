@@ -491,7 +491,6 @@ function substituteDependencies(
   localName: string,
   ps: ProgramSpace,
   exportIndex: Map<string, Set<string>>,
-  verbose = false,
 ): TripLangTerm {
   const defValue = extractDefinitionValue(def);
   if (!defValue) return def;
@@ -522,16 +521,6 @@ function substituteDependencies(
   const MAX_ITERATIONS = 30; // Prevent infinite loops
 
   while (currentExternalTermRefs.length > 0 && iteration < MAX_ITERATIONS) {
-    const iterationStartTime = performance.now();
-
-    if (verbose && currentExternalTermRefs.length > 0) {
-      console.error(
-        `  Term resolution iteration ${iteration} for ${moduleName}.${localName}: resolving terms [${currentExternalTermRefs.join(
-          ", ",
-        )}]`,
-      );
-    }
-
     // 1. COLLECT replacements
     const replacements = new Map<string, TripLangTerm>();
     const pendingRefs = new Set<string>();
@@ -681,30 +670,12 @@ function substituteDependencies(
         );
 
       if (!refsChanged) {
-        if (verbose) {
-          console.error(
-            `  Term resolution converged for ${moduleName}.${localName} after ${iteration} iterations (no new references)`,
-          );
-        }
         break;
       }
 
       currentExternalTermRefs = sortedStrings(nextExternalTermRefs);
-
-      if (verbose) {
-        console.error(
-          `  Batch resolved ${replacements.size} terms in ${(
-            performance.now() - iterationStartTime
-          ).toFixed(2)}ms`,
-        );
-      }
     } else {
       // No progress possible
-      if (verbose) {
-        console.error(
-          `  Term resolution converged for ${moduleName}.${localName} after ${iteration} iterations (no substitutions available)`,
-        );
-      }
       break;
     }
 
@@ -828,11 +799,6 @@ function substituteDependencies(
     // are data types or self-references that we can't/won't substitute).
     // This prevents infinite loops when encountering large structures with data type refs.
     if (!changed) {
-      if (verbose) {
-        console.error(
-          `  Type resolution converged for ${moduleName}.${localName} after ${typeIteration} iterations (no substitutions occurred)`,
-        );
-      }
       break;
     }
 
@@ -860,10 +826,7 @@ function resolveSCC(
   ps: ProgramSpace,
   exportIndex: Map<string, Set<string>>,
   hashCache: Map<TripLangTerm, string>,
-  verbose: boolean,
 ): void {
-  if (verbose) console.error(`Processing SCC: ${scc.join(", ")}`);
-
   // Simple case: no cycle
   if (scc.length === 1) {
     const qualified = scc[0]!;
@@ -874,7 +837,6 @@ function resolveSCC(
       localName,
       ps,
       exportIndex,
-      verbose,
     );
     module.defs.set(localName, resolvedDef);
     setGlobal(ps, qualified, resolvedDef);
@@ -926,7 +888,6 @@ function resolveSCC(
         snapshot.localName,
         ps,
         exportIndex,
-        verbose,
       );
 
       // Use cached hash if available, otherwise compute and cache
@@ -946,7 +907,6 @@ function resolveSCC(
       }
     }
     if (!hasChanged) {
-      if (verbose) console.error(`SCC resolved in ${iteration} iterations.`);
       return;
     }
   }
@@ -979,12 +939,7 @@ function buildExportIndex(ps: ProgramSpace): Map<string, Set<string>> {
  */
 export function resolveCrossModuleDependencies(
   programSpace: ProgramSpace,
-  verbose = false,
 ): ProgramSpace {
-  if (verbose) {
-    console.error("Resolving cross-module dependencies...");
-  }
-
   clearModuleInfoCache();
   const resolvedPS = shallowCopyProgramSpace(programSpace);
   const exportIndex = buildExportIndex(resolvedPS);
@@ -1003,108 +958,11 @@ export function resolveCrossModuleDependencies(
   const dependencyGraph = buildDependencyGraph(resolvedPS);
   const sccs = sccDependencyOrder(dependencyGraph);
 
-  if (verbose) {
-    console.error(`Built dependency graph with ${dependencyGraph.size} nodes`);
-    console.error(`Found ${sccs.length} strongly connected components`);
-  }
-
   // Create hash cache to avoid redundant computations
   const hashCache = new Map<TripLangTerm, string>();
 
   for (const scc of sccs) {
-    resolveSCC(scc, resolvedPS, exportIndex, hashCache, verbose);
-  }
-
-  // Sanity check: verify that all exported definitions have no external references
-  for (const moduleName of sortedModuleNames(resolvedPS)) {
-    const module = resolvedPS.modules.get(moduleName)!;
-    for (const exportName of sortedStrings(module.exports)) {
-      const definition = module.defs.get(exportName);
-      if (definition) {
-        const definitionValue = extractDefinitionValue(definition);
-        if (definitionValue) {
-          const [termRefs, typeRefs] = externalReferences(definitionValue);
-
-          // Filter out valid references (recursive definitions that are intentionally not inlined)
-          const externalTermRefs = sortedStrings(termRefs.keys()).filter(
-            (ref) => {
-              // Allow self-reference for recursive definitions
-              if (
-                ref === exportName &&
-                definition.kind === "poly" &&
-                definition.rec
-              )
-                return false;
-
-              // Allow references to other recursive definitions (local)
-              const localDef = module.defs.get(ref);
-              if (localDef && localDef.kind === "poly" && localDef.rec) {
-                return false;
-              }
-
-              // Allow references to other recursive definitions (imported)
-              const qualified = resolvedPS.termEnv.get(moduleName)?.get(ref);
-              if (qualified) {
-                const target = resolvedPS.terms.get(qualified);
-                if (target && target.kind === "poly" && target.rec) {
-                  return false;
-                }
-              }
-
-              return true;
-            },
-          );
-
-          const externalTypeRefs = sortedStrings(typeRefs.keys()).filter(
-            (ref) => {
-              // Allow self-reference for types
-              if (ref === exportName && definition.kind === "type") {
-                return false;
-              }
-
-              // Allow references to recursive types (local)
-              const localDef = module.defs.get(ref);
-              if (localDef && isRecursiveTypeDefinition(localDef)) return false;
-
-              // Allow references to recursive types (imported)
-              const qualified = resolvedPS.typeEnv.get(moduleName)?.get(ref);
-              if (qualified) {
-                const target = resolvedPS.types.get(qualified);
-                if (target && isRecursiveTypeDefinition(target)) return false;
-              }
-
-              return true;
-            },
-          );
-
-          if (
-            verbose &&
-            (externalTermRefs.length > 0 || externalTypeRefs.length > 0)
-          ) {
-            console.warn(
-              `Warning: Exported definition '${qualifiedName(
-                moduleName,
-                exportName,
-              )}' still has external references: terms=[${externalTermRefs.join(
-                ", ",
-              )}], types=[${externalTypeRefs.join(", ")}]`,
-            );
-
-            console.error(
-              `  Definition value: ${JSON.stringify(
-                definitionValue,
-                BIGINT_JSON_REPLACER,
-                2,
-              )}`,
-            );
-          }
-        }
-      }
-    }
-  }
-
-  if (verbose) {
-    console.error("Cross-module resolution completed");
+    resolveSCC(scc, resolvedPS, exportIndex, hashCache);
   }
 
   return resolvedPS;
@@ -1148,34 +1006,13 @@ export function findMainFunction(
 /**
  * Lowers a TripLang term through the pipeline to produce SKI expression
  */
-export function lowerToSKI(term: TripLangTerm, verbose = false): string {
-  if (verbose) {
-    console.error("Lowering main function through the pipeline...");
-  }
-
+export function lowerToSKI(term: TripLangTerm): string {
   let current = term;
   let level = 0;
   const MAX_LEVELS = 2; // poly→lambda→combinator
 
   // Lower through the pipeline: poly -> lambda -> combinator
   while (current.kind !== "combinator") {
-    if (verbose) {
-      console.error(`  Level ${level}: ${current.kind} -> lowering...`);
-    }
-
-    // Debug: check for external references before lowering
-    if (verbose && current.kind === "lambda") {
-      const [termRefs, _typeRefs] = externalReferences(current.term);
-      const externalTermRefs = sortedStrings(termRefs.keys());
-      if (externalTermRefs.length > 0) {
-        console.error(
-          `  Warning: lambda term still has external references: ${externalTermRefs.join(
-            ", ",
-          )}`,
-        );
-      }
-    }
-
     current = lower(current);
     level++;
 
@@ -1185,10 +1022,6 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
         `Too many lowering steps (${level}) - possible circular dependency or lowering re-introducing higher levels`,
       );
     }
-  }
-
-  if (verbose) {
-    console.error(`  Final level: ${current.kind}`);
   }
 
   // Extract the SKI expression and pretty print it
@@ -1201,27 +1034,15 @@ export function lowerToSKI(term: TripLangTerm, verbose = false): string {
  */
 export function linkModules(
   modules: Array<{ name: string; object: TripCObject }>,
-  verbose = false,
 ): string {
-  if (verbose) {
-    console.error(`Linking ${modules.length} modules...`);
-  }
-
   // Step 1: Load modules into program space
   const loadedModules = sortByKey(modules, (module) => module.name).map(
     ({ name, object }) => loadModule(object, name),
   );
   let programSpace = createProgramSpace(loadedModules);
 
-  if (verbose) {
-    const totalSymbols = programSpace.terms.size + programSpace.types.size;
-    console.error(
-      `Loaded ${programSpace.modules.size} modules with ${totalSymbols} total symbols`,
-    );
-  }
-
   // Step 2: Resolve cross-module dependencies
-  programSpace = resolveCrossModuleDependencies(programSpace, verbose);
+  programSpace = resolveCrossModuleDependencies(programSpace);
 
   // Step 3: Find the main function
   const mainFunction = findMainFunction(programSpace);
@@ -1229,16 +1050,6 @@ export function linkModules(
     throw new Error("No 'main' function found in any of the modules");
   }
 
-  if (verbose) {
-    console.error("Found main function, lowering to SKI...");
-  }
-
   // Step 4: Lower main function to SKI expression
-  const skiExpression = lowerToSKI(mainFunction, verbose);
-
-  if (verbose) {
-    console.error("Linking complete!");
-  }
-
-  return skiExpression;
+  return lowerToSKI(mainFunction);
 }

@@ -245,10 +245,7 @@ int main(void) {
   ThanatosConfig config = {
       .num_workers = 1,
       .arena_capacity = 65536,
-      .stdin_path = NULL,
-      .trace_dir = NULL,
-      .trace_timeout_ms = 0,
-  };
+      .stdin_path = NULL};
   thanatos_init(config);
   thanatos_start_threads(true);
 

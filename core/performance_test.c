@@ -179,8 +179,6 @@ int main(int argc, char **argv) {
   int depth = 5;
   uint32_t max_steps = 0xffffffffu;
   unsigned int seed = 0; /* 0 means use time(NULL) */
-  const char *trace_dir = getenv("THANATOS_TRACE_DIR");
-  int stall_trace_requested = 0;
 
   if (argc > 1 && !parse_int_arg(argv[1], &num_threads)) {
     fprintf(stderr, "Invalid thread count: %s\n", argv[1]);
@@ -225,11 +223,7 @@ int main(int argc, char **argv) {
   fflush(stdout);
 
   ThanatosConfig config = {.num_workers = num_threads,
-                           .arena_capacity = arena_max_capacity,
-                           .trace_dir = (trace_dir != NULL && trace_dir[0] != '\0')
-                                            ? trace_dir
-                                            : NULL,
-                           .trace_timeout_ms = 1000};
+                           .arena_capacity = arena_max_capacity};
   thanatos_init(config);
   thanatos_start_threads(true);
   printf("Arena start capacity: %u (max=%u)\n", arena_capacity(),
@@ -335,7 +329,6 @@ int main(int argc, char **argv) {
   int next_report = (reductions >= 100) ? 100 : reductions;
   long long last_progress = start;
   PerfStats last_stats = after_generation;
-  int zero_progress_reports = 0;
   while (atomic_load_explicit(&reduce_ctx.completed, memory_order_acquire) <
          reductions) {
     host_sleep_ms(50);
@@ -365,20 +358,6 @@ int main(int argc, char **argv) {
              current_stats.pending_active, current_stats.pending_done,
              current_stats.sq_occupancy, current_stats.cq_occupancy);
       fflush(stdout);
-      if (delta_steps == 0 && delta_nodes == 0 && delta_cons == 0 &&
-          delta_events == 0) {
-        zero_progress_reports++;
-        if (!stall_trace_requested && zero_progress_reports >= 3 &&
-            config.trace_dir != NULL) {
-          printf("Stall suspected: requesting trace dump in %s\n",
-                 config.trace_dir);
-          fflush(stdout);
-          thanatos_request_trace_dump();
-          stall_trace_requested = 1;
-        }
-      } else {
-        zero_progress_reports = 0;
-      }
       last_progress = now;
       last_stats = current_stats;
     }

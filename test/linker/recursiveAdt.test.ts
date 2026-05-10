@@ -76,16 +76,13 @@ describe("linking with recursive ADTs", { concurrency: false }, () => {
     const binObject = await getBinObject();
     const natObject = await getNatObject();
 
-    const skiExpression = linkModules(
-      [
-        { name: "Prelude", object: preludeObject },
-        { name: "Bin", object: binObject },
-        { name: "Nat", object: natObject },
-        { name: "RecursiveAdt", object: adtObject },
-        { name: "TestRecursive", object: testObject },
-      ],
-      false,
-    );
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObject },
+      { name: "Bin", object: binObject },
+      { name: "Nat", object: natObject },
+      { name: "RecursiveAdt", object: adtObject },
+      { name: "TestRecursive", object: testObject },
+    ]);
 
     assert.strictEqual(typeof skiExpression, "string");
     assert.ok(skiExpression.length > 0);
@@ -99,16 +96,13 @@ describe("linking with recursive ADTs", { concurrency: false }, () => {
     const binObject = await getBinObject();
     const natObject = await getNatObject();
 
-    const skiExpression = linkModules(
-      [
-        { name: "Prelude", object: preludeObject },
-        { name: "Bin", object: binObject },
-        { name: "Nat", object: natObject },
-        { name: "SNatLike", object: snatObject },
-        { name: "TestSNat", object: testObject },
-      ],
-      false,
-    );
+    const skiExpression = linkModules([
+      { name: "Prelude", object: preludeObject },
+      { name: "Bin", object: binObject },
+      { name: "Nat", object: natObject },
+      { name: "SNatLike", object: snatObject },
+      { name: "TestSNat", object: testObject },
+    ]);
 
     assert.strictEqual(typeof skiExpression, "string");
     assert.ok(skiExpression.length > 0);

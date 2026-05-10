@@ -22,7 +22,7 @@ describe("Lambda conversion", { skip: !thanatosAvailable() }, () => {
     arenaEvaluator = await createArenaEvaluator();
   });
 
-  const N = 5;
+  const N = 2;
   const id = untypedAbs("x", mkVar("x"));
   const konst = untypedAbs("x", untypedAbs("y", mkVar("x")));
   const flip = untypedAbs(

@@ -293,19 +293,12 @@ async function validateInputFiles(inputFiles: string[]): Promise<string[]> {
   return validatedFiles;
 }
 
-async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
-  if (verbose) {
-    console.log(`Linking ${inputFiles.length} files: ${inputFiles.join(", ")}`);
-  }
-
+async function linkFiles(inputFiles: string[]): Promise<void> {
   // Load all .tripc files
   const modules: Array<{ name: string; object: TripCObject }> = [];
 
   // Always include prelude first (mandatory).
   try {
-    if (verbose) {
-      console.log("Loading prelude module...");
-    }
     const preludeObject = await getPreludeObject();
     modules.push({ name: "Prelude", object: preludeObject });
   } catch (error) {
@@ -317,10 +310,6 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
   }
 
   for (const file of inputFiles) {
-    if (verbose) {
-      console.log(`Loading ${file}...`);
-    }
-
     const content = await readFile(file, "utf8");
     const object = deserializeTripCObject(content);
 
@@ -330,29 +319,16 @@ async function linkFiles(inputFiles: string[], verbose = false): Promise<void> {
     modules.push({ name: moduleName, object });
   }
 
-  if (verbose) {
-    console.log("Linking modules...");
-  }
-
-  const result = linkModules(modules, verbose);
+  const result = linkModules(modules);
   console.log(result);
 }
 
 async function compileFile(
   inputPath: string,
   outputPath?: string,
-  verbose = false,
   stdout = false,
 ): Promise<void> {
   try {
-    if (verbose) {
-      console.log(`Loading ${inputPath}...`);
-    }
-
-    if (verbose) {
-      console.log("Compiling TripLang program...");
-    }
-
     const objectFile = await loadTripModuleObject(inputPath);
     const serialized = serializeTripCObject(objectFile);
 
@@ -364,21 +340,7 @@ async function compileFile(
     const finalOutputPath =
       outputPath || inputPath.replace(/\.trip$/, ".tripc");
 
-    if (verbose) {
-      console.log(`Writing object file to ${finalOutputPath}...`);
-    }
-
     await writeFile(finalOutputPath, serialized, "utf8");
-
-    if (verbose) {
-      console.log(`   Module: ${objectFile.module}`);
-      console.log(`   Imports: ${objectFile.imports.length}`);
-      console.log(`   Exports: ${objectFile.exports.length}`);
-      console.log(
-        `   Definitions: ${Object.keys(objectFile.definitions).length}`,
-      );
-      console.log(`   Output: ${finalOutputPath}`);
-    }
   } catch (error: any) {
     if (error instanceof SingleFileCompilerError) {
       console.error(`Compilation error: ${error.message}`);
@@ -495,7 +457,7 @@ async function main(): Promise<void> {
       }
 
       const validatedFiles = await validateInputFiles(inputFiles);
-      await linkFiles(validatedFiles, options.verbose);
+      await linkFiles(validatedFiles);
     } else {
       // Compile mode
       if (!inputPath) {
@@ -532,7 +494,6 @@ async function main(): Promise<void> {
         await compileFile(
           resolvedInputPath,
           resolvedOutputPath,
-          options.verbose,
           options.stdout,
         );
       }

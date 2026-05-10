@@ -11,12 +11,25 @@ import {
   writeTopoDagWireAsync,
 } from "../ski/topoDagWire.ts";
 import type { Evaluator } from "./evaluator.ts";
+import { TEST_TIMEOUT_MS } from "../constants.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = join(__dirname, "..", "..");
 const THANATOS_FILE_NAME =
   process.platform === "win32" ? "thanatos.exe" : "thanatos";
-const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
+export const DEFAULT_THANATOS_TIMEOUT_MS = TEST_TIMEOUT_MS;
+
+export function getDefaultTimeoutMs(): number {
+  const envVal = process.env["THANATOS_TIMEOUT_MS"];
+  if (envVal !== undefined) {
+    const parsed = parseInt(envVal, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_THANATOS_TIMEOUT_MS;
+}
+
 const MIN_WORKERS = 2;
 
 export const THANATOS_BATCH_BROKER_URL_ENV = "THANATOS_BATCH_BROKER_URL";
@@ -53,7 +66,7 @@ export type BrokerRequest =
   | { op: "reset" }
   | { op: "ping" }
   | { op: "stats" }
-  | { op: "traceDump" };
+  | { op: "stats" };
 
 export type BrokerResponse =
   | { ok: true; value?: string; stdoutHex?: string; resultDag?: string }
@@ -104,7 +117,6 @@ export interface ThanatosSession {
   reset(): Promise<void>;
   ping(): Promise<void>;
   stats(): Promise<string>;
-  traceDump(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -170,26 +182,60 @@ export function hexToBytes(hex: string): Uint8Array {
   );
 }
 
+function debugLog(msg: string): void {
+  if (process.env["THANATOS_DEBUG_LOGGING"] === "1") {
+    console.error(msg);
+  }
+}
+
 export async function withTailLock<T>(
   lock: TailLock,
   callback: () => Promise<T>,
 ): Promise<T> {
-  const previous = lock.tail.catch(() => {});
+  const id = Math.random().toString(36).slice(2, 6);
+  debugLog(`[lock ${id}] queueing`);
+  const previous = lock.tail.catch((e) => {
+    debugLog(`[lock ${id}] previous failed: ${e.message}`);
+  });
   let release!: () => void;
   lock.tail = new Promise<void>((resolve) => {
     release = resolve;
   });
 
-  await previous;
   try {
-    return await callback();
+    debugLog(`[lock ${id}] waiting for previous`);
+    await previous;
+    debugLog(`[lock ${id}] acquired; executing callback`);
+    // Safety: ensure no single operation can hold the lock forever.
+    // We use a very long timeout here as a last resort.
+    const lockTimeoutMs = getDefaultTimeoutMs();
+
+    let timeoutId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(
+          new Error(
+            `withTailLock: operation timed out after ${lockTimeoutMs}ms`,
+          ),
+        );
+      }, lockTimeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([callback(), timeoutPromise]);
+      debugLog(`[lock ${id}] callback finished`);
+      return result;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   } finally {
+    debugLog(`[lock ${id}] releasing`);
     release();
   }
 }
 
 function requestTimeoutMs(options: ThanatosSessionOptions): number {
-  return options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  return options.requestTimeoutMs ?? getDefaultTimeoutMs();
 }
 
 function timeoutError(ms: number): Error {
@@ -198,17 +244,33 @@ function timeoutError(ms: number): Error {
 
 export class DirectThanatosSession implements ThanatosSession {
   private child: ChildProcess | null = null;
+  private lineChunks: Uint8Array[] = [];
   private lineBuffer = new Uint8Array(0);
   private pending: Promise<void> = Promise.resolve();
   private closed = false;
+  private dataWaiters: (() => void)[] = [];
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   public constructor(
     private readonly options: ThanatosSessionOptions = {},
     private readonly onFatal?: () => void,
   ) {}
 
+  private resetIdleTimer(): void {
+    if (this.idleTimer !== null) {
+      clearTimeout(this.idleTimer);
+    }
+    if (this.closed) return;
+    this.idleTimer = setTimeout(() => {
+      this.close().catch(() => {});
+    }, getDefaultTimeoutMs());
+  }
+
   start(workers?: number, env?: Record<string, string>): void {
-    if (this.child !== null) return;
+    if (this.child !== null) {
+      this.resetIdleTimer();
+      return;
+    }
     if (this.closed) throw new Error("ThanatosSession closed");
 
     const resolved = resolveThanatosBinPath(this.options.binPath);
@@ -223,11 +285,11 @@ export class DirectThanatosSession implements ThanatosSession {
       stdio: ["pipe", "pipe", "inherit"],
     });
 
+    this.resetIdleTimer();
+
     this.child.stdout?.on("data", (data: Uint8Array) => {
-      const merged = new Uint8Array(this.lineBuffer.length + data.length);
-      merged.set(this.lineBuffer);
-      merged.set(data, this.lineBuffer.length);
-      this.lineBuffer = merged;
+      this.lineChunks.push(data);
+      this.notifyData();
     });
     this.child.stdin?.on("error", (err: Error) => {
       if (!this.closed) {
@@ -239,9 +301,29 @@ export class DirectThanatosSession implements ThanatosSession {
         this.fail(err);
       }
     });
+    this.child.stdout?.on("close", () => {
+      this.notifyData();
+    });
 
     this.child.on("error", (err: Error) => {
       this.fail(err);
+    });
+    this.child.on("exit", () => {
+      this.notifyData();
+    });
+  }
+
+  private notifyData(): void {
+    const waiters = this.dataWaiters;
+    this.dataWaiters = [];
+    for (const resolve of waiters) {
+      resolve();
+    }
+  }
+
+  private async waitForData(): Promise<void> {
+    return new Promise((resolve) => {
+      this.dataWaiters.push(resolve);
     });
   }
 
@@ -254,12 +336,18 @@ export class DirectThanatosSession implements ThanatosSession {
   }
 
   private fail(error?: Error): void {
+    if (this.closed) return;
     this.closed = true;
+    if (this.idleTimer !== null) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
     const child = this.child;
     this.child = null;
     if (child !== null) {
       child.kill();
     }
+    this.notifyData();
     this.onFatal?.();
     if (error) {
       this.pending = Promise.reject(error);
@@ -267,7 +355,7 @@ export class DirectThanatosSession implements ThanatosSession {
     }
   }
 
-  private async withTimeout<T>(operation: Promise<T>): Promise<T> {
+  private async withTimeout<T>(operation: () => Promise<T>): Promise<T> {
     const ms = requestTimeoutMs(this.options);
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeout = new Promise<never>((_, reject) => {
@@ -279,7 +367,7 @@ export class DirectThanatosSession implements ThanatosSession {
     });
 
     try {
-      return await Promise.race([operation, timeout]);
+      return await Promise.race([operation(), timeout]);
     } finally {
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
@@ -303,12 +391,13 @@ export class DirectThanatosSession implements ThanatosSession {
       return;
     }
     await new Promise((resolve, reject) => {
+      const currentChild = this.child;
       const onError = (error: Error) => {
-        this.child?.stdin?.off("drain", onDrain);
+        currentChild?.stdin?.off("drain", onDrain);
         reject(error);
       };
       const onDrain = () => {
-        this.child?.stdin?.off("error", onError);
+        currentChild?.stdin?.off("error", onError);
         resolve(null);
       };
       this.child?.stdin?.once("error", onError);
@@ -317,17 +406,26 @@ export class DirectThanatosSession implements ThanatosSession {
   }
 
   private async readResponseLine(): Promise<string> {
-    if (
-      this.child === null ||
-      this.child.stdin === null ||
-      this.child.stdout === null
-    ) {
-      throw new Error("ThanatosSession not started");
-    }
-    if (this.closed) throw new Error("ThanatosSession closed");
-
     const decoder = new TextDecoder();
     while (true) {
+      if (this.closed) throw new Error("ThanatosSession closed");
+
+      if (this.lineChunks.length > 0) {
+        const totalLen = this.lineChunks.reduce(
+          (acc, c) => acc + c.length,
+          this.lineBuffer.length,
+        );
+        const merged = new Uint8Array(totalLen);
+        merged.set(this.lineBuffer);
+        let offset = this.lineBuffer.length;
+        for (const chunk of this.lineChunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        this.lineBuffer = merged;
+        this.lineChunks = [];
+      }
+
       const newlineIndex = this.lineBuffer.indexOf(0x0a);
       if (newlineIndex >= 0) {
         const response = decoder
@@ -337,47 +435,48 @@ export class DirectThanatosSession implements ThanatosSession {
         return response;
       }
 
-      await new Promise((resolve) => {
-        const cleanup = () => {
-          this.child?.stdout?.removeListener("data", onData);
-          this.child?.stdout?.removeListener("close", onClose);
-          this.child?.stdout?.removeListener("end", onClose);
-          this.child?.stdout?.removeListener("error", onClose);
-        };
-        const onData = () => {
-          cleanup();
-          resolve(null);
-        };
-        const onClose = () => {
-          cleanup();
-          resolve(null);
-        };
-        this.child?.stdout?.once("data", onData);
-        this.child?.stdout?.once("close", onClose);
-        this.child?.stdout?.once("end", onClose);
-        this.child?.stdout?.once("error", onClose);
-      });
-
-      if (this.child.killed || this.child.exitCode !== null) {
+      if (
+        this.child === null ||
+        this.child.killed ||
+        this.child.exitCode !== null
+      ) {
         throw new Error("thanatos daemon exited");
       }
+
+      await this.waitForData();
     }
   }
 
   private async request(line: string): Promise<string> {
+    const id = Math.random().toString(36).slice(2, 6);
+    debugLog(
+      `[session ${id}] request: ${line.slice(0, 50)}${line.length > 50 ? "..." : ""}`,
+    );
     this.start();
     await this.writePart(line);
     await this.writePart("\n");
-    return await this.readResponseLine();
+    const response = await this.readResponseLine();
+    debugLog(
+      `[session ${id}] response: ${response.slice(0, 50)}${response.length > 50 ? "..." : ""}`,
+    );
+    this.resetIdleTimer();
+    return response;
   }
 
   private async requestChunks(chunks: Iterable<string>): Promise<string> {
+    const id = Math.random().toString(36).slice(2, 6);
+    debugLog(`[session ${id}] requestChunks start`);
     this.start();
     for (const chunk of chunks) {
       await this.writePart(chunk);
     }
     await this.writePart("\n");
-    return await this.readResponseLine();
+    const response = await this.readResponseLine();
+    debugLog(
+      `[session ${id}] response: ${response.slice(0, 50)}${response.length > 50 ? "..." : ""}`,
+    );
+    this.resetIdleTimer();
+    return response;
   }
 
   private serialRequest(line: string): Promise<string> {
@@ -386,7 +485,10 @@ export class DirectThanatosSession implements ThanatosSession {
     this.pending = new Promise<void>((resolve) => {
       resolveNext = resolve;
     });
-    const result = this.withTimeout(previous.then(() => this.request(line)));
+    const result = (async () => {
+      await previous;
+      return await this.withTimeout(() => this.request(line));
+    })();
     void result.then(resolveNext, resolveNext);
     return result;
   }
@@ -397,9 +499,10 @@ export class DirectThanatosSession implements ThanatosSession {
     this.pending = new Promise<void>((resolve) => {
       resolveNext = resolve;
     });
-    const result = this.withTimeout(
-      previous.then(() => this.requestChunks(chunks)),
-    );
+    const result = (async () => {
+      await previous;
+      return await this.withTimeout(() => this.requestChunks(chunks));
+    })();
     void result.then(resolveNext, resolveNext);
     return result;
   }
@@ -414,8 +517,9 @@ export class DirectThanatosSession implements ThanatosSession {
     this.pending = new Promise<void>((resolve) => {
       resolveNext = resolve;
     });
-    const result = this.withTimeout(
-      previous.then(async () => {
+    const result = (async () => {
+      await previous;
+      return await this.withTimeout(async () => {
         this.start();
         await this.writePart(prefix);
         await writeTopoDagWireAsync(
@@ -426,9 +530,11 @@ export class DirectThanatosSession implements ThanatosSession {
           options,
         );
         await this.writePart("\n");
-        return await this.readResponseLine();
-      }),
-    );
+        const response = await this.readResponseLine();
+        this.resetIdleTimer();
+        return response;
+      });
+    })();
     void result.then(resolveNext, resolveNext);
     return result;
   }
@@ -506,27 +612,38 @@ export class DirectThanatosSession implements ThanatosSession {
     return response;
   }
 
-  async traceDump(): Promise<void> {
-    const response = await this.serialRequest("TRACE_DUMP");
-    if (response !== "OK") throw new Error("thanatos: " + response);
-  }
-
   async close(): Promise<void> {
     if (this.closed) return;
-    const child = this.child;
     try {
       if (this.child !== null && this.child.stdin !== null) {
-        await this.serialRequest("QUIT");
+        // Try to be nice, but don't wait too long.
+        await Promise.race([
+          this.serialRequest("QUIT"),
+          new Promise((r) => setTimeout(r, 1000)),
+        ]).catch(() => {});
       }
-    } catch {
-      // daemon may have exited; ignore
     } finally {
-      this.closed = true;
-      if (child !== null) {
-        child.kill();
-      }
-      this.child = null;
+      this.abort();
     }
+  }
+
+  abort(): void {
+    if (this.closed && this.child === null) return;
+    this.closed = true;
+    if (this.idleTimer !== null) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    const child = this.child;
+    this.child = null;
+    if (child !== null) {
+      child.kill("SIGKILL");
+    }
+    this.notifyData();
+    const error = new Error("ThanatosSession aborted");
+    this.pending = Promise.reject(error);
+    this.pending.catch(() => {});
+    this.onFatal?.();
   }
 }
 
@@ -555,6 +672,8 @@ export class BrokerThanatosSession implements ThanatosSession {
   }
 
   private async request<T>(payload: BrokerRequest): Promise<T> {
+    const id = Math.random().toString(36).slice(2, 6);
+    debugLog(`[broker-client ${id}] request op=${payload.op} to ${this.url}`);
     this.ensureOpen();
     const ms = requestTimeoutMs(this.options);
     const controller = new AbortController();
@@ -676,10 +795,6 @@ export class BrokerThanatosSession implements ThanatosSession {
 
   async stats(): Promise<string> {
     return await this.request<string>({ op: "stats" });
-  }
-
-  async traceDump(): Promise<void> {
-    await this.request<void>({ op: "traceDump" });
   }
 
   close(): Promise<void> {
@@ -855,11 +970,16 @@ export async function withThanatosSession<T>(
   callback: (session: ThanatosSession) => Promise<T>,
   options: ThanatosSessionOptions = {},
 ): Promise<T> {
+  const id = Math.random().toString(36).slice(2, 6);
+  debugLog(`[withThanatosSession ${id}] start`);
   const state = getSharedSessionState(options);
-  return await withTailLock(state, async () => {
+  const result = await withTailLock(state, async () => {
+    debugLog(`[withThanatosSession ${id}] acquired lock`);
     const session = await state.sessionPromise;
     return await callback(session);
   });
+  debugLog(`[withThanatosSession ${id}] finished`);
+  return result;
 }
 
 export async function closeThanatosSessions(): Promise<void> {

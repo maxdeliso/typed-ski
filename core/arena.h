@@ -260,14 +260,6 @@ uint32_t controlSuspensionCurrentValue(uint32_t ptr);
 uint32_t controlSuspensionRemainingSteps(uint32_t ptr);
 void arena_debug_ring_occupancy(uint32_t *out_sq_count, uint32_t *out_cq_count);
 
-/* Cooperative native trace dump support (no-op unless thanatos enables it). */
-void arena_trace_init(uint32_t worker_count);
-void arena_trace_request_epoch(uint32_t epoch);
-void arena_trace_capture_idle_workers(uint32_t epoch, uint32_t worker_count);
-bool arena_trace_wait_for_epoch(uint32_t epoch, uint32_t worker_count,
-                                uint32_t timeout_ms);
-bool arena_trace_write_dump_json(const char *path, uint32_t epoch,
-                                 uint32_t worker_count, bool timed_out);
 
 uint32_t debugGetArenaBaseAddr(void);
 uint32_t getArenaMode(void);

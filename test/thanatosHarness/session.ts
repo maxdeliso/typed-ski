@@ -8,6 +8,7 @@ import {
   DirectThanatosSession,
   getBatchBrokerEnvVarNames,
   getThanatosSession as getProductionThanatosSession,
+  getDefaultTimeoutMs,
   hexToBytes,
   THANATOS_BATCH_BROKER_TOKEN_HEADER,
   thanatosAvailable,
@@ -41,6 +42,12 @@ type TailLock = {
   tail: Promise<void>;
 };
 
+function debugLog(msg: string): void {
+  if (process.env["THANATOS_DEBUG_LOGGING"] === "1") {
+    console.error(msg);
+  }
+}
+
 async function handleBrokerRequest(
   req: any,
   res: any,
@@ -48,6 +55,8 @@ async function handleBrokerRequest(
   token: string,
   lock: TailLock,
 ): Promise<void> {
+  const brokerReqId = randomUUID().slice(0, 8);
+  debugLog(`[broker-server ${brokerReqId}] incoming ${req.method} ${req.url}`);
   if (req.method !== "POST") {
     res.writeHead(405).end("Method Not Allowed");
     return;
@@ -57,69 +66,118 @@ async function handleBrokerRequest(
     return;
   }
 
+  let aborted = false;
+
   let body = "";
-  for await (const chunk of req) {
-    body += chunk;
+  try {
+    body = await new Promise<string>((resolve, reject) => {
+      let data = "";
+      req.on("data", (chunk: any) => {
+        data += chunk;
+      });
+      req.on("end", () => {
+        resolve(data);
+      });
+      req.on("error", reject);
+      req.on("aborted", () => {
+        debugLog(`[broker-server ${brokerReqId}] aborted by client`);
+        aborted = true;
+        reject(new Error("aborted"));
+      });
+    });
+  } catch (error) {
+    if (aborted) {
+      return;
+    }
+    debugLog(`[broker-server ${brokerReqId}] body read error: ${error}`);
+    return;
   }
 
+  if (aborted) return;
+
+  let reqId = "?";
+  let op = "?";
   try {
     const payload = JSON.parse(body) as BrokerRequest;
+    reqId = randomUUID().slice(0, 8);
+    op = (payload as any).op;
+    debugLog(`[broker] req=${reqId} op=${payload.op} starting`);
+
     const response = await withTailLock(
       lock,
       async (): Promise<BrokerResponse> => {
-        switch (payload.op) {
-          case "signal":
-            await session.signal(payload.signal);
-            return { ok: true };
-          case "rawRequest":
-            return { ok: true, value: await session.rawRequest(payload.line) };
-          case "reduceDag":
-            return { ok: true, value: await session.reduceDag(payload.dag) };
-          case "reduceIo": {
-            const result = await session.reduceIo(
-              payload.dag,
-              hexToBytes(payload.stdinHex),
-            );
-            return {
-              ok: true,
-              stdoutHex: bytesToHex(result.stdout),
-              resultDag: result.resultDag,
-            };
-          }
-          case "reduceFile":
-            return {
-              ok: true,
-              value: await session.reduceFile(
+        const watchdogTimeout = getDefaultTimeoutMs();
+        const watchdog = setTimeout(() => {
+          debugLog(
+            `[thanatos broker] WARNING: req=${reqId} op=${payload.op} has been running for ${watchdogTimeout / 1000}s`,
+          );
+        }, watchdogTimeout);
+        watchdog.unref();
+
+        try {
+          debugLog(`[broker] req=${reqId} op=${payload.op} acquired lock`);
+          if (aborted) throw new Error("Client disconnected");
+          switch (payload.op) {
+            case "signal":
+              await session.signal(payload.signal);
+              return { ok: true };
+            case "rawRequest":
+              return {
+                ok: true,
+                value: await session.rawRequest(payload.line),
+              };
+            case "reduceDag":
+              return { ok: true, value: await session.reduceDag(payload.dag) };
+            case "reduceIo": {
+              const result = await session.reduceIo(
                 payload.dag,
-                payload.inPath,
-                payload.outPath,
-              ),
-            };
-          case "reset":
-            await session.reset();
-            return { ok: true };
-          case "ping":
-            await session.ping();
-            return { ok: true };
-          case "stats":
-            return { ok: true, value: await session.stats() };
-          case "traceDump":
-            await session.traceDump();
-            return { ok: true };
+                hexToBytes(payload.stdinHex),
+              );
+              return {
+                ok: true,
+                stdoutHex: bytesToHex(result.stdout),
+                resultDag: result.resultDag,
+              };
+            }
+            case "reduceFile":
+              return {
+                ok: true,
+                value: await session.reduceFile(
+                  payload.dag,
+                  payload.inPath,
+                  payload.outPath,
+                ),
+              };
+            case "reset":
+              await session.reset();
+              return { ok: true };
+            case "ping":
+              await session.ping();
+              return { ok: true };
+            case "stats":
+              return { ok: true, value: await session.stats() };
+          }
+        } finally {
+          clearTimeout(watchdog);
         }
       },
     );
-    res
-      .writeHead(200, { "content-type": "application/json" })
-      .end(JSON.stringify(response));
+    debugLog(`[broker] req=${reqId} op=${payload.op} finished`);
+    if (!aborted) {
+      res
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify(response));
+    }
   } catch (error) {
-    console.error("[thanatos harness] broker request failed", error);
-    res.writeHead(500, { "content-type": "application/json" }).end(
-      JSON.stringify({
-        ok: false,
-        error: THANATOS_BATCH_BROKER_INTERNAL_ERROR,
-      }),
-    );
+    debugLog(`[broker] req=${reqId} op=${op} FAILED: ${error}`);
+    if (!aborted) {
+      res.writeHead(500, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
   }
 }
 
@@ -153,6 +211,9 @@ export function startThanatosBatchBroker(
           [envVarNames.token]: token,
         },
         close: async () => {
+          if ("closeAllConnections" in server) {
+            (server as any).closeAllConnections();
+          }
           await new Promise((r) => server.close(() => r(null)));
           await session.close().catch(() => {});
         },

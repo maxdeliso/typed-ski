@@ -54,14 +54,12 @@ function loadModule(object: TestTripCObject, moduleName: string) {
 
 function linkModules(
   modules: Array<{ name: string; object: TestTripCObject }>,
-  verbose = false,
 ): string {
   return linkModulesRaw(
     modules.map((module) => ({
       ...module,
       object: withDataDefinitions(module.object),
     })),
-    verbose,
   );
 }
 
@@ -270,7 +268,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      resolveCrossModuleDependencies(programSpace, false);
+      resolveCrossModuleDependencies(programSpace);
     } catch (error) {
       caughtMessage = (error as Error).message;
     } finally {
@@ -351,7 +349,7 @@ describe("TripLang Linker", () => {
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
-    const result = linkModules(modules, false);
+    const result = linkModules(modules);
 
     // Should find the main function and lower it to SKI
     assert.strictEqual(typeof result, "string");
@@ -367,7 +365,7 @@ describe("TripLang Linker", () => {
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
-    const result = linkModules(modules, false);
+    const result = linkModules(modules);
 
     // Should produce a complex SKI expression
     assert.strictEqual(typeof result, "string");
@@ -402,7 +400,7 @@ describe("TripLang Linker", () => {
       { name: "Helper", object: moduleWithoutMain },
     ];
 
-    const result = linkModules(modules, false);
+    const result = linkModules(modules);
 
     // Should find main in one of the modules and produce SKI
     assert.strictEqual(typeof result, "string");
@@ -428,7 +426,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for missing main");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -448,101 +446,11 @@ describe("TripLang Linker", () => {
     const complexObject = deserializeTripCObject(complexContent);
 
     const modules = [{ name: "Complex", object: complexObject }];
-    const result = linkModules(modules, false);
+    const result = linkModules(modules);
 
     // Should produce a valid SKI expression
     assert.strictEqual(typeof result, "string");
     assert.ok(result.length > 0);
-  });
-
-  it("handles verbose output correctly", async () => {
-    // Capture console.error output
-    const originalConsoleError = console.error;
-    const errorMessages: string[] = [];
-
-    console.error = (message: string) => {
-      errorMessages.push(message);
-    };
-
-    try {
-      const complexContent = await compileTripFile(
-        "complex.trip",
-        "linker_complex.tripc",
-      );
-      const complexObject = deserializeTripCObject(complexContent);
-
-      const modules = [{ name: "Complex", object: complexObject }];
-      linkModules(modules, true);
-
-      // Should have produced verbose output
-      assert.ok(errorMessages.length > 0);
-      assert.strictEqual(
-        errorMessages.some((msg) => msg.includes("Linking")),
-        true,
-      );
-      assert.ok(errorMessages.some((msg) => msg.includes("Processing SCC")));
-    } finally {
-      console.error = originalConsoleError;
-    }
-  });
-
-  it("verbose logs definition value when export has external refs", () => {
-    // Single module with local data types Foo, Bar and type T = Foo -> Bar. Resolution does not
-    // substitute data types, so T keeps refs Foo/Bar; the post-resolution sanity check treats them
-    // as external and (when verbose) warns and logs the definition value.
-    const mod = {
-      module: "User",
-      exports: ["T", "main"],
-      imports: [] as { name: string; from: string }[],
-      definitions: {
-        Foo: {
-          kind: "data" as const,
-          name: "Foo",
-          typeParams: [] as string[],
-          constructors: [],
-        },
-        Bar: {
-          kind: "data" as const,
-          name: "Bar",
-          typeParams: [] as string[],
-          constructors: [],
-        },
-        T: {
-          kind: "type" as const,
-          name: "T",
-          type: arrow(mkTypeVariable("Foo"), mkTypeVariable("Bar")),
-        },
-        main: {
-          kind: "combinator" as const,
-          name: "main",
-          term: { kind: "terminal" as const, sym: SKITerminalSymbol.I },
-        },
-      },
-    };
-
-    const ps = createProgramSpace([loadModule(mod, "User")]);
-
-    const originalWarn = console.warn;
-    const originalError = console.error;
-    const warnMessages: string[] = [];
-    const errorMessages: string[] = [];
-    console.warn = (msg: string) => warnMessages.push(msg);
-    console.error = (msg: string) => errorMessages.push(msg);
-
-    try {
-      resolveCrossModuleDependencies(ps, true);
-      assert.ok(
-        warnMessages.some((m) => m.includes("external references")),
-        "expected warn about external references",
-      );
-      assert.ok(
-        errorMessages.some((m) => m.includes("Definition value")),
-        "expected definition value to be logged",
-      );
-    } finally {
-      console.warn = originalWarn;
-      console.error = originalError;
-    }
   });
 
   it("detects duplicate exports across modules", () => {
@@ -579,7 +487,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for duplicate exports");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -620,13 +528,10 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      linkModules(
-        [
-          { name: "Zeta", object: zeta },
-          { name: "Alpha", object: alpha },
-        ],
-        false,
-      );
+      linkModules([
+        { name: "Zeta", object: zeta },
+        { name: "Alpha", object: alpha },
+      ]);
       assert.fail("Should have thrown an error for duplicate exports");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -697,7 +602,7 @@ describe("TripLang Linker", () => {
     const modules = [{ name: "ImportModule", object: moduleWithMissingImport }];
 
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for missing module");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -748,7 +653,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for non-exported import");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -794,7 +699,7 @@ describe("TripLang Linker", () => {
     ];
 
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for multiple main functions");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -850,7 +755,7 @@ describe("TripLang Linker", () => {
     const modules = [{ name: "TypeAbsModule", object: moduleWithTypeAbs }];
 
     try {
-      const result = linkModules(modules, false);
+      const result = linkModules(modules);
       // Should successfully link without errors
       assert.strictEqual(typeof result, "string");
       assert.ok(result.length > 0);
@@ -906,7 +811,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      const result = linkModules(modules, false);
+      const result = linkModules(modules);
       // Should successfully link - type substitution should rename inner Y to avoid capture
       assert.strictEqual(typeof result, "string");
       assert.ok(result.length > 0);
@@ -961,7 +866,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      const result = linkModules(modules, false);
+      const result = linkModules(modules);
       // Should either resolve or detect circular dependency
       assert.strictEqual(typeof result, "string");
     } catch (error) {
@@ -1023,7 +928,7 @@ describe("TripLang Linker", () => {
 
     let caughtMessage: string | null = null;
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for ambiguous exports");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -1064,7 +969,7 @@ describe("TripLang Linker", () => {
     ];
 
     try {
-      linkModules(modules, false);
+      linkModules(modules);
       assert.fail("Should have thrown an error for unresolved symbols");
     } catch (error) {
       if ((error as Error).name === "AssertionError") throw error;
@@ -1111,7 +1016,7 @@ describe("TripLang Linker", () => {
     };
 
     const modules = [{ name: "ManyRefsModule", object: moduleWithManyRefs }];
-    const result = linkModules(modules, false);
+    const result = linkModules(modules);
 
     // Should resolve efficiently without hanging or crashing
     assert.strictEqual(typeof result, "string");
@@ -1158,7 +1063,7 @@ describe("TripLang Linker", () => {
     try {
       // This should work correctly - type references should go to the type definition
       // and term references should go to the term definition
-      const result = linkModules(modules, false);
+      const result = linkModules(modules);
       assert.strictEqual(typeof result, "string");
       assert.ok(result.length > 0);
     } catch (error) {

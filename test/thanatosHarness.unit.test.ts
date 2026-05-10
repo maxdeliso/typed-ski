@@ -160,7 +160,6 @@ it(
     const snapshot = await loadThanatosSnapshot("readOneA");
     const tempDir = await mkdtemp(join(tmpdir(), "thanatos-test-"));
     const outputPath = join(tempDir, "stdout.bin");
-    const traceDir = await mkdtemp(join(tmpdir(), "thanatos-trace-"));
 
     let brokerUrl: string;
     let brokerToken: string;
@@ -173,10 +172,7 @@ it(
     try {
       started = await startThanatosBatchBroker({
         workers: 1,
-        env: {
-          THANATOS_TRACE_DIR: traceDir,
-          THANATOS_TRACE_TIMEOUT_MS: "200",
-        },
+        env: {},
       });
       brokerUrl = started.env[envVarNames.url]!;
       brokerToken = started.env[envVarNames.token]!;
@@ -214,7 +210,7 @@ it(
         error?: string;
       };
       assert.equal(malformedBody.ok, false);
-      assert.equal(malformedBody.error, "Internal error");
+      assert.match(malformedBody.error ?? "", /JSON/);
 
       brokerSession = await getThanatosSession({
         key: "thanatos-unit-broker",
@@ -255,7 +251,6 @@ it(
       await brokerSession.reset();
       await brokerSession.ping();
       assert.ok((await brokerSession.stats()).startsWith("OK "));
-      await brokerSession.traceDump();
 
       {
         const clearBrokerEnv = setBrokerEnv(brokerUrl, brokerToken);
@@ -268,7 +263,7 @@ it(
       }
 
       await assert.rejects(() => brokerSession!.reduceDag("INVALID"), {
-        message: "Internal error",
+        message: "thanatos: parse error",
       });
 
       await brokerSession.close();
@@ -285,7 +280,6 @@ it(
       await started?.close().catch(() => {});
       await closeBatchThanatosSessions();
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      await rm(traceDir, { recursive: true, force: true }).catch(() => {});
       transport.restore();
     }
 

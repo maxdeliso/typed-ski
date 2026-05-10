@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile, rm, mkdtemp, stat, readdir } from "node:fs/promises";
+import { readFile, rm, stat, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { type TestContext, describe, it, waitFor } from "./util/test_shim.ts";
@@ -88,162 +88,15 @@ async function runThanatosSnapshot(
   }
 }
 
-async function waitForTraceDump(
-  traceDir: string,
-  timeoutMs = 2000,
-): Promise<string> {
-  return await waitFor(
-    async () => {
-      const dumps: string[] = [];
-      const entries = await readdir(traceDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith(".json")) {
-          dumps.push(join(traceDir, entry.name));
-        }
-      }
-      dumps.sort();
-      for (let i = dumps.length - 1; i >= 0; i--) {
-        const dumpPath = dumps[i]!;
-        if ((await tryReadTraceDumpJson(dumpPath)) !== null) {
-          return dumpPath;
-        }
-      }
-      throw new Error(`trace dump not ready in ${traceDir}`);
-    },
-    {
-      interval: 20,
-      timeout: timeoutMs,
-    },
-  );
-}
-
-async function waitForTraceDumpCount(
-  traceDir: string,
-  expectedCount: number,
-  timeoutMs = 2000,
-): Promise<string[]> {
-  return await waitFor(
-    async () => {
-      const dumps = new Map<string, true>();
-      const entries = await readdir(traceDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith(".json")) {
-          const dumpPath = join(traceDir, entry.name);
-          if ((await tryReadTraceDumpJson(dumpPath)) !== null) {
-            dumps.set(dumpPath, true);
-          }
-        }
-      }
-      const paths = Array.from(dumps.keys()).sort();
-      if (paths.length >= expectedCount) {
-        return paths;
-      }
-      throw new Error(
-        `waiting for ${expectedCount} thanatos trace dumps in ${traceDir}`,
-      );
-    },
-    {
-      interval: 20,
-      timeout: timeoutMs,
-    },
-  );
-}
-
-async function tryReadTraceDumpJson(path: string): Promise<unknown | null> {
-  try {
-    const text = await readFile(path, "utf8");
-    if (text.trim().length === 0) {
-      return null;
-    }
-    return JSON.parse(text);
-  } catch (error: any) {
-    if (error instanceof SyntaxError || error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-async function readTraceDumpJson<T>(path: string, timeoutMs = 500): Promise<T> {
-  return await waitFor(
-    async () => {
-      const dump = await tryReadTraceDumpJson(path);
-      if (dump !== null) {
-        return dump as T;
-      }
-      throw new Error(`trace JSON not ready at ${path}`);
-    },
-    {
-      interval: 20,
-      timeout: timeoutMs,
-    },
-  );
-}
-
-const HARNESS_TRACE_TIMEOUT_MS = "200";
 const HARNESS_WORKERS = defaultWorkerCount();
-const HARNESS_WORKER_IDS = Array.from(
-  { length: HARNESS_WORKERS },
-  (_, workerId) => workerId,
-);
-const HARNESS_COMPLETE_STATES = Array(HARNESS_WORKERS).fill(true);
-const HARNESS_IDLE_STATES = Array(HARNESS_WORKERS).fill("idle");
-let harnessTraceDirPromise: Promise<{ path: string; owned: boolean }> | null =
-  null;
-
-async function getHarnessTraceDir(): Promise<string> {
-  if (harnessTraceDirPromise === null) {
-    harnessTraceDirPromise = Promise.resolve().then(async () => {
-      const externalTraceDir = process.env["THANATOS_TRACE_DIR"];
-      if (externalTraceDir) {
-        return { path: externalTraceDir, owned: false };
-      }
-      return {
-        path: await mkdtemp(join(tmpdir(), "thanatos-harness-")),
-        owned: true,
-      };
-    });
-  }
-  return (await harnessTraceDirPromise).path;
-}
-
-async function clearHarnessTraceDumps(traceDir: string): Promise<void> {
-  const entries = await readdir(traceDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith(".json")) {
-      await rm(join(traceDir, entry.name)).catch(() => {});
-    }
-  }
-}
-
-async function prepareHarnessTraceDir(): Promise<string> {
-  const traceDir = await getHarnessTraceDir();
-  await clearHarnessTraceDumps(traceDir);
-  return traceDir;
-}
-
-async function cleanupHarnessTraceDir(): Promise<void> {
-  if (harnessTraceDirPromise === null) {
-    return;
-  }
-  const traceDir = await harnessTraceDirPromise;
-  harnessTraceDirPromise = null;
-  if (traceDir.owned) {
-    await rm(traceDir.path, { recursive: true, force: true }).catch(() => {});
-  }
-}
 
 async function withHarnessSession<T>(
   callback: (session: ThanatosSession) => Promise<T>,
 ): Promise<T> {
-  const traceDir = await getHarnessTraceDir();
   return await withBatchThanatosSession(callback, {
     key: "thanatosHarness",
     workers: HARNESS_WORKERS,
-    env: {
-      THANATOS_TRACE_DIR: traceDir,
-      THANATOS_TRACE_TIMEOUT_MS: HARNESS_TRACE_TIMEOUT_MS,
-    },
+    env: {},
   });
 }
 
@@ -320,121 +173,6 @@ describe("thanatos session suite", { skip: !thanatosAvailable() }, async () => {
       });
     });
 
-    it("thanatos trace dump - TRACE_DUMP writes JSON worker snapshot", async () => {
-      const traceDir = await prepareHarnessTraceDir();
-      await withHarnessSession(async (session) => {
-        await session.ping();
-        const resultDag = await session.reduceDag(
-          toTopoDagWire(parseSKI("I K")),
-        );
-        assert.equal(unparseSKI(fromTopoDagWire(resultDag)), "K");
-
-        await session.traceDump();
-        const dumpPath = await waitForTraceDump(traceDir);
-        const dump = await readTraceDumpJson<{
-          dump_version: number;
-          epoch: number;
-          runtime: { worker_count: number };
-          workers: Array<{
-            worker_id: number;
-            complete: boolean;
-            recent_events: Array<{ kind: string }>;
-          }>;
-        }>(dumpPath);
-
-        assert.equal(dump.dump_version, 1);
-        assert.ok(dump.epoch >= 1);
-        assert.equal(dump.runtime.worker_count, HARNESS_WORKERS);
-        assert.equal(dump.workers.length, HARNESS_WORKERS);
-        assert.deepEqual(
-          dump.workers.map((worker) => worker.worker_id),
-          HARNESS_WORKER_IDS,
-        );
-        assert.deepEqual(
-          dump.workers.map((worker) => worker.complete),
-          HARNESS_COMPLETE_STATES,
-        );
-        assert.ok(
-          dump.workers.some((worker) => worker.recent_events.length > 0),
-          `expected non-empty recent_events in ${dumpPath}`,
-        );
-      });
-    });
-
-    it("thanatos trace dump - idle multi-worker snapshot is complete", async () => {
-      const traceDir = await prepareHarnessTraceDir();
-      await withHarnessSession(async (session) => {
-        await session.ping();
-
-        await session.traceDump();
-        const dumpPath = await waitForTraceDump(traceDir);
-        const dump = await readTraceDumpJson<{
-          runtime: { worker_count: number };
-          workers: Array<{
-            worker_id: number;
-            complete: boolean;
-            state: string;
-          }>;
-        }>(dumpPath);
-
-        assert.equal(dump.runtime.worker_count, HARNESS_WORKERS);
-        assert.equal(dump.workers.length, HARNESS_WORKERS);
-        assert.deepEqual(
-          dump.workers.map((worker) => worker.worker_id),
-          HARNESS_WORKER_IDS,
-        );
-        assert.deepEqual(
-          dump.workers.map((worker) => worker.complete),
-          HARNESS_COMPLETE_STATES,
-        );
-        assert.deepEqual(
-          dump.workers.map((worker) => worker.state),
-          HARNESS_IDLE_STATES,
-        );
-      });
-    });
-
-    it("thanatos trace dump - repeated TRACE_DUMP increments epoch files", async () => {
-      const traceDir = await prepareHarnessTraceDir();
-      await withHarnessSession(async (session) => {
-        await session.ping();
-        await session.reduceDag(toTopoDagWire(parseSKI("I S")));
-
-        await session.traceDump();
-        await waitForTraceDump(traceDir);
-        await session.traceDump();
-
-        const dumpPaths = await waitForTraceDumpCount(traceDir, 2);
-        const dumps = await Promise.all(
-          dumpPaths.map(
-            async (path) =>
-              await readTraceDumpJson<{
-                epoch: number;
-                runtime: { worker_count: number };
-                workers: Array<{ complete: boolean }>;
-              }>(path),
-          ),
-        );
-        dumps.sort((a, b) => a.epoch - b.epoch);
-
-        const epochs = dumps.map((dump) => dump.epoch);
-        assert.equal(epochs.length, 2);
-        assert.equal(epochs[1], (epochs[0] ?? 0) + 1);
-        assert.deepEqual(
-          dumps.map((dump) => dump.runtime.worker_count),
-          [HARNESS_WORKERS, HARNESS_WORKERS],
-        );
-        assert.deepEqual(
-          dumps.map((dump) => dump.workers.length),
-          [HARNESS_WORKERS, HARNESS_WORKERS],
-        );
-        assert.deepEqual(
-          dumps.map((dump) => dump.workers.every((worker) => worker.complete)),
-          [true, true],
-        );
-      });
-    });
-
     it("REDUCE_FILE - rejects path > 1023 chars", async () => {
       await withHarnessSession(async (session) => {
         const longPath = "a".repeat(1024);
@@ -505,7 +243,6 @@ describe("thanatos session suite", { skip: !thanatosAvailable() }, async () => {
     });
   } finally {
     await closeBatchThanatosSessions();
-    await cleanupHarnessTraceDir();
   }
 });
 

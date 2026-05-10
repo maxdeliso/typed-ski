@@ -131,35 +131,28 @@ static bool wake_one_stdout_waiter(void) {
   return false;
 }
 
-static bool publish_one_stdout_byte(void) {
+/* Caller must hold stdout_publish_mutex while reading handler state and
+ * invoking it. Session handlers own short-lived contexts; handler swaps must
+ * wait until any in-flight publication using the old context is done.
+ */
+static bool publish_one_stdout_byte_locked(void) {
   uint8_t byte;
-  bool popped = false;
-  void (*handler)(uint8_t, void *) = NULL;
-  void *handler_ctx = NULL;
-
-  host_mutex_lock(&stdout_publish_mutex);
-  if (arena_stdout_try_pop(&byte)) {
-    popped = true;
-    handler = stdout_handler;
-    handler_ctx = stdout_handler_ctx;
+  if (!arena_stdout_try_pop(&byte))
+    return false;
+  void (*handler)(uint8_t, void *) = stdout_handler;
+  void *handler_ctx = stdout_handler_ctx;
+  if (handler != NULL) {
+    handler(byte, handler_ctx);
+  } else {
+    putchar(byte);
   }
-  host_mutex_unlock(&stdout_publish_mutex);
-
-  if (popped) {
-    if (handler != NULL) {
-      handler(byte, handler_ctx);
-    } else {
-      putchar(byte);
-    }
-    wake_one_stdout_waiter();
-    fflush(stdout);
-    return true;
-  }
-  return false;
+  wake_one_stdout_waiter();
+  fflush(stdout);
+  return true;
 }
 
-static void drain_stdout(void) {
-  while (publish_one_stdout_byte()) {
+static void drain_stdout_locked(void) {
+  while (publish_one_stdout_byte_locked()) {
   }
   fflush(stdout);
 }
@@ -320,7 +313,11 @@ dispatcher_thread_main(void *arg) {
 static void *stdout_thread_main(void *arg) {
   (void)arg;
   while (atomic_load_explicit(&is_thanatos_initialized, memory_order_acquire)) {
-    if (!publish_one_stdout_byte()) {
+    bool published = false;
+    host_mutex_lock(&stdout_publish_mutex);
+    published = publish_one_stdout_byte_locked();
+    host_mutex_unlock(&stdout_publish_mutex);
+    if (!published) {
       host_mutex_lock(&pump_mutex);
       while (atomic_load_explicit(&is_thanatos_initialized,
                                   memory_order_acquire) &&
@@ -331,7 +328,9 @@ static void *stdout_thread_main(void *arg) {
       host_mutex_unlock(&pump_mutex);
     }
   }
-  drain_stdout();
+  host_mutex_lock(&stdout_publish_mutex);
+  drain_stdout_locked();
+  host_mutex_unlock(&stdout_publish_mutex);
   return NULL;
 }
 
@@ -473,7 +472,9 @@ uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps) {
       /* Drain any remaining arena stdout bytes before main prints the result
        * line. Publication is serialized with the pump to preserve FIFO order.
        */
-      drain_stdout();
+      host_mutex_lock(&stdout_publish_mutex);
+      drain_stdout_locked();
+      host_mutex_unlock(&stdout_publish_mutex);
       return node;
     } else if (event == CQ_EVENT_IO_WAIT) {
       io_wait_register(node, req_id);

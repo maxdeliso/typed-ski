@@ -8,8 +8,6 @@ import * as fsp from "node:fs/promises";
 import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
 
-import { TEST_TIMEOUT_MS } from "../lib/constants.ts";
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
 const PACKAGE_JSON_PATH = join(PROJECT_ROOT, "package.json");
@@ -158,7 +156,6 @@ function nodeTestArgs(
   args.push("--test-global-setup", NODE_TEST_GLOBAL_SETUP_PATH);
   args.push("--preserve-symlinks");
   args.push("--preserve-symlinks-main");
-  args.push("--test-timeout=300000");
 
   if (options.coverage) {
     args.push("--experimental-test-coverage");
@@ -630,9 +627,7 @@ async function prepareTestExecution(
     await buildDist();
   }
 
-  const env: Record<string, string> = {
-    THANATOS_TIMEOUT_MS: String(TEST_TIMEOUT_MS),
-  };
+  const env: Record<string, string> = {};
 
   if (process.env["TEST_SRCDIR"] && process.env["TEST_WORKSPACE"]) {
     const nodeOptions = [

@@ -1,5 +1,7 @@
 import type { LlvmMainWrapper, LlvmTargetProfile } from "./llvm/types.ts";
 import { compareAscii } from "../shared/canonical.ts";
+import { parseTripLang } from "../parser/tripLang.ts";
+import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
 
 export const TRIP_BUNDLE_V1_MAGIC = "TRIP-BUNDLE-V1";
 
@@ -199,6 +201,144 @@ export function summarizeTripBundleV1(input: Uint8Array): string {
   }
 
   return lines.join("\n");
+}
+
+function unsupportedTripSideTopLevelSyntax(source: string): boolean {
+  for (const line of source.split(/\r?\n/)) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("native ") || trimmed.startsWith("opaque ")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parsedModuleName(program: TripLangProgram): string {
+  const moduleTerms = program.terms.filter((term) => term.kind === "module");
+  if (moduleTerms.length === 0) {
+    throw new TripBundleV1Error("missing module declaration");
+  }
+  if (moduleTerms.length > 1) {
+    throw new TripBundleV1Error("multiple module declarations");
+  }
+  return moduleTerms[0]!.name;
+}
+
+function supportedParseSummaryTerm(term: TripLangTerm): boolean {
+  switch (term.kind) {
+    case "module":
+    case "import":
+    case "export":
+    case "data":
+    case "type":
+    case "poly":
+    case "combinator":
+      return true;
+    case "native":
+    case "lambda":
+      return false;
+  }
+}
+
+function summarizeParsedModule(name: string, source: string): string[] {
+  if (unsupportedTripSideTopLevelSyntax(source)) {
+    throw new TripBundleV1Error("Parse error");
+  }
+
+  let program: TripLangProgram;
+  try {
+    program = parseTripLang(source);
+  } catch {
+    throw new TripBundleV1Error("Parse error");
+  }
+
+  if (program.terms.some((term) => !supportedParseSummaryTerm(term))) {
+    throw new TripBundleV1Error("Parse error");
+  }
+
+  const declared = parsedModuleName(program);
+  if (declared !== name) {
+    throw new TripBundleV1Error("source module mismatch");
+  }
+
+  const imports = program.terms.filter((term) => term.kind === "import");
+  const exports = program.terms.filter((term) => term.kind === "export");
+  const data = program.terms.filter((term) => term.kind === "data");
+  const types = program.terms.filter((term) => term.kind === "type");
+  const poly = program.terms.filter((term) => term.kind === "poly");
+  const combinators = program.terms.filter(
+    (term) => term.kind === "combinator",
+  );
+
+  const lines = [
+    `module ${name}`,
+    `declared ${declared}`,
+    `imports ${imports.length}`,
+  ];
+
+  for (const term of imports) {
+    if (term.kind === "import") {
+      lines.push(`import ${term.name} ${term.ref}`);
+    }
+  }
+
+  lines.push(`exports ${exports.length}`);
+  for (const term of exports) {
+    if (term.kind === "export") {
+      lines.push(`export ${term.name}`);
+    }
+  }
+
+  lines.push(`data ${data.length}`);
+  for (const term of data) {
+    if (term.kind === "data") {
+      lines.push(`data ${term.name}`);
+      for (const ctor of term.constructors) {
+        lines.push(`ctor ${ctor.name} ${ctor.fields.length}`);
+      }
+    }
+  }
+
+  lines.push(`type ${types.length}`);
+  for (const term of types) {
+    if (term.kind === "type") {
+      lines.push(`type ${term.name}`);
+    }
+  }
+
+  lines.push("native 0", `poly ${poly.length}`);
+  for (const term of poly) {
+    if (term.kind === "poly") {
+      lines.push(`poly ${term.name}`);
+    }
+  }
+
+  lines.push(`combinator ${combinators.length}`);
+  for (const term of combinators) {
+    if (term.kind === "combinator") {
+      lines.push(`combinator ${term.name}`);
+    }
+  }
+
+  return lines;
+}
+
+export function summarizeTripBundleV1ParsedModules(input: Uint8Array): string {
+  const bundle = parseTripBundleV1(input);
+  const lines = [
+    "OK",
+    "version bundle-parse-summary-v1",
+    `entry ${bundle.entryModule}`,
+    `target ${targetToString(bundle.target)}`,
+    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `modules ${bundle.modules.length}`,
+  ];
+
+  for (const module of bundle.modules) {
+    lines.push(...summarizeParsedModule(module.name, module.source));
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 export function parseTripBundleV1String(input: string): TripBundleV1 {

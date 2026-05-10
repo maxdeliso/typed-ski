@@ -12,6 +12,7 @@ import {
   serializeTripBundleV1,
   serializeTripBundleV1ToString,
   summarizeTripBundleV1,
+  summarizeTripBundleV1ParsedModules,
   TripBundleV1Error,
   type TripBundleV1,
 } from "../../../lib/compiler/index.ts";
@@ -126,6 +127,174 @@ poly main = #u8(7)
     );
   });
 
+  it("summarizes parsed modules in the bootstrap-facing bundle fixture", () => {
+    const bundleBytes = readFileSync(
+      join(fixtureDir, "bootstrap-summary.bundle-v1"),
+    );
+    const expectedSummary = readFileSync(
+      join(fixtureDir, "bootstrap-parse-summary.txt"),
+      "utf8",
+    );
+
+    assert.equal(
+      summarizeTripBundleV1ParsedModules(bundleBytes),
+      expectedSummary,
+    );
+  });
+
+  it("preserves declaration source order in host parsed module summaries", () => {
+    const source = `module Main
+import Alpha one
+import Beta two
+export second
+export first
+data Box = MkBox U8 | MkOther
+type Alias = U8
+combinator raw = S
+poly zed = #u8(0)
+poly alpha = #u8(1)
+`;
+    const summary = summarizeTripBundleV1ParsedModules(
+      serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "x86_64-unknown-linux-gnu" },
+        modules: [{ name: "Main", source }],
+      }),
+    );
+
+    assert.equal(
+      summary,
+      [
+        "OK",
+        "version bundle-parse-summary-v1",
+        "entry Main",
+        "target x86_64-unknown-linux-gnu",
+        "wrapper none",
+        "modules 1",
+        "module Main",
+        "declared Main",
+        "imports 2",
+        "import Alpha one",
+        "import Beta two",
+        "exports 2",
+        "export second",
+        "export first",
+        "data 1",
+        "data Box",
+        "ctor MkBox 1",
+        "ctor MkOther 0",
+        "type 1",
+        "type Alias",
+        "native 0",
+        "poly 2",
+        "poly zed",
+        "poly alpha",
+        "combinator 1",
+        "combinator raw",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("host parsed module summaries reject malformed module sources deterministically", () => {
+    const cases: Array<[string, Uint8Array, RegExp]> = [
+      [
+        "malformed syntax",
+        serializeTripBundleV1({
+          entryModule: "Main",
+          target: { kind: "x86_64-unknown-linux-gnu" },
+          modules: [
+            {
+              name: "Main",
+              source: `module Main
+export main
+poly main = \\x : U8 =>
+`,
+            },
+          ],
+        }),
+        /Parse error/,
+      ],
+      [
+        "source module mismatch",
+        serializeTripBundleV1({
+          entryModule: "Other",
+          target: { kind: "x86_64-unknown-linux-gnu" },
+          modules: [
+            {
+              name: "Other",
+              source: `module Main
+export main
+poly main = #u8(7)
+`,
+            },
+          ],
+        }),
+        /source module mismatch/,
+      ],
+      [
+        "unsupported native syntax",
+        serializeTripBundleV1({
+          entryModule: "Main",
+          target: { kind: "x86_64-unknown-linux-gnu" },
+          modules: [
+            {
+              name: "Main",
+              source: `module Main
+native readOne : U8
+`,
+            },
+          ],
+        }),
+        /Parse error/,
+      ],
+      [
+        "unsupported opaque syntax",
+        serializeTripBundleV1({
+          entryModule: "Main",
+          target: { kind: "x86_64-unknown-linux-gnu" },
+          modules: [
+            {
+              name: "Main",
+              source: `module Main
+opaque type Handle
+`,
+            },
+          ],
+        }),
+        /Parse error/,
+      ],
+      [
+        "non-ASCII source byte",
+        new Uint8Array([
+          ...encode(
+            [
+              "TRIP-BUNDLE-V1",
+              "entry Main",
+              "target x86_64-unknown-linux-gnu",
+              "wrapper c-main",
+              "modules 1",
+              "module Main 1",
+            ].join("\n") + "\n",
+          ),
+          0xff,
+        ]),
+        /non-ASCII byte/,
+      ],
+    ];
+
+    for (const [name, bytes, message] of cases) {
+      assert.throws(
+        () => summarizeTripBundleV1ParsedModules(bytes),
+        {
+          name: TripBundleV1Error.name,
+          message,
+        },
+        name,
+      );
+    }
+  });
+
   it("Trip-side native parser summary executable matches the golden fixture", async () => {
     const bundleBytes = readFileSync(
       join(fixtureDir, "bootstrap-summary.bundle-v1"),
@@ -146,6 +315,120 @@ poly main = #u8(7)
       assert.equal(result.status, 0);
       assert.equal(result.stderr, "");
       assert.equal(result.stdout, expectedSummary);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("Trip-side native parsed module summary executable matches the golden fixture", async () => {
+    const bundleBytes = readFileSync(
+      join(fixtureDir, "bootstrap-summary.bundle-v1"),
+    );
+    const expectedSummary = readFileSync(
+      join(fixtureDir, "bootstrap-parse-summary.txt"),
+      "utf8",
+    );
+    assert.equal(
+      summarizeTripBundleV1ParsedModules(bundleBytes),
+      expectedSummary,
+    );
+
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-parse-summary-"),
+    );
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      const result = runExecutable(exePath, bundleBytes);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expectedSummary);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("Trip-side native parsed module summary executable rejects malformed sources", async () => {
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-parse-summary-errors-"),
+    );
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      const cases: Array<[string, Uint8Array, RegExp]> = [
+        [
+          "malformed syntax",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+export main
+poly main = \\x : U8 =>
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "source module mismatch",
+          serializeTripBundleV1({
+            entryModule: "Other",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Other",
+                source: `module Main
+export main
+poly main = #u8(7)
+`,
+              },
+            ],
+          }),
+          /ERR:source module mismatch/,
+        ],
+        [
+          "unsupported native syntax",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+native readOne : U8
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "non-ASCII source byte",
+          new Uint8Array([
+            ...encode(
+              [
+                "TRIP-BUNDLE-V1",
+                "entry Main",
+                "target x86_64-unknown-linux-gnu",
+                "wrapper c-main",
+                "modules 1",
+                "module Main 1",
+              ].join("\n") + "\n",
+            ),
+            0xff,
+          ]),
+          /ERR:non-ascii byte/,
+        ],
+      ];
+
+      for (const [name, bytes, message] of cases) {
+        const result = runExecutable(exePath, bytes);
+        assert.equal(result.status, 0, name);
+        assert.equal(result.stderr, "", name);
+        assert.match(result.stdout, message, name);
+      }
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
@@ -596,6 +879,29 @@ async function compileBundleSummaryExecutable(
     mainWrapper: { kind: "stdin-list-u8" },
   });
   const llPath = join(tempDir, "bundle-summary.ll");
+  await writeFile(llPath, llvm, "utf8");
+  return compileLlvmToExecutable(llPath);
+}
+
+async function compileBundleParseSummaryExecutable(
+  tempDir: string,
+): Promise<string> {
+  const source = readFileSync(
+    join(__dirname, "../../../lib/compiler/bundleParseSummary.trip"),
+    "utf8",
+  );
+  const llvm = await compileTripToLlvm(source, {
+    entryModule: "BundleParseSummary",
+    moduleSources: await loadCommonModules([
+      "Prelude",
+      "Bin",
+      "Lexer",
+      "Parser",
+      "BundleSummary",
+    ]),
+    mainWrapper: { kind: "stdin-list-u8" },
+  });
+  const llPath = join(tempDir, "bundle-parse-summary.ll");
   await writeFile(llPath, llvm, "utf8");
   return compileLlvmToExecutable(llPath);
 }

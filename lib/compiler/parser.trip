@@ -29,6 +29,7 @@ import Lexer Token
 import Lexer tokenTag
 import Lexer tokenText
 import Lexer tokenNatValue
+import Lexer eqListU8
 import Lexer T_LParen
 import Lexer T_RParen
 import Lexer T_LBrace
@@ -575,11 +576,30 @@ poly rec parseExpr = \toks : List Token =>
             | Err e => Err [ParseError] [Pair Expr (List Token)] e
             | Ok tvRes =>
               match tvRes [Result ParseError (Pair Expr (List Token))] {
-                | MkPair typeVar afterTypeVar =>
-                    match (expect afterTypeVar fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
-                      | Err e => Err [ParseError] [Pair Expr (List Token)] e
-                      | Ok bodyToks => parseExpr bodyToks
-                    }
+                | MkPair tyVar afterTyVar =>
+                    if [Result ParseError (Pair Expr (List Token))] (eqListU8 tyVar "u8")
+                      (\u : U8 =>
+                        match (expect afterTyVar lParenTag) [Result ParseError (Pair Expr (List Token))] {
+                          | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                          | Ok afterOpen =>
+                              matchList [Token] [Result ParseError (Pair Expr (List Token))] afterOpen
+                                (Err [ParseError] [Pair Expr (List Token)] parseError)
+                                (\natTok : Token => \afterNat : List Token =>
+                                  if [Result ParseError (Pair Expr (List Token))] (eqU8 (tokenTag natTok) natTag)
+                                    (\u : U8 =>
+                                      match (expect afterNat rParenTag) [Result ParseError (Pair Expr (List Token))] {
+                                        | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                                        | Ok rest =>
+                                            Ok [ParseError] [Pair Expr (List Token)]
+                                              (MkPair [Expr] [List Token] (E_Nat (tokenNatValue natTok)) rest)
+                                      })
+                                    (\u : U8 => Err [ParseError] [Pair Expr (List Token)] parseError))
+                        })
+                      (\u : U8 =>
+                        match (expect afterTyVar fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                          | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                          | Ok bodyToks => parseExpr bodyToks
+                        })
               }
           })
         (\u : U8 =>

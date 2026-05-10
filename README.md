@@ -260,11 +260,39 @@ module name. Parsing is byte-exact: non-ASCII source bytes, non-canonical module
 order, and any trailing byte are rejected. It intentionally avoids JSON so a
 first-order Trip implementation can decode it with byte-list parsing.
 
+The canonical byte layout is:
+
+```text
+TRIP-BUNDLE-V1\n
+entry <ModuleName>\n
+target <TargetKind>\n
+wrapper <WrapperKind>\n
+modules <DecimalCount>\n
+module <ModuleName> <DecimalByteLength>\n
+<exact source bytes>
+```
+
+Additional module records repeat the `module` header and source byte payload,
+with one newline between records. The final source byte is the final byte of the
+bundle. `ModuleName` is `[A-Za-z_][A-Za-z0-9_]*`; decimal counts and lengths are
+base-10 safe integers with no leading zero except `0`. Supported bundle targets
+are `generic`, `x86_64-unknown-linux-gnu`, `arm64-apple-darwin`,
+`x86_64-pc-windows-msvc`, `wasm32-unknown-unknown`, and `wasm32-wasi`.
+Supported wrappers are `none`, `c-main`, and `stdin-list-u8`.
+
+`target datalayout` is not part of `bundle-v1` yet. When it is added, native-v1
+must carry it explicitly in the bundle contract rather than inferring layout from
+the host.
+
 The LLVM source path validates the native-v1 subset before emission. Runtime
 function values, escaping lambdas, function-typed constructor fields, dynamic
 callees, and unsupported higher-order values are rejected before Block IR/LLVM.
 The object language may still contain System-F terms and lambdas; the compiler
 implementation must represent and transform them as first-order AST data.
+
+Parser bootstrap progress for native-v1 is measured through this byte bundle
+contract and LLVM-hosted paths. Legacy Thanatos/SKI parser bootstrap tests are
+not acceptance criteria for this milestone.
 
 ## TripC Object Files (`.tripc`)
 

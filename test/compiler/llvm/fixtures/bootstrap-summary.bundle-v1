@@ -1,0 +1,16 @@
+TRIP-BUNDLE-V1
+entry Main
+target x86_64-unknown-linux-gnu
+wrapper stdin-list-u8
+modules 2
+module Lib 44
+module Lib
+export seven
+poly seven = #u8(7)
+
+module Main 100
+module Main
+import Prelude List
+import Lib seven
+export main
+poly main = \source : List U8 => seven

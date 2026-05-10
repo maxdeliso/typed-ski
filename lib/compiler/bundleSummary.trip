@@ -39,6 +39,10 @@ import Bin isZeroBin
 
 export parseBundleSummary
 export emitBundleSummary
+export BundleSummary
+export MkBundleSummary
+export ModuleRecord
+export MkModuleRecord
 export main
 
 poly directiveEntry : List U8 = "entry"
@@ -48,11 +52,11 @@ poly directiveModules : List U8 = "modules"
 
 data Line = MkLine (List U8) (List U8)
 data Word = MkWord (List U8) (List U8)
-data ModuleSummary = MkModuleSummary (List U8) (List U8)
-data BundleSummary = MkBundleSummary (List U8) (List U8) (List U8) (List U8) (List ModuleSummary)
+data ModuleRecord = MkModuleRecord (List U8) (List U8) (List U8)
+data BundleSummary = MkBundleSummary (List U8) (List U8) (List U8) (List U8) (List ModuleRecord)
 data ModuleHeader = MkModuleHeader (List U8) (List U8) Bin
 data SourcePayload = MkSourcePayload (List U8) (List U8)
-data ParsedModules = MkParsedModules Bool (List ModuleSummary) (List U8)
+data ParsedModules = MkParsedModules Bool (List ModuleRecord) (List U8)
 
 poly binOne = B1 BZ
 poly binTwo = B0 (B1 BZ)
@@ -307,13 +311,13 @@ poly parseWrapper = \value : List U8 =>
             (\u : U8 => Ok [List U8] [List U8] value)
             (\u : U8 => Err [List U8] [List U8] "bad wrapper")))
 
-poly rec parseModules = \remaining : List U8 => \count : Bin => \entry : List U8 => \previous : Maybe (List U8) => \entryFound : Bool => \accRev : List ModuleSummary =>
+poly rec parseModules = \remaining : List U8 => \count : Bin => \entry : List U8 => \previous : Maybe (List U8) => \entryFound : Bool => \accRev : List ModuleRecord =>
   if [Result (List U8) ParsedModules] (isZeroBin count)
     (\u : U8 =>
       if [Result (List U8) ParsedModules] (listIsEmpty [U8] remaining)
         (\u : U8 =>
           if [Result (List U8) ParsedModules] entryFound
-            (\u : U8 => Ok [List U8] [ParsedModules] (MkParsedModules entryFound (reverse [ModuleSummary] accRev) remaining))
+            (\u : U8 => Ok [List U8] [ParsedModules] (MkParsedModules entryFound (reverse [ModuleRecord] accRev) remaining))
             (\u : U8 => Err [List U8] [ParsedModules] "missing entry"))
         (\u : U8 => Err [List U8] [ParsedModules] "trailing bytes"))
     (\u : U8 =>
@@ -343,7 +347,7 @@ poly rec parseModules = \remaining : List U8 => \count : Bin => \entry : List U8
                                           (\u : U8 =>
                                             let nextCount = predBin count in
                                             let nextEntryFound = or entryFound (eqListU8 name entry) in
-                                            let nextAcc = cons [ModuleSummary] (MkModuleSummary name lengthDigits) accRev in
+                                            let nextAcc = cons [ModuleRecord] (MkModuleRecord name lengthDigits source) accRev in
                                             if [Result (List U8) ParsedModules] (isZeroBin nextCount)
                                               (\u : U8 => parseModules afterSource nextCount entry (Some [List U8] name) nextEntryFound nextAcc)
                                               (\u : U8 =>
@@ -416,7 +420,7 @@ poly parseBundleSummary = \input : List U8 =>
                                                                                       match (parseDecimal modsCountDigits) [Result (List U8) BundleSummary] {
                                                                                         | Err e => Err [List U8] [BundleSummary] e
                                                                                         | Ok modsCount =>
-                                                                                            match (parseModules afterModules modsCount entry (None [List U8]) false (nil [ModuleSummary])) [Result (List U8) BundleSummary] {
+                                                                                            match (parseModules afterModules modsCount entry (None [List U8]) false (nil [ModuleRecord])) [Result (List U8) BundleSummary] {
                                                                                               | Err e => Err [List U8] [BundleSummary] e
                                                                                               | Ok parsed =>
                                                                                                   match parsed [Result (List U8) BundleSummary] { | MkParsedModules found mods rest =>
@@ -443,15 +447,15 @@ poly parseBundleSummary = \input : List U8 =>
         }
   }
 
-poly emitModuleSummary = \module : ModuleSummary =>
-  match module [List U8] { | MkModuleSummary name lengthDigits =>
+poly emitModuleSummary = \module : ModuleRecord =>
+  match module [List U8] { | MkModuleRecord name lengthDigits source =>
     append [U8] "module " (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
   }
 
-poly rec emitModuleSummaries = \mods : List ModuleSummary =>
-  matchList [ModuleSummary] [List U8] mods
+poly rec emitModuleSummaries = \mods : List ModuleRecord =>
+  matchList [ModuleRecord] [List U8] mods
     (nil [U8])
-    (\h : ModuleSummary => \t : List ModuleSummary =>
+    (\h : ModuleRecord => \t : List ModuleRecord =>
       append [U8] (emitModuleSummary h) (emitModuleSummaries t))
 
 poly emitBundleSummary = \bundle : BundleSummary =>

@@ -126,35 +126,30 @@ poly main = #u8(7)
     );
   });
 
-  it(
-    "Trip-side native parser summary executable matches the golden fixture",
-    async () => {
-      const bundleBytes = readFileSync(
-        join(fixtureDir, "bootstrap-summary.bundle-v1"),
-      );
-      const expectedSummary = readFileSync(
-        join(fixtureDir, "bootstrap-summary.txt"),
-        "utf8",
-      );
-      assert.equal(
-        summarizeTripBundleV1(bundleBytes),
-        expectedSummary.replace(/\n$/, ""),
-      );
+  it("Trip-side native parser summary executable matches the golden fixture", async () => {
+    const bundleBytes = readFileSync(
+      join(fixtureDir, "bootstrap-summary.bundle-v1"),
+    );
+    const expectedSummary = readFileSync(
+      join(fixtureDir, "bootstrap-summary.txt"),
+      "utf8",
+    );
+    assert.equal(
+      summarizeTripBundleV1(bundleBytes),
+      expectedSummary.replace(/\n$/, ""),
+    );
 
-      const tempDir = await mkdtemp(
-        join(tmpdir(), "typed-ski-bundle-summary-"),
-      );
-      try {
-        const exePath = await compileBundleSummaryExecutable(tempDir);
-        const result = runExecutable(exePath, bundleBytes);
-        assert.equal(result.status, 0);
-        assert.equal(result.stderr, "");
-        assert.equal(result.stdout, expectedSummary);
-      } finally {
-        await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      }
-    },
-  );
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-bundle-summary-"));
+    try {
+      const exePath = await compileBundleSummaryExecutable(tempDir);
+      const result = runExecutable(exePath, bundleBytes);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expectedSummary);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 
   it("Trip-side native parser rejects malformed bundles", async () => {
     const mainSource = `module Main
@@ -588,7 +583,9 @@ poly main = #u8(0)
   });
 });
 
-async function compileBundleSummaryExecutable(tempDir: string): Promise<string> {
+async function compileBundleSummaryExecutable(
+  tempDir: string,
+): Promise<string> {
   const source = readFileSync(
     join(__dirname, "../../../lib/compiler/bundleSummary.trip"),
     "utf8",

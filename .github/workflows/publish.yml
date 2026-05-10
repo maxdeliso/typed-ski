@@ -51,6 +51,14 @@ jobs:
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors
 
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: bazel-test-logs-publish
+          path: bazel-testlogs/
+          if-no-files-found: ignore
+
       - name: Setup Deno (for JSR publish)
         uses: denoland/setup-deno@v2
         with:

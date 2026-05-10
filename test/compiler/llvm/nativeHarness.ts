@@ -102,7 +102,10 @@ export async function compileLlvmToExecutable(
 /**
  * Runs a native executable and returns its output.
  */
-export function runExecutable(exePath: string, input?: string): RunResult {
+export function runExecutable(
+  exePath: string,
+  input?: string | Uint8Array,
+): RunResult {
   const result = spawnSync(exePath, [], {
     input,
     encoding: "utf8",

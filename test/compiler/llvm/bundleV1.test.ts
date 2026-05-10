@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "../../util/test_shim.ts";
 import {
   compileTripBundleV1ToLlvm,
@@ -6,12 +9,16 @@ import {
   parseTripBundleV1String,
   serializeTripBundleV1,
   serializeTripBundleV1ToString,
+  summarizeTripBundleV1,
   TripBundleV1Error,
   type TripBundleV1,
 } from "../../../lib/compiler/index.ts";
+import { NativeV1SubsetError } from "../../../lib/minicore/index.ts";
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixtureDir = join(__dirname, "fixtures");
 
 function decode(bytes: Uint8Array): string {
   return decoder.decode(bytes);
@@ -88,6 +95,39 @@ poly main = #u8(7)
     );
   });
 
+  it("summarizes the bootstrap-facing canonical bundle fixture", () => {
+    const bundleBytes = readFileSync(
+      join(fixtureDir, "bootstrap-summary.bundle-v1"),
+    );
+    const expectedSummary = readFileSync(
+      join(fixtureDir, "bootstrap-summary.txt"),
+      "utf8",
+    ).replace(/\n$/, "");
+
+    assert.equal(summarizeTripBundleV1(bundleBytes), expectedSummary);
+    assert.equal(
+      Buffer.compare(
+        Buffer.from(serializeTripBundleV1(parseTripBundleV1(bundleBytes))),
+        bundleBytes,
+      ),
+      0,
+    );
+    assert.deepEqual(
+      parseTripBundleV1(bundleBytes).modules.map((module) => module.name),
+      ["Lib", "Main"],
+    );
+  });
+
+  it(
+    "future Trip-side parser summary executable matches the golden fixture",
+    { skip: true },
+    () => {
+      // Native-v1 stage1 should eventually compile a Trip program with the
+      // stdin-list-u8 wrapper that reads bootstrap-summary.bundle-v1 from stdin
+      // and writes bootstrap-summary.txt exactly.
+    },
+  );
+
   it("compiles a bundle to LLVM IR", () => {
     const llvm = compileTripBundleV1ToLlvm(serializeTripBundleV1(bundle));
     assert.match(llvm, /target triple = "x86_64-unknown-linux-gnu"/);
@@ -152,6 +192,17 @@ poly main = \\source : List U8 => #u8(0)
     assert.match(llvm, /declare ptr @trip_read_stdin_list_u8\(\)/);
     assert.match(llvm, /%trip_source = call ptr @trip_read_stdin_list_u8\(\)/);
     assert.match(llvm, /call i8 @trip_fn_Main_main\(ptr %trip_source\)/);
+  });
+
+  it("compiles the bootstrap-facing bundle fixture to LLVM IR", () => {
+    const bundleBytes = readFileSync(
+      join(fixtureDir, "bootstrap-summary.bundle-v1"),
+    );
+    const llvm = compileTripBundleV1ToLlvm(bundleBytes);
+    assert.match(llvm, /target triple = "x86_64-unknown-linux-gnu"/);
+    assert.match(llvm, /declare ptr @trip_read_stdin_list_u8\(\)/);
+    assert.match(llvm, /define i8 @trip_fn_Lib_seven\(\)/);
+    assert.match(llvm, /define i8 @trip_fn_Main_main\(ptr %v\d+\)/);
   });
 
   it("rejects a missing entry module", () => {
@@ -255,6 +306,11 @@ poly seven = #u8(7)
         /trailing bytes/,
       ],
       [
+        "trailing newline",
+        encode(decode(serializeTripBundleV1(bundle)) + "\n"),
+        /trailing bytes/,
+      ],
+      [
         "unsupported target",
         encode(
           bundleSource({
@@ -331,6 +387,32 @@ poly main = #u8(7)
         ),
       {
         message: /module Other source declares module Main/,
+      },
+    );
+  });
+
+  it("rejects native-v1 function value shapes through the bundle path", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+data Box = MkBox (U8 -> U8)
+export main
+poly main = #u8(0)
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        name: NativeV1SubsetError.name,
+        message: /field 0 of constructor Main\.Box\.MkBox/,
       },
     );
   });

@@ -49,6 +49,7 @@ export {
   parseTripBundleV1String,
   serializeTripBundleV1,
   serializeTripBundleV1ToString,
+  summarizeTripBundleV1,
   TripBundleV1Error,
   TRIP_BUNDLE_V1_MAGIC,
   type TripBundleV1,

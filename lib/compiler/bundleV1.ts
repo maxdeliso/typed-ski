@@ -183,6 +183,24 @@ export function serializeTripBundleV1ToString(bundle: TripBundleV1): string {
   return asciiString("serialized bundle", serializeTripBundleV1(bundle));
 }
 
+export function summarizeTripBundleV1(input: Uint8Array): string {
+  const bundle = parseTripBundleV1(input);
+  const lines = [
+    "OK",
+    "version bundle-v1",
+    `entry ${bundle.entryModule}`,
+    `target ${targetToString(bundle.target)}`,
+    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `modules ${bundle.modules.length}`,
+  ];
+
+  for (const module of bundle.modules) {
+    lines.push(`module ${module.name} ${module.source.length}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function parseTripBundleV1String(input: string): TripBundleV1 {
   return parseTripBundleV1(asciiBytes("input", input));
 }

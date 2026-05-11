@@ -1056,11 +1056,25 @@ class MiniCoreBuilder {
         strippedBody.returnType,
         module.name,
       );
-    } else if (typeScheme && typeScheme.kind === "forall") {
-      let current = typeScheme.body;
-      if (current.kind === "fn") {
-        resultTypeHint = current.result;
+    } else if (typeScheme) {
+      let current = typeScheme;
+      // Skip type parameters in the scheme
+      for (let i = 0; i < typeParams.length; i++) {
+        if (current.kind === "forall") {
+          current = current.body;
+        } else {
+          break;
+        }
       }
+      // Skip term parameters in the scheme
+      for (let i = 0; i < params.length; i++) {
+        if (current.kind === "fn") {
+          current = current.result;
+        } else {
+          break;
+        }
+      }
+      resultTypeHint = current;
     }
 
     // Set preliminary metadata for recursive calls

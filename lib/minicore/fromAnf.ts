@@ -170,17 +170,18 @@ function lowerExprToReturn(
     case "prim":
     case "runtimeCall": {
       const resultType = typeOfAnfValue(expr, state.fn.id, state.metadata);
+      const isTailCall = expr.kind === "call" || expr.kind === "runtimeCall";
       if (resultType.kind === "unit") {
         if (functionReturnType(state).kind !== "unit") {
           throw new MiniCoreBlockLoweringError(
             `Cannot return Unit from non-Unit function ${state.fn.name}`,
           );
         }
-        emitInstruction(expr, block, state, env);
+        emitInstruction(expr, block, state, env, undefined, isTailCall);
         block.terminator = { kind: "return" };
         return;
       }
-      const result = emitInstruction(expr, block, state, env);
+      const result = emitInstruction(expr, block, state, env, undefined, isTailCall);
       if (!result) {
         throw new MiniCoreBlockLoweringError(
           `Cannot return Unit from non-Unit function ${state.fn.name}`,
@@ -468,6 +469,7 @@ function emitInstruction(
   state: FunctionLoweringState,
   env: LocalEnv,
   resultId?: LocalId,
+  isTail: boolean = false,
 ): BlockValueRef | undefined {
   const resultType = typeOfAnfValue(value, state.fn.id, state.metadata);
   const result =
@@ -502,6 +504,7 @@ function emitInstruction(
           name: target.name,
           args: value.args.map((arg) => atomRef(arg, state, env)),
           typeArgs: value.typeArgs,
+          isTail,
         },
       };
       break;
@@ -559,6 +562,7 @@ function emitInstruction(
           kind: "runtimeCall",
           name: value.name,
           args: value.args.map((arg) => atomRef(arg, state, env)),
+          isTail,
         },
       };
       break;

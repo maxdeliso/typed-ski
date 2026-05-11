@@ -696,6 +696,9 @@ function emitCall(
   args: BlockValueRef[],
   context: FunctionEmitContext,
 ): string {
+  if (instruction.op.kind !== "call") {
+    throw new LlvmEmissionError("emitCall called for non-call op");
+  }
   if (!targetName) {
     throw new LlvmEmissionError("Cannot emit call to unknown function");
   }
@@ -703,15 +706,16 @@ function emitCall(
   const renderedArgs = args
     .map((arg) => formatTypedValue(arg, context))
     .join(", ");
+  const tail = instruction.op.isTail ? "tail " : "";
   if (resultType === "void") {
-    return `call void ${targetName}(${renderedArgs})`;
+    return `${tail}call void ${targetName}(${renderedArgs})`;
   }
   if (!instruction.result) {
     throw new LlvmEmissionError("Cannot emit non-void call without result");
   }
   return `${llvmLocalName(
     instruction.result.id,
-  )} = call ${resultType} ${targetName}(${renderedArgs})`;
+  )} = ${tail}call ${resultType} ${targetName}(${renderedArgs})`;
 }
 
 function emitRuntimeCall(
@@ -726,8 +730,9 @@ function emitRuntimeCall(
     .map((arg) => formatTypedValue(arg, context))
     .join(", ");
   const runtimeName = llvmRuntimeName(instruction.op.name as RuntimeSymbol);
+  const tail = instruction.op.isTail ? "tail " : "";
   if (resultType === "void") {
-    return `call void ${runtimeName}(${renderedArgs})`;
+    return `${tail}call void ${runtimeName}(${renderedArgs})`;
   }
   if (!instruction.result) {
     throw new LlvmEmissionError(
@@ -736,7 +741,7 @@ function emitRuntimeCall(
   }
   return `${llvmLocalName(
     instruction.result.id,
-  )} = call ${resultType} ${runtimeName}(${renderedArgs})`;
+  )} = ${tail}call ${resultType} ${runtimeName}(${renderedArgs})`;
 }
 
 function emitTerminator(

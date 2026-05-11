@@ -40,6 +40,12 @@ POSIX_PTHREAD_FLAGS = select({
     ],
 })
 
+STACK_FLAGS = select({
+    ":windows": ["/STACK:67108864"],
+    "@platforms//os:macos": ["-Wl,-stack_size,67108864"],
+    "//conditions:default": ["-Wl,-z,stack-size=67108864"],
+})
+
 HOST_PLATFORM_SRCS = select({
     ":windows": ["host_platform_windows.c"],
     "//conditions:default": ["host_platform_posix.c"],
@@ -116,7 +122,7 @@ cc_binary(
     srcs = ["main.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    linkopts = POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS + STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [":thanatos_lib"],
@@ -127,7 +133,7 @@ cc_test(
     srcs = ["arena_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    linkopts = POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS + STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [
@@ -141,7 +147,7 @@ cc_test(
     srcs = ["dag_codec_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    linkopts = POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS + STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [
@@ -156,7 +162,7 @@ cc_test(
     srcs = ["session_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    linkopts = POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS + STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [":thanatos_lib"],
@@ -167,7 +173,7 @@ cc_test(
     srcs = ["ski_io_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    linkopts = POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS + STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [":thanatos_lib"],
@@ -178,6 +184,7 @@ cc_test(
     srcs = ["util_test.c"],
     copts = COMMON_COPTS,
     features = ["-coverage"],
+    linkopts = STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [":util"],
@@ -188,7 +195,7 @@ cc_binary(
     srcs = ["performance_test.c"],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
-    linkopts = POSIX_PTHREAD_FLAGS,
+    linkopts = POSIX_PTHREAD_FLAGS + STACK_FLAGS,
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [":thanatos_lib"],

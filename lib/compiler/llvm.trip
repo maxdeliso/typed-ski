@@ -29,6 +29,8 @@ import Parser D_Module
 import Parser D_Import
 import Parser D_Export
 import Parser D_Type
+import Parser D_Opaque
+import Parser D_Native
 import Parser D_Data
 import Parser D_Def
 import Parser Expr
@@ -153,6 +155,8 @@ poly rec findMainBody = \decls : List Decl =>
         | D_Module name => findMainBody t
         | D_Import moduleName symbolName => findMainBody t
         | D_Export name => findMainBody t
+        | D_Opaque name => findMainBody t
+        | D_Native name => findMainBody t
         | D_Type name => findMainBody t
         | D_Data name ctors => findMainBody t
       })

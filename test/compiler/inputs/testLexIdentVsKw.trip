@@ -26,6 +26,7 @@ export main
 poly listAbc : List U8 = "abc"
 poly listPoly : List U8 = "poly"
 poly listX : List U8 = "x"
+poly listUnderscore : List U8 = "_"
 
 poly isIdentAbcToken = \tok : Token =>
   if [Bool] (eqU8 (tokenTag tok) (tokenTag (T_Ident listX)))
@@ -34,6 +35,11 @@ poly isIdentAbcToken = \tok : Token =>
 
 poly isKeywordPolyToken = \tok : Token =>
   eqU8 (tokenTag tok) (tokenTag T_KwPoly)
+
+poly isIdentUnderscoreToken = \tok : Token =>
+  if [Bool] (eqU8 (tokenTag tok) (tokenTag (T_Ident listX)))
+    (\u : U8 => eqListU8 (tokenText tok) listUnderscore)
+    (\u : U8 => false)
 
 poly main =
   let testIdent =
@@ -52,6 +58,17 @@ poly main =
             (\h : Token => \t : List Token => isKeywordPolyToken h)
     }
   in
+  let testUnderscore =
+    match (tokenize listUnderscore) [Bool] {
+      | Err e => false
+      | Ok toks =>
+          matchList [Token] [Bool] toks false
+            (\h : Token => \t : List Token => isIdentUnderscoreToken h)
+    }
+  in
   if [Bool] testIdent
-    (\u : U8 => testKeyword)
+    (\u : U8 =>
+      if [Bool] testKeyword
+        (\u : U8 => testUnderscore)
+        (\u : U8 => false))
     (\u : U8 => false)

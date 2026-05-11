@@ -203,16 +203,6 @@ export function summarizeTripBundleV1(input: Uint8Array): string {
   return lines.join("\n");
 }
 
-function unsupportedTripSideTopLevelSyntax(source: string): boolean {
-  for (const line of source.split(/\r?\n/)) {
-    const trimmed = line.trimStart();
-    if (trimmed.startsWith("native ") || trimmed.startsWith("opaque ")) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function parsedModuleName(program: TripLangProgram): string {
   const moduleTerms = program.terms.filter((term) => term.kind === "module");
   if (moduleTerms.length === 0) {
@@ -233,18 +223,14 @@ function supportedParseSummaryTerm(term: TripLangTerm): boolean {
     case "type":
     case "poly":
     case "combinator":
-      return true;
     case "native":
+      return true;
     case "lambda":
       return false;
   }
 }
 
 function summarizeParsedModule(name: string, source: string): string[] {
-  if (unsupportedTripSideTopLevelSyntax(source)) {
-    throw new TripBundleV1Error("Parse error");
-  }
-
   let program: TripLangProgram;
   try {
     program = parseTripLang(source);
@@ -264,7 +250,13 @@ function summarizeParsedModule(name: string, source: string): string[] {
   const imports = program.terms.filter((term) => term.kind === "import");
   const exports = program.terms.filter((term) => term.kind === "export");
   const data = program.terms.filter((term) => term.kind === "data");
-  const types = program.terms.filter((term) => term.kind === "type");
+  const types = program.terms.filter(
+    (term) => term.kind === "type" && term.opaque !== true,
+  );
+  const opaques = program.terms.filter(
+    (term) => term.kind === "type" && term.opaque === true,
+  );
+  const natives = program.terms.filter((term) => term.kind === "native");
   const poly = program.terms.filter((term) => term.kind === "poly");
   const combinators = program.terms.filter(
     (term) => term.kind === "combinator",
@@ -306,7 +298,21 @@ function summarizeParsedModule(name: string, source: string): string[] {
     }
   }
 
-  lines.push("native 0", `poly ${poly.length}`);
+  lines.push(`opaque ${opaques.length}`);
+  for (const term of opaques) {
+    if (term.kind === "type") {
+      lines.push(`opaque ${term.name}`);
+    }
+  }
+
+  lines.push(`native ${natives.length}`);
+  for (const term of natives) {
+    if (term.kind === "native") {
+      lines.push(`native ${term.name}`);
+    }
+  }
+
+  lines.push(`poly ${poly.length}`);
   for (const term of poly) {
     if (term.kind === "poly") {
       lines.push(`poly ${term.name}`);

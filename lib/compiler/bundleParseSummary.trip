@@ -36,6 +36,8 @@ import Parser Decl
 import Parser D_Module
 import Parser D_Import
 import Parser D_Export
+import Parser D_Opaque
+import Parser D_Native
 import Parser D_Type
 import Parser D_Data
 import Parser D_Def
@@ -53,12 +55,13 @@ poly prefixImport : List U8 = "import "
 poly prefixExport : List U8 = "export "
 poly prefixData : List U8 = "data "
 poly prefixType : List U8 = "type "
+poly prefixOpaque : List U8 = "opaque "
 poly prefixCtor : List U8 = "ctor "
 poly prefixPoly : List U8 = "poly "
 poly prefixCombinator : List U8 = "combinator "
 poly prefixImportsCount : List U8 = "imports "
 poly prefixExportsCount : List U8 = "exports "
-poly prefixNativeCount : List U8 = "native 0\n"
+poly prefixNative : List U8 = "native "
 poly prefixSummaryEntry : List U8 = "OK\nversion bundle-parse-summary-v1\nentry "
 poly prefixSummaryTarget : List U8 = "\ntarget "
 poly prefixSummaryWrapper : List U8 = "\nwrapper "
@@ -109,6 +112,8 @@ poly rec declaredModuleAcc = \decls : List Decl => \seen : Maybe (List U8) =>
             }
         | D_Import fromName symbolName => declaredModuleAcc t seen
         | D_Export name => declaredModuleAcc t seen
+        | D_Opaque name => declaredModuleAcc t seen
+        | D_Native name => declaredModuleAcc t seen
         | D_Type name => declaredModuleAcc t seen
         | D_Data name ctors => declaredModuleAcc t seen
         | D_Def kind isRec name body => declaredModuleAcc t seen
@@ -125,6 +130,8 @@ poly rec countImports = \decls : List Decl => \count : U8 =>
         | D_Import fromName symbolName => countImports t (inc count)
         | D_Module name => countImports t count
         | D_Export name => countImports t count
+        | D_Opaque name => countImports t count
+        | D_Native name => countImports t count
         | D_Type name => countImports t count
         | D_Data name ctors => countImports t count
         | D_Def kind isRec name body => countImports t count
@@ -138,6 +145,8 @@ poly rec countExports = \decls : List Decl => \count : U8 =>
         | D_Export name => countExports t (inc count)
         | D_Module name => countExports t count
         | D_Import fromName symbolName => countExports t count
+        | D_Opaque name => countExports t count
+        | D_Native name => countExports t count
         | D_Type name => countExports t count
         | D_Data name ctors => countExports t count
         | D_Def kind isRec name body => countExports t count
@@ -152,6 +161,8 @@ poly rec countData = \decls : List Decl => \count : U8 =>
         | D_Module name => countData t count
         | D_Import fromName symbolName => countData t count
         | D_Export name => countData t count
+        | D_Opaque name => countData t count
+        | D_Native name => countData t count
         | D_Type name => countData t count
         | D_Def kind isRec name body => countData t count
       })
@@ -165,8 +176,40 @@ poly rec countTypes = \decls : List Decl => \count : U8 =>
         | D_Module name => countTypes t count
         | D_Import fromName symbolName => countTypes t count
         | D_Export name => countTypes t count
+        | D_Opaque name => countTypes t count
+        | D_Native name => countTypes t count
         | D_Data name ctors => countTypes t count
         | D_Def kind isRec name body => countTypes t count
+      })
+
+poly rec countOpaque = \decls : List Decl => \count : U8 =>
+  matchList [Decl] [U8] decls
+    count
+    (\h : Decl => \t : List Decl =>
+      match h [U8] {
+        | D_Opaque name => countOpaque t (inc count)
+        | D_Module name => countOpaque t count
+        | D_Import fromName symbolName => countOpaque t count
+        | D_Export name => countOpaque t count
+        | D_Native name => countOpaque t count
+        | D_Type name => countOpaque t count
+        | D_Data name ctors => countOpaque t count
+        | D_Def kind isRec name body => countOpaque t count
+      })
+
+poly rec countNative = \decls : List Decl => \count : U8 =>
+  matchList [Decl] [U8] decls
+    count
+    (\h : Decl => \t : List Decl =>
+      match h [U8] {
+        | D_Native name => countNative t (inc count)
+        | D_Module name => countNative t count
+        | D_Import fromName symbolName => countNative t count
+        | D_Export name => countNative t count
+        | D_Opaque name => countNative t count
+        | D_Type name => countNative t count
+        | D_Data name ctors => countNative t count
+        | D_Def kind isRec name body => countNative t count
       })
 
 poly isPolyKind = \kind : DefKind =>
@@ -205,6 +248,8 @@ poly rec countPoly = \decls : List Decl => \count : U8 =>
         | D_Module name => countPoly t count
         | D_Import fromName symbolName => countPoly t count
         | D_Export name => countPoly t count
+        | D_Opaque name => countPoly t count
+        | D_Native name => countPoly t count
         | D_Type name => countPoly t count
         | D_Data name ctors => countPoly t count
       })
@@ -221,6 +266,8 @@ poly rec countCombinator = \decls : List Decl => \count : U8 =>
         | D_Module name => countCombinator t count
         | D_Import fromName symbolName => countCombinator t count
         | D_Export name => countCombinator t count
+        | D_Opaque name => countCombinator t count
+        | D_Native name => countCombinator t count
         | D_Type name => countCombinator t count
         | D_Data name ctors => countCombinator t count
       })
@@ -234,6 +281,8 @@ poly rec emitImports = \decls : List Decl =>
             append [U8] (emitTwoNameLine prefixImport fromName symbolName) (emitImports t)
         | D_Module name => emitImports t
         | D_Export name => emitImports t
+        | D_Opaque name => emitImports t
+        | D_Native name => emitImports t
         | D_Type name => emitImports t
         | D_Data name ctors => emitImports t
         | D_Def kind isRec name body => emitImports t
@@ -247,6 +296,8 @@ poly rec emitExports = \decls : List Decl =>
         | D_Export name => append [U8] (emitOneNameLine prefixExport name) (emitExports t)
         | D_Module name => emitExports t
         | D_Import fromName symbolName => emitExports t
+        | D_Opaque name => emitExports t
+        | D_Native name => emitExports t
         | D_Type name => emitExports t
         | D_Data name ctors => emitExports t
         | D_Def kind isRec name body => emitExports t
@@ -273,6 +324,8 @@ poly rec emitDataDefs = \decls : List Decl =>
         | D_Module name => emitDataDefs t
         | D_Import fromName symbolName => emitDataDefs t
         | D_Export name => emitDataDefs t
+        | D_Opaque name => emitDataDefs t
+        | D_Native name => emitDataDefs t
         | D_Type name => emitDataDefs t
         | D_Def kind isRec name body => emitDataDefs t
       })
@@ -286,8 +339,40 @@ poly rec emitTypes = \decls : List Decl =>
         | D_Module name => emitTypes t
         | D_Import fromName symbolName => emitTypes t
         | D_Export name => emitTypes t
+        | D_Opaque name => emitTypes t
+        | D_Native name => emitTypes t
         | D_Data name ctors => emitTypes t
         | D_Def kind isRec name body => emitTypes t
+      })
+
+poly rec emitOpaques = \decls : List Decl =>
+  matchList [Decl] [List U8] decls
+    (nil [U8])
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Opaque name => append [U8] (emitOneNameLine prefixOpaque name) (emitOpaques t)
+        | D_Module name => emitOpaques t
+        | D_Import fromName symbolName => emitOpaques t
+        | D_Export name => emitOpaques t
+        | D_Native name => emitOpaques t
+        | D_Type name => emitOpaques t
+        | D_Data name ctors => emitOpaques t
+        | D_Def kind isRec name body => emitOpaques t
+      })
+
+poly rec emitNatives = \decls : List Decl =>
+  matchList [Decl] [List U8] decls
+    (nil [U8])
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Native name => append [U8] (emitOneNameLine prefixNative name) (emitNatives t)
+        | D_Module name => emitNatives t
+        | D_Import fromName symbolName => emitNatives t
+        | D_Export name => emitNatives t
+        | D_Opaque name => emitNatives t
+        | D_Type name => emitNatives t
+        | D_Data name ctors => emitNatives t
+        | D_Def kind isRec name body => emitNatives t
       })
 
 poly rec emitPolyDefs = \decls : List Decl =>
@@ -302,6 +387,8 @@ poly rec emitPolyDefs = \decls : List Decl =>
         | D_Module name => emitPolyDefs t
         | D_Import fromName symbolName => emitPolyDefs t
         | D_Export name => emitPolyDefs t
+        | D_Opaque name => emitPolyDefs t
+        | D_Native name => emitPolyDefs t
         | D_Type name => emitPolyDefs t
         | D_Data name ctors => emitPolyDefs t
       })
@@ -318,6 +405,8 @@ poly rec emitCombinatorDefs = \decls : List Decl =>
         | D_Module name => emitCombinatorDefs t
         | D_Import fromName symbolName => emitCombinatorDefs t
         | D_Export name => emitCombinatorDefs t
+        | D_Opaque name => emitCombinatorDefs t
+        | D_Native name => emitCombinatorDefs t
         | D_Type name => emitCombinatorDefs t
         | D_Data name ctors => emitCombinatorDefs t
       })
@@ -353,17 +442,20 @@ poly emitParsedModule = \record : ModuleRecord =>
                 let expBlock = append [U8] (emitCountLine prefixExportsCount (countExports decls #u8(0))) (emitExports decls) in
                 let datBlock = append [U8] (emitCountLine prefixData (countData decls #u8(0))) (emitDataDefs decls) in
                 let typBlock = append [U8] (emitCountLine prefixType (countTypes decls #u8(0))) (emitTypes decls) in
+                let opaqueBlock = append [U8] (emitCountLine prefixOpaque (countOpaque decls #u8(0))) (emitOpaques decls) in
+                let nativeBlock = append [U8] (emitCountLine prefixNative (countNative decls #u8(0))) (emitNatives decls) in
                 let defBlock = append [U8] (emitCountLine prefixPoly (countPoly decls #u8(0))) (emitPolyDefs decls) in
                 let combBlock = append [U8] (emitCountLine prefixCombinator (countCombinator decls #u8(0))) (emitCombinatorDefs decls) in
                 let tail0 = append [U8] defBlock combBlock in
-                let tail1 = append [U8] prefixNativeCount tail0 in
-                let tail2 = append [U8] typBlock tail1 in
-                let tail3 = append [U8] datBlock tail2 in
-                let tail4 = append [U8] expBlock tail3 in
-                let tail5 = append [U8] impBlock tail4 in
-                let tail6 = append [U8] declaredLine tail5 in
+                let tail1 = append [U8] nativeBlock tail0 in
+                let tail2 = append [U8] opaqueBlock tail1 in
+                let tail3 = append [U8] typBlock tail2 in
+                let tail4 = append [U8] datBlock tail3 in
+                let tail5 = append [U8] expBlock tail4 in
+                let tail6 = append [U8] impBlock tail5 in
+                let tail7 = append [U8] declaredLine tail6 in
                 Ok [List U8] [List U8]
-                  (append [U8] modLine tail6)
+                  (append [U8] modLine tail7)
           }
     }
   }

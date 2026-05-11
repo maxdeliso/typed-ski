@@ -1,0 +1,389 @@
+OK
+version bundle-parse-summary-v1
+entry Lexer
+target x86_64-unknown-linux-gnu
+wrapper stdin-list-u8
+modules 3
+module Bin
+declared Bin
+imports 18
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+exports 9
+export incBin
+export addBin
+export mulBin
+export subBin
+export predBin
+export isZeroBin
+export eqBin
+export lteBin
+export gteBin
+data 0
+type 0
+opaque 0
+native 0
+poly 9
+poly isZeroBin
+poly incBin
+poly addBin
+poly mulBin
+poly predBin
+poly subBin
+poly eqBin
+poly lteBin
+poly gteBin
+combinator 0
+module Lexer
+declared Lexer
+imports 32
+import Prelude Bool
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude tail
+import Prelude if
+import Prelude and
+import Prelude or
+import Prelude true
+import Prelude false
+import Prelude Result
+import Prelude Err
+import Prelude Ok
+import Prelude ParseError
+import Prelude MkParseError
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude foldl
+import Prelude append
+import Prelude reverse
+import Prelude U8
+import Prelude eqU8
+import Prelude ltU8
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+exports 68
+export Token
+export T_LParen
+export T_RParen
+export T_LBrace
+export T_RBrace
+export T_LBracket
+export T_RBracket
+export T_Backslash
+export T_Arrow
+export T_FatArrow
+export T_Eq
+export T_Colon
+export T_Hash
+export T_Pipe
+export T_Dot
+export T_Comma
+export T_KwPoly
+export T_KwRec
+export T_KwLet
+export T_KwIn
+export T_KwMatch
+export T_KwModule
+export T_KwImport
+export T_KwExport
+export T_KwNative
+export T_KwOpaque
+export T_KwCombinator
+export T_KwType
+export T_KwData
+export T_Ident
+export T_Nat
+export T_EOF
+export tokenTag
+export tokenText
+export tokenNatValue
+export tokenize
+export tokenizeAcc
+export kwPoly
+export isKeywordPoly
+export keywordWords
+export anyEqWord
+export isKeywordWord
+export keywordTokenFromWordData
+export keywordTokenFromWordType
+export keywordTokenFromWordCombinator
+export keywordTokenFromWordExport
+export keywordTokenFromWordNative
+export keywordTokenFromWordOpaque
+export keywordTokenFromWordImport
+export keywordTokenFromWordModule
+export keywordTokenFromWordMatch
+export keywordTokenFromWordIn
+export keywordTokenFromWordLet
+export keywordTokenFromWordRec
+export keywordTokenFromWord
+export eqListU8
+export mapResult
+export isSpaceU8
+export isDigitU8
+export isAlphaU8
+export isIdentCharU8
+export simpleTokensU8
+export lookupTokenU8
+export digitValueU8
+export timesTen
+export consumeIdent
+export consumeDigits
+export consumeString
+data 1
+data Token
+ctor T_Tagged 1
+ctor T_Ident 1
+ctor T_Nat 1
+type 0
+opaque 0
+native 0
+poly 112
+poly T_LParen
+poly T_RParen
+poly T_LBrace
+poly T_RBrace
+poly T_LBracket
+poly T_RBracket
+poly T_Backslash
+poly T_Arrow
+poly T_FatArrow
+poly T_Eq
+poly T_Colon
+poly T_Hash
+poly T_Pipe
+poly T_Dot
+poly T_Comma
+poly T_KwPoly
+poly T_KwRec
+poly T_KwLet
+poly T_KwIn
+poly T_KwMatch
+poly T_KwModule
+poly T_KwImport
+poly T_KwExport
+poly T_KwNative
+poly T_KwOpaque
+poly T_KwCombinator
+poly T_KwType
+poly T_KwData
+poly T_EOF
+poly tokenTag
+poly tokenTaggedTextData
+poly tokenTaggedTextType
+poly tokenTaggedTextCombinator
+poly tokenTaggedTextOpaque
+poly tokenTaggedTextNative
+poly tokenTaggedTextExport
+poly tokenTaggedTextImport
+poly tokenTaggedTextModule
+poly tokenTaggedTextMatch
+poly tokenTaggedTextIn
+poly tokenTaggedTextLet
+poly tokenTaggedTextRec
+poly tokenTaggedText
+poly tokenText
+poly tokenNatValue
+poly u8_space
+poly u8_newline
+poly u8_cr
+poly u8_tab
+poly u8_underscore
+poly u8_quote
+poly u8_squote
+poly u8_backslash
+poly u8_gt
+poly u8_dash
+poly u8_eq
+poly u8_n
+poly u8_r
+poly isSpaceU8
+poly isDigitU8
+poly isAlphaU8
+poly isIdentCharU8
+poly digitToAscii
+poly singletonU8
+poly u8ToDigits
+poly eqListU8
+poly kwPoly
+poly isKeywordPoly
+poly keywordWords
+poly anyEqWord
+poly isKeywordWord
+poly keywordTokenFromWordP
+poly keywordTokenFromWordR
+poly keywordTokenFromWordL
+poly keywordTokenFromWordI
+poly keywordTokenFromWordM
+poly keywordTokenFromWordN
+poly keywordTokenFromWordO
+poly keywordTokenFromWordE
+poly keywordTokenFromWordT
+poly keywordTokenFromWordC
+poly keywordTokenFromWordData
+poly keywordTokenFromWordType
+poly keywordTokenFromWordCombinator
+poly keywordTokenFromWordOpaque
+poly keywordTokenFromWordNative
+poly keywordTokenFromWordExport
+poly keywordTokenFromWordImport
+poly keywordTokenFromWordModule
+poly keywordTokenFromWordMatch
+poly keywordTokenFromWordIn
+poly keywordTokenFromWordLet
+poly keywordTokenFromWordRec
+poly keywordTokenFromWord
+poly simpleTokenFromU8Hash
+poly simpleTokenFromU8Colon
+poly simpleTokenFromU8Backslash
+poly simpleTokenFromU8Bracket
+poly simpleTokenFromU8Brace
+poly simpleTokenFromU8
+poly mapResult
+poly simpleTokensU8
+poly lookupTokenU8
+poly consumeIdent
+poly consumeDigits
+poly consumeString
+poly escapedCharValue
+poly charLiteralError
+poly finishCharLiteral
+poly consumeCharLiteral
+poly tokenizeAcc
+poly tokenize
+combinator 0
+module Prelude
+declared Prelude
+imports 0
+exports 50
+export Bool
+export id
+export true
+export false
+export pair
+export fst
+export snd
+export if
+export not
+export and
+export or
+export readOne
+export writeOne
+export List
+export nil
+export cons
+export matchList
+export head
+export tail
+export error
+export Pair
+export MkPair
+export Result
+export Err
+export Ok
+export ParseError
+export MkParseError
+export Parser
+export Maybe
+export Some
+export None
+export append
+export map
+export foldl
+export takeWhile
+export dropWhile
+export span
+export reverse
+export Bin
+export BZ
+export B0
+export B1
+export eqU8
+export ltU8
+export lteU8
+export addU8
+export subU8
+export divU8
+export modU8
+export U8
+data 5
+data Pair
+ctor MkPair 2
+data Result
+ctor Err 1
+ctor Ok 1
+data Bin
+ctor BZ 0
+ctor B0 1
+ctor B1 1
+data ParseError
+ctor MkParseError 1
+data Maybe
+ctor None 0
+ctor Some 1
+type 3
+type Bool
+type List
+type Parser
+opaque 1
+opaque U8
+native 8
+native eqU8
+native ltU8
+native addU8
+native subU8
+native divU8
+native modU8
+native readOne
+native writeOne
+poly 25
+poly id
+poly true
+poly false
+poly pair
+poly fst
+poly snd
+poly not
+poly and
+poly or
+poly lteU8
+poly if
+poly nil
+poly cons
+poly matchList
+poly head
+poly tail
+poly append
+poly map
+poly foldl
+poly takeWhile
+poly dropWhile
+poly span
+poly reverseAcc
+poly reverse
+poly error
+combinator 0

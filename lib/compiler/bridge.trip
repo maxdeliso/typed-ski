@@ -44,6 +44,8 @@ import Parser D_Module
 import Parser D_Import
 import Parser D_Export
 import Parser D_Type
+import Parser D_Opaque
+import Parser D_Native
 import Parser D_Def
 import Parser D_Data
 import Core Core
@@ -410,6 +412,8 @@ poly rec filterElaboratableDecls = \decls : List Decl =>
         | D_Module name => filterElaboratableDecls t
         | D_Import mod sym => filterElaboratableDecls t
         | D_Export sym => filterElaboratableDecls t
+        | D_Opaque name => filterElaboratableDecls t
+        | D_Native name => filterElaboratableDecls t
         | D_Type name => filterElaboratableDecls t
       })
 
@@ -440,6 +444,8 @@ poly elaborateElaboratableDecl = \state : State => \decl : Decl =>
     | D_Module name => Ok [List U8] [State] state
     | D_Import mod sym => Ok [List U8] [State] state
     | D_Export sym => Ok [List U8] [State] state
+    | D_Opaque name => Ok [List U8] [State] state
+    | D_Native name => Ok [List U8] [State] state
     | D_Type name => Ok [List U8] [State] state
   }}
 

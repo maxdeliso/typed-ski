@@ -238,7 +238,11 @@ export function isAtDefinitionKeywordLine(state: ParserState): boolean {
   const nextChars = state.buf.slice(state.idx, state.idx + sliceLength);
   const lines = nextChars.split("\n");
   const firstLine = lines[0]!.trim();
-  return DEFINITION_KEYWORDS.some((keyword: string) =>
-    firstLine.startsWith(keyword),
-  );
+  return DEFINITION_KEYWORDS.some((keyword: string) => {
+    if (firstLine === keyword) {
+      return true;
+    }
+    const nextChar = firstLine[keyword.length];
+    return firstLine.startsWith(keyword) && /\s/.test(nextChar ?? "");
+  });
 }

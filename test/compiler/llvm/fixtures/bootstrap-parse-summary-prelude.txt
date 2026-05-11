@@ -1,0 +1,117 @@
+OK
+version bundle-parse-summary-v1
+entry Prelude
+target x86_64-unknown-linux-gnu
+wrapper stdin-list-u8
+modules 1
+module Prelude
+declared Prelude
+imports 0
+exports 50
+export Bool
+export id
+export true
+export false
+export pair
+export fst
+export snd
+export if
+export not
+export and
+export or
+export readOne
+export writeOne
+export List
+export nil
+export cons
+export matchList
+export head
+export tail
+export error
+export Pair
+export MkPair
+export Result
+export Err
+export Ok
+export ParseError
+export MkParseError
+export Parser
+export Maybe
+export Some
+export None
+export append
+export map
+export foldl
+export takeWhile
+export dropWhile
+export span
+export reverse
+export Bin
+export BZ
+export B0
+export B1
+export eqU8
+export ltU8
+export lteU8
+export addU8
+export subU8
+export divU8
+export modU8
+export U8
+data 5
+data Pair
+ctor MkPair 2
+data Result
+ctor Err 1
+ctor Ok 1
+data Bin
+ctor BZ 0
+ctor B0 1
+ctor B1 1
+data ParseError
+ctor MkParseError 1
+data Maybe
+ctor None 0
+ctor Some 1
+type 3
+type Bool
+type List
+type Parser
+opaque 1
+opaque U8
+native 8
+native eqU8
+native ltU8
+native addU8
+native subU8
+native divU8
+native modU8
+native readOne
+native writeOne
+poly 25
+poly id
+poly true
+poly false
+poly pair
+poly fst
+poly snd
+poly not
+poly and
+poly or
+poly lteU8
+poly if
+poly nil
+poly cons
+poly matchList
+poly head
+poly tail
+poly append
+poly map
+poly foldl
+poly takeWhile
+poly dropWhile
+poly span
+poly reverseAcc
+poly reverse
+poly error
+combinator 0

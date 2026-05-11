@@ -11,6 +11,7 @@ exports 1
 export seven
 data 0
 type 0
+opaque 0
 native 0
 poly 1
 poly seven
@@ -24,6 +25,7 @@ exports 1
 export main
 data 0
 type 0
+opaque 0
 native 0
 poly 1
 poly main

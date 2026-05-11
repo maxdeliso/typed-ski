@@ -262,6 +262,7 @@ enum {
   TOPO_DAG_PTR_WIDTH = 8,
   TOPO_DAG_RECORD_WIDTH = TOPO_DAG_TERM_WIDTH + (TOPO_DAG_PTR_WIDTH * 2),
   TOPO_DAG_RECORD_STRIDE = TOPO_DAG_RECORD_WIDTH + 1,
+  TOPO_DAG_MAX_RECORDS = 4 * 1024 * 1024,
 };
 
 #define TOPO_DAG_NULL_PTR 0xffffffffu
@@ -382,8 +383,8 @@ uint32_t parse_dag(const char *buf, size_t len, size_t *end_idx) {
   }
   size_t count =
       1 + ((dag_len - TOPO_DAG_RECORD_WIDTH) / TOPO_DAG_RECORD_STRIDE);
-  if (count > 1024 * 1024) {
-    fprintf(stderr, "parse_dag: token count exceeds limit (1M records)\n");
+  if (count > TOPO_DAG_MAX_RECORDS) {
+    fprintf(stderr, "parse_dag: token count exceeds limit (4M records)\n");
     return EMPTY;
   }
 

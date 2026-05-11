@@ -86,7 +86,7 @@ export async function compileLlvmToExecutable(
     exePath,
     ...(process.platform !== "win32"
       ? ["-lm", "-lpthread", "-D_POSIX_C_SOURCE=200809L", "-D_GNU_SOURCE"]
-      : []),
+      : ["-Wl,/STACK:67108864"]),
   ];
 
   const result = spawnSync(CLANG, args, { encoding: "utf8" });

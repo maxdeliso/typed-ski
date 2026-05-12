@@ -22,7 +22,7 @@ describe("LLVM emitter - executable wrapper", () => {
       [
         'target triple = "arm64-apple-darwin"',
         "",
-        "define i8 @trip_fn_Main_main() {",
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  ret i8 0",
         "}",
@@ -52,7 +52,7 @@ describe("LLVM emitter - executable wrapper", () => {
       [
         'target triple = "x86_64-unknown-linux-gnu"',
         "",
-        "define i8 @trip_fn_Main_main() {",
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  ret i8 0",
         "}",
@@ -82,7 +82,7 @@ describe("LLVM emitter - executable wrapper", () => {
       [
         'target triple = "x86_64-pc-windows-msvc"',
         "",
-        "define i8 @trip_fn_Main_main() {",
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  ret i8 0",
         "}",
@@ -107,7 +107,7 @@ describe("LLVM emitter - executable wrapper", () => {
     assert.equal(
       emitLlvmModule(module, { emitMainWrapper: true }),
       [
-        "define void @trip_fn_Main_main() {",
+        "define void @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  ret void",
         "}",

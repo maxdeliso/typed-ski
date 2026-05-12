@@ -294,6 +294,8 @@ data Token =
       "T_KwModule",
       "T_KwImport",
       "T_KwExport",
+      "T_KwNative",
+      "T_KwOpaque",
       "T_KwCombinator",
       "T_KwType",
       "T_KwData",
@@ -515,6 +517,17 @@ data Token =
     assert.deepStrictEqual(term, {
       kind: "export",
       name: "Baz",
+    });
+  });
+
+  it("marks opaque type definitions", () => {
+    const input = "opaque type Handle";
+    const [term] = parseTripLang(input).terms;
+    assert.deepStrictEqual(term, {
+      kind: "type",
+      name: "Handle",
+      opaque: true,
+      type: mkTypeVariable("Handle"),
     });
   });
 

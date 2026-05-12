@@ -19,12 +19,16 @@ import Lexer tokenTag
 import Lexer T_KwLet
 import Lexer T_KwIn
 import Lexer T_KwMatch
+import Lexer T_KwNative
+import Lexer T_KwOpaque
 
 export main
 
 poly listLet : List U8 = "let"
 poly listMatch : List U8 = "match"
 poly listIn : List U8 = "in"
+poly listNative : List U8 = "native"
+poly listOpaque : List U8 = "opaque"
 
 poly firstHasTag = \src : List U8 => \expectedTag : U8 =>
   match (tokenize src) [Bool] {
@@ -39,6 +43,12 @@ poly main =
   if [Bool] (firstHasTag listLet (tokenTag T_KwLet))
     (\u : U8 =>
       if [Bool] (firstHasTag listMatch (tokenTag T_KwMatch))
-        (\u : U8 => firstHasTag listIn (tokenTag T_KwIn))
+        (\u : U8 =>
+          if [Bool] (firstHasTag listIn (tokenTag T_KwIn))
+            (\u : U8 =>
+              if [Bool] (firstHasTag listNative (tokenTag T_KwNative))
+                (\u : U8 => firstHasTag listOpaque (tokenTag T_KwOpaque))
+                (\u : U8 => false))
+            (\u : U8 => false))
         (\u : U8 => false))
     (\u : U8 => false)

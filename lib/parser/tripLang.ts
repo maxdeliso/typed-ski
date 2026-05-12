@@ -186,6 +186,7 @@ function parseTripLangDefinition(
       {
         kind: TYPE,
         name: typeName,
+        opaque: true,
         type: mkTypeVariable(typeName),
       },
       skipWhitespace(opaqueFinalState),

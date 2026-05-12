@@ -110,12 +110,14 @@ export interface BlockCallOp {
   name: string;
   args: BlockValueRef[];
   typeArgs?: MiniType[];
+  isTail?: boolean;
 }
 
 export interface BlockRuntimeCallOp {
   kind: "runtimeCall";
   name: RuntimeSymbol;
   args: BlockValueRef[];
+  isTail?: boolean;
 }
 
 export interface BlockConstructOp {

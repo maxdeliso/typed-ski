@@ -20,6 +20,8 @@ import Parser Decl
 import Parser D_Module
 import Parser D_Import
 import Parser D_Export
+import Parser D_Opaque
+import Parser D_Native
 import Parser D_Type
 import Parser D_Data
 import Parser D_Def
@@ -55,6 +57,8 @@ poly main =
                     | D_Module name => false
                     | D_Import m s => false
                     | D_Export x => false
+                    | D_Opaque x => false
+                    | D_Native x => false
                     | D_Type x => false
                     | D_Data x ctors => false
                     | D_Def kind isRec name body =>

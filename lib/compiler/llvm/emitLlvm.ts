@@ -57,6 +57,7 @@ interface FunctionEmitContext extends ModuleEmitContext {
   incoming: ReadonlyMap<string, readonly EmitIncomingEdge[]>;
   caseUnpacks: ReadonlyMap<string, readonly CaseUnpackBlock[]>;
   expectedReturnType: MiniType;
+  runtimePointers: ReadonlyMap<RuntimeSymbol, string>;
 }
 
 type IncomingValue =
@@ -98,13 +99,15 @@ export function emitLlvmModule(
     writer.line(printRuntimeDeclaration(symbol));
   }
   if (representation === "boxed-runtime" && needsObjectRuntime(module)) {
-    writer.line("declare ptr @trip_alloc_obj(i64, i64)");
-    writer.line("declare void @trip_obj_set_field(ptr, i64, i64)");
-    writer.line("declare i64 @trip_obj_tag(ptr)");
-    writer.line("declare i64 @trip_obj_field(ptr, i64)");
+    writer.line("declare noalias ptr @trip_alloc_obj(i64, i64) nounwind");
+    writer.line("declare void @trip_obj_set_field(ptr, i64, i64) nounwind");
+    writer.line("declare i64 @trip_obj_tag(ptr) nounwind readonly willreturn");
+    writer.line(
+      "declare i64 @trip_obj_field(ptr, i64) nounwind readonly willreturn",
+    );
   }
   if (mainWrapper?.kind === "stdin-list-u8") {
-    writer.line("declare ptr @trip_read_stdin_list_u8()");
+    writer.line("declare noalias ptr @trip_read_stdin_list_u8() nounwind");
   }
   if (
     runtimeSymbols.length > 0 ||
@@ -261,23 +264,45 @@ function emitFunction(
   moduleContext: ModuleEmitContext,
 ): void {
   const controlFlow = analyzeEmitControlFlow(fn, moduleContext);
+
+  const runtimeUsage = new Map<RuntimeSymbol, number>();
+  for (const block of fn.blocks) {
+    for (const instruction of block.instructions) {
+      if (instruction.op.kind === "runtimeCall") {
+        const name = instruction.op.name as RuntimeSymbol;
+        runtimeUsage.set(name, (runtimeUsage.get(name) ?? 0) + 1);
+      }
+    }
+  }
+
+  const runtimePointers = new Map<RuntimeSymbol, string>();
   const context: FunctionEmitContext = {
     ...moduleContext,
     aliases: collectMoveAliases(fn),
     incoming: controlFlow.incoming,
     caseUnpacks: controlFlow.caseUnpacks,
     expectedReturnType: fn.returnType,
+    runtimePointers,
   };
+
   const params = fn.params
     .map(
       (param) => `${lowerLlvmValueType(param.type)} ${llvmLocalName(param.id)}`,
     )
     .join(", ");
   writer.line(
-    `define ${lowerLlvmReturnType(fn.returnType)} ${llvmFunctionName(
-      fn.name,
-    )}(${params}) {`,
+    `define ${lowerLlvmReturnType(
+      fn.returnType,
+    )} ${llvmFunctionName(fn.name)}(${params}) local_unnamed_addr nounwind {`,
   );
+
+  // Emit runtime pointer aliases for frequently used functions to enable 2-byte calls
+  runtimeUsage.forEach((count, name) => {
+    if (count > 2) {
+      const ptrName = `%rt_ptr_${sanitizeLlvmIdentifier(name)}`;
+      runtimePointers.set(name, ptrName);
+    }
+  });
 
   fn.blocks.forEach((block, index) => {
     emitBlock(writer, block, index === 0, context);
@@ -393,6 +418,14 @@ function emitBlock(
   writer.line(`${llvmLabelName(block.label)}:`);
   if (!isEntry) {
     emitPhiNodes(writer, block, context);
+  }
+
+  if (isEntry) {
+    context.runtimePointers.forEach((ptrName, symbol) => {
+      writer.indented(
+        `${ptrName} = bitcast ptr ${llvmRuntimeName(symbol)} to ptr`,
+      );
+    });
   }
 
   for (const instruction of block.instructions) {
@@ -696,6 +729,9 @@ function emitCall(
   args: BlockValueRef[],
   context: FunctionEmitContext,
 ): string {
+  if (instruction.op.kind !== "call") {
+    throw new LlvmEmissionError("emitCall called for non-call op");
+  }
   if (!targetName) {
     throw new LlvmEmissionError("Cannot emit call to unknown function");
   }
@@ -703,15 +739,16 @@ function emitCall(
   const renderedArgs = args
     .map((arg) => formatTypedValue(arg, context))
     .join(", ");
+  const tail = instruction.op.isTail ? "tail " : "";
   if (resultType === "void") {
-    return `call void ${targetName}(${renderedArgs})`;
+    return `${tail}call void ${targetName}(${renderedArgs})`;
   }
   if (!instruction.result) {
     throw new LlvmEmissionError("Cannot emit non-void call without result");
   }
   return `${llvmLocalName(
     instruction.result.id,
-  )} = call ${resultType} ${targetName}(${renderedArgs})`;
+  )} = ${tail}call ${resultType} ${targetName}(${renderedArgs})`;
 }
 
 function emitRuntimeCall(
@@ -725,9 +762,14 @@ function emitRuntimeCall(
   const renderedArgs = instruction.op.args
     .map((arg) => formatTypedValue(arg, context))
     .join(", ");
-  const runtimeName = llvmRuntimeName(instruction.op.name as RuntimeSymbol);
+
+  const name = instruction.op.name as RuntimeSymbol;
+  const cachedPtr = context.runtimePointers.get(name);
+  const runtimeName = cachedPtr ?? llvmRuntimeName(name);
+
+  const tail = instruction.op.isTail ? "tail " : "";
   if (resultType === "void") {
-    return `call void ${runtimeName}(${renderedArgs})`;
+    return `${tail}call void ${runtimeName}(${renderedArgs})`;
   }
   if (!instruction.result) {
     throw new LlvmEmissionError(
@@ -736,7 +778,7 @@ function emitRuntimeCall(
   }
   return `${llvmLocalName(
     instruction.result.id,
-  )} = call ${resultType} ${runtimeName}(${renderedArgs})`;
+  )} = ${tail}call ${resultType} ${runtimeName}(${renderedArgs})`;
 }
 
 function emitTerminator(
@@ -832,18 +874,21 @@ function emitCaseUnpackBlocks(
   for (const unpack of unpacks) {
     writer.line(`${llvmLabelName(unpack.label)}:`);
     unpack.fieldValues.forEach((field, index) => {
+      const rawName = field.rawName;
       writer.indented(
-        `${field.rawName} = call i64 @trip_obj_field(ptr ${formatValue(
+        `${rawName} = call i64 @trip_obj_field(ptr ${formatValue(
           unpack.scrutinee,
           context,
         )}, i64 ${index})`,
       );
-      const converted = valueFromWord(
-        field.rawName,
-        field.valueName,
-        field.param,
-      );
-      converted.forEach((line) => writer.indented(line));
+
+      const targetType = lowerLlvmValueType(field.param);
+      if (targetType === "i64") {
+        writer.indented(`${field.valueName} = add i64 ${rawName}, 0`);
+      } else {
+        const converted = valueFromWord(rawName, field.valueName, field.param);
+        converted.forEach((line) => writer.indented(line));
+      }
     });
     writer.indented(`br label ${llvmLabelRef(unpack.alt.target)}`);
   }
@@ -893,7 +938,8 @@ function valueFromWord(
   valueName: string,
   type: MiniType,
 ): string[] {
-  switch (lowerLlvmValueType(type)) {
+  const targetType = lowerLlvmValueType(type);
+  switch (targetType) {
     case "i64":
       return [`${valueName} = add i64 ${rawName}, 0`];
     case "i8":

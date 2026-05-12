@@ -57,12 +57,12 @@ describe("LLVM emitter - boxed runtime", () => {
     assert.equal(
       emitLlvmModule(module, { representation: "boxed-runtime" }),
       [
-        "declare ptr @trip_alloc_obj(i64, i64)",
-        "declare void @trip_obj_set_field(ptr, i64, i64)",
-        "declare i64 @trip_obj_tag(ptr)",
-        "declare i64 @trip_obj_field(ptr, i64)",
+        "declare noalias ptr @trip_alloc_obj(i64, i64) nounwind",
+        "declare void @trip_obj_set_field(ptr, i64, i64) nounwind",
+        "declare i64 @trip_obj_tag(ptr) nounwind readonly willreturn",
+        "declare i64 @trip_obj_field(ptr, i64) nounwind readonly willreturn",
         "",
-        "define ptr @trip_fn_Main_main() {",
+        "define ptr @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  %v1 = call ptr @trip_alloc_obj(i64 7, i64 1)",
         "  %_v1_field0_word = zext i8 65 to i64",
@@ -101,12 +101,12 @@ describe("LLVM emitter - boxed runtime", () => {
     assert.equal(
       emitLlvmModule(module, { representation: "boxed-runtime" }),
       [
-        "declare ptr @trip_alloc_obj(i64, i64)",
-        "declare void @trip_obj_set_field(ptr, i64, i64)",
-        "declare i64 @trip_obj_tag(ptr)",
-        "declare i64 @trip_obj_field(ptr, i64)",
+        "declare noalias ptr @trip_alloc_obj(i64, i64) nounwind",
+        "declare void @trip_obj_set_field(ptr, i64, i64) nounwind",
+        "declare i64 @trip_obj_tag(ptr) nounwind readonly willreturn",
+        "declare i64 @trip_obj_field(ptr, i64) nounwind readonly willreturn",
         "",
-        "define i8 @trip_fn_Main_main(ptr %v0) {",
+        "define i8 @trip_fn_Main_main(ptr %v0) local_unnamed_addr nounwind {",
         "entry:",
         "  %entry_case_tag = call i64 @trip_obj_tag(ptr %v0)",
         "  switch i64 %entry_case_tag, label %entry_case_unreachable [",
@@ -140,9 +140,9 @@ describe("LLVM emitter - boxed runtime", () => {
         mainWrapper: { kind: "stdin-list-u8" },
       }),
       [
-        "declare ptr @trip_read_stdin_list_u8()",
+        "declare noalias ptr @trip_read_stdin_list_u8() nounwind",
         "",
-        "define void @trip_fn_Compiler_main(ptr %v0) {",
+        "define void @trip_fn_Compiler_main(ptr %v0) local_unnamed_addr nounwind {",
         "entry:",
         "  ret void",
         "}",
@@ -253,7 +253,7 @@ describe("LLVM emitter - boxed runtime", () => {
     assert.equal(
       emitLlvmModule(module, { representation: "boxed-runtime" }),
       [
-        "define i8 @trip_fn_Main_boolToU8(i1 %v0) {",
+        "define i8 @trip_fn_Main_boolToU8(i1 %v0) local_unnamed_addr nounwind {",
         "entry:",
         "  br i1 %v0, label %ifTrue, label %ifFalse",
         "ifTrue:",

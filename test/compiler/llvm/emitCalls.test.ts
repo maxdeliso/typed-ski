@@ -62,13 +62,13 @@ describe("LLVM emitter - direct calls", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "define i8 @trip_fn_Main_main() {",
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  %v0 = call i8 @trip_fn_Main_inc(i8 41)",
         "  ret i8 %v0",
         "}",
         "",
-        "define i8 @trip_fn_Main_inc(i8 %v0) {",
+        "define i8 @trip_fn_Main_inc(i8 %v0) local_unnamed_addr nounwind {",
         "entry:",
         "  %v1 = add i8 %v0, 1",
         "  ret i8 %v1",

@@ -28,6 +28,7 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(__dirname, "fixtures");
+const projectRoot = join(__dirname, "../../..");
 
 function decode(bytes: Uint8Array): string {
   return decoder.decode(bytes);
@@ -55,6 +56,35 @@ function bundleSource(fields: {
     `modules ${fields.modules.length}`,
     ...fields.modules.map((module) => moduleRecord(module.name, module.source)),
   ].join("\n");
+}
+
+function realBootstrapModuleSource(name: string): string {
+  const directPath = join(projectRoot, "lib", `${name.toLowerCase()}.trip`);
+  try {
+    return readFileSync(directPath, "utf8");
+  } catch {
+    return readFileSync(
+      join(
+        projectRoot,
+        "lib",
+        "compiler",
+        `${name.charAt(0).toLowerCase()}${name.slice(1)}.trip`,
+      ),
+      "utf8",
+    );
+  }
+}
+
+function realBootstrapBundle(moduleNames: string[]): Uint8Array {
+  return serializeTripBundleV1({
+    entryModule: moduleNames.at(-1) ?? "Prelude",
+    target: { kind: "x86_64-unknown-linux-gnu" },
+    mainWrapper: { kind: "stdin-list-u8" },
+    modules: moduleNames.map((name) => ({
+      name,
+      source: realBootstrapModuleSource(name),
+    })),
+  });
 }
 
 describe("bundle-v1", () => {
@@ -142,6 +172,49 @@ poly main = #u8(7)
     );
   });
 
+  it("host parsed module summaries cover generated real bootstrap source bundles", () => {
+    const goldenCases: Array<[string, string[], string]> = [
+      ["Prelude", ["Prelude"], "bootstrap-parse-summary-prelude.txt"],
+      [
+        "Prelude + Bin + Lexer",
+        ["Prelude", "Bin", "Lexer"],
+        "bootstrap-parse-summary-prelude-bin-lexer.txt",
+      ],
+    ];
+
+    for (const [name, moduleNames, goldenFile] of goldenCases) {
+      assert.equal(
+        summarizeTripBundleV1ParsedModules(realBootstrapBundle(moduleNames)),
+        readFileSync(join(fixtureDir, goldenFile), "utf8"),
+        name,
+      );
+    }
+
+    const closureCases = [
+      ["Prelude"],
+      ["Prelude", "Bin"],
+      ["Prelude", "Bin", "Lexer"],
+      ["Prelude", "Bin", "Lexer", "Parser"],
+      ["Prelude", "Bin", "Lexer", "Parser", "BundleSummary"],
+      [
+        "Prelude",
+        "Bin",
+        "Lexer",
+        "Parser",
+        "BundleSummary",
+        "BundleParseSummary",
+      ],
+    ];
+
+    for (const moduleNames of closureCases) {
+      assert.match(
+        summarizeTripBundleV1ParsedModules(realBootstrapBundle(moduleNames)),
+        /^OK\nversion bundle-parse-summary-v1\n/,
+        moduleNames.join(" + "),
+      );
+    }
+  });
+
   it("preserves declaration source order in host parsed module summaries", () => {
     const source = `module Main
 import Alpha one
@@ -150,6 +223,9 @@ export second
 export first
 data Box = MkBox U8 | MkOther
 type Alias = U8
+opaque type Handle
+native secondNative : U8
+native firstNative : U8
 combinator raw = S
 poly zed = #u8(0)
 poly alpha = #u8(1)
@@ -185,7 +261,11 @@ poly alpha = #u8(1)
         "ctor MkOther 0",
         "type 1",
         "type Alias",
-        "native 0",
+        "opaque 1",
+        "opaque Handle",
+        "native 2",
+        "native secondNative",
+        "native firstNative",
         "poly 2",
         "poly zed",
         "poly alpha",
@@ -233,7 +313,7 @@ poly main = #u8(7)
         /source module mismatch/,
       ],
       [
-        "unsupported native syntax",
+        "malformed native syntax",
         serializeTripBundleV1({
           entryModule: "Main",
           target: { kind: "x86_64-unknown-linux-gnu" },
@@ -241,7 +321,7 @@ poly main = #u8(7)
             {
               name: "Main",
               source: `module Main
-native readOne : U8
+native readOne = U8
 `,
             },
           ],
@@ -249,7 +329,7 @@ native readOne : U8
         /Parse error/,
       ],
       [
-        "unsupported opaque syntax",
+        "malformed opaque syntax",
         serializeTripBundleV1({
           entryModule: "Main",
           target: { kind: "x86_64-unknown-linux-gnu" },
@@ -257,7 +337,7 @@ native readOne : U8
             {
               name: "Main",
               source: `module Main
-opaque type Handle
+opaque Handle
 `,
             },
           ],
@@ -347,6 +427,30 @@ opaque type Handle
     }
   });
 
+  it("Trip-side native parsed module summary executable matches generated real bootstrap source bundles", async () => {
+    const moduleSets = [
+      ["Prelude"],
+      ["Prelude", "Bin"],
+      ["Prelude", "Bin", "Lexer"],
+    ];
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-parse-summary-real-"),
+    );
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      for (const moduleNames of moduleSets) {
+        const bundleBytes = realBootstrapBundle(moduleNames);
+        const expectedSummary = summarizeTripBundleV1ParsedModules(bundleBytes);
+        const result = runExecutable(exePath, bundleBytes);
+        assert.equal(result.status, 0, moduleNames.join(" + "));
+        assert.equal(result.stderr, "", moduleNames.join(" + "));
+        assert.equal(result.stdout, expectedSummary, moduleNames.join(" + "));
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it("Trip-side native parsed module summary executable rejects malformed sources", async () => {
     const tempDir = await mkdtemp(
       join(tmpdir(), "typed-ski-bundle-parse-summary-errors-"),
@@ -389,7 +493,7 @@ poly main = #u8(7)
           /ERR:source module mismatch/,
         ],
         [
-          "unsupported native syntax",
+          "malformed native syntax",
           serializeTripBundleV1({
             entryModule: "Main",
             target: { kind: "x86_64-unknown-linux-gnu" },
@@ -397,7 +501,23 @@ poly main = #u8(7)
               {
                 name: "Main",
                 source: `module Main
-native readOne : U8
+native readOne = U8
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "malformed opaque syntax",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+opaque Handle
 `,
               },
             ],
@@ -637,7 +757,10 @@ poly main = \\source : List U8 => #u8(0)
         ],
       }),
     );
-    assert.match(llvm, /declare ptr @trip_read_stdin_list_u8\(\)/);
+    assert.match(
+      llvm,
+      /declare (noalias )?ptr @trip_read_stdin_list_u8\(\)( nounwind)?/,
+    );
     assert.match(llvm, /%trip_source = call ptr @trip_read_stdin_list_u8\(\)/);
     assert.match(llvm, /call i8 @trip_fn_Main_main\(ptr %trip_source\)/);
   });
@@ -648,7 +771,10 @@ poly main = \\source : List U8 => #u8(0)
     );
     const llvm = compileTripBundleV1ToLlvm(bundleBytes);
     assert.match(llvm, /target triple = "x86_64-unknown-linux-gnu"/);
-    assert.match(llvm, /declare ptr @trip_read_stdin_list_u8\(\)/);
+    assert.match(
+      llvm,
+      /declare (noalias )?ptr @trip_read_stdin_list_u8\(\)( nounwind)?/,
+    );
     assert.match(llvm, /define i8 @trip_fn_Lib_seven\(\)/);
     assert.match(llvm, /define i8 @trip_fn_Main_main\(ptr %v\d+\)/);
   });

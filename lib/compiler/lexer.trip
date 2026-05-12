@@ -29,6 +29,9 @@ import Prelude reverse
 import Prelude U8
 import Prelude eqU8
 import Prelude ltU8
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
 
 export Token
 export T_LParen
@@ -54,6 +57,8 @@ export T_KwMatch
 export T_KwModule
 export T_KwImport
 export T_KwExport
+export T_KwNative
+export T_KwOpaque
 export T_KwCombinator
 export T_KwType
 export T_KwData
@@ -74,6 +79,8 @@ export keywordTokenFromWordData
 export keywordTokenFromWordType
 export keywordTokenFromWordCombinator
 export keywordTokenFromWordExport
+export keywordTokenFromWordNative
+export keywordTokenFromWordOpaque
 export keywordTokenFromWordImport
 export keywordTokenFromWordModule
 export keywordTokenFromWordMatch
@@ -123,6 +130,8 @@ poly T_KwMatch : Token = T_Tagged #u8(20)
 poly T_KwModule : Token = T_Tagged #u8(21)
 poly T_KwImport : Token = T_Tagged #u8(22)
 poly T_KwExport : Token = T_Tagged #u8(23)
+poly T_KwNative : Token = T_Tagged #u8(24)
+poly T_KwOpaque : Token = T_Tagged #u8(25)
 poly T_KwCombinator : Token = T_Tagged #u8(26)
 poly T_KwType : Token = T_Tagged #u8(27)
 poly T_KwData : Token = T_Tagged #u8(28)
@@ -150,10 +159,20 @@ poly tokenTaggedTextCombinator = \tag : U8 =>
     (\u : U8 => "combinator")
     (\u : U8 => tokenTaggedTextType tag)
 
+poly tokenTaggedTextOpaque = \tag : U8 =>
+  if [List U8] (eqU8 tag #u8(25))
+    (\u : U8 => "opaque")
+    (\u : U8 => tokenTaggedTextCombinator tag)
+
+poly tokenTaggedTextNative = \tag : U8 =>
+  if [List U8] (eqU8 tag #u8(24))
+    (\u : U8 => "native")
+    (\u : U8 => tokenTaggedTextOpaque tag)
+
 poly tokenTaggedTextExport = \tag : U8 =>
   if [List U8] (eqU8 tag #u8(23))
     (\u : U8 => "export")
-    (\u : U8 => tokenTaggedTextCombinator tag)
+    (\u : U8 => tokenTaggedTextNative tag)
 
 poly tokenTaggedTextImport = \tag : U8 =>
   if [List U8] (eqU8 tag #u8(22))
@@ -211,9 +230,13 @@ poly u8_tab      : U8 = '\t'
 poly u8_underscore : U8 = '_'
 
 poly u8_quote : U8 = '\"'
+poly u8_squote : U8 = '\''
+poly u8_backslash : U8 = '\\'
 poly u8_gt : U8 = '>'
 poly u8_dash : U8 = '-'
 poly u8_eq : U8 = '='
+poly u8_n : U8 = 'n'
+poly u8_r : U8 = 'r'
 
 poly isSpaceU8 = \c : U8 =>
   if [Bool] (eqU8 c u8_space)   (\u : U8 => true)
@@ -234,6 +257,31 @@ poly isAlphaU8 = \c : U8 =>
 
 poly isIdentCharU8 = \c : U8 =>
   or (isAlphaU8 c) (or (isDigitU8 c) (eqU8 c u8_underscore))
+
+poly digitToAscii = \d : U8 =>
+  addU8 d #u8(48)
+
+poly singletonU8 = \b : U8 =>
+  cons [U8] b (nil [U8])
+
+poly u8ToDigits = \n : U8 =>
+  if [List U8] (ltU8 n #u8(10))
+    (\u : U8 => singletonU8 (digitToAscii n))
+    (\u : U8 =>
+      if [List U8] (ltU8 n #u8(100))
+        (\u : U8 =>
+          cons [U8]
+            (digitToAscii (divU8 n #u8(10)))
+            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
+        (\u : U8 =>
+          let hundreds = divU8 n #u8(100) in
+          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+          let ones = modU8 n #u8(10) in
+          cons [U8]
+            (digitToAscii hundreds)
+            (cons [U8]
+              (digitToAscii tens)
+              (singletonU8 (digitToAscii ones)))))
 
 poly rec eqListU8 = \a : List U8 => \b : List U8 =>
   matchList [U8] [Bool] a
@@ -257,10 +305,12 @@ poly keywordWords =
             (cons [List U8] "module"
               (cons [List U8] "import"
                 (cons [List U8] "export"
-                  (cons [List U8] "combinator"
-                    (cons [List U8] "type"
-                      (cons [List U8] "data"
-                        (nil [List U8])))))))))))
+                  (cons [List U8] "native"
+                    (cons [List U8] "opaque"
+                      (cons [List U8] "combinator"
+                        (cons [List U8] "type"
+                          (cons [List U8] "data"
+                            (nil [List U8])))))))))))))
 
 poly rec anyEqWord = \word : List U8 => \words : List (List U8) =>
   matchList [List U8] [Bool] words false
@@ -303,6 +353,16 @@ poly keywordTokenFromWordM = \word : List U8 =>
         (\u : U8 => T_KwModule)
         (\u : U8 => T_Ident word))
 
+poly keywordTokenFromWordN = \word : List U8 =>
+  if [Token] (eqListU8 word "native")
+    (\u : U8 => T_KwNative)
+    (\u : U8 => T_Ident word)
+
+poly keywordTokenFromWordO = \word : List U8 =>
+  if [Token] (eqListU8 word "opaque")
+    (\u : U8 => T_KwOpaque)
+    (\u : U8 => T_Ident word)
+
 poly keywordTokenFromWordE = \word : List U8 =>
   if [Token] (eqListU8 word "export")
     (\u : U8 => T_KwExport)
@@ -333,10 +393,20 @@ poly keywordTokenFromWordCombinator = \word : List U8 =>
     (\u : U8 => T_KwCombinator)
     (\u : U8 => keywordTokenFromWordType word)
 
+poly keywordTokenFromWordOpaque = \word : List U8 =>
+  if [Token] (eqListU8 word "opaque")
+    (\u : U8 => T_KwOpaque)
+    (\u : U8 => keywordTokenFromWordCombinator word)
+
+poly keywordTokenFromWordNative = \word : List U8 =>
+  if [Token] (eqListU8 word "native")
+    (\u : U8 => T_KwNative)
+    (\u : U8 => keywordTokenFromWordOpaque word)
+
 poly keywordTokenFromWordExport = \word : List U8 =>
   if [Token] (eqListU8 word "export")
     (\u : U8 => T_KwExport)
-    (\u : U8 => keywordTokenFromWordCombinator word)
+    (\u : U8 => keywordTokenFromWordNative word)
 
 poly keywordTokenFromWordImport = \word : List U8 =>
   if [Token] (eqListU8 word "import")
@@ -387,18 +457,24 @@ poly keywordTokenFromWord = \word : List U8 =>
                       if [Token] (eqU8 h 'm')
                         (\u : U8 => keywordTokenFromWordM word)
                         (\u : U8 =>
-                          if [Token] (eqU8 h 'e')
-                            (\u : U8 => keywordTokenFromWordE word)
+                          if [Token] (eqU8 h 'n')
+                            (\u : U8 => keywordTokenFromWordN word)
                             (\u : U8 =>
-                              if [Token] (eqU8 h 't')
-                                (\u : U8 => keywordTokenFromWordT word)
+                              if [Token] (eqU8 h 'o')
+                                (\u : U8 => keywordTokenFromWordO word)
                                 (\u : U8 =>
-                                  if [Token] (eqU8 h 'c')
-                                    (\u : U8 => keywordTokenFromWordC word)
+                                  if [Token] (eqU8 h 'e')
+                                    (\u : U8 => keywordTokenFromWordE word)
                                     (\u : U8 =>
-                                      if [Token] (eqU8 h 'd')
-                                        (\u : U8 => keywordTokenFromWordData word)
-                                        (\u : U8 => T_Ident word))))))))))
+                                      if [Token] (eqU8 h 't')
+                                        (\u : U8 => keywordTokenFromWordT word)
+                                        (\u : U8 =>
+                                          if [Token] (eqU8 h 'c')
+                                            (\u : U8 => keywordTokenFromWordC word)
+                                            (\u : U8 =>
+                                              if [Token] (eqU8 h 'd')
+                                                (\u : U8 => keywordTokenFromWordData word)
+                                                (\u : U8 => T_Ident word))))))))))))
 
 poly simpleTokenFromU8Hash = \c : U8 =>
   if [Maybe Token] (eqU8 c '#')
@@ -508,6 +584,48 @@ poly rec consumeString = \acc : List U8 => \input : List U8 =>
         (\u : U8 => consumeString (cons [U8] h acc) t)
     )
 
+poly escapedCharValue = \c : U8 =>
+  if [U8] (eqU8 c u8_n)
+    (\u : U8 => u8_newline)
+    (\u : U8 =>
+      if [U8] (eqU8 c u8_r)
+        (\u : U8 => u8_cr)
+        (\u : U8 =>
+          if [U8] (eqU8 c 't')
+            (\u : U8 => u8_tab)
+            (\u : U8 =>
+              if [U8] (eqU8 c u8_quote)
+                (\u : U8 => u8_quote)
+                (\u : U8 =>
+                  if [U8] (eqU8 c u8_squote)
+                    (\u : U8 => u8_squote)
+                    (\u : U8 => c)))))
+
+poly charLiteralError =
+  Err [ParseError] [Pair U8 (List U8)] (MkParseError (nil [U8]))
+
+poly finishCharLiteral = \value : U8 => \input : List U8 =>
+  matchList [U8] [Result ParseError (Pair U8 (List U8))] input
+    charLiteralError
+    (\close : U8 => \rest : List U8 =>
+      if [Result ParseError (Pair U8 (List U8))] (eqU8 close u8_squote)
+        (\u : U8 =>
+          Ok [ParseError] [Pair U8 (List U8)]
+            (MkPair [U8] [List U8] value rest))
+        (\u : U8 => charLiteralError))
+
+poly consumeCharLiteral = \input : List U8 =>
+  matchList [U8] [Result ParseError (Pair U8 (List U8))] input
+    charLiteralError
+    (\h : U8 => \t : List U8 =>
+      if [Result ParseError (Pair U8 (List U8))] (eqU8 h u8_backslash)
+        (\u : U8 =>
+          matchList [U8] [Result ParseError (Pair U8 (List U8))] t
+            charLiteralError
+            (\escaped : U8 => \afterEscaped : List U8 =>
+              finishCharLiteral (escapedCharValue escaped) afterEscaped))
+        (\u : U8 => finishCharLiteral h t))
+
 poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
   matchList [U8] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
@@ -531,7 +649,7 @@ poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
 
       match (simpleTokenFromU8 c) [Result ParseError (List Token)] {
         | None =>
-            if [Result ParseError (List Token)] (isAlphaU8 c)
+            if [Result ParseError (List Token)] (or (isAlphaU8 c) (eqU8 c u8_underscore))
               (\u : U8 =>
                 match (consumeIdent (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
                   | MkPair taken remaining =>
@@ -558,9 +676,19 @@ poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
                               tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)
                         })
                       (\u : U8 =>
-                        if [Result ParseError (List Token)] (eqU8 c u8_eq)
-                          (\u : U8 => tokenizeAcc cs (cons [Token] T_Eq accRev))
-                          (\u : U8 => Err [ParseError] [List Token] (MkParseError (nil [U8])))
+                        if [Result ParseError (List Token)] (eqU8 c u8_squote)
+                          (\u : U8 =>
+                            match (consumeCharLiteral cs) [Result ParseError (List Token)] {
+                              | Err e => Err [ParseError] [List Token] e
+                              | Ok charRes =>
+                                  let value = fst [U8] [List U8] charRes in
+                                  let remaining = snd [U8] [List U8] charRes in
+                                  tokenizeAcc remaining (cons [Token] (T_Nat (u8ToDigits value)) accRev)
+                            })
+                          (\u : U8 =>
+                            if [Result ParseError (List Token)] (eqU8 c u8_eq)
+                              (\u : U8 => tokenizeAcc cs (cons [Token] T_Eq accRev))
+                              (\u : U8 => Err [ParseError] [List Token] (MkParseError (nil [U8]))))
                       )
                   ))
 

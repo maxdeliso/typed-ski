@@ -79,6 +79,7 @@ export interface NativeDefinition {
 export interface TypeDefinition {
   kind: "type";
   name: string;
+  opaque?: true;
   type: BaseType;
 }
 

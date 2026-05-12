@@ -447,8 +447,8 @@ poly parseBundleSummary = \input : List U8 =>
         }
   }
 
-poly emitModuleSummary = \module : ModuleRecord =>
-  match module [List U8] { | MkModuleRecord name lengthDigits source =>
+poly emitModuleSummary = \modRec : ModuleRecord =>
+  match modRec [List U8] { | MkModuleRecord name lengthDigits source =>
     append [U8] "module " (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
   }
 

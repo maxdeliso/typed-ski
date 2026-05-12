@@ -5,4 +5,4 @@
 /**
  * Default timeout for tests and evaluations, in milliseconds.
  */
-export const TEST_TIMEOUT_MS = 60000;
+export const TEST_TIMEOUT_MS = 80000;

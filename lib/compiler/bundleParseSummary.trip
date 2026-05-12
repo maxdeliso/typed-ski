@@ -416,7 +416,10 @@ poly parseModuleSource = \bundleName : List U8 => \source : List U8 =>
     | Err e => Err [List U8] [List Decl] "Lex error"
     | Ok toks =>
         match (parseProgram toks) [Result (List U8) (List Decl)] {
-          | Err e => Err [List U8] [List Decl] "Parse error"
+          | Err e =>
+              match e [Result (List U8) (List Decl)] { | MkParseError msg =>
+                Err [List U8] [List Decl] msg
+              }
           | Ok decls =>
               match (declaredModule decls) [Result (List U8) (List Decl)] {
                 | Err e => Err [List U8] [List Decl] e

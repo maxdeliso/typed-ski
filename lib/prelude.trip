@@ -124,9 +124,12 @@ poly head = #A => \l : List A =>
 poly tail = #A => \l : List A =>
   l [List A] (nil [A]) (\h : A => \t : List A => t)
 
-poly rec append = #A => \xs : List A => \ys : List A =>
-  matchList [A] [List A] xs ys
-    (\h : A => \t : List A => cons [A] h (append [A] t ys))
+poly rec appendAcc = #A => \xs : List A => \acc : List A =>
+  matchList [A] [List A] xs acc
+    (\h : A => \t : List A => appendAcc [A] t (cons [A] h acc))
+
+poly append = #A => \xs : List A => \ys : List A =>
+  appendAcc [A] (reverse [A] xs) ys
 
 poly rec map = #A => #B => \f : A -> B => \l : List A =>
   matchList [A] [List B] l (nil [B])

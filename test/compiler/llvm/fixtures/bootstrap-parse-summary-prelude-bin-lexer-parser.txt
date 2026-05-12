@@ -644,7 +644,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 32
+poly 33
 poly id
 poly true
 poly false
@@ -662,6 +662,7 @@ poly matchList
 poly listIsEmpty
 poly head
 poly tail
+poly appendAcc
 poly append
 poly map
 poly foldl

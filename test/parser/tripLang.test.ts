@@ -306,7 +306,6 @@ data Token =
       "kwPoly",
       "isKeywordPoly",
       "keywordTokenFromWord",
-      "eqListU8",
       "mapResult",
     ] as const;
 

@@ -52,7 +52,7 @@ poly gteBin
 combinator 0
 module Lexer
 declared Lexer
-imports 32
+imports 37
 import Prelude Bool
 import Prelude List
 import Prelude nil
@@ -85,7 +85,12 @@ import Prelude ltU8
 import Prelude addU8
 import Prelude divU8
 import Prelude modU8
-exports 68
+import Prelude eqListU8
+import Prelude ltListU8
+import Prelude digitToAscii
+import Prelude singletonU8
+import Prelude u8ToDigits
+exports 66
 export Token
 export T_LParen
 export T_RParen
@@ -122,7 +127,6 @@ export tokenTag
 export tokenText
 export tokenNatValue
 export tokenize
-export tokenizeAcc
 export kwPoly
 export isKeywordPoly
 export keywordWords
@@ -141,7 +145,6 @@ export keywordTokenFromWordIn
 export keywordTokenFromWordLet
 export keywordTokenFromWordRec
 export keywordTokenFromWord
-export eqListU8
 export mapResult
 export isSpaceU8
 export isDigitU8
@@ -162,7 +165,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 112
+poly 108
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -225,10 +228,6 @@ poly isSpaceU8
 poly isDigitU8
 poly isAlphaU8
 poly isIdentCharU8
-poly digitToAscii
-poly singletonU8
-poly u8ToDigits
-poly eqListU8
 poly kwPoly
 poly isKeywordPoly
 poly keywordWords
@@ -279,7 +278,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 50
+exports 56
 export Bool
 export id
 export true
@@ -330,6 +329,12 @@ export subU8
 export divU8
 export modU8
 export U8
+export eqListU8
+export ltListU8
+export lteListU8
+export digitToAscii
+export singletonU8
+export u8ToDigits
 data 5
 data Pair
 ctor MkPair 2
@@ -360,7 +365,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 25
+poly 31
 poly id
 poly true
 poly false
@@ -386,4 +391,10 @@ poly span
 poly reverseAcc
 poly reverse
 poly error
+poly eqListU8
+poly ltListU8
+poly lteListU8
+poly digitToAscii
+poly singletonU8
+poly u8ToDigits
 combinator 0

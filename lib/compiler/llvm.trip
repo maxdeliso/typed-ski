@@ -21,8 +21,8 @@ import Prelude addU8
 import Prelude divU8
 import Prelude modU8
 import Prelude ltU8
+import Prelude eqListU8
 import Lexer tokenize
-import Lexer eqListU8
 import Parser parseProgram
 import Parser Decl
 import Parser D_Module

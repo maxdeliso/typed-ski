@@ -164,3 +164,58 @@ poly reverse = #A => \xs : List A =>
 
 poly error = #A =>
   (\x : A => x) (\x : A => x)
+
+poly rec eqListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => eqListU8 ta tb)
+            (\u : U8 => false)))
+poly rec ltListU8 = \a : List U8 => \b : List U8 =>
+  matchList [U8] [Bool] a
+    (matchList [U8] [Bool] b false (\hb : U8 => \tb : List U8 => true))
+    (\ha : U8 => \ta : List U8 =>
+      matchList [U8] [Bool] b
+        false
+        (\hb : U8 => \tb : List U8 =>
+          if [Bool] (eqU8 ha hb)
+            (\u : U8 => ltListU8 ta tb)
+            (\u : U8 => ltU8 ha hb)))
+
+poly lteListU8 = \a : List U8 => \b : List U8 =>
+  or (eqListU8 a b) (ltListU8 a b)
+
+poly digitToAscii = \d : U8 =>
+  addU8 d #u8(48)
+
+poly singletonU8 = \b : U8 =>
+  cons [U8] b (nil [U8])
+
+poly u8ToDigits = \n : U8 =>
+  if [List U8] (ltU8 n #u8(10))
+    (\u : U8 => singletonU8 (digitToAscii n))
+    (\u : U8 =>
+      if [List U8] (ltU8 n #u8(100))
+        (\u : U8 =>
+          cons [U8]
+            (digitToAscii (divU8 n #u8(10)))
+            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
+        (\u : U8 =>
+          let hundreds = divU8 n #u8(100) in
+          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+          let ones = modU8 n #u8(10) in
+          cons [U8]
+            (digitToAscii hundreds)
+            (cons [U8]
+              (digitToAscii tens)
+              (singletonU8 (digitToAscii ones)))))
+
+export eqListU8
+export ltListU8
+export lteListU8
+export digitToAscii
+export singletonU8
+export u8ToDigits

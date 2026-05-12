@@ -23,7 +23,7 @@ import Lexer T_Colon
 import Lexer T_Eq
 import Lexer T_Nat
 import Lexer T_EOF
-import Lexer eqListU8
+import Prelude eqListU8
 import Parser parseExpr
 import Parser Expr
 import Parser E_Var

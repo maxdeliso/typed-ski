@@ -32,6 +32,11 @@ import Prelude ltU8
 import Prelude addU8
 import Prelude divU8
 import Prelude modU8
+import Prelude eqListU8
+import Prelude ltListU8
+import Prelude digitToAscii
+import Prelude singletonU8
+import Prelude u8ToDigits
 
 export Token
 export T_LParen
@@ -69,7 +74,6 @@ export tokenTag
 export tokenText
 export tokenNatValue
 export tokenize
-export tokenizeAcc
 export kwPoly
 export isKeywordPoly
 export keywordWords
@@ -88,7 +92,6 @@ export keywordTokenFromWordIn
 export keywordTokenFromWordLet
 export keywordTokenFromWordRec
 export keywordTokenFromWord
-export eqListU8
 export mapResult
 export isSpaceU8
 export isDigitU8
@@ -258,42 +261,8 @@ poly isAlphaU8 = \c : U8 =>
 poly isIdentCharU8 = \c : U8 =>
   or (isAlphaU8 c) (or (isDigitU8 c) (eqU8 c u8_underscore))
 
-poly digitToAscii = \d : U8 =>
-  addU8 d #u8(48)
+poly kwPoly : List U8 = "poly"
 
-poly singletonU8 = \b : U8 =>
-  cons [U8] b (nil [U8])
-
-poly u8ToDigits = \n : U8 =>
-  if [List U8] (ltU8 n #u8(10))
-    (\u : U8 => singletonU8 (digitToAscii n))
-    (\u : U8 =>
-      if [List U8] (ltU8 n #u8(100))
-        (\u : U8 =>
-          cons [U8]
-            (digitToAscii (divU8 n #u8(10)))
-            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
-        (\u : U8 =>
-          let hundreds = divU8 n #u8(100) in
-          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
-          let ones = modU8 n #u8(10) in
-          cons [U8]
-            (digitToAscii hundreds)
-            (cons [U8]
-              (digitToAscii tens)
-              (singletonU8 (digitToAscii ones)))))
-
-poly rec eqListU8 = \a : List U8 => \b : List U8 =>
-  matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
-    (\ha : U8 => \ta : List U8 =>
-      matchList [U8] [Bool] b false
-        (\hb : U8 => \tb : List U8 =>
-          if [Bool] (eqU8 ha hb)
-            (\u : U8 => eqListU8 ta tb)
-            (\u : U8 => false)))
-
-poly kwPoly = "poly"
 poly isKeywordPoly = \word : List U8 => eqListU8 word kwPoly
 
 poly keywordWords =

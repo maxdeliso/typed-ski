@@ -19,7 +19,7 @@ import Lexer tokenTag
 import Lexer tokenText
 import Lexer T_KwPoly
 import Lexer T_Ident
-import Lexer eqListU8
+import Prelude eqListU8
 
 export main
 

@@ -12,6 +12,7 @@ import {
   serializeTripBundleV1,
   serializeTripBundleV1ToString,
   summarizeTripBundleV1,
+  summarizeTripBundleV1Inventory,
   summarizeTripBundleV1ParsedModules,
   TripBundleV1Error,
   type TripBundleV1,
@@ -85,6 +86,31 @@ function realBootstrapBundle(moduleNames: string[]): Uint8Array {
       source: realBootstrapModuleSource(name),
     })),
   });
+}
+
+async function compileBundleInventoryExecutable(
+  tempDir: string,
+): Promise<string> {
+  const source = readFileSync(
+    join(__dirname, "../../../lib/compiler/bundleInventory.trip"),
+    "utf8",
+  );
+  const llvm = await compileTripToLlvm(source, {
+    entryModule: "BundleInventory",
+    moduleSources: await loadCommonModules([
+      "Prelude",
+      "Bin",
+      "Lexer",
+      "Parser",
+      "BundleSummary",
+      "Avl",
+      "Nat",
+    ]),
+    mainWrapper: { kind: "stdin-list-u8" },
+  });
+  const llPath = join(tempDir, "bundle-inventory.ll");
+  await writeFile(llPath, llvm, "utf8");
+  return compileLlvmToExecutable(llPath);
 }
 
 describe("bundle-v1", () => {
@@ -647,6 +673,31 @@ native readOne : -> U8
         assert.equal(result.status, 0, name);
         assert.equal(result.stderr, "", name);
         assert.match(result.stdout, message, name);
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("Trip-side native module inventory executable matches generated real bootstrap source bundles", async () => {
+    const moduleSets = [
+      ["Prelude"],
+      ["Prelude", "Bin"],
+      ["Prelude", "Bin", "Lexer"],
+      ["Prelude", "Bin", "Lexer", "Parser"],
+    ];
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-inventory-real-"),
+    );
+    try {
+      const exePath = await compileBundleInventoryExecutable(tempDir);
+      for (const moduleNames of moduleSets) {
+        const bundleBytes = realBootstrapBundle(moduleNames);
+        const expected = summarizeTripBundleV1Inventory(bundleBytes);
+        const result = runExecutable(exePath, bundleBytes);
+        assert.equal(result.status, 0, moduleNames.join(" + "));
+        assert.equal(result.stderr, "", moduleNames.join(" + "));
+        assert.equal(result.stdout, expected, moduleNames.join(" + "));
       }
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});

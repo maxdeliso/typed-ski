@@ -4,7 +4,7 @@ import Prelude Bool
 import Prelude false
 import Prelude if
 import Prelude eqU8
-import Lexer eqListU8
+import Prelude eqListU8
 import Prelude List
 import Prelude nil
 import Prelude cons

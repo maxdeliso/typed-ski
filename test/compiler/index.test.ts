@@ -160,7 +160,7 @@ import Prelude Result
 import Prelude Ok
 import Prelude Err
 import Prelude U8
-import Lexer eqListU8
+import Prelude eqListU8
 import Compiler compileToComb
 import Unparse Comb
 import Unparse unparseCombinator

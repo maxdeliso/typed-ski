@@ -7,7 +7,7 @@ modules 1
 module Prelude
 declared Prelude
 imports 0
-exports 50
+exports 56
 export Bool
 export id
 export true
@@ -58,6 +58,12 @@ export subU8
 export divU8
 export modU8
 export U8
+export eqListU8
+export ltListU8
+export lteListU8
+export digitToAscii
+export singletonU8
+export u8ToDigits
 data 5
 data Pair
 ctor MkPair 2
@@ -88,7 +94,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 25
+poly 31
 poly id
 poly true
 poly false
@@ -114,4 +120,10 @@ poly span
 poly reverseAcc
 poly reverse
 poly error
+poly eqListU8
+poly ltListU8
+poly lteListU8
+poly digitToAscii
+poly singletonU8
+poly u8ToDigits
 combinator 0

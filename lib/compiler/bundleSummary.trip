@@ -27,6 +27,11 @@ import Prelude U8
 import Prelude eqU8
 import Prelude ltU8
 import Prelude lteU8
+import Prelude eqListU8
+import Prelude ltListU8
+import Prelude digitToAscii
+import Prelude singletonU8
+import Prelude u8ToDigits
 import Prelude writeOne
 import Prelude Bin
 import Prelude BZ
@@ -68,27 +73,6 @@ poly binSeven = B1 (B1 (B1 BZ))
 poly binEight = B0 (B0 (B0 (B1 BZ)))
 poly binNine = B1 (B0 (B0 (B1 BZ)))
 poly binTen = B0 (B1 (B0 (B1 BZ)))
-
-poly rec eqListU8 = \a : List U8 => \b : List U8 =>
-  matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
-    (\ha : U8 => \ta : List U8 =>
-      matchList [U8] [Bool] b false
-        (\hb : U8 => \tb : List U8 =>
-          if [Bool] (eqU8 ha hb)
-            (\u : U8 => eqListU8 ta tb)
-            (\u : U8 => false)))
-
-poly rec ltListU8 = \a : List U8 => \b : List U8 =>
-  matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b false (\hb : U8 => \tb : List U8 => true))
-    (\ha : U8 => \ta : List U8 =>
-      matchList [U8] [Bool] b
-        false
-        (\hb : U8 => \tb : List U8 =>
-          if [Bool] (eqU8 ha hb)
-            (\u : U8 => ltListU8 ta tb)
-            (\u : U8 => ltU8 ha hb)))
 
 poly listIsEmpty = #A => \xs : List A =>
   matchList [A] [Bool] xs true (\h : A => \t : List A => false)

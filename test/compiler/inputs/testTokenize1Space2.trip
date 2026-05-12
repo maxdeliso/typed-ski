@@ -4,7 +4,7 @@ import Lexer tokenize
 import Lexer Token
 import Lexer tokenTag
 import Lexer tokenNatValue
-import Lexer eqListU8
+import Prelude eqListU8
 import Prelude Result
 import Prelude Err
 import Prelude Ok

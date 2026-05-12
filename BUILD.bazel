@@ -273,7 +273,6 @@ trip_llvm_object(
 cc_binary(
     name = "trip_hello_world_linux",
     srcs = [":trip_hello_world_linux_obj"],
-    linkopts = ["-Wl,-z,stack-size=67108864"],
     tags = ["manual"],
     target_compatible_with = LINUX_X86_64_COMPATIBILITY,
     deps = ["//core:trip_runtime_io"],
@@ -282,7 +281,6 @@ cc_binary(
 cc_binary(
     name = "trip_hello_world_macos",
     srcs = [":trip_hello_world_macos_obj"],
-    linkopts = ["-Wl,-stack_size,67108864"],
     tags = ["manual"],
     target_compatible_with = MACOS_ARM64_COMPATIBILITY,
     deps = ["//core:trip_runtime_io"],

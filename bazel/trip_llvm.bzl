@@ -178,7 +178,6 @@ def _trip_windows_executable_impl(ctx):
     link_args.add("/SUBSYSTEM:CONSOLE")
     link_args.add("/ENTRY:trip_start")
     link_args.add("/NODEFAULTLIB")
-    link_args.add("/STACK:67108864")
     link_args.add("/OUT:" + exe.path)
     link_args.add(trip_obj)
     link_args.add(runtime_obj)

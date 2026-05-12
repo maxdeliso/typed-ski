@@ -84,17 +84,9 @@ export async function compileLlvmToExecutable(
     ...macosSdkArgs(),
     "-o",
     exePath,
-    ...(process.platform === "win32"
-      ? ["-Wl,/STACK:67108864"]
-      : [
-          "-lm",
-          "-lpthread",
-          "-D_POSIX_C_SOURCE=200809L",
-          "-D_GNU_SOURCE",
-          ...(process.platform === "darwin"
-            ? ["-Wl,-stack_size,67108864"]
-            : ["-Wl,-z,stack-size=67108864"]),
-        ]),
+    ...(process.platform !== "win32"
+      ? ["-lm", "-lpthread", "-D_POSIX_C_SOURCE=200809L", "-D_GNU_SOURCE"]
+      : []),
   ];
 
   const result = spawnSync(CLANG, args, { encoding: "utf8" });

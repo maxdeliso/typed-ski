@@ -181,7 +181,14 @@ function lowerExprToReturn(
         block.terminator = { kind: "return" };
         return;
       }
-      const result = emitInstruction(expr, block, state, env, undefined, isTailCall);
+      const result = emitInstruction(
+        expr,
+        block,
+        state,
+        env,
+        undefined,
+        isTailCall,
+      );
       if (!result) {
         throw new MiniCoreBlockLoweringError(
           `Cannot return Unit from non-Unit function ${state.fn.name}`,

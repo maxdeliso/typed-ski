@@ -17,6 +17,7 @@ export List
 export nil
 export cons
 export matchList
+export listIsEmpty
 export head
 export tail
 export error
@@ -50,6 +51,12 @@ export subU8
 export divU8
 export modU8
 export U8
+export eqListU8
+export ltListU8
+export lteListU8
+export digitToAscii
+export singletonU8
+export u8ToDigits
 
 opaque type U8
 native eqU8 : U8 -> U8 -> Bool
@@ -107,6 +114,9 @@ poly cons = #A => \x : A => \xs : List A =>
 poly matchList = #A => #R => \l : List A => \onNil : R =>
   \onCons : (A -> List A -> R) =>
     l [R] onNil onCons
+
+poly listIsEmpty = #A => \xs : List A =>
+  matchList [A] [Bool] xs true (\h : A => \t : List A => false)
 
 poly head = #A => \l : List A =>
   l [A] (error [A]) (\h : A => \t : List A => h)
@@ -167,16 +177,18 @@ poly error = #A =>
 
 poly rec eqListU8 = \a : List U8 => \b : List U8 =>
   matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b true (\hb : U8 => \tb : List U8 => false))
+    (matchList [U8] [Bool] b true (\h : U8 => \t : List U8 => false))
     (\ha : U8 => \ta : List U8 =>
-      matchList [U8] [Bool] b false
+      matchList [U8] [Bool] b
+        false
         (\hb : U8 => \tb : List U8 =>
           if [Bool] (eqU8 ha hb)
             (\u : U8 => eqListU8 ta tb)
             (\u : U8 => false)))
+
 poly rec ltListU8 = \a : List U8 => \b : List U8 =>
   matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b false (\hb : U8 => \tb : List U8 => true))
+    (matchList [U8] [Bool] b false (\h : U8 => \t : List U8 => true))
     (\ha : U8 => \ta : List U8 =>
       matchList [U8] [Bool] b
         false
@@ -188,11 +200,19 @@ poly rec ltListU8 = \a : List U8 => \b : List U8 =>
 poly lteListU8 = \a : List U8 => \b : List U8 =>
   or (eqListU8 a b) (ltListU8 a b)
 
-poly digitToAscii = \d : U8 =>
-  addU8 d #u8(48)
+poly digitToAscii = \n : U8 =>
+  if [U8] (eqU8 n #u8(0)) (\u : U8 => '0')
+  (if [U8] (eqU8 n #u8(1)) (\u : U8 => '1')
+  (if [U8] (eqU8 n #u8(2)) (\u : U8 => '2')
+  (if [U8] (eqU8 n #u8(3)) (\u : U8 => '3')
+  (if [U8] (eqU8 n #u8(4)) (\u : U8 => '4')
+  (if [U8] (eqU8 n #u8(5)) (\u : U8 => '5')
+  (if [U8] (eqU8 n #u8(6)) (\u : U8 => '6')
+  (if [U8] (eqU8 n #u8(7)) (\u : U8 => '7')
+  (if [U8] (eqU8 n #u8(8)) (\u : U8 => '8')
+  ('9')))))))))
 
-poly singletonU8 = \b : U8 =>
-  cons [U8] b (nil [U8])
+poly singletonU8 = \c : U8 => cons [U8] c (nil [U8])
 
 poly u8ToDigits = \n : U8 =>
   if [List U8] (ltU8 n #u8(10))
@@ -212,10 +232,3 @@ poly u8ToDigits = \n : U8 =>
             (cons [U8]
               (digitToAscii tens)
               (singletonU8 (digitToAscii ones)))))
-
-export eqListU8
-export ltListU8
-export lteListU8
-export digitToAscii
-export singletonU8
-export u8ToDigits

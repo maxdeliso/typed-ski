@@ -99,8 +99,6 @@ export isAlphaU8
 export isIdentCharU8
 export simpleTokensU8
 export lookupTokenU8
-export digitValueU8
-export timesTen
 export consumeIdent
 export consumeDigits
 export consumeString

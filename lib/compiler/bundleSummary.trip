@@ -72,10 +72,7 @@ poly binSix = B0 (B1 (B1 BZ))
 poly binSeven = B1 (B1 (B1 BZ))
 poly binEight = B0 (B0 (B0 (B1 BZ)))
 poly binNine = B1 (B0 (B0 (B1 BZ)))
-poly binTen = B0 (B1 (B0 (B1 BZ)))
-
-poly listIsEmpty = #A => \xs : List A =>
-  matchList [A] [Bool] xs true (\h : A => \t : List A => false)
+poly binTen : Bin = B0 (B1 (B0 (B1 BZ)))
 
 poly isAscii = \b : U8 =>
   ltU8 b #u8(128)

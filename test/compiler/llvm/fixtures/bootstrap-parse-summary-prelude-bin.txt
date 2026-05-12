@@ -1,9 +1,70 @@
 OK
 version bundle-parse-summary-v1
-entry Prelude
+entry Bin
 target x86_64-unknown-linux-gnu
 wrapper stdin-list-u8
-modules 1
+modules 2
+module Bin
+declared Bin
+imports 23
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude eqU8
+import Prelude addU8
+import Prelude not
+import Prelude digitToAscii
+import Prelude listIsEmpty
+exports 12
+export incBin
+export addBin
+export mulBin
+export subBin
+export predBin
+export isZeroBin
+export eqBin
+export ltBin
+export lteBin
+export gteBin
+export u8ToBin
+export binToDigits
+data 0
+type 0
+opaque 0
+native 0
+poly 16
+poly isZeroBin
+poly incBin
+poly addBin
+poly mulBin
+poly predBin
+poly subBin
+poly eqBin
+poly ltBin
+poly lteBin
+poly gteBin
+poly u8ToBinAcc
+poly u8ToBin
+poly divModBinAcc
+poly divModBin
+poly binToDigitsAcc
+poly binToDigits
+combinator 0
 module Prelude
 declared Prelude
 imports 0

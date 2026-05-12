@@ -76,7 +76,7 @@ function realBootstrapModuleSource(name: string): string {
   }
 }
 
-function realBootstrapBundle(moduleNames: string[]): Uint8Array {
+export function realBootstrapBundle(moduleNames: string[]): Uint8Array {
   return serializeTripBundleV1({
     entryModule: moduleNames.at(-1) ?? "Prelude",
     target: { kind: "x86_64-unknown-linux-gnu" },

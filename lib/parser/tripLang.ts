@@ -151,6 +151,33 @@ function parseDataDefinition(
   ];
 }
 
+function parseTypeDefinition(
+  name: string,
+  stateAfterName: ParserState,
+): [TripLangTerm, ParserState] {
+  let currentState = skipWhitespace(stateAfterName);
+
+  for (;;) {
+    const [nextCh] = peek(currentState);
+    if (nextCh === EQUALS) {
+      currentState = skipWhitespace(matchCh(currentState, EQUALS));
+      const [, type, finalState] = parseSystemFType(currentState);
+      return [{ kind: TYPE, name, type }, skipWhitespace(finalState)];
+    }
+
+    const [hasRemaining] = remaining(currentState);
+    if (!hasRemaining || isAtDefinitionKeywordLine(currentState)) {
+      return [
+        { kind: TYPE, name, type: mkTypeVariable(name) },
+        skipWhitespace(currentState),
+      ];
+    }
+
+    const [, stateAfterParam] = parseIdentifier(currentState);
+    currentState = skipWhitespace(stateAfterParam);
+  }
+}
+
 function parseTripLangDefinition(
   state: ParserState,
 ): [TripLangTerm, ParserState] {
@@ -241,6 +268,10 @@ function parseTripLangDefinition(
 
   currentState = skipWhitespace(stateAfterName);
 
+  if (kind === TYPE) {
+    return parseTypeDefinition(name, currentState);
+  }
+
   if (kind === POLY) {
     [type, currentState] = parseOptionalTypeAnnotation(
       currentState,
@@ -270,10 +301,6 @@ function parseTripLangDefinition(
     case COMBINATOR:
       [term, finalState] = parseSKIUntilLineEnd(currentState);
       return [{ kind: COMBINATOR, name, term }, skipWhitespace(finalState)];
-
-    case TYPE:
-      [, type, finalState] = parseSystemFType(currentState);
-      return [{ kind: TYPE, name, type }, skipWhitespace(finalState)];
 
     default:
       throw new ParseError(

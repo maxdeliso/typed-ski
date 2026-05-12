@@ -368,39 +368,57 @@ export function summarizeTripBundleV1Inventory(input: Uint8Array): string {
     const declared = parsedModuleName(program);
     lines.push(`declared ${declared}`);
 
-    const imports = program.terms.filter(
-      (t): t is TripLangTerm & { kind: "import" } => t.kind === "import",
-    );
-    lines.push(`imports ${imports.length}`);
-    for (const imp of imports) {
-      let status = "RESOLVED";
-      const originProgram = programs.get(imp.name);
-      if (!originProgram) {
-        status = "MISSING_MODULE";
-      } else {
-        const exported = originProgram.terms.some(
-          (t) => t.kind === "export" && t.name === imp.ref,
-        );
-        if (!exported) {
-          status = "NOT_EXPORTED";
+    const imps = program.terms.filter((t) => t.kind === "import");
+    lines.push(`imports ${imps.length}`);
+    for (const imp of imps) {
+      if (imp.kind === "import") {
+        let status = "RESOLVED";
+        const originProgram = programs.get(imp.name);
+        if (!originProgram) {
+          status = "MISSING_MODULE";
+        } else {
+          const exported = originProgram.terms.some(
+            (t) => t.kind === "export" && t.name === imp.ref,
+          );
+          if (!exported) {
+            status = "NOT_EXPORTED";
+          }
         }
+        lines.push(`import ${imp.name} ${imp.ref} ${status}`);
       }
-      lines.push(`import ${imp.name} ${imp.ref} ${status}`);
     }
 
-    const exports = program.terms.filter(
-      (t): t is TripLangTerm & { kind: "export" } => t.kind === "export",
-    );
-    lines.push(`exports ${exports.length}`);
-    for (const exp of exports) {
-      const origins = globalExports.get(exp.name) ?? [];
-      const status = origins.length > 1 ? "AMBIGUOUS" : "OK";
-      lines.push(`export ${exp.name} ${status}`);
+    const exps = program.terms.filter((t) => t.kind === "export");
+    lines.push(`exports ${exps.length}`);
+    for (const exp of exps) {
+      if (exp.kind === "export") {
+        const origins = globalExports.get(exp.name) ?? [];
+        let status = origins.length > 1 ? "AMBIGUOUS" : "OK";
+
+        if (status === "OK") {
+          const definitions = program.terms.filter(
+            (t) =>
+              (t.name === exp.name &&
+                (t.kind === "poly" ||
+                  t.kind === "combinator" ||
+                  t.kind === "data" ||
+                  t.kind === "type" ||
+                  t.kind === "native")) ||
+              (t.kind === "data" &&
+                t.constructors.some((ctor) => ctor.name === exp.name)),
+          );
+          if (definitions.length === 0) {
+            status = "EXPORT_UNDEFINED";
+          }
+        }
+
+        lines.push(`export ${exp.name} ${status}`);
+      }
     }
 
-    const data = program.terms.filter((t) => t.kind === "data");
-    lines.push(`data ${data.length}`);
-    for (const d of data) {
+    const datas = program.terms.filter((t) => t.kind === "data");
+    lines.push(`data ${datas.length}`);
+    for (const d of datas) {
       if (d.kind === "data") {
         lines.push(`data ${d.name}`);
         for (const ctor of d.constructors) {

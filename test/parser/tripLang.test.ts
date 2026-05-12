@@ -152,6 +152,24 @@ describe("parseTripLang", () => {
     });
   });
 
+  it("parses bare type declarations with optional parameters", () => {
+    const program = parseTripLang(`module Types
+type Bool
+type List A
+poly id = #A => \\x : A => x
+`);
+
+    assert.deepStrictEqual(program.terms.slice(0, 3), [
+      { kind: "module", name: "Types" },
+      { kind: "type", name: "Bool", type: mkTypeVariable("Bool") },
+      { kind: "type", name: "List", type: mkTypeVariable("List") },
+    ]);
+    assert.strictEqual(
+      requiredAt(program.terms, 3, "poly definition").kind,
+      "poly",
+    );
+  });
+
   it("parses data definitions", () => {
     const input = loadInput("dataMaybe.trip", __dirname);
     const [moduleDecl, term] = parseTripLang(input).terms;

@@ -18,6 +18,11 @@ import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
+import Prelude eqU8
+import Prelude addU8
+import Prelude not
+import Prelude digitToAscii
+import Prelude listIsEmpty
 
 export incBin
 export addBin
@@ -26,8 +31,11 @@ export subBin
 export predBin
 export isZeroBin
 export eqBin
+export ltBin
 export lteBin
 export gteBin
+export u8ToBin
+export binToDigits
 
 poly rec isZeroBin = \b : Bin =>
   match b [Bool] {
@@ -108,8 +116,51 @@ poly rec eqBin = \a : Bin => \b : Bin =>
         }
   }
 
+poly rec ltBin = \a : Bin => \b : Bin =>
+  not (isZeroBin (subBin b a))
+
 poly lteBin = \a : Bin => \b : Bin =>
   isZeroBin (subBin a b)
 
 poly gteBin = \a : Bin => \b : Bin =>
   lteBin b a
+
+poly rec u8ToBinAcc = \count : U8 => \n : U8 => \acc : Bin =>
+  if [Bin] (eqU8 count n)
+    (\u : U8 => acc)
+    (\u : U8 => u8ToBinAcc (addU8 count #u8(1)) n (incBin acc))
+
+poly u8ToBin = \n : U8 =>
+  u8ToBinAcc #u8(0) n BZ
+
+poly rec divModBinAcc = \n : Bin => \d : Bin => \q : Bin =>
+  if [Pair Bin Bin] (ltBin n d)
+    (\u : U8 => MkPair [Bin] [Bin] q n)
+    (\u : U8 => divModBinAcc (subBin n d) d (incBin q))
+
+poly divModBin = \n : Bin => \d : Bin =>
+  divModBinAcc n d BZ
+
+poly rec binToDigitsAcc = \val : Bin => \acc : List U8 =>
+  let ten = u8ToBin #u8(10) in
+  if [List U8] (isZeroBin val)
+    (\u : U8 => if [List U8] (listIsEmpty [U8] acc) (\u : U8 => "0") (\u : U8 => acc))
+    (\u : U8 =>
+      let res = divModBin val ten in
+      let q = fst [Bin] [Bin] res in
+      let r = snd [Bin] [Bin] res in
+      let digit = 
+        if [U8] (isZeroBin r) (\u : U8 => '0')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(1))) (\u : U8 => '1')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(2))) (\u : U8 => '2')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(3))) (\u : U8 => '3')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(4))) (\u : U8 => '4')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(5))) (\u : U8 => '5')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(6))) (\u : U8 => '6')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(7))) (\u : U8 => '7')
+        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(8))) (\u : U8 => '8')
+        (\u : U8 => '9'))))))))) in
+      binToDigitsAcc q (cons [U8] digit acc))
+
+poly binToDigits = \b : Bin =>
+  binToDigitsAcc b (nil [U8])

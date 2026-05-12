@@ -1,0 +1,192 @@
+OK
+version bundle-inventory-v1
+entry Bin
+target x86_64-unknown-linux-gnu
+wrapper stdin-list-u8
+modules 2
+module Bin
+declared Bin
+imports 23
+import Prelude Bin RESOLVED
+import Prelude BZ RESOLVED
+import Prelude B0 RESOLVED
+import Prelude B1 RESOLVED
+import Prelude Bool RESOLVED
+import Prelude true RESOLVED
+import Prelude false RESOLVED
+import Prelude Pair RESOLVED
+import Prelude MkPair RESOLVED
+import Prelude fst RESOLVED
+import Prelude snd RESOLVED
+import Prelude List RESOLVED
+import Prelude nil RESOLVED
+import Prelude cons RESOLVED
+import Prelude matchList RESOLVED
+import Prelude Result RESOLVED
+import Prelude Ok RESOLVED
+import Prelude Err RESOLVED
+import Prelude eqU8 RESOLVED
+import Prelude addU8 RESOLVED
+import Prelude not RESOLVED
+import Prelude digitToAscii RESOLVED
+import Prelude listIsEmpty RESOLVED
+exports 12
+export incBin OK
+export addBin OK
+export mulBin OK
+export subBin OK
+export predBin OK
+export isZeroBin OK
+export eqBin OK
+export ltBin OK
+export lteBin OK
+export gteBin OK
+export u8ToBin OK
+export binToDigits OK
+data 0
+type 0
+opaque 0
+native 0
+poly 16
+poly isZeroBin
+poly incBin
+poly addBin
+poly mulBin
+poly predBin
+poly subBin
+poly eqBin
+poly ltBin
+poly lteBin
+poly gteBin
+poly u8ToBinAcc
+poly u8ToBin
+poly divModBinAcc
+poly divModBin
+poly binToDigitsAcc
+poly binToDigits
+combinator 0
+module Prelude
+declared Prelude
+imports 0
+exports 57
+export Bool OK
+export id OK
+export true OK
+export false OK
+export pair OK
+export fst OK
+export snd OK
+export if OK
+export not OK
+export and OK
+export or OK
+export readOne OK
+export writeOne OK
+export List OK
+export nil OK
+export cons OK
+export matchList OK
+export listIsEmpty OK
+export head OK
+export tail OK
+export error OK
+export Pair OK
+export MkPair OK
+export Result OK
+export Err OK
+export Ok OK
+export ParseError OK
+export MkParseError OK
+export Parser OK
+export Maybe OK
+export Some OK
+export None OK
+export append OK
+export map OK
+export foldl OK
+export takeWhile OK
+export dropWhile OK
+export span OK
+export reverse OK
+export Bin OK
+export BZ OK
+export B0 OK
+export B1 OK
+export eqU8 OK
+export ltU8 OK
+export lteU8 OK
+export addU8 OK
+export subU8 OK
+export divU8 OK
+export modU8 OK
+export U8 OK
+export eqListU8 OK
+export ltListU8 OK
+export lteListU8 OK
+export digitToAscii OK
+export singletonU8 OK
+export u8ToDigits OK
+data 5
+data Pair
+ctor MkPair 2
+data Result
+ctor Err 1
+ctor Ok 1
+data Bin
+ctor BZ 0
+ctor B0 1
+ctor B1 1
+data ParseError
+ctor MkParseError 1
+data Maybe
+ctor None 0
+ctor Some 1
+type 3
+type Bool
+type List
+type Parser
+opaque 1
+opaque U8
+native 8
+native eqU8
+native ltU8
+native addU8
+native subU8
+native divU8
+native modU8
+native readOne
+native writeOne
+poly 32
+poly id
+poly true
+poly false
+poly pair
+poly fst
+poly snd
+poly not
+poly and
+poly or
+poly lteU8
+poly if
+poly nil
+poly cons
+poly matchList
+poly listIsEmpty
+poly head
+poly tail
+poly append
+poly map
+poly foldl
+poly takeWhile
+poly dropWhile
+poly span
+poly reverseAcc
+poly reverse
+poly error
+poly eqListU8
+poly ltListU8
+poly lteListU8
+poly digitToAscii
+poly singletonU8
+poly u8ToDigits
+combinator 0

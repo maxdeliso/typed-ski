@@ -6,7 +6,7 @@ wrapper stdin-list-u8
 modules 3
 module Bin
 declared Bin
-imports 18
+imports 23
 import Prelude Bin
 import Prelude BZ
 import Prelude B0
@@ -25,7 +25,12 @@ import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
-exports 9
+import Prelude eqU8
+import Prelude addU8
+import Prelude not
+import Prelude digitToAscii
+import Prelude listIsEmpty
+exports 12
 export incBin
 export addBin
 export mulBin
@@ -33,13 +38,16 @@ export subBin
 export predBin
 export isZeroBin
 export eqBin
+export ltBin
 export lteBin
 export gteBin
+export u8ToBin
+export binToDigits
 data 0
 type 0
 opaque 0
 native 0
-poly 9
+poly 16
 poly isZeroBin
 poly incBin
 poly addBin
@@ -47,8 +55,15 @@ poly mulBin
 poly predBin
 poly subBin
 poly eqBin
+poly ltBin
 poly lteBin
 poly gteBin
+poly u8ToBinAcc
+poly u8ToBin
+poly divModBinAcc
+poly divModBin
+poly binToDigitsAcc
+poly binToDigits
 combinator 0
 module Lexer
 declared Lexer
@@ -90,7 +105,7 @@ import Prelude ltListU8
 import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
-exports 66
+exports 64
 export Token
 export T_LParen
 export T_RParen
@@ -152,8 +167,6 @@ export isAlphaU8
 export isIdentCharU8
 export simpleTokensU8
 export lookupTokenU8
-export digitValueU8
-export timesTen
 export consumeIdent
 export consumeDigits
 export consumeString
@@ -278,7 +291,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 56
+exports 57
 export Bool
 export id
 export true
@@ -296,6 +309,7 @@ export List
 export nil
 export cons
 export matchList
+export listIsEmpty
 export head
 export tail
 export error
@@ -365,7 +379,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 31
+poly 32
 poly id
 poly true
 poly false
@@ -380,6 +394,7 @@ poly if
 poly nil
 poly cons
 poly matchList
+poly listIsEmpty
 poly head
 poly tail
 poly append

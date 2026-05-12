@@ -22,7 +22,7 @@ import Lexer T_Eq
 import Lexer T_Comma
 import Lexer T_Dot
 import Lexer T_EOF
-import Lexer eqListU8
+import Prelude eqListU8
 import Parser parseProgram
 import Parser DefKind
 import Parser K_Poly

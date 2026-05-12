@@ -1,5 +1,6 @@
 module Parser
 
+import Prelude eqListU8
 import Prelude List
 import Prelude nil
 import Prelude cons
@@ -29,7 +30,6 @@ import Lexer Token
 import Lexer tokenTag
 import Lexer tokenText
 import Lexer tokenNatValue
-import Lexer eqListU8
 import Lexer T_LParen
 import Lexer T_RParen
 import Lexer T_LBrace

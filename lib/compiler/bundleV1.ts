@@ -329,6 +329,142 @@ function summarizeParsedModule(name: string, source: string): string[] {
   return lines;
 }
 
+export function summarizeTripBundleV1Inventory(input: Uint8Array): string {
+  const bundle = parseTripBundleV1(input);
+  const programs = new Map<string, TripLangProgram>();
+  const globalExports = new Map<string, string[]>(); // symbol -> modules exporting it
+
+  for (const mod of bundle.modules) {
+    try {
+      const program = parseTripLang(mod.source);
+      programs.set(mod.name, program);
+
+      for (const term of program.terms) {
+        if (term.kind === "export") {
+          if (!globalExports.has(term.name)) {
+            globalExports.set(term.name, []);
+          }
+          globalExports.get(term.name)!.push(mod.name);
+        }
+      }
+    } catch {
+      return "ERR:Parse error\n";
+    }
+  }
+
+  const lines = [
+    "OK",
+    "version bundle-inventory-v1",
+    `entry ${bundle.entryModule}`,
+    `target ${targetToString(bundle.target)}`,
+    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `modules ${bundle.modules.length}`,
+  ];
+
+  for (const mod of bundle.modules) {
+    const program = programs.get(mod.name)!;
+    lines.push(`module ${mod.name}`);
+
+    const declared = parsedModuleName(program);
+    lines.push(`declared ${declared}`);
+
+    const imps = program.terms.filter((t) => t.kind === "import");
+    lines.push(`imports ${imps.length}`);
+    for (const imp of imps) {
+      if (imp.kind === "import") {
+        let status = "RESOLVED";
+        const originProgram = programs.get(imp.name);
+        if (!originProgram) {
+          status = "MISSING_MODULE";
+        } else {
+          const exported = originProgram.terms.some(
+            (t) => t.kind === "export" && t.name === imp.ref,
+          );
+          if (!exported) {
+            status = "NOT_EXPORTED";
+          }
+        }
+        lines.push(`import ${imp.name} ${imp.ref} ${status}`);
+      }
+    }
+
+    const exps = program.terms.filter((t) => t.kind === "export");
+    lines.push(`exports ${exps.length}`);
+    for (const exp of exps) {
+      if (exp.kind === "export") {
+        const origins = globalExports.get(exp.name) ?? [];
+        let status = origins.length > 1 ? "AMBIGUOUS" : "OK";
+
+        if (status === "OK") {
+          const definitions = program.terms.filter(
+            (t) =>
+              (t.name === exp.name &&
+                (t.kind === "poly" ||
+                  t.kind === "combinator" ||
+                  t.kind === "data" ||
+                  t.kind === "type" ||
+                  t.kind === "native")) ||
+              (t.kind === "data" &&
+                t.constructors.some((ctor) => ctor.name === exp.name)),
+          );
+          if (definitions.length === 0) {
+            status = "EXPORT_UNDEFINED";
+          }
+        }
+
+        lines.push(`export ${exp.name} ${status}`);
+      }
+    }
+
+    const datas = program.terms.filter((t) => t.kind === "data");
+    lines.push(`data ${datas.length}`);
+    for (const d of datas) {
+      if (d.kind === "data") {
+        lines.push(`data ${d.name}`);
+        for (const ctor of d.constructors) {
+          lines.push(`ctor ${ctor.name} ${ctor.fields.length}`);
+        }
+      }
+    }
+
+    const types = program.terms.filter(
+      (t) => t.kind === "type" && t.opaque !== true,
+    );
+    lines.push(`type ${types.length}`);
+    for (const t of types) {
+      lines.push(`type ${t.name}`);
+    }
+
+    const opaques = program.terms.filter(
+      (t) => t.kind === "type" && t.opaque === true,
+    );
+    lines.push(`opaque ${opaques.length}`);
+    for (const t of opaques) {
+      lines.push(`opaque ${t.name}`);
+    }
+
+    const natives = program.terms.filter((t) => t.kind === "native");
+    lines.push(`native ${natives.length}`);
+    for (const t of natives) {
+      lines.push(`native ${t.name}`);
+    }
+
+    const polys = program.terms.filter((t) => t.kind === "poly");
+    lines.push(`poly ${polys.length}`);
+    for (const t of polys) {
+      lines.push(`poly ${t.name}`);
+    }
+
+    const combinators = program.terms.filter((t) => t.kind === "combinator");
+    lines.push(`combinator ${combinators.length}`);
+    for (const t of combinators) {
+      lines.push(`combinator ${t.name}`);
+    }
+  }
+
+  return lines.join("\n") + "\n";
+}
+
 export function summarizeTripBundleV1ParsedModules(input: Uint8Array): string {
   const bundle = parseTripBundleV1(input);
   const lines = [

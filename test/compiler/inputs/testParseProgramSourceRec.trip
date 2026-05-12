@@ -11,7 +11,7 @@ import Prelude Ok
 import Prelude Err
 import Prelude U8
 import Lexer tokenize
-import Lexer eqListU8
+import Prelude eqListU8
 import Parser parseProgram
 import Parser DefKind
 import Parser K_Poly

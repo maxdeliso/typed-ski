@@ -288,7 +288,7 @@ import Prelude Pair
 import Prelude fst
 import Prelude snd
 import Prelude writeOne
-import Lexer eqListU8
+import Prelude eqListU8
 import Compiler compileToComb
 import Unparse Comb
 import Unparse unparseCombinator

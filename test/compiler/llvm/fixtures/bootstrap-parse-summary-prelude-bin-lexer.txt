@@ -6,7 +6,7 @@ wrapper stdin-list-u8
 modules 3
 module Bin
 declared Bin
-imports 18
+imports 23
 import Prelude Bin
 import Prelude BZ
 import Prelude B0
@@ -25,7 +25,12 @@ import Prelude matchList
 import Prelude Result
 import Prelude Ok
 import Prelude Err
-exports 9
+import Prelude eqU8
+import Prelude addU8
+import Prelude not
+import Prelude digitToAscii
+import Prelude listIsEmpty
+exports 12
 export incBin
 export addBin
 export mulBin
@@ -33,13 +38,16 @@ export subBin
 export predBin
 export isZeroBin
 export eqBin
+export ltBin
 export lteBin
 export gteBin
+export u8ToBin
+export binToDigits
 data 0
 type 0
 opaque 0
 native 0
-poly 9
+poly 16
 poly isZeroBin
 poly incBin
 poly addBin
@@ -47,12 +55,19 @@ poly mulBin
 poly predBin
 poly subBin
 poly eqBin
+poly ltBin
 poly lteBin
 poly gteBin
+poly u8ToBinAcc
+poly u8ToBin
+poly divModBinAcc
+poly divModBin
+poly binToDigitsAcc
+poly binToDigits
 combinator 0
 module Lexer
 declared Lexer
-imports 32
+imports 37
 import Prelude Bool
 import Prelude List
 import Prelude nil
@@ -85,7 +100,12 @@ import Prelude ltU8
 import Prelude addU8
 import Prelude divU8
 import Prelude modU8
-exports 68
+import Prelude eqListU8
+import Prelude ltListU8
+import Prelude digitToAscii
+import Prelude singletonU8
+import Prelude u8ToDigits
+exports 64
 export Token
 export T_LParen
 export T_RParen
@@ -122,7 +142,6 @@ export tokenTag
 export tokenText
 export tokenNatValue
 export tokenize
-export tokenizeAcc
 export kwPoly
 export isKeywordPoly
 export keywordWords
@@ -141,7 +160,6 @@ export keywordTokenFromWordIn
 export keywordTokenFromWordLet
 export keywordTokenFromWordRec
 export keywordTokenFromWord
-export eqListU8
 export mapResult
 export isSpaceU8
 export isDigitU8
@@ -149,8 +167,6 @@ export isAlphaU8
 export isIdentCharU8
 export simpleTokensU8
 export lookupTokenU8
-export digitValueU8
-export timesTen
 export consumeIdent
 export consumeDigits
 export consumeString
@@ -162,7 +178,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 112
+poly 108
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -225,10 +241,6 @@ poly isSpaceU8
 poly isDigitU8
 poly isAlphaU8
 poly isIdentCharU8
-poly digitToAscii
-poly singletonU8
-poly u8ToDigits
-poly eqListU8
 poly kwPoly
 poly isKeywordPoly
 poly keywordWords
@@ -279,7 +291,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 50
+exports 57
 export Bool
 export id
 export true
@@ -297,6 +309,7 @@ export List
 export nil
 export cons
 export matchList
+export listIsEmpty
 export head
 export tail
 export error
@@ -330,6 +343,12 @@ export subU8
 export divU8
 export modU8
 export U8
+export eqListU8
+export ltListU8
+export lteListU8
+export digitToAscii
+export singletonU8
+export u8ToDigits
 data 5
 data Pair
 ctor MkPair 2
@@ -360,7 +379,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 25
+poly 32
 poly id
 poly true
 poly false
@@ -375,6 +394,7 @@ poly if
 poly nil
 poly cons
 poly matchList
+poly listIsEmpty
 poly head
 poly tail
 poly append
@@ -386,4 +406,10 @@ poly span
 poly reverseAcc
 poly reverse
 poly error
+poly eqListU8
+poly ltListU8
+poly lteListU8
+poly digitToAscii
+poly singletonU8
+poly u8ToDigits
 combinator 0

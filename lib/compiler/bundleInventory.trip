@@ -1,0 +1,375 @@
+module BundleInventory
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude append
+import Prelude reverse
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude Pair
+import Prelude fst
+import Prelude snd
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Prelude and
+import Prelude or
+import Prelude U8
+import Prelude eqU8
+import Prelude ltU8
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+import Prelude eqListU8
+import Prelude ltListU8
+import Prelude lteListU8
+import Prelude digitToAscii
+import Prelude singletonU8
+import Prelude u8ToDigits
+import Prelude writeOne
+import BundleSummary parseBundleSummary
+import BundleSummary BundleSummary
+import BundleSummary MkBundleSummary
+import BundleSummary ModuleRecord
+import BundleSummary MkModuleRecord
+import Lexer tokenize
+import Parser Decl
+import Parser D_Module
+import Parser D_Import
+import Parser D_Export
+import Parser D_Opaque
+import Parser D_Native
+import Parser D_Type
+import Parser D_Data
+import Parser D_Def
+import Parser DefKind
+import Parser K_Poly
+import Parser K_Combinator
+import Parser parseProgram
+
+export main
+
+poly rec lookupMod = \key : List U8 => \table : List (Pair (List U8) (List Decl)) =>
+  matchList [(Pair (List U8) (List Decl))] [Maybe (List Decl)] table
+    (None [List Decl])
+    (\h : (Pair (List U8) (List Decl)) => \t : List (Pair (List U8) (List Decl)) =>
+      if [Maybe (List Decl)] (eqListU8 (fst [List U8] [List Decl] h) key)
+        (\u : U8 => Some [List Decl] (snd [List U8] [List Decl] h))
+        (\u : U8 => lookupMod key t))
+
+poly rec lookupExp = \key : List U8 => \table : List (Pair (List U8) (List (List U8))) =>
+  matchList [(Pair (List U8) (List (List U8)))] [Maybe (List (List U8))] table
+    (None [List (List U8)])
+    (\h : (Pair (List U8) (List (List U8))) => \t : List (Pair (List U8) (List (List U8))) =>
+      if [Maybe (List (List U8))] (eqListU8 (fst [List U8] [List (List U8)] h) key)
+        (\u : U8 => Some [List (List U8)] (snd [List U8] [List (List U8)] h))
+        (\u : U8 => lookupExp key t))
+
+poly rec removeExpEntry = \k : List U8 => \tbl : List (Pair (List U8) (List (List U8))) =>
+  matchList [(Pair (List U8) (List (List U8)))] [List (Pair (List U8) (List (List U8)))] tbl
+    (nil [(Pair (List U8) (List (List U8)))])
+    (\hh : (Pair (List U8) (List (List U8))) => \tt : List (Pair (List U8) (List (List U8))) =>
+      if [List (Pair (List U8) (List (List U8)))] (eqListU8 (fst [List U8] [List (List U8)] hh) k)
+        (\u : U8 => tt)
+        (\u : U8 => cons [(Pair (List U8) (List (List U8)))] hh (removeExpEntry k tt)))
+
+poly rec updateGlobalTable = \exports : List (List U8) => \modName : List U8 => \table : List (Pair (List U8) (List (List U8))) =>
+  matchList [List U8] [List (Pair (List U8) (List (List U8)))] exports
+    table
+    (\h : List U8 => \t : List (List U8) =>
+      let current = lookupExp h table in
+      let nextList = 
+        match current [List (List U8)] {
+          | None => cons [List U8] modName (nil [List U8])
+          | Some mods => append [List U8] mods (cons [List U8] modName (nil [List U8]))
+        } in
+      let nextTable = cons [(Pair (List U8) (List (List U8)))] (MkPair [List U8] [List (List U8)] h nextList) (removeExpEntry h table) in
+      updateGlobalTable t modName nextTable)
+
+poly rec collectModuleExports = \decls : List Decl => \acc : List (List U8) =>
+  matchList [Decl] [List (List U8)] decls (reverse [List U8] acc)
+    (\h : Decl => \t : List Decl =>
+      match h [List (List U8)] {
+        | D_Export name => collectModuleExports t (cons [List U8] name acc)
+        | D_Module n => collectModuleExports t acc
+        | D_Import f s => collectModuleExports t acc
+        | D_Opaque n => collectModuleExports t acc
+        | D_Native n => collectModuleExports t acc
+        | D_Type n => collectModuleExports t acc
+        | D_Data n cs => collectModuleExports t acc
+        | D_Def k r n e => collectModuleExports t acc
+      })
+
+poly rec populateInventoryAcc = \mods : List ModuleRecord => \modTable : List (Pair (List U8) (List Decl)) => \expTable : List (Pair (List U8) (List (List U8))) =>
+  matchList [ModuleRecord] [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] mods
+    (Ok [List U8] [Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8))))] 
+       (MkPair [List (Pair (List U8) (List Decl))] [List (Pair (List U8) (List (List U8)))] modTable expTable))
+    (\h : ModuleRecord => \t : List ModuleRecord =>
+       match h [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] { | MkModuleRecord name _ source =>
+         match (tokenize source) [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] {
+           | Err e => Err [List U8] [Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8))))] "Parse error"
+           | Ok toks =>
+             match (parseProgram toks) [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] {
+               | Err e => Err [List U8] [Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8))))] "Parse error"
+               | Ok decls =>
+                 let exports = collectModuleExports decls (nil [List U8]) in
+                 populateInventoryAcc t 
+                   (append [(Pair (List U8) (List Decl))] modTable (cons [(Pair (List U8) (List Decl))] (MkPair [List U8] [List Decl] name decls) (nil [(Pair (List U8) (List Decl))])))
+                   (updateGlobalTable exports name expTable)
+             }
+         }
+       })
+
+poly populateInventory = \mods : List ModuleRecord => \modTable : List (Pair (List U8) (List Decl)) => \expTable : List (Pair (List U8) (List (List U8))) =>
+  populateInventoryAcc mods modTable expTable
+
+poly rec symbolInList = \symbolName : List U8 => \exps : List (List U8) =>
+  matchList [List U8] [Bool] exps false
+    (\h : List U8 => \t : List (List U8) =>
+      if [Bool] (eqListU8 h symbolName)
+        (\u : U8 => true)
+        (\u : U8 => symbolInList symbolName t))
+
+poly isExported = \modName : List U8 => \symbolName : List U8 => \modTable : List (Pair (List U8) (List Decl)) =>
+  match (lookupMod modName modTable) [Bool] {
+    | None => false
+    | Some decls => 
+        let exports = collectModuleExports decls (nil [List U8]) in
+        symbolInList symbolName exports
+  }
+
+poly rec ctorNameInList = \name : List U8 => \cs : List (Pair (List U8) U8) =>
+  matchList [(Pair (List U8) U8)] [Bool] cs false
+    (\h : (Pair (List U8) U8) => \t : List (Pair (List U8) U8) =>
+      if [Bool] (eqListU8 (fst [List U8] [U8] h) name)
+        (\u : U8 => true)
+        (\u : U8 => ctorNameInList name t))
+
+poly rec isDefined = \symbolName : List U8 => \decls : List Decl =>
+  matchList [Decl] [Bool] decls false
+    (\h : Decl => \t : List Decl =>
+      let isMatch = 
+        match h [Bool] {
+          | D_Def k r n e => eqListU8 n symbolName
+          | D_Data n cs => or (eqListU8 n symbolName) (ctorNameInList symbolName cs)
+          | D_Type n => eqListU8 n symbolName
+          | D_Opaque n => eqListU8 n symbolName
+          | D_Native n => eqListU8 n symbolName
+          | D_Module n => false
+          | D_Import f s => false
+          | D_Export n => false
+        } in
+      if [Bool] isMatch (\u : U8 => true) (\u : U8 => isDefined symbolName t))
+
+poly emitImportStatus = \from : List U8 => \symbol : List U8 => \modTable : List (Pair (List U8) (List Decl)) =>
+  match (lookupMod from modTable) [List U8] {
+    | None => "MISSING_MODULE"
+    | Some decls =>
+        if [List U8] (isExported from symbol modTable)
+          (\u : U8 => "RESOLVED")
+          (\u : U8 => "NOT_EXPORTED")
+  }
+
+poly emitExportStatus = \symbol : List U8 => \expTable : List (Pair (List U8) (List (List U8))) => \decls : List Decl =>
+  match (lookupExp symbol expTable) [List U8] {
+    | None => "OK"
+    | Some origins =>
+        matchList [List U8] [List U8] origins
+          "OK"
+          (\h : List U8 => \t : List (List U8) =>
+            matchList [List U8] [List U8] t
+              (if [List U8] (isDefined symbol decls)
+                (\u : U8 => "OK")
+                (\u : U8 => "EXPORT_UNDEFINED"))
+              (\hh : List U8 => \tt : List (List U8) => "AMBIGUOUS"))
+  }
+
+poly rec filterDeclsAcc = \kind : U8 => \decls : List Decl => \acc : List Decl =>
+  matchList [Decl] [List Decl] decls (reverse [Decl] acc)
+    (\h : Decl => \t : List Decl =>
+      let isMatch = 
+        match h [Bool] {
+          | D_Module n => eqU8 kind #u8(0)
+          | D_Import f s => eqU8 kind #u8(1)
+          | D_Export n => eqU8 kind #u8(2)
+          | D_Data n cs => eqU8 kind #u8(3)
+          | D_Type n => eqU8 kind #u8(4)
+          | D_Opaque n => eqU8 kind #u8(5)
+          | D_Native n => eqU8 kind #u8(6)
+          | D_Def k r n e => 
+              match k [Bool] {
+                | K_Poly => eqU8 kind #u8(7)
+                | K_Combinator => eqU8 kind #u8(8)
+              }
+        } in
+      if [List Decl] isMatch
+        (\u : U8 => filterDeclsAcc kind t (cons [Decl] h acc))
+        (\u : U8 => filterDeclsAcc kind t acc))
+
+poly filterDecls = \kind : U8 => \decls : List Decl =>
+  filterDeclsAcc kind decls (nil [Decl])
+
+poly rec countList = #A => \xs : List A => \acc : U8 =>
+  matchList [A] [U8] xs acc
+    (\h : A => \t : List A => countList [A] t (addU8 acc #u8(1)))
+
+poly rec emitImportsSummary = \decls : List Decl => \modTable : List (Pair (List U8) (List Decl)) =>
+  matchList [Decl] [List U8] decls ""
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Import from symbol => 
+            append [U8] "import " (append [U8] from (append [U8] " " (append [U8] symbol (append [U8] " " (append [U8] (emitImportStatus from symbol modTable) (append [U8] "\n" (emitImportsSummary t modTable)))))))
+        | D_Module n => emitImportsSummary t modTable
+        | D_Export n => emitImportsSummary t modTable
+        | D_Opaque n => emitImportsSummary t modTable
+        | D_Native n => emitImportsSummary t modTable
+        | D_Type n => emitImportsSummary t modTable
+        | D_Data n cs => emitImportsSummary t modTable
+        | D_Def k r n e => emitImportsSummary t modTable
+      })
+
+poly rec emitExportsSummary = \decls : List Decl => \expTable : List (Pair (List U8) (List (List U8))) => \allDecls : List Decl =>
+  matchList [Decl] [List U8] decls ""
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Export symbol =>
+            append [U8] "export " (append [U8] symbol (append [U8] " " (append [U8] (emitExportStatus symbol expTable allDecls) (append [U8] "\n" (emitExportsSummary t expTable allDecls)))))
+        | D_Module n => emitExportsSummary t expTable allDecls
+        | D_Import f s => emitExportsSummary t expTable allDecls
+        | D_Opaque n => emitExportsSummary t expTable allDecls
+        | D_Native n => emitExportsSummary t expTable allDecls
+        | D_Type n => emitExportsSummary t expTable allDecls
+        | D_Data n cs => emitExportsSummary t expTable allDecls
+        | D_Def k r n e => emitExportsSummary t expTable allDecls
+      })
+
+poly rec emitCtors = \cs : List (Pair (List U8) U8) =>
+  matchList [(Pair (List U8) U8)] [List U8] cs ""
+    (\h : (Pair (List U8) U8) => \t : List (Pair (List U8) U8) =>
+      append [U8] "ctor " (append [U8] (fst [List U8] [U8] h) (append [U8] " " (append [U8] (u8ToDigits (snd [List U8] [U8] h)) (append [U8] "\n" (emitCtors t))))))
+
+poly rec emitDataSummary = \decls : List Decl =>
+  matchList [Decl] [List U8] decls ""
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Data name ctors => 
+            append [U8] "data " (append [U8] name (append [U8] "\n" (append [U8] (emitCtors ctors) (emitDataSummary t))))
+        | D_Module n => emitDataSummary t
+        | D_Import f s => emitDataSummary t
+        | D_Export n => emitDataSummary t
+        | D_Opaque n => emitDataSummary t
+        | D_Native n => emitDataSummary t
+        | D_Type n => emitDataSummary t
+        | D_Def k r n e => emitDataSummary t
+      })
+
+poly rec emitNamesSummary = \decls : List Decl => \prefix : List U8 =>
+  matchList [Decl] [List U8] decls ""
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Type n => append [U8] prefix (append [U8] n (append [U8] "\n" (emitNamesSummary t prefix)))
+        | D_Opaque n => append [U8] prefix (append [U8] n (append [U8] "\n" (emitNamesSummary t prefix)))
+        | D_Native n => append [U8] prefix (append [U8] n (append [U8] "\n" (emitNamesSummary t prefix)))
+        | D_Def k r n e => 
+            match k [Bool] {
+              | K_Poly => append [U8] "poly " (append [U8] n (append [U8] "\n" (emitNamesSummary t prefix)))
+              | K_Combinator => append [U8] "combinator " (append [U8] n (append [U8] "\n" (emitNamesSummary t prefix)))
+            }
+        | D_Module n => emitNamesSummary t prefix
+        | D_Import f s => emitNamesSummary t prefix
+        | D_Export n => emitNamesSummary t prefix
+        | D_Data n cs => emitNamesSummary t prefix
+      })
+
+poly rec getDeclared = \decls : List Decl =>
+  matchList [Decl] [List U8] decls "Main"
+    (\h : Decl => \t : List Decl =>
+      match h [List U8] {
+        | D_Module n => n
+        | D_Import f s => getDeclared t
+        | D_Export n => getDeclared t
+        | D_Opaque n => getDeclared t
+        | D_Native n => getDeclared t
+        | D_Type n => getDeclared t
+        | D_Data n cs => getDeclared t
+        | D_Def k r n e => getDeclared t
+      })
+
+poly emitModuleInventory = \name : List U8 => \decls : List Decl => \modTable : List (Pair (List U8) (List Decl)) => \expTable : List (Pair (List U8) (List (List U8))) =>
+  let declared = getDeclared decls in
+  let imps = filterDecls #u8(1) decls in
+  let exps = filterDecls #u8(2) decls in
+  let datas = filterDecls #u8(3) decls in
+  let types = filterDecls #u8(4) decls in
+  let opaques = filterDecls #u8(5) decls in
+  let natives = filterDecls #u8(6) decls in
+  let polys = filterDecls #u8(7) decls in
+  let combinators = filterDecls #u8(8) decls in
+  
+  let s1 = append [U8] "module " (append [U8] name "\n") in
+  let s2 = append [U8] "declared " (append [U8] declared "\n") in
+  let s3 = append [U8] "imports " (append [U8] (u8ToDigits (countList [Decl] imps #u8(0))) "\n") in
+  let s4 = emitImportsSummary imps modTable in
+  let s5 = append [U8] "exports " (append [U8] (u8ToDigits (countList [Decl] exps #u8(0))) "\n") in
+  let s6 = emitExportsSummary exps expTable decls in
+  let s7 = append [U8] "data " (append [U8] (u8ToDigits (countList [Decl] datas #u8(0))) "\n") in
+  let s8 = emitDataSummary datas in
+  let s9 = append [U8] "type " (append [U8] (u8ToDigits (countList [Decl] types #u8(0))) "\n") in
+  let s10 = emitNamesSummary types "type " in
+  let s11 = append [U8] "opaque " (append [U8] (u8ToDigits (countList [Decl] opaques #u8(0))) "\n") in
+  let s12 = emitNamesSummary opaques "opaque " in
+  let s13 = append [U8] "native " (append [U8] (u8ToDigits (countList [Decl] natives #u8(0))) "\n") in
+  let s14 = emitNamesSummary natives "native " in
+  let s15 = append [U8] "poly " (append [U8] (u8ToDigits (countList [Decl] polys #u8(0))) "\n") in
+  let s16 = emitNamesSummary polys "poly " in
+  let s17 = append [U8] "combinator " (append [U8] (u8ToDigits (countList [Decl] combinators #u8(0))) "\n") in
+  let s18 = emitNamesSummary combinators "combinator " in
+  
+  append [U8] s1 (append [U8] s2 (append [U8] s3 (append [U8] s4 (append [U8] s5 (append [U8] s6 (append [U8] s7 (append [U8] s8 (append [U8] s9 (append [U8] s10 (append [U8] s11 (append [U8] s12 (append [U8] s13 (append [U8] s14 (append [U8] s15 (append [U8] s16 (append [U8] s17 s18))))))))))))))))
+
+poly rec emitInventorySummary = \mods : List ModuleRecord => \modTable : List (Pair (List U8) (List Decl)) => \expTable : List (Pair (List U8) (List (List U8))) =>
+  matchList [ModuleRecord] [List U8] mods ""
+    (\h : ModuleRecord => \t : List ModuleRecord =>
+       match h [List U8] { | MkModuleRecord name _ _ =>
+         match (lookupMod name modTable) [List U8] {
+           | None => append [U8] "module " (append [U8] name "\n  error: not found\n")
+           | Some decls =>
+               append [U8] (emitModuleInventory name decls modTable expTable) (emitInventorySummary t modTable expTable)
+         }
+       })
+
+poly main = \source : List U8 =>
+  match (parseBundleSummary source) [U8] {
+    | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+    | Ok bundle =>
+        match bundle [U8] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
+          match (populateInventory mods (nil [(Pair (List U8) (List Decl))]) (nil [(Pair (List U8) (List (List U8)))])) [U8] {
+            | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+            | Ok inv =>
+                match inv [U8] { | MkPair modTable expTable =>
+                  let header = append [U8] "OK\nversion bundle-inventory-v1\nentry "
+                                (append [U8] entry
+                                  (append [U8] "\ntarget "
+                                    (append [U8] target
+                                      (append [U8] "\nwrapper "
+                                        (append [U8] wrapper
+                                          (append [U8] "\nmodules "
+                                            (append [U8] modsCountDigits "\n"))))))) in
+                  writeAll (append [U8] header (emitInventorySummary mods modTable expTable))
+                }
+          }
+        }
+  }
+
+poly rec writeAll = \bytes : List U8 =>
+  matchList [U8] [U8] bytes
+    #u8(0)
+    (\h : U8 => \t : List U8 =>
+      writeOne h [U8] (\u : U8 => writeAll t))

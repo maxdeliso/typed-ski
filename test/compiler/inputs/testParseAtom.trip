@@ -17,7 +17,7 @@ import Lexer Token
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
-import Lexer eqListU8
+import Prelude eqListU8
 import Parser parseAtom
 import Parser Expr
 import Parser E_Var

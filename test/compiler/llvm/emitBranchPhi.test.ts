@@ -45,7 +45,7 @@ describe("LLVM emitter - branch and phi", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "define i8 @trip_fn_Main_choose(i1 %v0) {",
+        "define i8 @trip_fn_Main_choose(i1 %v0) local_unnamed_addr nounwind {",
         "entry:",
         "  br i1 %v0, label %then0, label %else0",
         "then0:",
@@ -110,7 +110,7 @@ describe("LLVM emitter - branch and phi", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "define i8 @trip_fn_Main_joinTwo(i1 %v0, i8 %v1) {",
+        "define i8 @trip_fn_Main_joinTwo(i1 %v0, i8 %v1) local_unnamed_addr nounwind {",
         "entry:",
         "  br i1 %v0, label %then0, label %else0",
         "then0:",

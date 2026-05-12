@@ -44,10 +44,10 @@ describe("LLVM emitter - runtime calls", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "declare i8 @trip_read_one()",
-        "declare void @trip_write_one(i8)",
+        "declare i8 @trip_read_one() nounwind",
+        "declare void @trip_write_one(i8) nounwind",
         "",
-        "define void @trip_fn_Main_echo() {",
+        "define void @trip_fn_Main_echo() local_unnamed_addr nounwind {",
         "entry:",
         "  %v0 = call i8 @trip_read_one()",
         "  call void @trip_write_one(i8 %v0)",

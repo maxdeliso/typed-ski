@@ -28,9 +28,9 @@ poly main = writeOne #u8(65) [U8] (\\x : U8 => x)
     assert.equal(
       emitLlvmModule(block),
       [
-        "declare void @trip_write_one(i8)",
+        "declare void @trip_write_one(i8) nounwind",
         "",
-        "define i8 @trip_fn_Main_main() {",
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  call void @trip_write_one(i8 65)",
         "  ret i8 65",
@@ -60,10 +60,10 @@ poly main =
     assert.equal(
       emitLlvmModule(block),
       [
-        "declare i8 @trip_read_one()",
-        "declare void @trip_write_one(i8)",
+        "declare i8 @trip_read_one() nounwind",
+        "declare void @trip_write_one(i8) nounwind",
         "",
-        "define i8 @trip_fn_Main_main() {",
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
         "entry:",
         "  %v0 = call i8 @trip_read_one()",
         "  call void @trip_write_one(i8 %v0)",

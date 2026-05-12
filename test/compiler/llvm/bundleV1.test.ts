@@ -757,7 +757,10 @@ poly main = \\source : List U8 => #u8(0)
         ],
       }),
     );
-    assert.match(llvm, /declare ptr @trip_read_stdin_list_u8\(\)/);
+    assert.match(
+      llvm,
+      /declare (noalias )?ptr @trip_read_stdin_list_u8\(\)( nounwind)?/,
+    );
     assert.match(llvm, /%trip_source = call ptr @trip_read_stdin_list_u8\(\)/);
     assert.match(llvm, /call i8 @trip_fn_Main_main\(ptr %trip_source\)/);
   });
@@ -768,7 +771,10 @@ poly main = \\source : List U8 => #u8(0)
     );
     const llvm = compileTripBundleV1ToLlvm(bundleBytes);
     assert.match(llvm, /target triple = "x86_64-unknown-linux-gnu"/);
-    assert.match(llvm, /declare ptr @trip_read_stdin_list_u8\(\)/);
+    assert.match(
+      llvm,
+      /declare (noalias )?ptr @trip_read_stdin_list_u8\(\)( nounwind)?/,
+    );
     assert.match(llvm, /define i8 @trip_fn_Lib_seven\(\)/);
     assert.match(llvm, /define i8 @trip_fn_Main_main\(ptr %v\d+\)/);
   });

@@ -57,6 +57,7 @@ interface FunctionEmitContext extends ModuleEmitContext {
   incoming: ReadonlyMap<string, readonly EmitIncomingEdge[]>;
   caseUnpacks: ReadonlyMap<string, readonly CaseUnpackBlock[]>;
   expectedReturnType: MiniType;
+  runtimePointers: ReadonlyMap<RuntimeSymbol, string>;
 }
 
 type IncomingValue =
@@ -263,13 +264,27 @@ function emitFunction(
   moduleContext: ModuleEmitContext,
 ): void {
   const controlFlow = analyzeEmitControlFlow(fn, moduleContext);
+
+  const runtimeUsage = new Map<RuntimeSymbol, number>();
+  for (const block of fn.blocks) {
+    for (const instruction of block.instructions) {
+      if (instruction.op.kind === "runtimeCall") {
+        const name = instruction.op.name as RuntimeSymbol;
+        runtimeUsage.set(name, (runtimeUsage.get(name) ?? 0) + 1);
+      }
+    }
+  }
+
+  const runtimePointers = new Map<RuntimeSymbol, string>();
   const context: FunctionEmitContext = {
     ...moduleContext,
     aliases: collectMoveAliases(fn),
     incoming: controlFlow.incoming,
     caseUnpacks: controlFlow.caseUnpacks,
     expectedReturnType: fn.returnType,
+    runtimePointers,
   };
+
   const params = fn.params
     .map(
       (param) => `${lowerLlvmValueType(param.type)} ${llvmLocalName(param.id)}`,
@@ -280,6 +295,14 @@ function emitFunction(
       fn.returnType,
     )} ${llvmFunctionName(fn.name)}(${params}) local_unnamed_addr nounwind {`,
   );
+
+  // Emit runtime pointer aliases for frequently used functions to enable 2-byte calls
+  runtimeUsage.forEach((count, name) => {
+    if (count > 2) {
+      const ptrName = `%rt_ptr_${sanitizeLlvmIdentifier(name)}`;
+      runtimePointers.set(name, ptrName);
+    }
+  });
 
   fn.blocks.forEach((block, index) => {
     emitBlock(writer, block, index === 0, context);
@@ -395,6 +418,14 @@ function emitBlock(
   writer.line(`${llvmLabelName(block.label)}:`);
   if (!isEntry) {
     emitPhiNodes(writer, block, context);
+  }
+
+  if (isEntry) {
+    context.runtimePointers.forEach((ptrName, symbol) => {
+      writer.indented(
+        `${ptrName} = bitcast ptr ${llvmRuntimeName(symbol)} to ptr`,
+      );
+    });
   }
 
   for (const instruction of block.instructions) {
@@ -708,7 +739,7 @@ function emitCall(
   const renderedArgs = args
     .map((arg) => formatTypedValue(arg, context))
     .join(", ");
-  const tail = instruction.op.isTail ? "musttail " : "";
+  const tail = instruction.op.isTail ? "tail " : "";
   if (resultType === "void") {
     return `${tail}call void ${targetName}(${renderedArgs})`;
   }
@@ -731,8 +762,12 @@ function emitRuntimeCall(
   const renderedArgs = instruction.op.args
     .map((arg) => formatTypedValue(arg, context))
     .join(", ");
-  const runtimeName = llvmRuntimeName(instruction.op.name as RuntimeSymbol);
-  const tail = instruction.op.isTail ? "musttail " : "";
+
+  const name = instruction.op.name as RuntimeSymbol;
+  const cachedPtr = context.runtimePointers.get(name);
+  const runtimeName = cachedPtr ?? llvmRuntimeName(name);
+
+  const tail = instruction.op.isTail ? "tail " : "";
   if (resultType === "void") {
     return `${tail}call void ${runtimeName}(${renderedArgs})`;
   }

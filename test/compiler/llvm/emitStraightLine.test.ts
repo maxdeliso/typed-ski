@@ -24,9 +24,12 @@ describe("LLVM emitter - straight-line code", () => {
 
     assert.strictEqual(
       emitLlvmModule(module, { target: { kind: "generic" } }),
-      ["define void @trip_fn_Main_main() {", "entry:", "  ret void", "}"].join(
-        "\n",
-      ),
+      [
+        "define void @trip_fn_Main_main() local_unnamed_addr nounwind {",
+        "entry:",
+        "  ret void",
+        "}",
+      ].join("\n"),
     );
   });
 
@@ -39,9 +42,12 @@ describe("LLVM emitter - straight-line code", () => {
 
     assert.strictEqual(
       emitLlvmModule(module),
-      ["define i8 @trip_fn_Main_main() {", "entry:", "  ret i8 42", "}"].join(
-        "\n",
-      ),
+      [
+        "define i8 @trip_fn_Main_main() local_unnamed_addr nounwind {",
+        "entry:",
+        "  ret i8 42",
+        "}",
+      ].join("\n"),
     );
   });
 
@@ -74,7 +80,7 @@ describe("LLVM emitter - straight-line code", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "define i8 @trip_fn_Main_add(i8 %v0, i8 %v1) {",
+        "define i8 @trip_fn_Main_add(i8 %v0, i8 %v1) local_unnamed_addr nounwind {",
         "entry:",
         "  %v2 = add i8 %v0, %v1",
         "  ret i8 %v2",
@@ -112,7 +118,7 @@ describe("LLVM emitter - straight-line code", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "define i1 @trip_fn_Main_less(i8 %v0, i8 %v1) {",
+        "define i1 @trip_fn_Main_less(i8 %v0, i8 %v1) local_unnamed_addr nounwind {",
         "entry:",
         "  %v2 = icmp ult i8 %v0, %v1",
         "  ret i1 %v2",
@@ -143,7 +149,7 @@ describe("LLVM emitter - straight-line code", () => {
     assert.strictEqual(
       emitLlvmModule(module),
       [
-        "define i8 @trip_fn_Main_id(i8 %v0) {",
+        "define i8 @trip_fn_Main_id(i8 %v0) local_unnamed_addr nounwind {",
         "entry:",
         "  ret i8 %v0",
         "}",

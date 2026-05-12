@@ -38,6 +38,15 @@ export function collectRuntimeSymbols(module: BlockModule): RuntimeSymbol[] {
 
 export function printRuntimeDeclaration(name: RuntimeSymbol): string {
   const signature = lowerRuntimeSignature(name);
+  const rawSignature = getRuntimeSymbolSignature(name);
   const args = signature.args.join(", ");
-  return `declare ${signature.result} ${llvmRuntimeName(name)}(${args})`;
+  const attributes: string[] = ["nounwind"];
+
+  if (rawSignature.effects === "pure") {
+    attributes.push("readnone", "willreturn");
+  }
+
+  const attrStr = attributes.length > 0 ? ` #${name}_attrs` : "";
+  const directAttrs = attributes.join(" ");
+  return `declare ${signature.result} ${llvmRuntimeName(name)}(${args}) ${directAttrs}`;
 }

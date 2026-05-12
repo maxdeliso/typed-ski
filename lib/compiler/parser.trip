@@ -179,7 +179,7 @@ data Decl =
   | D_Def DefKind Bool (List U8) Expr
 
 poly parseError =
-  MkParseError (nil [U8])
+  MkParseError "Parse error"
 
 poly checkedIncrementU8 = \n : U8 =>
   if [Result ParseError U8] (ltU8 n #u8(255))
@@ -911,12 +911,8 @@ poly parseOpaqueDecl = \toks : List Token =>
         | Ok opqRes =>
           let name = fstNameToken opqRes in
           let afterName = sndNameToken opqRes in
-          match (skipToTopLevelDecl afterName) [Result ParseError (Pair Decl (List Token))] {
-            | Err e => Err [ParseError] [Pair Decl (List Token)] e
-            | Ok rest =>
-              Ok [ParseError] [Pair Decl (List Token)]
-                (MkPair [Decl] [List Token] (D_Opaque name) rest)
-          }
+          Ok [ParseError] [Pair Decl (List Token)]
+            (MkPair [Decl] [List Token] (D_Opaque name) afterName)
       }
   }
 

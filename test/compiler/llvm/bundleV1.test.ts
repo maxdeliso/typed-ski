@@ -427,11 +427,46 @@ opaque Handle
     }
   });
 
+  it("Trip-side native parsed module summary executable matches the prelude-bin-lexer-parser fixture", async () => {
+    const bundleBytes = realBootstrapBundle([
+      "Prelude",
+      "Bin",
+      "Lexer",
+      "Parser",
+    ]);
+    const expectedSummary = readFileSync(
+      join(fixtureDir, "bootstrap-parse-summary-prelude-bin-lexer-parser.txt"),
+      "utf8",
+    );
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-parse-summary-fixture-"),
+    );
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      const result = runExecutable(exePath, bundleBytes);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expectedSummary);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it("Trip-side native parsed module summary executable matches generated real bootstrap source bundles", async () => {
     const moduleSets = [
       ["Prelude"],
       ["Prelude", "Bin"],
       ["Prelude", "Bin", "Lexer"],
+      ["Prelude", "Bin", "Lexer", "Parser"],
+      ["Prelude", "Bin", "Lexer", "Parser", "BundleSummary"],
+      [
+        "Prelude",
+        "Bin",
+        "Lexer",
+        "Parser",
+        "BundleSummary",
+        "BundleParseSummary",
+      ],
     ];
     const tempDir = await mkdtemp(
       join(tmpdir(), "typed-ski-bundle-parse-summary-real-"),
@@ -440,11 +475,11 @@ opaque Handle
       const exePath = await compileBundleParseSummaryExecutable(tempDir);
       for (const moduleNames of moduleSets) {
         const bundleBytes = realBootstrapBundle(moduleNames);
-        const expectedSummary = summarizeTripBundleV1ParsedModules(bundleBytes);
+        const expected = summarizeTripBundleV1ParsedModules(bundleBytes);
         const result = runExecutable(exePath, bundleBytes);
         assert.equal(result.status, 0, moduleNames.join(" + "));
         assert.equal(result.stderr, "", moduleNames.join(" + "));
-        assert.equal(result.stdout, expectedSummary, moduleNames.join(" + "));
+        assert.equal(result.stdout, expected, moduleNames.join(" + "));
       }
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
@@ -493,7 +528,55 @@ poly main = #u8(7)
           /ERR:source module mismatch/,
         ],
         [
-          "malformed native syntax",
+          "malformed opaque syntax (missing type keyword)",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+opaque Handle
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "malformed opaque syntax (missing name)",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+opaque type
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "malformed opaque syntax (extra equals)",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+opaque type Handle =
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "malformed native syntax (missing colon)",
           serializeTripBundleV1({
             entryModule: "Main",
             target: { kind: "x86_64-unknown-linux-gnu" },
@@ -509,7 +592,7 @@ native readOne = U8
           /ERR:Parse error/,
         ],
         [
-          "malformed opaque syntax",
+          "malformed native syntax (missing type)",
           serializeTripBundleV1({
             entryModule: "Main",
             target: { kind: "x86_64-unknown-linux-gnu" },
@@ -517,7 +600,23 @@ native readOne = U8
               {
                 name: "Main",
                 source: `module Main
-opaque Handle
+native readOne :
+`,
+              },
+            ],
+          }),
+          /ERR:Parse error/,
+        ],
+        [
+          "malformed native syntax (invalid type)",
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+native readOne : -> U8
 `,
               },
             ],

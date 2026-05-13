@@ -157,16 +157,17 @@ ASCII-only outputs:
 
 ## Performance and Parallelism
 
-This project evaluates SKI expressions through Thanatos, a native
-multi-threaded daemon:
+This project supports two evaluation paths for Trip programs:
 
-- **Parallel Native Execution**: Thanatos dispatches reductions to native worker
-  threads.
-- **Daemon Delegation**: TypeScript evaluator APIs submit topo-DAG requests to
-  the daemon and decode topo-DAG responses.
-- **Structural Sharing**: Global hash-consing ensures that identical
-  sub-expressions share the same memory, significantly reducing the memory
-  footprint of large reductions.
+- **LLVM Ahead-of-Time Compilation**: Trip source is compiled through
+  MiniCore → ANF → Block IR → LLVM IR, then lowered to a native executable via
+  clang. This is the primary path for correctness testing and production use.
+- **Thanatos SKI Reduction**: Untyped SKI expressions can be evaluated by
+  Thanatos, a native C11/pthreads daemon that dispatches reductions to worker
+  threads over an IPC topo-DAG protocol.
+- **Structural Sharing**: Global hash-consing (in the Thanatos path) ensures
+  that identical sub-expressions share the same memory, reducing the footprint
+  of large SKI reductions.
 
 ### Thanatos (Native Orchestrator)
 
@@ -245,7 +246,7 @@ in Block IR, so later representation passes can choose an implementation layout.
 
 ## LLVM Compiler Backend
 
-In addition to the Thanatos SKI evaluator, the compiler features an ahead-of-time **LLVM Backend**. The pipeline lowers MiniCore Block IR modules into LLVM IR via the `emitLlvmModule` target. This backend supports generating generic LLVM IR as well as compiling for specific target profiles (e.g., `x86_64-unknown-linux-gnu`, `wasm32-wasi`). The emitted LLVM code utilizes a boxed-runtime representation to bridge Trip's data structures and semantics into native machine code.
+The compiler features an ahead-of-time **LLVM Backend**, which is now the primary path for compiled Trip program evaluation and combinator correctness testing. The pipeline lowers MiniCore Block IR modules into LLVM IR via the `emitLlvmModule` target. This backend supports generating generic LLVM IR as well as compiling for specific target profiles (e.g., `x86_64-unknown-linux-gnu`, `wasm32-wasi`). The emitted LLVM code utilizes a boxed-runtime representation to bridge Trip's data structures and semantics into native machine code.
 
 ### Native-v1 Bootstrap Contract
 

@@ -1,0 +1,9 @@
+module Main
+import Prelude U8
+import Prelude addU8
+
+poly outer = \x : U8 => addU8 #u8(3) x
+poly inner = \x : U8 => addU8 #u8(4) x
+
+export main
+poly main = outer (inner #u8(10))

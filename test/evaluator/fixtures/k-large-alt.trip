@@ -1,0 +1,7 @@
+module Main
+import Prelude U8
+
+poly k_u8 = \x : U8 => \y : U8 => x
+
+export main
+poly main = k_u8 #u8(42) #u8(1)

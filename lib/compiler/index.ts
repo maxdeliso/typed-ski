@@ -51,6 +51,7 @@ export {
   serializeTripBundleV1ToString,
   summarizeTripBundleV1,
   summarizeTripBundleV1Inventory,
+  summarizeTripBundleV1ModuleEnv,
   summarizeTripBundleV1ParsedModules,
   TripBundleV1Error,
   TRIP_BUNDLE_V1_MAGIC,

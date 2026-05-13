@@ -13,6 +13,7 @@ import {
   serializeTripBundleV1ToString,
   summarizeTripBundleV1,
   summarizeTripBundleV1Inventory,
+  summarizeTripBundleV1ModuleEnv,
   summarizeTripBundleV1ParsedModules,
   TripBundleV1Error,
   type TripBundleV1,
@@ -109,6 +110,30 @@ async function compileBundleInventoryExecutable(
     mainWrapper: { kind: "stdin-list-u8" },
   });
   const llPath = join(tempDir, "bundle-inventory.ll");
+  await writeFile(llPath, llvm, "utf8");
+  return compileLlvmToExecutable(llPath);
+}
+
+async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
+  const source = readFileSync(
+    join(__dirname, "../../../lib/compiler/moduleEnv.trip"),
+    "utf8",
+  );
+  const llvm = await compileTripToLlvm(source, {
+    entryModule: "ModuleEnv",
+    moduleSources: await loadCommonModules([
+      "Prelude",
+      "Bin",
+      "Lexer",
+      "Parser",
+      "BundleSummary",
+      "Avl",
+      "Nat",
+      "DataEnv",
+    ]),
+    mainWrapper: { kind: "stdin-list-u8" },
+  });
+  const llPath = join(tempDir, "module-env.ll");
   await writeFile(llPath, llvm, "utf8");
   return compileLlvmToExecutable(llPath);
 }
@@ -694,6 +719,81 @@ native readOne : -> U8
       for (const moduleNames of moduleSets) {
         const bundleBytes = realBootstrapBundle(moduleNames);
         const expected = summarizeTripBundleV1Inventory(bundleBytes);
+        const result = runExecutable(exePath, bundleBytes);
+        assert.equal(result.status, 0, moduleNames.join(" + "));
+        assert.equal(result.stderr, "", moduleNames.join(" + "));
+        assert.equal(result.stdout, expected, moduleNames.join(" + "));
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("host module metadata summary reproduces MiniCore setup order", () => {
+    const summary = summarizeTripBundleV1ModuleEnv(
+      realBootstrapBundle(["Prelude"]),
+    );
+
+    assert.match(summary, /^OK\nversion module-env-v1\nmodules 1\n/);
+    assert.match(summary, /datatype 0 Prelude\.Bool Bool\n/);
+    assert.match(summary, /datatype 1 Prelude\.List List\n/);
+    assert.match(
+      summary,
+      /constructor 0 Prelude\.false false Prelude\.false data#0 tag 0 total 2 arity 0\n/,
+    );
+    assert.match(
+      summary,
+      /constructor 1 Prelude\.true true Prelude\.true data#0 tag 1 total 2 arity 0\n/,
+    );
+    assert.match(
+      summary,
+      /constructor 2 Prelude\.nil nil Prelude\.nil data#1 tag 0 total 2 arity 0\n/,
+    );
+    assert.match(
+      summary,
+      /constructor 3 Prelude\.cons cons Prelude\.cons data#1 tag 1 total 2 arity 2\n/,
+    );
+    assert.match(summary, /primitive \d+ Nat\.succ arity 1\n/);
+    assert.match(summary, /primitive \d+ Prelude\.error arity 0\n/);
+    assert.match(summary, /opaque U8\n/);
+    assert.match(summary, /native eqU8\n/);
+  });
+
+  it("host module metadata summary reports ambiguous constructor aliases", () => {
+    const bytes = serializeTripBundleV1({
+      entryModule: "Main",
+      target: { kind: "x86_64-unknown-linux-gnu" },
+      modules: [
+        {
+          name: "Main",
+          source: `module Main
+export main
+data A = Dup
+data B = Dup
+poly main = Dup
+`,
+        },
+      ],
+    });
+
+    const summary = summarizeTripBundleV1ModuleEnv(bytes);
+    assert.match(summary, /alias Main\.Dup AMBIGUOUS\n/);
+    assert.match(summary, /export main OK\n/);
+  });
+
+  it("Trip-side native module metadata executable matches generated real bootstrap source bundles", async () => {
+    const moduleSets = [
+      ["Prelude"],
+      ["Prelude", "Bin"],
+      ["Prelude", "Bin", "Lexer"],
+      ["Prelude", "Bin", "Lexer", "Parser"],
+    ];
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-module-env-real-"));
+    try {
+      const exePath = await compileModuleEnvExecutable(tempDir);
+      for (const moduleNames of moduleSets) {
+        const bundleBytes = realBootstrapBundle(moduleNames);
+        const expected = summarizeTripBundleV1ModuleEnv(bundleBytes);
         const result = runExecutable(exePath, bundleBytes);
         assert.equal(result.status, 0, moduleNames.join(" + "));
         assert.equal(result.stderr, "", moduleNames.join(" + "));

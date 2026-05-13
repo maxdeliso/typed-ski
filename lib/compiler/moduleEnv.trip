@@ -1,0 +1,875 @@
+module ModuleEnv
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude append
+import Prelude reverse
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Maybe
+import Prelude Some
+import Prelude None
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude if
+import Prelude or
+import Prelude not
+import Prelude U8
+import Prelude eqU8
+import Prelude ltU8
+import Prelude addU8
+import Prelude eqListU8
+import Prelude lteListU8
+import Prelude digitToAscii
+import Prelude singletonU8
+import Prelude u8ToDigits
+import Prelude writeOne
+import Avl empty
+import Avl insert
+import BundleSummary parseBundleSummary
+import BundleSummary BundleSummary
+import BundleSummary MkBundleSummary
+import BundleSummary ModuleRecord
+import BundleSummary MkModuleRecord
+import Lexer tokenize
+import Parser Decl
+import Parser D_Module
+import Parser D_Import
+import Parser D_Export
+import Parser D_Opaque
+import Parser D_Native
+import Parser D_Type
+import Parser D_Data
+import Parser D_Def
+import Parser DefKind
+import Parser K_Poly
+import Parser K_Combinator
+import Parser parseProgram
+import DataEnv DataEnv
+import DataEnv MkDataEnv
+import DataEnv CtorInfo
+import DataEnv MkCtorInfo
+import DataEnv ADTInfo
+import DataEnv MkADTInfo
+
+export ModuleInfo
+export MkModuleInfo
+export ImportInfo
+export MkImportInfo
+export ExportInfo
+export MkExportInfo
+export DefinitionInfo
+export MkDefinitionInfo
+export DataTypeInfo
+export MkDataTypeInfo
+export ConstructorMeta
+export MkConstructorMeta
+export ConstructorAliasInfo
+export MkConstructorAliasInfo
+export OpaqueInfo
+export MkOpaqueInfo
+export NativeInfo
+export MkNativeInfo
+export PrimitiveInfo
+export MkPrimitiveInfo
+export ModuleEnv
+export MkModuleEnv
+export buildModuleEnv
+export lookupModule
+export lookupImport
+export lookupExport
+export lookupDefinition
+export lookupADT
+export lookupConstructor
+export lookupConstructorAlias
+export lookupPrimitive
+export lookupOpaque
+export lookupNative
+export dataEnvFromModuleEnv
+export emitModuleEnvSummary
+export emitBundleModuleEnvSummary
+export main
+
+data ModuleInfo = MkModuleInfo (List U8) (List Decl)
+data ImportInfo = MkImportInfo (List U8) (List U8) (List U8)
+data ExportInfo = MkExportInfo (List U8) (List U8)
+data DefinitionInfo = MkDefinitionInfo (List U8) (List U8) (List U8)
+data DataTypeInfo = MkDataTypeInfo (List U8) (List U8) U8
+data ConstructorMeta = MkConstructorMeta (List U8) (List U8) (List U8) (List U8) U8 U8 U8 U8 U8
+data ConstructorAliasInfo = MkConstructorAliasInfo (List U8) (Maybe (List U8))
+data OpaqueInfo = MkOpaqueInfo (List U8) (List U8)
+data NativeInfo = MkNativeInfo (List U8) (List U8)
+data PrimitiveInfo = MkPrimitiveInfo (List U8) U8 U8
+
+data ModuleEnv = MkModuleEnv
+  (List ModuleInfo)
+  (List ImportInfo)
+  (List ExportInfo)
+  (List DefinitionInfo)
+  (List DataTypeInfo)
+  (List ConstructorMeta)
+  (List ConstructorAliasInfo)
+  (List OpaqueInfo)
+  (List NativeInfo)
+  (List PrimitiveInfo)
+
+data BuildState = MkBuildState
+  (List ModuleInfo)
+  (List ImportInfo)
+  (List ExportInfo)
+  (List DefinitionInfo)
+  (List DataTypeInfo)
+  (List OpaqueInfo)
+  (List NativeInfo)
+  U8
+
+poly newline : List U8 = "\n"
+poly space : List U8 = " "
+poly dot : List U8 = "."
+poly ambiguousText : List U8 = "AMBIGUOUS"
+
+poly inc = \n : U8 =>
+  addU8 n #u8(1)
+
+poly qualify = \moduleName : List U8 => \name : List U8 =>
+  append [U8] moduleName (append [U8] dot name)
+
+poly qualifyCtor = \moduleName : List U8 => \typeName : List U8 => \ctorName : List U8 =>
+  append [U8] moduleName (append [U8] dot (append [U8] typeName (append [U8] dot ctorName)))
+
+poly emitLine1 = \prefix : List U8 => \a : List U8 =>
+  append [U8] prefix (append [U8] a newline)
+
+poly emitLine2 = \prefix : List U8 => \a : List U8 => \b : List U8 =>
+  append [U8] prefix (append [U8] a (append [U8] space (append [U8] b newline)))
+
+poly emitLine3 = \prefix : List U8 => \a : List U8 => \b : List U8 => \c : List U8 =>
+  append [U8] prefix (append [U8] a (append [U8] space (append [U8] b (append [U8] space (append [U8] c newline)))))
+
+poly emitU8Line = \prefix : List U8 => \n : U8 =>
+  append [U8] prefix (append [U8] (u8ToDigits n) newline)
+
+poly rec countList = #A => \xs : List A => \acc : U8 =>
+  matchList [A] [U8] xs acc
+    (\h : A => \t : List A => countList [A] t (inc acc))
+
+poly count = #A => \xs : List A =>
+  countList [A] xs #u8(0)
+
+poly defKindName = \kind : DefKind =>
+  match kind [List U8] {
+    | K_Poly => "poly"
+    | K_Combinator => "combinator"
+  }
+
+poly definitionKind = \decl : Decl =>
+  match decl [List U8] {
+    | D_Def kind isRec name body => defKindName kind
+    | D_Data name ctors => "data"
+    | D_Type name => "type"
+    | D_Opaque name => "opaque"
+    | D_Native name => "native"
+    | D_Module name => "module"
+    | D_Import fromName symbolName => "import"
+    | D_Export name => "export"
+  }
+
+poly definitionName = \decl : Decl =>
+  match decl [List U8] {
+    | D_Def kind isRec name body => name
+    | D_Data name ctors => name
+    | D_Type name => name
+    | D_Opaque name => name
+    | D_Native name => name
+    | D_Module name => name
+    | D_Import fromName symbolName => symbolName
+    | D_Export name => name
+  }
+
+poly rec declaredModuleAcc = \decls : List Decl => \seen : Maybe (List U8) =>
+  matchList [Decl] [Result (List U8) (List U8)] decls
+    (match seen [Result (List U8) (List U8)] {
+      | None => Err [List U8] [List U8] "missing module declaration"
+      | Some name => Ok [List U8] [List U8] name
+    })
+    (\h : Decl => \t : List Decl =>
+      match h [Result (List U8) (List U8)] {
+        | D_Module name =>
+            match seen [Result (List U8) (List U8)] {
+              | None => declaredModuleAcc t (Some [List U8] name)
+              | Some prev => Err [List U8] [List U8] "multiple module declarations"
+            }
+        | D_Import fromName symbolName => declaredModuleAcc t seen
+        | D_Export name => declaredModuleAcc t seen
+        | D_Opaque name => declaredModuleAcc t seen
+        | D_Native name => declaredModuleAcc t seen
+        | D_Type name => declaredModuleAcc t seen
+        | D_Data name ctors => declaredModuleAcc t seen
+        | D_Def kind isRec name body => declaredModuleAcc t seen
+      })
+
+poly declaredModule = \decls : List Decl =>
+  declaredModuleAcc decls (None [List U8])
+
+poly parseModuleSource = \bundleName : List U8 => \source : List U8 =>
+  match (tokenize source) [Result (List U8) ModuleInfo] {
+    | Err e => Err [List U8] [ModuleInfo] "Lex error"
+    | Ok toks =>
+        match (parseProgram toks) [Result (List U8) ModuleInfo] {
+          | Err e =>
+              match e [Result (List U8) ModuleInfo] { | MkParseError msg =>
+                Err [List U8] [ModuleInfo] msg
+              }
+          | Ok decls =>
+              match (declaredModule decls) [Result (List U8) ModuleInfo] {
+                | Err e => Err [List U8] [ModuleInfo] e
+                | Ok declared =>
+                    if [Result (List U8) ModuleInfo] (eqListU8 declared bundleName)
+                      (\u : U8 => Ok [List U8] [ModuleInfo] (MkModuleInfo bundleName decls))
+                      (\u : U8 => Err [List U8] [ModuleInfo] "source module mismatch")
+              }
+        }
+  }
+
+poly rec collectDecls = \moduleName : List U8 => \decls : List Decl => \state : BuildState =>
+  matchList [Decl] [BuildState] decls
+    state
+    (\h : Decl => \t : List Decl =>
+      match state [BuildState] { | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
+        match h [BuildState] {
+          | D_Import fromName symbolName =>
+              collectDecls moduleName t
+                (MkBuildState mods (append [ImportInfo] imps (cons [ImportInfo] (MkImportInfo moduleName fromName symbolName) (nil [ImportInfo]))) exps defs dataTypes opaques natives nextTypeId)
+          | D_Export name =>
+              collectDecls moduleName t
+                (MkBuildState mods imps (append [ExportInfo] exps (cons [ExportInfo] (MkExportInfo moduleName name) (nil [ExportInfo]))) defs dataTypes opaques natives nextTypeId)
+          | D_Data name ctors =>
+              let qName = qualify moduleName name in
+              collectDecls moduleName t
+                (MkBuildState mods imps exps
+                  (append [DefinitionInfo] defs (cons [DefinitionInfo] (MkDefinitionInfo moduleName name "data") (nil [DefinitionInfo])))
+                  (append [DataTypeInfo] dataTypes (cons [DataTypeInfo] (MkDataTypeInfo qName name nextTypeId) (nil [DataTypeInfo])))
+                  opaques natives (inc nextTypeId))
+          | D_Type name =>
+              collectDecls moduleName t
+                (MkBuildState mods imps exps (append [DefinitionInfo] defs (cons [DefinitionInfo] (MkDefinitionInfo moduleName name "type") (nil [DefinitionInfo]))) dataTypes opaques natives nextTypeId)
+          | D_Opaque name =>
+              collectDecls moduleName t
+                (MkBuildState mods imps exps
+                  (append [DefinitionInfo] defs (cons [DefinitionInfo] (MkDefinitionInfo moduleName name "opaque") (nil [DefinitionInfo])))
+                  dataTypes (append [OpaqueInfo] opaques (cons [OpaqueInfo] (MkOpaqueInfo moduleName name) (nil [OpaqueInfo]))) natives nextTypeId)
+          | D_Native name =>
+              collectDecls moduleName t
+                (MkBuildState mods imps exps
+                  (append [DefinitionInfo] defs (cons [DefinitionInfo] (MkDefinitionInfo moduleName name "native") (nil [DefinitionInfo])))
+                  dataTypes opaques (append [NativeInfo] natives (cons [NativeInfo] (MkNativeInfo moduleName name) (nil [NativeInfo]))) nextTypeId)
+          | D_Def kind isRec name body =>
+              collectDecls moduleName t
+                (MkBuildState mods imps exps
+                  (append [DefinitionInfo] defs (cons [DefinitionInfo] (MkDefinitionInfo moduleName name (defKindName kind)) (nil [DefinitionInfo])))
+                  dataTypes opaques natives nextTypeId)
+          | D_Module name => collectDecls moduleName t state
+        }
+      })
+
+poly rec parseModulesAcc = \records : List ModuleRecord => \state : BuildState =>
+  matchList [ModuleRecord] [Result (List U8) BuildState] records
+    (Ok [List U8] [BuildState] state)
+    (\h : ModuleRecord => \t : List ModuleRecord =>
+      match h [Result (List U8) BuildState] { | MkModuleRecord name lengthDigits source =>
+        match (parseModuleSource name source) [Result (List U8) BuildState] {
+          | Err e => Err [List U8] [BuildState] e
+          | Ok modInfo =>
+              match modInfo [Result (List U8) BuildState] { | MkModuleInfo modName decls =>
+                match state [Result (List U8) BuildState] { | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
+                  let withMod = MkBuildState
+                    (append [ModuleInfo] mods (cons [ModuleInfo] modInfo (nil [ModuleInfo])))
+                    imps exps defs dataTypes opaques natives nextTypeId in
+                  parseModulesAcc t (collectDecls modName decls withMod)
+                }
+              }
+        }
+      })
+
+poly initialBuildState =
+  MkBuildState (nil [ModuleInfo]) (nil [ImportInfo]) (nil [ExportInfo]) (nil [DefinitionInfo])
+    (cons [DataTypeInfo] (MkDataTypeInfo "Prelude.Bool" "Bool" #u8(0))
+      (cons [DataTypeInfo] (MkDataTypeInfo "Prelude.List" "List" #u8(1)) (nil [DataTypeInfo])))
+    (nil [OpaqueInfo]) (nil [NativeInfo]) #u8(2)
+
+poly rec findDataTypeId = \qName : List U8 => \dataTypes : List DataTypeInfo =>
+  matchList [DataTypeInfo] [Maybe U8] dataTypes
+    (None [U8])
+    (\h : DataTypeInfo => \t : List DataTypeInfo =>
+      match h [Maybe U8] { | MkDataTypeInfo hQName hLocal hId =>
+        if [Maybe U8] (eqListU8 hQName qName)
+          (\u : U8 => Some [U8] hId)
+          (\u : U8 => findDataTypeId qName t)
+      })
+
+poly rec countCtors = \ctors : List (Pair (List U8) U8) => \acc : U8 =>
+  matchList [Pair (List U8) U8] [U8] ctors acc
+    (\h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) => countCtors t (inc acc))
+
+poly rec addCtorMetas = \moduleName : List U8 => \typeName : List U8 => \dataId : U8 => \ctors : List (Pair (List U8) U8) => \total : U8 => \tag : U8 => \symbolId : U8 => \acc : List ConstructorMeta =>
+  matchList [Pair (List U8) U8] [Pair (List ConstructorMeta) U8] ctors
+    (MkPair [List ConstructorMeta] [U8] acc symbolId)
+    (\h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) =>
+      let ctorName = fst [List U8] [U8] h in
+      let arity = snd [List U8] [U8] h in
+      let qName = qualifyCtor moduleName typeName ctorName in
+      let alias = qualify moduleName ctorName in
+      let meta = MkConstructorMeta qName ctorName alias typeName dataId symbolId tag total arity in
+      addCtorMetas moduleName typeName dataId t total (inc tag) (inc symbolId)
+        (append [ConstructorMeta] acc (cons [ConstructorMeta] meta (nil [ConstructorMeta])))
+    )
+
+poly rec collectConstructorsFromDecls = \moduleName : List U8 => \decls : List Decl => \dataTypes : List DataTypeInfo => \symbolId : U8 => \acc : List ConstructorMeta =>
+  matchList [Decl] [Pair (List ConstructorMeta) U8] decls
+    (MkPair [List ConstructorMeta] [U8] acc symbolId)
+    (\h : Decl => \t : List Decl =>
+      match h [Pair (List ConstructorMeta) U8] {
+        | D_Data typeName ctors =>
+            let dataQName = qualify moduleName typeName in
+            match (findDataTypeId dataQName dataTypes) [Pair (List ConstructorMeta) U8] {
+              | None => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+              | Some dataId =>
+                  let total = countCtors ctors #u8(0) in
+                  match (addCtorMetas moduleName typeName dataId ctors total #u8(0) symbolId acc) [Pair (List ConstructorMeta) U8] { | MkPair nextAcc nextSymbolId =>
+                    collectConstructorsFromDecls moduleName t dataTypes nextSymbolId nextAcc
+                  }
+            }
+        | D_Module name => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+        | D_Import fromName symbolName => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+        | D_Export name => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+        | D_Opaque name => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+        | D_Native name => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+        | D_Type name => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+        | D_Def kind isRec name body => collectConstructorsFromDecls moduleName t dataTypes symbolId acc
+      })
+
+poly rec collectConstructors = \mods : List ModuleInfo => \dataTypes : List DataTypeInfo => \symbolId : U8 => \acc : List ConstructorMeta =>
+  matchList [ModuleInfo] [Pair (List ConstructorMeta) U8] mods
+    (MkPair [List ConstructorMeta] [U8] acc symbolId)
+    (\h : ModuleInfo => \t : List ModuleInfo =>
+      match h [Pair (List ConstructorMeta) U8] { | MkModuleInfo moduleName decls =>
+        match (collectConstructorsFromDecls moduleName decls dataTypes symbolId acc) [Pair (List ConstructorMeta) U8] { | MkPair nextAcc nextSymbolId =>
+          collectConstructors t dataTypes nextSymbolId nextAcc
+        }
+      })
+
+poly pseudoConstructors =
+  cons [ConstructorMeta] (MkConstructorMeta "Prelude.false" "false" "Prelude.false" "Bool" #u8(0) #u8(0) #u8(0) #u8(2) #u8(0))
+    (cons [ConstructorMeta] (MkConstructorMeta "Prelude.true" "true" "Prelude.true" "Bool" #u8(0) #u8(1) #u8(1) #u8(2) #u8(0))
+      (cons [ConstructorMeta] (MkConstructorMeta "Prelude.nil" "nil" "Prelude.nil" "List" #u8(1) #u8(2) #u8(0) #u8(2) #u8(0))
+        (cons [ConstructorMeta] (MkConstructorMeta "Prelude.cons" "cons" "Prelude.cons" "List" #u8(1) #u8(3) #u8(1) #u8(2) #u8(2))
+          (nil [ConstructorMeta]))))
+
+poly rec addAlias = \alias : List U8 => \qName : List U8 => \aliases : List ConstructorAliasInfo =>
+  matchList [ConstructorAliasInfo] [List ConstructorAliasInfo] aliases
+    (cons [ConstructorAliasInfo] (MkConstructorAliasInfo alias (Some [List U8] qName)) (nil [ConstructorAliasInfo]))
+    (\h : ConstructorAliasInfo => \t : List ConstructorAliasInfo =>
+      match h [List ConstructorAliasInfo] { | MkConstructorAliasInfo hAlias hTarget =>
+        if [List ConstructorAliasInfo] (eqListU8 hAlias alias)
+          (\u : U8 =>
+            match hTarget [List ConstructorAliasInfo] {
+              | None => aliases
+              | Some existing =>
+                  if [List ConstructorAliasInfo] (eqListU8 existing qName)
+                    (\u : U8 => aliases)
+                    (\u : U8 => cons [ConstructorAliasInfo] (MkConstructorAliasInfo alias (None [List U8])) t)
+            })
+          (\u : U8 => cons [ConstructorAliasInfo] h (addAlias alias qName t))
+      })
+
+poly rec buildAliases = \ctors : List ConstructorMeta => \aliases : List ConstructorAliasInfo =>
+  matchList [ConstructorMeta] [List ConstructorAliasInfo] ctors
+    aliases
+    (\h : ConstructorMeta => \t : List ConstructorMeta =>
+      match h [List ConstructorAliasInfo] { | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
+        buildAliases t (addAlias alias qName aliases)
+      })
+
+poly primitivesStartingAt = \firstSymbolId : U8 =>
+  cons [PrimitiveInfo] (MkPrimitiveInfo "Nat.succ" firstSymbolId #u8(1))
+    (cons [PrimitiveInfo] (MkPrimitiveInfo "Nat.add" (addU8 firstSymbolId #u8(1)) #u8(2))
+      (cons [PrimitiveInfo] (MkPrimitiveInfo "Nat.mul" (addU8 firstSymbolId #u8(2)) #u8(2))
+        (cons [PrimitiveInfo] (MkPrimitiveInfo "Nat.lte" (addU8 firstSymbolId #u8(3)) #u8(2))
+          (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.not" (addU8 firstSymbolId #u8(4)) #u8(1))
+            (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.eqU8" (addU8 firstSymbolId #u8(5)) #u8(2))
+              (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.ltU8" (addU8 firstSymbolId #u8(6)) #u8(2))
+                (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.addU8" (addU8 firstSymbolId #u8(7)) #u8(2))
+                  (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.subU8" (addU8 firstSymbolId #u8(8)) #u8(2))
+                    (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.divU8" (addU8 firstSymbolId #u8(9)) #u8(2))
+                      (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.modU8" (addU8 firstSymbolId #u8(10)) #u8(2))
+                        (cons [PrimitiveInfo] (MkPrimitiveInfo "Prelude.error" (addU8 firstSymbolId #u8(11)) #u8(0))
+                          (nil [PrimitiveInfo]))))))))))))
+
+poly buildModuleEnv = \records : List ModuleRecord =>
+  match (parseModulesAcc records initialBuildState) [Result (List U8) ModuleEnv] {
+    | Err e => Err [List U8] [ModuleEnv] e
+    | Ok state =>
+        match state [Result (List U8) ModuleEnv] { | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
+          match (collectConstructors mods dataTypes #u8(4) pseudoConstructors) [Result (List U8) ModuleEnv] { | MkPair ctors nextSymbolId =>
+            let aliases = buildAliases ctors (nil [ConstructorAliasInfo]) in
+            let primitives = primitivesStartingAt nextSymbolId in
+            Ok [List U8] [ModuleEnv] (MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives primitives)
+          }
+        }
+  }
+
+poly rec lookupModule = \name : List U8 => \mods : List ModuleInfo =>
+  matchList [ModuleInfo] [Maybe ModuleInfo] mods
+    (None [ModuleInfo])
+    (\h : ModuleInfo => \t : List ModuleInfo =>
+      match h [Maybe ModuleInfo] { | MkModuleInfo hName decls =>
+        if [Maybe ModuleInfo] (eqListU8 hName name)
+          (\u : U8 => Some [ModuleInfo] h)
+          (\u : U8 => lookupModule name t)
+      })
+
+poly rec lookupImport = \moduleName : List U8 => \symbolName : List U8 => \imports : List ImportInfo =>
+  matchList [ImportInfo] [Maybe ImportInfo] imports
+    (None [ImportInfo])
+    (\h : ImportInfo => \t : List ImportInfo =>
+      match h [Maybe ImportInfo] { | MkImportInfo hModule hFrom hSymbol =>
+        if [Maybe ImportInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
+          (\u : U8 => lookupImport moduleName symbolName t)
+          (\u : U8 => Some [ImportInfo] h)
+      })
+
+poly rec lookupExport = \moduleName : List U8 => \symbolName : List U8 => \exports : List ExportInfo =>
+  matchList [ExportInfo] [Maybe ExportInfo] exports
+    (None [ExportInfo])
+    (\h : ExportInfo => \t : List ExportInfo =>
+      match h [Maybe ExportInfo] { | MkExportInfo hModule hSymbol =>
+        if [Maybe ExportInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
+          (\u : U8 => lookupExport moduleName symbolName t)
+          (\u : U8 => Some [ExportInfo] h)
+      })
+
+poly rec lookupDefinition = \moduleName : List U8 => \symbolName : List U8 => \defs : List DefinitionInfo =>
+  matchList [DefinitionInfo] [Maybe DefinitionInfo] defs
+    (None [DefinitionInfo])
+    (\h : DefinitionInfo => \t : List DefinitionInfo =>
+      match h [Maybe DefinitionInfo] { | MkDefinitionInfo hModule hSymbol hKind =>
+        if [Maybe DefinitionInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
+          (\u : U8 => lookupDefinition moduleName symbolName t)
+          (\u : U8 => Some [DefinitionInfo] h)
+      })
+
+poly rec lookupADT = \qName : List U8 => \dataTypes : List DataTypeInfo =>
+  matchList [DataTypeInfo] [Maybe DataTypeInfo] dataTypes
+    (None [DataTypeInfo])
+    (\h : DataTypeInfo => \t : List DataTypeInfo =>
+      match h [Maybe DataTypeInfo] { | MkDataTypeInfo hQName hLocal hId =>
+        if [Maybe DataTypeInfo] (eqListU8 hQName qName)
+          (\u : U8 => Some [DataTypeInfo] h)
+          (\u : U8 => lookupADT qName t)
+      })
+
+poly rec lookupConstructor = \qName : List U8 => \ctors : List ConstructorMeta =>
+  matchList [ConstructorMeta] [Maybe ConstructorMeta] ctors
+    (None [ConstructorMeta])
+    (\h : ConstructorMeta => \t : List ConstructorMeta =>
+      match h [Maybe ConstructorMeta] { | MkConstructorMeta hQName local alias dataName dataId symbolId tag total arity =>
+        if [Maybe ConstructorMeta] (eqListU8 hQName qName)
+          (\u : U8 => Some [ConstructorMeta] h)
+          (\u : U8 => lookupConstructor qName t)
+      })
+
+poly rec lookupConstructorAlias = \alias : List U8 => \aliases : List ConstructorAliasInfo =>
+  matchList [ConstructorAliasInfo] [Maybe ConstructorAliasInfo] aliases
+    (None [ConstructorAliasInfo])
+    (\h : ConstructorAliasInfo => \t : List ConstructorAliasInfo =>
+      match h [Maybe ConstructorAliasInfo] { | MkConstructorAliasInfo hAlias hTarget =>
+        if [Maybe ConstructorAliasInfo] (eqListU8 hAlias alias)
+          (\u : U8 => Some [ConstructorAliasInfo] h)
+          (\u : U8 => lookupConstructorAlias alias t)
+      })
+
+poly rec lookupPrimitive = \qName : List U8 => \prims : List PrimitiveInfo =>
+  matchList [PrimitiveInfo] [Maybe PrimitiveInfo] prims
+    (None [PrimitiveInfo])
+    (\h : PrimitiveInfo => \t : List PrimitiveInfo =>
+      match h [Maybe PrimitiveInfo] { | MkPrimitiveInfo hQName hSymbol hArity =>
+        if [Maybe PrimitiveInfo] (eqListU8 hQName qName)
+          (\u : U8 => Some [PrimitiveInfo] h)
+          (\u : U8 => lookupPrimitive qName t)
+      })
+
+poly rec lookupOpaque = \moduleName : List U8 => \name : List U8 => \opaques : List OpaqueInfo =>
+  matchList [OpaqueInfo] [Maybe OpaqueInfo] opaques
+    (None [OpaqueInfo])
+    (\h : OpaqueInfo => \t : List OpaqueInfo =>
+      match h [Maybe OpaqueInfo] { | MkOpaqueInfo hModule hName =>
+        if [Maybe OpaqueInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hName name)))
+          (\u : U8 => lookupOpaque moduleName name t)
+          (\u : U8 => Some [OpaqueInfo] h)
+      })
+
+poly rec lookupNative = \moduleName : List U8 => \name : List U8 => \natives : List NativeInfo =>
+  matchList [NativeInfo] [Maybe NativeInfo] natives
+    (None [NativeInfo])
+    (\h : NativeInfo => \t : List NativeInfo =>
+      match h [Maybe NativeInfo] { | MkNativeInfo hModule hName =>
+        if [Maybe NativeInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hName name)))
+          (\u : U8 => lookupNative moduleName name t)
+          (\u : U8 => Some [NativeInfo] h)
+      })
+
+poly importStatus = \fromName : List U8 => \symbolName : List U8 => \mods : List ModuleInfo => \exports : List ExportInfo =>
+  match (lookupModule fromName mods) [List U8] {
+    | None => "MISSING_MODULE"
+    | Some modInfo =>
+        match (lookupExport fromName symbolName exports) [List U8] {
+          | None => "NOT_EXPORTED"
+          | Some exp => "RESOLVED"
+        }
+  }
+
+poly rec isDefined = \moduleName : List U8 => \symbolName : List U8 => \defs : List DefinitionInfo =>
+  match (lookupDefinition moduleName symbolName defs) [Bool] {
+    | Some d => true
+    | None => false
+  }
+
+poly rec isConstructorDefined = \moduleName : List U8 => \symbolName : List U8 => \ctors : List ConstructorMeta =>
+  matchList [ConstructorMeta] [Bool] ctors
+    false
+    (\h : ConstructorMeta => \t : List ConstructorMeta =>
+      match h [Bool] { | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
+        if [Bool] (eqListU8 alias (qualify moduleName symbolName))
+          (\u : U8 => true)
+          (\u : U8 => isConstructorDefined moduleName symbolName t)
+      })
+
+poly rec countExportOrigins = \symbolName : List U8 => \exports : List ExportInfo => \acc : U8 =>
+  matchList [ExportInfo] [U8] exports acc
+    (\h : ExportInfo => \t : List ExportInfo =>
+      match h [U8] { | MkExportInfo hModule hSymbol =>
+        if [U8] (eqListU8 hSymbol symbolName)
+          (\u : U8 => countExportOrigins symbolName t (inc acc))
+          (\u : U8 => countExportOrigins symbolName t acc)
+      })
+
+poly exportStatus = \moduleName : List U8 => \symbolName : List U8 => \exports : List ExportInfo => \defs : List DefinitionInfo => \ctors : List ConstructorMeta =>
+  let origins = countExportOrigins symbolName exports #u8(0) in
+  if [List U8] (ltU8 #u8(1) origins)
+    (\u : U8 => "AMBIGUOUS")
+    (\u : U8 =>
+      if [List U8] (or (isDefined moduleName symbolName defs) (isConstructorDefined moduleName symbolName ctors))
+        (\u : U8 => "OK")
+        (\u : U8 => "EXPORT_UNDEFINED"))
+
+poly rec emitModuleImportsAcc = \moduleName : List U8 => \imports : List ImportInfo => \mods : List ModuleInfo => \exports : List ExportInfo => \acc : List U8 =>
+  matchList [ImportInfo] [List U8] imports
+    acc
+    (\h : ImportInfo => \t : List ImportInfo =>
+      match h [List U8] { | MkImportInfo hModule hFrom hSymbol =>
+        if [List U8] (eqListU8 hModule moduleName)
+          (\u : U8 =>
+            emitModuleImportsAcc moduleName t mods exports
+              (append [U8] (emitLine3 "import " hFrom hSymbol (importStatus hFrom hSymbol mods exports)) acc))
+          (\u : U8 => emitModuleImportsAcc moduleName t mods exports acc)
+      })
+
+poly emitModuleImports = \moduleName : List U8 => \imports : List ImportInfo => \mods : List ModuleInfo => \exports : List ExportInfo =>
+  emitModuleImportsAcc moduleName (reverse [ImportInfo] imports) mods exports (nil [U8])
+
+poly rec emitModuleExportsAcc = \moduleName : List U8 => \exports : List ExportInfo => \defs : List DefinitionInfo => \ctors : List ConstructorMeta => \acc : List U8 =>
+  matchList [ExportInfo] [List U8] exports
+    acc
+    (\h : ExportInfo => \t : List ExportInfo =>
+      match h [List U8] { | MkExportInfo hModule hSymbol =>
+        if [List U8] (eqListU8 hModule moduleName)
+          (\u : U8 =>
+            emitModuleExportsAcc moduleName t defs ctors
+              (append [U8] (emitLine2 "export " hSymbol (exportStatus moduleName hSymbol exports defs ctors)) acc))
+          (\u : U8 => emitModuleExportsAcc moduleName t defs ctors acc)
+      })
+
+poly emitModuleExports = \moduleName : List U8 => \exports : List ExportInfo => \defs : List DefinitionInfo => \ctors : List ConstructorMeta =>
+  emitModuleExportsAcc moduleName (reverse [ExportInfo] exports) defs ctors (nil [U8])
+
+poly rec emitModuleDefsAcc = \moduleName : List U8 => \defs : List DefinitionInfo => \acc : List U8 =>
+  matchList [DefinitionInfo] [List U8] defs
+    acc
+    (\h : DefinitionInfo => \t : List DefinitionInfo =>
+      match h [List U8] { | MkDefinitionInfo hModule hName hKind =>
+        if [List U8] (eqListU8 hModule moduleName)
+          (\u : U8 => emitModuleDefsAcc moduleName t (append [U8] (emitLine2 "definition " hKind hName) acc))
+          (\u : U8 => emitModuleDefsAcc moduleName t acc)
+      })
+
+poly emitModuleDefs = \moduleName : List U8 => \defs : List DefinitionInfo =>
+  emitModuleDefsAcc moduleName (reverse [DefinitionInfo] defs) (nil [U8])
+
+
+poly rec emitModuleOpaquesAcc = \moduleName : List U8 => \opaques : List OpaqueInfo => \acc : List U8 =>
+  matchList [OpaqueInfo] [List U8] opaques
+    acc
+    (\h : OpaqueInfo => \t : List OpaqueInfo =>
+      match h [List U8] { | MkOpaqueInfo hModule hName =>
+        if [List U8] (eqListU8 hModule moduleName)
+          (\u : U8 => emitModuleOpaquesAcc moduleName t (append [U8] (emitLine1 "opaque " hName) acc))
+          (\u : U8 => emitModuleOpaquesAcc moduleName t acc)
+      })
+
+poly emitModuleOpaques = \moduleName : List U8 => \opaques : List OpaqueInfo =>
+  emitModuleOpaquesAcc moduleName (reverse [OpaqueInfo] opaques) (nil [U8])
+
+poly rec emitModuleNativesAcc = \moduleName : List U8 => \natives : List NativeInfo => \acc : List U8 =>
+  matchList [NativeInfo] [List U8] natives
+    acc
+    (\h : NativeInfo => \t : List NativeInfo =>
+      match h [List NativeInfo] { | MkNativeInfo hModule hName =>
+        if [List U8] (eqListU8 hModule moduleName)
+          (\u : U8 => emitModuleNativesAcc moduleName t (append [U8] (emitLine1 "native " hName) acc))
+          (\u : U8 => emitModuleNativesAcc moduleName t acc)
+      })
+
+poly emitModuleNatives = \moduleName : List U8 => \natives : List NativeInfo =>
+  emitModuleNativesAcc moduleName (reverse [NativeInfo] natives) (nil [U8])
+
+
+poly rec emitModulesAcc = \mods : List ModuleInfo => \fullMods : List ModuleInfo => \imports : List ImportInfo => \exports : List ExportInfo => \defs : List DefinitionInfo => \ctors : List ConstructorMeta => \opaques : List OpaqueInfo => \natives : List NativeInfo => \acc : List U8 =>
+  matchList [ModuleInfo] [List U8] mods
+    acc
+    (\h : ModuleInfo => \t : List ModuleInfo =>
+      match h [List U8] { | MkModuleInfo moduleName decls =>
+        let head = emitLine1 "module " moduleName in
+        let impBlock = append [U8] (emitU8Line "imports " (count [ImportInfo] (moduleImports moduleName imports))) (emitModuleImports moduleName imports fullMods exports) in
+        let expBlock = append [U8] (emitU8Line "exports " (count [ExportInfo] (moduleExports moduleName exports))) (emitModuleExports moduleName exports defs ctors) in
+        let defBlock = append [U8] (emitU8Line "definitions " (count [DefinitionInfo] (moduleDefs moduleName defs))) (emitModuleDefs moduleName defs) in
+        let opaqueBlock = append [U8] (emitU8Line "opaque " (count [OpaqueInfo] (moduleOpaques moduleName opaques))) (emitModuleOpaques moduleName opaques) in
+        let nativeBlock = append [U8] (emitU8Line "native " (count [NativeInfo] (moduleNatives moduleName natives))) (emitModuleNatives moduleName natives) in
+        let modSummary = append [U8] head (append [U8] impBlock (append [U8] expBlock (append [U8] defBlock (append [U8] opaqueBlock nativeBlock)))) in
+        emitModulesAcc t fullMods imports exports defs ctors opaques natives (append [U8] modSummary acc)
+      })
+
+poly emitModules = \mods : List ModuleInfo => \imports : List ImportInfo => \exports : List ExportInfo => \defs : List DefinitionInfo => \ctors : List ConstructorMeta => \opaques : List OpaqueInfo => \natives : List NativeInfo =>
+  emitModulesAcc (reverse [ModuleInfo] mods) mods imports exports defs ctors opaques natives (nil [U8])
+
+poly rec moduleImportsAcc = \moduleName : List U8 => \imports : List ImportInfo => \acc : List ImportInfo =>
+  matchList [ImportInfo] [List ImportInfo] imports
+    acc
+    (\h : ImportInfo => \t : List ImportInfo =>
+      match h [List ImportInfo] { | MkImportInfo hModule hFrom hSymbol =>
+        if [List ImportInfo] (eqListU8 hModule moduleName)
+          (\u : U8 => moduleImportsAcc moduleName t (cons [ImportInfo] h acc))
+          (\u : U8 => moduleImportsAcc moduleName t acc)
+      })
+
+poly moduleImports = \moduleName : List U8 => \imports : List ImportInfo =>
+  reverse [ImportInfo] (moduleImportsAcc moduleName imports (nil [ImportInfo]))
+
+poly rec moduleExportsAcc = \moduleName : List U8 => \exports : List ExportInfo => \acc : List ExportInfo =>
+  matchList [ExportInfo] [List ExportInfo] exports
+    acc
+    (\h : ExportInfo => \t : List ExportInfo =>
+      match h [List ExportInfo] { | MkExportInfo hModule hSymbol =>
+        if [List ExportInfo] (eqListU8 hModule moduleName)
+          (\u : U8 => moduleExportsAcc moduleName t (cons [ExportInfo] h acc))
+          (\u : U8 => moduleExportsAcc moduleName t acc)
+      })
+
+poly moduleExports = \moduleName : List U8 => \exports : List ExportInfo =>
+  reverse [ExportInfo] (moduleExportsAcc moduleName exports (nil [ExportInfo]))
+
+poly rec moduleDefsAcc = \moduleName : List U8 => \defs : List DefinitionInfo => \acc : List DefinitionInfo =>
+  matchList [DefinitionInfo] [List DefinitionInfo] defs
+    acc
+    (\h : DefinitionInfo => \t : List DefinitionInfo =>
+      match h [List DefinitionInfo] { | MkDefinitionInfo hModule hName hKind =>
+        if [List DefinitionInfo] (eqListU8 hModule moduleName)
+          (\u : U8 => moduleDefsAcc moduleName t (cons [DefinitionInfo] h acc))
+          (\u : U8 => moduleDefsAcc moduleName t acc)
+      })
+
+poly moduleDefs = \moduleName : List U8 => \defs : List DefinitionInfo =>
+  reverse [DefinitionInfo] (moduleDefsAcc moduleName defs (nil [DefinitionInfo]))
+
+poly rec moduleOpaquesAcc = \moduleName : List U8 => \opaques : List OpaqueInfo => \acc : List OpaqueInfo =>
+  matchList [OpaqueInfo] [List OpaqueInfo] opaques
+    acc
+    (\h : OpaqueInfo => \t : List OpaqueInfo =>
+      match h [List OpaqueInfo] { | MkOpaqueInfo hModule hName =>
+        if [List OpaqueInfo] (eqListU8 hModule moduleName)
+          (\u : U8 => moduleOpaquesAcc moduleName t (cons [OpaqueInfo] h acc))
+          (\u : U8 => moduleOpaquesAcc moduleName t acc)
+      })
+
+poly moduleOpaques = \moduleName : List U8 => \opaques : List OpaqueInfo =>
+  reverse [OpaqueInfo] (moduleOpaquesAcc moduleName opaques (nil [OpaqueInfo]))
+
+poly rec moduleNativesAcc = \moduleName : List U8 => \natives : List NativeInfo => \acc : List NativeInfo =>
+  matchList [NativeInfo] [List NativeInfo] natives
+    acc
+    (\h : NativeInfo => \t : List NativeInfo =>
+      match h [List NativeInfo] { | MkNativeInfo hModule hName =>
+        if [List NativeInfo] (eqListU8 hModule moduleName)
+          (\u : U8 => moduleNativesAcc moduleName t (cons [NativeInfo] h acc))
+          (\u : U8 => moduleNativesAcc moduleName t acc)
+      })
+
+poly moduleNatives = \moduleName : List U8 => \natives : List NativeInfo =>
+  reverse [NativeInfo] (moduleNativesAcc moduleName natives (nil [NativeInfo]))
+
+poly emitDataType = \info : DataTypeInfo =>
+  match info [List U8] { | MkDataTypeInfo qName local id =>
+    append [U8] "datatype " (append [U8] (u8ToDigits id) (append [U8] space (append [U8] qName (append [U8] space (append [U8] local newline)))))
+  }
+
+poly rec emitDataTypesAcc = \dataTypes : List DataTypeInfo => \acc : List U8 =>
+  matchList [DataTypeInfo] [List U8] dataTypes
+    acc
+    (\h : DataTypeInfo => \t : List DataTypeInfo =>
+      emitDataTypesAcc t (append [U8] (emitDataType h) acc))
+
+poly emitDataTypes = \dataTypes : List DataTypeInfo =>
+  emitDataTypesAcc (reverse [DataTypeInfo] dataTypes) (nil [U8])
+
+poly emitConstructor = \info : ConstructorMeta =>
+  match info [List U8] { | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
+    let s0 = append [U8] "constructor " (u8ToDigits symbolId) in
+    let s1 = append [U8] s0 (append [U8] space qName) in
+    let s2 = append [U8] s1 (append [U8] space local) in
+    let s3 = append [U8] s2 (append [U8] space alias) in
+    let s4 = append [U8] s3 (append [U8] " data#" (u8ToDigits dataId)) in
+    let s5 = append [U8] s4 (append [U8] " tag " (u8ToDigits tag)) in
+    let s6 = append [U8] s5 (append [U8] " total " (u8ToDigits total)) in
+    append [U8] s6 (append [U8] " arity " (append [U8] (u8ToDigits arity) newline))
+  }
+
+poly rec emitConstructorsAcc = \ctors : List ConstructorMeta => \acc : List U8 =>
+  matchList [ConstructorMeta] [List U8] ctors
+    acc
+    (\h : ConstructorMeta => \t : List ConstructorMeta =>
+      emitConstructorsAcc t (append [U8] (emitConstructor h) acc))
+
+poly emitConstructors = \ctors : List ConstructorMeta =>
+  emitConstructorsAcc (reverse [ConstructorMeta] ctors) (nil [U8])
+
+poly emitAlias = \info : ConstructorAliasInfo =>
+  match info [List U8] { | MkConstructorAliasInfo alias target =>
+    match target [List U8] {
+      | None => emitLine2 "alias " alias ambiguousText
+      | Some qName => emitLine2 "alias " alias qName
+    }
+  }
+
+poly rec emitAliasesAcc = \aliases : List ConstructorAliasInfo => \acc : List U8 =>
+  matchList [ConstructorAliasInfo] [List U8] aliases
+    acc
+    (\h : ConstructorAliasInfo => \t : List ConstructorAliasInfo =>
+      emitAliasesAcc t (append [U8] (emitAlias h) acc))
+
+poly emitAliases = \aliases : List ConstructorAliasInfo =>
+  emitAliasesAcc (reverse [ConstructorAliasInfo] aliases) (nil [U8])
+
+poly emitPrimitive = \info : PrimitiveInfo =>
+  match info [List U8] { | MkPrimitiveInfo qName symbolId arity =>
+    append [U8] "primitive "
+      (append [U8] (u8ToDigits symbolId)
+        (append [U8] space
+          (append [U8] qName
+            (append [U8] " arity "
+              (append [U8] (u8ToDigits arity) newline)))))
+  }
+
+poly rec emitPrimitivesAcc = \prims : List PrimitiveInfo => \acc : List U8 =>
+  matchList [PrimitiveInfo] [List U8] prims
+    acc
+    (\h : PrimitiveInfo => \t : List PrimitiveInfo =>
+      emitPrimitivesAcc t (append [U8] (emitPrimitive h) acc))
+
+poly emitPrimitives = \prims : List PrimitiveInfo =>
+  emitPrimitivesAcc (reverse [PrimitiveInfo] prims) (nil [U8])
+
+poly rec insertDataEnvCtors = \ctors : List ConstructorMeta => \env : DataEnv =>
+  matchList [ConstructorMeta] [DataEnv] ctors
+    env
+    (\h : ConstructorMeta => \t : List ConstructorMeta =>
+      match h [DataEnv] { | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
+        match env [DataEnv] { | MkDataEnv cEnv aEnv =>
+          let info = MkCtorInfo tag total arity dataName in
+          insertDataEnvCtors t (MkDataEnv (insert [List U8] [CtorInfo] lteListU8 local info cEnv) aEnv)
+        }
+      })
+
+poly rec ctorNamesForData = \dataId : U8 => \ctors : List ConstructorMeta =>
+  matchList [ConstructorMeta] [List (List U8)] ctors
+    (nil [List U8])
+    (\h : ConstructorMeta => \t : List ConstructorMeta =>
+      match h [List (List U8)] { | MkConstructorMeta qName local alias dataName hDataId symbolId tag total arity =>
+        if [List (List U8)] (eqU8 hDataId dataId)
+          (\u : U8 => cons [List U8] local (ctorNamesForData dataId t))
+          (\u : U8 => ctorNamesForData dataId t)
+      })
+
+poly rec insertDataEnvAdts = \dataTypes : List DataTypeInfo => \ctors : List ConstructorMeta => \env : DataEnv =>
+  matchList [DataTypeInfo] [DataEnv] dataTypes
+    env
+    (\h : DataTypeInfo => \t : List DataTypeInfo =>
+      match h [DataEnv] { | MkDataTypeInfo qName local dataId =>
+        match env [DataEnv] { | MkDataEnv cEnv aEnv =>
+          let names = ctorNamesForData dataId ctors in
+          insertDataEnvAdts t ctors (MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 local (MkADTInfo names) aEnv))
+        }
+      })
+
+poly dataEnvFromModuleEnv = \env : ModuleEnv =>
+  match env [DataEnv] { | MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims =>
+    let emptyEnv = MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo]) in
+    insertDataEnvAdts dataTypes ctors (insertDataEnvCtors ctors emptyEnv)
+  }
+
+poly emitModuleEnvSummary = \env : ModuleEnv =>
+  match env [List U8] { | MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims =>
+    let header = append [U8] "OK\nversion module-env-v1\nmodules " (append [U8] (u8ToDigits (count [ModuleInfo] mods)) newline) in
+    let dataHeader = emitU8Line "data-types " (count [DataTypeInfo] dataTypes) in
+    let ctorHeader = emitU8Line "constructors " (count [ConstructorMeta] ctors) in
+    let aliasHeader = emitU8Line "aliases " (count [ConstructorAliasInfo] aliases) in
+    let primHeader = emitU8Line "primitives " (count [PrimitiveInfo] prims) in
+    let s0 = append [U8] header (emitModules mods imps exps defs ctors opaques natives) in
+    let s1 = append [U8] s0 dataHeader in
+    let s2 = append [U8] s1 (emitDataTypes dataTypes) in
+    let s3 = append [U8] s2 ctorHeader in
+    let s4 = append [U8] s3 (emitConstructors ctors) in
+    let s5 = append [U8] s4 aliasHeader in
+    let s6 = append [U8] s5 (emitAliases aliases) in
+    append [U8] s6 (append [U8] primHeader (emitPrimitives prims))
+  }
+
+poly emitBundleModuleEnvSummary = \bundle : BundleSummary =>
+  match bundle [Result (List U8) (List U8)] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
+    match (buildModuleEnv mods) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] e
+      | Ok env => Ok [List U8] [List U8] (emitModuleEnvSummary env)
+    }
+  }
+
+poly rec writeAll = \bytes : List U8 =>
+  matchList [U8] [U8] bytes
+    #u8(0)
+    (\h : U8 => \t : List U8 =>
+      writeOne h [U8] (\u : U8 => writeAll t))
+
+poly main = \source : List U8 =>
+  match (parseBundleSummary source) [U8] {
+    | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+    | Ok bundle =>
+        match (emitBundleModuleEnvSummary bundle) [U8] {
+          | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+          | Ok summary => writeAll summary
+        }
+  }

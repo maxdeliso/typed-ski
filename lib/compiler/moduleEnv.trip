@@ -40,6 +40,8 @@ import BundleSummary MkBundleSummary
 import BundleSummary ModuleRecord
 import BundleSummary MkModuleRecord
 import Lexer tokenize
+import Lexer ParseError
+import Lexer MkParseError
 import Parser Decl
 import Parser D_Module
 import Parser D_Import

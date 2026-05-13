@@ -271,8 +271,6 @@ data Token =
       { name: "Prelude", ref: "Result" },
       { name: "Prelude", ref: "Err" },
       { name: "Prelude", ref: "Ok" },
-      { name: "Prelude", ref: "ParseError" },
-      { name: "Prelude", ref: "MkParseError" },
       { name: "Prelude", ref: "Maybe" },
       { name: "Prelude", ref: "Some" },
       { name: "Prelude", ref: "None" },

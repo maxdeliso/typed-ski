@@ -67,7 +67,7 @@ poly binToDigits
 combinator 0
 module Lexer
 declared Lexer
-imports 37
+imports 35
 import Prelude Bool RESOLVED
 import Prelude List RESOLVED
 import Prelude nil RESOLVED
@@ -82,8 +82,6 @@ import Prelude false RESOLVED
 import Prelude Result RESOLVED
 import Prelude Err RESOLVED
 import Prelude Ok RESOLVED
-import Prelude ParseError RESOLVED
-import Prelude MkParseError RESOLVED
 import Prelude Maybe RESOLVED
 import Prelude Some RESOLVED
 import Prelude None RESOLVED
@@ -105,7 +103,9 @@ import Prelude ltListU8 RESOLVED
 import Prelude digitToAscii RESOLVED
 import Prelude singletonU8 RESOLVED
 import Prelude u8ToDigits RESOLVED
-exports 64
+exports 66
+export ParseError OK
+export MkParseError OK
 export Token OK
 export T_LParen OK
 export T_RParen OK
@@ -170,7 +170,9 @@ export lookupTokenU8 OK
 export consumeIdent OK
 export consumeDigits OK
 export consumeString OK
-data 1
+data 2
+data ParseError
+ctor MkParseError 1
 data Token
 ctor T_Tagged 1
 ctor T_Ident 1
@@ -299,8 +301,8 @@ import Prelude matchList RESOLVED
 import Prelude Result RESOLVED
 import Prelude Ok RESOLVED
 import Prelude Err RESOLVED
-import Prelude ParseError RESOLVED
-import Prelude MkParseError RESOLVED
+import Lexer ParseError RESOLVED
+import Lexer MkParseError RESOLVED
 import Prelude Pair RESOLVED
 import Prelude MkPair RESOLVED
 import Prelude fst RESOLVED
@@ -352,7 +354,7 @@ import Lexer T_KwData RESOLVED
 import Lexer T_Ident RESOLVED
 import Lexer T_Nat RESOLVED
 import Lexer T_EOF RESOLVED
-exports 90
+exports 97
 export Pattern OK
 export P_Ctor OK
 export Expr OK
@@ -428,8 +430,6 @@ export parseMatchArm OK
 export parseMatchArms OK
 export isAtomStart OK
 export skipTypeArg OK
-export isTypeStartTag OK
-export skipRequiredTypeToTopLevel OK
 export parseCtorArity OK
 export parseAtomWith OK
 export parseAppLoopWith OK
@@ -443,7 +443,21 @@ export parseNamedDef OK
 export parseDecl OK
 export parseProgramAcc OK
 export parseProgram OK
-data 4
+export Type OK
+export Ty_Var OK
+export Ty_App OK
+export Ty_Arrow OK
+export Ty_Forall OK
+export parseSimpleType OK
+export parseTypeApplication OK
+export parseType OK
+export arrowTag OK
+data 5
+data Type
+ctor Ty_Var 1
+ctor Ty_App 2
+ctor Ty_Arrow 2
+ctor Ty_Forall 2
 data Pattern
 ctor P_Ctor 2
 data Expr
@@ -468,7 +482,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 83
+poly 89
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -481,6 +495,7 @@ poly lBracketTag
 poly rBracketTag
 poly backslashTag
 poly hashTag
+poly arrowTag
 poly fatArrowTag
 poly eqTag
 poly pipeTag
@@ -501,6 +516,8 @@ poly kwOpaqueTag
 poly kwCombinatorTag
 poly kwTypeTag
 poly kwDataTag
+poly fstTypeToken
+poly sndTypeToken
 poly fstNameToken
 poly sndNameToken
 poly fstExprToken
@@ -527,8 +544,13 @@ poly isAtomStartTag
 poly isAtomStart
 poly parseAtomWith
 poly skipTypeArg
-poly isTypeStartTag
-poly skipRequiredTypeToTopLevel
+poly parseSimpleTypeWith
+poly isTypeAtomStartTag
+poly parseTypeAppLoopWith
+poly parseTypeApplicationWith
+poly parseType
+poly parseSimpleType
+poly parseTypeApplication
 poly parseAppLoopWith
 poly parseAppWith
 poly parseAtom
@@ -537,8 +559,6 @@ poly parseMatchArm
 poly parseMatchArms
 poly parseExpr
 poly parseNamedDef
-poly skipBalanced
-poly skipOneType
 poly parseCtorArity
 poly parseDataCtors
 poly parseModuleDecl
@@ -556,7 +576,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 57
+exports 54
 export Bool OK
 export id OK
 export true OK
@@ -583,9 +603,6 @@ export MkPair OK
 export Result OK
 export Err OK
 export Ok OK
-export ParseError OK
-export MkParseError OK
-export Parser OK
 export Maybe OK
 export Some OK
 export None OK

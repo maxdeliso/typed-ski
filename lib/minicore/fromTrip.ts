@@ -479,6 +479,14 @@ class MiniCoreBuilder {
     moduleName?: string,
   ): TypeId | undefined {
     if (moduleName) {
+      const module = this.modules.get(moduleName);
+      if (module) {
+        const imported = module.imports.get(name);
+        if (imported) {
+          const id = this.dataTypeByQName.get(imported);
+          if (id !== undefined) return id;
+        }
+      }
       const local = this.dataTypeByQName.get(`${moduleName}.${name}`);
       if (local !== undefined) {
         return local;

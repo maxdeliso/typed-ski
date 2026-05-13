@@ -67,7 +67,7 @@ poly binToDigits
 combinator 0
 module Lexer
 declared Lexer
-imports 37
+imports 35
 import Prelude Bool
 import Prelude List
 import Prelude nil
@@ -82,8 +82,6 @@ import Prelude false
 import Prelude Result
 import Prelude Err
 import Prelude Ok
-import Prelude ParseError
-import Prelude MkParseError
 import Prelude Maybe
 import Prelude Some
 import Prelude None
@@ -105,7 +103,9 @@ import Prelude ltListU8
 import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
-exports 64
+exports 66
+export ParseError
+export MkParseError
 export Token
 export T_LParen
 export T_RParen
@@ -170,7 +170,9 @@ export lookupTokenU8
 export consumeIdent
 export consumeDigits
 export consumeString
-data 1
+data 2
+data ParseError
+ctor MkParseError 1
 data Token
 ctor T_Tagged 1
 ctor T_Ident 1
@@ -291,7 +293,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 57
+exports 54
 export Bool
 export id
 export true
@@ -318,9 +320,6 @@ export MkPair
 export Result
 export Err
 export Ok
-export ParseError
-export MkParseError
-export Parser
 export Maybe
 export Some
 export None

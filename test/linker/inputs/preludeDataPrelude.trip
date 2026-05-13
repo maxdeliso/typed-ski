@@ -8,8 +8,6 @@ import Prelude B0
 import Prelude B1
 import Bin addBin
 import Prelude Pair
-import Prelude ParseError
-import Prelude MkParseError
 import Prelude Err
 import Prelude Ok
 import Prelude MkPair
@@ -20,9 +18,8 @@ poly zeroBin : Bin = BZ
 poly one : Bin = B1 BZ
 poly two : Bin = B0 (B1 BZ)
 
-poly parseErr = MkParseError zeroBin (nil [Bin])
-poly okVal = Ok [ParseError] [Bin] two
-poly errVal = Err [ParseError] [Bin] parseErr
+poly errVal = Err [Bin] [Bin] zeroBin
+poly okVal = Ok [Bin] [Bin] two
 poly pair : Pair Bin Bin = MkPair [Bin] [Bin] one two
 
 type Church = #X -> (X -> X) -> X -> X
@@ -38,8 +35,8 @@ poly rec binToChurch = \b : Bin =>
     | B1 rest => succ (dbl (binToChurch rest))
   }
 
-poly fromResult = \r : #R -> (ParseError -> R) -> (Bin -> R) -> R =>
-  r [Bin] (\e : ParseError => zeroBin) (\v : Bin => v)
+poly fromResult = \r : #R -> (Bin -> R) -> (Bin -> R) -> R =>
+  r [Bin] (\e : Bin => zeroBin) (\v : Bin => v)
 
 poly sumPair = pair [Bin] (\a : Bin => \b : Bin => addBin a b)
 

@@ -7,7 +7,7 @@ modules 1
 module Prelude
 declared Prelude
 imports 0
-exports 57
+exports 54
 export Bool
 export id
 export true
@@ -34,9 +34,6 @@ export MkPair
 export Result
 export Err
 export Ok
-export ParseError
-export MkParseError
-export Parser
 export Maybe
 export Some
 export None

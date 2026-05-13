@@ -1,0 +1,84 @@
+module Test
+
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude List
+import Prelude cons
+import Prelude nil
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Pair
+import Prelude fst
+import Lexer Token
+import Lexer T_Ident
+import Lexer T_Arrow
+import Lexer T_LParen
+import Lexer T_RParen
+import Lexer T_Hash
+import Lexer T_EOF
+import Prelude eqListU8
+import Parser parseType
+import Parser Type
+import Parser Ty_Var
+import Parser Ty_App
+import Parser Ty_Arrow
+import Parser Ty_Forall
+
+export main
+
+poly isVarNamed = \ty : Type => \name : List U8 =>
+  match ty [Bool] {
+    | Ty_Var n => eqListU8 n name
+    | Ty_App f x => false
+    | Ty_Arrow l r => false
+    | Ty_Forall n b => false
+  }
+
+poly main =
+  let input =
+    cons [Token] T_Hash
+      (cons [Token] (T_Ident "A")
+        (cons [Token] T_Arrow
+          (cons [Token] (T_Ident "A")
+            (cons [Token] T_Arrow
+              (cons [Token] T_LParen
+                (cons [Token] (T_Ident "B")
+                  (cons [Token] (T_Ident "C")
+                    (cons [Token] T_RParen
+                      (cons [Token] T_EOF (nil [Token]))))))))))
+  in
+  match (parseType input) [Bool] {
+    | Err e => false
+    | Ok res =>
+      let ty = fst [Type] [List Token] res in
+      match ty [Bool] {
+        | Ty_Var n => false
+        | Ty_App f x => false
+        | Ty_Arrow l r => false
+        | Ty_Forall n b =>
+          if [Bool] (eqListU8 n "A")
+            (\u : U8 =>
+              match b [Bool] {
+                | Ty_Var n => false
+                | Ty_App f x => false
+                | Ty_Arrow l r =>
+                  if [Bool] (isVarNamed l "A")
+                    (\u : U8 =>
+                      match r [Bool] {
+                        | Ty_Var n => false
+                        | Ty_App f x =>
+                            if [Bool] (isVarNamed f "B")
+                              (\u : U8 => isVarNamed x "C")
+                              (\u : U8 => false)
+                        | Ty_Arrow l r => false
+                        | Ty_Forall n b => false
+                      }
+                    )
+                    (\u : U8 => false)
+                | Ty_Forall n b => false
+              })
+            (\u : U8 => false)
+      }
+  }

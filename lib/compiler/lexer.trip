@@ -14,8 +14,6 @@ import Prelude false
 import Prelude Result
 import Prelude Err
 import Prelude Ok
-import Prelude ParseError
-import Prelude MkParseError
 import Prelude Maybe
 import Prelude Some
 import Prelude None
@@ -38,6 +36,8 @@ import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
 
+export ParseError
+export MkParseError
 export Token
 export T_LParen
 export T_RParen
@@ -102,6 +102,8 @@ export lookupTokenU8
 export consumeIdent
 export consumeDigits
 export consumeString
+
+data ParseError = MkParseError (List U8)
 
 data Token =
   | T_Tagged U8

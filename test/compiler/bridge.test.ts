@@ -19,13 +19,43 @@ import {
 } from "../thanatosHarness.ts";
 
 const LEXER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lexer.trip");
-const PARSER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "parser.trip");
+const PARSER_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "parser.trip",
+);
 const CORE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "core.trip");
-const DATA_ENV_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "dataEnv.trip");
-const UNPARSE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "unparse.trip");
-const LOWERING_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lowering.trip");
-const CORE_TO_LOWER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "coreToLower.trip");
-const BRIDGE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "bridge.trip");
+const DATA_ENV_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "dataEnv.trip",
+);
+const UNPARSE_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "unparse.trip",
+);
+const LOWERING_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "lowering.trip",
+);
+const CORE_TO_LOWER_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "coreToLower.trip",
+);
+const BRIDGE_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "bridge.trip",
+);
 const AVL_SOURCE_FILE = join(workspaceRoot, "lib", "avl.trip");
 const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "bin.trip");
 const NAT_SOURCE_FILE = join(workspaceRoot, "lib", "nat.trip");

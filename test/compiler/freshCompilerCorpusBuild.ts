@@ -14,10 +14,26 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 
-export const LEXER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lexer.trip");
-export const PARSER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "parser.trip");
+export const LEXER_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "lexer.trip",
+);
+export const PARSER_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "parser.trip",
+);
 const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "bin.trip");
-const PARSER_DRIVER_FILE = join(workspaceRoot, "test", "compiler", "inputs", "testParseDefinitionKinds.trip");
+const PARSER_DRIVER_FILE = join(
+  workspaceRoot,
+  "test",
+  "compiler",
+  "inputs",
+  "testParseDefinitionKinds.trip",
+);
 const BIN_DRIVER_SOURCE = `module Test
 import Bin addBin
 import Nat fromBin

@@ -70,7 +70,10 @@ async function compileTripFile(
   outputTripc?: string,
 ): Promise<string> {
   const fixtureName = outputTripc ?? tripFileName.replace(".trip", ".tripc");
-  return await readFile(join(workspaceRoot, "test", "linker", fixtureName), "utf8");
+  return await readFile(
+    join(workspaceRoot, "test", "linker", fixtureName),
+    "utf8",
+  );
 }
 
 describe("TripLang Linker", () => {

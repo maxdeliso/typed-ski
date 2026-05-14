@@ -304,10 +304,7 @@ poly id = #a => \\x:a => x`;
     });
 
     it("CLI files have proper content", async () => {
-      const tripcTs = await readFile(
-        join(srcRoot, "bin/tripc.ts"),
-        "utf-8",
-      );
+      const tripcTs = await readFile(join(srcRoot, "bin/tripc.ts"), "utf-8");
       assert.ok(tripcTs.includes("TripLang Compiler & Linker"));
       assert.ok(tripcTs.includes("loadTripModuleObject"));
     });

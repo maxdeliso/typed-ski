@@ -10,11 +10,7 @@ import { projectRoot, tripcScriptPath } from "../../util/tripcHarness.ts";
 function runNodeScript(script: string, args: string[]) {
   return spawnSync(
     process.execPath,
-    [
-      "--disable-warning=ExperimentalWarning",
-      script,
-      ...args,
-    ],
+    ["--disable-warning=ExperimentalWarning", script, ...args],
     {
       cwd: projectRoot,
       encoding: "utf8",

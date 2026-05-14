@@ -85,10 +85,7 @@ it("compileToObjectFile normalizes imported module metadata order", async () => 
   const prelude = await getPreludeObject();
   const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);
-  const parserSource = await readFile(
-    PARSER_SOURCE_FILE,
-    "utf8",
-  );
+  const parserSource = await readFile(PARSER_SOURCE_FILE, "utf8");
 
   const ordered = serializeTripCObject(
     compileToObjectFile(parserSource, {

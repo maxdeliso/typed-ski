@@ -53,7 +53,13 @@ async function getPreludeObjectCached() {
 async function compileAndValidateTestProgram(
   inputFileName: string,
 ): Promise<SKIExpression> {
-  const testFilePath = join(workspaceRoot, "test", "compiler", "inputs", inputFileName);
+  const testFilePath = join(
+    workspaceRoot,
+    "test",
+    "compiler",
+    "inputs",
+    inputFileName,
+  );
   const testObj = await loadTripModuleObject(testFilePath);
 
   const lexerObj = await getLexerObject();
@@ -146,7 +152,13 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         const preludeObj = await getPreludeObjectCached();
 
         const testObj = await loadTripModuleObject(
-          join(workspaceRoot, "test", "compiler", "inputs", "testTokenize1Space2.trip"),
+          join(
+            workspaceRoot,
+            "test",
+            "compiler",
+            "inputs",
+            "testTokenize1Space2.trip",
+          ),
         );
         const skiExpression = linkModules([
           { name: "Prelude", object: preludeObj },

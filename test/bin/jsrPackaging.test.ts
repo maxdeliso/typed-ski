@@ -89,11 +89,12 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("CLI files have proper shebang", async () => {
-      const tripcTs = await readFile(
-        join(srcRoot, "bin/tripc.ts"),
-        "utf-8",
+      const tripcTs = await readFile(join(srcRoot, "bin/tripc.ts"), "utf-8");
+      assert.ok(
+        tripcTs.includes(
+          "#!/usr/bin/env -S node --disable-warning=ExperimentalWarning",
+        ),
       );
-      assert.ok(tripcTs.includes("#!/usr/bin/env -S node --disable-warning=ExperimentalWarning"));
     });
 
     // Shell wrapper tests removed
@@ -102,10 +103,7 @@ describe("JSR Packaging Configuration", () => {
   describe("library integration", () => {
     it("compiler library exports", async () => {
       // Test that the compiler library is properly exported
-      const libIndex = await readFile(
-        join(srcRoot, "lib/index.ts"),
-        "utf-8",
-      );
+      const libIndex = await readFile(join(srcRoot, "lib/index.ts"), "utf-8");
 
       assert.ok(libIndex.includes("compileToObjectFile"));
       assert.ok(libIndex.includes("compileToObjectFileString"));
@@ -183,11 +181,7 @@ describe("JSR Packaging Configuration", () => {
 
       const { status, stdout } = spawnSync(
         process.execPath,
-        [
-          "--disable-warning=ExperimentalWarning",
-          tripcScript,
-          "--version",
-        ],
+        ["--disable-warning=ExperimentalWarning", tripcScript, "--version"],
         {
           cwd: jsRoot,
           encoding: "utf-8",
@@ -203,11 +197,7 @@ describe("JSR Packaging Configuration", () => {
 
       const { status, stdout } = spawnSync(
         process.execPath,
-        [
-          "--disable-warning=ExperimentalWarning",
-          tripcScript,
-          "--help",
-        ],
+        ["--disable-warning=ExperimentalWarning", tripcScript, "--help"],
         {
           cwd: jsRoot,
           encoding: "utf-8",

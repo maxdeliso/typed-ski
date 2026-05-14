@@ -33,7 +33,13 @@ describe("Prelude Linking", () => {
         const binObj = await getBinObject();
         const natObj = await getNatObject();
         const testObj = await loadTripModuleObject(
-          join(workspaceRoot, "test", "linker", "inputs", "testArithmetic.trip"),
+          join(
+            workspaceRoot,
+            "test",
+            "linker",
+            "inputs",
+            "testArithmetic.trip",
+          ),
         );
 
         const skiExpression = linkModules([

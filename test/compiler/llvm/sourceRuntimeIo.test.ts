@@ -12,7 +12,10 @@ import {
   type BlockModule,
 } from "../../../lib/minicore/index.ts";
 
-const preludeSource = readFileSync(join(workspaceRoot, "lib", "prelude.trip"), "utf8");
+const preludeSource = readFileSync(
+  join(workspaceRoot, "lib", "prelude.trip"),
+  "utf8",
+);
 
 describe("LLVM source lowering - runtime IO", () => {
   it("lowers Prelude.writeOne to the Trip runtime ABI", () => {

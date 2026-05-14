@@ -10,7 +10,10 @@ import {
 import { loadInput } from "../util/fileLoader.ts";
 
 function loadCompilerInput(fileName: string): string {
-  return loadInput(`combinatorCompiler/${fileName}`, join(workspaceRoot, "test", "compiler"));
+  return loadInput(
+    `combinatorCompiler/${fileName}`,
+    join(workspaceRoot, "test", "compiler"),
+  );
 }
 
 it("compileToCombinatorString links built-in imports", async () => {

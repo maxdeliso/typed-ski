@@ -14,7 +14,13 @@ import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const testSourcePath = join(workspaceRoot, "test", "compiler", "inputs", "testBinOps.trip");
+const testSourcePath = join(
+  workspaceRoot,
+  "test",
+  "compiler",
+  "inputs",
+  "testBinOps.trip",
+);
 
 let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
 let binObject: Awaited<ReturnType<typeof getBinObject>> | null = null;

@@ -16,5 +16,4 @@ const __file = dirname(fileURLToPath(import.meta.url));
  *      invocations that bypass scripts/bazel.ts.
  */
 export const workspaceRoot: string =
-  process.env["TYPED_SKI_PROJECT_ROOT"] ??
-  resolve(__file, "..", "..", "..");
+  process.env["TYPED_SKI_PROJECT_ROOT"] ?? resolve(__file, "..", "..", "..");

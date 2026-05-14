@@ -89,9 +89,7 @@ async function main(): Promise<void> {
     );
     console.error("");
     console.error("Examples:");
-    console.error(
-      "  node ts_out/compiler/main.js mymodule.trip",
-    );
+    console.error("  node ts_out/compiler/main.js mymodule.trip");
     console.error(
       "  node ts_out/compiler/main.js mymodule.trip mymodule.tripc",
     );

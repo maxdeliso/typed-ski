@@ -48,11 +48,7 @@ export function runTripcSync(
 ): SpawnSyncReturns<string> {
   return spawnSync(
     process.execPath,
-    [
-      "--disable-warning=ExperimentalWarning",
-      tripcScriptPath,
-      ...args,
-    ],
+    ["--disable-warning=ExperimentalWarning", tripcScriptPath, ...args],
     {
       ...options,
       encoding: "utf8",

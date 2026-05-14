@@ -16,7 +16,10 @@ const MODULE_SOURCES = [
   ["Bin", join(workspaceRoot, "lib", "bin.trip")],
   ["Nat", join(workspaceRoot, "lib", "nat.trip")],
   ["Avl", join(workspaceRoot, "lib", "avl.trip")],
-  ["AvlNatTreeTest", join(workspaceRoot, "test", "inputs", "avl", "AvlNatTreeTest.trip")],
+  [
+    "AvlNatTreeTest",
+    join(workspaceRoot, "test", "inputs", "avl", "AvlNatTreeTest.trip"),
+  ],
 ] as const;
 
 async function compileAvlNatTreeProgram() {

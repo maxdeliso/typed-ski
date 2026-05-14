@@ -57,15 +57,19 @@ function isInternal(node: Node): boolean {
   while (current) {
     if (Node.isJSDocable(current)) {
       if (
-        current.getJsDocs().some((doc: any) => doc.getText().includes("@internal"))
+        current
+          .getJsDocs()
+          .some((doc: any) => doc.getText().includes("@internal"))
       )
-      return true;
+        return true;
     }
     if (Node.isVariableDeclaration(current)) {
       const statement = current.getVariableStatement();
       if (
         statement &&
-        statement.getJsDocs().some((doc: any) => doc.getText().includes("@internal"))
+        statement
+          .getJsDocs()
+          .some((doc: any) => doc.getText().includes("@internal"))
       ) {
         return true;
       }
@@ -165,7 +169,9 @@ for (const sourceFile of project.getSourceFiles()) {
       const isExportedFromRoot = PROD_ROOTS.some((root) => {
         const sf = project.getSourceFile(root);
         const exportedDecls = sf?.getExportedDeclarations().get(name) ?? [];
-        return exportedDecls.some((exportedDecl: Node) => exportedDecl === decl);
+        return exportedDecls.some(
+          (exportedDecl: Node) => exportedDecl === decl,
+        );
       });
 
       if (!isProd && !isTest) {

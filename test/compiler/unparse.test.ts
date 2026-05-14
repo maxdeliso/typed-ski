@@ -11,10 +11,18 @@ import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { loadInput } from "../util/fileLoader.ts";
 
-const UNPARSE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "unparse.trip");
+const UNPARSE_SOURCE_FILE = join(
+  workspaceRoot,
+  "lib",
+  "compiler",
+  "unparse.trip",
+);
 
 function loadUnparseStage1Input(fileName: string): string {
-  return loadInput(`unparseStage1/${fileName}`, join(workspaceRoot, "test", "compiler"));
+  return loadInput(
+    `unparseStage1/${fileName}`,
+    join(workspaceRoot, "test", "compiler"),
+  );
 }
 
 let unparseObject: TripCObject | null = null;

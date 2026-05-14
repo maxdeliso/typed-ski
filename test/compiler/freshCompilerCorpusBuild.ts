@@ -1,6 +1,8 @@
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
   serializeTripCObject,
   type TripCObject,
@@ -12,19 +14,10 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 
-export const LEXER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/lexer.trip",
-  import.meta.url,
-);
-export const PARSER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/parser.trip",
-  import.meta.url,
-);
-const BIN_SOURCE_FILE = new URL("../../../lib/compiler/bin.trip", import.meta.url);
-const PARSER_DRIVER_FILE = new URL(
-  "../../../test/compiler/inputs/testParseDefinitionKinds.trip",
-  import.meta.url,
-);
+export const LEXER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lexer.trip");
+export const PARSER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "parser.trip");
+const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "bin.trip");
+const PARSER_DRIVER_FILE = join(workspaceRoot, "test", "compiler", "inputs", "testParseDefinitionKinds.trip");
 const BIN_DRIVER_SOURCE = `module Test
 import Bin addBin
 import Nat fromBin
@@ -49,10 +42,10 @@ export interface DeterminismRun {
 }
 
 export async function compileFreshObject(
-  sourceFile: URL,
+  sourceFile: string,
   importedModules: ReadonlyArray<TripCObject>,
 ): Promise<TripCObject> {
-  const source = await readFile(fileURLToPath(sourceFile), "utf8");
+  const source = await readFile(sourceFile, "utf8");
   return compileToObjectFile(source, { importedModules });
 }
 

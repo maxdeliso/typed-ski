@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, it } from "./test_shim.ts";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { evaluateTrip, evaluateTripWithIo } from "./tripHarness.ts";
 import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { loadInput } from "./fileLoader.ts";
 import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-const srcUtilDir = join(srcRoot, "test", "util");
-const linkerTestDir = join(srcRoot, "test", "linker");
+const srcUtilDir = join(workspaceRoot, "test", "util");
+const linkerTestDir = join(workspaceRoot, "test", "linker");
 
 describe("TripHarness", { skip: !thanatosAvailable() }, () => {
   it("includeNat flag allows using Nat module", async () => {

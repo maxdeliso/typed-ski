@@ -1,5 +1,7 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -8,49 +10,19 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { toTopoDagWire } from "../../lib/ski/topoDagWire.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const LEXER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/lexer.trip",
-  import.meta.url,
-);
-const PARSER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/parser.trip",
-  import.meta.url,
-);
-const CORE_SOURCE_FILE = new URL(
-  "../../../lib/compiler/core.trip",
-  import.meta.url,
-);
-const DATA_ENV_SOURCE_FILE = new URL(
-  "../../../lib/compiler/dataEnv.trip",
-  import.meta.url,
-);
-const UNPARSE_SOURCE_FILE = new URL(
-  "../../../lib/compiler/unparse.trip",
-  import.meta.url,
-);
-const LOWERING_SOURCE_FILE = new URL(
-  "../../../lib/compiler/lowering.trip",
-  import.meta.url,
-);
-const BRIDGE_SOURCE_FILE = new URL(
-  "../../../lib/compiler/bridge.trip",
-  import.meta.url,
-);
-const CORE_TO_LOWER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/coreToLower.trip",
-  import.meta.url,
-);
-const COMPILER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/index.trip",
-  import.meta.url,
-);
-const LLVM_SOURCE_FILE = new URL(
-  "../../../lib/compiler/llvm.trip",
-  import.meta.url,
-);
-const AVL_SOURCE_FILE = new URL("../../../lib/avl.trip", import.meta.url);
-const BIN_SOURCE_FILE = new URL("../../../lib/bin.trip", import.meta.url);
-const NAT_SOURCE_FILE = new URL("../../../lib/nat.trip", import.meta.url);
+const LEXER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lexer.trip");
+const PARSER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "parser.trip");
+const CORE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "core.trip");
+const DATA_ENV_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "dataEnv.trip");
+const UNPARSE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "unparse.trip");
+const LOWERING_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lowering.trip");
+const BRIDGE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "bridge.trip");
+const CORE_TO_LOWER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "coreToLower.trip");
+const COMPILER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "index.trip");
+const LLVM_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "llvm.trip");
+const AVL_SOURCE_FILE = join(workspaceRoot, "lib", "avl.trip");
+const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "bin.trip");
+const NAT_SOURCE_FILE = join(workspaceRoot, "lib", "nat.trip");
 
 interface CompilerModules {
   prelude: TripCObject;

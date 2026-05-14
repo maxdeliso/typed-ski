@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile, rm, mkdtemp } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
 import { describe, it } from "./util/test_shim.ts";
+import { workspaceRoot } from "../lib/shared/workspaceRoot.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
 import { unparseSKI } from "../lib/ski/expression.ts";
 import { fromTopoDagWire, toTopoDagWire } from "../lib/ski/topoDagWire.ts";
@@ -27,9 +27,6 @@ import {
 
 const BROKER_TOKEN_HEADER = "x-thanatos-batch-token";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "..", "..");
-
 type ThanatosSnapshot = {
   dag: string;
   stdin: Uint8Array;
@@ -39,7 +36,7 @@ type ThanatosSnapshot = {
 };
 
 async function loadThanatosSnapshot(name: string): Promise<ThanatosSnapshot> {
-  const snapshotDir = join(srcRoot, "test", "thanatosSnapshots", name);
+  const snapshotDir = join(workspaceRoot, "test", "thanatosSnapshots", name);
   const program = await readFile(join(snapshotDir, "input.ski"), "utf8");
   const resultDagPath = join(snapshotDir, "result.dag");
   const stdinPath = join(snapshotDir, "stdin.bin");

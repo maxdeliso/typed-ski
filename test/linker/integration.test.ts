@@ -18,12 +18,10 @@ import {
   runTripcSync,
 } from "../util/tripcHarness.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-const srcLinkerDir = join(srcRoot, "test", "linker");
+const srcLinkerDir = join(workspaceRoot, "test", "linker");
 const FIXTURE_FILES = [
   "int_simple.trip",
   "int_complex.trip",

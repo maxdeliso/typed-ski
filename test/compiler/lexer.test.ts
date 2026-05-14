@@ -9,8 +9,8 @@
 
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
@@ -30,12 +30,7 @@ import {
   withBatchThanatosSession,
 } from "../thanatosHarness.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-const LEXER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/lexer.trip",
-  import.meta.url,
-);
+const LEXER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lexer.trip");
 
 // Cache compiled objects
 let lexerObject: TripCObject | null = null;
@@ -58,7 +53,7 @@ async function getPreludeObjectCached() {
 async function compileAndValidateTestProgram(
   inputFileName: string,
 ): Promise<SKIExpression> {
-  const testFilePath = join(srcRoot, "test", "compiler", "inputs", inputFileName);
+  const testFilePath = join(workspaceRoot, "test", "compiler", "inputs", inputFileName);
   const testObj = await loadTripModuleObject(testFilePath);
 
   const lexerObj = await getLexerObject();
@@ -151,7 +146,7 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         const preludeObj = await getPreludeObjectCached();
 
         const testObj = await loadTripModuleObject(
-          join(srcRoot, "test", "compiler", "inputs", "testTokenize1Space2.trip"),
+          join(workspaceRoot, "test", "compiler", "inputs", "testTokenize1Space2.trip"),
         );
         const skiExpression = linkModules([
           { name: "Prelude", object: preludeObj },

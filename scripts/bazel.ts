@@ -641,7 +641,12 @@ async function prepareTestExecution(
     await buildDist();
   }
 
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = {
+    // Inject the authoritative workspace root so every consumer can import
+    // lib/shared/workspaceRoot.ts and get the correct path without having to
+    // count directory levels relative to their own compiled location.
+    TYPED_SKI_PROJECT_ROOT: PROJECT_ROOT,
+  };
 
   if (process.env["TEST_SRCDIR"] && process.env["TEST_WORKSPACE"]) {
     const nodeOptions = [

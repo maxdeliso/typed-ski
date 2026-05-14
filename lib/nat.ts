@@ -1,11 +1,11 @@
 /**
  * Nat module provider.
  */
+import { join } from "node:path";
 import type { TripCObject } from "./compiler/objectFile.ts";
 import { loadTripModuleObject } from "./tripSourceLoader.ts";
-
-const NAT_SOURCE_FILE = new URL("../../lib/nat.trip", import.meta.url);
+import { workspaceRoot } from "./shared/workspaceRoot.ts";
 
 export async function getNatObject(): Promise<TripCObject> {
-  return await loadTripModuleObject(NAT_SOURCE_FILE);
+  return await loadTripModuleObject(join(workspaceRoot, "lib", "nat.trip"));
 }

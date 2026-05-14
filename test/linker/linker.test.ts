@@ -11,8 +11,8 @@ import { describe, it } from "../util/test_shim.ts";
  */
 
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
   deserializeTripCObject,
   type TripCObject,
@@ -35,9 +35,6 @@ import { SKITerminalSymbol } from "../../lib/ski/terminal.ts";
 import { externalReferences } from "../../lib/meta/frontend/externalReferences.ts";
 import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
 import { readFile } from "node:fs/promises";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
 
 type TestTripCObject = Omit<TripCObject, "dataDefinitions"> &
   Partial<Pick<TripCObject, "dataDefinitions">>;
@@ -73,7 +70,7 @@ async function compileTripFile(
   outputTripc?: string,
 ): Promise<string> {
   const fixtureName = outputTripc ?? tripFileName.replace(".trip", ".tripc");
-  return await readFile(join(srcRoot, "test", "linker", fixtureName), "utf8");
+  return await readFile(join(workspaceRoot, "test", "linker", fixtureName), "utf8");
 }
 
 describe("TripLang Linker", () => {

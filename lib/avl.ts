@@ -1,11 +1,11 @@
 /**
  * Avl module provider.
  */
+import { join } from "node:path";
 import type { TripCObject } from "./compiler/objectFile.ts";
 import { loadTripModuleObject } from "./tripSourceLoader.ts";
-
-const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
+import { workspaceRoot } from "./shared/workspaceRoot.ts";
 
 export async function getAvlObject(): Promise<TripCObject> {
-  return await loadTripModuleObject(AVL_SOURCE_FILE);
+  return await loadTripModuleObject(join(workspaceRoot, "lib", "avl.trip"));
 }

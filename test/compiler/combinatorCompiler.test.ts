@@ -1,7 +1,7 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
   bootstrappedCompile,
   BootstrappedCompilerError,
@@ -9,11 +9,8 @@ import {
 } from "../../lib/compiler/combinatorCompiler.ts";
 import { loadInput } from "../util/fileLoader.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-
 function loadCompilerInput(fileName: string): string {
-  return loadInput(`combinatorCompiler/${fileName}`, join(srcRoot, "test", "compiler"));
+  return loadInput(`combinatorCompiler/${fileName}`, join(workspaceRoot, "test", "compiler"));
 }
 
 it("compileToCombinatorString links built-in imports", async () => {

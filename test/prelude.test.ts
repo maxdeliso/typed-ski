@@ -1,5 +1,7 @@
 import { describe, it } from "./util/test_shim.ts";
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { workspaceRoot } from "../lib/shared/workspaceRoot.ts";
 import { createThanatosEvaluator, thanatosAvailable } from "../lib/index.ts";
 import { linkModules } from "../lib/linker/moduleLinker.ts";
 import { parseSKI } from "../lib/parser/ski.ts";
@@ -17,7 +19,7 @@ it(
     const binObject = await getBinObject();
     const natObject = await getNatObject();
     const testObject = await loadTripModuleObject(
-      new URL("../../test/compiler/inputs/preludeTest.trip", import.meta.url),
+      join(workspaceRoot, "test", "compiler", "inputs", "preludeTest.trip"),
     );
 
     const skiExpression = linkModules([
@@ -46,7 +48,7 @@ it(
 it("subU8 primitive subtraction", { skip: !thanatosAvailable() }, async () => {
   const preludeObject = await getPreludeObject();
   const testObject = await loadTripModuleObject(
-    new URL("../../test/compiler/inputs/subU8Test.trip", import.meta.url),
+    join(workspaceRoot, "test", "compiler", "inputs", "subU8Test.trip"),
   );
 
   const skiExpression = linkModules([

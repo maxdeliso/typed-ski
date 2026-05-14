@@ -1,8 +1,8 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
-import { fileURLToPath } from "node:url";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
   createSystemFApplication,
   mkSystemFAbs,
@@ -18,9 +18,7 @@ import { requiredAt } from "../util/required.ts";
 import { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
 import { unparseSystemFType } from "../../lib/parser/systemFType.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-const srcDir = join(srcRoot, "test", "parser");
+const srcDir = join(workspaceRoot, "test", "parser");
 
 const expectSystemFApp = (t: SystemFTerm) => {
   assert.strictEqual(t.kind, "non-terminal");
@@ -230,7 +228,7 @@ data Token =
   });
 
   it("parses lib/compiler/lexer.trip Token ADT", () => {
-    const lexerPath = join(srcRoot, "lib", "compiler", "lexer.trip");
+    const lexerPath = join(workspaceRoot, "lib", "compiler", "lexer.trip");
     const input = loadTripSourceFileSync(lexerPath).trim();
     const program = parseTripLang(input);
 

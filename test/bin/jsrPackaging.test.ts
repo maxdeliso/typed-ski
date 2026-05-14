@@ -14,6 +14,7 @@ import { existsSync } from "node:fs";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "../util/test_shim.ts";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { spawnSync } from "node:child_process";
 
 import { parseJsonc } from "../util/jsonc.ts";
@@ -24,7 +25,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const jsRoot = join(__dirname, "../..");
-const srcRoot = join(__dirname, "../../..");
+const srcRoot = workspaceRoot;
 
 describe("JSR Packaging Configuration", () => {
   describe("jsr.json configuration", () => {

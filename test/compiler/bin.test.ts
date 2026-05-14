@@ -4,8 +4,8 @@
 
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
@@ -14,9 +14,7 @@ import { UnChurchNumber } from "../../lib/ski/church.ts";
 import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-const testSourcePath = join(srcRoot, "test", "compiler", "inputs", "testBinOps.trip");
+const testSourcePath = join(workspaceRoot, "test", "compiler", "inputs", "testBinOps.trip");
 
 let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
 let binObject: Awaited<ReturnType<typeof getBinObject>> | null = null;

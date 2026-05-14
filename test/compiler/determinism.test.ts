@@ -86,7 +86,7 @@ it("compileToObjectFile normalizes imported module metadata order", async () => 
   const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);
   const parserSource = await readFile(
-    fileURLToPath(PARSER_SOURCE_FILE),
+    PARSER_SOURCE_FILE,
     "utf8",
   );
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, it } from "./util/test_shim.ts";
+import { workspaceRoot } from "../lib/shared/workspaceRoot.ts";
 import {
   loadTripModuleObject,
   loadTripSourceFile,
@@ -9,8 +9,7 @@ import {
   resetSourceCache,
 } from "../lib/tripSourceLoader.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../..");
+const srcRoot = workspaceRoot;
 
 describe("tripSourceLoader", () => {
   it("loadTripSourceFile with string path", async () => {

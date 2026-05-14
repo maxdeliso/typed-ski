@@ -1,5 +1,7 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
   compileMiniCoreModules,
   evaluateMiniCore,
@@ -7,13 +9,13 @@ import {
 } from "../../lib/minicore/index.ts";
 import { loadTripSourceFile } from "../../lib/tripSourceLoader.ts";
 
-const PRELUDE_URL = new URL("../../../lib/prelude.trip", import.meta.url);
-const NAT_URL = new URL("../../../lib/nat.trip", import.meta.url);
-const BIN_URL = new URL("../../../lib/bin.trip", import.meta.url);
-const INPUT_DIR = new URL("../../../test/inputs/minicore/", import.meta.url);
+const PRELUDE_URL = join(workspaceRoot, "lib", "prelude.trip");
+const NAT_URL = join(workspaceRoot, "lib", "nat.trip");
+const BIN_URL = join(workspaceRoot, "lib", "bin.trip");
+const INPUT_DIR = join(workspaceRoot, "test", "inputs", "minicore");
 
 async function loadInput(name: string) {
-  return await loadTripSourceFile(new URL(name, INPUT_DIR));
+  return await loadTripSourceFile(join(INPUT_DIR, name));
 }
 
 async function getBaseModules() {

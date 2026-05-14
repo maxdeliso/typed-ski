@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { getAvlObject } from "../avl.ts";
 import { getBinObject } from "../bin.ts";
 import { createThanatosEvaluator } from "../evaluator/thanatosEvaluator.ts";
@@ -7,6 +8,7 @@ import { parseSKI } from "../parser/ski.ts";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { getPreludeObject } from "../prelude.ts";
 import { sortedStrings } from "../shared/canonical.ts";
+import { workspaceRoot } from "../shared/workspaceRoot.ts";
 import { unparseSKI } from "../ski/expression.ts";
 import { optimizeSKI } from "../ski/optimizer.ts";
 import {
@@ -19,27 +21,26 @@ import {
   SingleFileCompilerError,
 } from "./singleFileCompiler.ts";
 
-const PRELUDE_SOURCE_FILE = new URL("../../../lib/prelude.trip", import.meta.url);
-const NAT_SOURCE_FILE = new URL("../../../lib/nat.trip", import.meta.url);
-const BIN_SOURCE_FILE = new URL("../../../lib/bin.trip", import.meta.url);
-const AVL_SOURCE_FILE = new URL("../../../lib/avl.trip", import.meta.url);
-const LEXER_SOURCE_FILE = new URL("../../../lib/compiler/lexer.trip", import.meta.url);
-const PARSER_SOURCE_FILE = new URL("../../../lib/compiler/parser.trip", import.meta.url);
-const CORE_SOURCE_FILE = new URL("../../../lib/compiler/core.trip", import.meta.url);
-const DATA_ENV_SOURCE_FILE = new URL("../../../lib/compiler/dataEnv.trip", import.meta.url);
-const CORE_TO_LOWER_SOURCE_FILE = new URL(
-  "../../../lib/compiler/coreToLower.trip",
-  import.meta.url,
-);
-const UNPARSE_SOURCE_FILE = new URL("../../../lib/compiler/unparse.trip", import.meta.url);
-const LOWERING_SOURCE_FILE = new URL("../../../lib/compiler/lowering.trip", import.meta.url);
-const BRIDGE_SOURCE_FILE = new URL("../../../lib/compiler/bridge.trip", import.meta.url);
-const LLVM_SOURCE_FILE = new URL("../../../lib/compiler/llvm.trip", import.meta.url);
-const COMPILER_SOURCE_FILE = new URL("../../../lib/compiler/index.trip", import.meta.url);
-const TELEMETRY_SOURCE_FILE = new URL("../../../lib/compiler/telemetry.trip", import.meta.url);
+const lib = (...parts: string[]) => join(workspaceRoot, "lib", ...parts);
+
+const PRELUDE_SOURCE_FILE = lib("prelude.trip");
+const NAT_SOURCE_FILE = lib("nat.trip");
+const BIN_SOURCE_FILE = lib("bin.trip");
+const AVL_SOURCE_FILE = lib("avl.trip");
+const LEXER_SOURCE_FILE = lib("compiler", "lexer.trip");
+const PARSER_SOURCE_FILE = lib("compiler", "parser.trip");
+const CORE_SOURCE_FILE = lib("compiler", "core.trip");
+const DATA_ENV_SOURCE_FILE = lib("compiler", "dataEnv.trip");
+const CORE_TO_LOWER_SOURCE_FILE = lib("compiler", "coreToLower.trip");
+const UNPARSE_SOURCE_FILE = lib("compiler", "unparse.trip");
+const LOWERING_SOURCE_FILE = lib("compiler", "lowering.trip");
+const BRIDGE_SOURCE_FILE = lib("compiler", "bridge.trip");
+const LLVM_SOURCE_FILE = lib("compiler", "llvm.trip");
+const COMPILER_SOURCE_FILE = lib("compiler", "index.trip");
+const TELEMETRY_SOURCE_FILE = lib("compiler", "telemetry.trip");
 
 interface BuiltinModuleSpec {
-  source: URL;
+  source: string;
   load: () => Promise<TripCObject>;
 }
 

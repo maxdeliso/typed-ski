@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, it } from "../util/test_shim.ts";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import assert from "node:assert/strict";
 import {
   anfToBlockModule,
@@ -10,14 +12,11 @@ import {
 } from "../../lib/minicore/index.ts";
 
 const MODULE_SOURCES = [
-  ["Prelude", new URL("../../../lib/prelude.trip", import.meta.url)],
-  ["Bin", new URL("../../../lib/bin.trip", import.meta.url)],
-  ["Nat", new URL("../../../lib/nat.trip", import.meta.url)],
-  ["Avl", new URL("../../../lib/avl.trip", import.meta.url)],
-  [
-    "AvlNatTreeTest",
-    new URL("../../../test/inputs/avl/AvlNatTreeTest.trip", import.meta.url),
-  ],
+  ["Prelude", join(workspaceRoot, "lib", "prelude.trip")],
+  ["Bin", join(workspaceRoot, "lib", "bin.trip")],
+  ["Nat", join(workspaceRoot, "lib", "nat.trip")],
+  ["Avl", join(workspaceRoot, "lib", "avl.trip")],
+  ["AvlNatTreeTest", join(workspaceRoot, "test", "inputs", "avl", "AvlNatTreeTest.trip")],
 ] as const;
 
 async function compileAvlNatTreeProgram() {

@@ -1,8 +1,8 @@
 import { before, after, describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { compile } from "../../lib/meta/frontend/compilation.ts";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { compileToCombinatorString } from "../../lib/compiler/combinatorCompiler.ts";
 import { loadInput } from "../util/fileLoader.ts";
 import { unparseType } from "../../lib/parser/type.ts";
@@ -25,9 +25,7 @@ import { resolveExternalProgramReferences } from "../../lib/meta/frontend/substi
 import type { TripLangTerm } from "../../lib/meta/trip.ts";
 import type { BaseType } from "../../lib/types/types.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const srcRoot = join(__dirname, "../../..");
-const srcDir = join(srcRoot, "test", "meta");
+const srcDir = join(workspaceRoot, "test", "meta");
 
 function resolvePoly(
   compiled: { program: { terms: TripLangTerm[] } },

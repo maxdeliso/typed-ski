@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, it } from "../../util/test_shim.ts";
+import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import {
   compileTripBundleV1ToLlvm,
   parseTripBundleV1,
@@ -28,8 +28,7 @@ import {
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, "../../../..");
+const projectRoot = workspaceRoot;
 const fixtureDir = join(projectRoot, "test", "compiler", "llvm", "fixtures");
 
 function decode(bytes: Uint8Array): string {
@@ -93,7 +92,7 @@ async function compileBundleInventoryExecutable(
   tempDir: string,
 ): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../../lib/compiler/bundleInventory.trip"),
+    join(projectRoot, "lib", "compiler", "bundleInventory.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {
@@ -116,7 +115,7 @@ async function compileBundleInventoryExecutable(
 
 async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../../lib/compiler/moduleEnv.trip"),
+    join(projectRoot, "lib", "compiler", "moduleEnv.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {
@@ -1246,7 +1245,7 @@ async function compileBundleSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../../lib/compiler/bundleSummary.trip"),
+    join(projectRoot, "lib", "compiler", "bundleSummary.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {
@@ -1263,7 +1262,7 @@ async function compileBundleParseSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../../lib/compiler/bundleParseSummary.trip"),
+    join(projectRoot, "lib", "compiler", "bundleParseSummary.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {

@@ -21,9 +21,9 @@ import {
 } from "../../lib/minicore/fromTrip.ts";
 import * as miniCoreIndex from "../../lib/minicore/index.ts";
 
-const PRELUDE_URL = new URL("../../lib/prelude.trip", import.meta.url);
-const NAT_URL = new URL("../../lib/nat.trip", import.meta.url);
-const BIN_URL = new URL("../../lib/bin.trip", import.meta.url);
+const PRELUDE_URL = new URL("../../../lib/prelude.trip", import.meta.url);
+const NAT_URL = new URL("../../../lib/nat.trip", import.meta.url);
+const BIN_URL = new URL("../../../lib/bin.trip", import.meta.url);
 
 const fn = (
   id: number,

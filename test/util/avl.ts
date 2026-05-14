@@ -1,7 +1,7 @@
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
+const AVL_SOURCE_FILE = new URL("../../../lib/avl.trip", import.meta.url);
 
 /**
  * Loads the AVL tree module for testing.

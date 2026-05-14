@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
 import { Node, Project, SyntaxKind } from "ts-morph";
 import { join } from "node:path";
@@ -57,16 +57,15 @@ function isInternal(node: Node): boolean {
   while (current) {
     if (Node.isJSDocable(current)) {
       if (
-        current.getJsDocs().some((doc) => doc.getText().includes("@internal"))
-      ) {
-        return true;
-      }
+        current.getJsDocs().some((doc: any) => doc.getText().includes("@internal"))
+      )
+      return true;
     }
     if (Node.isVariableDeclaration(current)) {
       const statement = current.getVariableStatement();
       if (
         statement &&
-        statement.getJsDocs().some((doc) => doc.getText().includes("@internal"))
+        statement.getJsDocs().some((doc: any) => doc.getText().includes("@internal"))
       ) {
         return true;
       }
@@ -94,14 +93,14 @@ function traceReachability(rootFiles: string[]): Set<Node> {
       }
     }
 
-    sourceFile.forEachDescendant((node) => {
+    sourceFile.forEachDescendant((node: Node) => {
       if (
         Node.isStatement(node) &&
         !Node.isExportDeclaration(node) &&
         !Node.isExportSpecifier(node)
       ) {
-        node.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id) => {
-          id.getDefinitions().forEach((def) => {
+        node.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id: any) => {
+          id.getDefinitions().forEach((def: any) => {
             const decl = def.getDeclarationNode();
             if (decl && !reachable.has(decl)) {
               reachable.add(decl);
@@ -116,8 +115,8 @@ function traceReachability(rootFiles: string[]): Set<Node> {
   let processed = 0;
   while (processed < queue.length) {
     const current = queue[processed++]!;
-    current.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id) => {
-      id.getDefinitions().forEach((def) => {
+    current.getDescendantsOfKind(SyntaxKind.Identifier).forEach((id: any) => {
+      id.getDefinitions().forEach((def: any) => {
         const decl = def.getDeclarationNode();
         if (decl && !reachable.has(decl)) {
           const sourceFile = decl.getSourceFile();
@@ -166,7 +165,7 @@ for (const sourceFile of project.getSourceFiles()) {
       const isExportedFromRoot = PROD_ROOTS.some((root) => {
         const sf = project.getSourceFile(root);
         const exportedDecls = sf?.getExportedDeclarations().get(name) ?? [];
-        return exportedDecls.some((exportedDecl) => exportedDecl === decl);
+        return exportedDecls.some((exportedDecl: Node) => exportedDecl === decl);
       });
 
       if (!isProd && !isTest) {

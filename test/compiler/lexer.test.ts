@@ -31,8 +31,9 @@ import {
 } from "../thanatosHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
 const LEXER_SOURCE_FILE = new URL(
-  "../../lib/compiler/lexer.trip",
+  "../../../lib/compiler/lexer.trip",
   import.meta.url,
 );
 
@@ -57,7 +58,7 @@ async function getPreludeObjectCached() {
 async function compileAndValidateTestProgram(
   inputFileName: string,
 ): Promise<SKIExpression> {
-  const testFilePath = join(__dirname, "inputs", inputFileName);
+  const testFilePath = join(srcRoot, "test", "compiler", "inputs", inputFileName);
   const testObj = await loadTripModuleObject(testFilePath);
 
   const lexerObj = await getLexerObject();
@@ -150,7 +151,7 @@ poly main = (isSpaceU8 #u8(${charCode})) [U8] #u8(1) #u8(0)
         const preludeObj = await getPreludeObjectCached();
 
         const testObj = await loadTripModuleObject(
-          join(__dirname, "inputs", "testTokenize1Space2.trip"),
+          join(srcRoot, "test", "compiler", "inputs", "testTokenize1Space2.trip"),
         );
         const skiExpression = linkModules([
           { name: "Prelude", object: preludeObj },

@@ -21,8 +21,9 @@ import process from "node:process";
 import { resolveDistPath } from "../util/tripcHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, "../..");
-const fixturesDir = join(__dirname, "fixtures");
+const jsRoot = join(__dirname, "../..");
+const srcRoot = join(__dirname, "../../..");
+const fixturesDir = join(srcRoot, "test", "bin", "fixtures");
 const compiledTripcName = process.platform === "win32" ? "tripc.cmd" : "tripc";
 const bundledTripcPath = resolveDistPath(
   "TYPED_SKI_DIST_JS_PATH",
@@ -49,7 +50,7 @@ import { required, requiredAt } from "../util/required.ts";
 // Test utilities
 async function runCommand(
   command: string[],
-  cwd = projectRoot,
+  cwd = jsRoot,
 ): Promise<{
   success: boolean;
   stdout: string;
@@ -60,15 +61,13 @@ async function runCommand(
   let executable = command0;
   let args = command.slice(1);
 
-  // For running 'bin/tripc.ts', use process.execPath with the repo's transform-types flags.
   if (command0 === "node" || command0 === process.execPath) {
-    if (args.includes("bin/tripc.ts")) {
+    if (args.includes("bin/tripc.js")) {
       executable = process.execPath;
-      const tripcIndex = args.indexOf("bin/tripc.ts");
+      const tripcIndex = args.indexOf("bin/tripc.js");
       args = [
         "--disable-warning=ExperimentalWarning",
-        "--experimental-transform-types",
-        "bin/tripc.ts",
+        "bin/tripc.js",
         ...args.slice(tripcIndex + 1),
       ];
     } else if (
@@ -297,7 +296,7 @@ poly id = #a => \\x:a => x`;
 
   describe("CLI file structure tests", () => {
     it("CLI files exist", () => {
-      const binDir = join(projectRoot, "bin");
+      const binDir = join(srcRoot, "bin");
       assert.strictEqual(existsSync(binDir), true);
 
       assert.strictEqual(existsSync(join(binDir, "tripc.ts")), true);
@@ -305,7 +304,7 @@ poly id = #a => \\x:a => x`;
 
     it("CLI files have proper content", async () => {
       const tripcTs = await readFile(
-        join(projectRoot, "bin/tripc.ts"),
+        join(srcRoot, "bin/tripc.ts"),
         "utf-8",
       );
       assert.ok(tripcTs.includes("TripLang Compiler & Linker"));
@@ -314,11 +313,11 @@ poly id = #a => \\x:a => x`;
   });
 
   describe("CLI Packaging Tests", () => {
-    describe("TypeScript CLI (bin/tripc.ts)", () => {
+    describe("Compiled CLI (bin/tripc.js)", () => {
       it("--version flag", async () => {
         const result = await runCommand([
           process.execPath,
-          "bin/tripc.ts",
+          "bin/tripc.js",
           "--version",
         ]);
 
@@ -329,7 +328,7 @@ poly id = #a => \\x:a => x`;
       it("--help flag", async () => {
         const result = await runCommand([
           process.execPath,
-          "bin/tripc.ts",
+          "bin/tripc.js",
           "--help",
         ]);
 
@@ -343,7 +342,7 @@ poly id = #a => \\x:a => x`;
 
         const result = await runCommand([
           process.execPath,
-          "bin/tripc.ts",
+          "bin/tripc.js",
           testFile,
           "--stdout",
         ]);
@@ -360,7 +359,7 @@ poly id = #a => \\x:a => x`;
 
         const result = await runCommand([
           process.execPath,
-          "bin/tripc.ts",
+          "bin/tripc.js",
           invalidFile,
         ]);
 
@@ -516,7 +515,7 @@ poly id = #a => \\x:a => x`;
     it("error on unknown option", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.ts",
+        "bin/tripc.js",
         "--unknown",
       ]);
       assert.strictEqual(result.success, false);
@@ -526,7 +525,7 @@ poly id = #a => \\x:a => x`;
     it("error on too many arguments", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.ts",
+        "bin/tripc.js",
         "a.trip",
         "b.tripc",
         "extra",
@@ -536,7 +535,7 @@ poly id = #a => \\x:a => x`;
     });
 
     it("error on no input file", async () => {
-      const result = await runCommand([process.execPath, "bin/tripc.ts"]);
+      const result = await runCommand([process.execPath, "bin/tripc.js"]);
       assert.strictEqual(result.success, false);
       assert.ok(result.stderr.includes("Error: No input file specified"));
     });
@@ -545,7 +544,7 @@ poly id = #a => \\x:a => x`;
       const tempFile = fixturePath("empty.txt");
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.ts",
+        "bin/tripc.js",
         tempFile,
       ]);
       assert.strictEqual(result.success, false);
@@ -555,7 +554,7 @@ poly id = #a => \\x:a => x`;
     it("error on linking with no files", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.ts",
+        "bin/tripc.js",
         "--link",
       ]);
       assert.strictEqual(result.success, false);
@@ -566,12 +565,12 @@ poly id = #a => \\x:a => x`;
 
     it("short flags coverage (-h, -v, -c)", async () => {
       // -h
-      let result = await runCommand([process.execPath, "bin/tripc.ts", "-h"]);
+      let result = await runCommand([process.execPath, "bin/tripc.js", "-h"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("USAGE:"));
 
       // -v
-      result = await runCommand([process.execPath, "bin/tripc.ts", "-v"]);
+      result = await runCommand([process.execPath, "bin/tripc.js", "-v"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("tripc v"));
     });
@@ -579,7 +578,7 @@ poly id = #a => \\x:a => x`;
     it("error when input path is a directory", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.ts",
+        "bin/tripc.js",
         "bin/",
       ]);
       assert.strictEqual(result.success, false);

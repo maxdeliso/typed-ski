@@ -10,13 +10,13 @@ import {
 } from "../../lib/minicore/index.ts";
 
 const MODULE_SOURCES = [
-  ["Prelude", new URL("../../lib/prelude.trip", import.meta.url)],
-  ["Bin", new URL("../../lib/bin.trip", import.meta.url)],
-  ["Nat", new URL("../../lib/nat.trip", import.meta.url)],
-  ["Avl", new URL("../../lib/avl.trip", import.meta.url)],
+  ["Prelude", new URL("../../../lib/prelude.trip", import.meta.url)],
+  ["Bin", new URL("../../../lib/bin.trip", import.meta.url)],
+  ["Nat", new URL("../../../lib/nat.trip", import.meta.url)],
+  ["Avl", new URL("../../../lib/avl.trip", import.meta.url)],
   [
     "AvlNatTreeTest",
-    new URL("../inputs/avl/AvlNatTreeTest.trip", import.meta.url),
+    new URL("../../../test/inputs/avl/AvlNatTreeTest.trip", import.meta.url),
   ],
 ] as const;
 

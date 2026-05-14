@@ -22,6 +22,7 @@ import {
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
 
 describe("Prelude Linking", () => {
   it(
@@ -35,7 +36,7 @@ describe("Prelude Linking", () => {
         const binObj = await getBinObject();
         const natObj = await getNatObject();
         const testObj = await loadTripModuleObject(
-          join(__dirname, "inputs", "testArithmetic.trip"),
+          join(srcRoot, "test", "linker", "inputs", "testArithmetic.trip"),
         );
 
         const skiExpression = linkModules([
@@ -69,7 +70,7 @@ describe("Prelude Linking", () => {
       try {
         const preludeObj = await getPreludeObject();
         const testObj = await loadTripModuleObject(
-          join(__dirname, "inputs", "testLogic.trip"),
+          join(srcRoot, "test", "linker", "inputs", "testLogic.trip"),
         );
 
         const skiExpression = linkModules([

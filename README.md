@@ -100,7 +100,7 @@ To run a single test file with Node directly:
 
 ```powershell
 $env:THANATOS_BIN = "$(pwd)\bazel-bin\core\thanatos.exe"
-node --experimental-transform-types --test-global-setup test/globalSetup.ts --test test/path/to/test.ts
+node --disable-warning=ExperimentalWarning --test-global-setup ts_out/test/globalSetup.js --test ts_out/test/path/to/test.js
 ```
 
 To run a single test with Bazel:

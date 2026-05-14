@@ -9,7 +9,7 @@ import {
 } from "../../../lib/compiler/index.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = resolve(__dirname, "../../../");
+const PROJECT_ROOT = resolve(__dirname, "../../../../");
 
 export interface RunResult {
   stdout: string;

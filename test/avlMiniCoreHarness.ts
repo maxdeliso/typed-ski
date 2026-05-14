@@ -17,10 +17,10 @@ export interface AvlMiniCoreRunResult {
   program: Program;
 }
 
-const PRELUDE_SOURCE_FILE = new URL("../lib/prelude.trip", import.meta.url);
-const BIN_SOURCE_FILE = new URL("../lib/bin.trip", import.meta.url);
-const NAT_SOURCE_FILE = new URL("../lib/nat.trip", import.meta.url);
-const AVL_SOURCE_FILE = new URL("../lib/avl.trip", import.meta.url);
+const PRELUDE_SOURCE_FILE = new URL("../../lib/prelude.trip", import.meta.url);
+const BIN_SOURCE_FILE = new URL("../../lib/bin.trip", import.meta.url);
+const NAT_SOURCE_FILE = new URL("../../lib/nat.trip", import.meta.url);
+const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
 
 let builtinSourcesPromise:
   | Promise<{

@@ -3,11 +3,11 @@ module(
 )
 
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
-bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_nodejs", version = "6.7.4")
-bazel_dep(name = "aspect_rules_js", version = "3.0.3")
+bazel_dep(name = "aspect_rules_js", version = "3.1.2")
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
 http_archive = use_repo_rule(
@@ -86,23 +86,23 @@ http_archive(
     ],
 )
 
-NODE_25_VERSION = "25.6.0"
+NODE_26_VERSION = "26.1.0"
 
-NODE_25_REPOSITORIES = {
-    "25.6.0-darwin_arm64": [
-        "node-v25.6.0-darwin-arm64.tar.xz",
-        "node-v25.6.0-darwin-arm64",
-        "4404c6e228e8e0aa35c95cdd5d375021e900f771de1d8ba7e0fc8ce47a4c6b91",
+NODE_26_REPOSITORIES = {
+    "26.1.0-darwin_arm64": [
+        "node-v26.1.0-darwin-arm64.tar.xz",
+        "node-v26.1.0-darwin-arm64",
+        "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443",
     ],
-    "25.6.0-linux_amd64": [
-        "node-v25.6.0-linux-x64.tar.xz",
-        "node-v25.6.0-linux-x64",
-        "f61908298ba1c8e1802ac00283cee678e0eb4035e1c74f094b06b1620423fcf2",
+    "26.1.0-linux_amd64": [
+        "node-v26.1.0-linux-x64.tar.xz",
+        "node-v26.1.0-linux-x64",
+        "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9",
     ],
-    "25.6.0-windows_amd64": [
-        "node-v25.6.0-win-x64.zip",
-        "node-v25.6.0-win-x64",
-        "133686ade5cd1e1686afcf2d688530fc35afef649ddf6a491e4705610727bd23",
+    "26.1.0-windows_amd64": [
+        "node-v26.1.0-win-x64.zip",
+        "node-v26.1.0-win-x64",
+        "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92",
     ],
 }
 
@@ -115,25 +115,25 @@ nodejs_repository = use_repo_rule(
 [
     nodejs_repository(
         name = name,
-        node_repositories = NODE_25_REPOSITORIES,
-        node_version = NODE_25_VERSION,
+        node_repositories = NODE_26_REPOSITORIES,
+        node_version = NODE_26_VERSION,
         platform = platform,
     )
     for platform, name in [
-        ("darwin_arm64", "typed_ski_node25_darwin_arm64"),
-        ("linux_amd64", "typed_ski_node25_linux_amd64"),
-        ("windows_amd64", "typed_ski_node25_windows_amd64"),
+        ("darwin_arm64", "typed_ski_node26_darwin_arm64"),
+        ("linux_amd64", "typed_ski_node26_linux_amd64"),
+        ("windows_amd64", "typed_ski_node26_windows_amd64"),
     ]
 ]
 
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
-node.toolchain(node_version = "25.6.0")
+node.toolchain(node_version = "26.1.0")
 use_repo(node, "nodejs_darwin_arm64", "nodejs_linux_amd64", "nodejs_windows_amd64")
 
 register_toolchains(
-    "//bazel:node25_darwin_arm64_toolchain",
-    "//bazel:node25_linux_amd64_toolchain",
-    "//bazel:node25_windows_amd64_toolchain",
+    "//bazel:node26_darwin_arm64_toolchain",
+    "//bazel:node26_linux_amd64_toolchain",
+    "//bazel:node26_windows_amd64_toolchain",
 )
 
 npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm", dev_dependency = True)

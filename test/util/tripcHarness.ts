@@ -12,8 +12,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEST_TEMP_ROOT = process.env["TEST_TMPDIR"] ?? tmpdir();
 
-export const projectRoot = resolve(__dirname, "../..");
-export const tripcScriptPath = join(projectRoot, "bin", "tripc.ts");
+export const jsRoot = resolve(__dirname, "../..");
+export const projectRoot = resolve(__dirname, "../../..");
+export const srcRoot = projectRoot;
+export const tripcScriptPath = join(jsRoot, "bin", "tripc.js");
 
 export async function createTempWorkspace(prefix: string): Promise<string> {
   return await mkdtemp(join(TEST_TEMP_ROOT, prefix));
@@ -48,7 +50,6 @@ export function runTripcSync(
     process.execPath,
     [
       "--disable-warning=ExperimentalWarning",
-      "--experimental-transform-types",
       tripcScriptPath,
       ...args,
     ],
@@ -63,5 +64,5 @@ export function resolveDistPath(
   envName: string,
   fallbackRelativePath: string,
 ): string {
-  return process.env[envName] ?? join(projectRoot, fallbackRelativePath);
+  return process.env[envName] ?? join(srcRoot, fallbackRelativePath);
 }

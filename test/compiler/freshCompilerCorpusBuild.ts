@@ -13,16 +13,16 @@ import { getPreludeObject } from "../../lib/prelude.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 
 export const LEXER_SOURCE_FILE = new URL(
-  "../../lib/compiler/lexer.trip",
+  "../../../lib/compiler/lexer.trip",
   import.meta.url,
 );
 export const PARSER_SOURCE_FILE = new URL(
-  "../../lib/compiler/parser.trip",
+  "../../../lib/compiler/parser.trip",
   import.meta.url,
 );
-const BIN_SOURCE_FILE = new URL("../../lib/compiler/bin.trip", import.meta.url);
+const BIN_SOURCE_FILE = new URL("../../../lib/compiler/bin.trip", import.meta.url);
 const PARSER_DRIVER_FILE = new URL(
-  "../../test/compiler/inputs/testParseDefinitionKinds.trip",
+  "../../../test/compiler/inputs/testParseDefinitionKinds.trip",
   import.meta.url,
 );
 const BIN_DRIVER_SOURCE = `module Test

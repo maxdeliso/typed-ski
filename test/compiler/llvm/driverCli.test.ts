@@ -12,7 +12,6 @@ function runNodeScript(script: string, args: string[]) {
     process.execPath,
     [
       "--disable-warning=ExperimentalWarning",
-      "--experimental-transform-types",
       script,
       ...args,
     ],

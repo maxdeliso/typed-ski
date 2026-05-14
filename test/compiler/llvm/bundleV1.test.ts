@@ -29,8 +29,8 @@ import {
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixtureDir = join(__dirname, "fixtures");
-const projectRoot = join(__dirname, "../../..");
+const projectRoot = join(__dirname, "../../../..");
+const fixtureDir = join(projectRoot, "test", "compiler", "llvm", "fixtures");
 
 function decode(bytes: Uint8Array): string {
   return decoder.decode(bytes);
@@ -93,7 +93,7 @@ async function compileBundleInventoryExecutable(
   tempDir: string,
 ): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/bundleInventory.trip"),
+    join(__dirname, "../../../../lib/compiler/bundleInventory.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {
@@ -116,7 +116,7 @@ async function compileBundleInventoryExecutable(
 
 async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/moduleEnv.trip"),
+    join(__dirname, "../../../../lib/compiler/moduleEnv.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {
@@ -1246,7 +1246,7 @@ async function compileBundleSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/bundleSummary.trip"),
+    join(__dirname, "../../../../lib/compiler/bundleSummary.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {
@@ -1263,7 +1263,7 @@ async function compileBundleParseSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
   const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/bundleParseSummary.trip"),
+    join(__dirname, "../../../../lib/compiler/bundleParseSummary.trip"),
     "utf8",
   );
   const llvm = await compileTripToLlvm(source, {

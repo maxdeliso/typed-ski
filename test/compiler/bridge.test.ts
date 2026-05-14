@@ -17,40 +17,40 @@ import {
 } from "../thanatosHarness.ts";
 
 const LEXER_SOURCE_FILE = new URL(
-  "../../lib/compiler/lexer.trip",
+  "../../../lib/compiler/lexer.trip",
   import.meta.url,
 );
 const PARSER_SOURCE_FILE = new URL(
-  "../../lib/compiler/parser.trip",
+  "../../../lib/compiler/parser.trip",
   import.meta.url,
 );
 const CORE_SOURCE_FILE = new URL(
-  "../../lib/compiler/core.trip",
+  "../../../lib/compiler/core.trip",
   import.meta.url,
 );
 const DATA_ENV_SOURCE_FILE = new URL(
-  "../../lib/compiler/dataEnv.trip",
+  "../../../lib/compiler/dataEnv.trip",
   import.meta.url,
 );
 const UNPARSE_SOURCE_FILE = new URL(
-  "../../lib/compiler/unparse.trip",
+  "../../../lib/compiler/unparse.trip",
   import.meta.url,
 );
 const LOWERING_SOURCE_FILE = new URL(
-  "../../lib/compiler/lowering.trip",
+  "../../../lib/compiler/lowering.trip",
   import.meta.url,
 );
 const CORE_TO_LOWER_SOURCE_FILE = new URL(
-  "../../lib/compiler/coreToLower.trip",
+  "../../../lib/compiler/coreToLower.trip",
   import.meta.url,
 );
 const BRIDGE_SOURCE_FILE = new URL(
-  "../../lib/compiler/bridge.trip",
+  "../../../lib/compiler/bridge.trip",
   import.meta.url,
 );
-const AVL_SOURCE_FILE = new URL("../../lib/avl.trip", import.meta.url);
-const BIN_SOURCE_FILE = new URL("../../lib/bin.trip", import.meta.url);
-const NAT_SOURCE_FILE = new URL("../../lib/nat.trip", import.meta.url);
+const AVL_SOURCE_FILE = new URL("../../../lib/avl.trip", import.meta.url);
+const BIN_SOURCE_FILE = new URL("../../../lib/bin.trip", import.meta.url);
+const NAT_SOURCE_FILE = new URL("../../../lib/nat.trip", import.meta.url);
 
 interface BridgeModules {
   prelude: TripCObject;

@@ -7,7 +7,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, "..", "..");
+const jsRoot = join(__dirname, "..", "..");
+const PROJECT_ROOT = join(__dirname, "..", "..", "..");
 
 describe("Bootstrapped Lowering Pipeline", () => {
   const libDir = join(PROJECT_ROOT, "lib");
@@ -44,8 +45,7 @@ describe("Bootstrapped Lowering Pipeline", () => {
           process.execPath,
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
-            join(PROJECT_ROOT, "bin", "tripc.ts"),
+            join(jsRoot, "bin", "tripc.js"),
             file,
             tripcFile,
           ],
@@ -68,8 +68,7 @@ describe("Bootstrapped Lowering Pipeline", () => {
         process.execPath,
         [
           "--disable-warning=ExperimentalWarning",
-          "--experimental-transform-types",
-          join(PROJECT_ROOT, "bin", "tripc.ts"),
+          join(jsRoot, "bin", "tripc.js"),
           "--link",
           ...tripcFiles,
         ],

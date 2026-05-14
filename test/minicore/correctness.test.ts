@@ -7,10 +7,10 @@ import {
 } from "../../lib/minicore/index.ts";
 import { loadTripSourceFile } from "../../lib/tripSourceLoader.ts";
 
-const PRELUDE_URL = new URL("../../lib/prelude.trip", import.meta.url);
-const NAT_URL = new URL("../../lib/nat.trip", import.meta.url);
-const BIN_URL = new URL("../../lib/bin.trip", import.meta.url);
-const INPUT_DIR = new URL("../inputs/minicore/", import.meta.url);
+const PRELUDE_URL = new URL("../../../lib/prelude.trip", import.meta.url);
+const NAT_URL = new URL("../../../lib/nat.trip", import.meta.url);
+const BIN_URL = new URL("../../../lib/bin.trip", import.meta.url);
+const INPUT_DIR = new URL("../../../test/inputs/minicore/", import.meta.url);
 
 async function loadInput(name: string) {
   return await loadTripSourceFile(new URL(name, INPUT_DIR));

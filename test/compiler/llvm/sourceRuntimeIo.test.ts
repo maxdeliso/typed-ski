@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "../../util/test_shim.ts";
 import { emitLlvmModule } from "../../../lib/compiler/llvm/index.ts";
 import {
@@ -10,7 +12,9 @@ import {
   type BlockModule,
 } from "../../../lib/minicore/index.ts";
 
-const preludeSource = readFileSync("lib/prelude.trip", "utf8");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = join(__dirname, "../../../..");
+const preludeSource = readFileSync(join(projectRoot, "lib/prelude.trip"), "utf8");
 
 describe("LLVM source lowering - runtime IO", () => {
   it("lowers Prelude.writeOne to the Trip runtime ABI", () => {

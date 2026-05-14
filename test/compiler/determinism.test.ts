@@ -26,8 +26,7 @@ async function runFreshCompilerCorpusBuildInSubprocess(): Promise<Uint8Array> {
     process.execPath,
     [
       "--disable-warning=ExperimentalWarning",
-      "--experimental-transform-types",
-      fileURLToPath(new URL("./freshCompilerCorpusBuild.ts", import.meta.url)),
+      fileURLToPath(new URL("./freshCompilerCorpusBuild.js", import.meta.url)),
     ],
     {
       maxBuffer: 32 * 1024 * 1024,

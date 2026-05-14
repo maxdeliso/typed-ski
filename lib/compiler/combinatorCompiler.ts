@@ -19,24 +19,24 @@ import {
   SingleFileCompilerError,
 } from "./singleFileCompiler.ts";
 
-const PRELUDE_SOURCE_FILE = new URL("../prelude.trip", import.meta.url);
-const NAT_SOURCE_FILE = new URL("../nat.trip", import.meta.url);
-const BIN_SOURCE_FILE = new URL("../bin.trip", import.meta.url);
-const AVL_SOURCE_FILE = new URL("../avl.trip", import.meta.url);
-const LEXER_SOURCE_FILE = new URL("./lexer.trip", import.meta.url);
-const PARSER_SOURCE_FILE = new URL("./parser.trip", import.meta.url);
-const CORE_SOURCE_FILE = new URL("./core.trip", import.meta.url);
-const DATA_ENV_SOURCE_FILE = new URL("./dataEnv.trip", import.meta.url);
+const PRELUDE_SOURCE_FILE = new URL("../../../lib/prelude.trip", import.meta.url);
+const NAT_SOURCE_FILE = new URL("../../../lib/nat.trip", import.meta.url);
+const BIN_SOURCE_FILE = new URL("../../../lib/bin.trip", import.meta.url);
+const AVL_SOURCE_FILE = new URL("../../../lib/avl.trip", import.meta.url);
+const LEXER_SOURCE_FILE = new URL("../../../lib/compiler/lexer.trip", import.meta.url);
+const PARSER_SOURCE_FILE = new URL("../../../lib/compiler/parser.trip", import.meta.url);
+const CORE_SOURCE_FILE = new URL("../../../lib/compiler/core.trip", import.meta.url);
+const DATA_ENV_SOURCE_FILE = new URL("../../../lib/compiler/dataEnv.trip", import.meta.url);
 const CORE_TO_LOWER_SOURCE_FILE = new URL(
-  "./coreToLower.trip",
+  "../../../lib/compiler/coreToLower.trip",
   import.meta.url,
 );
-const UNPARSE_SOURCE_FILE = new URL("./unparse.trip", import.meta.url);
-const LOWERING_SOURCE_FILE = new URL("./lowering.trip", import.meta.url);
-const BRIDGE_SOURCE_FILE = new URL("./bridge.trip", import.meta.url);
-const LLVM_SOURCE_FILE = new URL("./llvm.trip", import.meta.url);
-const COMPILER_SOURCE_FILE = new URL("./index.trip", import.meta.url);
-const TELEMETRY_SOURCE_FILE = new URL("./telemetry.trip", import.meta.url);
+const UNPARSE_SOURCE_FILE = new URL("../../../lib/compiler/unparse.trip", import.meta.url);
+const LOWERING_SOURCE_FILE = new URL("../../../lib/compiler/lowering.trip", import.meta.url);
+const BRIDGE_SOURCE_FILE = new URL("../../../lib/compiler/bridge.trip", import.meta.url);
+const LLVM_SOURCE_FILE = new URL("../../../lib/compiler/llvm.trip", import.meta.url);
+const COMPILER_SOURCE_FILE = new URL("../../../lib/compiler/index.trip", import.meta.url);
+const TELEMETRY_SOURCE_FILE = new URL("../../../lib/compiler/telemetry.trip", import.meta.url);
 
 interface BuiltinModuleSpec {
   source: URL;

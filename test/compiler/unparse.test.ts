@@ -1,6 +1,6 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
@@ -12,14 +12,15 @@ import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { loadInput } from "../util/fileLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
 
 const UNPARSE_SOURCE_FILE = new URL(
-  "../../lib/compiler/unparse.trip",
+  "../../../lib/compiler/unparse.trip",
   import.meta.url,
 );
 
 function loadUnparseStage1Input(fileName: string): string {
-  return loadInput(`unparseStage1/${fileName}`, __dirname);
+  return loadInput(`unparseStage1/${fileName}`, join(srcRoot, "test", "compiler"));
 }
 
 let unparseObject: TripCObject | null = null;

@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
 
 it(
   "bootstrapped Parser.parseType correctly parses a complex type",
@@ -19,16 +20,16 @@ it(
     const preludeObject = await getPreludeObject();
     const natObject = await getNatObject();
     const lexerObject = await loadTripModuleObject(
-      new URL("../../lib/compiler/lexer.trip", import.meta.url),
+      new URL("../../../lib/compiler/lexer.trip", import.meta.url),
     );
     const parserObject = await loadTripModuleObject(
-      new URL("../../lib/compiler/parser.trip", import.meta.url),
+      new URL("../../../lib/compiler/parser.trip", import.meta.url),
     );
     const binObject = await loadTripModuleObject(
-      new URL("../../lib/bin.trip", import.meta.url),
+      new URL("../../../lib/bin.trip", import.meta.url),
     );
     const testObject = await loadTripModuleObject(
-      join(__dirname, "inputs", "testParseType.trip"),
+      join(srcRoot, "test", "compiler", "inputs", "testParseType.trip"),
     );
 
     const skiExpression = linkModules([

@@ -23,7 +23,7 @@ import {
 import { required, requiredAt } from "../util/required.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, "../..");
+const jsRoot = join(__dirname, "../..");
 
 describe("CLI Integration", () => {
   describe("Library vs CLI consistency", () => {
@@ -39,12 +39,11 @@ poly id = #a => \\x:a => x`;
         writeFileSync(tripFile, source);
 
         // Run CLI
-        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const tripcPath = join(jsRoot, "bin/tripc.js");
         const cliResult = spawnSync(
           "node",
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
             tripcPath,
             tripFile,
             tripcFile,
@@ -86,12 +85,11 @@ poly double = \\x:Int => add x x`;
         writeFileSync(tripFile, source);
 
         // Run CLI
-        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const tripcPath = join(jsRoot, "bin/tripc.js");
         const cliResult = spawnSync(
           "node",
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
             tripcPath,
             tripFile,
             tripcFile,
@@ -139,12 +137,11 @@ poly id : MyType = \\x:Int => x`;
         writeFileSync(tripFile, source);
 
         // Run CLI
-        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const tripcPath = join(jsRoot, "bin/tripc.js");
         const cliResult = spawnSync(
           "node",
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
             tripcPath,
             tripFile,
             tripcFile,
@@ -182,12 +179,11 @@ export myI`;
         writeFileSync(tripFile, source);
 
         // Run CLI
-        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const tripcPath = join(jsRoot, "bin/tripc.js");
         const cliResult = spawnSync(
           "node",
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
             tripcPath,
             tripFile,
             tripcFile,
@@ -228,12 +224,11 @@ export myI`;
         const tripcFile = join(workspaceDir, "large.tripc");
         writeFileSync(tripFile, source);
 
-        const tripcPath = join(projectRoot, "bin/tripc.ts");
+        const tripcPath = join(jsRoot, "bin/tripc.js");
         const result = spawnSync(
           "node",
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
             tripcPath,
             tripFile,
             tripcFile,

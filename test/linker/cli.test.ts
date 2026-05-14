@@ -22,6 +22,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
+const srcLinkerDir = join(srcRoot, "test", "linker");
 const FIXTURE_FILES = [
   "A.trip",
   "cli_A.tripc",
@@ -37,7 +39,7 @@ describe("TripLang Linker CLI", { concurrency: false }, () => {
 
   beforeEach(async () => {
     workspacePath = await createTempWorkspace("typed-ski-linker-cli-");
-    await copyFixtures(__dirname, workspacePath, FIXTURE_FILES);
+    await copyFixtures(srcLinkerDir, workspacePath, FIXTURE_FILES);
   });
 
   afterEach(async () => {

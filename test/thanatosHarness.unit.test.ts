@@ -27,6 +27,9 @@ import {
 
 const BROKER_TOKEN_HEADER = "x-thanatos-batch-token";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "..", "..");
+
 type ThanatosSnapshot = {
   dag: string;
   stdin: Uint8Array;
@@ -36,11 +39,7 @@ type ThanatosSnapshot = {
 };
 
 async function loadThanatosSnapshot(name: string): Promise<ThanatosSnapshot> {
-  const snapshotDir = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "thanatosSnapshots",
-    name,
-  );
+  const snapshotDir = join(srcRoot, "test", "thanatosSnapshots", name);
   const program = await readFile(join(snapshotDir, "input.ski"), "utf8");
   const resultDagPath = join(snapshotDir, "result.dag");
   const stdinPath = join(snapshotDir, "stdin.bin");

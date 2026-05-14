@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "./test_shim.ts";
 import { evaluateTrip, evaluateTripWithIo } from "./tripHarness.ts";
@@ -9,15 +9,15 @@ import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const linkerTestDir = fileURLToPath(
-  new URL("../linker/", import.meta.url).href,
-);
+const srcRoot = join(__dirname, "../../..");
+const srcUtilDir = join(srcRoot, "test", "util");
+const linkerTestDir = join(srcRoot, "test", "linker");
 
 describe("TripHarness", { skip: !thanatosAvailable() }, () => {
   it("includeNat flag allows using Nat module", async () => {
     const evaluator = await createThanatosEvaluator({ workers: 1 });
     try {
-      const source = loadInput("includeNat.trip", __dirname);
+      const source = loadInput("includeNat.trip", srcUtilDir);
 
       const result = await evaluateTrip(source, evaluator, {
         includeNat: true,

@@ -10,11 +10,15 @@ def _workspace_command_impl(ctx):
     if node_short_path.startswith("../"):
         node_short_path = node_short_path[3:]
 
+    ts_out_dir = ctx.attr.ts_out[DefaultInfo].files.to_list()[0]
+    ts_out_short_path = ts_out_dir.short_path  # e.g. "ts_out"
+
     extension = ".bat" if is_windows else ".sh"
     launcher = ctx.actions.declare_file(ctx.label.name + extension)
     args = [ctx.attr.subcommand] + ctx.attr.command_args
 
     if is_windows:
+        ts_out_win = ts_out_short_path.replace("/", "\\")
         content = "\r\n".join([
             "@echo off",
             "setlocal",
@@ -34,8 +38,10 @@ def _workspace_command_impl(ctx):
             "  exit /b 1",
             ")",
             "for /f \"delims=\" %%i in (\"%NODE_BIN%\") do set \"NODE_BIN=%%~fi\"",
+            "set \"BAZEL_JS=%CD%\\" + ts_out_win + "\\scripts\\bazel.js\"",
+            "set \"TYPED_SKI_PROJECT_ROOT=%BUILD_WORKSPACE_DIRECTORY%\"",
             "cd /d \"%BUILD_WORKSPACE_DIRECTORY%\"",
-            "\"%NODE_BIN%\" \"--experimental-transform-types\" \"scripts/bazel.ts\" " + " ".join([batch_quote(arg) for arg in args]) + " %*",
+            "\"%NODE_BIN%\" \"%BAZEL_JS%\" " + " ".join([batch_quote(arg) for arg in args]) + " %*",
             "exit /b %ERRORLEVEL%",
             "",
         ])
@@ -59,14 +65,17 @@ def _workspace_command_impl(ctx):
             "  exit 1",
             "fi",
             "NODE_BIN=$(cd \"$(dirname \"$NODE_BIN\")\" && pwd)/$(basename \"$NODE_BIN\")",
+            "BAZEL_JS=\"$(pwd)/" + ts_out_short_path + "/scripts/bazel.js\"",
+            "export TYPED_SKI_PROJECT_ROOT=\"$BUILD_WORKSPACE_DIRECTORY\"",
             "cd \"$BUILD_WORKSPACE_DIRECTORY\"",
-            "\"$NODE_BIN\" --experimental-transform-types scripts/bazel.ts " + " ".join([shell_quote(arg) for arg in args]) + " \"$@\"",
+            "\"$NODE_BIN\" \"$BAZEL_JS\" " + " ".join([shell_quote(arg) for arg in args]) + " \"$@\"",
             "",
         ])
     ctx.actions.write(launcher, content, is_executable = True)
-    
-    runfiles = ctx.runfiles(files = [node_toolchain.nodeinfo.node])
-    
+
+    ts_out_files = ctx.attr.ts_out[DefaultInfo].files.to_list()
+    runfiles = ctx.runfiles(files = [node_toolchain.nodeinfo.node] + ts_out_files)
+
     return [DefaultInfo(executable = launcher, runfiles = runfiles)]
 
 workspace_command = rule(
@@ -74,6 +83,9 @@ workspace_command = rule(
     attrs = {
         "command_args": attr.string_list(),
         "subcommand": attr.string(mandatory = True),
+        "ts_out": attr.label(
+            default = "//:ts_out",
+        ),
         "_windows_constraint": attr.label(
             default = "@platforms//os:windows",
         ),

@@ -24,6 +24,8 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
+const srcLinkerDir = join(srcRoot, "test", "linker");
 const FIXTURE_FILES = [
   "recursive_adt.trip",
   "test_recursive.trip",
@@ -36,7 +38,7 @@ describe("linking with recursive ADTs", { concurrency: false }, () => {
 
   beforeEach(async () => {
     workspacePath = await createTempWorkspace("typed-ski-recursive-adt-");
-    await copyFixtures(__dirname, workspacePath, FIXTURE_FILES);
+    await copyFixtures(srcLinkerDir, workspacePath, FIXTURE_FILES);
   });
 
   afterEach(async () => {

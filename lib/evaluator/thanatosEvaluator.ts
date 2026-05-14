@@ -14,7 +14,7 @@ import type { Evaluator } from "./evaluator.ts";
 import { TEST_TIMEOUT_MS } from "../constants.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const PROJECT_ROOT = join(__dirname, "..", "..");
+export const PROJECT_ROOT = join(__dirname, "..", "..", "..");
 const THANATOS_FILE_NAME =
   process.platform === "win32" ? "thanatos.exe" : "thanatos";
 export const DEFAULT_THANATOS_TIMEOUT_MS = TEST_TIMEOUT_MS;

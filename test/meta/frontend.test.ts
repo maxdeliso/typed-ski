@@ -26,6 +26,8 @@ import type { TripLangTerm } from "../../lib/meta/trip.ts";
 import type { BaseType } from "../../lib/types/types.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
+const srcDir = join(srcRoot, "test", "meta");
 
 function resolvePoly(
   compiled: { program: { terms: TripLangTerm[] } },
@@ -68,7 +70,7 @@ describe(
     });
 
     it("executes condSucc example", async () => {
-      const src = loadInput("condSucc.trip", __dirname);
+      const src = loadInput("condSucc.trip", srcDir);
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
       const skiMain = bracketLambda(eraseSystemF(mainPoly.term));
@@ -77,7 +79,7 @@ describe(
     });
 
     it("Result data type with match expression", async () => {
-      const src = loadInput("resultMatch.trip", __dirname);
+      const src = loadInput("resultMatch.trip", srcDir);
       const compiled = compile(src);
 
       const num = async (name: string) => {
@@ -97,7 +99,7 @@ describe(
     });
 
     it("parses & runs pred example", async () => {
-      const src = loadInput("pred.trip", __dirname);
+      const src = loadInput("pred.trip", srcDir);
       const compiled = compile(src);
 
       const num = async (name: string) => {
@@ -116,7 +118,7 @@ describe(
     });
 
     it("compiles mul example (six & twenty-four)", async () => {
-      const src = loadInput("mul.trip", __dirname);
+      const src = loadInput("mul.trip", srcDir);
       const compiled = compile(src);
 
       const sixPoly = resolvePoly(compiled, "six");
@@ -137,7 +139,7 @@ describe(
     });
 
     it("loads factorial with poly rec syntax", async () => {
-      const src = loadInput("recFact.trip", __dirname);
+      const src = loadInput("recFact.trip", srcDir);
       const program = parseTripLang(src);
 
       const factDef = program.terms.find(
@@ -167,7 +169,7 @@ describe(
     });
 
     it("evaluates Maybe ADT constructors", async () => {
-      const src = loadInput("adtMaybe.trip", __dirname);
+      const src = loadInput("adtMaybe.trip", srcDir);
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
       const mainSki = bracketLambda(eraseSystemF(mainPoly.term));
@@ -178,7 +180,7 @@ describe(
     });
 
     it("evaluates Result ADT constructors", async () => {
-      const src = loadInput("adtResult.trip", __dirname);
+      const src = loadInput("adtResult.trip", srcDir);
       const compiled = compile(src);
       const mainPoly = resolvePoly(compiled, "main");
       const mainSki = bracketLambda(eraseSystemF(mainPoly.term));
@@ -189,7 +191,7 @@ describe(
     });
 
     it("elaborates nested type applications", () => {
-      const src = loadInput("nestedTypeApps.trip", __dirname);
+      const src = loadInput("nestedTypeApps.trip", srcDir);
       const program = parseTripLang(src);
       const succRaw = program.terms.find(
         (d) => d.kind === "poly" && d.name === "succ",
@@ -214,7 +216,7 @@ describe(
     });
 
     it("compiles + evaluates full polymorphic factorial", async () => {
-      const src = loadInput("polyFact.trip", __dirname);
+      const src = loadInput("polyFact.trip", srcDir);
       const compiled = compile(src);
 
       // expect 9 type definitions, with specific ids

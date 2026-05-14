@@ -37,6 +37,7 @@ import { arrow, mkTypeVariable } from "../../lib/types/types.ts";
 import { readFile } from "node:fs/promises";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, "../../..");
 
 type TestTripCObject = Omit<TripCObject, "dataDefinitions"> &
   Partial<Pick<TripCObject, "dataDefinitions">>;
@@ -72,7 +73,7 @@ async function compileTripFile(
   outputTripc?: string,
 ): Promise<string> {
   const fixtureName = outputTripc ?? tripFileName.replace(".trip", ".tripc");
-  return await readFile(join(__dirname, fixtureName), "utf8");
+  return await readFile(join(srcRoot, "test", "linker", fixtureName), "utf8");
 }
 
 describe("TripLang Linker", () => {

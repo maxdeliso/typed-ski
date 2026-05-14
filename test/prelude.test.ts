@@ -17,7 +17,7 @@ it(
     const binObject = await getBinObject();
     const natObject = await getNatObject();
     const testObject = await loadTripModuleObject(
-      new URL("./compiler/inputs/preludeTest.trip", import.meta.url),
+      new URL("../../test/compiler/inputs/preludeTest.trip", import.meta.url),
     );
 
     const skiExpression = linkModules([
@@ -46,7 +46,7 @@ it(
 it("subU8 primitive subtraction", { skip: !thanatosAvailable() }, async () => {
   const preludeObject = await getPreludeObject();
   const testObject = await loadTripModuleObject(
-    new URL("./compiler/inputs/subU8Test.trip", import.meta.url),
+    new URL("../../test/compiler/inputs/subU8Test.trip", import.meta.url),
   );
 
   const skiExpression = linkModules([

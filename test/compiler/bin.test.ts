@@ -15,7 +15,8 @@ import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const testSourcePath = join(__dirname, "inputs", "testBinOps.trip");
+const srcRoot = join(__dirname, "../../..");
+const testSourcePath = join(srcRoot, "test", "compiler", "inputs", "testBinOps.trip");
 
 let preludeObject: Awaited<ReturnType<typeof getPreludeObject>> | null = null;
 let binObject: Awaited<ReturnType<typeof getBinObject>> | null = null;

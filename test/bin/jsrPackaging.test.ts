@@ -23,12 +23,13 @@ import {
 } from "../util/tripcHarness.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, "../..");
+const jsRoot = join(__dirname, "../..");
+const srcRoot = join(__dirname, "../../..");
 
 describe("JSR Packaging Configuration", () => {
   describe("jsr.json configuration", () => {
     it("has required fields", async () => {
-      const configPath = join(projectRoot, "jsr.json");
+      const configPath = join(srcRoot, "jsr.json");
       assert.strictEqual(existsSync(configPath), true);
 
       const configContent = await readFile(configPath, "utf-8");
@@ -47,7 +48,7 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("exports field configuration", async () => {
-      const configPath = join(projectRoot, "jsr.json");
+      const configPath = join(srcRoot, "jsr.json");
       const configContent = await readFile(configPath, "utf-8");
       const config = parseJsonc(configContent) as any;
 
@@ -59,7 +60,7 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("publish include configuration", async () => {
-      const configPath = join(projectRoot, "jsr.json");
+      const configPath = join(srcRoot, "jsr.json");
       const configContent = await readFile(configPath, "utf-8");
       const config = parseJsonc(configContent) as any;
 
@@ -73,12 +74,12 @@ describe("JSR Packaging Configuration", () => {
 
   describe("CLI file structure", () => {
     it("bin directory exists", () => {
-      const binDir = join(projectRoot, "bin");
+      const binDir = join(srcRoot, "bin");
       assert.strictEqual(existsSync(binDir), true);
     });
 
     it("required CLI files exist", () => {
-      const binDir = join(projectRoot, "bin");
+      const binDir = join(srcRoot, "bin");
 
       // Core CLI files
       assert.strictEqual(existsSync(join(binDir, "tripc.ts")), true);
@@ -88,15 +89,10 @@ describe("JSR Packaging Configuration", () => {
 
     it("CLI files have proper shebang", async () => {
       const tripcTs = await readFile(
-        join(projectRoot, "bin/tripc.ts"),
+        join(srcRoot, "bin/tripc.ts"),
         "utf-8",
       );
-      assert.ok(tripcTs.includes("#!/usr/bin/env"));
-      assert.ok(
-        tripcTs.includes(
-          "node --disable-warning=ExperimentalWarning --experimental-transform-types",
-        ),
-      );
+      assert.ok(tripcTs.includes("#!/usr/bin/env -S node --disable-warning=ExperimentalWarning"));
     });
 
     // Shell wrapper tests removed
@@ -106,7 +102,7 @@ describe("JSR Packaging Configuration", () => {
     it("compiler library exports", async () => {
       // Test that the compiler library is properly exported
       const libIndex = await readFile(
-        join(projectRoot, "lib/index.ts"),
+        join(srcRoot, "lib/index.ts"),
         "utf-8",
       );
 
@@ -118,7 +114,7 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("compiler module structure", () => {
-      const compilerDir = join(projectRoot, "lib/compiler");
+      const compilerDir = join(srcRoot, "lib/compiler");
       assert.strictEqual(existsSync(compilerDir), true);
 
       assert.strictEqual(existsSync(join(compilerDir, "index.ts")), true);
@@ -132,7 +128,7 @@ describe("JSR Packaging Configuration", () => {
 
   describe("distribution files", () => {
     it("dist directory structure", async () => {
-      const distDir = join(projectRoot, "dist");
+      const distDir = join(srcRoot, "dist");
 
       // These files are created by build tasks
       if (existsSync(distDir)) {
@@ -159,16 +155,16 @@ describe("JSR Packaging Configuration", () => {
 
   describe("version consistency", () => {
     it("version numbers match across files", async () => {
-      const packageJsonPath = join(projectRoot, "package.json");
+      const packageJsonPath = join(srcRoot, "package.json");
       const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
       const version = packageJson.version;
 
-      const jsrJsonPath = join(projectRoot, "jsr.json");
+      const jsrJsonPath = join(srcRoot, "jsr.json");
       const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
       assert.strictEqual(jsrJson.version, version);
 
       const generatedVersionPath = join(
-        projectRoot,
+        srcRoot,
         "lib",
         "shared",
         "version.generated.ts",
@@ -182,18 +178,17 @@ describe("JSR Packaging Configuration", () => {
 
   describe("CLI tools functionality", () => {
     it("tripc CLI can show version", async () => {
-      const tripcScript = join(projectRoot, "bin/tripc.ts");
+      const tripcScript = join(jsRoot, "bin/tripc.js");
 
       const { status, stdout } = spawnSync(
         process.execPath,
         [
           "--disable-warning=ExperimentalWarning",
-          "--experimental-transform-types",
           tripcScript,
           "--version",
         ],
         {
-          cwd: projectRoot,
+          cwd: jsRoot,
           encoding: "utf-8",
         },
       );
@@ -203,18 +198,17 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("tripc CLI can show help", async () => {
-      const tripcScript = join(projectRoot, "bin/tripc.ts");
+      const tripcScript = join(jsRoot, "bin/tripc.js");
 
       const { status, stdout } = spawnSync(
         process.execPath,
         [
           "--disable-warning=ExperimentalWarning",
-          "--experimental-transform-types",
           tripcScript,
           "--help",
         ],
         {
-          cwd: projectRoot,
+          cwd: jsRoot,
           encoding: "utf-8",
         },
       );
@@ -224,8 +218,8 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("tripc can compile test file", async () => {
-      const tripcScript = join(projectRoot, "bin/tripc.ts");
-      const testFile = join(projectRoot, "test/test.trip");
+      const tripcScript = join(jsRoot, "bin/tripc.js");
+      const testFile = join(srcRoot, "test/test.trip");
       const outputDir = await createTempWorkspace("typed-ski-jsr-packaging-");
       try {
         const outputFile = join(outputDir, "test_output.tripc");
@@ -233,13 +227,12 @@ describe("JSR Packaging Configuration", () => {
           process.execPath,
           [
             "--disable-warning=ExperimentalWarning",
-            "--experimental-transform-types",
             tripcScript,
             testFile,
             outputFile,
           ],
           {
-            cwd: projectRoot,
+            cwd: jsRoot,
             encoding: "utf-8",
           },
         );

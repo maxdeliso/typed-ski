@@ -82,7 +82,7 @@ for (const [src, shortPath] of Object.entries(dataFiles)) {
     fs.copyFileSync(src, dest);
 }
 console.log('Copying complete.');
-""" % (str({f.path: f.short_path for f in data_files}), ctx.attr.out_dir)
+""" % (str({f.path: f.short_path for f in data_files}), out_dir.path)
 
     ctx.actions.write(wrapper_script, script_content)
 

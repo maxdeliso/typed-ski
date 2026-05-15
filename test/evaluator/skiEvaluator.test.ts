@@ -1,28 +1,21 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "../util/test_shim.ts";
+import { loadWorkspaceFile } from "../util/fileLoader.ts";
 import { compileTripAndRun } from "../compiler/llvm/nativeHarness.ts";
 
-const identity = readFileSync("test/evaluator/fixtures/identity.trip", "utf8");
-const kCombinator = readFileSync(
+const identity = loadWorkspaceFile("test/evaluator/fixtures/identity.trip");
+const kCombinator = loadWorkspaceFile(
   "test/evaluator/fixtures/k-combinator.trip",
-  "utf8",
 );
-const bLawComposition = readFileSync(
+const bLawComposition = loadWorkspaceFile(
   "test/evaluator/fixtures/b-law-composition.trip",
-  "utf8",
 );
-const bLawOrder = readFileSync(
+const bLawOrder = loadWorkspaceFile(
   "test/evaluator/fixtures/b-law-order.trip",
-  "utf8",
 );
-const cLawFlip = readFileSync(
-  "test/evaluator/fixtures/c-law-flip.trip",
-  "utf8",
-);
-const cLawFlipDistinct = readFileSync(
+const cLawFlip = loadWorkspaceFile("test/evaluator/fixtures/c-law-flip.trip");
+const cLawFlipDistinct = loadWorkspaceFile(
   "test/evaluator/fixtures/c-law-flip-distinct.trip",
-  "utf8",
 );
 
 describe("Function identity - native LLVM", () => {

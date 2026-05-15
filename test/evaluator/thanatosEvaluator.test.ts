@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "../util/test_shim.ts";
+import { loadWorkspaceFile } from "../util/fileLoader.ts";
 import { compileTripAndRun } from "../compiler/llvm/nativeHarness.ts";
 
-const kZero = readFileSync("test/evaluator/fixtures/k-zero.trip", "utf8");
-const writeA = readFileSync("test/evaluator/fixtures/write-a.trip", "utf8");
-const arithmetic = readFileSync(
+const kZero = loadWorkspaceFile("test/evaluator/fixtures/k-zero.trip");
+const writeA = loadWorkspaceFile("test/evaluator/fixtures/write-a.trip");
+const arithmetic = loadWorkspaceFile(
   "test/evaluator/fixtures/arithmetic.trip",
-  "utf8",
 );
 
 describe("Basic native evaluation", () => {

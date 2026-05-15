@@ -29,8 +29,6 @@ def _ts_compile_impl(ctx):
     "noEmit": false,
     "ignoreDeprecations": "6.0",
     "skipLibCheck": true,
-    "module": "Node16",
-    "moduleResolution": "Node16",
     "baseUrl": ".",
     "typeRoots": ["./node_modules/@types"],
     "types": ["node", "random-seed"],

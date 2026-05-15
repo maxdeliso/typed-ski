@@ -79,6 +79,7 @@ ts_compile(
             "scripts/**",
             "test/**",
             "tsconfig.json",
+            "package.json",
         ],
         allow_empty = True,
         exclude = [

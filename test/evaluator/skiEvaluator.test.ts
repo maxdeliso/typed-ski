@@ -10,9 +10,7 @@ const kCombinator = loadWorkspaceFile(
 const bLawComposition = loadWorkspaceFile(
   "test/evaluator/fixtures/b-law-composition.trip",
 );
-const bLawOrder = loadWorkspaceFile(
-  "test/evaluator/fixtures/b-law-order.trip",
-);
+const bLawOrder = loadWorkspaceFile("test/evaluator/fixtures/b-law-order.trip");
 const cLawFlip = loadWorkspaceFile("test/evaluator/fixtures/c-law-flip.trip");
 const cLawFlipDistinct = loadWorkspaceFile(
   "test/evaluator/fixtures/c-law-flip-distinct.trip",

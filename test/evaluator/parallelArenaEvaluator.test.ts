@@ -10,9 +10,7 @@ const kSmall = loadWorkspaceFile("test/evaluator/fixtures/k-small.trip");
 const identity21 = loadWorkspaceFile(
   "test/evaluator/fixtures/identity-21.trip",
 );
-const kLargeAlt = loadWorkspaceFile(
-  "test/evaluator/fixtures/k-large-alt.trip",
-);
+const kLargeAlt = loadWorkspaceFile("test/evaluator/fixtures/k-large-alt.trip");
 
 describe("Reduction correctness - native LLVM", () => {
   it("K combinator returns its first argument", async () => {

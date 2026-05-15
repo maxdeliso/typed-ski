@@ -5,9 +5,7 @@ import { compileTripAndRun } from "../compiler/llvm/nativeHarness.ts";
 
 const kZero = loadWorkspaceFile("test/evaluator/fixtures/k-zero.trip");
 const writeA = loadWorkspaceFile("test/evaluator/fixtures/write-a.trip");
-const arithmetic = loadWorkspaceFile(
-  "test/evaluator/fixtures/arithmetic.trip",
-);
+const arithmetic = loadWorkspaceFile("test/evaluator/fixtures/arithmetic.trip");
 
 describe("Basic native evaluation", () => {
   it("reduces a basic expression (K combinator)", async () => {

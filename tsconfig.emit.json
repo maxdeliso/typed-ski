@@ -4,6 +4,7 @@
     "noEmit": false,
     "declaration": false,
     "sourceMap": true,
+    "inlineSources": true,
     "rootDir": ".",
     "outDir": "ts_out"
   }

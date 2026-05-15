@@ -88,7 +88,13 @@ ts_compile(
             "**/*.js.map",
         ],
     ) + [
+        # lib/shared, lib/evaluator, and scripts each have their own BUILD.bazel,
+        # so glob(["lib/**"]) and glob(["scripts/**"]) above cannot cross those
+        # package boundaries. Reference their filegroups explicitly instead.
+        "//lib/shared:shared",
         "//lib/shared:version_generated_src",
+        "//lib/evaluator:evaluator",
+        "//scripts:scripts",
     ],
     tsconfig = "//:tsconfig.emit.json",
 )

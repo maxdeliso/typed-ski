@@ -15,12 +15,12 @@ TripLang AST ──► MiniCore Program ──► ANF Program ──► BlockMod
                  (typed, first-order)  (linear)        (basic blocks)   (textual)
 ```
 
-| Stage | Entry point                                                | File                                    |
-|-------|------------------------------------------------------------|-----------------------------------------|
-| 1     | `compileMiniCoreModules(modules, entry)`                   | [fromTrip.ts](fromTrip.ts)              |
-| 2     | `toAnfProgram(program)`                                    | [toAnf.ts](toAnf.ts)                    |
-| 3     | `anfToBlockModule(anfProgram)`                             | [fromAnf.ts](fromAnf.ts)                |
-| 4     | `emitLlvmModule(blockModule, …)`                           | [../compiler/llvm/emitLlvm.ts](../compiler/llvm/emitLlvm.ts) |
+| Stage | Entry point                              | File                                                         |
+| ----- | ---------------------------------------- | ------------------------------------------------------------ |
+| 1     | `compileMiniCoreModules(modules, entry)` | [fromTrip.ts](fromTrip.ts)                                   |
+| 2     | `toAnfProgram(program)`                  | [toAnf.ts](toAnf.ts)                                         |
+| 3     | `anfToBlockModule(anfProgram)`           | [fromAnf.ts](fromAnf.ts)                                     |
+| 4     | `emitLlvmModule(blockModule, …)`         | [../compiler/llvm/emitLlvm.ts](../compiler/llvm/emitLlvm.ts) |
 
 The four stages live behind one driver, `compileTripSourceToLlvm`, in
 [../compiler/llvmCompiler.ts](../compiler/llvmCompiler.ts).

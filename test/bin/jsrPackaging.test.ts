@@ -15,6 +15,7 @@ import { readFile, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "../util/test_shim.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
+import { VERSION as generatedVersionConstant } from "../../lib/shared/version.generated.ts";
 import { spawnSync } from "node:child_process";
 
 import { parseJsonc } from "../util/jsonc.ts";
@@ -162,16 +163,12 @@ describe("JSR Packaging Configuration", () => {
       const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
       assert.strictEqual(jsrJson.version, version);
 
-      const generatedVersionPath = join(
-        srcRoot,
-        "lib",
-        "shared",
-        "version.generated.ts",
-      );
-      const generatedVersion = await readFile(generatedVersionPath, "utf-8");
-      assert.ok(
-        generatedVersion.includes(`export const VERSION = "${version}";`),
-      );
+      // Read the VERSION via static import rather than file-system probe.
+      // The .ts source file is not materialized as a real file in Windows
+      // Bazel runfiles (MANIFEST-only), and the static import covers the
+      // same intent — verify the codegen-emitted constant matches
+      // package.json — without depending on path resolution.
+      assert.strictEqual(generatedVersionConstant, version);
     });
   });
 

@@ -26,6 +26,7 @@ jsr.json
 
 # Distribution files (can be regenerated)
 dist/
+ts_out/
 .make/
 
 # Generated TypeScript files

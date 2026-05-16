@@ -41,9 +41,9 @@
     "build:ts": "tsc --project tsconfig.emit.json",
     "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
     "bench:avl": "node --disable-warning=ExperimentalWarning ts_out/test/avlBenchmark.js",
-    "dist": "node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
+    "dist": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js test"
+    "test": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js test"
   },
   "dependencies": {
     "random-seed": "0.3.0",

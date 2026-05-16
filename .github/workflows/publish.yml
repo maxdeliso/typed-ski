@@ -22,11 +22,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "26.1.0"
-          cache: "pnpm"
+      # No host Node.js setup: Bazel provides hermetic Node 26 via
+      # rules_nodejs, and every Node-touching command goes through it.
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -46,7 +43,9 @@ jobs:
         run: bazel test //:native_tests
 
       - name: Build and stage distribution artifacts
-        run: pnpm run dist
+        # Use the Bazel target rather than `pnpm run dist`: runs under
+        # Bazel's hermetic Node 26 instead of host Node.
+        run: bazel run //:dist
 
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors

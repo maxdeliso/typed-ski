@@ -30,11 +30,13 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "26.1.0"
-          cache: "pnpm"
+      # No host Node.js setup: Bazel provides a hermetic Node 26 via
+      # rules_nodejs, and every Node-touching command in this workflow
+      # (bazel build/test/run) goes through that. pnpm install below runs
+      # under whatever Node the runner image ships (currently 22/24), which
+      # is fine for dependency resolution. Removing actions/setup-node also
+      # removed a recurring "Attempting to download 26.1.0..." flake on the
+      # Windows runner.
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -99,7 +101,10 @@ jobs:
 
       - name: Build and stage distribution artifacts for JSR dry run
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        run: pnpm run dist
+        # Use the Bazel target rather than `pnpm run dist`: it runs under
+        # Bazel's hermetic Node 26 instead of the runner's host Node, so
+        # this step is unaffected by host Node version.
+        run: bazel run //:dist
 
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'

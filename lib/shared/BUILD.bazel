@@ -17,9 +17,17 @@ codegen_rule(
         "$(location //:package.json)",
         "--ts-out",
         "$(location version.generated.ts)",
+        "--js-out",
+        "$(location version.generated.js)",
     ],
     data = ["//:package.json"],
-    outs = ["version.generated.ts"],
+    # Emit both .ts (for editor / sync-generated verification) and .js (for
+    # runtime — copied into ts_out as a data file by ts_compile, removing
+    # any reliance on tsc to compile the generated .ts file across sandboxes).
+    outs = [
+        "version.generated.ts",
+        "version.generated.js",
+    ],
     script = "//scripts:generate_version.mjs",
 )
 

@@ -19,11 +19,11 @@ import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { readFile } from "node:fs/promises";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcLinkerDir = join(workspaceRoot, "test", "linker");
 const FIXTURE_FILES = [
   "recursive_adt.trip",
   "test_recursive.trip",
@@ -36,7 +36,7 @@ describe("linking with recursive ADTs", { concurrency: false }, () => {
 
   beforeEach(async () => {
     workspacePath = await createTempWorkspace("typed-ski-recursive-adt-");
-    await copyFixtures(__dirname, workspacePath, FIXTURE_FILES);
+    await copyFixtures(srcLinkerDir, workspacePath, FIXTURE_FILES);
   });
 
   afterEach(async () => {

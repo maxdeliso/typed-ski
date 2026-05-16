@@ -1,8 +1,8 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
-import { fileURLToPath } from "node:url";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
   createSystemFApplication,
   mkSystemFAbs,
@@ -18,7 +18,7 @@ import { requiredAt } from "../util/required.ts";
 import { loadTripSourceFileSync } from "../../lib/tripSourceLoader.ts";
 import { unparseSystemFType } from "../../lib/parser/systemFType.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcDir = join(workspaceRoot, "test", "parser");
 
 const expectSystemFApp = (t: SystemFTerm) => {
   assert.strictEqual(t.kind, "non-terminal");
@@ -37,7 +37,7 @@ const expectSystemFVar = (t: SystemFTerm) => {
 
 describe("parseTripLang", () => {
   it("parses polymorphic definitions", () => {
-    const input = loadInput("polyId.trip", __dirname);
+    const input = loadInput("polyId.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     assert.deepStrictEqual(moduleDecl, {
@@ -60,7 +60,7 @@ describe("parseTripLang", () => {
   });
 
   it("parses recursive polymorphic definitions", () => {
-    const input = loadInput("polyRec.trip", __dirname);
+    const input = loadInput("polyRec.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     assert.deepStrictEqual(moduleDecl, {
@@ -81,7 +81,7 @@ describe("parseTripLang", () => {
   });
 
   it("parses poly definitions with explicit types", () => {
-    const input = loadInput("typedInc.trip", __dirname);
+    const input = loadInput("typedInc.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     assert.deepStrictEqual(moduleDecl, {
@@ -107,7 +107,7 @@ describe("parseTripLang", () => {
   });
 
   it("parses complex combinator definitions", () => {
-    const input = loadInput("combinatorY.trip", __dirname);
+    const input = loadInput("combinatorY.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     assert.deepStrictEqual(moduleDecl, {
@@ -128,7 +128,7 @@ describe("parseTripLang", () => {
   });
 
   it("parses type definitions correctly", () => {
-    const input = loadInput("typeNat.trip", __dirname);
+    const input = loadInput("typeNat.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     const typeVar = (name: string) => ({
@@ -171,7 +171,7 @@ poly id = #A => \\x : A => x
   });
 
   it("parses data definitions", () => {
-    const input = loadInput("dataMaybe.trip", __dirname);
+    const input = loadInput("dataMaybe.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     assert.deepStrictEqual(moduleDecl, {
@@ -228,14 +228,7 @@ data Token =
   });
 
   it("parses lib/compiler/lexer.trip Token ADT", () => {
-    const lexerPath = join(
-      __dirname,
-      "..",
-      "..",
-      "lib",
-      "compiler",
-      "lexer.trip",
-    );
+    const lexerPath = join(workspaceRoot, "lib", "compiler", "lexer.trip");
     const input = loadTripSourceFileSync(lexerPath).trim();
     const program = parseTripLang(input);
 
@@ -382,7 +375,7 @@ data Token =
   });
 
   it("parses multiple definitions", () => {
-    const input = loadInput("church.trip", __dirname);
+    const input = loadInput("church.trip", srcDir);
     const program = parseTripLang(input);
     const typeVar = (name: string) => ({
       kind: "type-var" as const,
@@ -444,7 +437,7 @@ data Token =
   });
 
   it("parses poly definition with explicit type annotation", () => {
-    const input = loadInput("polyWithType.trip", __dirname);
+    const input = loadInput("polyWithType.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
     assert.deepStrictEqual(moduleDecl, {
       kind: "module",
@@ -473,7 +466,7 @@ data Token =
   });
 
   it("parses poly definition without explicit type annotation", () => {
-    const input = loadInput("typedNoType.trip", __dirname);
+    const input = loadInput("typedNoType.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
     assert.deepStrictEqual(moduleDecl, {
       kind: "module",
@@ -547,7 +540,7 @@ data Token =
   });
 
   it("parses combined module/import/export definitions from file", () => {
-    const input = loadInput("moduleCombo.trip", __dirname);
+    const input = loadInput("moduleCombo.trip", srcDir);
     const program = parseTripLang(input);
     assert.deepStrictEqual(program, {
       kind: "program",

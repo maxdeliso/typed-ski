@@ -2,7 +2,7 @@ OK
 version bundle-inventory-v1
 entry Parser
 target x86_64-unknown-linux-gnu
-wrapper stdin-list-u8
+wrapper enabled
 modules 4
 module Bin
 declared Bin

@@ -1,6 +1,13 @@
 common --enable_platform_specific_config
 common --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+# Retry external repository downloads (npm packages, LLVM tarballs, Node
+# toolchain, etc.) on transient HTTP errors. CI cold-cache runs have
+# occasionally hit 502s from upstream mirrors.
+common --experimental_repository_downloader_retries=3
+common --http_timeout_scaling=2.0
+
 build --action_env=PATH
 test --test_timeout=80
 test --test_env=PATH

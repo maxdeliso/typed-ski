@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-transform-types
+#!/usr/bin/env -S node
 
 /**
  * TripLang Compiler CLI
@@ -8,7 +8,7 @@
  * This tool processes one .trip file and outputs a standardized intermediate
  * "object file" (.tripc) that can be linked with other modules in later phases.
  *
- * Usage: node --experimental-transform-types compiler/main.ts <input.trip> [output.tripc]
+ * Usage: node ts_out/compiler/main.js <input.trip> [output.tripc]
  */
 
 import { realpathSync, statSync } from "node:fs";
@@ -85,15 +85,13 @@ async function main(): Promise<void> {
 
   if (!inputArg) {
     console.error(
-      "Usage: node --experimental-transform-types compiler/main.ts <input.trip> [output.tripc]",
+      "Usage: node ts_out/compiler/main.js <input.trip> [output.tripc]",
     );
     console.error("");
     console.error("Examples:");
+    console.error("  node ts_out/compiler/main.js mymodule.trip");
     console.error(
-      "  node --experimental-transform-types compiler/main.ts mymodule.trip",
-    );
-    console.error(
-      "  node --experimental-transform-types compiler/main.ts mymodule.trip mymodule.tripc",
+      "  node ts_out/compiler/main.js mymodule.trip mymodule.tripc",
     );
     process.exit(1);
   }

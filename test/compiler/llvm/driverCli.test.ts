@@ -10,12 +10,7 @@ import { projectRoot, tripcScriptPath } from "../../util/tripcHarness.ts";
 function runNodeScript(script: string, args: string[]) {
   return spawnSync(
     process.execPath,
-    [
-      "--disable-warning=ExperimentalWarning",
-      "--experimental-transform-types",
-      script,
-      ...args,
-    ],
+    ["--disable-warning=ExperimentalWarning", script, ...args],
     {
       cwd: projectRoot,
       encoding: "utf8",
@@ -100,7 +95,7 @@ describe("tripc LLVM driver", () => {
         serializeTripBundleV1({
           entryModule: "Main",
           target: { kind: "x86_64-unknown-linux-gnu" },
-          mainWrapper: { kind: "c-main" },
+          emitMainWrapper: true,
           modules: [
             {
               name: "Main",

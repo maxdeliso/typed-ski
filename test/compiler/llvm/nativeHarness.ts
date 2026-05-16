@@ -1,15 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import {
   compileTripSourceToLlvm,
   type CompileTripSourceToLlvmOptions,
 } from "../../../lib/compiler/index.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = resolve(__dirname, "../../../");
+const PROJECT_ROOT = workspaceRoot;
 
 export interface RunResult {
   stdout: string;
@@ -202,7 +201,7 @@ export const bootstrap = {
       const llvm = await compileTripToLlvm(compilerSource, {
         entryModule: "Compiler",
         moduleSources,
-        mainWrapper: { kind: "stdin-list-u8" },
+        emitMainWrapper: true,
       });
 
       const llPath = join(tempDir, "compiler.ll");

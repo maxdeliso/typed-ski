@@ -5,6 +5,7 @@ load("//bazel:codegen.bzl", "codegen_rule")
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
+load("//bazel:ts_compile.bzl", "ts_compile")
 load(
     "//bazel:trip_llvm.bzl",
     "trip_executable_stdout_test",
@@ -16,7 +17,10 @@ load("//bazel:workspace_command.bzl", "workspace_command")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["package.json"])
+exports_files([
+    "package.json",
+    "tsconfig.emit.json",
+])
 
 js_library(
     name = "package_json",
@@ -64,6 +68,37 @@ npm_link_all_packages(
     name = "node_modules",
 )
 
+ts_compile(
+    name = "ts_out",
+    node_modules = [":node_modules"],
+    srcs = glob(
+        [
+            "bin/**",
+            "compiler/**",
+            "lib/**",
+            "scripts/**",
+            "test/**",
+            "tsconfig.json",
+            "package.json",
+        ],
+        allow_empty = True,
+        exclude = [
+            "scripts/findUnusedExports.ts",
+            "**/*.js",
+            "**/*.js.map",
+        ],
+    ) + [
+        # lib/shared, lib/evaluator, and scripts each have their own BUILD.bazel,
+        # so glob(["lib/**"]) and glob(["scripts/**"]) above cannot cross those
+        # package boundaries. Reference their filegroups explicitly instead.
+        "//lib/shared:shared",
+        "//lib/shared:version_generated_src",
+        "//lib/evaluator:evaluator",
+        "//scripts:scripts",
+    ],
+    tsconfig = "//:tsconfig.emit.json",
+)
+
 NODE_DATA_BASE = glob(
     [
         "package.json",
@@ -87,6 +122,7 @@ NODE_DATA_BASE = glob(
     ":node_modules/pnpm",
     "//lib/shared:version_generated",
     ":jsr.json",
+    ":ts_out",
 ]
 
 NODE_TEST_DATA = NODE_DATA_BASE + glob(
@@ -194,6 +230,7 @@ test_suite(
 node_dist(
     name = "dist_artifacts",
     data = NODE_DIST_DATA,
+    ts_out = ":ts_out",
 )
 
 node_sharded_test(

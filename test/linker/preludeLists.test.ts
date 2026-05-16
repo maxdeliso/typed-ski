@@ -4,8 +4,8 @@ import { describe, it } from "../util/test_shim.ts";
  */
 
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
@@ -20,8 +20,6 @@ import {
 } from "../thanatosHarness.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
 describe("Prelude List Linking", () => {
   it(
     "links prelude list cases (thanatos)",
@@ -34,7 +32,7 @@ describe("Prelude List Linking", () => {
         const binObj = await getBinObject();
         const natObj = await getNatObject();
         const testObj = await loadTripModuleObject(
-          join(__dirname, "inputs", "testLists.trip"),
+          join(workspaceRoot, "test", "linker", "inputs", "testLists.trip"),
         );
 
         const skiExpression = linkModules([

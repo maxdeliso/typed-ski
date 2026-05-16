@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../lib/shared/workspaceRoot.ts";
 
 export type AvlCase = {
   name: string;
@@ -9,8 +9,7 @@ export type AvlCase = {
   expected: bigint;
 };
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const INPUT_DIR = join(__dirname, "inputs", "avl");
+const INPUT_DIR = join(workspaceRoot, "test", "inputs", "avl");
 
 function loadInput(fileName: string): Promise<string> {
   return readFile(join(INPUT_DIR, fileName), "utf-8");

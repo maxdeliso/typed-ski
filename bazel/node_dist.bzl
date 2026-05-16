@@ -9,6 +9,9 @@ def _node_dist_impl(ctx):
     node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
     node_path = node_toolchain.nodeinfo.target_tool_path
 
+    ts_out_dir = ctx.attr.ts_out[DefaultInfo].files.to_list()[0]
+    bazel_build_dist_js = ts_out_dir.path + "/scripts/bazelBuildDist.js"
+
     tripc_js = ctx.actions.declare_file(ctx.label.name + "/tripc.js")
     tripc_min_js = ctx.actions.declare_file(ctx.label.name + "/tripc.min.js")
     tripc_node_js = ctx.actions.declare_file(ctx.label.name + "/tripc.node.js")
@@ -24,8 +27,7 @@ def _node_dist_impl(ctx):
     if is_windows:
         command = " ".join([
             batch_quote(node_path),
-            batch_quote("--experimental-transform-types"),
-            batch_quote("scripts/bazelBuildDist.ts"),
+            batch_quote(bazel_build_dist_js),
             batch_quote(manifest.path),
             batch_quote(tripc_js.path),
             batch_quote(tripc_min_js.path),
@@ -43,8 +45,7 @@ def _node_dist_impl(ctx):
     else:
         command = " ".join([
             shell_quote(node_path),
-            shell_quote("--experimental-transform-types"),
-            shell_quote("scripts/bazelBuildDist.ts"),
+            shell_quote(bazel_build_dist_js),
             shell_quote(manifest.path),
             shell_quote(tripc_js.path),
             shell_quote(tripc_min_js.path),
@@ -64,7 +65,7 @@ def _node_dist_impl(ctx):
 
     ctx.actions.run(
         executable = launcher,
-        inputs = ctx.files.data + [manifest, node_toolchain.nodeinfo.node],
+        inputs = ctx.files.data + [manifest, node_toolchain.nodeinfo.node, ts_out_dir],
         outputs = outputs,
         mnemonic = "NodeDist",
         progress_message = "Building Node dist artifacts for %s" % ctx.label,
@@ -78,6 +79,9 @@ node_dist = rule(
     attrs = {
         "data": attr.label_list(
             allow_files = True,
+        ),
+        "ts_out": attr.label(
+            mandatory = True,
         ),
         "_windows_constraint": attr.label(
             default = "@platforms//os:windows",

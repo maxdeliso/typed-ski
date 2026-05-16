@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { workspaceRoot } from "../lib/shared/workspaceRoot.ts";
 import { compileMiniCoreModules } from "../lib/minicore/fromTrip.ts";
 import {
   evaluateMiniCore,
@@ -17,10 +19,10 @@ export interface AvlMiniCoreRunResult {
   program: Program;
 }
 
-const PRELUDE_SOURCE_FILE = new URL("../lib/prelude.trip", import.meta.url);
-const BIN_SOURCE_FILE = new URL("../lib/bin.trip", import.meta.url);
-const NAT_SOURCE_FILE = new URL("../lib/nat.trip", import.meta.url);
-const AVL_SOURCE_FILE = new URL("../lib/avl.trip", import.meta.url);
+const PRELUDE_SOURCE_FILE = join(workspaceRoot, "lib", "prelude.trip");
+const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "bin.trip");
+const NAT_SOURCE_FILE = join(workspaceRoot, "lib", "nat.trip");
+const AVL_SOURCE_FILE = join(workspaceRoot, "lib", "avl.trip");
 
 let builtinSourcesPromise:
   | Promise<{

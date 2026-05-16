@@ -1,4 +1,4 @@
-import type { LlvmMainWrapper, LlvmTargetProfile } from "./llvm/types.ts";
+import type { LlvmTargetProfile } from "./llvm/types.ts";
 import { compareAscii } from "../shared/canonical.ts";
 import { parseTripLang } from "../parser/tripLang.ts";
 import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
@@ -13,7 +13,7 @@ export interface TripBundleV1Module {
 export interface TripBundleV1 {
   entryModule: string;
   target: LlvmTargetProfile;
-  mainWrapper?: LlvmMainWrapper;
+  emitMainWrapper?: boolean;
   modules: TripBundleV1Module[];
 }
 
@@ -68,18 +68,16 @@ function targetToString(target: LlvmTargetProfile): string {
   return target.kind;
 }
 
-function wrapperToString(wrapper: LlvmMainWrapper | undefined): string {
-  return wrapper?.kind ?? "none";
+function wrapperToString(wrapper: boolean | undefined): string {
+  return wrapper ? "enabled" : "none";
 }
 
-function parseWrapper(value: string): LlvmMainWrapper | undefined {
+function parseWrapper(value: string): boolean {
   switch (value) {
     case "none":
-      return undefined;
-    case "c-main":
-      return { kind: "c-main" };
-    case "stdin-list-u8":
-      return { kind: "stdin-list-u8" };
+      return false;
+    case "enabled":
+      return true;
     default:
       throw new TripBundleV1Error(
         `Unsupported bundle-v1 wrapper kind: ${value}`,
@@ -93,8 +91,6 @@ function parseBundleTarget(value: string): LlvmTargetProfile {
     case "generic":
     case "x86_64-unknown-linux-gnu":
     case "x86_64-pc-windows-msvc":
-    case "wasm32-unknown-unknown":
-    case "wasm32-wasi":
       return { kind: value };
     default:
       throw new TripBundleV1Error(
@@ -153,7 +149,7 @@ export function serializeTripBundleV1(bundle: TripBundleV1): Uint8Array {
     TRIP_BUNDLE_V1_MAGIC,
     `entry ${bundle.entryModule}`,
     `target ${targetToString(bundle.target)}`,
-    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `wrapper ${wrapperToString(bundle.emitMainWrapper)}`,
     `modules ${bundle.modules.length}`,
   ];
 
@@ -192,7 +188,7 @@ export function summarizeTripBundleV1(input: Uint8Array): string {
     "version bundle-v1",
     `entry ${bundle.entryModule}`,
     `target ${targetToString(bundle.target)}`,
-    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `wrapper ${wrapperToString(bundle.emitMainWrapper)}`,
     `modules ${bundle.modules.length}`,
   ];
 
@@ -357,7 +353,7 @@ export function summarizeTripBundleV1Inventory(input: Uint8Array): string {
     "version bundle-inventory-v1",
     `entry ${bundle.entryModule}`,
     `target ${targetToString(bundle.target)}`,
-    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `wrapper ${wrapperToString(bundle.emitMainWrapper)}`,
     `modules ${bundle.modules.length}`,
   ];
 
@@ -887,7 +883,7 @@ export function summarizeTripBundleV1ParsedModules(input: Uint8Array): string {
     "version bundle-parse-summary-v1",
     `entry ${bundle.entryModule}`,
     `target ${targetToString(bundle.target)}`,
-    `wrapper ${wrapperToString(bundle.mainWrapper)}`,
+    `wrapper ${wrapperToString(bundle.emitMainWrapper)}`,
     `modules ${bundle.modules.length}`,
   ];
 
@@ -921,7 +917,7 @@ export function parseTripBundleV1(input: Uint8Array): TripBundleV1 {
   const target = parseBundleTarget(requireDirective(line, "target"));
 
   [line, offset] = readLine(input, offset);
-  const mainWrapper = parseWrapper(requireDirective(line, "wrapper"));
+  const emitMainWrapper = parseWrapper(requireDirective(line, "wrapper"));
 
   [line, offset] = readLine(input, offset);
   const moduleCount = parsePositiveInteger(
@@ -987,5 +983,5 @@ export function parseTripBundleV1(input: Uint8Array): TripBundleV1 {
     throw new TripBundleV1Error("Bundle-v1 has trailing bytes");
   }
 
-  return { entryModule, target, mainWrapper, modules };
+  return { entryModule, target, emitMainWrapper, modules };
 }

@@ -104,6 +104,15 @@ async function main() {
       const tsPath = resolve(args.tsOut);
       writes.push(writeFile(tsPath, buildTsContent(version), "utf8"));
     }
+    if (args.jsOut) {
+      // The .ts content is already valid ESM JS (just `export const VERSION =
+      // "..."`), so we emit the same body. Having the codegen rule produce
+      // the .js directly means the ts_compile wrapper's data-file copy
+      // places it in ts_out/, removing any dependency on tsc to compile the
+      // generated .ts — which proved unreliable across Bazel sandbox modes.
+      const jsPath = resolve(args.jsOut);
+      writes.push(writeFile(jsPath, buildTsContent(version), "utf8"));
+    }
     if (args.jsrJson) {
       const jsrJsonPath = resolve(args.jsrJson);
       writes.push(writeFile(jsrJsonPath, buildJsrJson(pkg), "utf8"));
@@ -124,6 +133,7 @@ function getArgs() {
     if (arg === "--root") args.root = process.argv[++i];
     if (arg === "--package-json") args.packageJson = process.argv[++i];
     if (arg === "--ts-out") args.tsOut = process.argv[++i];
+    if (arg === "--js-out") args.jsOut = process.argv[++i];
     if (arg === "--jsr-json") args.jsrJson = process.argv[++i];
     if (arg === "--verify") args.verify = true;
     if (arg === "--debug-paths") args.debugPaths = true;

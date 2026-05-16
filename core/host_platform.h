@@ -53,34 +53,6 @@ typedef struct {
   bool writable;
 } HostFileMapping;
 
-#elif defined(__wasm__)
-#define HOST_ALIGNED(n) __attribute__((aligned(n)))
-#define HOST_UNUSED __attribute__((unused))
-#define HOST_NO_SANITIZE_ADDRESS
-#define HOST_NOINLINE __attribute__((noinline))
-#define HOST_NORETURN __attribute__((noreturn))
-#define HOST_PAUSE() ((void)0)
-#define HOST_TRAP() __builtin_trap()
-
-typedef struct {
-  int unused;
-} HostMutex;
-
-typedef struct {
-  int unused;
-} HostCond;
-
-typedef int HostThread;
-
-typedef struct {
-  int unused;
-} HostEvent;
-
-typedef struct {
-  void *data;
-  size_t size;
-  bool writable;
-} HostFileMapping;
 #else
 #include <pthread.h>
 

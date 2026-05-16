@@ -27,7 +27,6 @@ import {
 } from "./runtimeAbi.ts";
 import type {
   EmitLlvmOptions,
-  LlvmMainWrapper,
   LlvmRepresentation,
   LlvmTargetProfile,
   LlvmValueType,
@@ -91,7 +90,7 @@ export function emitLlvmModule(
 
   const writer = new LlvmWriter();
   const target = options.target ?? { kind: "generic" };
-  const mainWrapper = options.mainWrapper ?? legacyMainWrapper(options);
+  const emitMainWrapperFlag = options.emitMainWrapper ?? false;
   emitTargetTriple(writer, target);
 
   const runtimeSymbols = collectRuntimeSymbols(module);
@@ -106,15 +105,25 @@ export function emitLlvmModule(
       "declare i64 @trip_obj_field(ptr, i64) nounwind readonly willreturn",
     );
   }
-  if (mainWrapper?.kind === "stdin-list-u8") {
-    writer.line("declare noalias ptr @trip_read_stdin_list_u8() nounwind");
+
+  let needsStdinDecl = false;
+  if (emitMainWrapperFlag) {
+    const entry = module.symbols.find(
+      (symbol): symbol is BlockFunctionDef =>
+        symbol.kind === "function" && symbol.id === module.entry,
+    );
+    if (entry && entry.params.length === 1) {
+      needsStdinDecl = true;
+      writer.line("declare noalias ptr @trip_read_stdin_list_u8() nounwind");
+    }
   }
+
   if (
     runtimeSymbols.length > 0 ||
     (representation === "boxed-runtime" && needsObjectRuntime(module))
   ) {
     writer.blank();
-  } else if (mainWrapper?.kind === "stdin-list-u8") {
+  } else if (needsStdinDecl) {
     writer.blank();
   }
 
@@ -130,19 +139,14 @@ export function emitLlvmModule(
     if (index > 0) writer.blank();
     emitFunction(writer, fn, context);
   });
-  if (mainWrapper) {
+  if (emitMainWrapperFlag) {
     writer.blank();
-    emitMainWrapper(writer, module, context, mainWrapper);
+    emitMainWrapper(writer, module, context);
   }
 
   return writer.toString();
 }
 
-function legacyMainWrapper(
-  options: EmitLlvmOptions,
-): LlvmMainWrapper | undefined {
-  return options.emitMainWrapper ? { kind: "c-main" } : undefined;
-}
 function needsObjectRuntime(module: BlockModule): boolean {
   return module.symbols.some(
     (symbol) =>
@@ -163,8 +167,6 @@ function emitTargetTriple(writer: LlvmWriter, target: LlvmTargetProfile): void {
     case "arm64-apple-darwin":
     case "x86_64-unknown-linux-gnu":
     case "x86_64-pc-windows-msvc":
-    case "wasm32-unknown-unknown":
-    case "wasm32-wasi":
       writer.line(`target triple = "${target.kind}"`);
       writer.blank();
       return;
@@ -185,7 +187,6 @@ function emitMainWrapper(
   writer: LlvmWriter,
   module: BlockModule,
   context: ModuleEmitContext,
-  wrapper: LlvmMainWrapper,
 ): void {
   const entry = module.symbols.find(
     (symbol): symbol is BlockFunctionDef =>
@@ -204,56 +205,64 @@ function emitMainWrapper(
   const entryReturnType = lowerLlvmReturnType(entry.returnType);
   writer.line("define i32 @main() {");
   writer.line("entry:");
-  switch (wrapper.kind) {
-    case "c-main":
-      if (entry.params.length !== 0) {
-        throw new LlvmEmissionError(
-          `Cannot emit C main wrapper for parameterized entry ${entry.name}`,
-        );
-      }
-      if (entryReturnType === "void") {
-        writer.indented(`call void ${entryName}()`);
-        writer.indented("ret i32 0");
-      } else if (entryReturnType === "i8") {
-        writer.indented(`%trip_result = call i8 ${entryName}()`);
-        writer.indented("%exit_code = zext i8 %trip_result to i32");
-        writer.indented("ret i32 %exit_code");
-      } else if (entryReturnType === "i1") {
-        writer.indented(`%trip_result = call i1 ${entryName}()`);
-        writer.indented("%exit_code = zext i1 %trip_result to i32");
-        writer.indented("ret i32 %exit_code");
-      } else if (entryReturnType === "i64") {
-        writer.indented(`%trip_result = call i64 ${entryName}()`);
-        writer.indented("%exit_code = trunc i64 %trip_result to i32");
-        writer.indented("ret i32 %exit_code");
-      } else {
-        writer.indented(
-          `%trip_result = call ${entryReturnType} ${entryName}()`,
-        );
-        writer.indented("ret i32 0");
-      }
-      break;
-    case "stdin-list-u8": {
-      if (entry.params.length !== 1) {
-        throw new LlvmEmissionError(
-          `Cannot emit stdin List U8 main wrapper for ${entry.name} with ${entry.params.length} parameter(s)`,
-        );
-      }
-      const [param] = entry.params;
-      const entryParamType = lowerLlvmValueType(param!.type);
-      writer.indented("%trip_source = call ptr @trip_read_stdin_list_u8()");
-      if (entryReturnType === "void") {
-        writer.indented(
-          `call void ${entryName}(${entryParamType} %trip_source)`,
-        );
-      } else {
-        writer.indented(
-          `%trip_result = call ${entryReturnType} ${entryName}(${entryParamType} %trip_source)`,
-        );
-      }
+
+  // void returns are mapped to a 0 exit code to support future layering of exception handling.
+
+  if (entry.params.length === 0) {
+    if (entryReturnType === "void") {
+      writer.indented(`call void ${entryName}()`);
       writer.indented("ret i32 0");
-      break;
+    } else if (entryReturnType === "i8") {
+      writer.indented(`%trip_result = call i8 ${entryName}()`);
+      writer.indented("%exit_code = zext i8 %trip_result to i32");
+      writer.indented("ret i32 %exit_code");
+    } else if (entryReturnType === "i1") {
+      writer.indented(`%trip_result = call i1 ${entryName}()`);
+      writer.indented("%exit_code = zext i1 %trip_result to i32");
+      writer.indented("ret i32 %exit_code");
+    } else if (entryReturnType === "i64") {
+      writer.indented(`%trip_result = call i64 ${entryName}()`);
+      writer.indented("%exit_code = trunc i64 %trip_result to i32");
+      writer.indented("ret i32 %exit_code");
+    } else {
+      writer.indented(`%trip_result = call ${entryReturnType} ${entryName}()`);
+      writer.indented("ret i32 0");
     }
+  } else if (entry.params.length === 1) {
+    const [param] = entry.params;
+    const entryParamType = lowerLlvmValueType(param!.type);
+    writer.indented("%trip_source = call ptr @trip_read_stdin_list_u8()");
+    if (entryReturnType === "void") {
+      writer.indented(`call void ${entryName}(${entryParamType} %trip_source)`);
+      writer.indented("ret i32 0");
+    } else if (entryReturnType === "i8") {
+      writer.indented(
+        `%trip_result = call i8 ${entryName}(${entryParamType} %trip_source)`,
+      );
+      writer.indented("%exit_code = zext i8 %trip_result to i32");
+      writer.indented("ret i32 %exit_code");
+    } else if (entryReturnType === "i1") {
+      writer.indented(
+        `%trip_result = call i1 ${entryName}(${entryParamType} %trip_source)`,
+      );
+      writer.indented("%exit_code = zext i1 %trip_result to i32");
+      writer.indented("ret i32 %exit_code");
+    } else if (entryReturnType === "i64") {
+      writer.indented(
+        `%trip_result = call i64 ${entryName}(${entryParamType} %trip_source)`,
+      );
+      writer.indented("%exit_code = trunc i64 %trip_result to i32");
+      writer.indented("ret i32 %exit_code");
+    } else {
+      writer.indented(
+        `%trip_result = call ${entryReturnType} ${entryName}(${entryParamType} %trip_source)`,
+      );
+      writer.indented("ret i32 0");
+    }
+  } else {
+    throw new LlvmEmissionError(
+      `Cannot emit main wrapper for parameterized entry ${entry.name} with ${entry.params.length} parameters`,
+    );
   }
   writer.line("}");
 }

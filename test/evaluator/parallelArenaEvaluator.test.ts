@@ -1,21 +1,16 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "../util/test_shim.ts";
+import { loadWorkspaceFile } from "../util/fileLoader.ts";
 import { compileTripAndRun } from "../compiler/llvm/nativeHarness.ts";
 
-const kCombinator = readFileSync(
+const kCombinator = loadWorkspaceFile(
   "test/evaluator/fixtures/k-combinator.trip",
-  "utf8",
 );
-const kSmall = readFileSync("test/evaluator/fixtures/k-small.trip", "utf8");
-const identity21 = readFileSync(
+const kSmall = loadWorkspaceFile("test/evaluator/fixtures/k-small.trip");
+const identity21 = loadWorkspaceFile(
   "test/evaluator/fixtures/identity-21.trip",
-  "utf8",
 );
-const kLargeAlt = readFileSync(
-  "test/evaluator/fixtures/k-large-alt.trip",
-  "utf8",
-);
+const kLargeAlt = loadWorkspaceFile("test/evaluator/fixtures/k-large-alt.trip");
 
 describe("Reduction correctness - native LLVM", () => {
   it("K combinator returns its first argument", async () => {

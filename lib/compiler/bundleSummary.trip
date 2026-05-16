@@ -273,24 +273,15 @@ poly parseTarget = \value : List U8 =>
             (\u : U8 =>
               if [Result (List U8) (List U8)] (eqListU8 value "x86_64-pc-windows-msvc")
                 (\u : U8 => Ok [List U8] [List U8] value)
-                (\u : U8 =>
-                  if [Result (List U8) (List U8)] (eqListU8 value "wasm32-unknown-unknown")
-                    (\u : U8 => Ok [List U8] [List U8] value)
-                    (\u : U8 =>
-                      if [Result (List U8) (List U8)] (eqListU8 value "wasm32-wasi")
-                        (\u : U8 => Ok [List U8] [List U8] value)
-                        (\u : U8 => Err [List U8] [List U8] "bad target"))))))
+                (\u : U8 => Err [List U8] [List U8] "bad target"))))
 
 poly parseWrapper = \value : List U8 =>
   if [Result (List U8) (List U8)] (eqListU8 value "none")
     (\u : U8 => Ok [List U8] [List U8] value)
     (\u : U8 =>
-      if [Result (List U8) (List U8)] (eqListU8 value "c-main")
+      if [Result (List U8) (List U8)] (eqListU8 value "enabled")
         (\u : U8 => Ok [List U8] [List U8] value)
-        (\u : U8 =>
-          if [Result (List U8) (List U8)] (eqListU8 value "stdin-list-u8")
-            (\u : U8 => Ok [List U8] [List U8] value)
-            (\u : U8 => Err [List U8] [List U8] "bad wrapper")))
+        (\u : U8 => Err [List U8] [List U8] "bad wrapper"))
 
 poly rec parseModules = \remaining : List U8 => \count : Bin => \entry : List U8 => \previous : Maybe (List U8) => \entryFound : Bool => \accRev : List ModuleRecord =>
   if [Result (List U8) ParsedModules] (isZeroBin count)

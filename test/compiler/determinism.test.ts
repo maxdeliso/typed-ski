@@ -26,8 +26,7 @@ async function runFreshCompilerCorpusBuildInSubprocess(): Promise<Uint8Array> {
     process.execPath,
     [
       "--disable-warning=ExperimentalWarning",
-      "--experimental-transform-types",
-      fileURLToPath(new URL("./freshCompilerCorpusBuild.ts", import.meta.url)),
+      fileURLToPath(new URL("./freshCompilerCorpusBuild.js", import.meta.url)),
     ],
     {
       maxBuffer: 32 * 1024 * 1024,
@@ -86,10 +85,7 @@ it("compileToObjectFile normalizes imported module metadata order", async () => 
   const prelude = await getPreludeObject();
   const nat = await getNatObject();
   const lexer = await compileFreshObject(LEXER_SOURCE_FILE, [prelude]);
-  const parserSource = await readFile(
-    fileURLToPath(PARSER_SOURCE_FILE),
-    "utf8",
-  );
+  const parserSource = await readFile(PARSER_SOURCE_FILE, "utf8");
 
   const ordered = serializeTripCObject(
     compileToObjectFile(parserSource, {

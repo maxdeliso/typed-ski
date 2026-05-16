@@ -7,19 +7,6 @@
 #include "arena.h"
 #include "host_platform.h"
 
-#ifdef __wasm__
-typedef __SIZE_TYPE__ size_t;
-void *memcpy(void *dest, const void *src, size_t n) {
-  return __builtin_memcpy(dest, src, n);
-}
-void *memset(void *s, int c, size_t n) { return __builtin_memset(s, c, n); }
-void *memmove(void *dest, const void *src, size_t n) {
-  return __builtin_memmove(dest, src, n);
-}
-#define WASM_PAGE_SIZE 65536
-#define IMPORT_MEMORY                                                          \
-  __attribute__((import_module("env"), import_name("memory")))
-#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +15,6 @@ void *memmove(void *dest, const void *src, size_t n) {
 #endif
 #ifdef __linux__
 #include <sys/syscall.h>
-#endif
 #endif
 
 static const uint32_t ARENA_MAGIC = 0x534B4941;
@@ -55,21 +41,14 @@ enum {
 
 /** Set by worker at batch start, cleared at batch end; allocators unregister
  * before grow(). */
-#ifdef __wasm__
-static uint32_t tls_worker_id = MAX_WORKERS;
-#else
 static _Thread_local uint32_t tls_worker_id = MAX_WORKERS;
-#endif
 
 uint8_t *ARENA_BASE_ADDR = NULL;
 static uint32_t ARENA_MODE = 0;
 /** Native only: actual mmap size reserved at init (layout uses uint64_t so no
  * overflow at MAX_CAP). */
-#ifndef __wasm__
 static size_t ARENA_RESERVED_BYTES = 0;
-#endif
 
-#ifndef __wasm__
 /* Native mmap-backed file I/O is ambient arena state. The session layer treats
  * REDUCE_FILE as single-flight, so at most one file-backed reduction may be
  * active per process at a time.
@@ -101,17 +80,6 @@ void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
 size_t arena_get_mmap_out_cursor(void) {
   return atomic_load_explicit(&mmap_stdout_cursor, memory_order_acquire);
 }
-#else
-void arena_set_io_mmap(uint8_t *in_map, size_t in_size, uint8_t *out_map,
-                       size_t out_size) {
-  (void)in_map;
-  (void)in_size;
-  (void)out_map;
-  (void)out_size;
-}
-
-size_t arena_get_mmap_out_cursor(void) { return 0; }
-#endif
 
 static inline uint32_t align64(uint32_t x) { return (x + 63) & ~63u; }
 static inline uint64_t align64_u64(uint64_t x) {
@@ -120,19 +88,11 @@ static inline uint64_t align64_u64(uint64_t x) {
 static inline void worker_cooperative_yield(void);
 
 static inline void sys_wait32(atomic_uint *ptr, uint32_t expected) {
-#ifdef __wasm__
-  __builtin_wasm_memory_atomic_wait32((int *)ptr, (int)expected, -1);
-#else
   host_wait_u32(ptr, expected);
-#endif
 }
 
 static inline void sys_notify(atomic_uint *ptr, uint32_t count) {
-#ifdef __wasm__
-  __builtin_wasm_memory_atomic_notify((int *)ptr, count);
-#else
   host_notify_u32(ptr, count);
-#endif
 }
 
 static inline uint32_t ring_bytes(uint32_t entries, uint32_t slot_size) {
@@ -380,11 +340,7 @@ static inline uint32_t freelist_head_version(uint64_t head) {
 #endif
 
 static inline void trap_invariant(void) {
-#ifdef __wasm__
-  HOST_TRAP();
-#else
   abort();
-#endif
 }
 
 #ifdef NDEBUG
@@ -535,7 +491,6 @@ static uint64_t active_layout_bytes(const SabLayout *layout,
          (uint64_t)capacity * ACTIVE_LAYOUT_BYTES_PER_CAPACITY_SLOT;
 }
 
-#ifndef __wasm__
 static bool commit_arena_range(uint64_t offset, uint64_t bytes) {
   if (bytes == 0)
     return true;
@@ -580,19 +535,10 @@ static bool commit_arena_capacity_ranges(const SabLayout *layout,
     return false;
   return true;
 }
-#endif
 
 static void *allocate_raw_arena(uint32_t initial_capacity,
                                 uint32_t max_capacity) {
   SabLayout layout = calculate_layout(initial_capacity, max_capacity);
-#ifdef __wasm__
-  uint32_t pages_needed =
-      (uint32_t)((layout.total_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE);
-  int old_pages = __builtin_wasm_memory_grow(0, pages_needed);
-  if (old_pages == -1)
-    return NULL;
-  ARENA_BASE_ADDR = (uint8_t *)((uintptr_t)old_pages * WASM_PAGE_SIZE);
-#else
 
   SabLayout reserve_layout = calculate_layout(max_capacity, max_capacity);
   ARENA_RESERVED_BYTES = (size_t)reserve_layout.total_size;
@@ -613,7 +559,6 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
     ARENA_BASE_ADDR = NULL;
     return NULL;
   }
-#endif
 
   SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   h->magic = ARENA_MAGIC;
@@ -646,11 +591,9 @@ static void *allocate_raw_arena(uint32_t initial_capacity,
   ARENA_ASSERT(h->offset_node_link < h->offset_node_kind);
   ARENA_ASSERT(h->offset_node_kind < h->offset_node_sym);
   ARENA_ASSERT(h->offset_node_sym < h->offset_buckets);
-#ifndef __wasm__
   if (ARENA_RESERVED_BYTES > 0) {
     ARENA_ASSERT(layout.total_size <= ARENA_RESERVED_BYTES);
   }
-#endif
 
   atomic_init(&h->capacity, initial_capacity);
   h->bucket_mask = initial_capacity - 1;
@@ -714,11 +657,7 @@ static inline void ensure_arena(void) {
   if (ARENA_BASE_ADDR != NULL)
     return;
   if (ARENA_MODE == 1) {
-#ifdef __wasm__
-    HOST_TRAP();
-#else
     abort();
-#endif
   }
   allocate_raw_arena(INITIAL_CAP, MAX_CAP);
   ARENA_MODE = 0;
@@ -730,12 +669,8 @@ uint32_t initArena(uint32_t initial_capacity) {
     return 0;
   }
   if (ARENA_BASE_ADDR != NULL) {
-#ifdef __wasm__
-    return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
-#else
     uint32_t addr32 = (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
     return addr32 > 2 ? addr32 : 3;
-#endif
   }
 
   {
@@ -754,12 +689,8 @@ uint32_t initArena(uint32_t initial_capacity) {
   uint32_t i = allocTerminal(ARENA_SYM_I);
   h->false_id = allocCons(k, i);
 
-#ifdef __wasm__
-  return (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
-#else
   uint32_t addr32 = (uint32_t)(uintptr_t)ARENA_BASE_ADDR;
   return addr32 > 2 ? addr32 : 3;
-#endif
 }
 
 uint32_t connectArena(uint32_t ptr_addr) {
@@ -831,11 +762,7 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
   while (true) {
     uint32_t seq = atomic_load_explicit(&h->resize_seq, memory_order_acquire);
     if (seq == POISON_SEQ) {
-#ifdef __wasm__
-      HOST_TRAP();
-#else
       abort();
-#endif
     }
 
     if (seq & 1) {
@@ -850,7 +777,7 @@ static inline uint32_t enter_stable(SabHeader **h_out) {
 
       /* Spin until the resize finishes */
       while ((atomic_load_explicit(&h->resize_seq, memory_order_acquire) & 1)) {
-#if defined(__linux__) && !defined(__wasm__)
+#if defined(__linux__)
         HOST_PAUSE();
 #elif defined(__x86_64__) || defined(_M_X64)
         HOST_PAUSE();
@@ -1750,18 +1677,7 @@ static bool resume_worker_state(uint32_t slice_id, uint32_t susp_ptr,
 }
 
 static inline void worker_cooperative_yield(void) {
-#ifdef __wasm__
-  /* Temporary host-yield stub: the zero-timeout wait is only a rendezvous
-   * hint, not a durable notify/wake protocol yet. */
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  atomic_uint *gate = &h->global_epoch;
-  uint32_t observed = atomic_load_explicit(gate, memory_order_relaxed);
-  __builtin_wasm_memory_atomic_wait32((int *)gate, (int)observed, 0);
-#elif defined(__linux__)
   host_yield();
-#else
-  host_yield();
-#endif
 }
 
 uint32_t controlSuspensionReason(uint32_t ptr) {
@@ -1826,7 +1742,7 @@ HOST_NO_SANITIZE_ADDRESS static void grow(void) {
           atomic_load_explicit(&h->worker_epochs[i], memory_order_acquire);
       if (w_epoch == 0 || w_epoch >= new_epoch)
         break;
-#if defined(__linux__) && !defined(__wasm__)
+#if defined(__linux__)
       HOST_PAUSE();
 #elif defined(__x86_64__) || defined(_M_X64)
       HOST_PAUSE();
@@ -1858,7 +1774,6 @@ HOST_NO_SANITIZE_ADDRESS static void grow(void) {
   uint32_t new_cap = old_cap * 2;
   if (new_cap > max_cap)
     new_cap = max_cap;
-#ifndef __wasm__
   /* Cap so we never write past the actual mmap (defense-in-depth). */
   if (ARENA_RESERVED_BYTES > 0) {
     while (new_cap > old_cap) {
@@ -1872,39 +1787,19 @@ HOST_NO_SANITIZE_ADDRESS static void grow(void) {
       return; /* cannot grow within reservation */
     }
   }
-#endif
   uint32_t grow_num =
       atomic_fetch_add_explicit(&h->grow_count, 1, memory_order_relaxed) + 1;
-#ifndef __wasm__
   fprintf(stderr, "Arena: grow #%u %u -> %u (top=%u)\n", grow_num, old_cap,
           new_cap, old_top);
-#else
-  (void)grow_num;
-#endif
 
   SabLayout layout = calculate_layout(new_cap, max_cap);
 
-#ifdef __wasm__
-  uint32_t current_bytes = __builtin_wasm_memory_size(0) * WASM_PAGE_SIZE;
-  uintptr_t needed_end =
-      (uintptr_t)ARENA_BASE_ADDR + (uintptr_t)layout.total_size;
-  if (needed_end > current_bytes) {
-    uint32_t extra = needed_end - current_bytes;
-    uint32_t pages = (extra + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
-    size_t previous_pages = __builtin_wasm_memory_grow(0, pages);
-    if (previous_pages == (size_t)-1) {
-      atomic_store_explicit(&h->resize_seq, POISON_SEQ, memory_order_release);
-      HOST_TRAP();
-    }
-  }
-#else
 
   if (!commit_arena_capacity_ranges(&layout, old_cap, new_cap, false)) {
     atomic_store_explicit(&h->resize_seq, POISON_SEQ, memory_order_release);
     abort();
   }
 
-#endif
 
   atomic_store_explicit(&h->capacity, new_cap, memory_order_release);
   h->bucket_mask = new_cap - 1;
@@ -1935,11 +1830,9 @@ HOST_NO_SANITIZE_ADDRESS static void grow(void) {
   ARENA_ASSERT(h->offset_node_link < h->offset_node_kind);
   ARENA_ASSERT(h->offset_node_kind < h->offset_node_sym);
   ARENA_ASSERT(h->offset_node_sym < h->offset_buckets);
-#ifndef __wasm__
   if (ARENA_RESERVED_BYTES > 0) {
     ARENA_ASSERT(layout.total_size <= ARENA_RESERVED_BYTES);
   }
-#endif
 
   atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
   atomic_uint *hashes =
@@ -2602,7 +2495,6 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
           continue;
         }
 
-#ifndef __wasm__
         if (atomic_load_explicit(&mmap_stdin_active, memory_order_acquire)) {
           size_t cursor = atomic_fetch_add_explicit(&mmap_stdin_cursor, 1,
                                                     memory_order_relaxed);
@@ -2622,7 +2514,6 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
             return out;
           }
         }
-#endif
 
         uint8_t byte;
         if (try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdin), &byte,
@@ -2660,7 +2551,6 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
 
             uint8_t byte = (uint8_t)load_u8_payload(syms, byte_node);
 
-#ifndef __wasm__
             if (mmap_stdout_buf != NULL) {
               size_t cursor = atomic_fetch_add_explicit(&mmap_stdout_cursor, 1,
                                                         memory_order_relaxed);
@@ -2679,7 +2569,6 @@ static StepOutcome step_iterative(uint32_t slice_id, WorkerState *ws,
                 return out;
               }
             }
-#endif
 
             if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), &byte,
                             1)) {
@@ -2916,13 +2805,11 @@ static StepOutcome step_once_with_links(uint32_t slice_id, WorkerState *ws,
                                         bool yield_on_step_limit,
                                         bool allow_retry,
                                         uint64_t *step_counter) {
-#ifndef __wasm__
   if (atomic_load_explicit(&mmap_stdin_active, memory_order_acquire) ||
       mmap_stdout_buf != NULL) {
     return step_iterative(slice_id, ws, gas, h, yield_on_gas,
                           yield_on_step_limit, allow_retry, step_counter);
   }
-#endif
   if (is_control_ptr(ws->current_val) || ws->current_val >= MAX_CAP) {
     return step_iterative(slice_id, ws, gas, h, yield_on_gas,
                           yield_on_step_limit, allow_retry, step_counter);

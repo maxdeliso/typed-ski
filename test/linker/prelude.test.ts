@@ -4,8 +4,8 @@ import { describe, it } from "../util/test_shim.ts";
  */
 
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getBinObject } from "../../lib/bin.ts";
@@ -21,8 +21,6 @@ import {
 } from "../thanatosHarness.ts";
 import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
 describe("Prelude Linking", () => {
   it(
     "links prelude arithmetic cases (thanatos)",
@@ -35,7 +33,13 @@ describe("Prelude Linking", () => {
         const binObj = await getBinObject();
         const natObj = await getNatObject();
         const testObj = await loadTripModuleObject(
-          join(__dirname, "inputs", "testArithmetic.trip"),
+          join(
+            workspaceRoot,
+            "test",
+            "linker",
+            "inputs",
+            "testArithmetic.trip",
+          ),
         );
 
         const skiExpression = linkModules([
@@ -69,7 +73,7 @@ describe("Prelude Linking", () => {
       try {
         const preludeObj = await getPreludeObject();
         const testObj = await loadTripModuleObject(
-          join(__dirname, "inputs", "testLogic.trip"),
+          join(workspaceRoot, "test", "linker", "inputs", "testLogic.trip"),
         );
 
         const skiExpression = linkModules([

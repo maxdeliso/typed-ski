@@ -1,11 +1,11 @@
 /**
  * Bin module provider.
  */
+import { join } from "node:path";
 import type { TripCObject } from "./compiler/objectFile.ts";
 import { loadTripModuleObject } from "./tripSourceLoader.ts";
-
-const BIN_SOURCE_FILE = new URL("./bin.trip", import.meta.url);
+import { workspaceRoot } from "./shared/workspaceRoot.ts";
 
 export async function getBinObject(): Promise<TripCObject> {
-  return await loadTripModuleObject(BIN_SOURCE_FILE);
+  return await loadTripModuleObject(join(workspaceRoot, "lib", "bin.trip"));
 }

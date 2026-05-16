@@ -18,10 +18,10 @@ import {
   runTripcSync,
 } from "../util/tripcHarness.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcLinkerDir = join(workspaceRoot, "test", "linker");
 const FIXTURE_FILES = [
   "int_simple.trip",
   "int_complex.trip",
@@ -38,7 +38,7 @@ describe("TripLang Linker Integration", { concurrency: false }, () => {
 
   beforeEach(async () => {
     workspacePath = await createTempWorkspace("typed-ski-linker-integration-");
-    await copyFixtures(__dirname, workspacePath, FIXTURE_FILES);
+    await copyFixtures(srcLinkerDir, workspacePath, FIXTURE_FILES);
   });
 
   afterEach(async () => {

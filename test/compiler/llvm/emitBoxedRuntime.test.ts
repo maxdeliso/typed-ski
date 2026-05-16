@@ -137,7 +137,7 @@ describe("LLVM emitter - boxed runtime", () => {
     assert.equal(
       emitLlvmModule(module, {
         representation: "boxed-runtime",
-        mainWrapper: { kind: "stdin-list-u8" },
+        emitMainWrapper: true,
       }),
       [
         "declare noalias ptr @trip_read_stdin_list_u8() nounwind",

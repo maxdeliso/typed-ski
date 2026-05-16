@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, it } from "../../util/test_shim.ts";
+import { loadWorkspaceFile } from "../../util/fileLoader.ts";
+import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import {
   compileTripBundleV1ToLlvm,
   parseTripBundleV1,
@@ -28,9 +29,8 @@ import {
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixtureDir = join(__dirname, "fixtures");
-const projectRoot = join(__dirname, "../../..");
+const projectRoot = workspaceRoot;
+const fixtureDir = join(projectRoot, "test", "compiler", "llvm", "fixtures");
 
 function decode(bytes: Uint8Array): string {
   return decoder.decode(bytes);
@@ -54,34 +54,30 @@ function bundleSource(fields: {
     "TRIP-BUNDLE-V1",
     `entry ${fields.entry ?? "Main"}`,
     `target ${fields.target ?? "x86_64-unknown-linux-gnu"}`,
-    `wrapper ${fields.wrapper ?? "c-main"}`,
+    `wrapper ${fields.wrapper ?? "enabled"}`,
     `modules ${fields.modules.length}`,
     ...fields.modules.map((module) => moduleRecord(module.name, module.source)),
   ].join("\n");
 }
 
 function realBootstrapModuleSource(name: string): string {
-  const directPath = join(projectRoot, "lib", `${name.toLowerCase()}.trip`);
-  try {
-    return readFileSync(directPath, "utf8");
-  } catch {
-    return readFileSync(
-      join(
-        projectRoot,
-        "lib",
-        "compiler",
-        `${name.charAt(0).toLowerCase()}${name.slice(1)}.trip`,
-      ),
-      "utf8",
-    );
+  // Modules live either directly under lib/ or under lib/compiler/ — pick
+  // whichever exists. Use loadWorkspaceFile for the actual read so a missing
+  // file at the chosen path produces a diagnostic instead of a bare ENOENT.
+  const primary = `lib/${name.toLowerCase()}.trip`;
+  if (existsSync(join(workspaceRoot, primary))) {
+    return loadWorkspaceFile(primary);
   }
+  return loadWorkspaceFile(
+    `lib/compiler/${name.charAt(0).toLowerCase()}${name.slice(1)}.trip`,
+  );
 }
 
 export function realBootstrapBundle(moduleNames: string[]): Uint8Array {
   return serializeTripBundleV1({
     entryModule: moduleNames.at(-1) ?? "Prelude",
     target: { kind: "x86_64-unknown-linux-gnu" },
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
     modules: moduleNames.map((name) => ({
       name,
       source: realBootstrapModuleSource(name),
@@ -92,10 +88,7 @@ export function realBootstrapBundle(moduleNames: string[]): Uint8Array {
 async function compileBundleInventoryExecutable(
   tempDir: string,
 ): Promise<string> {
-  const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/bundleInventory.trip"),
-    "utf8",
-  );
+  const source = loadWorkspaceFile("lib/compiler/bundleInventory.trip");
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleInventory",
     moduleSources: await loadCommonModules([
@@ -107,7 +100,7 @@ async function compileBundleInventoryExecutable(
       "Avl",
       "Nat",
     ]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "bundle-inventory.ll");
   await writeFile(llPath, llvm, "utf8");
@@ -115,10 +108,7 @@ async function compileBundleInventoryExecutable(
 }
 
 async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
-  const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/moduleEnv.trip"),
-    "utf8",
-  );
+  const source = loadWorkspaceFile("lib/compiler/moduleEnv.trip");
   const llvm = await compileTripToLlvm(source, {
     entryModule: "ModuleEnv",
     moduleSources: await loadCommonModules([
@@ -131,7 +121,7 @@ async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
       "Nat",
       "DataEnv",
     ]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "module-env.ll");
   await writeFile(llPath, llvm, "utf8");
@@ -142,7 +132,7 @@ describe("bundle-v1", () => {
   const bundle: TripBundleV1 = {
     entryModule: "Main",
     target: { kind: "x86_64-unknown-linux-gnu" },
-    mainWrapper: { kind: "c-main" },
+    emitMainWrapper: true,
     modules: [
       {
         name: "Main",
@@ -174,7 +164,7 @@ poly main = #u8(7)
         "TRIP-BUNDLE-V1",
         "entry Main",
         "target x86_64-unknown-linux-gnu",
-        "wrapper c-main",
+        "wrapper enabled",
         "modules 1",
         "module Main 43",
         `module Main
@@ -403,7 +393,7 @@ opaque Handle
               "TRIP-BUNDLE-V1",
               "entry Main",
               "target x86_64-unknown-linux-gnu",
-              "wrapper c-main",
+              "wrapper enabled",
               "modules 1",
               "module Main 1",
             ].join("\n") + "\n",
@@ -682,7 +672,7 @@ native readOne : -> U8
                 "TRIP-BUNDLE-V1",
                 "entry Main",
                 "target x86_64-unknown-linux-gnu",
-                "wrapper c-main",
+                "wrapper enabled",
                 "modules 1",
                 "module Main 1",
               ].join("\n") + "\n",
@@ -877,7 +867,7 @@ poly seven = #u8(7)
               "TRIP-BUNDLE-V1",
               "entry Main",
               "target x86_64-unknown-linux-gnu",
-              "wrapper c-main",
+              "wrapper enabled",
               "modules 1",
               "module Main 999",
               mainSource,
@@ -910,7 +900,7 @@ poly seven = #u8(7)
                 "TRIP-BUNDLE-V1",
                 "entry Main",
                 "target x86_64-unknown-linux-gnu",
-                "wrapper c-main",
+                "wrapper enabled",
                 "modules 1",
                 "module Main 1",
               ].join("\n") + "\n",
@@ -957,7 +947,7 @@ poly seven = #u8(7)
     const serialized = serializeTripBundleV1({
       entryModule: "Main",
       target: { kind: "x86_64-unknown-linux-gnu" },
-      mainWrapper: { kind: "c-main" },
+      emitMainWrapper: true,
       modules: [
         {
           name: "Main",
@@ -994,7 +984,7 @@ poly seven = #u8(7)
       serializeTripBundleV1({
         entryModule: "Main",
         target: { kind: "x86_64-unknown-linux-gnu" },
-        mainWrapper: { kind: "stdin-list-u8" },
+        emitMainWrapper: true,
         modules: [
           {
             name: "Main",
@@ -1069,7 +1059,7 @@ poly seven = #u8(7)
             "TRIP-BUNDLE-V1",
             "target x86_64-unknown-linux-gnu",
             "entry Main",
-            "wrapper c-main",
+            "wrapper enabled",
             "modules 0",
           ].join("\n"),
         ),
@@ -1104,7 +1094,7 @@ poly seven = #u8(7)
             "TRIP-BUNDLE-V1",
             "entry Main",
             "target x86_64-unknown-linux-gnu",
-            "wrapper c-main",
+            "wrapper enabled",
             "modules 1",
             "module Main 999",
             mainSource,
@@ -1176,7 +1166,7 @@ poly seven = #u8(7)
                 "TRIP-BUNDLE-V1",
                 "entry Main",
                 "target x86_64-unknown-linux-gnu",
-                "wrapper c-main",
+                "wrapper enabled",
                 "modules 1",
                 "module Main 1",
               ].join("\n") + "\n",
@@ -1245,14 +1235,11 @@ poly main = #u8(0)
 async function compileBundleSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
-  const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/bundleSummary.trip"),
-    "utf8",
-  );
+  const source = loadWorkspaceFile("lib/compiler/bundleSummary.trip");
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleSummary",
     moduleSources: await loadCommonModules(["Prelude", "Bin"]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "bundle-summary.ll");
   await writeFile(llPath, llvm, "utf8");
@@ -1262,10 +1249,7 @@ async function compileBundleSummaryExecutable(
 async function compileBundleParseSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
-  const source = readFileSync(
-    join(__dirname, "../../../lib/compiler/bundleParseSummary.trip"),
-    "utf8",
-  );
+  const source = loadWorkspaceFile("lib/compiler/bundleParseSummary.trip");
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleParseSummary",
     moduleSources: await loadCommonModules([
@@ -1275,7 +1259,7 @@ async function compileBundleParseSummaryExecutable(
       "Parser",
       "BundleSummary",
     ]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "bundle-parse-summary.ll");
   await writeFile(llPath, llvm, "utf8");

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-transform-types
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,14 @@ import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, "..");
+// JS_ROOT: directory containing compiled .js outputs (one level up from scripts/)
+// In Bazel: <runfiles>/ts_out, locally (after build): <project>/out
+const JS_ROOT = join(__dirname, "..");
+// PROJECT_ROOT: source root with package.json, node_modules, tsconfig, etc.
+// Two levels up because compiled scripts live in ts_out/scripts/ or out/scripts/.
+// Overridden by TYPED_SKI_PROJECT_ROOT when bazelBuildDist runs with a workspace copy.
+const PROJECT_ROOT =
+  process.env["TYPED_SKI_PROJECT_ROOT"] ?? join(__dirname, "../..");
 const PACKAGE_JSON_PATH = join(PROJECT_ROOT, "package.json");
 
 type PackageJson = {
@@ -83,12 +90,7 @@ const LOCAL_TSC_ENTRY = join(
   "lib",
   "tsc.js",
 );
-const NODE_TRANSFORM_TYPES_ARG = "--experimental-transform-types";
-const NODE_TEST_GLOBAL_SETUP_PATH = join(
-  PROJECT_ROOT,
-  "test",
-  "globalSetup.ts",
-);
+const NODE_TEST_GLOBAL_SETUP_PATH = join(JS_ROOT, "test", "globalSetup.js");
 const TEMP_ROOT =
   process.platform === "win32"
     ? (process.env["LOCALAPPDATA"] ??
@@ -129,7 +131,7 @@ async function ensurePnpmStore(): Promise<string> {
   await fsp.mkdir(storeDir, { recursive: true });
   return storeDir;
 }
-const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.ts"]);
+const DIST_REQUIRED_TESTS = new Set(["test/bin/cli.test.js"]);
 
 const repo = (...parts: string[]) => join(PROJECT_ROOT, ...parts);
 
@@ -192,7 +194,7 @@ function nodeTestArgs(
 }
 
 function usage(): never {
-  console.error(`Usage: node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts <command>
+  console.error(`Usage: node --disable-warning=ExperimentalWarning out/scripts/bazel.js <command>
 
 Commands:
   verify-version
@@ -208,12 +210,12 @@ Commands:
 }
 
 async function run(args: string[], options: any = {}): Promise<void> {
-  const { env: extraEnv, timeoutMs, ...rest } = options;
+  const { env: extraEnv, timeoutMs, cwd: cwdOverride, ...rest } = options;
   const pnpmStore = await ensurePnpmStore();
   return new Promise((resolve, reject) => {
     const [command, commandArgs] = splitSpawnArgs(args);
     const child = spawn(command, commandArgs, {
-      cwd: PROJECT_ROOT,
+      cwd: cwdOverride ?? PROJECT_ROOT,
       stdio: "inherit",
       env: {
         ...process.env,
@@ -267,12 +269,12 @@ async function run(args: string[], options: any = {}): Promise<void> {
 }
 
 async function runCapture(args: string[], options: any = {}): Promise<string> {
-  const { env: extraEnv, ...rest } = options;
+  const { env: extraEnv, cwd: cwdOverride, ...rest } = options;
   const pnpmStore = await ensurePnpmStore();
   return new Promise((resolve, reject) => {
     const [command, commandArgs] = splitSpawnArgs(args);
     const child = spawn(command, commandArgs, {
-      cwd: PROJECT_ROOT,
+      cwd: cwdOverride ?? PROJECT_ROOT,
       stdio: ["ignore", "piped", "inherit"],
       env: {
         ...process.env,
@@ -438,7 +440,7 @@ async function formatCheck(): Promise<void> {
 }
 
 async function collectTests(): Promise<string[]> {
-  const testRoot = join(PROJECT_ROOT, "test");
+  const testRoot = join(JS_ROOT, "test");
   const files: string[] = [];
   console.log(`Collecting tests from ${testRoot}...`);
 
@@ -468,8 +470,8 @@ async function collectTests(): Promise<string[]> {
 
       if (isDir) {
         await walk(fullPath);
-      } else if (isFile && entry.name.endsWith(".test.ts")) {
-        const relPath = relative(PROJECT_ROOT, fullPath).replaceAll("\\", "/");
+      } else if (isFile && entry.name.endsWith(".test.js")) {
+        const relPath = relative(JS_ROOT, fullPath).replaceAll("\\", "/");
         files.push(relPath);
       }
     }
@@ -579,7 +581,6 @@ async function runSelectedTests(
     [
       NODE,
       NODE_DISABLE_EXPERIMENTAL_WARNING_ARG,
-      NODE_TRANSFORM_TYPES_ARG,
       ...nodeTestArgs(files, {
         coverage: options.coverage,
         extraArgs: options.nodeArgs,
@@ -591,6 +592,7 @@ async function runSelectedTests(
     ],
     {
       env,
+      cwd: JS_ROOT,
       timeoutMs: options.timeoutMs,
     },
   );
@@ -614,6 +616,18 @@ async function prepareTestExecution(
   files: string[],
 ): Promise<Record<string, string>> {
   console.log("Preparing test execution environment...");
+  console.log(`JS_ROOT: ${JS_ROOT}`);
+  if (fs.existsSync(JS_ROOT)) {
+    try {
+      const contents = fs.readdirSync(JS_ROOT);
+      console.log(`Contents of JS_ROOT: ${contents.join(", ")}`);
+    } catch (e) {
+      console.error(`Error reading JS_ROOT: ${e}`);
+    }
+  } else {
+    console.warn(`JS_ROOT does not exist: ${JS_ROOT}`);
+  }
+
   for (const key of Object.keys(process.env)) {
     if (key.startsWith("TYPED_SKI_")) {
       console.log(`[env] ${key}: ${process.env[key]}`);
@@ -627,7 +641,12 @@ async function prepareTestExecution(
     await buildDist();
   }
 
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = {
+    // Inject the authoritative workspace root so every consumer can import
+    // lib/shared/workspaceRoot.ts and get the correct path without having to
+    // count directory levels relative to their own compiled location.
+    TYPED_SKI_PROJECT_ROOT: PROJECT_ROOT,
+  };
 
   if (process.env["TEST_SRCDIR"] && process.env["TEST_WORKSPACE"]) {
     const nodeOptions = [

@@ -1,7 +1,9 @@
 import { dirname, join, resolve } from "node:path";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function usage(): never {
   console.error(
@@ -110,10 +112,13 @@ const childEnv = {
 Object.assign(process.env, childEnv);
 process.chdir(workspaceCopy);
 
-const importPath = pathToFileURL(
-  join(workspaceCopy, "scripts", "bazel.ts"),
-).href;
-const { buildDist } = (await import(importPath)) as typeof import("./bazel.ts");
+// Set PROJECT_ROOT so that bazel.js operates on the workspace copy, then
+// import the compiled sibling bazel.js (same ts_out/scripts/ directory).
+process.env["TYPED_SKI_PROJECT_ROOT"] = workspaceCopy;
+const bazelJsPath = join(__dirname, "bazel.js");
+const { buildDist } = (await import(
+  pathToFileURL(bazelJsPath).href
+)) as typeof import("./bazel.ts");
 await buildDist({ sync: false });
 
 await copyOutput(join(workspaceCopy, "dist", "tripc.js"), tripcJsOutputPath);

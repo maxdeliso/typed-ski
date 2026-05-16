@@ -7,22 +7,16 @@ export type LlvmTargetProfile =
   | { kind: "generic" }
   | { kind: "arm64-apple-darwin" }
   | { kind: "x86_64-unknown-linux-gnu" }
-  | { kind: "x86_64-pc-windows-msvc" }
-  | { kind: "wasm32-unknown-unknown" }
-  | { kind: "wasm32-wasi" };
+  | { kind: "x86_64-pc-windows-msvc" };
 
 export interface EmitLlvmOptions {
   target?: LlvmTargetProfile;
   representation?: LlvmRepresentation;
-  /** Legacy shorthand for `mainWrapper: { kind: "c-main" }`. */
   emitMainWrapper?: boolean;
-  mainWrapper?: LlvmMainWrapper;
 }
 /* node:coverage enable */
 
 export type LlvmRepresentation = "scalar-v0" | "boxed-runtime";
-
-export type LlvmMainWrapper = { kind: "c-main" } | { kind: "stdin-list-u8" };
 /* node:coverage enable */
 
 export type LlvmV0PrimitiveKind = "addU8" | "subU8" | "eqU8" | "ltU8";

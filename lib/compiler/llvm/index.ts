@@ -8,7 +8,6 @@ export {
 } from "./validateLlvmV0.ts";
 export type {
   EmitLlvmOptions,
-  LlvmMainWrapper,
   LlvmRepresentation,
   LlvmTargetProfile,
 } from "./types.ts";

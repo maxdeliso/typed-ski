@@ -32,7 +32,7 @@ def _node_sharded_test_impl(ctx):
 
     if is_windows:
         node_bin = node_path.replace("/", "\\")
-        command = "\"%NODE_BIN%\" \"--experimental-transform-types\" \"--preserve-symlinks\" \"--preserve-symlinks-main\" \"scripts/bazel.ts\" \"bazel-test-shard\" %*"
+        command = "\"%NODE_BIN%\" \"--preserve-symlinks\" \"--preserve-symlinks-main\" \"%RUNFILES_ROOT%\\ts_out\\scripts\\bazel.js\" \"bazel-test-shard\" %*"
         content_lines = [
             "@echo off",
             "setlocal",
@@ -55,8 +55,8 @@ def _node_sharded_test_impl(ctx):
             "  exit /b 1",
             ")",
             "cd /d \"%RUNFILES_ROOT%\"",
-            "if not exist \"scripts\\bazel.ts\" (",
-            "  echo bazel.ts not found under %RUNFILES_ROOT%",
+            "if not exist \"ts_out\\scripts\\bazel.js\" (",
+            "  echo bazel.js not found under %RUNFILES_ROOT%",
             "  exit /b 1",
             ")",
             "set \"THANATOS_BIN=%RUNFILES_ROOT%\\" + thanatos_rootpath.replace("/", "\\") + "\"",
@@ -78,7 +78,7 @@ def _node_sharded_test_impl(ctx):
         content = "\r\n".join(content_lines)
     else:
         node_bin = shell_dquote_literal(node_path)
-        command = "\"$node_bin\" --experimental-transform-types --preserve-symlinks --preserve-symlinks-main scripts/bazel.ts bazel-test-shard \"$@\""
+        command = "\"$node_bin\" --preserve-symlinks --preserve-symlinks-main \"$runfiles_root/ts_out/scripts/bazel.js\" bazel-test-shard \"$@\""
         content_lines = [
             "#!/usr/bin/env bash",
             "set -euo pipefail",
@@ -101,8 +101,8 @@ def _node_sharded_test_impl(ctx):
             "  exit 1",
             "fi",
             "cd \"$runfiles_root\"",
-            "if [[ ! -f \"scripts/bazel.ts\" ]]; then",
-            "  echo \"bazel.ts not found under $runfiles_root\" >&2",
+            "if [[ ! -f \"ts_out/scripts/bazel.js\" ]]; then",
+            "  echo \"bazel.js not found under $runfiles_root\" >&2",
             "  exit 1",
             "fi",
             "export THANATOS_BIN=\"$runfiles_root/" + shell_dquote_literal(thanatos_rootpath) + "\"",

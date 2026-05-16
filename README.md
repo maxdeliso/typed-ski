@@ -100,7 +100,7 @@ To run a single test file with Node directly:
 
 ```powershell
 $env:THANATOS_BIN = "$(pwd)\bazel-bin\core\thanatos.exe"
-node --experimental-transform-types --test-global-setup test/globalSetup.ts --test test/path/to/test.ts
+node --disable-warning=ExperimentalWarning --test-global-setup ts_out/test/globalSetup.js --test ts_out/test/path/to/test.js
 ```
 
 To run a single test with Bazel:
@@ -246,7 +246,7 @@ in Block IR, so later representation passes can choose an implementation layout.
 
 ## LLVM Compiler Backend
 
-The compiler features an ahead-of-time **LLVM Backend**, which is now the primary path for compiled Trip program evaluation and combinator correctness testing. The pipeline lowers MiniCore Block IR modules into LLVM IR via the `emitLlvmModule` target. This backend supports generating generic LLVM IR as well as compiling for specific target profiles (e.g., `x86_64-unknown-linux-gnu`, `wasm32-wasi`). The emitted LLVM code utilizes a boxed-runtime representation to bridge Trip's data structures and semantics into native machine code.
+The compiler features an ahead-of-time **LLVM Backend**, which is now the primary path for compiled Trip program evaluation and combinator correctness testing. The pipeline lowers MiniCore Block IR modules into LLVM IR via the `emitLlvmModule` target. This backend supports generating generic LLVM IR as well as compiling for specific target profiles (e.g., `x86_64-unknown-linux-gnu`, `arm64-apple-darwin`). The emitted LLVM code utilizes a boxed-runtime representation to bridge Trip's data structures and semantics into native machine code.
 
 ### Native-v1 Bootstrap Contract
 
@@ -277,9 +277,8 @@ Additional module records repeat the `module` header and source byte payload,
 with one newline between records. The final source byte is the final byte of the
 bundle. `ModuleName` is `[A-Za-z_][A-Za-z0-9_]*`; decimal counts and lengths are
 base-10 safe integers with no leading zero except `0`. Supported bundle targets
-are `generic`, `x86_64-unknown-linux-gnu`, `arm64-apple-darwin`,
-`x86_64-pc-windows-msvc`, `wasm32-unknown-unknown`, and `wasm32-wasi`.
-Supported wrappers are `none`, `c-main`, and `stdin-list-u8`.
+are `generic`, `x86_64-unknown-linux-gnu`, `arm64-apple-darwin`, and
+`x86_64-pc-windows-msvc`. Supported wrappers are `none` and `enabled`.
 
 `target datalayout` is not part of `bundle-v1` yet. When it is added, native-v1
 must carry it explicitly in the bundle contract rather than inferring layout from

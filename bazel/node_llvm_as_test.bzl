@@ -47,7 +47,7 @@ def _node_llvm_as_test_impl(ctx):
             ")",
             "cd /d \"%RUNFILES_ROOT%\"",
             "if not \"%TEST_SHARD_STATUS_FILE%\"==\"\" type nul > \"%TEST_SHARD_STATUS_FILE%\"",
-            "\"%NODE_BIN%\" \"--experimental-transform-types\" \"--preserve-symlinks\" \"--test\" \"--enable-source-maps\" \"test/compiler/llvm/llvmAsSmoke.test.ts\"",
+            "\"%NODE_BIN%\" \"--preserve-symlinks\" \"--test\" \"--enable-source-maps\" \"%RUNFILES_ROOT%\\ts_out\\test\\compiler\\llvm\\llvmAsSmoke.test.js\"",
             "exit /b %ERRORLEVEL%",
             "",
         ])
@@ -82,7 +82,7 @@ def _node_llvm_as_test_impl(ctx):
             "fi",
             "cd \"$runfiles_root\"",
             "[[ -n \"${TEST_SHARD_STATUS_FILE:-}\" ]] && touch \"$TEST_SHARD_STATUS_FILE\"",
-            "\"$node_bin\" --experimental-transform-types --preserve-symlinks --test --enable-source-maps test/compiler/llvm/llvmAsSmoke.test.ts",
+            "\"$node_bin\" --preserve-symlinks --test --enable-source-maps \"$runfiles_root/ts_out/test/compiler/llvm/llvmAsSmoke.test.js\"",
             "",
         ])
 

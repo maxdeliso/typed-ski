@@ -7,7 +7,6 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  BAZEL_TOOLCHAINS_MSVC_ACCEPT_MICROSOFT_VISUAL_STUDIO_BUILDTOOLS_EULA: "1"
 
 permissions:
   contents: read
@@ -20,7 +19,7 @@ jobs:
         os:
           - macos-15
           - ubuntu-24.04
-          - windows-2025
+          - windows-2022
 
     runs-on: ${{ matrix.os }}
 
@@ -30,11 +29,18 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
+      # Host Node only needs to be new enough for `pnpm install` to run
+      # (pnpm 11 requires Node ≥ 22). Every Node-touching command in
+      # this workflow goes through Bazel's hermetic Node 26 via
+      # rules_nodejs, so the host version below is independent of the
+      # version the project targets. Using a major-version spec (`22`)
+      # rather than a specific patch (e.g. 26.1.0) picks the runner's
+      # pre-cached Node and avoids the network download that previously
+      # flaked on the Windows runner.
+      - name: Setup Node.js (for pnpm only)
         uses: actions/setup-node@v6
         with:
-          node-version: "25.6.0"
-          cache: "pnpm"
+          node-version: "22"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -99,7 +105,10 @@ jobs:
 
       - name: Build and stage distribution artifacts for JSR dry run
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        run: pnpm run dist
+        # Use the Bazel target rather than `pnpm run dist`: it runs under
+        # Bazel's hermetic Node 26 instead of the runner's host Node, so
+        # this step is unaffected by host Node version.
+        run: bazel run //:dist
 
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'

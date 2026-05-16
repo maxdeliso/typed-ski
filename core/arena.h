@@ -1,21 +1,10 @@
 #ifndef ARENA_H
 #define ARENA_H
 
-#ifdef __wasm__
-
-typedef unsigned char uint8_t;
-typedef unsigned int uint32_t;
-typedef int int32_t;
-typedef long long int64_t;
-typedef _Bool bool;
-#define true 1
-#define false 0
-#else
-#include <stdbool.h>
-#include <stdint.h>
-#endif
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #define MAX_WORKERS 64
 #define SAB_ABI_VERSION 1

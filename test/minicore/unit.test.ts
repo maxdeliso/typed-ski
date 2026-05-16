@@ -1,6 +1,8 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { evaluateMiniCore, valueToNat } from "../../lib/minicore/evaluator.ts";
 import type {
   ConstructorDef,
@@ -21,9 +23,9 @@ import {
 } from "../../lib/minicore/fromTrip.ts";
 import * as miniCoreIndex from "../../lib/minicore/index.ts";
 
-const PRELUDE_URL = new URL("../../lib/prelude.trip", import.meta.url);
-const NAT_URL = new URL("../../lib/nat.trip", import.meta.url);
-const BIN_URL = new URL("../../lib/bin.trip", import.meta.url);
+const PRELUDE_URL = join(workspaceRoot, "lib", "prelude.trip");
+const NAT_URL = join(workspaceRoot, "lib", "nat.trip");
+const BIN_URL = join(workspaceRoot, "lib", "bin.trip");
 
 const fn = (
   id: number,

@@ -25,7 +25,19 @@ jobs:
       matrix:
         include:
           - language: actions
+            build-mode: none
           - language: javascript-typescript
+            build-mode: none
+          # c-cpp uses build-mode: none (buildless extraction): CodeQL walks
+          # the source tree and analyses the .c/.h files directly. Wiring up
+          # build-mode: manual against Bazel proved fragile — Bazel's cc
+          # toolchain ignores the CC/CXX env vars that codeql-init sets, so
+          # the compiler interceptor sees zero compilations and CodeQL fails
+          # the run ("CodeQL could not process any code written in C/C++").
+          # Buildless analysis covers our case fine; the C codebase is small
+          # and lives entirely under core/.
+          - language: c-cpp
+            build-mode: none
 
     steps:
       - uses: actions/checkout@v6
@@ -33,6 +45,7 @@ jobs:
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - uses: github/codeql-action/analyze@v4
         with:

@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.18.19",
+  "version": "0.18.20",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -29,31 +29,32 @@
     }
   },
   "engines": {
-    "node": "25.x"
+    "node": "26.x"
   },
-  "packageManager": "pnpm@10.33.2",
+  "packageManager": "pnpm@11.1.1",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
     ]
   },
   "scripts": {
-    "tripc": "node --disable-warning=ExperimentalWarning --experimental-transform-types bin/tripc.ts",
-    "bench:avl": "node --disable-warning=ExperimentalWarning --experimental-transform-types test/avlBenchmark.ts",
-    "dist": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts dist",
+    "build:ts": "tsc --project tsconfig.emit.json",
+    "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
+    "bench:avl": "node --disable-warning=ExperimentalWarning ts_out/test/avlBenchmark.js",
+    "dist": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/bazel.ts test"
+    "test": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js test"
   },
   "dependencies": {
     "random-seed": "0.3.0",
     "ts-morph": "^28.0.0"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.7.0",
     "@types/random-seed": "^0.3.5",
     "esbuild": "^0.28.0",
     "json-stringify-safe": "5.0.1",
-    "pnpm": "10.33.2",
+    "pnpm": "11.1.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3"
   }

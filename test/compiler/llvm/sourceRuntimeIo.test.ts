@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "../../util/test_shim.ts";
+import { loadWorkspaceFile } from "../../util/fileLoader.ts";
 import { emitLlvmModule } from "../../../lib/compiler/llvm/index.ts";
 import {
   anfToBlockModule,
@@ -10,7 +10,7 @@ import {
   type BlockModule,
 } from "../../../lib/minicore/index.ts";
 
-const preludeSource = readFileSync("lib/prelude.trip", "utf8");
+const preludeSource = loadWorkspaceFile("lib/prelude.trip");
 
 describe("LLVM source lowering - runtime IO", () => {
   it("lowers Prelude.writeOne to the Trip runtime ABI", () => {

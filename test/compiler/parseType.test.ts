@@ -7,10 +7,8 @@ import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { createThanatosEvaluator, thanatosAvailable } from "../../lib/index.ts";
 import { UnChurchBoolean } from "../../lib/ski/church.ts";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { join } from "node:path";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
 it(
   "bootstrapped Parser.parseType correctly parses a complex type",
@@ -19,16 +17,16 @@ it(
     const preludeObject = await getPreludeObject();
     const natObject = await getNatObject();
     const lexerObject = await loadTripModuleObject(
-      new URL("../../lib/compiler/lexer.trip", import.meta.url),
+      join(workspaceRoot, "lib", "compiler", "lexer.trip"),
     );
     const parserObject = await loadTripModuleObject(
-      new URL("../../lib/compiler/parser.trip", import.meta.url),
+      join(workspaceRoot, "lib", "compiler", "parser.trip"),
     );
     const binObject = await loadTripModuleObject(
-      new URL("../../lib/bin.trip", import.meta.url),
+      join(workspaceRoot, "lib", "bin.trip"),
     );
     const testObject = await loadTripModuleObject(
-      join(__dirname, "inputs", "testParseType.trip"),
+      join(workspaceRoot, "test", "compiler", "inputs", "testParseType.trip"),
     );
 
     const skiExpression = linkModules([

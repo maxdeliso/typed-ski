@@ -103,14 +103,21 @@ describe("JSR Packaging Configuration", () => {
 
   describe("library integration", () => {
     it("compiler library exports", async () => {
-      // Test that the compiler library is properly exported
+      // Guards the slim public API surface. Internal symbols (TripCObject,
+      // compileToObjectFile, MiniCore IR types, Bundle-v1 helpers, etc.) are
+      // intentionally not re-exported from lib/index.ts; they remain
+      // importable from their specific module paths but are not part of the
+      // stable contract.
       const libIndex = await readFile(join(srcRoot, "lib/index.ts"), "utf-8");
 
-      assert.ok(libIndex.includes("compileToObjectFile"));
-      assert.ok(libIndex.includes("compileToObjectFileString"));
-      assert.ok(libIndex.includes("TripCObject"));
-      assert.ok(libIndex.includes("ModuleImport"));
-      assert.ok(libIndex.includes("SingleFileCompilerError"));
+      assert.ok(libIndex.includes("compile"));
+      assert.ok(libIndex.includes("compileTripSourceToLlvm"));
+      assert.ok(libIndex.includes("parseSKI"));
+      assert.ok(libIndex.includes("unparseSKI"));
+      assert.ok(libIndex.includes("bracketLambda"));
+      assert.ok(libIndex.includes("typecheckSystemF"));
+      assert.ok(libIndex.includes("createThanatosEvaluator"));
+      assert.ok(libIndex.includes("getPreludeObject"));
     });
 
     it("compiler module structure", () => {

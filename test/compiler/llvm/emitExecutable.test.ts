@@ -143,7 +143,8 @@ describe("LLVM emitter - executable wrapper", () => {
 
     assert.throws(() => emitLlvmModule(module, { emitMainWrapper: true }), {
       name: LlvmEmissionError.name,
-      message: "Cannot emit main wrapper for parameterized entry Main.main with 2 parameters",
+      message:
+        "Cannot emit main wrapper for parameterized entry Main.main with 2 parameters",
     });
   });
 });

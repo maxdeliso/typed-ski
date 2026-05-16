@@ -105,7 +105,7 @@ export function emitLlvmModule(
       "declare i64 @trip_obj_field(ptr, i64) nounwind readonly willreturn",
     );
   }
-  
+
   let needsStdinDecl = false;
   if (emitMainWrapperFlag) {
     const entry = module.symbols.find(
@@ -207,7 +207,7 @@ function emitMainWrapper(
   writer.line("entry:");
 
   // void returns are mapped to a 0 exit code to support future layering of exception handling.
-  
+
   if (entry.params.length === 0) {
     if (entryReturnType === "void") {
       writer.indented(`call void ${entryName}()`);
@@ -225,9 +225,7 @@ function emitMainWrapper(
       writer.indented("%exit_code = trunc i64 %trip_result to i32");
       writer.indented("ret i32 %exit_code");
     } else {
-      writer.indented(
-        `%trip_result = call ${entryReturnType} ${entryName}()`,
-      );
+      writer.indented(`%trip_result = call ${entryReturnType} ${entryName}()`);
       writer.indented("ret i32 0");
     }
   } else if (entry.params.length === 1) {
@@ -235,20 +233,24 @@ function emitMainWrapper(
     const entryParamType = lowerLlvmValueType(param!.type);
     writer.indented("%trip_source = call ptr @trip_read_stdin_list_u8()");
     if (entryReturnType === "void") {
-      writer.indented(
-        `call void ${entryName}(${entryParamType} %trip_source)`,
-      );
+      writer.indented(`call void ${entryName}(${entryParamType} %trip_source)`);
       writer.indented("ret i32 0");
     } else if (entryReturnType === "i8") {
-      writer.indented(`%trip_result = call i8 ${entryName}(${entryParamType} %trip_source)`);
+      writer.indented(
+        `%trip_result = call i8 ${entryName}(${entryParamType} %trip_source)`,
+      );
       writer.indented("%exit_code = zext i8 %trip_result to i32");
       writer.indented("ret i32 %exit_code");
     } else if (entryReturnType === "i1") {
-      writer.indented(`%trip_result = call i1 ${entryName}(${entryParamType} %trip_source)`);
+      writer.indented(
+        `%trip_result = call i1 ${entryName}(${entryParamType} %trip_source)`,
+      );
       writer.indented("%exit_code = zext i1 %trip_result to i32");
       writer.indented("ret i32 %exit_code");
     } else if (entryReturnType === "i64") {
-      writer.indented(`%trip_result = call i64 ${entryName}(${entryParamType} %trip_source)`);
+      writer.indented(
+        `%trip_result = call i64 ${entryName}(${entryParamType} %trip_source)`,
+      );
       writer.indented("%exit_code = trunc i64 %trip_result to i32");
       writer.indented("ret i32 %exit_code");
     } else {

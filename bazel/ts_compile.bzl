@@ -19,9 +19,26 @@ def _ts_compile_impl(ctx):
         fail("Cannot find typescript/lib/tsc.js in node_modules")
 
     ts_config_generated = ctx.actions.declare_file(ctx.label.name + "_tsconfig.json")
-    
+
     ups = "/".join([".." for _ in ctx.bin_dir.path.split("/")])
-    
+
+    # Generated .ts files (produced by other Bazel actions, e.g. codegen rules)
+    # live under bazel-out/<config>/bin/..., not in the source tree. The
+    # source-relative include patterns below (`%s/lib/**/*` etc., which resolve
+    # to execroot/lib/**/*) do not reach them, and relying on rootDirs to make
+    # tsc follow imports into them works on Windows but silently no-ops under
+    # the strict darwin-sandbox / linux-sandbox on CI. List each generated .ts
+    # file by its short_path so tsc visits and emits it.
+    generated_ts_includes = [
+        f.short_path
+        for f in ctx.files.srcs
+        if not f.is_source and (f.path.endswith(".ts") or f.path.endswith(".tsx"))
+    ]
+    generated_ts_include_lines = "".join([
+        ",\n    \"%s\"" % path
+        for path in generated_ts_includes
+    ])
+
     config_content = """{
   "extends": "%s/%s",
   "compilerOptions": {
@@ -44,9 +61,9 @@ def _ts_compile_impl(ctx):
     "%s/lib/**/*",
     "%s/scripts/bazel.ts",
     "%s/scripts/bazelBuildDist.ts",
-    "%s/test/**/*"
+    "%s/test/**/*"%s
   ]
-}""" % (ups, ctx.file.tsconfig.path, ctx.attr.out_dir, ups, ups, ups, ups, ups, ups, ups, ups)
+}""" % (ups, ctx.file.tsconfig.path, ctx.attr.out_dir, ups, ups, ups, ups, ups, ups, ups, ups, generated_ts_include_lines)
     
     ctx.actions.write(ts_config_generated, config_content)
 

@@ -230,7 +230,7 @@ LLVM EMIT MODE:
     --entry-module <name>
                      Entry module name; defaults to the input module declaration
     --target <triple>
-                     generic | arm64-apple-darwin | x86_64-unknown-linux-gnu | x86_64-pc-windows-msvc | wasm32-unknown-unknown | wasm32-wasi
+                     generic | arm64-apple-darwin | x86_64-unknown-linux-gnu | x86_64-pc-windows-msvc
     --emit-main-wrapper
                      Emit an int main() wrapper that calls the Trip entry
     --main-wrapper <kind>

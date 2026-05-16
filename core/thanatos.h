@@ -14,8 +14,8 @@ typedef struct {
   const char *stdin_path;
 } ThanatosConfig;
 
-/* READ_ONE semantics now match JS/WASM more closely: if no byte is available
- * yet, native waits until one arrives instead of failing. If stdin_path == NULL,
+/* READ_ONE blocks until a byte is available: if none is ready yet, native
+ * waits until one arrives instead of failing. If stdin_path == NULL,
  * READ_ONE remains parked indefinitely. For regular files, EOF is treated as a
  * temporary condition so appending later bytes will wake pending reads. */
 
@@ -34,8 +34,7 @@ void thanatos_set_stdout_handler(void (*handler)(uint8_t, void *), void *ctx);
  * WRITE_ONE waiters may never resume. */
 void thanatos_start_threads(bool enable_stdout_pump);
 
-/** Reduce with optional stdin (from config). Use same binary as JS/WASM for
- * identical stdout. */
+/** Reduce with optional stdin (from config). */
 uint32_t thanatos_reduce(uint32_t node_id, uint32_t max_steps);
 
 /** Reduce to normal form (unbounded steps). Convenience for daemon REDUCE. */

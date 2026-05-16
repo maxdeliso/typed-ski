@@ -273,13 +273,7 @@ poly parseTarget = \value : List U8 =>
             (\u : U8 =>
               if [Result (List U8) (List U8)] (eqListU8 value "x86_64-pc-windows-msvc")
                 (\u : U8 => Ok [List U8] [List U8] value)
-                (\u : U8 =>
-                  if [Result (List U8) (List U8)] (eqListU8 value "wasm32-unknown-unknown")
-                    (\u : U8 => Ok [List U8] [List U8] value)
-                    (\u : U8 =>
-                      if [Result (List U8) (List U8)] (eqListU8 value "wasm32-wasi")
-                        (\u : U8 => Ok [List U8] [List U8] value)
-                        (\u : U8 => Err [List U8] [List U8] "bad target"))))))
+                (\u : U8 => Err [List U8] [List U8] "bad target"))))
 
 poly parseWrapper = \value : List U8 =>
   if [Result (List U8) (List U8)] (eqListU8 value "none")

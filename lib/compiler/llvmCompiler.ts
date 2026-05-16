@@ -48,8 +48,6 @@ export function parseLlvmTarget(value: string): LlvmTargetProfile {
     case "generic":
     case "x86_64-unknown-linux-gnu":
     case "x86_64-pc-windows-msvc":
-    case "wasm32-unknown-unknown":
-    case "wasm32-wasi":
       return { kind: value };
     default:
       throw new Error(`Unsupported LLVM target: ${value}`);

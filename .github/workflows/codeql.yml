@@ -25,14 +25,38 @@ jobs:
       matrix:
         include:
           - language: actions
+            build-mode: none
           - language: javascript-typescript
+            build-mode: none
+          # c-cpp uses build-mode: manual so CodeQL's compiler interceptor
+          # observes the actual Bazel cc_* compilations. --spawn_strategy=local
+          # ensures every compile runs in the host shell where the CC/CXX env
+          # vars (set by codeql-init) take effect — under the default
+          # sandboxed/processwrapper strategy those env vars do not reach the
+          # compiler subprocess.
+          - language: c-cpp
+            build-mode: manual
 
     steps:
       - uses: actions/checkout@v6
 
+      - name: Setup Bazel
+        if: matrix.language == 'c-cpp'
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build native C targets for CodeQL
+        if: matrix.language == 'c-cpp'
+        run: bazel build --spawn_strategy=local //core/...
 
       - uses: github/codeql-action/analyze@v4
         with:

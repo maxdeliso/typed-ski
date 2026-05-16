@@ -131,10 +131,10 @@ describe("LLVM emitter - executable wrapper", () => {
     );
   });
 
-  it("rejects a C main wrapper for a parameterized entry", () => {
+  it("rejects a main wrapper for an entry with too many parameters", () => {
     const module = moduleOf([
-      fn(0, "Main.main", [param(0)], u8, [
-        block("entry", [param(0)], [], {
+      fn(0, "Main.main", [param(0), param(1)], u8, [
+        block("entry", [param(0), param(1)], [], {
           kind: "return",
           value: litU8(0),
         }),
@@ -143,7 +143,7 @@ describe("LLVM emitter - executable wrapper", () => {
 
     assert.throws(() => emitLlvmModule(module, { emitMainWrapper: true }), {
       name: LlvmEmissionError.name,
-      message: "Cannot emit C main wrapper for parameterized entry Main.main",
+      message: "Cannot emit main wrapper for parameterized entry Main.main with 2 parameters",
     });
   });
 });

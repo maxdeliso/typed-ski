@@ -2,7 +2,7 @@ OK
 version bundle-parse-summary-v1
 entry Bin
 target x86_64-unknown-linux-gnu
-wrapper stdin-list-u8
+wrapper enabled
 modules 2
 module Bin
 declared Bin

@@ -201,7 +201,7 @@ export const bootstrap = {
       const llvm = await compileTripToLlvm(compilerSource, {
         entryModule: "Compiler",
         moduleSources,
-        mainWrapper: { kind: "stdin-list-u8" },
+        emitMainWrapper: true,
       });
 
       const llPath = join(tempDir, "compiler.ll");

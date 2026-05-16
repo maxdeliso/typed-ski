@@ -23,7 +23,6 @@ export interface CompileTripSourceToLlvmOptions {
   target?: LlvmTargetProfile;
   representation?: LlvmRepresentation;
   emitMainWrapper?: boolean;
-  mainWrapper?: EmitLlvmOptions["mainWrapper"];
   validateNativeV1Subset?: boolean;
 }
 
@@ -33,7 +32,6 @@ export interface CompileTripModulesToLlvmOptions {
   target?: LlvmTargetProfile;
   representation?: LlvmRepresentation;
   emitMainWrapper?: boolean;
-  mainWrapper?: EmitLlvmOptions["mainWrapper"];
   validateNativeV1Subset?: boolean;
 }
 
@@ -116,7 +114,6 @@ export function compileTripModulesToLlvm(
     target: options.target,
     representation: options.representation ?? "boxed-runtime",
     emitMainWrapper: options.emitMainWrapper,
-    mainWrapper: options.mainWrapper,
   });
 }
 
@@ -140,7 +137,6 @@ export function compileTripSourceToLlvm(
     target: options.target,
     representation: options.representation,
     emitMainWrapper: options.emitMainWrapper,
-    mainWrapper: options.mainWrapper,
     validateNativeV1Subset: options.validateNativeV1Subset,
   });
 }
@@ -149,7 +145,7 @@ export function compileTripBundleV1ToLlvm(
   bundleSource: Uint8Array,
   options: Omit<
     CompileTripModulesToLlvmOptions,
-    "modules" | "entryModule" | "target" | "emitMainWrapper" | "mainWrapper"
+    "modules" | "entryModule" | "target" | "emitMainWrapper"
   > = {},
 ): string {
   const bundle = parseTripBundleV1(bundleSource);
@@ -169,6 +165,6 @@ export function compileTripBundleV1ToLlvm(
     modules,
     entryModule: bundle.entryModule,
     target: bundle.target,
-    mainWrapper: bundle.mainWrapper,
+    emitMainWrapper: bundle.emitMainWrapper,
   });
 }

@@ -59,7 +59,6 @@ interface CLIOptions {
   entryModule?: string;
   target: LlvmTargetProfile;
   emitMainWrapper: boolean;
-  mainWrapper?: EmitLlvmOptions["mainWrapper"];
   bundleV1: boolean;
 }
 
@@ -149,26 +148,6 @@ function parseArgs(args: string[]): {
       case "--emit-main-wrapper":
         options.emitMainWrapper = true;
         break;
-      case "--main-wrapper": {
-        const value = requireValue(args, ++i, arg);
-        switch (value) {
-          case "none":
-            options.mainWrapper = undefined;
-            options.emitMainWrapper = false;
-            break;
-          case "c-main":
-            options.mainWrapper = { kind: "c-main" };
-            break;
-          case "stdin-list-u8":
-            options.mainWrapper = { kind: "stdin-list-u8" };
-            break;
-          default:
-            console.error(`Unsupported main wrapper: ${value}`);
-            console.error("Use --main-wrapper none|c-main|stdin-list-u8.");
-            process.exit(1);
-        }
-        break;
-      }
       default:
         if (arg.startsWith("-")) {
           console.error(`Unknown option: ${arg}`);
@@ -233,8 +212,6 @@ LLVM EMIT MODE:
                      generic | arm64-apple-darwin | x86_64-unknown-linux-gnu | x86_64-pc-windows-msvc
     --emit-main-wrapper
                      Emit an int main() wrapper that calls the Trip entry
-    --main-wrapper <kind>
-                     none | c-main | stdin-list-u8
 
 LINKING MODE:
     <input1.tripc>   First object file to link
@@ -405,7 +382,6 @@ async function emitLlvmFile(
       moduleSources,
       target: options.target,
       emitMainWrapper: options.emitMainWrapper,
-      mainWrapper: options.mainWrapper,
     });
 
     if (options.stdout) {

@@ -12,15 +12,11 @@ export type LlvmTargetProfile =
 export interface EmitLlvmOptions {
   target?: LlvmTargetProfile;
   representation?: LlvmRepresentation;
-  /** Legacy shorthand for `mainWrapper: { kind: "c-main" }`. */
   emitMainWrapper?: boolean;
-  mainWrapper?: LlvmMainWrapper;
 }
 /* node:coverage enable */
 
 export type LlvmRepresentation = "scalar-v0" | "boxed-runtime";
-
-export type LlvmMainWrapper = { kind: "c-main" } | { kind: "stdin-list-u8" };
 /* node:coverage enable */
 
 export type LlvmV0PrimitiveKind = "addU8" | "subU8" | "eqU8" | "ltU8";

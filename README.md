@@ -278,8 +278,7 @@ with one newline between records. The final source byte is the final byte of the
 bundle. `ModuleName` is `[A-Za-z_][A-Za-z0-9_]*`; decimal counts and lengths are
 base-10 safe integers with no leading zero except `0`. Supported bundle targets
 are `generic`, `x86_64-unknown-linux-gnu`, `arm64-apple-darwin`, and
-`x86_64-pc-windows-msvc`. Supported wrappers are `none`, `c-main`, and
-`stdin-list-u8`.
+`x86_64-pc-windows-msvc`. Supported wrappers are `none` and `enabled`.
 
 `target datalayout` is not part of `bundle-v1` yet. When it is added, native-v1
 must carry it explicitly in the bundle contract rather than inferring layout from

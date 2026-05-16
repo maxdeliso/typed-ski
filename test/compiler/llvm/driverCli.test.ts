@@ -95,7 +95,7 @@ describe("tripc LLVM driver", () => {
         serializeTripBundleV1({
           entryModule: "Main",
           target: { kind: "x86_64-unknown-linux-gnu" },
-          mainWrapper: { kind: "c-main" },
+          emitMainWrapper: true,
           modules: [
             {
               name: "Main",

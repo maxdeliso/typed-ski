@@ -28,7 +28,6 @@ export {
   type EmitLlvmOptions,
   type LlvmIncomingEdge,
   type LlvmIncomingEdges,
-  type LlvmMainWrapper,
   type LlvmRepresentation,
   type LlvmTargetProfile,
 } from "./llvm/index.ts";

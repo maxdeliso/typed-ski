@@ -54,7 +54,7 @@ function bundleSource(fields: {
     "TRIP-BUNDLE-V1",
     `entry ${fields.entry ?? "Main"}`,
     `target ${fields.target ?? "x86_64-unknown-linux-gnu"}`,
-    `wrapper ${fields.wrapper ?? "c-main"}`,
+    `wrapper ${fields.wrapper ?? "enabled"}`,
     `modules ${fields.modules.length}`,
     ...fields.modules.map((module) => moduleRecord(module.name, module.source)),
   ].join("\n");
@@ -77,7 +77,7 @@ export function realBootstrapBundle(moduleNames: string[]): Uint8Array {
   return serializeTripBundleV1({
     entryModule: moduleNames.at(-1) ?? "Prelude",
     target: { kind: "x86_64-unknown-linux-gnu" },
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
     modules: moduleNames.map((name) => ({
       name,
       source: realBootstrapModuleSource(name),
@@ -100,7 +100,7 @@ async function compileBundleInventoryExecutable(
       "Avl",
       "Nat",
     ]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "bundle-inventory.ll");
   await writeFile(llPath, llvm, "utf8");
@@ -121,7 +121,7 @@ async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
       "Nat",
       "DataEnv",
     ]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "module-env.ll");
   await writeFile(llPath, llvm, "utf8");
@@ -132,7 +132,7 @@ describe("bundle-v1", () => {
   const bundle: TripBundleV1 = {
     entryModule: "Main",
     target: { kind: "x86_64-unknown-linux-gnu" },
-    mainWrapper: { kind: "c-main" },
+    emitMainWrapper: true,
     modules: [
       {
         name: "Main",
@@ -164,7 +164,7 @@ poly main = #u8(7)
         "TRIP-BUNDLE-V1",
         "entry Main",
         "target x86_64-unknown-linux-gnu",
-        "wrapper c-main",
+        "wrapper enabled",
         "modules 1",
         "module Main 43",
         `module Main
@@ -393,7 +393,7 @@ opaque Handle
               "TRIP-BUNDLE-V1",
               "entry Main",
               "target x86_64-unknown-linux-gnu",
-              "wrapper c-main",
+              "wrapper enabled",
               "modules 1",
               "module Main 1",
             ].join("\n") + "\n",
@@ -672,7 +672,7 @@ native readOne : -> U8
                 "TRIP-BUNDLE-V1",
                 "entry Main",
                 "target x86_64-unknown-linux-gnu",
-                "wrapper c-main",
+                "wrapper enabled",
                 "modules 1",
                 "module Main 1",
               ].join("\n") + "\n",
@@ -867,7 +867,7 @@ poly seven = #u8(7)
               "TRIP-BUNDLE-V1",
               "entry Main",
               "target x86_64-unknown-linux-gnu",
-              "wrapper c-main",
+              "wrapper enabled",
               "modules 1",
               "module Main 999",
               mainSource,
@@ -900,7 +900,7 @@ poly seven = #u8(7)
                 "TRIP-BUNDLE-V1",
                 "entry Main",
                 "target x86_64-unknown-linux-gnu",
-                "wrapper c-main",
+                "wrapper enabled",
                 "modules 1",
                 "module Main 1",
               ].join("\n") + "\n",
@@ -947,7 +947,7 @@ poly seven = #u8(7)
     const serialized = serializeTripBundleV1({
       entryModule: "Main",
       target: { kind: "x86_64-unknown-linux-gnu" },
-      mainWrapper: { kind: "c-main" },
+      emitMainWrapper: true,
       modules: [
         {
           name: "Main",
@@ -984,7 +984,7 @@ poly seven = #u8(7)
       serializeTripBundleV1({
         entryModule: "Main",
         target: { kind: "x86_64-unknown-linux-gnu" },
-        mainWrapper: { kind: "stdin-list-u8" },
+        emitMainWrapper: true,
         modules: [
           {
             name: "Main",
@@ -1059,7 +1059,7 @@ poly seven = #u8(7)
             "TRIP-BUNDLE-V1",
             "target x86_64-unknown-linux-gnu",
             "entry Main",
-            "wrapper c-main",
+            "wrapper enabled",
             "modules 0",
           ].join("\n"),
         ),
@@ -1094,7 +1094,7 @@ poly seven = #u8(7)
             "TRIP-BUNDLE-V1",
             "entry Main",
             "target x86_64-unknown-linux-gnu",
-            "wrapper c-main",
+            "wrapper enabled",
             "modules 1",
             "module Main 999",
             mainSource,
@@ -1166,7 +1166,7 @@ poly seven = #u8(7)
                 "TRIP-BUNDLE-V1",
                 "entry Main",
                 "target x86_64-unknown-linux-gnu",
-                "wrapper c-main",
+                "wrapper enabled",
                 "modules 1",
                 "module Main 1",
               ].join("\n") + "\n",
@@ -1239,7 +1239,7 @@ async function compileBundleSummaryExecutable(
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleSummary",
     moduleSources: await loadCommonModules(["Prelude", "Bin"]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "bundle-summary.ll");
   await writeFile(llPath, llvm, "utf8");
@@ -1259,7 +1259,7 @@ async function compileBundleParseSummaryExecutable(
       "Parser",
       "BundleSummary",
     ]),
-    mainWrapper: { kind: "stdin-list-u8" },
+    emitMainWrapper: true,
   });
   const llPath = join(tempDir, "bundle-parse-summary.ll");
   await writeFile(llPath, llvm, "utf8");

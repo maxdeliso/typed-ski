@@ -30,13 +30,18 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      # No host Node.js setup: Bazel provides a hermetic Node 26 via
-      # rules_nodejs, and every Node-touching command in this workflow
-      # (bazel build/test/run) goes through that. pnpm install below runs
-      # under whatever Node the runner image ships (currently 22/24), which
-      # is fine for dependency resolution. Removing actions/setup-node also
-      # removed a recurring "Attempting to download 26.1.0..." flake on the
-      # Windows runner.
+      # Host Node only needs to be new enough for `pnpm install` to run
+      # (pnpm 11 requires Node ≥ 22). Every Node-touching command in
+      # this workflow goes through Bazel's hermetic Node 26 via
+      # rules_nodejs, so the host version below is independent of the
+      # version the project targets. Using a major-version spec (`22`)
+      # rather than a specific patch (e.g. 26.1.0) picks the runner's
+      # pre-cached Node and avoids the network download that previously
+      # flaked on the Windows runner.
+      - name: Setup Node.js (for pnpm only)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

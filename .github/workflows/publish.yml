@@ -22,8 +22,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      # No host Node.js setup: Bazel provides hermetic Node 26 via
-      # rules_nodejs, and every Node-touching command goes through it.
+      # Host Node only needs to be new enough for `pnpm install`. Every
+      # Node-touching command goes through Bazel's hermetic Node 26.
+      - name: Setup Node.js (for pnpm only)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

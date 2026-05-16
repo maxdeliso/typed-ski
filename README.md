@@ -99,7 +99,7 @@ bazelisk test //:native_tests
 To run a single test file with Node directly:
 
 ```powershell
-$env:THANATOS_BIN = "$(pwd)\bazel-bin\core\thanatos.exe"
+$env:THANATOS_BIN = "$(pwd)\bazel-bin\runtime\thanatos\thanatos.exe"
 node --disable-warning=ExperimentalWarning --test-global-setup ts_out/test/globalSetup.js --test ts_out/test/path/to/test.js
 ```
 

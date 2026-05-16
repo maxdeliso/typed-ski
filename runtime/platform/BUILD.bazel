@@ -1,0 +1,80 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(
+    ["**"],
+    exclude = ["*.generated.*"],
+))
+
+filegroup(
+    name = "platform",
+    srcs = glob(
+        ["**"],
+        exclude = ["*.generated.*"],
+    ),
+)
+
+config_setting(
+    name = "windows",
+    constraint_values = ["@platforms//os:windows"],
+)
+
+COMMON_COPTS = [
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Wstrict-prototypes",
+    "-Werror",
+]
+
+POSIX_PTHREAD_FLAGS = select({
+    ":windows": [],
+    "//conditions:default": [
+        "-pthread",
+        "-D_POSIX_C_SOURCE=200809L",
+        "-D_GNU_SOURCE",
+        "-D_DARWIN_C_SOURCE",
+    ],
+})
+
+HOST_PLATFORM_SRCS = select({
+    ":windows": ["host_platform_windows.c"],
+    "//conditions:default": ["host_platform_posix.c"],
+})
+
+cc_library(
+    name = "util",
+    srcs = ["util.c"],
+    hdrs = ["util.h"],
+    copts = COMMON_COPTS,
+    features = ["-coverage"],
+    includes = ["."],
+    tags = ["no-coverage"],
+)
+
+cc_library(
+    name = "arena_runtime",
+    srcs = [
+        "arena.c",
+    ] + HOST_PLATFORM_SRCS,
+    hdrs = [
+        "arena.h",
+        "host_platform.h",
+    ],
+    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
+    features = ["-coverage"],
+    includes = ["."],
+    tags = ["no-coverage"],
+)
+
+cc_test(
+    name = "util_test",
+    srcs = ["util_test.c"],
+    copts = COMMON_COPTS,
+    features = ["-coverage"],
+    linkstatic = 1,
+    tags = ["no-coverage"],
+    deps = [":util"],
+)

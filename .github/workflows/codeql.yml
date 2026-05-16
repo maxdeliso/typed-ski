@@ -35,7 +35,7 @@ jobs:
           # the compiler interceptor sees zero compilations and CodeQL fails
           # the run ("CodeQL could not process any code written in C/C++").
           # Buildless analysis covers our case fine; the C codebase is small
-          # and lives entirely under core/.
+          # and lives entirely under runtime/.
           - language: c-cpp
             build-mode: none
 

@@ -1,0 +1,35 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(
+    ["**"],
+    exclude = ["*.generated.*"],
+))
+
+filegroup(
+    name = "trip_runtime_srcs",
+    srcs = glob(
+        ["**"],
+        exclude = ["*.generated.*"],
+    ),
+)
+
+COMMON_COPTS = [
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Wstrict-prototypes",
+    "-Werror",
+]
+
+cc_library(
+    name = "trip_runtime_io",
+    srcs = ["trip_runtime.c"],
+    hdrs = ["trip_runtime.h"],
+    copts = COMMON_COPTS,
+    features = ["-coverage"],
+    includes = ["."],
+    tags = ["no-coverage"],
+)

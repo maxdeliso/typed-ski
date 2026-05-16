@@ -1,10 +1,8 @@
 import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
-import {
-  externalReferences,
-  extractDefinitionValue,
-  parseTripLang,
-} from "../../../lib/index.ts";
+import { externalReferences } from "../../../lib/meta/frontend/externalReferences.ts";
+import { extractDefinitionValue } from "../../../lib/meta/frontend/symbolTable.ts";
+import { parseTripLang } from "../../../lib/parser/tripLang.ts";
 import { required, requiredAt } from "../../util/required.ts";
 
 function getFirstDefinitionValue(input: string) {

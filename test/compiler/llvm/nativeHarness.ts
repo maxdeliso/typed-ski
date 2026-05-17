@@ -73,13 +73,13 @@ export async function compileLlvmToExecutable(
   const allRuntimeSources =
     runtimeSources.length > 0
       ? runtimeSources
-      : [join(PROJECT_ROOT, "core/trip_runtime.c")];
+      : [join(PROJECT_ROOT, "runtime/trip/trip_runtime.c")];
 
   const args = [
     llPath,
     ...allRuntimeSources,
     "-I",
-    join(PROJECT_ROOT, "core"),
+    join(PROJECT_ROOT, "runtime/trip"),
     ...macosSdkArgs(),
     "-o",
     exePath,

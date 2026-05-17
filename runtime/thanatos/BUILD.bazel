@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//bazel:codegen.bzl", "codegen_rule")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,7 +8,7 @@ exports_files(glob(
 ))
 
 filegroup(
-    name = "core",
+    name = "thanatos_srcs",
     srcs = glob(
         ["**"],
         exclude = ["*.generated.*"],
@@ -40,55 +39,18 @@ POSIX_PTHREAD_FLAGS = select({
     ],
 })
 
-HOST_PLATFORM_SRCS = select({
-    ":windows": ["host_platform_windows.c"],
-    "//conditions:default": ["host_platform_posix.c"],
-})
-
-cc_library(
-    name = "util",
-    srcs = ["util.c"],
-    hdrs = ["util.h"],
-    copts = COMMON_COPTS,
-    features = ["-coverage"],
-    tags = ["no-coverage"],
-)
-
-cc_library(
-    name = "arena_runtime",
-    srcs = [
-        "arena.c",
-    ] + HOST_PLATFORM_SRCS,
-    hdrs = [
-        "arena.h",
-        "host_platform.h",
-    ],
-    copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
-    features = ["-coverage"],
-    includes = ["."],
-    tags = ["no-coverage"],
-)
-
 cc_library(
     name = "ski_io",
     srcs = ["ski_io.c"],
     hdrs = ["ski_io.h"],
     copts = COMMON_COPTS,
     features = ["-coverage"],
+    includes = ["."],
     tags = ["no-coverage"],
     deps = [
-        ":arena_runtime",
-        ":util",
+        "//runtime/platform:arena_runtime",
+        "//runtime/platform:util",
     ],
-)
-
-cc_library(
-    name = "trip_runtime_io",
-    srcs = ["trip_runtime.c"],
-    hdrs = ["trip_runtime.h"],
-    copts = COMMON_COPTS,
-    features = ["-coverage"],
-    tags = ["no-coverage"],
 )
 
 cc_library(
@@ -103,11 +65,12 @@ cc_library(
     ],
     copts = COMMON_COPTS + POSIX_PTHREAD_FLAGS,
     features = ["-coverage"],
+    includes = ["."],
     tags = ["no-coverage"],
     deps = [
-        ":arena_runtime",
         ":ski_io",
-        ":util",
+        "//runtime/platform:arena_runtime",
+        "//runtime/platform:util",
     ],
 )
 
@@ -131,8 +94,8 @@ cc_test(
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [
-        ":arena_runtime",
         ":ski_io",
+        "//runtime/platform:arena_runtime",
     ],
 )
 
@@ -145,9 +108,9 @@ cc_test(
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [
-        ":arena_runtime",
         ":ski_io",
-        ":util",
+        "//runtime/platform:arena_runtime",
+        "//runtime/platform:util",
     ],
 )
 
@@ -171,16 +134,6 @@ cc_test(
     linkstatic = 1,
     tags = ["no-coverage"],
     deps = [":thanatos_lib"],
-)
-
-cc_test(
-    name = "util_test",
-    srcs = ["util_test.c"],
-    copts = COMMON_COPTS,
-    features = ["-coverage"],
-    linkstatic = 1,
-    tags = ["no-coverage"],
-    deps = [":util"],
 )
 
 cc_binary(

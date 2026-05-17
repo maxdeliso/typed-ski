@@ -12,10 +12,7 @@ typed-ski-native.sln
 typed-ski-*.vcxproj
 typed-ski-*.vcxproj.filters
 *.vcxproj.user
-bazel-bin
-bazel-out
-bazel-testlogs
-bazel-typed-ski
+bazel-*
 .bazel-user-root/
 jsr.json
 .tmp/

@@ -118,7 +118,7 @@ NODE_DATA_BASE = glob(
     "//scripts",
     "//lib/shared",
     "//lib/evaluator",
-    "//core",
+    "//runtime",
     ":node_modules/pnpm",
     "//lib/shared:version_generated",
     ":jsr.json",
@@ -207,22 +207,22 @@ LLVM_AS_COMPATIBILITY = select({
 
 alias(
     name = "thanatos",
-    actual = "//core:thanatos",
+    actual = "//runtime/thanatos:thanatos",
 )
 
 alias(
     name = "performance_test",
-    actual = "//core:performance_test",
+    actual = "//runtime/thanatos:performance_test",
 )
 
 test_suite(
     name = "native_tests",
     tests = [
-        "//core:arena_test",
-        "//core:dag_codec_test",
-        "//core:session_test",
-        "//core:ski_io_test",
-        "//core:util_test",
+        "//runtime/platform:util_test",
+        "//runtime/thanatos:arena_test",
+        "//runtime/thanatos:dag_codec_test",
+        "//runtime/thanatos:session_test",
+        "//runtime/thanatos:ski_io_test",
         "//:trip_hello_world_test",
     ],
 )
@@ -245,7 +245,7 @@ node_sharded_test(
     generated_jsr = ":jsr.json",
     llvm_dist = LLVM_DIST_DATA,
     shard_count = 8,
-    thanatos = "//core:thanatos",
+    thanatos = "//runtime/thanatos:thanatos",
 )
 
 node_llvm_as_test(
@@ -312,7 +312,7 @@ cc_binary(
     srcs = [":trip_hello_world_linux_obj"],
     tags = ["manual"],
     target_compatible_with = LINUX_X86_64_COMPATIBILITY,
-    deps = ["//core:trip_runtime_io"],
+    deps = ["//runtime/trip:trip_runtime_io"],
 )
 
 cc_binary(
@@ -320,7 +320,7 @@ cc_binary(
     srcs = [":trip_hello_world_macos_obj"],
     tags = ["manual"],
     target_compatible_with = MACOS_ARM64_COMPATIBILITY,
-    deps = ["//core:trip_runtime_io"],
+    deps = ["//runtime/trip:trip_runtime_io"],
 )
 
 windows_import_library(

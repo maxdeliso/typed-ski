@@ -1,13 +1,15 @@
 import { describe, it } from "../../util/test_shim.ts";
 import assert from "node:assert/strict";
+import type {
+  DataDefinition,
+  PolyDefinition,
+  TripLangProgram,
+  TypeDefinition,
+} from "../../../lib/meta/trip.ts";
 import {
-  type DataDefinition,
   extractDefinitionValue,
   indexSymbols,
-  type PolyDefinition,
-  type TripLangProgram,
-  type TypeDefinition,
-} from "../../../lib/index.ts";
+} from "../../../lib/meta/frontend/symbolTable.ts";
 import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 

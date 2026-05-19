@@ -1,252 +1,99 @@
 /**
- * CLI Integration Tests
- *
- * Tests for CLI integration with the library:
- * - CLI uses library functions correctly
- * - Object file format validation
- * - Error handling consistency
- * - Cross-format compatibility
+ * CLI integration tests for the LLVM path.
  */
 
 import { describe, it } from "../util/test_shim.ts";
-import { strictEqual as equal } from "node:assert/strict";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-
-import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import { join } from "node:path";
+import { compileTripSourceToLlvm } from "../../lib/compiler/index.ts";
+import { serializeTripBundleV1 } from "../../lib/compiler/bundleV1.ts";
 import {
   cleanupTempWorkspace,
   createTempWorkspace,
+  jsRoot,
 } from "../util/tripcHarness.ts";
-import { required, requiredAt } from "../util/required.ts";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const jsRoot = join(__dirname, "../..");
+const HELLO_SOURCE = readFileSync(
+  join(workspaceRoot, "test/compiler/llvm/helloWorld.trip"),
+  "utf8",
+);
+const PRELUDE_SOURCE = readFileSync(
+  join(workspaceRoot, "lib/prelude.trip"),
+  "utf8",
+);
+
+function runTripc(args: string[]) {
+  return spawnSync(
+    process.execPath,
+    [
+      "--disable-warning=ExperimentalWarning",
+      join(jsRoot, "bin/tripc.js"),
+      ...args,
+    ],
+    {
+      cwd: jsRoot,
+      encoding: "utf-8",
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+}
 
 describe("CLI Integration", () => {
-  describe("Library vs CLI consistency", () => {
-    it("library and CLI produce same output for simple module", async () => {
-      const source = `module Test
-export id
-poly id = #a => \\x:a => x`;
+  it("source CLI output matches the LLVM library path", async () => {
+    const workspaceDir = await createTempWorkspace("cli-llvm-integration-");
+    try {
+      const outPath = join(workspaceDir, "hello.ll");
+      const result = runTripc([
+        "--emit",
+        "llvm",
+        "test/compiler/llvm/helloWorld.trip",
+        outPath,
+        "--entry-module",
+        "Main",
+        "--module-source",
+        "Prelude=lib/prelude.trip",
+        "--emit-main-wrapper",
+      ]);
 
-      const workspaceDir = await createTempWorkspace("cli-integration-");
-      try {
-        const tripFile = join(workspaceDir, "test.trip");
-        const tripcFile = join(workspaceDir, "test.tripc");
-        writeFileSync(tripFile, source);
-
-        // Run CLI
-        const tripcPath = join(jsRoot, "bin/tripc.js");
-        const cliResult = spawnSync(
-          "node",
-          [
-            "--disable-warning=ExperimentalWarning",
-            tripcPath,
-            tripFile,
-            tripcFile,
-          ],
-          { encoding: "utf-8" },
-        );
-        equal(cliResult.status, 0, cliResult.stderr);
-
-        // Run library
-        const libResult = compileToObjectFile(source);
-
-        // Read CLI output
-        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
-
-        // Compare key fields
-        equal(cliOutput.module, libResult.module);
-        equal(cliOutput.exports.length, libResult.exports.length);
-        equal(
-          Object.keys(cliOutput.definitions).length,
-          Object.keys(libResult.definitions).length,
-        );
-      } finally {
-        await cleanupTempWorkspace(workspaceDir);
-      }
-    });
-
-    it("library and CLI produce same output for module with imports", async () => {
-      const source = `module Test
-import Math add
-export double
-poly double = \\x:Int => add x x`;
-
-      const workspaceDir = await createTempWorkspace(
-        "cli-integration-imports-",
-      );
-      try {
-        const tripFile = join(workspaceDir, "test.trip");
-        const tripcFile = join(workspaceDir, "test.tripc");
-        writeFileSync(tripFile, source);
-
-        // Run CLI
-        const tripcPath = join(jsRoot, "bin/tripc.js");
-        const cliResult = spawnSync(
-          "node",
-          [
-            "--disable-warning=ExperimentalWarning",
-            tripcPath,
-            tripFile,
-            tripcFile,
-          ],
-          { encoding: "utf-8" },
-        );
-        equal(cliResult.status, 0, cliResult.stderr);
-
-        // Run library
-        const libResult = compileToObjectFile(source);
-
-        // Read CLI output
-        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
-
-        // Compare
-        equal(cliOutput.module, libResult.module);
-        equal(cliOutput.imports.length, libResult.imports.length);
-        const cliImport0 = requiredAt(
-          cliOutput.imports,
-          0,
-          "cli import missing",
-        ) as any;
-        const libImport0 = requiredAt(
-          libResult.imports,
-          0,
-          "lib import missing",
-        );
-        equal(cliImport0.name, libImport0.name);
-        equal(cliImport0.from, libImport0.from);
-      } finally {
-        await cleanupTempWorkspace(workspaceDir);
-      }
-    });
-
-    it("library and CLI produce same output for module with types", async () => {
-      const source = `module Test
-type MyType = Int -> Int
-export id
-poly id : MyType = \\x:Int => x`;
-
-      const workspaceDir = await createTempWorkspace("cli-integration-types-");
-      try {
-        const tripFile = join(workspaceDir, "test.trip");
-        const tripcFile = join(workspaceDir, "test.tripc");
-        writeFileSync(tripFile, source);
-
-        // Run CLI
-        const tripcPath = join(jsRoot, "bin/tripc.js");
-        const cliResult = spawnSync(
-          "node",
-          [
-            "--disable-warning=ExperimentalWarning",
-            tripcPath,
-            tripFile,
-            tripcFile,
-          ],
-          { encoding: "utf-8" },
-        );
-        equal(cliResult.status, 0, cliResult.stderr);
-
-        // Run library
-        const libResult = compileToObjectFile(source);
-
-        // Read CLI output
-        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
-
-        // Compare
-        equal(cliOutput.module, libResult.module);
-        equal(
-          Object.keys(cliOutput.definitions).length,
-          Object.keys(libResult.definitions).length,
-        );
-      } finally {
-        await cleanupTempWorkspace(workspaceDir);
-      }
-    });
-
-    it("library and CLI produce same output for module with combinators", async () => {
-      const source = `module Test
-combinator myI = I
-export myI`;
-
-      const workspaceDir = await createTempWorkspace("cli-integration-comb-");
-      try {
-        const tripFile = join(workspaceDir, "test.trip");
-        const tripcFile = join(workspaceDir, "test.tripc");
-        writeFileSync(tripFile, source);
-
-        // Run CLI
-        const tripcPath = join(jsRoot, "bin/tripc.js");
-        const cliResult = spawnSync(
-          "node",
-          [
-            "--disable-warning=ExperimentalWarning",
-            tripcPath,
-            tripFile,
-            tripcFile,
-          ],
-          { encoding: "utf-8" },
-        );
-        equal(cliResult.status, 0, cliResult.stderr);
-
-        // Run library
-        const libResult = compileToObjectFile(source);
-
-        // Read CLI output
-        const cliOutput = JSON.parse(readFileSync(tripcFile, "utf-8")) as any;
-
-        // Compare
-        equal(cliOutput.module, libResult.module);
-        const cliMyI = required(cliOutput.definitions.myI, "cli myI missing");
-        const libMyI = required(libResult.definitions.myI, "lib myI missing");
-        equal(cliMyI.kind, "combinator");
-        equal(libMyI.kind, "combinator");
-      } finally {
-        await cleanupTempWorkspace(workspaceDir);
-      }
-    });
+      assert.equal(result.status, 0, result.stderr);
+      const cliOutput = readFileSync(outPath, "utf8").trimEnd();
+      const libOutput = compileTripSourceToLlvm(HELLO_SOURCE, {
+        entryModule: "Main",
+        moduleSources: [{ name: "Prelude", source: PRELUDE_SOURCE }],
+        emitMainWrapper: true,
+      });
+      assert.equal(cliOutput, libOutput);
+    } finally {
+      await cleanupTempWorkspace(workspaceDir);
+    }
   });
 
-  describe("Object file validation", () => {
-    it("CLI handles very large module", async () => {
-      // Create a module with 100 definitions
-      let source = "module Large\n";
-      for (let i = 0; i < 100; i++) {
-        source += `export f${i}\npoly f${i} = #a => \\x:a => x\n`;
-      }
-
-      const workspaceDir = await createTempWorkspace("cli-integration-large-");
-      try {
-        const tripFile = join(workspaceDir, "large.trip");
-        const tripcFile = join(workspaceDir, "large.tripc");
-        writeFileSync(tripFile, source);
-
-        const tripcPath = join(jsRoot, "bin/tripc.js");
-        const result = spawnSync(
-          "node",
-          [
-            "--disable-warning=ExperimentalWarning",
-            tripcPath,
-            tripFile,
-            tripcFile,
+  it("bundle-v1 CLI output lowers directly to LLVM", async () => {
+    const workspaceDir = await createTempWorkspace("cli-bundle-integration-");
+    try {
+      const bundlePath = join(workspaceDir, "hello.bundle-v1");
+      writeFileSync(
+        bundlePath,
+        serializeTripBundleV1({
+          entryModule: "Main",
+          target: { kind: "x86_64-unknown-linux-gnu" },
+          emitMainWrapper: true,
+          modules: [
+            { name: "Main", source: HELLO_SOURCE },
+            { name: "Prelude", source: PRELUDE_SOURCE },
           ],
-          { encoding: "utf-8" },
-        );
+        }),
+      );
 
-        equal(result.status, 0, result.stderr);
-
-        // Verify output
-        const objectContent = readFileSync(tripcFile, "utf-8");
-        const parsed = JSON.parse(objectContent);
-
-        equal(parsed.exports.length, 100);
-        equal(Object.keys(parsed.definitions).length, 100);
-      } finally {
-        await cleanupTempWorkspace(workspaceDir);
-      }
-    });
+      const result = runTripc(["--bundle-v1", bundlePath, "--stdout"]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /target triple = "x86_64-unknown-linux-gnu"/);
+      assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
+    } finally {
+      await cleanupTempWorkspace(workspaceDir);
+    }
   });
 });

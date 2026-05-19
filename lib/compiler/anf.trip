@@ -1,0 +1,152 @@
+module Anf
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Pair
+import Prelude MkPair
+import Prelude fst
+import Prelude snd
+import Prelude U8
+import Prelude append
+import Prelude Bin
+import Prelude BZ
+import Prelude B0
+import Prelude B1
+import Bin incBin
+import Bin binToDigits
+import CoreToMini MiniExpr
+import CoreToMini ME_Var
+import CoreToMini ME_Lam
+import CoreToMini ME_Call
+import CoreToMini ME_Con
+import CoreToMini ME_Let
+import CoreToMini ME_Native
+import CoreToMini ME_Match
+import Unparse Terminal
+
+export AnfExpr
+export AE_Var
+export AE_Native
+export AE_Lam
+export AE_Call
+export AE_Con
+export AE_Case
+export AE_Let
+export Pos
+export PAtom
+export PVal
+export PTail
+export Binding
+export MkBinding
+export NormResult
+export MkNormResult
+export normalize
+
+data AnfExpr =
+  | AE_Var (List U8)
+  | AE_Native Terminal
+  | AE_Lam (List U8) AnfExpr
+  | AE_Call (List U8) (List AnfExpr)
+  | AE_Con U8 U8 U8 (List AnfExpr)
+  | AE_Case AnfExpr (List AnfExpr)
+  | AE_Let (List U8) AnfExpr AnfExpr
+
+data Pos = PAtom | PVal | PTail
+
+data Binding = MkBinding (List U8) AnfExpr
+
+data NormResult = MkNormResult Bin (List Binding) AnfExpr
+
+data AtomList = MkAtomList Bin (List Binding) (List AnfExpr)
+
+data ArmsRes = MkArmsRes Bin (List AnfExpr)
+
+poly tempPrefix = cons [U8] '_' (cons [U8] '_' (cons [U8] 't' (nil [U8])))
+
+poly freshName = \counter : Bin => append [U8] tempPrefix (binToDigits counter)
+
+poly rec applyBindings = \bindings : List Binding => \body : AnfExpr =>
+  matchList [Binding] [AnfExpr] bindings
+    body
+    (\h : Binding => \t : List Binding =>
+      match h [AnfExpr] { | MkBinding name val =>
+        applyBindings t (AE_Let name val body)
+      })
+
+poly wrapValue = \state : Bin => \binds : List Binding => \value : AnfExpr => \pos : Pos =>
+  match pos [NormResult] {
+    | PAtom =>
+        let nm = freshName state in
+        let s1 = incBin state in
+        MkNormResult s1 (cons [Binding] (MkBinding nm value) binds) (AE_Var nm)
+    | PVal => MkNormResult state binds value
+    | PTail => MkNormResult state (nil [Binding]) (applyBindings binds value)
+  }
+
+poly trivialAt = \state : Bin => \atom : AnfExpr => \pos : Pos =>
+  MkNormResult state (nil [Binding]) atom
+
+poly rec atomizeArgs = \normFn : Bin -> MiniExpr -> Pos -> NormResult => \state : Bin => \args : List MiniExpr => \accBinds : List Binding =>
+  matchList [MiniExpr] [AtomList] args
+    (MkAtomList state accBinds (nil [AnfExpr]))
+    (\h : MiniExpr => \t : List MiniExpr =>
+      match (normFn state h PAtom) [AtomList] { | MkNormResult s1 hBinds hAtom =>
+        let combined = append [Binding] hBinds accBinds in
+        match (atomizeArgs normFn s1 t combined) [AtomList] { | MkAtomList s2 finalBinds restAtoms =>
+          MkAtomList s2 finalBinds (cons [AnfExpr] hAtom restAtoms)
+        }
+      })
+
+poly rec normArms = \normFn : Bin -> MiniExpr -> Pos -> NormResult => \state : Bin => \arms : List MiniExpr => \acc : List AnfExpr =>
+  matchList [MiniExpr] [ArmsRes] arms
+    (MkArmsRes state (nil [AnfExpr]))
+    (\h : MiniExpr => \t : List MiniExpr =>
+      match (normFn state h PTail) [ArmsRes] { | MkNormResult s1 _ hExpr =>
+        match (normArms normFn s1 t acc) [ArmsRes] { | MkArmsRes s2 restArms =>
+          MkArmsRes s2 (cons [AnfExpr] hExpr restArms)
+        }
+      })
+
+poly rec norm = \state : Bin => \expr : MiniExpr => \pos : Pos =>
+  match expr [NormResult] {
+    | ME_Var name => trivialAt state (AE_Var name) pos
+    | ME_Native t => trivialAt state (AE_Native t) pos
+    | ME_Lam n body =>
+        match (norm state body PTail) [NormResult] { | MkNormResult s1 _ bExpr =>
+          wrapValue s1 (nil [Binding]) (AE_Lam n bExpr) pos
+        }
+    | ME_Call f args =>
+        match (atomizeArgs norm state args (nil [Binding])) [NormResult] { | MkAtomList s1 binds atoms =>
+          wrapValue s1 binds (AE_Call f atoms) pos
+        }
+    | ME_Con tag total arity fields =>
+        match (atomizeArgs norm state fields (nil [Binding])) [NormResult] { | MkAtomList s1 binds atoms =>
+          wrapValue s1 binds (AE_Con tag total arity atoms) pos
+        }
+    | ME_Let name val body =>
+        match (norm state val PVal) [NormResult] { | MkNormResult s1 valBinds valExpr =>
+          match (norm s1 body pos) [NormResult] { | MkNormResult s2 bodyBinds bodyExpr =>
+            match pos [NormResult] {
+              | PAtom =>
+                  let combined = append [Binding] bodyBinds (cons [Binding] (MkBinding name valExpr) valBinds) in
+                  MkNormResult s2 combined bodyExpr
+              | PVal =>
+                  let combined = append [Binding] bodyBinds (cons [Binding] (MkBinding name valExpr) valBinds) in
+                  MkNormResult s2 combined bodyExpr
+              | PTail =>
+                  MkNormResult s2 (nil [Binding]) (applyBindings valBinds (AE_Let name valExpr bodyExpr))
+            }
+          }
+        }
+    | ME_Match scrut arms =>
+        match (norm state scrut PAtom) [NormResult] { | MkNormResult s1 scrBinds scrAtom =>
+          match (normArms norm s1 arms (nil [AnfExpr])) [NormResult] { | MkArmsRes s2 normedArms =>
+            wrapValue s2 scrBinds (AE_Case scrAtom normedArms) pos
+          }
+        }
+  }
+
+poly normalize = \expr : MiniExpr =>
+  match (norm BZ expr PTail) [AnfExpr] { | MkNormResult s b e => e }

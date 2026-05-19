@@ -22,8 +22,8 @@ build system and one workspace:
 4. **Self-hosting bootstrap** — an in-progress re-implementation of the
    compiler in TripLang itself. `.trip` modules in
    [`lib/compiler/`](lib/compiler/) (lexer.trip, parser.trip, core.trip,
-   lowering.trip, llvm.trip, etc.). Currently exercised only by a
-   verification test, not by the build path.
+   lowering.trip, llvm.trip, etc.). The current native bootstrap consumes
+   `bundle-v1` input and emits LLVM IR for the narrow stage-1 path.
 
 ## Quick Start
 
@@ -104,8 +104,8 @@ bazelisk run  //:test -- test/path/to/test.ts
 The public API is intentionally small — `compile`, `compileTripSourceToLlvm`,
 the SKI utilities, System F utilities, the Thanatos client, and the module
 providers. See [`lib/index.ts`](lib/index.ts) for the full surface. Other
-internal modules (MiniCore IR, Bundle-v1 serialization, TripC object format,
-TopoDagWire protocol) are importable from their specific paths but are not
+internal modules (MiniCore IR, Bundle-v1 serialization, legacy SKI-linker
+helpers, TopoDagWire protocol) are importable from their specific paths but are not
 part of the stable contract.
 
 ---
@@ -165,9 +165,13 @@ A small typed functional language. Two backends:
 - **Classical (SKI)** — Source flows through System F elaboration →
   typechecking → bracket abstraction → SKI → Thanatos.
 
-CLI: [`bin/tripc.ts`](bin/tripc.ts) supports compilation (`tripc input.trip
-[output.tripc]`), linking (`tripc --link a.tripc b.tripc`), LLVM emission
-(`tripc --emit llvm input.trip`), and bundle parsing.
+CLI: [`bin/tripc.ts`](bin/tripc.ts) emits LLVM IR from Trip source or
+deterministic `bundle-v1` input:
+
+```bash
+tripc --emit llvm input.trip output.ll
+tripc --bundle-v1 compiler.bundle-v1 output.ll
+```
 
 ### Canonicalization
 
@@ -178,8 +182,6 @@ reproducible builds and byte-level diffing:
   kind (`poly rec`, `combinator`, etc.) and emits parseable canonical
   syntax. Internal lowering stages use `lambda` during linking and
   execution.
-- `.tripc` object files are emitted with canonical import/export/definition
-  ordering and recursively sorted object keys.
 - Link-time dependency traversal and SCC processing use explicit ASCII
   ordering rather than incidental `Map`/`Set` iteration order.
 - Final SKI output is the fully parenthesized canonical `unparseSKI` form
@@ -285,41 +287,20 @@ before Block IR / LLVM. The object language may still contain System F
 terms and lambdas; the compiler implementation must represent and
 transform them as first-order AST data.
 
-### TripC object files (`.tripc`)
-
-A JSON-based intermediate object file format for modular compilation and
-linking. A `.tripc` object encapsulates a compiled Trip module:
-
-- **Module identity and linkage** — module name, `exports`, explicit
-  `imports` mapping symbols to providing modules.
-- **Definitions** — compiled intermediate definitions (AST
-  representations) indexed by symbol name.
-- **Data definitions** — canonicalized ADT metadata, allowing downstream
-  passes to canonicalize and validate matches across module boundaries
-  without relying on hardcoded built-ins.
-
-`.tripc` serialization forces reproducible canonical ASCII-ordered keys
-and safely encapsulates large numeric types using a dedicated
-`__trip_bigint__` representation.
-
-> The `.tripc` and `bundle-v1` formats currently coexist. A consolidation
-> is planned — see [`docs/design/`](docs/design/) for in-progress design
-> notes.
-
 ## 4. Self-hosting bootstrap
 
 `.trip` files under [`lib/compiler/`](lib/compiler/) (lexer.trip,
 parser.trip, core.trip, lowering.trip, llvm.trip, moduleEnv.trip, etc.)
 are an in-progress re-implementation of the compiler in TripLang itself.
-They are not currently part of the main build — they are exercised only by
-a `bootstrappedCompile` verification test that checks the self-hosted
-output matches the TypeScript compiler.
+They are not currently part of the main build. The active acceptance path
+is the LLVM self-hosting test: TypeScript compiles the Trip compiler to a
+native executable, then that executable reads `bundle-v1` and emits LLVM IR
+for a stage-1 Trip program.
 
-This is aspirational code targeting LLVM IR self-hosting (not in-language
-object emission or linking). When the bootstrap matures, it will compile
-through the `bundle-v1` contract above. Parser bootstrap progress is
-measured through that contract; legacy Thanatos/SKI parser bootstrap tests
-are not acceptance criteria for this milestone.
+This is targeting LLVM IR self-hosting, not in-language object emission or
+linking. Parser bootstrap progress is measured through the `bundle-v1`
+contract above; legacy Thanatos/SKI parser bootstrap tests are not
+acceptance criteria for this milestone.
 
 ---
 

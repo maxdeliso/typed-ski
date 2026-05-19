@@ -5,67 +5,25 @@
  * without getting stuck in circular dependency resolution loops.
  */
 
-import { afterEach, beforeEach, describe, it } from "../util/test_shim.ts";
+import { describe, it } from "../util/test_shim.ts";
 
 import assert from "node:assert/strict";
-import {
-  cleanupTempWorkspace,
-  copyFixtures,
-  createTempWorkspace,
-  runTripcSync,
-} from "../util/tripcHarness.ts";
-import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
+import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getBinObject } from "../../lib/bin.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { getNatObject } from "../../lib/nat.ts";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
 const srcLinkerDir = join(workspaceRoot, "test", "linker");
-const FIXTURE_FILES = [
-  "recursive_adt.trip",
-  "test_recursive.trip",
-  "snat_like.trip",
-  "test_snat.trip",
-] as const;
 
-describe("linking with recursive ADTs", { concurrency: false }, () => {
-  let workspacePath: string | null = null;
-
-  beforeEach(async () => {
-    workspacePath = await createTempWorkspace("typed-ski-recursive-adt-");
-    await copyFixtures(srcLinkerDir, workspacePath, FIXTURE_FILES);
-  });
-
-  afterEach(async () => {
-    await cleanupTempWorkspace(workspacePath);
-    workspacePath = null;
-  });
-
-  async function compileTripFile(
-    tripFileName: string,
-    outputTripc?: string,
-  ): Promise<ReturnType<typeof deserializeTripCObject>> {
-    if (workspacePath === null) {
-      throw new Error("Expected test workspace to be prepared");
-    }
-
-    const out = outputTripc ?? tripFileName.replace(".trip", ".tripc");
-    const tripcPath = join(workspacePath, out);
-    const { status: code, stderr } = runTripcSync([tripFileName, out], {
-      cwd: workspacePath,
-    });
-
-    if (code !== 0) {
-      throw new Error(
-        `Failed to compile ${tripFileName}: exit code ${code}\n${stderr}`,
-      );
-    }
-
-    const content = await readFile(tripcPath, "utf8");
-    return deserializeTripCObject(content);
+describe("linking with recursive ADTs", () => {
+  function compileTripFile(tripFileName: string) {
+    return compileToObjectFile(
+      readFileSync(join(srcLinkerDir, tripFileName), "utf8"),
+    );
   }
 
   it("links a module with a recursive ADT", async () => {

@@ -212,19 +212,26 @@ describe("JSR Packaging Configuration", () => {
       assert.ok(stdout.includes("USAGE:"));
     });
 
-    it("tripc can compile test file", async () => {
+    it("tripc can emit LLVM for a test file", async () => {
       const tripcScript = join(jsRoot, "bin/tripc.js");
-      const testFile = join(srcRoot, "test/test.trip");
+      const testFile = join(srcRoot, "test/compiler/llvm/helloWorld.trip");
       const outputDir = await createTempWorkspace("typed-ski-jsr-packaging-");
       try {
-        const outputFile = join(outputDir, "test_output.tripc");
+        const outputFile = join(outputDir, "test_output.ll");
         const { status, stderr } = spawnSync(
           process.execPath,
           [
             "--disable-warning=ExperimentalWarning",
             tripcScript,
+            "--emit",
+            "llvm",
             testFile,
             outputFile,
+            "--entry-module",
+            "Main",
+            "--module-source",
+            "Prelude=lib/prelude.trip",
+            "--emit-main-wrapper",
           ],
           {
             cwd: jsRoot,
@@ -232,7 +239,7 @@ describe("JSR Packaging Configuration", () => {
           },
         );
 
-        assert.strictEqual(status, 0, `Compilation failed: ${stderr}`);
+        assert.strictEqual(status, 0, `LLVM emission failed: ${stderr}`);
         assert.strictEqual(existsSync(outputFile), true);
       } finally {
         await cleanupTempWorkspace(outputDir);

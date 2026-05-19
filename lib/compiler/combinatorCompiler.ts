@@ -36,6 +36,9 @@ const UNPARSE_SOURCE_FILE = lib("compiler", "unparse.trip");
 const LOWERING_SOURCE_FILE = lib("compiler", "lowering.trip");
 const BRIDGE_SOURCE_FILE = lib("compiler", "bridge.trip");
 const LLVM_SOURCE_FILE = lib("compiler", "llvm.trip");
+const BUNDLE_SUMMARY_SOURCE_FILE = lib("compiler", "bundleSummary.trip");
+const CORE_TO_MINI_SOURCE_FILE = lib("compiler", "coreToMini.trip");
+const ANF_SOURCE_FILE = lib("compiler", "anf.trip");
 const COMPILER_SOURCE_FILE = lib("compiler", "index.trip");
 const TELEMETRY_SOURCE_FILE = lib("compiler", "telemetry.trip");
 
@@ -113,6 +116,27 @@ const BUILTIN_MODULES = new Map<string, BuiltinModuleSpec>([
     },
   ],
   [
+    "BundleSummary",
+    {
+      source: BUNDLE_SUMMARY_SOURCE_FILE,
+      load: () => loadTripModuleObject(BUNDLE_SUMMARY_SOURCE_FILE),
+    },
+  ],
+  [
+    "CoreToMini",
+    {
+      source: CORE_TO_MINI_SOURCE_FILE,
+      load: () => loadTripModuleObject(CORE_TO_MINI_SOURCE_FILE),
+    },
+  ],
+  [
+    "Anf",
+    {
+      source: ANF_SOURCE_FILE,
+      load: () => loadTripModuleObject(ANF_SOURCE_FILE),
+    },
+  ],
+  [
     "Compiler",
     {
       source: COMPILER_SOURCE_FILE,
@@ -179,11 +203,19 @@ function sanitizeImportedModule(
   if (moduleName !== "Compiler") {
     return object;
   }
-  const omittedDefinitions = new Set(["main", "compileToLlvm", "writeAll"]);
+  const omittedDefinitions = new Set([
+    "main",
+    "compileToLlvm",
+    "compileBundleToLlvm",
+    "findModuleSource",
+    "writeAll",
+  ]);
   return {
     ...object,
     exports: object.exports.filter((name) => !omittedDefinitions.has(name)),
-    imports: object.imports.filter((imp) => imp.from !== "Llvm"),
+    imports: object.imports.filter(
+      (imp) => imp.from !== "Llvm" && imp.from !== "BundleSummary",
+    ),
     definitions: Object.fromEntries(
       Object.entries(object.definitions).filter(
         ([name]) => !omittedDefinitions.has(name),
@@ -228,7 +260,11 @@ async function loadBuiltinModuleGraph(
     try {
       const source = await loadTripSourceFile(spec.source);
       for (const importedModuleName of importedModuleNames(source)) {
-        if (moduleName === "Compiler" && importedModuleName === "Llvm") {
+        if (
+          moduleName === "Compiler" &&
+          (importedModuleName === "Llvm" ||
+            importedModuleName === "BundleSummary")
+        ) {
           continue;
         }
         await visit(importedModuleName);

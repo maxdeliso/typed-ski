@@ -9,8 +9,8 @@
  * 3. **TripLang compiler** — frontend `compile`, LLVM emit, module providers.
  * 4. **Thanatos evaluator** — native C/pthreads SKI reducer.
  *
- * Library internals (MiniCore IR, Bundle-v1 serialization, .tripc object
- * format, topoDagWire protocol, frontend implementation modules) are not
+ * Library internals (MiniCore IR, Bundle-v1 serialization, legacy SKI-linker
+ * helpers, topoDagWire protocol, frontend implementation modules) are not
  * part of the public API. They are importable from their specific module
  * paths but may change without a major version bump.
  *

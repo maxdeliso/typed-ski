@@ -167,6 +167,7 @@ export const bootstrap = {
         "Prelude",
         "Nat",
         "Bin",
+        "BundleSummary",
         "Avl",
         "Lexer",
         "Parser",
@@ -220,7 +221,7 @@ export const bootstrap = {
    */
   async runNativeCompiler(
     compilerExePath: string,
-    fixtureSource: string,
+    fixtureSource: string | Uint8Array,
   ): Promise<string> {
     const result = runExecutable(compilerExePath, fixtureSource);
     if (result.status !== 0) {

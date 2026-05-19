@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { writeFile, mkdtemp, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
+import { serializeTripBundleV1 } from "../../../lib/compiler/index.ts";
 import { describe, it } from "../../util/test_shim.ts";
 import {
   bootstrap,
@@ -37,11 +39,24 @@ describe("LLVM self-host bootstrap", () => {
 
     try {
       const stage1LlPath = join(tempDir, "hello.stage1.ll");
+      const preludeSource = await readFile(
+        join(workspaceRoot, "lib", "prelude.trip"),
+        "utf8",
+      );
+      const bundleBytes = serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules: [
+          { name: "Main", source: HELLO_SOURCE },
+          { name: "Prelude", source: preludeSource },
+        ],
+      });
 
-      // Stage-1: Native compiler (Stage-1) reads HELLO_SOURCE and emits LLVM IR
+      // Stage-1: native compiler reads bundle-v1 and emits LLVM IR.
       const stage1Ll = await bootstrap.runNativeCompiler(
         compilerExe,
-        HELLO_SOURCE,
+        bundleBytes,
       );
       assert.ok(!stage1Ll.startsWith("ERR:"), stage1Ll);
       assert.match(stage1Ll, /define i8 @trip_fn_Main_main\(\)/);

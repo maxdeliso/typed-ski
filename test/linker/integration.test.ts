@@ -1,170 +1,68 @@
 /**
- * Integration tests for the TripLang Linker
- *
- * This test suite validates end-to-end workflows including:
- * - Compilation + Linking pipeline
- * - Different expression types
- * - Error scenarios
- * - Performance characteristics
+ * Integration tests for the internal TripLang linker.
  */
 
-import { afterEach, beforeEach, describe, it } from "../util/test_shim.ts";
-
+import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import {
-  cleanupTempWorkspace,
-  copyFixtures,
-  createTempWorkspace,
-  runTripcSync,
-} from "../util/tripcHarness.ts";
-import { parseSKI } from "../../lib/parser/ski.ts";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
+import { linkModules } from "../../lib/linker/moduleLinker.ts";
+import { parseSKI } from "../../lib/parser/ski.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
 const srcLinkerDir = join(workspaceRoot, "test", "linker");
-const FIXTURE_FILES = [
-  "int_simple.trip",
-  "int_complex.trip",
-  "int_mod_a.trip",
-  "int_mod_b.trip",
-  "int_invalid.trip",
-  "int_noMain.trip",
-  "int_large.trip",
-  "int_exec_wrapper.trip",
-] as const;
 
-describe("TripLang Linker Integration", { concurrency: false }, () => {
-  let workspacePath: string | null = null;
+function compileFixture(fileName: string) {
+  return compileToObjectFile(
+    readFileSync(join(srcLinkerDir, fileName), "utf8"),
+  );
+}
 
-  beforeEach(async () => {
-    workspacePath = await createTempWorkspace("typed-ski-linker-integration-");
-    await copyFixtures(srcLinkerDir, workspacePath, FIXTURE_FILES);
+describe("TripLang Linker Integration", () => {
+  it("compiles and links a simple expression", () => {
+    const object = compileFixture("int_simple.trip");
+    const linked = linkModules([{ name: object.module, object }]);
+    assert.strictEqual(linked, "I");
   });
 
-  afterEach(async () => {
-    await cleanupTempWorkspace(workspacePath);
-    workspacePath = null;
+  it("compiles and links a complex expression", () => {
+    const object = compileFixture("int_complex.trip");
+    const linked = linkModules([{ name: object.module, object }]);
+    assert.ok(linked.includes("K"));
+    assert.doesNotThrow(() => parseSKI(linked));
   });
 
-  function compileTrip(fileName: string, outputTripc?: string) {
-    if (workspacePath === null) {
-      throw new Error("Expected test workspace to be prepared");
-    }
-    return runTripcSync(
-      [fileName, outputTripc ?? fileName.replace(".trip", ".tripc")],
-      {
-        cwd: workspacePath,
-      },
-    );
-  }
-
-  function linkTripc(fileNames: string[]) {
-    if (workspacePath === null) {
-      throw new Error("Expected test workspace to be prepared");
-    }
-    return runTripcSync(["--link", ...fileNames], {
-      cwd: workspacePath,
-    });
-  }
-
-  it("full pipeline: compile + link simple expression", () => {
-    const { status: compileCode } = compileTrip(
-      "int_simple.trip",
-      "int_simple.tripc",
-    );
-    assert.strictEqual(compileCode, 0);
-
-    const { stdout, status: linkCode } = linkTripc(["int_simple.tripc"]);
-
-    assert.strictEqual(linkCode, 0);
-    assert.strictEqual(stdout.trim(), "I");
-  });
-
-  it("full pipeline: compile + link complex expression", () => {
-    const { status: compileCode } = compileTrip(
-      "int_complex.trip",
-      "int_complex.tripc",
-    );
-    assert.strictEqual(compileCode, 0);
-
-    const { stdout, status: linkCode } = linkTripc(["int_complex.tripc"]);
-
-    assert.strictEqual(linkCode, 0);
-    assert.ok(stdout.includes("K"));
-    assert.doesNotThrow(() => parseSKI(stdout.trim()));
-  });
-
-  it("full pipeline: compile + link multiple modules", () => {
-    const { status: compileACode } = compileTrip(
-      "int_mod_a.trip",
-      "int_mod_a.tripc",
-    );
-    const { status: compileBCode } = compileTrip(
-      "int_mod_b.trip",
-      "int_mod_b.tripc",
-    );
-
-    assert.strictEqual(compileACode, 0);
-    assert.strictEqual(compileBCode, 0);
-
-    const { stdout, status: linkCode } = linkTripc([
-      "int_mod_a.tripc",
-      "int_mod_b.tripc",
+  it("compiles and links multiple modules", () => {
+    const a = compileFixture("int_mod_a.trip");
+    const b = compileFixture("int_mod_b.trip");
+    const linked = linkModules([
+      { name: a.module, object: a },
+      { name: b.module, object: b },
     ]);
-
-    assert.strictEqual(linkCode, 0);
-    assert.strictEqual(typeof stdout, "string");
-    assert.ok(stdout.length > 0);
+    assert.strictEqual(typeof linked, "string");
+    assert.ok(linked.length > 0);
   });
 
-  it("handles compilation errors gracefully", () => {
-    const { stderr, status: compileCode } = compileTrip(
-      "int_invalid.trip",
-      "int_invalid.tripc",
+  it("reports linking errors", () => {
+    const object = compileFixture("int_noMain.trip");
+    assert.throws(
+      () => linkModules([{ name: object.module, object }]),
+      /No 'main' function found|Symbol.*is not defined/,
     );
-
-    assert.notStrictEqual(compileCode, 0);
-    assert.ok(stderr.includes("Compilation error"));
   });
 
-  it("handles linking errors gracefully", () => {
-    const { status: compileCode } = compileTrip(
-      "int_noMain.trip",
-      "int_noMain.tripc",
-    );
-    assert.strictEqual(compileCode, 0);
-
-    const { stderr, status: linkCode } = linkTripc(["int_noMain.tripc"]);
-
-    assert.notStrictEqual(linkCode, 0);
-    assert.match(stderr, /No 'main' function found|Symbol.*is not defined/);
+  it("handles large expressions", () => {
+    const object = compileFixture("int_large.trip");
+    const linked = linkModules([{ name: object.module, object }]);
+    assert.strictEqual(typeof linked, "string");
+    assert.ok(linked.length > 0);
   });
 
-  it("performance: handles large expressions", () => {
-    const { status: compileCode } = compileTrip(
-      "int_large.trip",
-      "int_large.tripc",
-    );
-    assert.strictEqual(compileCode, 0);
-
-    const { stdout, status: linkCode } = linkTripc(["int_large.tripc"]);
-
-    assert.strictEqual(linkCode, 0);
-    assert.strictEqual(typeof stdout, "string");
-    assert.ok(stdout.length > 0);
-  });
-
-  it("executable wrapper integration", () => {
-    const { status: compileCode } = compileTrip(
-      "int_exec_wrapper.trip",
-      "int_exec_wrapper.tripc",
-    );
-    assert.strictEqual(compileCode, 0);
-
-    const { stdout, status: code } = linkTripc(["int_exec_wrapper.tripc"]);
-
-    assert.strictEqual(code, 0);
-    assert.strictEqual(typeof stdout, "string");
-    assert.ok(stdout.length > 0);
+  it("handles executable wrapper expressions", () => {
+    const object = compileFixture("int_exec_wrapper.trip");
+    const linked = linkModules([{ name: object.module, object }]);
+    assert.strictEqual(typeof linked, "string");
+    assert.ok(linked.length > 0);
   });
 });

@@ -83,11 +83,19 @@ function tripStringLiteral(text: string): string {
 }
 
 function compilerCombOnly(object: TripCObject): TripCObject {
-  const omittedDefinitions = new Set(["main", "compileToLlvm", "writeAll"]);
+  const omittedDefinitions = new Set([
+    "main",
+    "compileToLlvm",
+    "compileBundleToLlvm",
+    "findModuleSource",
+    "writeAll",
+  ]);
   return {
     ...object,
     exports: object.exports.filter((name) => !omittedDefinitions.has(name)),
-    imports: object.imports.filter((imp) => imp.from !== "Llvm"),
+    imports: object.imports.filter(
+      (imp) => imp.from !== "Llvm" && imp.from !== "BundleSummary",
+    ),
     definitions: Object.fromEntries(
       Object.entries(object.definitions).filter(
         ([name]) => !omittedDefinitions.has(name),

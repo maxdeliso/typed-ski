@@ -15,6 +15,7 @@ import Prelude fst
 import Prelude snd
 import Prelude map
 import Prelude matchList
+import Prelude eqListU8
 import Lexer tokenize
 import Parser parseProgram
 import Parser D_Def
@@ -32,9 +33,14 @@ import Unparse C_App
 import Unparse T_I
 import Unparse unparseCombinator
 import Llvm compileSourceToLlvm
+import BundleSummary parseBundleSummary
+import BundleSummary MkBundleSummary
+import BundleSummary ModuleRecord
+import BundleSummary MkModuleRecord
 
 export compileToComb
 export compileToLlvm
+export compileBundleToLlvm
 export main
 
 poly compileToComb = \source : List U8 =>
@@ -62,6 +68,28 @@ poly compileToComb = \source : List U8 =>
 poly compileToLlvm = \source : List U8 =>
   compileSourceToLlvm source
 
+poly rec findModuleSource = \name : List U8 => \mods : List ModuleRecord =>
+  matchList [ModuleRecord] [Result (List U8) (List U8)] mods
+    (Err [List U8] [List U8] "Entry module missing")
+    (\h : ModuleRecord => \t : List ModuleRecord =>
+      match h [Result (List U8) (List U8)] { | MkModuleRecord modName lengthDigits source =>
+        if [Result (List U8) (List U8)] (eqListU8 name modName)
+          (\u : U8 => Ok [List U8] [List U8] source)
+          (\u : U8 => findModuleSource name t)
+      })
+
+poly compileBundleToLlvm = \source : List U8 =>
+  match (parseBundleSummary source) [Result (List U8) (List U8)] {
+    | Err e => Err [List U8] [List U8] e
+    | Ok bundle =>
+        match bundle [Result (List U8) (List U8)] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
+          match (findModuleSource entry mods) [Result (List U8) (List U8)] {
+            | Err e => Err [List U8] [List U8] e
+            | Ok entrySource => compileSourceToLlvm entrySource
+          }
+        }
+  }
+
 poly rec writeAll = \bytes : List U8 =>
   matchList [U8] [U8] bytes
     #u8(0)
@@ -69,7 +97,7 @@ poly rec writeAll = \bytes : List U8 =>
       writeOne h [U8] (\u : U8 => writeAll t))
 
 poly main = \source : List U8 =>
-  match (compileToLlvm source) [U8] {
+  match (compileBundleToLlvm source) [U8] {
     | Err e => writeAll (append [U8] "ERR:" e)
     | Ok llvm => writeAll llvm
   }

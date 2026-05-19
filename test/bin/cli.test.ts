@@ -1,12 +1,5 @@
 /**
- * CLI Tests
- *
- * Comprehensive tests for the TripLang compiler CLI:
- * - Library function testing
- * - Object file format validation
- * - CLI packaging in various distribution formats
- * - Error handling
- * - Version consistency
+ * CLI tests for the TripLang LLVM compiler.
  */
 
 import { describe, it } from "../util/test_shim.ts";
@@ -24,7 +17,6 @@ import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const jsRoot = join(__dirname, "../..");
 const srcRoot = workspaceRoot;
-const fixturesDir = join(srcRoot, "test", "bin", "fixtures");
 const compiledTripcName = process.platform === "win32" ? "tripc.cmd" : "tripc";
 const bundledTripcPath = resolveDistPath(
   "TYPED_SKI_DIST_JS_PATH",
@@ -39,16 +31,6 @@ const compiledTripcPath = resolveDistPath(
   `dist/${compiledTripcName}`,
 );
 
-// Import library functions for testing
-import {
-  compileToObjectFile,
-  compileToObjectFileString,
-  SingleFileCompilerError,
-} from "../../lib/compiler/singleFileCompiler.ts";
-import { deserializeTripCObject } from "../../lib/compiler/objectFile.ts";
-import { required, requiredAt } from "../util/required.ts";
-
-// Test utilities
 async function runCommand(
   command: string[],
   cwd = jsRoot,
@@ -58,13 +40,12 @@ async function runCommand(
   stderr: string;
   code: number | null;
 }> {
-  const command0 = requiredAt(command, 0, "expected command executable");
-  let executable = command0;
+  let executable = command[0]!;
   let args = command.slice(1);
 
-  if (command0 === "node" || command0 === process.execPath) {
+  if (executable === "node" || executable === process.execPath) {
+    executable = process.execPath;
     if (args.includes("bin/tripc.js")) {
-      executable = process.execPath;
       const tripcIndex = args.indexOf("bin/tripc.js");
       args = [
         "--disable-warning=ExperimentalWarning",
@@ -75,7 +56,6 @@ async function runCommand(
       args.includes("dist/tripc.js") ||
       args.includes("dist/tripc.min.js")
     ) {
-      executable = process.execPath;
       const scriptIndex = args.findIndex((arg) => arg.endsWith(".js"));
       if (scriptIndex !== -1) {
         args = [args[scriptIndex]!, ...args.slice(scriptIndex + 1)];
@@ -83,31 +63,18 @@ async function runCommand(
     }
   }
 
-  try {
-    const result = spawnSync(executable, args, {
-      cwd,
-      encoding: "utf-8",
-      shell: process.platform === "win32" && executable.endsWith(".cmd"),
-    });
+  const result = spawnSync(executable, args, {
+    cwd,
+    encoding: "utf-8",
+    shell: process.platform === "win32" && executable.endsWith(".cmd"),
+  });
 
-    return {
-      success: result.status === 0,
-      stdout: result.stdout || "",
-      stderr: result.stderr || "",
-      code: result.status,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      stdout: "",
-      stderr: (error as Error).message,
-      code: -1,
-    };
-  }
-}
-
-function fixturePath(fixtureName: string): string {
-  return join(fixturesDir, fixtureName);
+  return {
+    success: result.status === 0,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    code: result.status,
+  };
 }
 
 function assertCommandSuccess(
@@ -118,394 +85,167 @@ function assertCommandSuccess(
     code: number | null;
   },
   command: string[],
-  context?: string,
 ): void {
   if (!result.success) {
-    const contextMsg = context ? `\nContext: ${context}\n` : "\n";
-    const commandMsg = `Command: ${command.join(" ")}\n`;
-    const codeMsg = `Exit code: ${result.code}\n`;
-    const stdoutMsg = `Stdout:\n${result.stdout || "(empty)"}\n`;
-    const stderrMsg = `Stderr:\n${result.stderr || "(empty)"}\n`;
     throw new Error(
-      `Command failed:${contextMsg}${commandMsg}${codeMsg}${stdoutMsg}${stderrMsg}`,
+      [
+        `Command failed: ${command.join(" ")}`,
+        `Exit code: ${result.code}`,
+        `Stdout:\n${result.stdout || "(empty)"}`,
+        `Stderr:\n${result.stderr || "(empty)"}`,
+      ].join("\n"),
     );
   }
 }
 
+function llvmArgs(): string[] {
+  return [
+    "--emit",
+    "llvm",
+    "test/compiler/llvm/helloWorld.trip",
+    "--entry-module",
+    "Main",
+    "--module-source",
+    "Prelude=lib/prelude.trip",
+    "--emit-main-wrapper",
+    "--stdout",
+  ];
+}
+
 describe("CLI Tests", () => {
-  describe("Library function tests", () => {
-    it("compileToObjectFile works with valid input", () => {
-      const source = `module Test
-export id
-poly id = #a => \\x:a => x`;
-
-      const result = compileToObjectFile(source);
-
-      assert.strictEqual(result.module, "Test");
-      assert.ok("imports" in result);
-      assert.ok("exports" in result);
-      assert.ok("definitions" in result);
-      assert.ok("dataDefinitions" in result);
-
-      assert.ok(Array.isArray(result.imports));
-      assert.ok(Array.isArray(result.exports));
-      assert.ok(typeof result.definitions === "object");
-      assert.ok(Array.isArray(result.dataDefinitions));
-
-      assert.ok(result.exports.includes("id"));
-      assert.ok("id" in result.definitions);
-    });
-
-    it("compileToObjectFileString works", () => {
-      const source = `module Test
-export id
-poly id = #a => \\x:a => x`;
-
-      const result = compileToObjectFileString(source);
-
-      assert.strictEqual(typeof result, "string");
-
-      // Should be valid JSON
-      const parsed = JSON.parse(result);
-      assert.strictEqual(parsed.module, "Test");
-
-      // Should be deserializable
-      const deserialized = deserializeTripCObject(result);
-      assert.deepStrictEqual(deserialized, parsed);
-    });
-
-    it("invalid syntax is parsed as non-terminal", () => {
-      const invalidSource = `module Test
-poly id = invalid syntax here`;
-
-      const result = compileToObjectFile(invalidSource);
-
-      // Should still compile but with non-terminal structure
-      assert.strictEqual(result.module, "Test");
-      assert.ok("id" in result.definitions);
-
-      const idDef = required(result.definitions.id, "expected definition 'id'");
-      if (idDef.kind === "poly") {
-        assert.strictEqual(idDef.term.kind, "non-terminal");
-      }
-    });
-
-    it("error handling for missing module", () => {
-      const noModuleSource = `poly id = #a => \\x:a => x`;
-
-      assert.throws(() => {
-        compileToObjectFile(noModuleSource);
-      }, SingleFileCompilerError);
-    });
-
-    it("error handling for multiple modules", () => {
-      const multipleModulesSource = `module First
-module Second
-poly id = #a => \\x:a => x`;
-
-      assert.throws(() => {
-        compileToObjectFile(multipleModulesSource);
-      }, SingleFileCompilerError);
-    });
-  });
-
-  describe("Object file format tests", () => {
-    it("object file has correct structure", () => {
-      const source = `module Test
-import Math add
-export id
-export double
-poly id = #a => \\x:a => x
-poly double = \\x:Int => add x x`;
-
-      const result = compileToObjectFile(source);
-
-      // Check module
-      assert.strictEqual(result.module, "Test");
-
-      // Check imports
-      assert.strictEqual(result.imports.length, 1);
-      assert.deepStrictEqual(
-        requiredAt(result.imports, 0, "expected first import"),
-        { name: "add", from: "Math" },
-      );
-
-      // Check exports
-      assert.strictEqual(result.exports.length, 2);
-      assert.ok(result.exports.includes("id"));
-      assert.ok(result.exports.includes("double"));
-
-      // Check definitions
-      assert.strictEqual(Object.keys(result.definitions).length, 2);
-      assert.ok("id" in result.definitions);
-      assert.ok("double" in result.definitions);
-      assert.deepStrictEqual(result.dataDefinitions, []);
-
-      // Check definition structure
-      const idDef = required(result.definitions.id, "expected definition 'id'");
-      assert.strictEqual(idDef.kind, "poly");
-      assert.strictEqual(idDef.name, "id");
-
-      const doubleDef = required(
-        result.definitions.double,
-        "expected definition 'double'",
-      );
-      assert.strictEqual(doubleDef.kind, "poly");
-      assert.strictEqual(doubleDef.name, "double");
-    });
-
-    it("object file serialization/deserialization", () => {
-      const source = `module Test
-export id
-poly id = #a => \\x:a => x`;
-
-      const original = compileToObjectFile(source);
-      const serialized = compileToObjectFileString(source);
-      const deserialized = deserializeTripCObject(serialized);
-
-      // Check key properties instead of deep equality
-      assert.strictEqual(deserialized.module, original.module);
-      assert.deepStrictEqual(deserialized.imports, original.imports);
-      assert.deepStrictEqual(deserialized.exports, original.exports);
-      assert.deepStrictEqual(
-        deserialized.dataDefinitions,
-        original.dataDefinitions,
-      );
-      assert.deepStrictEqual(
-        Object.keys(deserialized.definitions),
-        Object.keys(original.definitions),
-      );
-    });
-
-    it("object file contains elaborated definitions", () => {
-      const source = `module Test
-export id
-poly id = #a => \\x:a => x`;
-
-      const result = compileToObjectFile(source);
-      const idDef = required(result.definitions.id, "expected definition 'id'");
-
-      // Term should be elaborated System F
-      if (idDef.kind === "poly") {
-        assert.strictEqual(idDef.term.kind, "systemF-type-abs");
-        if (idDef.term.kind === "systemF-type-abs") {
-          assert.strictEqual(idDef.term.body.kind, "systemF-abs");
-        }
-      }
-    });
-  });
-
   describe("CLI file structure tests", () => {
     it("CLI files exist", () => {
-      const binDir = join(srcRoot, "bin");
-      assert.strictEqual(existsSync(binDir), true);
-
-      assert.strictEqual(existsSync(join(binDir, "tripc.ts")), true);
+      assert.strictEqual(existsSync(join(srcRoot, "bin", "tripc.ts")), true);
     });
 
     it("CLI files have proper content", async () => {
       const tripcTs = await readFile(join(srcRoot, "bin/tripc.ts"), "utf-8");
-      assert.ok(tripcTs.includes("TripLang Compiler & Linker"));
-      assert.ok(tripcTs.includes("loadTripModuleObject"));
+      assert.ok(tripcTs.includes("TripLang LLVM compiler CLI"));
+      assert.ok(tripcTs.includes("compileTripBundleV1ToLlvm"));
+      assert.ok(!tripcTs.includes("linkModules"));
+      assert.ok(!tripcTs.includes("loadTripModuleObject"));
     });
   });
 
-  describe("CLI Packaging Tests", () => {
-    describe("Compiled CLI (bin/tripc.js)", () => {
-      it("--version flag", async () => {
-        const result = await runCommand([
-          process.execPath,
-          "bin/tripc.js",
-          "--version",
-        ]);
+  describe("Compiled CLI (bin/tripc.js)", () => {
+    it("--version flag", async () => {
+      const result = await runCommand([
+        process.execPath,
+        "bin/tripc.js",
+        "--version",
+      ]);
 
-        assert.strictEqual(result.success, true);
-        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
-      });
-
-      it("--help flag", async () => {
-        const result = await runCommand([
-          process.execPath,
-          "bin/tripc.js",
-          "--help",
-        ]);
-
-        assert.strictEqual(result.success, true);
-        assert.ok(result.stdout.includes("TripLang Compiler & Linker (tripc)"));
-        assert.ok(result.stdout.includes("USAGE:"));
-      });
-
-      it("compilation", async () => {
-        const testFile = fixturePath("test.trip");
-
-        const result = await runCommand([
-          process.execPath,
-          "bin/tripc.js",
-          testFile,
-          "--stdout",
-        ]);
-
-        assert.strictEqual(result.success, true);
-
-        // Verify object file content
-        const parsed = JSON.parse(result.stdout);
-        assert.strictEqual(parsed.module, "TestModule");
-      });
-
-      it("error handling", async () => {
-        const invalidFile = fixturePath("invalid_syntax.trip");
-
-        const result = await runCommand([
-          process.execPath,
-          "bin/tripc.js",
-          invalidFile,
-        ]);
-
-        assert.strictEqual(result.success, false);
-        assert.ok(result.stderr.includes("Compilation error"));
-      });
+      assert.strictEqual(result.success, true);
+      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
     });
 
-    describe("Bundled JavaScript (dist/tripc.js)", () => {
-      const bundledJsPath = bundledTripcPath;
+    it("--help flag", async () => {
+      const result = await runCommand([
+        process.execPath,
+        "bin/tripc.js",
+        "--help",
+      ]);
 
-      it("file exists", () => {
-        assert.strictEqual(existsSync(bundledJsPath), true);
-      });
-
-      it("--version flag", async () => {
-        const command = [process.execPath, bundledJsPath, "--version"];
-        const result = await runCommand(command);
-
-        assertCommandSuccess(
-          result,
-          command,
-          "Bundled JavaScript (dist/tripc.js) --version flag",
-        );
-        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
-      });
-
-      it("compilation", async () => {
-        const testFile = fixturePath("test.trip");
-
-        const command = [process.execPath, bundledJsPath, testFile, "--stdout"];
-        const result = await runCommand(command);
-
-        assertCommandSuccess(
-          result,
-          command,
-          "Bundled JavaScript (dist/tripc.js) compilation",
-        );
-
-        // Verify output
-        const parsed = JSON.parse(result.stdout);
-        assert.strictEqual(parsed.module, "TestModule");
-      });
+      assert.strictEqual(result.success, true);
+      assert.ok(result.stdout.includes("TripLang LLVM Compiler (tripc)"));
+      assert.ok(result.stdout.includes("USAGE:"));
     });
 
-    describe("Minified JavaScript (dist/tripc.min.js)", () => {
-      const minifiedJsPath = minifiedTripcPath;
+    it("emits LLVM to stdout", async () => {
+      const result = await runCommand([
+        process.execPath,
+        "bin/tripc.js",
+        ...llvmArgs(),
+      ]);
 
-      it("file exists", () => {
-        assert.strictEqual(existsSync(minifiedJsPath), true);
-      });
-
-      it("--version flag", async () => {
-        const command = [process.execPath, minifiedJsPath, "--version"];
-        const result = await runCommand(command);
-
-        assertCommandSuccess(
-          result,
-          command,
-          "Minified JavaScript (dist/tripc.min.js) --version flag",
-        );
-        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
-      });
-
-      it("compilation", async () => {
-        const testFile = fixturePath("test.trip");
-
-        const command = [
-          process.execPath,
-          minifiedJsPath,
-          testFile,
-          "--stdout",
-        ];
-        const result = await runCommand(command);
-
-        assertCommandSuccess(
-          result,
-          command,
-          "Minified JavaScript (dist/tripc.min.js) compilation",
-        );
-
-        // Verify output
-        const parsed = JSON.parse(result.stdout);
-        assert.strictEqual(parsed.module, "TestModule");
-      });
+      assert.strictEqual(result.success, true, result.stderr);
+      assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
+      assert.match(result.stdout, /define i32 @main\(\)/);
     });
 
-    describe("Compiled Binary (dist/tripc)", () => {
-      const binaryPath = compiledTripcPath;
+    it("reports LLVM errors", async () => {
+      const result = await runCommand([
+        process.execPath,
+        "bin/tripc.js",
+        "--emit",
+        "llvm",
+        "test/bin/fixtures/invalid_syntax.trip",
+      ]);
 
-      it("file exists", () => {
-        assert.strictEqual(existsSync(binaryPath), true);
-      });
+      assert.strictEqual(result.success, false);
+      assert.ok(result.stderr.includes("LLVM emission error"));
+    });
+  });
 
-      it("file is executable", async () => {
-        try {
-          const stat = statSync(binaryPath);
-          assert.strictEqual(stat.isFile(), true);
-        } catch (error) {
-          throw new Error(
-            `Binary file check failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
-      });
+  describe("Bundled JavaScript (dist/tripc.js)", () => {
+    it("file exists", () => {
+      assert.strictEqual(existsSync(bundledTripcPath), true);
+    });
 
-      it("--version flag", async () => {
-        const command = [compiledTripcPath, "--version"];
-        const result = await runCommand(command);
+    it("--version flag", async () => {
+      const command = [process.execPath, bundledTripcPath, "--version"];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+    });
 
-        assertCommandSuccess(
-          result,
-          command,
-          "Compiled Binary (dist/tripc) --version flag",
-        );
-        assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
-      });
+    it("emits LLVM", async () => {
+      const command = [process.execPath, bundledTripcPath, ...llvmArgs()];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
+    });
+  });
 
-      it("--help flag", async () => {
-        const command = [compiledTripcPath, "--help"];
-        const result = await runCommand(command);
+  describe("Minified JavaScript (dist/tripc.min.js)", () => {
+    it("file exists", () => {
+      assert.strictEqual(existsSync(minifiedTripcPath), true);
+    });
 
-        assertCommandSuccess(
-          result,
-          command,
-          "Compiled Binary (dist/tripc) --help flag",
-        );
-        assert.ok(result.stdout.includes("TripLang Compiler & Linker (tripc)"));
-        assert.ok(result.stdout.includes("USAGE:"));
-      });
+    it("--version flag", async () => {
+      const command = [process.execPath, minifiedTripcPath, "--version"];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+    });
 
-      it("compilation", async () => {
-        const testFile = fixturePath("test.trip");
+    it("emits LLVM", async () => {
+      const command = [process.execPath, minifiedTripcPath, ...llvmArgs()];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
+    });
+  });
 
-        const command = [compiledTripcPath, testFile, "--stdout"];
-        const result = await runCommand(command);
+  describe("Compiled Binary (dist/tripc)", () => {
+    it("file exists", () => {
+      assert.strictEqual(existsSync(compiledTripcPath), true);
+    });
 
-        assertCommandSuccess(
-          result,
-          command,
-          "Compiled Binary (dist/tripc) compilation",
-        );
+    it("file is executable", () => {
+      assert.strictEqual(statSync(compiledTripcPath).isFile(), true);
+    });
 
-        // Verify output
-        const parsed = JSON.parse(result.stdout);
-        assert.strictEqual(parsed.module, "TestModule");
-      });
+    it("--version flag", async () => {
+      const command = [compiledTripcPath, "--version"];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+    });
+
+    it("--help flag", async () => {
+      const command = [compiledTripcPath, "--help"];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.ok(result.stdout.includes("TripLang LLVM Compiler (tripc)"));
+      assert.ok(result.stdout.includes("USAGE:"));
+    });
+
+    it("emits LLVM", async () => {
+      const command = [compiledTripcPath, ...llvmArgs()];
+      const result = await runCommand(command);
+      assertCommandSuccess(result, command);
+      assert.match(result.stdout, /define i8 @trip_fn_Main_main\(\)/);
     });
   });
 
@@ -525,7 +265,7 @@ poly id = #a => \\x:a => x`;
         process.execPath,
         "bin/tripc.js",
         "a.trip",
-        "b.tripc",
+        "b.ll",
         "extra",
       ]);
       assert.strictEqual(result.success, false);
@@ -538,36 +278,21 @@ poly id = #a => \\x:a => x`;
       assert.ok(result.stderr.includes("Error: No input file specified"));
     });
 
-    it("error on non-trip extension for compilation", async () => {
-      const tempFile = fixturePath("empty.txt");
+    it("error on non-trip extension for source input", async () => {
       const result = await runCommand([
         process.execPath,
         "bin/tripc.js",
-        tempFile,
+        "test/bin/fixtures/empty.txt",
       ]);
       assert.strictEqual(result.success, false);
       assert.ok(result.stderr.includes("must have .trip extension"));
     });
 
-    it("error on linking with no files", async () => {
-      const result = await runCommand([
-        process.execPath,
-        "bin/tripc.js",
-        "--link",
-      ]);
-      assert.strictEqual(result.success, false);
-      assert.ok(
-        result.stderr.includes("Error: No input files specified for linking"),
-      );
-    });
-
-    it("short flags coverage (-h, -v, -c)", async () => {
-      // -h
+    it("short flags coverage (-h, -v)", async () => {
       let result = await runCommand([process.execPath, "bin/tripc.js", "-h"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("USAGE:"));
 
-      // -v
       result = await runCommand([process.execPath, "bin/tripc.js", "-v"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("tripc v"));

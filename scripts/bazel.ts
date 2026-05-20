@@ -220,6 +220,8 @@ async function run(args: string[], options: any = {}): Promise<void> {
       env: {
         ...process.env,
         pnpm_config_store_dir: pnpmStore,
+        pnpm_config_cache_dir: join(pnpmStore, "cache"),
+        pnpm_config_state_dir: join(pnpmStore, "state"),
         ...extraEnv,
       },
       ...rest,
@@ -279,6 +281,8 @@ async function runCapture(args: string[], options: any = {}): Promise<string> {
       env: {
         ...process.env,
         pnpm_config_store_dir: pnpmStore,
+        pnpm_config_cache_dir: join(pnpmStore, "cache"),
+        pnpm_config_state_dir: join(pnpmStore, "state"),
         ...extraEnv,
       },
       ...rest,

@@ -18,8 +18,6 @@
  *   eraseTypedLambda,
  *   bracketLambda,
  *   resolvePoly,
- *   createArenaEvaluator,
- *   UnChurchNumber
  * } from "jsr:@maxdeliso/typed-ski";
  *
  * const tripLangCode = `
@@ -47,13 +45,7 @@
  * const skiCombinators = bracketLambda(untypedLambda);
  * console.log("4. SKI Combinators:", unparseSKI(skiCombinators));
  *
- * // Evaluation and unchurching
- * const evaluator = await createArenaEvaluator();
- * const normalForm = await evaluator.reduce(skiCombinators);
- * console.log("5. Normal Form:", unparseSKI(normalForm));
- *
- * const result = await UnChurchNumber(normalForm, evaluator);
- * console.log("6. UnChurch Result:", result); // 1
+ * console.log("5. SKI Result:", unparseSKI(skiCombinators));
  * ```
  *
  * @module

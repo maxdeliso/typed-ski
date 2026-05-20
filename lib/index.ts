@@ -1,14 +1,12 @@
 /**
- * Typed SKI: SKI calculus, TripLang compiler, and Thanatos evaluator.
+ * Typed SKI: SKI calculus and TripLang compiler.
  *
- * This package contains four conceptually distinct things, exposed here
+ * This package contains three conceptually distinct things, exposed here
  * through a small public API:
  *
  * 1. **SKI calculus** — parser, printer, Church encoding, bracket abstraction.
  * 2. **System F + typed lambda** — parser, printer, type inference, erasure.
  * 3. **TripLang compiler** — frontend `compile`, LLVM emit, module providers.
- * 4. **Thanatos evaluator** — native C/pthreads SKI reducer.
- *
  * Library internals (MiniCore IR, Bundle-v1 serialization, legacy SKI-linker
  * helpers, topoDagWire protocol, frontend implementation modules) are not
  * part of the public API. They are importable from their specific module
@@ -23,7 +21,6 @@
  *   eraseSystemF,
  *   bracketLambda,
  *   unparseSKI,
- *   createArenaEvaluator,
  *   UnChurchNumber,
  * } from "jsr:@maxdeliso/typed-ski";
  *
@@ -33,9 +30,7 @@
  * `);
  * const mainPoly = resolvePoly(program, "M.main");
  * const ski = bracketLambda(eraseSystemF(mainPoly.term));
- * const evaluator = await createArenaEvaluator();
- * const nf = await evaluator.reduce(ski);
- * console.log(unparseSKI(nf));
+ * console.log(unparseSKI(ski));
  * ```
  *
  * @module
@@ -94,20 +89,6 @@ export {
 // ─── Type utilities ─────────────────────────────────────────────────────
 export { unparseType } from "./parser/type.ts";
 export { inferType } from "./types/inference.ts";
-
-// ─── Thanatos evaluator ─────────────────────────────────────────────────
-export {
-  createArenaEvaluator,
-  createThanatosEvaluator,
-  defaultWorkerCount,
-  ThanatosEvaluator,
-  ThanatosUnavailableError,
-  thanatosAvailable,
-} from "./evaluator/thanatosEvaluator.ts";
-export type {
-  ThanatosEvaluatorOptions,
-  ThanatosReduceIoResult,
-} from "./evaluator/thanatosEvaluator.ts";
 
 // ─── Constants ──────────────────────────────────────────────────────────
 export { TEST_TIMEOUT_MS } from "./constants.ts";

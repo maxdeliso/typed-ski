@@ -1,71 +1,49 @@
-import { describe, it } from "./util/test_shim.ts";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { workspaceRoot } from "../lib/shared/workspaceRoot.ts";
-import { createThanatosEvaluator, thanatosAvailable } from "../lib/index.ts";
-import { linkModules } from "../lib/linker/moduleLinker.ts";
-import { parseSKI } from "../lib/parser/ski.ts";
-import { getBinObject } from "../lib/bin.ts";
-import { getPreludeObject } from "../lib/prelude.ts";
-import { getNatObject } from "../lib/nat.ts";
-import { UnChurchNumber } from "../lib/ski/church.ts";
-import { loadTripModuleObject } from "../lib/tripSourceLoader.ts";
+import { describe, it } from "./util/test_shim.ts";
+import { compileTripAndRun } from "./compiler/llvm/nativeHarness.ts";
 
-it(
-  "links prelude with not, and, or, pred, sub, lte, gte",
-  { skip: !thanatosAvailable() },
-  async () => {
-    const preludeObject = await getPreludeObject();
-    const binObject = await getBinObject();
-    const natObject = await getNatObject();
-    const testObject = await loadTripModuleObject(
-      join(workspaceRoot, "test", "compiler", "inputs", "preludeTest.trip"),
-    );
+describe("Prelude native LLVM execution", () => {
+  it("runs boolean and U8 prelude operations", async () => {
+    const source = `
+module Main
+import Prelude Bool
+import Prelude true
+import Prelude false
+import Prelude not
+import Prelude and
+import Prelude or
+import Prelude if
+import Prelude addU8
+import Prelude subU8
+import Prelude U8
 
-    const skiExpression = linkModules([
-      { name: "Prelude", object: preludeObject },
-      { name: "Bin", object: binObject },
-      { name: "Nat", object: natObject },
-      { name: "TestPrelude", object: testObject },
-    ]);
+export main
 
-    const skiExpr = parseSKI(skiExpression);
-    const evaluator = await createThanatosEvaluator();
-    try {
-      const evaluated = await evaluator.reduce(skiExpr);
-      const decoded = await UnChurchNumber(evaluated, evaluator);
-      assert.deepStrictEqual(
-        decoded,
-        8n,
-        "not/and/or/pred/sub/lte/gte expressions should sum to 8",
-      );
-    } finally {
-      await evaluator.terminate();
-    }
-  },
-);
+poly bit = \\b : Bool => if [U8] b (\\u : U8 => #u8(1)) (\\u : U8 => #u8(0))
 
-it("subU8 primitive subtraction", { skip: !thanatosAvailable() }, async () => {
-  const preludeObject = await getPreludeObject();
-  const testObject = await loadTripModuleObject(
-    join(workspaceRoot, "test", "compiler", "inputs", "subU8Test.trip"),
-  );
+poly main =
+  let a = bit (not false) in
+  let b = bit (and true true) in
+  let c = bit (or false true) in
+  addU8 (addU8 a b) (addU8 c (subU8 #u8(10) #u8(5)))
+`;
 
-  const skiExpression = linkModules([
-    { name: "Prelude", object: preludeObject },
-    { name: "SubU8Test", object: testObject },
-  ]);
+    const result = await compileTripAndRun(source);
+    assert.equal(result.status, 8);
+  });
 
-  const skiExpr = parseSKI(skiExpression);
-  const evaluator = await createThanatosEvaluator();
-  try {
-    const result = await evaluator.reduce(skiExpr);
-    assert.deepStrictEqual(
-      result,
-      { kind: "u8", value: 8 },
-      "subU8 #u8(10) #u8(2) should be #u8(8)",
-    );
-  } finally {
-    await evaluator.terminate();
-  }
+  it("runs primitive subtraction", async () => {
+    const source = `
+module Main
+import Prelude subU8
+import Prelude U8
+
+export main
+
+poly main = subU8 #u8(10) #u8(2)
+`;
+
+    const result = await compileTripAndRun(source);
+    assert.equal(result.status, 8);
+  });
 });

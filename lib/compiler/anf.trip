@@ -24,6 +24,10 @@ import CoreToMini ME_Con
 import CoreToMini ME_Let
 import CoreToMini ME_Native
 import CoreToMini ME_Match
+import MiniCore MiniFunc
+import MiniCore MkMiniFunc
+import MiniCore MiniProgram
+import MiniCore MkMiniProgram
 import Unparse Terminal
 
 export AnfExpr
@@ -43,6 +47,11 @@ export MkBinding
 export NormResult
 export MkNormResult
 export normalize
+export AnfFunc
+export MkAnfFunc
+export AnfProgram
+export MkAnfProgram
+export normalizeProgram
 
 data AnfExpr =
   | AE_Var (List U8)
@@ -62,6 +71,10 @@ data NormResult = MkNormResult Bin (List Binding) AnfExpr
 data AtomList = MkAtomList Bin (List Binding) (List AnfExpr)
 
 data ArmsRes = MkArmsRes Bin (List AnfExpr)
+
+data AnfFunc = MkAnfFunc (List U8) (List (List U8)) AnfExpr
+
+data AnfProgram = MkAnfProgram (List AnfFunc) (List U8)
 
 poly tempPrefix = cons [U8] '_' (cons [U8] '_' (cons [U8] 't' (nil [U8])))
 
@@ -150,3 +163,17 @@ poly rec norm = \state : Bin => \expr : MiniExpr => \pos : Pos =>
 
 poly normalize = \expr : MiniExpr =>
   match (norm BZ expr PTail) [AnfExpr] { | MkNormResult s b e => e }
+
+poly rec normalizeFuncs = \funcs : List MiniFunc =>
+  matchList [MiniFunc] [List AnfFunc] funcs
+    (nil [AnfFunc])
+    (\h : MiniFunc => \t : List MiniFunc =>
+      match h [List AnfFunc] {
+        | MkMiniFunc name params body =>
+            cons [AnfFunc] (MkAnfFunc name params (normalize body)) (normalizeFuncs t)
+      })
+
+poly normalizeProgram = \prog : MiniProgram =>
+  match prog [AnfProgram] {
+    | MkMiniProgram funcs entry => MkAnfProgram (normalizeFuncs funcs) entry
+  }

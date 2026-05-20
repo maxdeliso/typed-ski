@@ -1,0 +1,14 @@
+=== identity ===
+main x = x
+
+=== letBinding ===
+main x = (let y x y)
+
+=== nestedCall ===
+konst x y = x
+main z = (let __t0 (call konst z z) (call konst __t0 z))
+
+=== adtMatch ===
+flip b = (case b (con 1/2/0) (con 0/2/0))
+main = (let __t0 (con 0/2/0) (call flip __t0))
+

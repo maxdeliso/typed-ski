@@ -12,10 +12,6 @@ def _node_sharded_test_impl(ctx):
     extension = ".bat" if is_windows else ".sh"
     launcher = ctx.actions.declare_file(ctx.label.name + extension)
 
-    thanatos_rootpath = ctx.expand_location(
-        "$(rootpath %s)" % str(ctx.attr.thanatos.label),
-        [ctx.attr.thanatos],
-    )
     clang_rootpath = ""
     if ctx.attr.clang:
         clang_rootpath = ctx.expand_location(
@@ -59,7 +55,6 @@ def _node_sharded_test_impl(ctx):
             "  echo bazel.js not found under %RUNFILES_ROOT%",
             "  exit /b 1",
             ")",
-            "set \"THANATOS_BIN=%RUNFILES_ROOT%\\" + thanatos_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_JS_PATH=%RUNFILES_ROOT%\\" + dist_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_MIN_JS_PATH=%RUNFILES_ROOT%\\" + dist_min_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_NODE_JS_PATH=%RUNFILES_ROOT%\\" + dist_node_js_rootpath.replace("/", "\\") + "\"",
@@ -105,7 +100,6 @@ def _node_sharded_test_impl(ctx):
             "  echo \"bazel.js not found under $runfiles_root\" >&2",
             "  exit 1",
             "fi",
-            "export THANATOS_BIN=\"$runfiles_root/" + shell_dquote_literal(thanatos_rootpath) + "\"",
             "export TYPED_SKI_DIST_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_MIN_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_min_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_NODE_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_node_js_rootpath) + "\"",
@@ -128,7 +122,7 @@ def _node_sharded_test_impl(ctx):
     if ctx.file.generated_jsr:
         symlinks["jsr.json"] = ctx.file.generated_jsr
 
-    runfiles_files = ctx.files.data + [ctx.executable.thanatos, node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
+    runfiles_files = ctx.files.data + [node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
     if ctx.attr.clang:
         runfiles_files.append(ctx.executable.clang)
     if ctx.attr.llvm_dist:
@@ -139,7 +133,6 @@ def _node_sharded_test_impl(ctx):
         symlinks = symlinks,
     )
     runfiles = merge_target_runfiles(runfiles, ctx.attr.data)
-    runfiles = runfiles.merge(ctx.attr.thanatos[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.dist[DefaultInfo].default_runfiles)
     if ctx.attr.clang:
         runfiles = runfiles.merge(ctx.attr.clang[DefaultInfo].default_runfiles)
@@ -166,11 +159,6 @@ node_sharded_test = rule(
         "llvm_dist": attr.label_list(
             allow_files = True,
             cfg = "exec",
-        ),
-        "thanatos": attr.label(
-            executable = True,
-            cfg = "target",
-            mandatory = True,
         ),
         "_windows_constraint": attr.label(
             default = "@platforms//os:windows",

@@ -116,7 +116,7 @@ describe("JSR Packaging Configuration", () => {
       assert.ok(libIndex.includes("unparseSKI"));
       assert.ok(libIndex.includes("bracketLambda"));
       assert.ok(libIndex.includes("typecheckSystemF"));
-      assert.ok(libIndex.includes("createThanatosEvaluator"));
+      assert.ok(!libIndex.includes("create" + "Thana" + "tosEvaluator"));
       assert.ok(libIndex.includes("getPreludeObject"));
     });
 

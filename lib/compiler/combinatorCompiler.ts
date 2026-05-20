@@ -1,16 +1,12 @@
 import { join } from "node:path";
 import { getAvlObject } from "../avl.ts";
 import { getBinObject } from "../bin.ts";
-import { createThanatosEvaluator } from "../evaluator/thanatosEvaluator.ts";
 import { linkModules } from "../linker/moduleLinker.ts";
 import { getNatObject } from "../nat.ts";
-import { parseSKI } from "../parser/ski.ts";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { getPreludeObject } from "../prelude.ts";
 import { sortedStrings } from "../shared/canonical.ts";
 import { workspaceRoot } from "../shared/workspaceRoot.ts";
-import { unparseSKI } from "../ski/expression.ts";
-import { optimizeSKI } from "../ski/optimizer.ts";
 import {
   loadTripModuleObject,
   loadTripSourceFile,
@@ -38,6 +34,7 @@ const BRIDGE_SOURCE_FILE = lib("compiler", "bridge.trip");
 const LLVM_SOURCE_FILE = lib("compiler", "llvm.trip");
 const BUNDLE_SUMMARY_SOURCE_FILE = lib("compiler", "bundleSummary.trip");
 const CORE_TO_MINI_SOURCE_FILE = lib("compiler", "coreToMini.trip");
+const MINI_CORE_SOURCE_FILE = lib("compiler", "miniCore.trip");
 const ANF_SOURCE_FILE = lib("compiler", "anf.trip");
 const COMPILER_SOURCE_FILE = lib("compiler", "index.trip");
 const TELEMETRY_SOURCE_FILE = lib("compiler", "telemetry.trip");
@@ -130,6 +127,13 @@ const BUILTIN_MODULES = new Map<string, BuiltinModuleSpec>([
     },
   ],
   [
+    "MiniCore",
+    {
+      source: MINI_CORE_SOURCE_FILE,
+      load: () => loadTripModuleObject(MINI_CORE_SOURCE_FILE),
+    },
+  ],
+  [
     "Anf",
     {
       source: ANF_SOURCE_FILE,
@@ -151,50 +155,6 @@ const BUILTIN_MODULES = new Map<string, BuiltinModuleSpec>([
     },
   ],
 ]);
-
-const SUPPORTED_BOOTSTRAPPED_TERM_KINDS = new Set([
-  "module",
-  "export",
-  "poly",
-  "data",
-]);
-
-export interface BootstrappedCompileOptions {
-  workers?: number;
-}
-
-export class BootstrappedCompilerError extends Error {
-  constructor(
-    message: string,
-    public override readonly cause?: unknown,
-  ) {
-    super(message);
-    this.name = "BootstrappedCompilerError";
-  }
-}
-
-export class BootstrappedCompilerMismatchError extends BootstrappedCompilerError {
-  constructor(
-    public readonly expected: string,
-    public readonly actual: string,
-  ) {
-    super(
-      [
-        "Bootstrapped compiler output did not match the TypeScript compiler.",
-        `Expected: ${expected}`,
-        `Actual: ${actual}`,
-      ].join("\n"),
-    );
-    this.name = "BootstrappedCompilerMismatchError";
-  }
-}
-
-let compilerRuntimeModulesPromise: Promise<Map<string, TripCObject>> | null =
-  null;
-
-function tripStringLiteral(text: string): string {
-  return JSON.stringify(text);
-}
 
 function sanitizeImportedModule(
   moduleName: string,
@@ -285,128 +245,6 @@ async function loadBuiltinModuleGraph(
   return loaded;
 }
 
-async function getCompilerRuntimeModules(): Promise<Map<string, TripCObject>> {
-  if (!compilerRuntimeModulesPromise) {
-    compilerRuntimeModulesPromise = loadBuiltinModuleGraph(["Compiler"]);
-  }
-  return await compilerRuntimeModulesPromise;
-}
-
-function assertBootstrappedCompileSupported(source: string): void {
-  const unsupportedKinds = new Set<string>();
-  for (const term of parseTripLang(source).terms) {
-    if (!SUPPORTED_BOOTSTRAPPED_TERM_KINDS.has(term.kind)) {
-      unsupportedKinds.add(term.kind);
-    }
-  }
-
-  if (unsupportedKinds.size === 0) {
-    return;
-  }
-
-  throw new BootstrappedCompilerError(
-    "bootstrappedCompile currently supports only top-level module/export/poly/data declarations; found: " +
-      sortedStrings(unsupportedKinds).join(", "),
-  );
-}
-
-function makeBootstrappedCompileHarness(source: string): string {
-  return `module Test
-import Prelude Result
-import Prelude Ok
-import Prelude Err
-import Prelude Bool
-import Prelude if
-import Prelude U8
-import Prelude List
-import Prelude append
-import Prelude matchList
-import Prelude Pair
-import Prelude fst
-import Prelude snd
-import Prelude writeOne
-import Prelude eqListU8
-import Compiler compileToComb
-import Unparse Comb
-import Unparse unparseCombinator
-
-export main
-
-poly rec writeAll = \\bytes : List U8 =>
-  matchList [U8] [U8] bytes
-    #u8(0)
-    (\\h : U8 => \\t : List U8 =>
-      writeOne h [U8] (\\u : U8 => writeAll t))
-
-poly rec findMain = \\results : List (Pair (List U8) Comb) =>
-  matchList [Pair (List U8) Comb] [Result (List U8) (List U8)] results
-    (Err [List U8] [List U8] "Missing main")
-    (\\h : Pair (List U8) Comb => \\t : List (Pair (List U8) Comb) =>
-      if [Result (List U8) (List U8)] (eqListU8 (fst [List U8] [Comb] h) "main")
-        (\\u : U8 => Ok [List U8] [List U8] (unparseCombinator (snd [List U8] [Comb] h)))
-        (\\u : U8 => findMain t))
-
-poly main =
-  match (compileToComb ${tripStringLiteral(source)}) [U8] {
-    | Err e => writeAll (append [U8] "ERR:" e)
-    | Ok results =>
-        match (findMain results) [U8] {
-          | Err e => writeAll (append [U8] "ERR:" e)
-          | Ok actual => writeAll actual
-        }
-  }
-`;
-}
-
-async function buildBootstrappedCompileExpression(source: string) {
-  const modules = await getCompilerRuntimeModules();
-  const prelude = requireModule(modules, "Prelude");
-  const lexer = requireModule(modules, "Lexer");
-  const unparse = requireModule(modules, "Unparse");
-  const compiler = requireModule(modules, "Compiler");
-
-  const testObject = compileToObjectFile(
-    makeBootstrappedCompileHarness(source),
-    {
-      importedModules: [prelude, lexer, unparse, compiler],
-    },
-  );
-
-  const linked = linkModules([
-    ...sortedStrings(modules.keys()).map((moduleName) => ({
-      name: moduleName,
-      object: requireModule(modules, moduleName),
-    })),
-    { name: "Test", object: testObject },
-  ]);
-
-  return parseSKI(linked);
-}
-
-function requireModule(
-  modules: Map<string, TripCObject>,
-  moduleName: string,
-): TripCObject {
-  const object = modules.get(moduleName);
-  if (!object) {
-    throw new BootstrappedCompilerError(
-      `Missing built-in compiler module '${moduleName}'.`,
-    );
-  }
-  return object;
-}
-
-async function runHarness(source: string, workers = 1): Promise<string> {
-  const expression = await buildBootstrappedCompileExpression(source);
-  const evaluator = await createThanatosEvaluator({ workers });
-  const { stdout } = await evaluator.reduceWithIo(expression);
-  return new TextDecoder().decode(stdout);
-}
-
-function normalizeCombinatorString(source: string): string {
-  return unparseSKI(optimizeSKI(parseSKI(source)));
-}
-
 /**
  * Compiles a TripLang module source string to the final linked combinator string
  * using the TypeScript compiler and built-in library modules.
@@ -440,30 +278,4 @@ export async function compileToCombinatorString(
   modules.push({ name: objectFile.module, object: objectFile });
 
   return linkModules(modules);
-}
-
-/**
- * Runs the self-hosted compiler on the given source, compares it against the
- * TypeScript compiler output, and returns the matching combinator string.
- */
-export async function bootstrappedCompile(
-  source: string,
-  options: BootstrappedCompileOptions = {},
-): Promise<string> {
-  assertBootstrappedCompileSupported(source);
-
-  const expected = normalizeCombinatorString(
-    await compileToCombinatorString(source),
-  );
-  const rawActual = await runHarness(source, options.workers ?? 1);
-
-  if (rawActual.startsWith("ERR:")) {
-    throw new BootstrappedCompilerError(rawActual.slice(4));
-  }
-  const actual = normalizeCombinatorString(rawActual);
-  if (actual !== expected) {
-    throw new BootstrappedCompilerMismatchError(expected, actual);
-  }
-
-  return actual;
 }

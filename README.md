@@ -8,28 +8,25 @@ build system and one workspace:
    [`lib/ski/`](lib/ski/), [`lib/parser/`](lib/parser/),
    [`lib/conversion/`](lib/conversion/), [`lib/types/`](lib/types/),
    [`lib/terms/`](lib/terms/).
-2. **Thanatos** — a native C11/pthreads parallel SKI reducer that talks to
-   the TypeScript evaluator over an ASCII "topo-DAG" wire protocol. Research
-   artifact. Runtime in [`runtime/thanatos/`](runtime/thanatos/), TS client
-   in [`lib/evaluator/`](lib/evaluator/).
-3. **TripLang compiler** — a small typed functional language (modules, ADTs,
-   polymorphism) with two backends: a classical path that compiles to SKI
-   and runs on Thanatos, and a native path that lowers through MiniCore →
-   ANF → Block IR → LLVM IR → clang. The native path is the production
-   direction. CLI in [`bin/tripc.ts`](bin/tripc.ts); pipeline documented in
-   [`lib/minicore/README.md`](lib/minicore/README.md); native runtime in
-   [`runtime/trip/`](runtime/trip/).
-4. **Self-hosting bootstrap** — an in-progress re-implementation of the
+2. **TripLang compiler** — a small typed functional language (modules, ADTs,
+   polymorphism) whose mainline backend lowers through MiniCore → ANF → Block
+   IR → LLVM IR → clang. CLI in [`bin/tripc.ts`](bin/tripc.ts); pipeline
+   documented in [`lib/minicore/README.md`](lib/minicore/README.md); native
+   runtime in [`runtime/trip/`](runtime/trip/).
+3. **Self-hosting bootstrap** — an in-progress re-implementation of the
    compiler in TripLang itself. `.trip` modules in
    [`lib/compiler/`](lib/compiler/) (lexer.trip, parser.trip, core.trip,
    lowering.trip, llvm.trip, etc.). The current native bootstrap consumes
    `bundle-v1` input and emits LLVM IR for the narrow stage-1 path.
+4. **Sealed SKI reducer consumer** — the legacy native SKI reducer lives under
+   [`consumers/thanatos/`](consumers/thanatos/) as an isolated binary consumer,
+   outside the main public TypeScript API and test runtime.
 
 ## Quick Start
 
 ```bash
-bazelisk build //:thanatos              # native SKI reducer
-bazelisk test  //:native_tests          # C tests + end-to-end native trip
+bazelisk build //consumers/thanatos:thanatos
+bazelisk test  //:native_tests          # end-to-end native Trip executable
 bazelisk test  //:node_tests            # TypeScript test suite
 bazelisk run   //:dist                  # build distributable CLI artifacts
 bazelisk run   //:ci                    # fmt + lint + typecheck + build + cov
@@ -54,8 +51,7 @@ pinned in `.bazelversion`.
 2. Install `pnpm` (`npm install -g pnpm`).
 3. Install `Bazelisk`.
 4. On macOS: `xcode-select --install`.
-5. Clone the repo, `pnpm install`, `bazelisk build //:thanatos`,
-   `bazelisk run //:dist`.
+5. Clone the repo, `pnpm install`, `bazelisk run //:dist`.
 
 Helper scripts in [`scripts/`](scripts/) use the local `pnpm` pinned via
 `node_modules/pnpm`.
@@ -65,8 +61,8 @@ Helper scripts in [`scripts/`](scripts/) use the local `pnpm` pinned via
 ```bash
 bazelisk test //:node_tests             # sharded Node.js test suite
 bazelisk run  //:test                   # single-process workspace run
-bazelisk test //:native_tests           # C tests
-bazelisk build //:thanatos              # rebuild native binary
+bazelisk test //:native_tests           # native Trip executable smoke tests
+bazelisk test //consumers/thanatos:all  # sealed reducer consumer tests
 ```
 
 On Windows, pass `--enable_runfiles` to `bazelisk test //:node_tests` if your
@@ -77,7 +73,6 @@ Bazel setup does not expose a runfiles tree by default.
 With Node directly:
 
 ```powershell
-$env:THANATOS_BIN = "$(pwd)\bazel-bin\runtime\thanatos\thanatos.exe"
 node --disable-warning=ExperimentalWarning --test-global-setup ts_out/test/globalSetup.js --test ts_out/test/path/to/test.js
 ```
 
@@ -102,8 +97,8 @@ bazelisk run  //:test -- test/path/to/test.ts
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
 
 The public API is intentionally small — `compile`, `compileTripSourceToLlvm`,
-the SKI utilities, System F utilities, the Thanatos client, and the module
-providers. See [`lib/index.ts`](lib/index.ts) for the full surface. Other
+the SKI utilities, System F utilities, and the module providers. See
+[`lib/index.ts`](lib/index.ts) for the full surface. Other
 internal modules (MiniCore IR, Bundle-v1 serialization, legacy SKI-linker
 helpers, TopoDagWire protocol) are importable from their specific paths but are not
 part of the stable contract.
@@ -114,56 +109,17 @@ part of the stable contract.
 
 ## 1. SKI calculus library
 
-The original purpose of this repo. Parser, printer, evaluator, bracket
+The original purpose of this repo. Parser, printer, bracket
 abstraction (lambda → SKI), Church encoding. The public entry points are
 listed in [`lib/index.ts`](lib/index.ts).
 
-The Thanatos-backed evaluator uses a global hash-cons (in the Thanatos path)
-so identical sub-expressions share memory, keeping the footprint of large
-reductions bounded.
+## 2. TripLang compiler
 
-## 2. Thanatos (parallel SKI reducer)
+A small typed functional language. The mainline backend is:
 
-Thanatos is the native C11/pthreads orchestrator for compute-heavy SKI
-reductions. The TypeScript `ThanatosEvaluator` is a daemon forwarder: it
-serializes SKI expressions to the topo-DAG wire format, submits them to a
-running `thanatos` daemon, and decodes the response. Keeping reduction native
-avoids JS runtime overhead.
-
-Sources: [`runtime/thanatos/`](runtime/thanatos/) (C),
-[`lib/evaluator/`](lib/evaluator/) (TS),
-[`lib/ski/topoDagWire.ts`](lib/ski/topoDagWire.ts) (protocol).
-
-### Topo-DAG wire format
-
-The TypeScript evaluator and Thanatos communicate using **Topo-DAG**, an
-ASCII serialization of the SKI graph. Fixed-width records (19 chars per
-record, 20-char stride including separator), separated by `|`. Each record
-encodes one DAG node:
-
-```text
-[Term: 3 chars][Left Pointer: 8 hex chars][Right Pointer: 8 hex chars]
-```
-
-- **Term field (3 chars):** `@00` for application; `U` followed by 2 hex
-  digits for unsigned 8-bit integers (e.g. `UFF`); terminal symbol followed
-  by `00` (e.g. `S00`, `K00`, `I00`).
-- **Left/right pointers (8 chars each):** zero-padded uppercase hex,
-  absolute character offset of the child record. The DAG is topologically
-  sorted so pointers strictly point backward. Null pointer is `FFFFFFFF`
-  (used by leaves).
-
-Roots are implicitly the last records in the string.
-
-## 3. TripLang compiler
-
-A small typed functional language. Two backends:
-
-- **Native (LLVM)** — the production direction. Source flows through
+- **Native (LLVM)** — Source flows through
   `TripLang AST → MiniCore → ANF → Block IR → LLVM IR → clang`. Pipeline
   documented in detail in [`lib/minicore/README.md`](lib/minicore/README.md).
-- **Classical (SKI)** — Source flows through System F elaboration →
-  typechecking → bracket abstraction → SKI → Thanatos.
 
 CLI: [`bin/tripc.ts`](bin/tripc.ts) emits LLVM IR from Trip source or
 deterministic `bundle-v1` input:
@@ -299,8 +255,8 @@ for a stage-1 Trip program.
 
 This is targeting LLVM IR self-hosting, not in-language object emission or
 linking. Parser bootstrap progress is measured through the `bundle-v1`
-contract above; legacy Thanatos/SKI parser bootstrap tests are not
-acceptance criteria for this milestone.
+contract above; legacy SKI parser bootstrap tests are not acceptance criteria
+for this milestone.
 
 ---
 
@@ -338,9 +294,8 @@ the test suite exposed through Bazel commands.
 # CI/CD
 
 GitHub Actions use Bazel on Ubuntu, native Windows, and macOS Apple Silicon.
-Native C targets run through ordinary Bazel build/test steps. The Node.js
-suite runs through the sharded `//:node_tests` Bazel test target so each
-shard owns its own Thanatos session. The hosted macOS runner includes
+Native targets run through ordinary Bazel build/test steps. The Node.js
+suite runs through the sharded `//:node_tests` Bazel test target. The hosted macOS runner includes
 Xcode tooling and the macOS SDK; local macOS setups need Xcode Command
 Line Tools installed. See the workflow files in `.github/workflows/`.
 

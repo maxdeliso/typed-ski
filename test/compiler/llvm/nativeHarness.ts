@@ -19,6 +19,7 @@ export interface RunResult {
 export interface HarnessOptions extends CompileTripSourceToLlvmOptions {
   cleanup?: boolean;
   runtimeSources?: string[];
+  stdin?: string | Uint8Array;
 }
 
 const CLANG = process.env["TYPED_SKI_CLANG"];
@@ -137,7 +138,7 @@ export async function compileTripAndRun(
       llPath,
       options.runtimeSources,
     );
-    return runExecutable(exePath);
+    return runExecutable(exePath, options.stdin);
   } finally {
     if (options.cleanup !== false) {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});

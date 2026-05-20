@@ -3,8 +3,6 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "runtime",
     srcs = [
-        "//runtime/platform:platform",
-        "//runtime/thanatos:thanatos_srcs",
         "//runtime/trip:trip_runtime_srcs",
     ],
 )

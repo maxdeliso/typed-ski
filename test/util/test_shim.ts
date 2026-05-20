@@ -25,10 +25,7 @@ const universalWaitFor = async (
 
 const parseArgs = (arg2: any, arg3?: any) => {
   let fn: any;
-  const defaultTimeout = parseInt(
-    process.env["THANATOS_TIMEOUT_MS"] ?? TEST_TIMEOUT_MS.toString(),
-    10,
-  );
+  const defaultTimeout = TEST_TIMEOUT_MS;
   let options: any = { timeout: defaultTimeout };
 
   if (typeof arg2 === "function") {

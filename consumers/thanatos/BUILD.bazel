@@ -1,0 +1,22 @@
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "thanatos",
+    actual = "//consumers/thanatos/runtime:thanatos",
+)
+
+alias(
+    name = "performance_test",
+    actual = "//consumers/thanatos/runtime:performance_test",
+)
+
+test_suite(
+    name = "thanatos_tests",
+    tests = [
+        "//consumers/thanatos/platform:util_test",
+        "//consumers/thanatos/runtime:arena_test",
+        "//consumers/thanatos/runtime:dag_codec_test",
+        "//consumers/thanatos/runtime:session_test",
+        "//consumers/thanatos/runtime:ski_io_test",
+    ],
+)

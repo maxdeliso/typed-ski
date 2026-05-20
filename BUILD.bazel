@@ -205,24 +205,9 @@ LLVM_AS_COMPATIBILITY = select({
     "//conditions:default": ["@platforms//:incompatible"],
 })
 
-alias(
-    name = "thanatos",
-    actual = "//runtime/thanatos:thanatos",
-)
-
-alias(
-    name = "performance_test",
-    actual = "//runtime/thanatos:performance_test",
-)
-
 test_suite(
     name = "native_tests",
     tests = [
-        "//runtime/platform:util_test",
-        "//runtime/thanatos:arena_test",
-        "//runtime/thanatos:dag_codec_test",
-        "//runtime/thanatos:session_test",
-        "//runtime/thanatos:ski_io_test",
         "//:trip_hello_world_test",
     ],
 )
@@ -245,7 +230,6 @@ node_sharded_test(
     generated_jsr = ":jsr.json",
     llvm_dist = LLVM_DIST_DATA,
     shard_count = 8,
-    thanatos = "//runtime/thanatos:thanatos",
 )
 
 node_llvm_as_test(

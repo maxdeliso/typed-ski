@@ -201,18 +201,3 @@ export function compileToObjectFile(
     }
   }
 }
-
-/**
- * Compiles a single TripLang source string to a serialized .tripc object file.
- *
- * @param source The TripLang source code
- * @returns JSON string representation of the object file
- * @throws SingleFileCompilerError if compilation fails
- */
-export function compileToObjectFileString(
-  source: string,
-  options: CompileToObjectFileOptions = {},
-): string {
-  const objectFile = compileToObjectFile(source, options);
-  return serializeTripCObject(objectFile);
-}

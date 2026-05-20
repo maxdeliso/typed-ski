@@ -1,0 +1,149 @@
+module MiniVerify
+
+import Prelude List
+import Prelude nil
+import Prelude cons
+import Prelude matchList
+import Prelude Result
+import Prelude Ok
+import Prelude Err
+import Prelude Pair
+import Prelude U8
+import Prelude append
+import Prelude addU8
+import Prelude divU8
+import Prelude modU8
+import Prelude ltU8
+import Prelude if
+import Core Core
+import Lexer tokenize
+import Parser parseProgram
+import Parser Decl
+import Bridge elaborateProgramToCore
+import MiniCore buildMiniProgram
+import MiniCore MiniProgram
+import Anf normalizeProgram
+import Anf AnfProgram
+import Anf MkAnfProgram
+import Anf AnfFunc
+import Anf MkAnfFunc
+import Anf AnfExpr
+import Anf AE_Var
+import Anf AE_Native
+import Anf AE_Lam
+import Anf AE_Call
+import Anf AE_Con
+import Anf AE_Case
+import Anf AE_Let
+import Unparse Terminal
+import Unparse terminalBytes
+
+export unparseAnfProgram
+export verifyToAnfText
+
+poly digitToAscii = \d : U8 =>
+  addU8 d #u8(48)
+
+poly singletonU8 = \b : U8 =>
+  cons [U8] b (nil [U8])
+
+poly u8ToDigits = \n : U8 =>
+  if [List U8] (ltU8 n #u8(10))
+    (\u : U8 => singletonU8 (digitToAscii n))
+    (\u : U8 =>
+      if [List U8] (ltU8 n #u8(100))
+        (\u : U8 =>
+          cons [U8]
+            (digitToAscii (divU8 n #u8(10)))
+            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
+        (\u : U8 =>
+          let hundreds = divU8 n #u8(100) in
+          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+          let ones = modU8 n #u8(10) in
+          cons [U8]
+            (digitToAscii hundreds)
+            (cons [U8]
+              (digitToAscii tens)
+              (singletonU8 (digitToAscii ones))))
+    )
+
+poly rec renderList = \f : AnfExpr -> List U8 => \es : List AnfExpr =>
+  matchList [AnfExpr] [List U8] es
+    (nil [U8])
+    (\h : AnfExpr => \t : List AnfExpr =>
+      append [U8] (cons [U8] ' ' (f h)) (renderList f t))
+
+poly rec renderParams = \ps : List (List U8) =>
+  matchList [List U8] [List U8] ps
+    (nil [U8])
+    (\h : List U8 => \t : List (List U8) =>
+      append [U8] (cons [U8] ' ' h) (renderParams t))
+
+poly rec unparseAnfExpr = \e : AnfExpr =>
+  match e [List U8] {
+    | AE_Var n => n
+    | AE_Native t => terminalBytes t
+    | AE_Lam n b =>
+        append [U8] "(lam "
+          (append [U8] n
+            (append [U8] " " (append [U8] (unparseAnfExpr b) ")")))
+    | AE_Call f args =>
+        append [U8] "(call "
+          (append [U8] f (append [U8] (renderList unparseAnfExpr args) ")"))
+    | AE_Con tag total arity args =>
+        append [U8] "(con "
+          (append [U8] (u8ToDigits tag)
+            (append [U8] "/"
+              (append [U8] (u8ToDigits total)
+                (append [U8] "/"
+                  (append [U8] (u8ToDigits arity)
+                    (append [U8] (renderList unparseAnfExpr args) ")"))))))
+    | AE_Case scrut arms =>
+        append [U8] "(case "
+          (append [U8] (unparseAnfExpr scrut)
+            (append [U8] (renderList unparseAnfExpr arms) ")"))
+    | AE_Let n v b =>
+        append [U8] "(let "
+          (append [U8] n
+            (append [U8] " "
+              (append [U8] (unparseAnfExpr v)
+                (append [U8] " " (append [U8] (unparseAnfExpr b) ")")))))
+  }
+
+poly unparseAnfFunc = \fn : AnfFunc =>
+  match fn [List U8] {
+    | MkAnfFunc name params body =>
+        append [U8] name
+          (append [U8] (renderParams params)
+            (append [U8] " = "
+              (append [U8] (unparseAnfExpr body) (singletonU8 #u8(10)))))
+  }
+
+poly rec unparseAnfFuncs = \fns : List AnfFunc =>
+  matchList [AnfFunc] [List U8] fns
+    (nil [U8])
+    (\h : AnfFunc => \t : List AnfFunc =>
+      append [U8] (unparseAnfFunc h) (unparseAnfFuncs t))
+
+poly unparseAnfProgram = \prog : AnfProgram =>
+  match prog [List U8] {
+    | MkAnfProgram funcs entry => unparseAnfFuncs funcs
+  }
+
+poly verifyToAnfText = \source : List U8 =>
+  match (tokenize source) [List U8] {
+    | Err e => append [U8] "ERR:" "Lex error"
+    | Ok toks =>
+        match (parseProgram toks) [List U8] {
+          | Err e => append [U8] "ERR:" "Parse error"
+          | Ok decls =>
+              match (elaborateProgramToCore decls) [List U8] {
+                | Err e => append [U8] "ERR:" e
+                | Ok coreDefs =>
+                    match (buildMiniProgram coreDefs "main") [List U8] {
+                      | Err e => append [U8] "ERR:" e
+                      | Ok prog => unparseAnfProgram (normalizeProgram prog)
+                    }
+              }
+        }
+  }

@@ -93,6 +93,7 @@ import Lowering L_Lam
 import Lowering L_Native
 
 export elaborateProgram
+export elaborateProgramToCore
 export checkedLengthU8
 
 poly rec eqListU8 = \a : List U8 => \b : List U8 =>
@@ -461,3 +462,43 @@ poly rec elaborateProgramRec = \state : State => \decls : List Decl =>
 poly elaborateProgram = \globals : Avl (List U8) Lower => \decls : List Decl =>
   let initialState = MkState globals (MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo])) in
   elaborateProgramRec initialState (filterElaboratableDecls decls)
+
+poly rec elaborateToCoreRec = \dEnv : DataEnv => \decls : List Decl =>
+  matchList [Decl] [Result (List U8) (List (Pair (List U8) Core))] decls
+    (Ok [List U8] [List (Pair (List U8) Core)] (nil [Pair (List U8) Core]))
+    (\h : Decl => \t : List Decl =>
+      match h [Result (List U8) (List (Pair (List U8) Core))] {
+        | D_Def kind isRec name body =>
+            match (elaborateExpr dEnv body) [Result (List U8) (List (Pair (List U8) Core))] {
+              | Err e => Err [List U8] [List (Pair (List U8) Core)] e
+              | Ok core =>
+                  match (elaborateToCoreRec dEnv t) [Result (List U8) (List (Pair (List U8) Core))] {
+                    | Err e2 => Err [List U8] [List (Pair (List U8) Core)] e2
+                    | Ok rest =>
+                        Ok [List U8] [List (Pair (List U8) Core)]
+                          (cons [Pair (List U8) Core] (MkPair [List U8] [Core] name core) rest)
+                  }
+            }
+        | D_Data name ctors =>
+            match (checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)) [Result (List U8) (List (Pair (List U8) Core))] {
+              | Err e => Err [List U8] [List (Pair (List U8) Core)] e
+              | Ok total =>
+                  match (populateDataEnv name ctors total #u8(0) dEnv) [Result (List U8) (List (Pair (List U8) Core))] {
+                    | MkDataEnv cEnv aEnv =>
+                        let adtInfo = MkADTInfo (getCtorNames ctors) in
+                        let nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv) in
+                        elaborateToCoreRec nextDEnv t
+                  }
+            }
+        | D_Module name => elaborateToCoreRec dEnv t
+        | D_Import mod sym => elaborateToCoreRec dEnv t
+        | D_Export sym => elaborateToCoreRec dEnv t
+        | D_Opaque name => elaborateToCoreRec dEnv t
+        | D_Native name => elaborateToCoreRec dEnv t
+        | D_Type name => elaborateToCoreRec dEnv t
+      })
+
+poly elaborateProgramToCore = \decls : List Decl =>
+  elaborateToCoreRec
+    (MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo]))
+    (filterElaboratableDecls decls)

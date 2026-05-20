@@ -38,6 +38,7 @@ const BRIDGE_SOURCE_FILE = lib("compiler", "bridge.trip");
 const LLVM_SOURCE_FILE = lib("compiler", "llvm.trip");
 const BUNDLE_SUMMARY_SOURCE_FILE = lib("compiler", "bundleSummary.trip");
 const CORE_TO_MINI_SOURCE_FILE = lib("compiler", "coreToMini.trip");
+const MINI_CORE_SOURCE_FILE = lib("compiler", "miniCore.trip");
 const ANF_SOURCE_FILE = lib("compiler", "anf.trip");
 const COMPILER_SOURCE_FILE = lib("compiler", "index.trip");
 const TELEMETRY_SOURCE_FILE = lib("compiler", "telemetry.trip");
@@ -127,6 +128,13 @@ const BUILTIN_MODULES = new Map<string, BuiltinModuleSpec>([
     {
       source: CORE_TO_MINI_SOURCE_FILE,
       load: () => loadTripModuleObject(CORE_TO_MINI_SOURCE_FILE),
+    },
+  ],
+  [
+    "MiniCore",
+    {
+      source: MINI_CORE_SOURCE_FILE,
+      load: () => loadTripModuleObject(MINI_CORE_SOURCE_FILE),
     },
   ],
   [

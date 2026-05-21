@@ -399,7 +399,10 @@ workspace_command(
     subcommand = "test",
 )
 
-workspace_command(
+# ts_compile already runs tsc over every source file with the project's
+# strict config (tsconfig.emit.json only adds emit options to tsconfig.json),
+# so building :ts_out is the typecheck. Alias keeps the //:typecheck name.
+alias(
     name = "typecheck",
-    subcommand = "typecheck",
+    actual = ":ts_out",
 )

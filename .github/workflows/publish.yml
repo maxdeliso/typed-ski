@@ -18,25 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      # Host Node only needs to be new enough for `pnpm install`. Every
-      # Node-touching command goes through Bazel's hermetic Node 26.
-      - name: Setup Node.js (for pnpm only)
-        uses: actions/setup-node@v6
+      - name: Setup Bazel and Node dependencies
+        uses: ./.github/actions/setup-bazel-node
         with:
-          node-version: "22"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
-          repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       - name: Build native Bazel targets

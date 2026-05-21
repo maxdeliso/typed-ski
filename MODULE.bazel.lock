@@ -253,7 +253,7 @@
     "@@rules_nodejs+//nodejs:extensions.bzl%node": {
       "general": {
         "bzlTransitiveDigest": "oZFClfRhTTwsYzpxVPkOpOt/r0+OzEfEV37au0jFZ0s=",
-        "usagesDigest": "K/XEYg4PuU0FfDUjAj4ci0XZha878ImWrJStu8cyuMg=",
+        "usagesDigest": "K2WRLrHF9HH61w8DG3fHzdm2TN0HJcpM4APPeL69iMU=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -262,11 +262,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "linux_amd64"
             }
@@ -275,11 +291,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "linux_arm64"
             }
@@ -288,11 +320,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "linux_s390x"
             }
@@ -301,11 +349,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "linux_ppc64le"
             }
@@ -314,11 +378,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "darwin_amd64"
             }
@@ -327,11 +407,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "darwin_arm64"
             }
@@ -340,11 +436,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "windows_amd64"
             }
@@ -353,11 +465,27 @@
             "repoRuleId": "@@rules_nodejs+//nodejs:repositories.bzl%_nodejs_repositories",
             "attributes": {
               "node_download_auth": {},
-              "node_repositories": {},
+              "node_repositories": {
+                "26.1.0-darwin_arm64": [
+                  "node-v26.1.0-darwin-arm64.tar.xz",
+                  "node-v26.1.0-darwin-arm64",
+                  "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443"
+                ],
+                "26.1.0-linux_amd64": [
+                  "node-v26.1.0-linux-x64.tar.xz",
+                  "node-v26.1.0-linux-x64",
+                  "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9"
+                ],
+                "26.1.0-windows_amd64": [
+                  "node-v26.1.0-win-x64.zip",
+                  "node-v26.1.0-win-x64",
+                  "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92"
+                ]
+              },
               "node_urls": [
                 "https://nodejs.org/dist/v{version}/{filename}"
               ],
-              "node_version": "22.14.0",
+              "node_version": "26.1.0",
               "include_headers": false,
               "platform": "windows_arm64"
             }

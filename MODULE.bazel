@@ -87,11 +87,32 @@ http_archive(
     ],
 )
 
-NODE_VERSION = "22.14.0"
+NODE_26_VERSION = "26.1.0"
+
+NODE_26_REPOSITORIES = {
+    "26.1.0-darwin_arm64": [
+        "node-v26.1.0-darwin-arm64.tar.xz",
+        "node-v26.1.0-darwin-arm64",
+        "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443",
+    ],
+    "26.1.0-linux_amd64": [
+        "node-v26.1.0-linux-x64.tar.xz",
+        "node-v26.1.0-linux-x64",
+        "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9",
+    ],
+    "26.1.0-windows_amd64": [
+        "node-v26.1.0-win-x64.zip",
+        "node-v26.1.0-win-x64",
+        "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92",
+    ],
+}
 
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
-node.toolchain(node_version = NODE_VERSION)
-use_repo(node, "nodejs_linux_amd64", "nodejs_darwin_arm64", "nodejs_windows_amd64")
+node.toolchain(
+    node_repositories = NODE_26_REPOSITORIES,
+    node_version = NODE_26_VERSION,
+)
+use_repo(node, "nodejs_darwin_arm64", "nodejs_linux_amd64", "nodejs_windows_amd64")
 
 npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
 npm.npm_translate_lock(
@@ -102,7 +123,7 @@ npm.npm_translate_lock(
 use_repo(npm, "npm")
 
 rules_ts_ext = use_extension("@aspect_rules_ts//ts:extensions.bzl", "ext")
-rules_ts_ext.setup(node_version = NODE_VERSION)
+rules_ts_ext.setup(node_version = NODE_26_VERSION)
 use_repo(rules_ts_ext, "npm_typescript")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")

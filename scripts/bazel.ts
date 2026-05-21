@@ -63,10 +63,8 @@ function assertCurrentNodeVersion(): void {
 
 type CommandName =
   | "verify-version"
-  | "sync-generated"
   | "verify-generated"
   | "dist"
-  | "build"
   | "test"
   | "bazel-test-shard";
 
@@ -203,10 +201,8 @@ function usage(): never {
 
 Commands:
   verify-version
-  sync-generated
   verify-generated
   dist
-  build
   test
   bazel-test-shard`);
   process.exit(1);
@@ -721,11 +717,6 @@ export async function runBazelShardTests(args: string[] = []): Promise<void> {
   });
 }
 
-async function build(): Promise<void> {
-  verifyVersion();
-  await buildDist();
-}
-
 export async function main(
   argv: string[] = process.argv.slice(2),
 ): Promise<void> {
@@ -737,17 +728,11 @@ export async function main(
     case "verify-version":
       verifyVersion();
       break;
-    case "sync-generated":
-      await syncGenerated();
-      break;
     case "verify-generated":
       await verifyGenerated();
       break;
     case "dist":
       await buildDist();
-      break;
-    case "build":
-      await build();
       break;
     case "test":
       await runTests(false, args);

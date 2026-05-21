@@ -352,16 +352,6 @@ workspace_command(
     subcommand = "verify-version",
 )
 
-workspace_command(
-    name = "sync_generated",
-    subcommand = "sync-generated",
-)
-
-workspace_command(
-    name = "build",
-    subcommand = "build",
-)
-
 prettier_check(
     name = "fmt_check",
     srcs = glob(
@@ -383,16 +373,6 @@ prettier_check(
         "//scripts:scripts",
     ],
     node_modules = [":node_modules/prettier"],
-)
-
-workspace_command(
-    name = "lint",
-    subcommand = "lint",
-)
-
-workspace_command(
-    name = "test",
-    subcommand = "test",
 )
 
 # ts_compile already runs tsc over every source file with the project's

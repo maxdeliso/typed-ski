@@ -51,7 +51,7 @@ pinned in `.bazelversion`.
 2. Install `pnpm` (`npm install -g pnpm`).
 3. Install `Bazelisk`.
 4. On macOS: `xcode-select --install`.
-5. Clone the repo, `pnpm install`, `bazelisk run //:dist`.
+5. Clone the repo, `pnpm install`, `bazelisk build //:dist_artifacts`.
 
 Helper scripts in [`scripts/`](scripts/) use the local `pnpm` pinned via
 `node_modules/pnpm`.
@@ -60,7 +60,6 @@ Helper scripts in [`scripts/`](scripts/) use the local `pnpm` pinned via
 
 ```bash
 bazelisk test //:node_tests             # sharded Node.js test suite
-bazelisk run  //:test                   # single-process workspace run
 bazelisk test //:native_tests           # native Trip executable smoke tests
 bazelisk test //consumers/thanatos:all  # sealed reducer consumer tests
 ```
@@ -80,16 +79,13 @@ With Bazel:
 
 ```bash
 bazelisk test //:node_tests --test_arg=test/path/to/test.ts
-bazelisk run  //:test -- test/path/to/test.ts
 ```
 
 ### Other useful commands
 
-- `bazelisk run //:dist` — atomic validated build of CLI artifacts
-- `bazelisk run //:build` — alias for `//:dist` that also verifies version
-- `bazelisk run //:typecheck` — TypeScript type checking
-- `bazelisk run //:coverage` — tests with coverage output
-- `bazelisk run //:ci` — fmt, lint, typecheck, build, single cov-producing test pass
+- `bazelisk build //:dist_artifacts` — validated build of CLI artifacts
+- `bazelisk build //:fmt_check` — Prettier formatting check
+- `bazelisk build //:typecheck` — TypeScript type checking
 - `bazelisk run //:verify_version` — check the repo-pinned Node.js version
 
 ## Artifacts

@@ -57,11 +57,15 @@ def _prettier_check_impl(ctx):
     # limit; the source files themselves are staged as action inputs.
     ctx.actions.write(wrapper, """\
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
 import process from "node:process";
 
 const [node, prettier, fileList, marker] = process.argv.slice(2);
-const files = readFileSync(fileList, "utf8").split("\\n").filter(Boolean);
+const files = readFileSync(fileList, "utf8")
+  .split("\\n")
+  .filter(Boolean)
+  .map((f) => realpathSync(f));
+
 const BATCH = 120;
 for (let i = 0; i < files.length; i += BATCH) {
   const result = spawnSync(

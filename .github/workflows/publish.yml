@@ -50,10 +50,7 @@ jobs:
           path: bazel-testlogs/
           if-no-files-found: ignore
 
-      - name: Setup Deno (for JSR publish)
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Publish to JSR (Deno Registry)
-        run: deno publish --config jsr.json
+      # Published via jsr's Node CLI; OIDC auth uses the id-token
+      # permission above, same as deno publish would.
+      - name: Publish to JSR
+        run: npx --yes jsr@0.14.3 publish

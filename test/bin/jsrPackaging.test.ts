@@ -78,7 +78,7 @@ describe("JSR Packaging Configuration", () => {
       const configContent = await readFile(configPath, "utf-8");
       const config = parseJsonc(configContent) as any;
 
-      assert.deepStrictEqual(config.compilerOptions.types, ["node"]);
+      assert.ok(!("types" in config.compilerOptions));
       assert.ok(!("@types/node" in config.imports));
     });
   });

@@ -5,6 +5,7 @@ load("//bazel:codegen.bzl", "codegen_rule")
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
+load("//bazel:prettier.bzl", "prettier_check")
 load("//bazel:ts_compile.bzl", "ts_compile")
 load(
     "//bazel:trip_llvm.bzl",
@@ -365,9 +366,27 @@ workspace_command(
     subcommand = "build",
 )
 
-workspace_command(
+prettier_check(
     name = "fmt_check",
-    subcommand = "fmt-check",
+    srcs = glob(
+        [
+            "*.json",
+            "*.jsonc",
+            "*.md",
+            "bin/**",
+            "compiler/**",
+            "lib/**",
+            "test/**",
+            ".github/**",
+        ],
+        allow_empty = True,
+        exclude = ["**/*.generated.*"],
+    ) + [
+        "//lib/evaluator:evaluator",
+        "//lib/shared:shared",
+        "//scripts:scripts",
+    ],
+    node_modules = [":node_modules/prettier"],
 )
 
 workspace_command(

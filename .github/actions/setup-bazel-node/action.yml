@@ -1,5 +1,5 @@
-name: Setup Bazel
-description: Configure Bazel caches via bazelisk.
+name: Setup Bazel and Node dependencies
+description: Install pnpm dependencies and configure Bazel caches.
 
 inputs:
   disk-cache:
@@ -12,8 +12,21 @@ inputs:
 runs:
   using: composite
   steps:
-    # No host Node or pnpm install: Node is supplied hermetically by Bazel
-    # (rules_nodejs) and npm deps by npm_translate_lock from pnpm-lock.yaml.
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: "22"
+
+    # The //:typecheck, //:fmt_check and //:dist targets run scripts/bazel.ts,
+    # which spawns a host pnpm resolved from node_modules/pnpm (or PATH). They
+    # are not hermetic, so the workspace needs a real pnpm install.
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
     - name: Setup Bazel
       uses: bazel-contrib/setup-bazel@0.19.0
       with:

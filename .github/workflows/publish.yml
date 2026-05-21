@@ -31,9 +31,13 @@ jobs:
         run: bazel test //:native_tests
 
       - name: Build and stage distribution artifacts
-        # Use the Bazel target rather than `pnpm run dist`: runs under
-        # Bazel's hermetic Node 26 instead of host Node.
-        run: bazel run //:dist
+        run: |
+          bazel build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
+          mkdir -p dist
+          install -m644 bazel-bin/dist_artifacts/tripc.js bazel-bin/dist_artifacts/tripc.min.js bazel-bin/dist_artifacts/tripc.node.js dist/
+          install -m755 bazel-bin/dist_artifacts/tripc dist/tripc
+          install -m644 bazel-bin/jsr.json jsr.json
+          install -m644 bazel-bin/lib/shared/version.generated.ts lib/shared/version.generated.ts
 
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors

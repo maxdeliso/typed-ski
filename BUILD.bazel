@@ -358,11 +358,6 @@ workspace_command(
 )
 
 workspace_command(
-    name = "dist",
-    subcommand = "dist",
-)
-
-workspace_command(
     name = "build",
     subcommand = "build",
 )

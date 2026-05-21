@@ -39,10 +39,10 @@ jobs:
         run: bazel test //:native_tests
 
       - name: Run format check
-        run: bazel run //:fmt_check
+        run: bazel build //:fmt_check
 
       - name: Run typecheck
-        run: bazel run //:typecheck
+        run: bazel build //:typecheck
 
       - name: Run Node tests
         if: matrix.os != 'ubuntu-24.04'
@@ -84,10 +84,13 @@ jobs:
 
       - name: Build and stage distribution artifacts for JSR dry run
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        # Use the Bazel target rather than `pnpm run dist`: it runs under
-        # Bazel's hermetic Node 26 instead of the runner's host Node, so
-        # this step is unaffected by host Node version.
-        run: bazel run //:dist
+        run: |
+          bazel build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
+          mkdir -p dist
+          install -m644 bazel-bin/dist_artifacts/tripc.js bazel-bin/dist_artifacts/tripc.min.js bazel-bin/dist_artifacts/tripc.node.js dist/
+          install -m755 bazel-bin/dist_artifacts/tripc dist/tripc
+          install -m644 bazel-bin/jsr.json jsr.json
+          install -m644 bazel-bin/lib/shared/version.generated.ts lib/shared/version.generated.ts
 
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'

@@ -5,6 +5,7 @@ load("//bazel:codegen.bzl", "codegen_rule")
 load("//bazel:node_dist.bzl", "node_dist")
 load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
 load("//bazel:node_sharded_test.bzl", "node_sharded_test")
+load("//bazel:prettier.bzl", "prettier_check")
 load("//bazel:ts_compile.bzl", "ts_compile")
 load(
     "//bazel:trip_llvm.bzl",
@@ -215,6 +216,7 @@ test_suite(
 node_dist(
     name = "dist_artifacts",
     data = NODE_DIST_DATA,
+    esbuild = [":node_modules/esbuild"],
     ts_out = ":ts_out",
 )
 
@@ -350,37 +352,33 @@ workspace_command(
     subcommand = "verify-version",
 )
 
-workspace_command(
-    name = "sync_generated",
-    subcommand = "sync-generated",
-)
-
-workspace_command(
-    name = "dist",
-    subcommand = "dist",
-)
-
-workspace_command(
-    name = "build",
-    subcommand = "build",
-)
-
-workspace_command(
+prettier_check(
     name = "fmt_check",
-    subcommand = "fmt-check",
+    srcs = glob(
+        [
+            "*.json",
+            "*.jsonc",
+            "*.md",
+            "bin/**",
+            "compiler/**",
+            "lib/**",
+            "test/**",
+            ".github/**",
+        ],
+        allow_empty = True,
+        exclude = ["**/*.generated.*"],
+    ) + [
+        "//lib/evaluator:evaluator",
+        "//lib/shared:shared",
+        "//scripts:scripts",
+    ],
+    node_modules = [":node_modules/prettier"],
 )
 
-workspace_command(
-    name = "lint",
-    subcommand = "lint",
-)
-
-workspace_command(
-    name = "test",
-    subcommand = "test",
-)
-
-workspace_command(
+# ts_compile already runs tsc over every source file with the project's
+# strict config (tsconfig.emit.json only adds emit options to tsconfig.json),
+# so building :ts_out is the typecheck. Alias keeps the //:typecheck name.
+alias(
     name = "typecheck",
-    subcommand = "typecheck",
+    actual = ":ts_out",
 )

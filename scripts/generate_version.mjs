@@ -22,15 +22,17 @@ function buildJsrJson(pkg) {
     publish: pkg.jsr?.publish || {
       include: pkg.files || [],
     },
+    // No `types` entry: `jsr publish` resolves node: specifiers and the
+    // `process` global from built-ins, so naming a node types package
+    // (e.g. `["node"]`) would only force an @types/node lookup that
+    // fails on a CI runner with no node_modules/ install.
     compilerOptions: {
       strict: true,
       lib: ["ESNext", "dom"],
-      types: ["@types/node"],
     },
     imports: {
       "random-seed": `npm:random-seed@${pkg.dependencies["random-seed"]}`,
       "ts-morph": `npm:ts-morph@${pkg.dependencies["ts-morph"]}`,
-      "@types/node": `npm:@types/node@${pkg.devDependencies["@types/node"]}`,
     },
   };
 

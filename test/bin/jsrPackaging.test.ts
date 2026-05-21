@@ -72,6 +72,15 @@ describe("JSR Packaging Configuration", () => {
       assert.ok(config.publish.include.includes("README.md"));
       assert.ok(config.publish.include.includes("SECURITY.md"));
     });
+
+    it("uses Deno's built-in Node types without requiring node_modules", async () => {
+      const configPath = join(srcRoot, "jsr.json");
+      const configContent = await readFile(configPath, "utf-8");
+      const config = parseJsonc(configContent) as any;
+
+      assert.ok(!("types" in config.compilerOptions));
+      assert.ok(!("@types/node" in config.imports));
+    });
   });
 
   describe("CLI file structure", () => {

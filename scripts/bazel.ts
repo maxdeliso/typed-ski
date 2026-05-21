@@ -63,12 +63,8 @@ function assertCurrentNodeVersion(): void {
 
 type CommandName =
   | "verify-version"
-  | "sync-generated"
   | "verify-generated"
   | "dist"
-  | "build"
-  | "fmt-check"
-  | "typecheck"
   | "test"
   | "bazel-test-shard";
 
@@ -114,6 +110,13 @@ function pnpmCommand(...args: string[]): string[] {
 }
 
 function esbuildCommand(...args: string[]): string[] {
+  // Bazel rules stage esbuild from :node_modules and point this at it, so
+  // dist builds need no host pnpm and no network fetch. The pnpm dlx
+  // fallback only runs for ad-hoc local invocations outside Bazel.
+  const configuredEsbuild = process.env["TYPED_SKI_ESBUILD_PATH"];
+  if (configuredEsbuild) {
+    return [NODE, configuredEsbuild, ...args];
+  }
   return pnpmCommand("dlx", "esbuild@0.28.0", ...args);
 }
 
@@ -198,12 +201,8 @@ function usage(): never {
 
 Commands:
   verify-version
-  sync-generated
   verify-generated
   dist
-  build
-  fmt-check
-  typecheck
   test
   bazel-test-shard`);
   process.exit(1);
@@ -438,11 +437,6 @@ export async function buildDist(
   await validateDist();
 }
 
-async function formatCheck(): Promise<void> {
-  console.log("Format check using pnpm exec prettier --check .");
-  await run(pnpmCommand("exec", "prettier", "--check", "."));
-}
-
 async function collectTests(): Promise<string[]> {
   const testRoot = join(JS_ROOT, "test");
   const files: string[] = [];
@@ -602,12 +596,6 @@ async function runSelectedTests(
   );
 }
 
-async function typecheck(): Promise<void> {
-  await syncGenerated();
-  const files = await collectTests();
-  await typecheckTests(files);
-}
-
 async function typecheckAndPrepareTestExecution(
   files: string[],
 ): Promise<Record<string, string>> {
@@ -729,11 +717,6 @@ export async function runBazelShardTests(args: string[] = []): Promise<void> {
   });
 }
 
-async function build(): Promise<void> {
-  verifyVersion();
-  await buildDist();
-}
-
 export async function main(
   argv: string[] = process.argv.slice(2),
 ): Promise<void> {
@@ -745,23 +728,11 @@ export async function main(
     case "verify-version":
       verifyVersion();
       break;
-    case "sync-generated":
-      await syncGenerated();
-      break;
     case "verify-generated":
       await verifyGenerated();
       break;
     case "dist":
       await buildDist();
-      break;
-    case "build":
-      await build();
-      break;
-    case "fmt-check":
-      await formatCheck();
-      break;
-    case "typecheck":
-      await typecheck();
       break;
     case "test":
       await runTests(false, args);

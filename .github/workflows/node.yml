@@ -26,31 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      # Host Node only needs to be new enough for `pnpm install` to run
-      # (pnpm 11 requires Node ≥ 22). Every Node-touching command in
-      # this workflow goes through Bazel's hermetic Node 26 via
-      # rules_nodejs, so the host version below is independent of the
-      # version the project targets. Using a major-version spec (`22`)
-      # rather than a specific patch (e.g. 26.1.0) picks the runner's
-      # pre-cached Node and avoids the network download that previously
-      # flaked on the Windows runner.
-      - name: Setup Node.js (for pnpm only)
-        uses: actions/setup-node@v6
+      - name: Setup Bazel and Node dependencies
+        uses: ./.github/actions/setup-bazel-node
         with:
-          node-version: "22"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
-          repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       - name: Build native Bazel targets
@@ -60,10 +39,10 @@ jobs:
         run: bazel test //:native_tests
 
       - name: Run format check
-        run: bazel run //:fmt_check
+        run: bazel build //:fmt_check
 
       - name: Run typecheck
-        run: bazel run //:typecheck
+        run: bazel build //:typecheck
 
       - name: Run Node tests
         if: matrix.os != 'ubuntu-24.04'
@@ -97,19 +76,19 @@ jobs:
           path: bazel-testlogs/
           if-no-files-found: ignore
 
-      - name: Setup Deno (for JSR dry run)
-        if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
       - name: Build and stage distribution artifacts for JSR dry run
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        # Use the Bazel target rather than `pnpm run dist`: it runs under
-        # Bazel's hermetic Node 26 instead of the runner's host Node, so
-        # this step is unaffected by host Node version.
-        run: bazel run //:dist
+        run: |
+          bazel build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
+          mkdir -p dist
+          install -m644 bazel-bin/dist_artifacts/tripc.js bazel-bin/dist_artifacts/tripc.min.js bazel-bin/dist_artifacts/tripc.node.js dist/
+          install -m755 bazel-bin/dist_artifacts/tripc dist/tripc
+          install -m644 bazel-bin/jsr.json jsr.json
+          install -m644 bazel-bin/lib/shared/version.generated.ts lib/shared/version.generated.ts
 
+      # jsr's Node CLI: no Deno toolchain to install (the runner already
+      # has Node), and it does not enter Deno's byonm mode, so it needs no
+      # node_modules/ install to resolve node: builtins or @types.
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        run: deno publish --dry-run --config jsr.json
+        run: npx --yes jsr@0.14.3 publish --dry-run

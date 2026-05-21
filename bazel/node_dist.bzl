@@ -2,6 +2,15 @@
 
 load("//bazel:common.bzl", "shell_quote", "batch_quote")
 
+def _find_esbuild_entry(files):
+    for f in files:
+        p = f.path.replace("\\", "/")
+        if p.endswith("/esbuild/bin/esbuild"):
+            return f.path
+        if f.is_directory and p.endswith("/esbuild"):
+            return f.path + "/bin/esbuild"
+    fail("Cannot find esbuild/bin/esbuild in the esbuild attr")
+
 def _node_dist_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(
         ctx.attr._windows_constraint[platform_common.ConstraintValueInfo],
@@ -11,6 +20,8 @@ def _node_dist_impl(ctx):
 
     ts_out_dir = ctx.attr.ts_out[DefaultInfo].files.to_list()[0]
     bazel_build_dist_js = ts_out_dir.path + "/scripts/bazelBuildDist.js"
+
+    esbuild_entry = _find_esbuild_entry(ctx.files.esbuild)
 
     tripc_js = ctx.actions.declare_file(ctx.label.name + "/tripc.js")
     tripc_min_js = ctx.actions.declare_file(ctx.label.name + "/tripc.min.js")
@@ -38,6 +49,7 @@ def _node_dist_impl(ctx):
             "@echo off",
             "setlocal",
             "cd /d \"%CD%\"",
+            "set \"TYPED_SKI_ESBUILD_PATH=%CD%\\" + esbuild_entry.replace("/", "\\") + "\"",
             command,
             "exit /b %ERRORLEVEL%",
             "",
@@ -56,6 +68,7 @@ def _node_dist_impl(ctx):
             "#!/usr/bin/env bash",
             "set -euo pipefail",
             "cd \"$PWD\"",
+            "export TYPED_SKI_ESBUILD_PATH=\"$PWD/" + esbuild_entry + "\"",
             command,
             "",
         ])
@@ -65,7 +78,7 @@ def _node_dist_impl(ctx):
 
     ctx.actions.run(
         executable = launcher,
-        inputs = ctx.files.data + [manifest, node_toolchain.nodeinfo.node, ts_out_dir],
+        inputs = ctx.files.data + ctx.files.esbuild + [manifest, node_toolchain.nodeinfo.node, ts_out_dir],
         outputs = outputs,
         mnemonic = "NodeDist",
         progress_message = "Building Node dist artifacts for %s" % ctx.label,
@@ -79,6 +92,10 @@ node_dist = rule(
     attrs = {
         "data": attr.label_list(
             allow_files = True,
+        ),
+        "esbuild": attr.label_list(
+            allow_files = True,
+            mandatory = True,
         ),
         "ts_out": attr.label(
             mandatory = True,

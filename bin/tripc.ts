@@ -5,7 +5,9 @@
  */
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   compileTripBundleV1ToLlvm,
   compileTripSourceToLlvm,
@@ -270,6 +272,18 @@ async function main(): Promise<void> {
   );
 }
 
-if ((import.meta as any).main) {
+function isMain(importMetaUrl: string): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      realpathSync(process.argv[1]) ===
+      realpathSync(fileURLToPath(importMetaUrl))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMain(import.meta.url)) {
   await main();
 }

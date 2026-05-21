@@ -33,8 +33,9 @@ lib/**/*.embedded.ts
 # Generated C files
 core/*.generated.h
 
-# Deno cache
+# Deno cache and generated lockfile
 .deno-cache/
+deno.lock
 deno.lock.bak
 .toolchains/
 
@@ -67,3 +68,6 @@ bin/*-coverage
 codecov
 codecov.SHA256SUM
 codecov.SHA256SUM.sig
+
+# Claude Code working directory
+.claude/

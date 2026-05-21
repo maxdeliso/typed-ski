@@ -18,25 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      # Host Node only needs to be new enough for `pnpm install`. Every
-      # Node-touching command goes through Bazel's hermetic Node 26.
-      - name: Setup Node.js (for pnpm only)
-        uses: actions/setup-node@v6
+      - name: Setup Bazel and Node dependencies
+        uses: ./.github/actions/setup-bazel-node
         with:
-          node-version: "22"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
-          repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       - name: Build native Bazel targets
@@ -46,9 +31,13 @@ jobs:
         run: bazel test //:native_tests
 
       - name: Build and stage distribution artifacts
-        # Use the Bazel target rather than `pnpm run dist`: runs under
-        # Bazel's hermetic Node 26 instead of host Node.
-        run: bazel run //:dist
+        run: |
+          bazel build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
+          mkdir -p dist
+          install -m644 bazel-bin/dist_artifacts/tripc.js bazel-bin/dist_artifacts/tripc.min.js bazel-bin/dist_artifacts/tripc.node.js dist/
+          install -m755 bazel-bin/dist_artifacts/tripc dist/tripc
+          install -m644 bazel-bin/jsr.json jsr.json
+          install -m644 bazel-bin/lib/shared/version.generated.ts lib/shared/version.generated.ts
 
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors
@@ -61,10 +50,7 @@ jobs:
           path: bazel-testlogs/
           if-no-files-found: ignore
 
-      - name: Setup Deno (for JSR publish)
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Publish to JSR (Deno Registry)
-        run: deno publish --config jsr.json
+      # Published via jsr's Node CLI; OIDC auth uses the id-token
+      # permission above, same as deno publish would.
+      - name: Publish to JSR
+        run: npx --yes jsr@0.14.3 publish

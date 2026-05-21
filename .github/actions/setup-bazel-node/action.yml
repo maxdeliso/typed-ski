@@ -1,0 +1,24 @@
+name: Setup Bazel
+description: Configure Bazel caches via bazelisk.
+
+inputs:
+  disk-cache:
+    description: Bazel disk cache name.
+    required: true
+  cache-save:
+    description: Whether setup-bazel should save caches.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # No host Node or pnpm install: every CI command runs through Bazel's
+    # hermetic Node 26 toolchain and resolves npm packages via
+    # npm_translate_lock, so the host toolchain is never used.
+    - name: Setup Bazel
+      uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ inputs.disk-cache }}
+        repository-cache: true
+        cache-save: ${{ inputs.cache-save }}

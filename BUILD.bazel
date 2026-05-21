@@ -216,6 +216,7 @@ test_suite(
 node_dist(
     name = "dist_artifacts",
     data = NODE_DIST_DATA,
+    esbuild = [":node_modules/esbuild"],
     ts_out = ":ts_out",
 )
 

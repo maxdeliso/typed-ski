@@ -114,6 +114,13 @@ function pnpmCommand(...args: string[]): string[] {
 }
 
 function esbuildCommand(...args: string[]): string[] {
+  // Bazel rules stage esbuild from :node_modules and point this at it, so
+  // dist builds need no host pnpm and no network fetch. The pnpm dlx
+  // fallback only runs for ad-hoc local invocations outside Bazel.
+  const configuredEsbuild = process.env["TYPED_SKI_ESBUILD_PATH"];
+  if (configuredEsbuild) {
+    return [NODE, configuredEsbuild, ...args];
+  }
   return pnpmCommand("dlx", "esbuild@0.28.0", ...args);
 }
 

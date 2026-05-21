@@ -24,9 +24,8 @@ import {
   createTempWorkspace,
 } from "../util/tripcHarness.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const jsRoot = join(__dirname, "../..");
 const srcRoot = workspaceRoot;
+const jsRoot = workspaceRoot;
 
 describe("JSR Packaging Configuration", () => {
   describe("jsr.json configuration", () => {
@@ -181,7 +180,7 @@ describe("JSR Packaging Configuration", () => {
 
   describe("CLI tools functionality", () => {
     it("tripc CLI can show version", async () => {
-      const tripcScript = join(jsRoot, "bin/tripc.js");
+      const tripcScript = join(jsRoot, "ts_out/bin/tripc.js");
 
       const { status, stdout } = spawnSync(
         process.execPath,
@@ -197,7 +196,7 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("tripc CLI can show help", async () => {
-      const tripcScript = join(jsRoot, "bin/tripc.js");
+      const tripcScript = join(jsRoot, "ts_out/bin/tripc.js");
 
       const { status, stdout } = spawnSync(
         process.execPath,
@@ -213,7 +212,7 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("tripc can emit LLVM for a test file", async () => {
-      const tripcScript = join(jsRoot, "bin/tripc.js");
+      const tripcScript = join(jsRoot, "ts_out/bin/tripc.js");
       const testFile = join(srcRoot, "test/compiler/llvm/helloWorld.trip");
       const outputDir = await createTempWorkspace("typed-ski-jsr-packaging-");
       try {

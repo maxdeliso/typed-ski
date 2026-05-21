@@ -30,7 +30,7 @@ function runTripc(args: string[]) {
     process.execPath,
     [
       "--disable-warning=ExperimentalWarning",
-      join(jsRoot, "bin/tripc.js"),
+      join(jsRoot, "ts_out/bin/tripc.js"),
       ...args,
     ],
     {

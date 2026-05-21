@@ -1,5 +1,4 @@
 .git
 .deno-cache
 coverage
-dist
 node_modules

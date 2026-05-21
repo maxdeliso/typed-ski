@@ -1,11 +1,4 @@
-load("@aspect_rules_js//js:defs.bzl", "js_library")
-load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
-load("//bazel:codegen.bzl", "codegen_rule")
-load("//bazel:node_dist.bzl", "node_dist")
-load("//bazel:node_llvm_as_test.bzl", "node_llvm_as_test")
-load("//bazel:node_sharded_test.bzl", "node_sharded_test")
-load("//bazel:ts_compile.bzl", "ts_compile")
 load(
     "//bazel:trip_llvm.bzl",
     "trip_executable_stdout_test",
@@ -13,18 +6,25 @@ load(
     "trip_windows_executable",
     "windows_import_library",
 )
-load("//bazel:workspace_command.bzl", "workspace_command")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "package.json",
     "tsconfig.emit.json",
+    "dist/tripc.node.js",
 ])
 
-js_library(
-    name = "package_json",
-    srcs = ["package.json"],
+genrule(
+    name = "copy_tripc",
+    srcs = ["dist/tripc.node.js"],
+    outs = ["tripc_copy.js"],
+    cmd = "cp $< $@",
+)
+
+filegroup(
+    name = "tripc_compiler",
+    srcs = [":copy_tripc"],
 )
 
 config_setting(
@@ -50,93 +50,6 @@ config_setting(
         "@platforms//cpu:x86_64",
     ],
 )
-
-codegen_rule(
-    name = "jsr_generated_src",
-    outs = ["jsr.json"],
-    args = [
-        "--package-json",
-        "$(location :package.json)",
-        "--jsr-json",
-        "$(location jsr.json)",
-    ],
-    data = [":package.json"],
-    script = "//scripts:generate_version.mjs",
-)
-
-npm_link_all_packages(
-    name = "node_modules",
-)
-
-ts_compile(
-    name = "ts_out",
-    node_modules = [":node_modules"],
-    srcs = glob(
-        [
-            "bin/**",
-            "compiler/**",
-            "lib/**",
-            "scripts/**",
-            "test/**",
-            "tsconfig.json",
-            "package.json",
-        ],
-        allow_empty = True,
-        exclude = [
-            "scripts/findUnusedExports.ts",
-            "**/*.js",
-            "**/*.js.map",
-        ],
-    ) + [
-        # lib/shared, lib/evaluator, and scripts each have their own BUILD.bazel,
-        # so glob(["lib/**"]) and glob(["scripts/**"]) above cannot cross those
-        # package boundaries. Reference their filegroups explicitly instead.
-        "//lib/shared:shared",
-        "//lib/shared:version_generated_src",
-        "//lib/evaluator:evaluator",
-        "//scripts:scripts",
-    ],
-    tsconfig = "//:tsconfig.emit.json",
-)
-
-NODE_DATA_BASE = glob(
-    [
-        "package.json",
-        "tsconfig.json",
-        "*.jsonc",
-        "*.md",
-        "bin/**",
-        "compiler/**",
-        "lib/**",
-    ],
-    allow_empty = True,
-    exclude = [
-        "coverage/**",
-        "dist/**",
-    ],
-) + [
-    "//scripts",
-    "//lib/shared",
-    "//lib/evaluator",
-    "//runtime",
-    ":node_modules/pnpm",
-    "//lib/shared:version_generated",
-    ":jsr.json",
-    ":ts_out",
-]
-
-NODE_TEST_DATA = NODE_DATA_BASE + glob(
-    [
-        "test/**",
-    ],
-    allow_empty = True,
-    exclude = [
-        "coverage/**",
-        "dist/**",
-    ],
-)
-
-NODE_DIST_DATA = NODE_DATA_BASE
 
 LLVM_AS_BIN = select({
     ":linux_x86_64": "@typed_ski_llvm_linux_x64//:llvm_as",
@@ -198,13 +111,6 @@ HELLO_WORLD_COMPATIBILITY = select({
     "//conditions:default": ["@platforms//:incompatible"],
 })
 
-LLVM_AS_COMPATIBILITY = select({
-    ":linux_x86_64": [],
-    ":macos_arm64": [],
-    ":windows_x86_64": [],
-    "//conditions:default": ["@platforms//:incompatible"],
-})
-
 test_suite(
     name = "native_tests",
     tests = [
@@ -212,41 +118,10 @@ test_suite(
     ],
 )
 
-node_dist(
-    name = "dist_artifacts",
-    data = NODE_DIST_DATA,
-    ts_out = ":ts_out",
-)
-
-node_sharded_test(
-    name = "node_tests",
-    size = "large",
-    timeout = "long",
-    clang = LLVM_CLANG_BIN,
-    data = NODE_TEST_DATA + [
-        ":node_modules",
-    ],
-    dist = ":dist_artifacts",
-    generated_jsr = ":jsr.json",
-    llvm_dist = LLVM_DIST_DATA,
-    shard_count = 8,
-)
-
-node_llvm_as_test(
-    name = "llvm_as_smoke_test",
-    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
-        ":node_modules",
-    ],
-    llvm_as = LLVM_AS_BIN,
-    target_compatible_with = LLVM_AS_COMPATIBILITY,
-)
-
 trip_llvm_object(
     name = "trip_hello_world_linux_obj",
     src = "test/compiler/llvm/helloWorld.trip",
-    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
-        ":node_modules",
-    ],
+    compiler = ":tripc_compiler",
     entry_module = "Main",
     llvm_dist = LLVM_DIST_DATA,
     llvm_llc = LLVM_LLC_BIN,
@@ -261,9 +136,7 @@ trip_llvm_object(
 trip_llvm_object(
     name = "trip_hello_world_macos_obj",
     src = "test/compiler/llvm/helloWorld.trip",
-    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
-        ":node_modules",
-    ],
+    compiler = ":tripc_compiler",
     entry_module = "Main",
     llvm_dist = LLVM_DIST_DATA,
     llvm_llc = LLVM_LLC_BIN,
@@ -278,9 +151,7 @@ trip_llvm_object(
 trip_llvm_object(
     name = "trip_hello_world_windows_obj",
     src = "test/compiler/llvm/helloWorld.trip",
-    data = NODE_TEST_DATA + LLVM_DIST_DATA + [
-        ":node_modules",
-    ],
+    compiler = ":tripc_compiler",
     entry_module = "Main",
     llvm_dist = LLVM_DIST_DATA,
     llvm_llc = LLVM_LLC_BIN,
@@ -343,44 +214,4 @@ trip_executable_stdout_test(
     expected_exit_code = 10,
     expected_stdout = "Hello, world!\n",
     target_compatible_with = HELLO_WORLD_COMPATIBILITY,
-)
-
-workspace_command(
-    name = "verify_version",
-    subcommand = "verify-version",
-)
-
-workspace_command(
-    name = "sync_generated",
-    subcommand = "sync-generated",
-)
-
-workspace_command(
-    name = "dist",
-    subcommand = "dist",
-)
-
-workspace_command(
-    name = "build",
-    subcommand = "build",
-)
-
-workspace_command(
-    name = "fmt_check",
-    subcommand = "fmt-check",
-)
-
-workspace_command(
-    name = "lint",
-    subcommand = "lint",
-)
-
-workspace_command(
-    name = "test",
-    subcommand = "test",
-)
-
-workspace_command(
-    name = "typecheck",
-    subcommand = "typecheck",
 )

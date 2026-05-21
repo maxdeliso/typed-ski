@@ -21,15 +21,17 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      # Host Node only needs to be new enough for `pnpm install`. Every
-      # Node-touching command goes through Bazel's hermetic Node 26.
-      - name: Setup Node.js (for pnpm only)
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "26"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build distribution artifacts
+        run: pnpm run dist
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
@@ -37,7 +39,7 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: true
 
       - name: Build native Bazel targets
         run: bazel build //consumers/thanatos:thanatos
@@ -45,21 +47,8 @@ jobs:
       - name: Run native Bazel tests
         run: bazel test //:native_tests
 
-      - name: Build and stage distribution artifacts
-        # Use the Bazel target rather than `pnpm run dist`: runs under
-        # Bazel's hermetic Node 26 instead of host Node.
-        run: bazel run //:dist
-
       - name: Run test suite
-        run: bazel test //:node_tests --test_output=errors
-
-      - name: Upload test logs
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: bazel-test-logs-publish
-          path: bazel-testlogs/
-          if-no-files-found: ignore
+        run: pnpm run test
 
       - name: Setup Deno (for JSR publish)
         uses: denoland/setup-deno@v2

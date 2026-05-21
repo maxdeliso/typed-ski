@@ -14,9 +14,8 @@ import process from "node:process";
 import { resolveDistPath } from "../util/tripcHarness.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const jsRoot = join(__dirname, "../..");
 const srcRoot = workspaceRoot;
+const jsRoot = workspaceRoot;
 const compiledTripcName = process.platform === "win32" ? "tripc.cmd" : "tripc";
 const bundledTripcPath = resolveDistPath(
   "TYPED_SKI_DIST_JS_PATH",
@@ -45,11 +44,11 @@ async function runCommand(
 
   if (executable === "node" || executable === process.execPath) {
     executable = process.execPath;
-    if (args.includes("bin/tripc.js")) {
-      const tripcIndex = args.indexOf("bin/tripc.js");
+    if (args.includes("ts_out/bin/tripc.js")) {
+      const tripcIndex = args.indexOf("ts_out/bin/tripc.js");
       args = [
         "--disable-warning=ExperimentalWarning",
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         ...args.slice(tripcIndex + 1),
       ];
     } else if (
@@ -127,11 +126,11 @@ describe("CLI Tests", () => {
     });
   });
 
-  describe("Compiled CLI (bin/tripc.js)", () => {
+  describe("Compiled CLI (ts_out/bin/tripc.js)", () => {
     it("--version flag", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "--version",
       ]);
 
@@ -142,7 +141,7 @@ describe("CLI Tests", () => {
     it("--help flag", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "--help",
       ]);
 
@@ -154,7 +153,7 @@ describe("CLI Tests", () => {
     it("emits LLVM to stdout", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         ...llvmArgs(),
       ]);
 
@@ -166,7 +165,7 @@ describe("CLI Tests", () => {
     it("reports LLVM errors", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "--emit",
         "llvm",
         "test/bin/fixtures/invalid_syntax.trip",
@@ -253,7 +252,7 @@ describe("CLI Tests", () => {
     it("error on unknown option", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "--unknown",
       ]);
       assert.strictEqual(result.success, false);
@@ -263,7 +262,7 @@ describe("CLI Tests", () => {
     it("error on too many arguments", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "a.trip",
         "b.ll",
         "extra",
@@ -273,7 +272,7 @@ describe("CLI Tests", () => {
     });
 
     it("error on no input file", async () => {
-      const result = await runCommand([process.execPath, "bin/tripc.js"]);
+      const result = await runCommand([process.execPath, "ts_out/bin/tripc.js"]);
       assert.strictEqual(result.success, false);
       assert.ok(result.stderr.includes("Error: No input file specified"));
     });
@@ -281,7 +280,7 @@ describe("CLI Tests", () => {
     it("error on non-trip extension for source input", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "test/bin/fixtures/empty.txt",
       ]);
       assert.strictEqual(result.success, false);
@@ -289,11 +288,11 @@ describe("CLI Tests", () => {
     });
 
     it("short flags coverage (-h, -v)", async () => {
-      let result = await runCommand([process.execPath, "bin/tripc.js", "-h"]);
+      let result = await runCommand([process.execPath, "ts_out/bin/tripc.js", "-h"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("USAGE:"));
 
-      result = await runCommand([process.execPath, "bin/tripc.js", "-v"]);
+      result = await runCommand([process.execPath, "ts_out/bin/tripc.js", "-v"]);
       assert.strictEqual(result.success, true);
       assert.ok(result.stdout.includes("tripc v"));
     });
@@ -301,7 +300,7 @@ describe("CLI Tests", () => {
     it("error when input path is a directory", async () => {
       const result = await runCommand([
         process.execPath,
-        "bin/tripc.js",
+        "ts_out/bin/tripc.js",
         "bin/",
       ]);
       assert.strictEqual(result.success, false);

@@ -10,47 +10,40 @@ def _trip_llvm_object_impl(ctx):
     if len(ctx.attr.module_source_names) != len(ctx.files.module_source_files):
         fail("module_source_names and module_source_files must have the same length")
 
-    node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
     llvm_ir = ctx.actions.declare_file(ctx.label.name + ".ll")
     obj = ctx.actions.declare_file(ctx.label.name + ctx.attr.object_extension)
 
-    tripc_js = None
-    for f in ctx.attr.compiler_dist[DefaultInfo].files.to_list():
-        if f.basename == "tripc.node.js":
-            tripc_js = f
-            break
-    if not tripc_js:
-        fail("Could not find tripc.node.js in compiler_dist")
+    tripc_js = ctx.file.compiler
 
-    emit_args = ctx.actions.args()
-    emit_args.add(tripc_js)
-    emit_args.add("--emit")
-    emit_args.add("llvm")
-    emit_args.add(ctx.file.src)
-    emit_args.add(llvm_ir)
-    emit_args.add("--target")
-    emit_args.add(ctx.attr.target_triple)
-    if ctx.attr.entry_module:
-        emit_args.add("--entry-module")
-        emit_args.add(ctx.attr.entry_module)
-    if ctx.attr.emit_main_wrapper:
-        emit_args.add("--emit-main-wrapper")
-
+    module_args = []
     for index, module_name in enumerate(ctx.attr.module_source_names):
         module_file = ctx.files.module_source_files[index]
-        emit_args.add("--module-source")
-        emit_args.add("{}={}".format(module_name, module_file.path))
+        module_args.append("--module-source")
+        module_args.append("{}={}".format(module_name, module_file.path))
+
+    args = [
+        tripc_js.path,
+        "--emit",
+        "llvm",
+        ctx.file.src.path,
+        llvm_ir.path,
+        "--target",
+        ctx.attr.target_triple,
+    ]
+    if ctx.attr.entry_module:
+        args.extend(["--entry-module", ctx.attr.entry_module])
+    if ctx.attr.emit_main_wrapper:
+        args.append("--emit-main-wrapper")
+    args.extend(module_args)
 
     ctx.actions.run(
-        executable = node_toolchain.nodeinfo.node,
-        arguments = [emit_args],
+        executable = "node",
+        arguments = args,
         inputs = depset(
-            ctx.files.data +
             ctx.files.module_source_files +
             [
                 ctx.file.src,
                 tripc_js,
-                node_toolchain.nodeinfo.node,
             ],
         ),
         outputs = [llvm_ir],
@@ -82,7 +75,6 @@ def _trip_llvm_object_impl(ctx):
 trip_llvm_object = rule(
     implementation = _trip_llvm_object_impl,
     attrs = {
-        "data": attr.label_list(allow_files = True),
         "emit_main_wrapper": attr.bool(default = True),
         "entry_module": attr.string(default = ""),
         "llvm_dist": attr.label_list(
@@ -103,11 +95,11 @@ trip_llvm_object = rule(
             mandatory = True,
         ),
         "target_triple": attr.string(default = "x86_64-pc-windows-msvc"),
-        "compiler_dist": attr.label(
-            default = "//:dist_artifacts",
+        "compiler": attr.label(
+            allow_single_file = True,
+            mandatory = True,
         ),
     },
-    toolchains = ["@rules_nodejs//nodejs:toolchain_type"],
 )
 
 def _windows_import_library_impl(ctx):

@@ -82,6 +82,10 @@ export async function compileLlvmToExecutable(
     "-I",
     join(PROJECT_ROOT, "runtime/trip"),
     ...macosSdkArgs(),
+    "-Xclang",
+    "-opaque-pointers",
+    "-mllvm",
+    "-opaque-pointers",
     "-o",
     exePath,
     ...(process.platform !== "win32"

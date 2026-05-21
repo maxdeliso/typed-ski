@@ -38,12 +38,16 @@
     ]
   },
   "scripts": {
-    "build:ts": "tsc --project tsconfig.emit.json",
-    "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
-    "bench:avl": "node --disable-warning=ExperimentalWarning ts_out/test/avlBenchmark.js",
-    "dist": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
+    "prebuild": "node scripts/generate_version.mjs --ts-out lib/shared/version.generated.ts --jsr-json jsr.json",
+    "build": "tsc --project tsconfig.emit.json",
+    "tripc": "node ts_out/bin/tripc.js",
+    "bench:avl": "node ts_out/test/avlBenchmark.js",
+    "dist": "pnpm run build && node scripts/build_dist.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js test"
+    "test": "pnpm run build && node --test --test-global-setup ts_out/test/globalSetup.js --experimental-test-module-mocks 'ts_out/**/*.test.js'",
+    "test:coverage": "pnpm run build && node --test --test-global-setup ts_out/test/globalSetup.js --experimental-test-module-mocks --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=coverage.lcov 'ts_out/**/*.test.js'",
+    "fmt:check": "prettier --check .",
+    "fmt:fix": "prettier --write ."
   },
   "dependencies": {
     "random-seed": "0.3.0",

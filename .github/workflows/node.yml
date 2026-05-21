@@ -1,7 +1,10 @@
-name: Bazel CI
+name: Build & Test
 
 on:
   pull_request:
+    branches:
+      - main
+  push:
     branches:
       - main
 
@@ -29,21 +32,17 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      # Host Node only needs to be new enough for `pnpm install` to run
-      # (pnpm 11 requires Node ≥ 22). Every Node-touching command in
-      # this workflow goes through Bazel's hermetic Node 26 via
-      # rules_nodejs, so the host version below is independent of the
-      # version the project targets. Using a major-version spec (`22`)
-      # rather than a specific patch (e.g. 26.1.0) picks the runner's
-      # pre-cached Node and avoids the network download that previously
-      # flaked on the Windows runner.
-      - name: Setup Node.js (for pnpm only)
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "26"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build distribution artifacts
+        run: pnpm run dist
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
@@ -60,26 +59,18 @@ jobs:
         run: bazel test //:native_tests
 
       - name: Run format check
-        run: bazel run //:fmt_check
+        run: pnpm run fmt:check
 
       - name: Run typecheck
-        run: bazel run //:typecheck
+        run: pnpm run typecheck
 
       - name: Run Node tests
         if: matrix.os != 'ubuntu-24.04'
-        run: bazel test //:node_tests --test_output=errors
+        run: pnpm run test
 
       - name: Collect Node test coverage (Ubuntu)
         if: matrix.os == 'ubuntu-24.04'
-        run: |
-          bazel coverage //:node_tests --test_output=errors --nocache_test_results
-          echo "Found coverage files:"
-          find -L bazel-testlogs -name "coverage.dat" -print || true
-          find -L bazel-testlogs -name "coverage.dat" -exec cat {} + > coverage.lcov
-          if [[ ! -s coverage.lcov ]]; then
-            echo "No coverage data collected"
-            exit 1
-          fi
+        run: pnpm run test:coverage
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04'
@@ -98,18 +89,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Setup Deno (for JSR dry run)
-        if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
+        if: matrix.os == 'ubuntu-24.04' && github.event_name == 'pull_request'
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
 
-      - name: Build and stage distribution artifacts for JSR dry run
-        if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        # Use the Bazel target rather than `pnpm run dist`: it runs under
-        # Bazel's hermetic Node 26 instead of the runner's host Node, so
-        # this step is unaffected by host Node version.
-        run: bazel run //:dist
-
       - name: JSR dry run publish
-        if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
+        if: matrix.os == 'ubuntu-24.04' && github.event_name == 'pull_request'
         run: deno publish --dry-run --config jsr.json

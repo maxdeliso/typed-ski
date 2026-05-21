@@ -6,9 +6,6 @@ bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
-bazel_dep(name = "rules_nodejs", version = "6.7.4")
-bazel_dep(name = "aspect_rules_js", version = "3.1.2")
-bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
 http_archive = use_repo_rule(
     "@bazel_tools//tools/build_defs/repo:http.bzl",
@@ -85,71 +82,6 @@ http_archive(
         "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang%2Bllvm-22.1.4-x86_64-pc-windows-msvc.tar.xz",
     ],
 )
-
-NODE_26_VERSION = "26.1.0"
-
-NODE_26_REPOSITORIES = {
-    "26.1.0-darwin_arm64": [
-        "node-v26.1.0-darwin-arm64.tar.xz",
-        "node-v26.1.0-darwin-arm64",
-        "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443",
-    ],
-    "26.1.0-linux_amd64": [
-        "node-v26.1.0-linux-x64.tar.xz",
-        "node-v26.1.0-linux-x64",
-        "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9",
-    ],
-    "26.1.0-windows_amd64": [
-        "node-v26.1.0-win-x64.zip",
-        "node-v26.1.0-win-x64",
-        "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92",
-    ],
-}
-
-nodejs_repository = use_repo_rule(
-    "@rules_nodejs//nodejs:repositories.bzl",
-    "_nodejs_repositories",
-)
-
-# Define nodejs repositories for different platforms
-[
-    nodejs_repository(
-        name = name,
-        node_repositories = NODE_26_REPOSITORIES,
-        node_version = NODE_26_VERSION,
-        platform = platform,
-    )
-    for platform, name in [
-        ("darwin_arm64", "typed_ski_node26_darwin_arm64"),
-        ("linux_amd64", "typed_ski_node26_linux_amd64"),
-        ("windows_amd64", "typed_ski_node26_windows_amd64"),
-    ]
-]
-
-node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
-node.toolchain(node_version = "26.1.0")
-use_repo(node, "nodejs_darwin_arm64", "nodejs_linux_amd64", "nodejs_windows_amd64")
-
-register_toolchains(
-    "//bazel:node26_darwin_arm64_toolchain",
-    "//bazel:node26_linux_amd64_toolchain",
-    "//bazel:node26_windows_amd64_toolchain",
-)
-
-npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm", dev_dependency = True)
-npm.npm_translate_lock(
-    name = "npm",
-    lifecycle_hooks_exclude = ["esbuild"],
-    pnpm_lock = "//:pnpm-lock.yaml",
-    public_hoist_packages = {
-        "*": [""],
-    },
-    verify_node_modules_ignored = "//:.bazelignore",
-)
-use_repo(npm, "npm")
-
-pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
-use_repo(pnpm, "pnpm")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 toolchains.exec_platform(

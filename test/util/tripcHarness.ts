@@ -12,10 +12,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEST_TEMP_ROOT = process.env["TEST_TMPDIR"] ?? tmpdir();
 
-export const jsRoot = resolve(__dirname, "../..");
 export const projectRoot = resolve(__dirname, "../../..");
+export const jsRoot = projectRoot;
 export const srcRoot = projectRoot;
-export const tripcScriptPath = join(jsRoot, "bin", "tripc.js");
+export const tripcScriptPath = join(projectRoot, "ts_out", "bin", "tripc.js");
 
 export async function createTempWorkspace(prefix: string): Promise<string> {
   return await mkdtemp(join(TEST_TEMP_ROOT, prefix));

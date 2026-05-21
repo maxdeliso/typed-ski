@@ -25,12 +25,11 @@ function buildJsrJson(pkg) {
     compilerOptions: {
       strict: true,
       lib: ["ESNext", "dom"],
-      types: ["@types/node"],
+      types: ["node"],
     },
     imports: {
       "random-seed": `npm:random-seed@${pkg.dependencies["random-seed"]}`,
       "ts-morph": `npm:ts-morph@${pkg.dependencies["ts-morph"]}`,
-      "@types/node": `npm:@types/node@${pkg.devDependencies["@types/node"]}`,
     },
   };
 

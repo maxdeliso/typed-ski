@@ -28,8 +28,8 @@ build system and one workspace:
 bazelisk build //consumers/thanatos:thanatos
 bazelisk test  //:native_tests          # end-to-end native Trip executable
 bazelisk test  //:node_tests            # TypeScript test suite
-bazelisk run   //:dist                  # build distributable CLI artifacts
-bazelisk run   //:ci                    # fmt + lint + typecheck + build + cov
+bazelisk build //:dist_artifacts         # distributable CLI artifacts
+bazelisk build //:fmt_check //:typecheck # formatting + type checks
 ```
 
 Alternatively, use `pnpm` for distribution: `pnpm run dist`.

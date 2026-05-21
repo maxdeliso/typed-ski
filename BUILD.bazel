@@ -1,4 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@aspect_rules_js//js:defs.bzl", "js_test")
+load("@npm//:defs.bzl", "npm_link_all_packages")
 load(
     "//bazel:trip_llvm.bzl",
     "trip_executable_stdout_test",
@@ -8,6 +10,8 @@ load(
 )
 
 package(default_visibility = ["//visibility:public"])
+
+npm_link_all_packages(name = "npm")
 
 exports_files([
     "package.json",

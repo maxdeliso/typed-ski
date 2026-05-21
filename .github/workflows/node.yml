@@ -41,6 +41,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Interrogate tool versions
+        run: |
+          echo "--- Tool Versions ---"
+          echo "Node: $(node --version)"
+          echo "pnpm: $(pnpm --version)"
+          echo "Bazel: $(bazel --version)"
+          echo "Clang: $(clang --version | head -n 1)"
+          echo "---------------------"
+
       - name: Build distribution artifacts
         run: pnpm run dist
 

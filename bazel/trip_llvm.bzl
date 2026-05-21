@@ -10,6 +10,9 @@ def _trip_llvm_object_impl(ctx):
     if len(ctx.attr.module_source_names) != len(ctx.files.module_source_files):
         fail("module_source_names and module_source_files must have the same length")
 
+    node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
+    node_executable = node_toolchain.nodeinfo.target_tool_path
+
     llvm_ir = ctx.actions.declare_file(ctx.label.name + ".ll")
     obj = ctx.actions.declare_file(ctx.label.name + ctx.attr.object_extension)
 
@@ -21,24 +24,24 @@ def _trip_llvm_object_impl(ctx):
         module_args.append("--module-source")
         module_args.append("{}={}".format(module_name, module_file.path))
 
-    args = [
-        tripc_js.path,
-        "--emit",
-        "llvm",
-        ctx.file.src.path,
-        llvm_ir.path,
-        "--target",
-        ctx.attr.target_triple,
-    ]
+    args = ctx.actions.args()
+    args.add(tripc_js.path)
+    args.add("--emit")
+    args.add("llvm")
+    args.add(ctx.file.src.path)
+    args.add(llvm_ir.path)
+    args.add("--target")
+    args.add(ctx.attr.target_triple)
     if ctx.attr.entry_module:
-        args.extend(["--entry-module", ctx.attr.entry_module])
+        args.add("--entry-module")
+        args.add(ctx.attr.entry_module)
     if ctx.attr.emit_main_wrapper:
-        args.append("--emit-main-wrapper")
-    args.extend(module_args)
+        args.add("--emit-main-wrapper")
+    args.add_all(module_args)
 
     ctx.actions.run(
-        executable = "node",
-        arguments = args,
+        executable = node_toolchain.nodeinfo.node,
+        arguments = [args],
         inputs = depset(
             ctx.files.module_source_files +
             [
@@ -100,6 +103,7 @@ trip_llvm_object = rule(
             mandatory = True,
         ),
     },
+    toolchains = ["@rules_nodejs//nodejs:toolchain_type"],
 )
 
 def _windows_import_library_impl(ctx):

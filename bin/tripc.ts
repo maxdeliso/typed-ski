@@ -270,6 +270,24 @@ async function main(): Promise<void> {
   );
 }
 
-if ((import.meta as any).main) {
+import { fileURLToPath } from "node:url";
+import * as fs from "node:fs";
+
+function isMain(importMetaUrl: string): boolean {
+  if (typeof (import.meta as any).main === "boolean") {
+    return (import.meta as any).main;
+  }
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      fs.realpathSync(process.argv[1]) ===
+      fs.realpathSync(fileURLToPath(importMetaUrl))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMain(import.meta.url)) {
   await main();
 }

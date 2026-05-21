@@ -67,8 +67,6 @@ type CommandName =
   | "verify-generated"
   | "dist"
   | "build"
-  | "fmt-check"
-  | "typecheck"
   | "test"
   | "bazel-test-shard";
 
@@ -209,8 +207,6 @@ Commands:
   verify-generated
   dist
   build
-  fmt-check
-  typecheck
   test
   bazel-test-shard`);
   process.exit(1);
@@ -445,11 +441,6 @@ export async function buildDist(
   await validateDist();
 }
 
-async function formatCheck(): Promise<void> {
-  console.log("Format check using pnpm exec prettier --check .");
-  await run(pnpmCommand("exec", "prettier", "--check", "."));
-}
-
 async function collectTests(): Promise<string[]> {
   const testRoot = join(JS_ROOT, "test");
   const files: string[] = [];
@@ -609,12 +600,6 @@ async function runSelectedTests(
   );
 }
 
-async function typecheck(): Promise<void> {
-  await syncGenerated();
-  const files = await collectTests();
-  await typecheckTests(files);
-}
-
 async function typecheckAndPrepareTestExecution(
   files: string[],
 ): Promise<Record<string, string>> {
@@ -763,12 +748,6 @@ export async function main(
       break;
     case "build":
       await build();
-      break;
-    case "fmt-check":
-      await formatCheck();
-      break;
-    case "typecheck":
-      await typecheck();
       break;
     case "test":
       await runTests(false, args);

@@ -805,35 +805,40 @@ static inline bool check_stable(uint32_t seq) {
   return atomic_load_explicit(&h->resize_seq, memory_order_acquire) == seq;
 }
 
-/** Wait-free: nodes never move in memory on grow(). */
-uint32_t kindOf(uint32_t n) {
+static inline SabHeader *get_arena_header(void) {
+  return (SabHeader *)ARENA_BASE_ADDR;
+}
+
+static inline SabHeader *get_node_header(uint32_t n) {
   ensure_arena();
   if (control_ptr_value_accessor_violation(n))
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return NULL;
+  SabHeader *h = get_arena_header();
+  if (h == NULL || n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+    return NULL;
+  return h;
+}
+
+/** Wait-free: nodes never move in memory on grow(). */
+uint32_t kindOf(uint32_t n) {
+  SabHeader *h = get_node_header(n);
+  if (!h)
     return 0;
   atomic_uchar *kinds = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_kind);
   return load_kind_pub(kinds, n);
 }
 
 uint32_t symOf(uint32_t n) {
-  ensure_arena();
-  if (control_ptr_value_accessor_violation(n))
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+  SabHeader *h = get_node_header(n);
+  if (!h)
     return 0;
   atomic_uchar *syms = (atomic_uchar *)(ARENA_BASE_ADDR + h->offset_node_sym);
   return atomic_load_explicit(&syms[n], memory_order_acquire);
 }
 
 uint32_t hashOf(uint32_t n) {
-  ensure_arena();
-  if (control_ptr_value_accessor_violation(n))
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+  SabHeader *h = get_node_header(n);
+  if (!h)
     return 0;
   atomic_uint *hashes =
       (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_hash32);
@@ -841,124 +846,91 @@ uint32_t hashOf(uint32_t n) {
 }
 
 uint32_t leftOf(uint32_t n) {
-  ensure_arena();
-  if (control_ptr_value_accessor_violation(n))
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+  SabHeader *h = get_node_header(n);
+  if (!h)
     return 0;
   atomic_uint *lefts = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_left);
   return atomic_load_explicit(&lefts[n], memory_order_acquire);
 }
 
 uint32_t rightOf(uint32_t n) {
-  ensure_arena();
-  if (control_ptr_value_accessor_violation(n))
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  if (n >= atomic_load_explicit(&h->capacity, memory_order_relaxed))
+  SabHeader *h = get_node_header(n);
+  if (!h)
     return 0;
   atomic_uint *rights = (atomic_uint *)(ARENA_BASE_ADDR + h->offset_node_right);
   return atomic_load_explicit(&rights[n], memory_order_acquire);
 }
 
 uint32_t arena_top(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->top, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->top, memory_order_relaxed) : 0;
 }
 
 uint32_t arena_capacity(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->capacity, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->capacity, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_total_nodes(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->total_nodes, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->total_nodes, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_total_steps(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->total_steps, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->total_steps, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_total_link_chase_hops(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->total_link_chase_hops,
-                              memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->total_link_chase_hops,
+                                  memory_order_relaxed)
+           : 0;
 }
 
 unsigned long long arena_total_cons_allocs(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->total_cons_allocs, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->total_cons_allocs, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_total_cont_allocs(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->total_cont_allocs, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->total_cont_allocs, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_total_susp_allocs(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->total_susp_allocs, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->total_susp_allocs, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_duplicate_lost_allocs(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->duplicate_lost_allocs, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->duplicate_lost_allocs, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_hashcons_hits(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->hashcons_hits, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->hashcons_hits, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_hashcons_misses(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->hashcons_misses, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->hashcons_misses, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_bulk_fusion_checks(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->bulk_fusion_checks, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->bulk_fusion_checks, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_bulk_fusion_candidates(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->bulk_fusion_candidates, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->bulk_fusion_candidates, memory_order_relaxed) : 0;
 }
 
 unsigned long long arena_bulk_fusion_hits(void) {
-  if (ARENA_BASE_ADDR == NULL)
-    return 0;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
-  return atomic_load_explicit(&h->bulk_fusion_hits, memory_order_relaxed);
+  SabHeader *h = get_arena_header();
+  return h ? atomic_load_explicit(&h->bulk_fusion_hits, memory_order_relaxed) : 0;
 }
 
 void arena_hash_table_stats(unsigned long long *out_items,
@@ -970,8 +942,8 @@ void arena_hash_table_stats(unsigned long long *out_items,
   unsigned long long chain_sq_sum = 0;
   uint32_t max_chain = 0;
 
-  if (ARENA_BASE_ADDR != NULL) {
-    SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
+  SabHeader *h = get_arena_header();
+  if (h != NULL) {
     while (true) {
       uint32_t seq = enter_stable(&h);
       uint32_t cap = atomic_load_explicit(&h->capacity, memory_order_acquire);
@@ -2897,9 +2869,9 @@ uint32_t reduce(uint32_t expr, uint32_t max) {
 }
 
 HOST_NO_SANITIZE_ADDRESS int64_t hostPullV2(void) {
-  if (ARENA_BASE_ADDR == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h)
     return -1;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   uint8_t *base = ARENA_BASE_ADDR;
   Cqe cqe;
   if (try_dequeue((Ring *)(base + h->offset_cq), &cqe, sizeof(Cqe))) {
@@ -2913,18 +2885,18 @@ HOST_NO_SANITIZE_ADDRESS int64_t hostPullV2(void) {
 }
 
 HOST_NO_SANITIZE_ADDRESS void hostCqDequeueBlocking(Cqe *cqe) {
-  if (ARENA_BASE_ADDR == NULL || cqe == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h || cqe == NULL)
     return;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   Ring *cq = (Ring *)(ARENA_BASE_ADDR + h->offset_cq);
   dequeue_blocking(cq, cqe, sizeof(Cqe));
 }
 
 HOST_NO_SANITIZE_ADDRESS void
 arena_cq_enqueue_shutdown_sentinel(void) {
-  if (ARENA_BASE_ADDR == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h)
     return;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   Ring *cq = (Ring *)(ARENA_BASE_ADDR + h->offset_cq);
   Cqe sentinel = {0, 0, CQ_EVENT_DONE};
   enqueue_blocking(cq, &sentinel, sizeof(Cqe));
@@ -2932,9 +2904,9 @@ arena_cq_enqueue_shutdown_sentinel(void) {
 
 uint32_t hostSubmit(uint32_t node_id, uint32_t req_id, uint32_t max_steps) {
   ensure_arena();
-  if (ARENA_BASE_ADDR == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h)
     return 2;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   Sqe sqe = {node_id, req_id, max_steps};
   if (try_enqueue((Ring *)(ARENA_BASE_ADDR + h->offset_sq), &sqe, sizeof(Sqe)))
     return 0;
@@ -2943,34 +2915,34 @@ uint32_t hostSubmit(uint32_t node_id, uint32_t req_id, uint32_t max_steps) {
 
 void arena_stdin_push(uint8_t byte) {
   ensure_arena();
-  if (ARENA_BASE_ADDR == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h)
     return;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   enqueue_blocking((Ring *)(ARENA_BASE_ADDR + h->offset_stdin), &byte, 1);
 }
 
 bool arena_stdout_try_pop(uint8_t *byte_out) {
   ensure_arena();
-  if (ARENA_BASE_ADDR == NULL || byte_out == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h || byte_out == NULL)
     return false;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout), byte_out, 1);
 }
 
 bool arena_stdin_wait_try_dequeue(uint32_t *node_id_out) {
   ensure_arena();
-  if (ARENA_BASE_ADDR == NULL || node_id_out == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h || node_id_out == NULL)
     return false;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdin_wait),
                      node_id_out, 4);
 }
 
 bool arena_stdout_wait_try_dequeue(uint32_t *node_id_out) {
   ensure_arena();
-  if (ARENA_BASE_ADDR == NULL || node_id_out == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h || node_id_out == NULL)
     return false;
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   return try_dequeue((Ring *)(ARENA_BASE_ADDR + h->offset_stdout_wait),
                      node_id_out, 4);
 }
@@ -2981,10 +2953,9 @@ void arena_debug_ring_occupancy(uint32_t *out_sq_count, uint32_t *out_cq_count) 
     *out_sq_count = 0;
   if (out_cq_count)
     *out_cq_count = 0;
-  if (ARENA_BASE_ADDR == NULL)
+  SabHeader *h = get_arena_header();
+  if (!h)
     return;
-
-  SabHeader *h = (SabHeader *)ARENA_BASE_ADDR;
   Ring *sq = (Ring *)(ARENA_BASE_ADDR + h->offset_sq);
   Ring *cq = (Ring *)(ARENA_BASE_ADDR + h->offset_cq);
   if (out_sq_count) {

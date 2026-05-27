@@ -275,7 +275,7 @@ poly emitCallFunction = \moduleName : List U8 => \name : List U8 => \calleeModul
   append [U8] (emitFunctionHeader moduleName name)
     (append [U8] "  %call = call i8 @"
       (append [U8] (functionSymbol calleeModule calleeName)
-        (append [U8] "()\n  ret i8 %call\n}\n\n")))
+        "()\n  ret i8 %call\n}\n\n"))
 
 poly emitWriteCall = \byte : U8 =>
   append [U8]

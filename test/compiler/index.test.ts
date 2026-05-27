@@ -1,80 +1,33 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import type { TripCObject } from "../../lib/compiler/objectFile.ts";
+import {
+  type CompilerTripModuleName,
+  loadCompilerTripModule,
+} from "../../lib/compiler/bootstrapModules.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
-import { getPreludeObject } from "../../lib/prelude.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import { toTopoDagWire } from "../../lib/ski/topoDagWire.ts";
-import { loadTripModuleObject } from "../../lib/tripSourceLoader.ts";
 
-const LEXER_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "lexer.trip");
-const PARSER_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "parser.trip",
-);
-const CORE_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "core.trip");
-const DATA_ENV_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "dataEnv.trip",
-);
-const UNPARSE_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "unparse.trip",
-);
-const LOWERING_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "lowering.trip",
-);
-const BRIDGE_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "bridge.trip",
-);
-const CORE_TO_LOWER_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "coreToLower.trip",
-);
-const COMPILER_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "index.trip",
-);
-const LLVM_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "llvm.trip");
-const AVL_SOURCE_FILE = join(workspaceRoot, "lib", "avl.trip");
-const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "bin.trip");
-const NAT_SOURCE_FILE = join(workspaceRoot, "lib", "nat.trip");
+const HARNESS_MODULE_NAMES: readonly CompilerTripModuleName[] = [
+  "Prelude",
+  "Nat",
+  "Bin",
+  "Avl",
+  "Lexer",
+  "Parser",
+  "Core",
+  "DataEnv",
+  "CoreToLower",
+  "Unparse",
+  "Lowering",
+  "Bridge",
+  "Llvm",
+  "Compiler",
+];
 
-interface CompilerModules {
-  prelude: TripCObject;
-  lexer: TripCObject;
-  parser: TripCObject;
-  core: TripCObject;
-  dataEnv: TripCObject;
-  unparse: TripCObject;
-  lowering: TripCObject;
-  coreToLower: TripCObject;
-  bridge: TripCObject;
-  llvm: TripCObject;
-  compiler: TripCObject;
-  avl: TripCObject;
-  bin: TripCObject;
-  nat: TripCObject;
-}
+type CompilerModules = Map<CompilerTripModuleName, TripCObject>;
 
 let compilerModulesPromise: Promise<CompilerModules> | null = null;
 
@@ -107,57 +60,26 @@ function compilerCombOnly(object: TripCObject): TripCObject {
 async function getCompilerModules(): Promise<CompilerModules> {
   if (!compilerModulesPromise) {
     compilerModulesPromise = (async () => {
-      const [
-        prelude,
-        lexer,
-        parser,
-        core,
-        dataEnv,
-        unparse,
-        lowering,
-        coreToLower,
-        bridge,
-        llvm,
-        compiler,
-        avl,
-        bin,
-        nat,
-      ] = await Promise.all([
-        getPreludeObject(),
-        loadTripModuleObject(LEXER_SOURCE_FILE),
-        loadTripModuleObject(PARSER_SOURCE_FILE),
-        loadTripModuleObject(CORE_SOURCE_FILE),
-        loadTripModuleObject(DATA_ENV_SOURCE_FILE),
-        loadTripModuleObject(UNPARSE_SOURCE_FILE),
-        loadTripModuleObject(LOWERING_SOURCE_FILE),
-        loadTripModuleObject(CORE_TO_LOWER_SOURCE_FILE),
-        loadTripModuleObject(BRIDGE_SOURCE_FILE),
-        loadTripModuleObject(LLVM_SOURCE_FILE),
-        loadTripModuleObject(COMPILER_SOURCE_FILE),
-        loadTripModuleObject(AVL_SOURCE_FILE),
-        loadTripModuleObject(BIN_SOURCE_FILE),
-        loadTripModuleObject(NAT_SOURCE_FILE),
-      ]);
-
-      return {
-        prelude,
-        lexer,
-        parser,
-        core,
-        dataEnv,
-        unparse,
-        lowering,
-        coreToLower,
-        bridge,
-        llvm,
-        compiler,
-        avl,
-        bin,
-        nat,
-      };
+      const objects = await Promise.all(
+        HARNESS_MODULE_NAMES.map((name) => loadCompilerTripModule(name)),
+      );
+      return new Map(
+        HARNESS_MODULE_NAMES.map((name, i) => [name, objects[i]!]),
+      );
     })();
   }
-  return await compilerModulesPromise;
+  return compilerModulesPromise;
+}
+
+function moduleObject(
+  modules: CompilerModules,
+  name: CompilerTripModuleName,
+): TripCObject {
+  const object = modules.get(name);
+  if (!object) {
+    throw new Error(`Harness module '${name}' not loaded`);
+  }
+  return object;
 }
 
 function makeParityHarness(source: string, expected: string): string {
@@ -204,29 +126,33 @@ poly main =
 
 async function buildCompilerHarnessExpression(source: string) {
   const modules = await getCompilerModules();
-  const compilerForHarness = compilerCombOnly(modules.compiler);
+  const get = (name: CompilerTripModuleName) => moduleObject(modules, name);
+  const compilerForHarness = compilerCombOnly(get("Compiler"));
   const testObject = compileToObjectFile(source, {
     importedModules: [
-      modules.prelude,
-      modules.lexer,
-      modules.unparse,
+      get("Prelude"),
+      get("Lexer"),
+      get("Unparse"),
       compilerForHarness,
     ],
   });
 
+  const LINKED_MODULE_NAMES: readonly CompilerTripModuleName[] = [
+    "Prelude",
+    "Bin",
+    "Nat",
+    "Avl",
+    "Lexer",
+    "Parser",
+    "Core",
+    "DataEnv",
+    "Unparse",
+    "Lowering",
+    "CoreToLower",
+    "Bridge",
+  ];
   const linked = linkModules([
-    { name: "Prelude", object: modules.prelude },
-    { name: "Bin", object: modules.bin },
-    { name: "Nat", object: modules.nat },
-    { name: "Avl", object: modules.avl },
-    { name: "Lexer", object: modules.lexer },
-    { name: "Parser", object: modules.parser },
-    { name: "Core", object: modules.core },
-    { name: "DataEnv", object: modules.dataEnv },
-    { name: "Unparse", object: modules.unparse },
-    { name: "Lowering", object: modules.lowering },
-    { name: "CoreToLower", object: modules.coreToLower },
-    { name: "Bridge", object: modules.bridge },
+    ...LINKED_MODULE_NAMES.map((name) => ({ name, object: get(name) })),
     { name: "Compiler", object: compilerForHarness },
     { name: "Test", object: testObject },
   ]);

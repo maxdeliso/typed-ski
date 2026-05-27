@@ -26,7 +26,13 @@ export const PARSER_SOURCE_FILE = join(
   "compiler",
   "parser.trip",
 );
-const BIN_SOURCE_FILE = join(workspaceRoot, "lib", "compiler", "bin.trip");
+const BIN_WITH_NAT_SOURCE_FILE = join(
+  workspaceRoot,
+  "test",
+  "compiler",
+  "inputs",
+  "binWithNat.trip",
+);
 const PARSER_DRIVER_FILE = join(
   workspaceRoot,
   "test",
@@ -74,7 +80,10 @@ export async function runFreshCompilerCorpusBuild(): Promise<DeterminismRun> {
     lexer,
     nat,
   ]);
-  const bin = await compileFreshObject(BIN_SOURCE_FILE, [prelude, nat]);
+  const bin = await compileFreshObject(BIN_WITH_NAT_SOURCE_FILE, [
+    prelude,
+    nat,
+  ]);
   const binForLink: TripCObject = {
     ...bin,
     exports: ["addBin", "incBin"],

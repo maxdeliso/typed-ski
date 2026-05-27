@@ -7,6 +7,7 @@ import {
   serializeTripCObject,
   type TripCObject,
 } from "../../lib/compiler/objectFile.ts";
+import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
 import { compileToObjectFile } from "../../lib/compiler/singleFileCompiler.ts";
 import { linkModules } from "../../lib/linker/moduleLinker.ts";
 import { getNatObject } from "../../lib/nat.ts";
@@ -14,18 +15,8 @@ import { parseSKI } from "../../lib/parser/ski.ts";
 import { getPreludeObject } from "../../lib/prelude.ts";
 import { unparseSKI } from "../../lib/ski/expression.ts";
 
-export const LEXER_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "lexer.trip",
-);
-export const PARSER_SOURCE_FILE = join(
-  workspaceRoot,
-  "lib",
-  "compiler",
-  "parser.trip",
-);
+export const LEXER_SOURCE_FILE = compilerTripModuleSourcePath("Lexer");
+export const PARSER_SOURCE_FILE = compilerTripModuleSourcePath("Parser");
 const BIN_WITH_NAT_SOURCE_FILE = join(
   workspaceRoot,
   "test",

@@ -1,13 +1,10 @@
 /**
  * Bootstrap compiler module registry.
  *
- * The self-hosted Trip compiler is spread across .trip files under
- * lib/compiler/. This file is the single source of truth for their
+ * The self-hosted Trip compiler lives in bootstrap/src/ as .trip
+ * modules. This file is the single source of truth for their
  * name -> path mapping, extending the four public Trip modules from
- * lib/tripModules.ts. Three call sites (combinatorCompiler,
- * test/compiler/index.test.ts, test/compiler/llvm/nativeHarness.ts)
- * previously each hardcoded a parallel copy of this table; they now
- * all consume this registry.
+ * lib/tripModules.ts.
  *
  * @module
  */
@@ -94,7 +91,12 @@ export function compilerTripModuleSourcePath(
   name: CompilerTripModuleName,
 ): string {
   if (isBootstrapModule(name)) {
-    return join(workspaceRoot, "lib", "compiler", BOOTSTRAP_MODULE_FILES[name]);
+    return join(
+      workspaceRoot,
+      "bootstrap",
+      "src",
+      BOOTSTRAP_MODULE_FILES[name],
+    );
   }
   return tripModuleSourcePath(name);
 }

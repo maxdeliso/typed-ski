@@ -32,7 +32,7 @@ poly main =
 `;
 
 describe("LLVM self-host bootstrap", () => {
-  it("stage-0 emits a native compiler that emits and runs hello-world LLVM", async () => {
+  it("stage-0 emits a native compiler for stage-1 bundles", async () => {
     const { exePath: compilerExe, cleanup: cleanupBootstrap } =
       await bootstrap.compileCompilerToNative();
     const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-bootstrap-"));
@@ -69,6 +69,46 @@ describe("LLVM self-host bootstrap", () => {
       const result = runExecutable(stage1Exe);
       assert.equal(result.status, 0);
       assert.equal(result.stdout, "Hello, world!\n");
+
+      const multiModuleLlPath = join(tempDir, "multi-module.stage1.ll");
+      const multiModuleBundle = serializeTripBundleV1({
+        entryModule: "App",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules: [
+          {
+            name: "Lib",
+            source: `module Lib
+export seven
+poly seven = #u8(7)
+`,
+          },
+          {
+            name: "App",
+            source: `module App
+import Lib seven
+export main
+poly main = seven
+`,
+          },
+        ],
+      });
+
+      const multiModuleLl = await bootstrap.runNativeCompiler(
+        compilerExe,
+        multiModuleBundle,
+      );
+      assert.ok(!multiModuleLl.startsWith("ERR:"), multiModuleLl);
+      assert.match(multiModuleLl, /define i8 @trip_fn_Lib_seven\(\)/);
+      assert.match(multiModuleLl, /define i8 @trip_fn_App_main\(\)/);
+      assert.match(multiModuleLl, /call i8 @trip_fn_Lib_seven\(\)/);
+      assert.match(multiModuleLl, /call i8 @trip_fn_App_main\(\)/);
+      await writeFile(multiModuleLlPath, multiModuleLl, "utf8");
+
+      const multiModuleExe = await compileLlvmToExecutable(multiModuleLlPath);
+      const multiModuleResult = runExecutable(multiModuleExe);
+      assert.equal(multiModuleResult.status, 0);
+      assert.equal(multiModuleResult.stdout, "");
     } finally {
       await Promise.all([
         cleanupBootstrap(),

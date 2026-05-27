@@ -15,9 +15,11 @@
  */
 
 import { describe, it } from "../util/test_shim.ts";
+import assert from "node:assert/strict";
 import { join } from "node:path";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { compileTripSourceToLlvm } from "../../lib/compiler/index.ts";
+import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { loadTripSourceFile } from "../../lib/tripSourceLoader.ts";
 
 const PRELUDE_URL = join(workspaceRoot, "lib", "prelude.trip");
@@ -59,6 +61,19 @@ describe("MiniCore higher-order specialization", () => {
         source,
       })),
     ]);
+
+    const modules = [...moduleSources, { name: "Probe", source: PROBE_SOURCE }];
+    const program = compileMiniCoreModules(modules, "Probe", {
+      requireNullaryEntry: false,
+    });
+    const lookupSpecialization = program.symbols.find((symbol) =>
+      symbol.name.startsWith("Avl.lookup$"),
+    );
+    assert.ok(lookupSpecialization, "expected specialized Avl.lookup symbol");
+    assert.match(lookupSpecialization.name, /\$lteKey=Prelude\.lteListU8\$/);
+    assert.match(lookupSpecialization.name, /\$K=/);
+    assert.match(lookupSpecialization.name, /\$V=/);
+    assert.doesNotMatch(lookupSpecialization.name, /\$\$/);
 
     // Should compile cleanly through MiniCore -> ANF -> Block validation.
     // Before the type-arg substitution fix, this throws

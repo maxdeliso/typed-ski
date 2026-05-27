@@ -15,7 +15,7 @@ build system and one workspace:
    runtime in [`runtime/trip/`](runtime/trip/).
 3. **Self-hosting bootstrap** — an in-progress re-implementation of the
    compiler in TripLang itself. `.trip` modules in
-   [`lib/compiler/`](lib/compiler/) (lexer.trip, parser.trip, core.trip,
+   [`bootstrap/src/`](bootstrap/src/) (lexer.trip, parser.trip, core.trip,
    lowering.trip, llvm.trip, etc.). The current native bootstrap consumes
    `bundle-v1` input and emits LLVM IR for the narrow stage-1 path.
 4. **Sealed SKI reducer consumer** — the legacy native SKI reducer lives under
@@ -241,7 +241,7 @@ transform them as first-order AST data.
 
 ## 4. Self-hosting bootstrap
 
-`.trip` files under [`lib/compiler/`](lib/compiler/) (lexer.trip,
+`.trip` files under [`bootstrap/src/`](bootstrap/src/) (lexer.trip,
 parser.trip, core.trip, lowering.trip, llvm.trip, moduleEnv.trip, etc.)
 are an in-progress re-implementation of the compiler in TripLang itself.
 They are not currently part of the main build. The active acceptance path

@@ -75,6 +75,7 @@ ts_compile(
     srcs = glob(
         [
             "bin/**",
+            "bootstrap/**",
             "compiler/**",
             "lib/**",
             "scripts/**",
@@ -107,6 +108,7 @@ NODE_DATA_BASE = glob(
         "*.jsonc",
         "*.md",
         "bin/**",
+        "bootstrap/**",
         "compiler/**",
         "lib/**",
     ],
@@ -360,6 +362,7 @@ prettier_check(
             "*.jsonc",
             "*.md",
             "bin/**",
+            "bootstrap/**",
             "compiler/**",
             "lib/**",
             "test/**",

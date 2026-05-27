@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "../../util/test_shim.ts";
-import { loadWorkspaceFile } from "../../util/fileLoader.ts";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
+import {
+  compilerTripModuleSourcePath,
+  isKnownCompilerTripModule,
+} from "../../../lib/compiler/bootstrapModules.ts";
 import {
   compileTripBundleV1ToLlvm,
   parseTripBundleV1,
@@ -61,16 +64,12 @@ function bundleSource(fields: {
 }
 
 function realBootstrapModuleSource(name: string): string {
-  // Modules live either directly under lib/ or under lib/compiler/ — pick
-  // whichever exists. Use loadWorkspaceFile for the actual read so a missing
-  // file at the chosen path produces a diagnostic instead of a bare ENOENT.
-  const primary = `lib/${name.toLowerCase()}.trip`;
-  if (existsSync(join(workspaceRoot, primary))) {
-    return loadWorkspaceFile(primary);
+  if (!isKnownCompilerTripModule(name)) {
+    throw new Error(
+      `realBootstrapModuleSource: unknown built-in module '${name}'`,
+    );
   }
-  return loadWorkspaceFile(
-    `lib/compiler/${name.charAt(0).toLowerCase()}${name.slice(1)}.trip`,
-  );
+  return readFileSync(compilerTripModuleSourcePath(name), "utf8");
 }
 
 export function realBootstrapBundle(moduleNames: string[]): Uint8Array {
@@ -88,7 +87,10 @@ export function realBootstrapBundle(moduleNames: string[]): Uint8Array {
 async function compileBundleInventoryExecutable(
   tempDir: string,
 ): Promise<string> {
-  const source = loadWorkspaceFile("lib/compiler/bundleInventory.trip");
+  const source = readFileSync(
+    compilerTripModuleSourcePath("BundleInventory"),
+    "utf8",
+  );
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleInventory",
     moduleSources: await loadCommonModules([
@@ -108,7 +110,10 @@ async function compileBundleInventoryExecutable(
 }
 
 async function compileModuleEnvExecutable(tempDir: string): Promise<string> {
-  const source = loadWorkspaceFile("lib/compiler/moduleEnv.trip");
+  const source = readFileSync(
+    compilerTripModuleSourcePath("ModuleEnv"),
+    "utf8",
+  );
   const llvm = await compileTripToLlvm(source, {
     entryModule: "ModuleEnv",
     moduleSources: await loadCommonModules([
@@ -1235,7 +1240,10 @@ poly main = #u8(0)
 async function compileBundleSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
-  const source = loadWorkspaceFile("lib/compiler/bundleSummary.trip");
+  const source = readFileSync(
+    compilerTripModuleSourcePath("BundleSummary"),
+    "utf8",
+  );
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleSummary",
     moduleSources: await loadCommonModules(["Prelude", "Bin"]),
@@ -1249,7 +1257,10 @@ async function compileBundleSummaryExecutable(
 async function compileBundleParseSummaryExecutable(
   tempDir: string,
 ): Promise<string> {
-  const source = loadWorkspaceFile("lib/compiler/bundleParseSummary.trip");
+  const source = readFileSync(
+    compilerTripModuleSourcePath("BundleParseSummary"),
+    "utf8",
+  );
   const llvm = await compileTripToLlvm(source, {
     entryModule: "BundleParseSummary",
     moduleSources: await loadCommonModules([

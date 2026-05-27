@@ -1,0 +1,81 @@
+/**
+ * Stage-0 native verification of the MiniCore/ANF self-host front-half.
+ *
+ * Compiles `MiniVerify.verifyToAnfText` (plus its transitive .trip deps)
+ * via the host LLVM emitter, runs the resulting native exe, and asserts
+ * its stdout matches the golden snapshot already pinned by the host
+ * MiniCore evaluator test in `minicoreAnf.test.ts`.
+ *
+ * Currently skipped: the host MiniCore->Block lowering does not propagate
+ * type-argument substitutions through higher-order specialization. Any
+ * entry whose closure reaches `Bridge.elaborateProgramToCore` triggers
+ *
+ *   call Bridge.lteListU8 in Avl.lookup$lteKey=Bridge.lteListU8...
+ *   arg 0 type mismatch: expected data#1<u8>, got K
+ *
+ * inside `validateBlockModule`. The specialization in `fromTrip.ts`
+ * captures the function-value argument (`lteKey = Bridge.lteListU8`) but
+ * leaves the type parameter `K` unsubstituted in the specialized body.
+ * Fix that, then drop the skip; no harness changes should be needed.
+ */
+
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, it } from "../../util/test_shim.ts";
+import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
+import {
+  buildMiniVerifyHarnessSource,
+  MINI_VERIFY_MODULE_NAMES,
+} from "../minicoreAnfHarness.ts";
+import {
+  compileLlvmToExecutable,
+  compileTripToLlvm,
+  loadCommonModules,
+  runExecutable,
+} from "./nativeHarness.ts";
+
+const GOLDEN_FILE = join(
+  workspaceRoot,
+  "test",
+  "compiler",
+  "inputs",
+  "minicoreAnf.golden.txt",
+);
+
+describe("MiniVerify native self-host", () => {
+  it(
+    "stage-0 emits a native exe whose ANF rendering matches the host golden",
+    {
+      skip: "MiniCore->Block lowering drops type-arg substitution in higher-order specialization of Avl.lookup; see file header.",
+    },
+    async () => {
+      const moduleSources = await loadCommonModules([
+        ...MINI_VERIFY_MODULE_NAMES,
+      ]);
+      const verifySource = buildMiniVerifyHarnessSource("writeAll");
+
+      const llvm = await compileTripToLlvm(verifySource, {
+        entryModule: "Verify",
+        moduleSources,
+        emitMainWrapper: true,
+      });
+
+      const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-mini-verify-"));
+      try {
+        const llPath = join(tempDir, "mini-verify.ll");
+        await writeFile(llPath, llvm, "utf8");
+        const exePath = await compileLlvmToExecutable(llPath);
+        const result = runExecutable(exePath);
+        const expected = await readFile(GOLDEN_FILE, "utf8");
+        assert.equal(result.status, 0);
+        assert.equal(result.stderr, "");
+        assert.equal(result.stdout, expected);
+      } finally {
+        await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      }
+    },
+  );
+});

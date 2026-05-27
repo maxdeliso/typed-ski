@@ -15,6 +15,7 @@ import Prelude Bool
 import Prelude true
 import Prelude false
 import Prelude if
+import Prelude and
 import Prelude or
 import Prelude U8
 import Prelude addU8
@@ -40,11 +41,20 @@ import Parser E_Lam
 import Parser E_Let
 import Parser E_Nat
 import Parser E_Match
+import BundleSummary BundleSummary
+import BundleSummary MkBundleSummary
+import BundleSummary ModuleRecord
+import BundleSummary MkModuleRecord
 
 export compileSourceToLlvm
+export compileBundleSummaryToLlvm
 export emitLlvmForWriteBytes
 export collectWriteBytes
 export findMainBody
+
+data ParsedModule = MkParsedModule (List U8) (List Decl)
+data QualifiedName = MkQualifiedName (List U8) (List U8)
+data EmitState = MkEmitState (List QualifiedName) (List U8)
 
 poly digitToAscii = \d : U8 =>
   addU8 d #u8(48)
@@ -143,23 +153,129 @@ poly rec collectWriteBytes = \expr : Expr =>
         }
   }
 
-poly rec findMainBody = \decls : List Decl =>
+poly rec findDefBody = \wanted : List U8 => \decls : List Decl =>
   matchList [Decl] [Maybe Expr] decls
     (None [Expr])
     (\h : Decl => \t : List Decl =>
       match h [Maybe Expr] {
         | D_Def kind isRec name body =>
-            if [Maybe Expr] (eqListU8 name "main")
+            if [Maybe Expr] (eqListU8 name wanted)
               (\u : U8 => Some [Expr] body)
-              (\u : U8 => findMainBody t)
-        | D_Module name => findMainBody t
-        | D_Import moduleName symbolName => findMainBody t
-        | D_Export name => findMainBody t
-        | D_Opaque name => findMainBody t
-        | D_Native name => findMainBody t
-        | D_Type name => findMainBody t
-        | D_Data name ctors => findMainBody t
+              (\u : U8 => findDefBody wanted t)
+        | D_Module name => findDefBody wanted t
+        | D_Import moduleName symbolName => findDefBody wanted t
+        | D_Export name => findDefBody wanted t
+        | D_Opaque name => findDefBody wanted t
+        | D_Native name => findDefBody wanted t
+        | D_Type name => findDefBody wanted t
+        | D_Data name ctors => findDefBody wanted t
       })
+
+poly findMainBody = \decls : List Decl =>
+  findDefBody "main" decls
+
+poly rec findImportModule = \wanted : List U8 => \decls : List Decl =>
+  matchList [Decl] [Maybe (List U8)] decls
+    (None [List U8])
+    (\h : Decl => \t : List Decl =>
+      match h [Maybe (List U8)] {
+        | D_Import moduleName symbolName =>
+            if [Maybe (List U8)] (eqListU8 symbolName wanted)
+              (\u : U8 => Some [List U8] moduleName)
+              (\u : U8 => findImportModule wanted t)
+        | D_Def kind isRec name body => findImportModule wanted t
+        | D_Module name => findImportModule wanted t
+        | D_Export name => findImportModule wanted t
+        | D_Opaque name => findImportModule wanted t
+        | D_Native name => findImportModule wanted t
+        | D_Type name => findImportModule wanted t
+        | D_Data name ctors => findImportModule wanted t
+      })
+
+poly rec parseModuleSource = \name : List U8 => \source : List U8 =>
+  match (tokenize source) [Result (List U8) ParsedModule] {
+    | Err e => Err [List U8] [ParsedModule] "Lex error"
+    | Ok toks =>
+        match (parseProgram toks) [Result (List U8) ParsedModule] {
+          | Err e => Err [List U8] [ParsedModule] "Parse error"
+          | Ok decls => Ok [List U8] [ParsedModule] (MkParsedModule name decls)
+        }
+  }
+
+poly rec parseModuleRecords = \records : List ModuleRecord =>
+  matchList [ModuleRecord] [Result (List U8) (List ParsedModule)] records
+    (Ok [List U8] [List ParsedModule] (nil [ParsedModule]))
+    (\h : ModuleRecord => \t : List ModuleRecord =>
+      match h [Result (List U8) (List ParsedModule)] { | MkModuleRecord name lengthDigits source =>
+        match (parseModuleSource name source) [Result (List U8) (List ParsedModule)] {
+          | Err e => Err [List U8] [List ParsedModule] e
+          | Ok parsed =>
+              match (parseModuleRecords t) [Result (List U8) (List ParsedModule)] {
+                | Err e => Err [List U8] [List ParsedModule] e
+                | Ok rest => Ok [List U8] [List ParsedModule] (cons [ParsedModule] parsed rest)
+              }
+        }
+      })
+
+poly rec findParsedModule = \wanted : List U8 => \mods : List ParsedModule =>
+  matchList [ParsedModule] [Maybe ParsedModule] mods
+    (None [ParsedModule])
+    (\h : ParsedModule => \t : List ParsedModule =>
+      match h [Maybe ParsedModule] { | MkParsedModule name decls =>
+        if [Maybe ParsedModule] (eqListU8 name wanted)
+          (\u : U8 => Some [ParsedModule] h)
+          (\u : U8 => findParsedModule wanted t)
+      })
+
+poly resolveCallee = \moduleName : List U8 => \decls : List Decl => \callee : List U8 =>
+  match (findImportModule callee decls) [Result (List U8) QualifiedName] {
+    | Some importedModule =>
+        Ok [List U8] [QualifiedName] (MkQualifiedName importedModule callee)
+    | None =>
+        match (findDefBody callee decls) [Result (List U8) QualifiedName] {
+          | Some localBody => Ok [List U8] [QualifiedName] (MkQualifiedName moduleName callee)
+          | None => Err [List U8] [QualifiedName] "Unknown callee"
+        }
+  }
+
+poly sameQualified = \moduleName : List U8 => \name : List U8 => \qualified : QualifiedName =>
+  match qualified [Bool] { | MkQualifiedName qModule qName =>
+    and (eqListU8 moduleName qModule) (eqListU8 name qName)
+  }
+
+poly rec hasEmitted = \moduleName : List U8 => \name : List U8 => \seen : List QualifiedName =>
+  matchList [QualifiedName] [Bool] seen
+    false
+    (\h : QualifiedName => \t : List QualifiedName =>
+      if [Bool] (sameQualified moduleName name h)
+        (\u : U8 => true)
+        (\u : U8 => hasEmitted moduleName name t))
+
+poly markEmitted = \moduleName : List U8 => \name : List U8 => \state : EmitState =>
+  match state [EmitState] { | MkEmitState seen text =>
+    MkEmitState (cons [QualifiedName] (MkQualifiedName moduleName name) seen) text
+  }
+
+poly appendStateText = \state : EmitState => \text : List U8 =>
+  match state [EmitState] { | MkEmitState seen current =>
+    MkEmitState seen (append [U8] current text)
+  }
+
+poly functionSymbol = \moduleName : List U8 => \name : List U8 =>
+  append [U8] "trip_fn_" (append [U8] moduleName (append [U8] "_" name))
+
+poly emitFunctionHeader = \moduleName : List U8 => \name : List U8 =>
+  append [U8] "define i8 @" (append [U8] (functionSymbol moduleName name) "() {\nentry:\n")
+
+poly emitLiteralFunction = \moduleName : List U8 => \name : List U8 => \digits : List U8 =>
+  append [U8] (emitFunctionHeader moduleName name)
+    (append [U8] "  ret i8 " (append [U8] digits "\n}\n\n"))
+
+poly emitCallFunction = \moduleName : List U8 => \name : List U8 => \calleeModule : List U8 => \calleeName : List U8 =>
+  append [U8] (emitFunctionHeader moduleName name)
+    (append [U8] "  %call = call i8 @"
+      (append [U8] (functionSymbol calleeModule calleeName)
+        (append [U8] "()\n  ret i8 %call\n}\n\n")))
 
 poly emitWriteCall = \byte : U8 =>
   append [U8]
@@ -177,20 +293,89 @@ poly rec lastByteOrZero = \bytes : List U8 => \last : U8 =>
     last
     (\h : U8 => \t : List U8 => lastByteOrZero t h)
 
+poly emitWriteFunction = \moduleName : List U8 => \name : List U8 => \bytes : List U8 =>
+  append [U8]
+    (emitFunctionHeader moduleName name)
+    (append [U8]
+      (emitWriteCalls bytes)
+      (append [U8]
+        "  ret i8 "
+        (append [U8] (u8ToDigits (lastByteOrZero bytes #u8(0))) "\n}\n\n")))
+
+poly emitMainWrapper = \moduleName : List U8 =>
+  append [U8] "define i32 @main() {\nentry:\n  %trip_result = call i8 @"
+    (append [U8] (functionSymbol moduleName "main") "()\n  ret i32 0\n}\n")
+
 poly emitLlvmForWriteBytes = \bytes : List U8 =>
   append [U8]
     "declare void @trip_write_one(i8)\n\n"
-    (append [U8]
-      "define i8 @trip_fn_Main_main() {\nentry:\n"
-      (append [U8]
-        (emitWriteCalls bytes)
-        (append [U8]
-          "  ret i8 "
-          (append [U8]
-            (u8ToDigits (lastByteOrZero bytes #u8(0)))
-            (append [U8]
-              "\n}\n\n"
-              "define i32 @main() {\nentry:\n  %trip_result = call i8 @trip_fn_Main_main()\n  ret i32 0\n}\n")))))
+    (append [U8] (emitWriteFunction "Main" "main" bytes) (emitMainWrapper "Main"))
+
+poly rec emitRequiredFunction = \mods : List ParsedModule => \moduleName : List U8 => \name : List U8 => \state : EmitState =>
+  match state [Result (List U8) EmitState] { | MkEmitState seen text =>
+    if [Result (List U8) EmitState] (hasEmitted moduleName name seen)
+      (\u : U8 => Ok [List U8] [EmitState] state)
+      (\u : U8 =>
+        match (findParsedModule moduleName mods) [Result (List U8) EmitState] {
+          | None => Err [List U8] [EmitState] "Module not found"
+          | Some parsed =>
+              match parsed [Result (List U8) EmitState] { | MkParsedModule parsedName decls =>
+                match (findDefBody name decls) [Result (List U8) EmitState] {
+                  | None => Err [List U8] [EmitState] "Definition not found"
+                  | Some body =>
+                      emitFunctionBody mods moduleName decls name body (markEmitted moduleName name state)
+                }
+              }
+        })
+  }
+
+poly emitWriteBody = \moduleName : List U8 => \name : List U8 => \body : Expr => \state : EmitState =>
+  match (collectWriteBytes body) [Result (List U8) EmitState] {
+    | Err e => Err [List U8] [EmitState] e
+    | Ok bytes => Ok [List U8] [EmitState] (appendStateText state (emitWriteFunction moduleName name bytes))
+  }
+
+poly emitFunctionBody = \mods : List ParsedModule => \moduleName : List U8 => \decls : List Decl => \name : List U8 => \body : Expr => \state : EmitState =>
+  match body [Result (List U8) EmitState] {
+    | E_Nat digits =>
+        Ok [List U8] [EmitState] (appendStateText state (emitLiteralFunction moduleName name digits))
+    | E_Var callee =>
+        match (resolveCallee moduleName decls callee) [Result (List U8) EmitState] {
+          | Err e => Err [List U8] [EmitState] e
+          | Ok qualified =>
+              match qualified [Result (List U8) EmitState] { | MkQualifiedName calleeModule calleeName =>
+                match (emitRequiredFunction mods calleeModule calleeName state) [Result (List U8) EmitState] {
+                  | Err e => Err [List U8] [EmitState] e
+                  | Ok depState =>
+                      Ok [List U8] [EmitState] (appendStateText depState (emitCallFunction moduleName name calleeModule calleeName))
+                }
+              }
+        }
+    | E_App f x => emitWriteBody moduleName name body state
+    | E_Lam arg inner => Err [List U8] [EmitState] "Unsupported LLVM expression"
+    | E_Let letName value inner => Err [List U8] [EmitState] "Unsupported LLVM expression"
+    | E_Match scrutinee arms => Err [List U8] [EmitState] "Unsupported LLVM expression"
+  }
+
+poly compileParsedModulesToLlvm = \entry : List U8 => \wrapper : List U8 => \mods : List ParsedModule =>
+  match (emitRequiredFunction mods entry "main" (MkEmitState (nil [QualifiedName]) (nil [U8]))) [Result (List U8) (List U8)] {
+    | Err e => Err [List U8] [List U8] e
+    | Ok state =>
+        match state [Result (List U8) (List U8)] { | MkEmitState seen body =>
+          let withDecl = append [U8] "declare void @trip_write_one(i8)\n\n" body in
+          if [Result (List U8) (List U8)] (eqListU8 wrapper "enabled")
+            (\u : U8 => Ok [List U8] [List U8] (append [U8] withDecl (emitMainWrapper entry)))
+            (\u : U8 => Ok [List U8] [List U8] withDecl)
+        }
+  }
+
+poly compileBundleSummaryToLlvm = \bundle : BundleSummary =>
+  match bundle [Result (List U8) (List U8)] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
+    match (parseModuleRecords mods) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] e
+      | Ok parsedMods => compileParsedModulesToLlvm entry wrapper parsedMods
+    }
+  }
 
 poly compileSourceToLlvm = \source : List U8 =>
   match (tokenize source) [Result (List U8) (List U8)] {

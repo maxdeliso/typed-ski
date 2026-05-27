@@ -750,12 +750,16 @@ class MiniCoreBuilder {
   }
 
   private functionTypeParams(qName: string): string[] {
-    try {
-      const { definition } = this.functionSource(qName);
-      return collectTopLevelParams(definition.term).typeParams;
-    } catch {
+    if (
+      this.isZeroQName(qName) ||
+      this.isSpecialApplication(qName) ||
+      MINI_PRIMITIVES.some(([name]) => name === qName) ||
+      this.isConstructorQName(qName)
+    ) {
       return [];
     }
+    const { definition } = this.functionSource(qName);
+    return collectTopLevelParams(definition.term).typeParams;
   }
 
   private materializeType(baseType: BaseType, ctx: LoweringContext): MiniType {
@@ -989,15 +993,17 @@ class MiniCoreBuilder {
       a.paramName.localeCompare(b.paramName),
     );
     const sortedTypeKeys = [...typeSubst.keys()].sort();
-    const bindingSuffix = sortedBindings
-      .map((b) => `${b.paramName}=${this.symbols[b.symbol]!.name}`)
-      .join("$");
-    const typeSuffix = sortedTypeKeys
-      .map((k) => `${k}=${miniTypeToString(typeSubst.get(k)!)}`)
-      .join("$");
-    const key = typeSuffix
-      ? `${qName}$${bindingSuffix}$${typeSuffix}`
-      : `${qName}$${bindingSuffix}`;
+    const suffixParts = [
+      ...sortedBindings.map(
+        (b) => `${b.paramName}=${this.symbols[b.symbol]!.name}`,
+      ),
+      ...sortedTypeKeys.map(
+        (k) => `${k}=${miniTypeToString(typeSubst.get(k)!)}`,
+      ),
+    ];
+    const key = suffixParts.length
+      ? `${qName}$${suffixParts.join("$")}`
+      : qName;
 
     const existing = this.specializedFunctions.get(key);
     if (existing !== undefined) {

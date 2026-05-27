@@ -1,6 +1,7 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import {
@@ -227,9 +228,10 @@ data Token =
     });
   });
 
-  it("parses lib/compiler/lexer.trip Token ADT", () => {
-    const lexerPath = join(workspaceRoot, "lib", "compiler", "lexer.trip");
-    const input = loadTripSourceFileSync(lexerPath).trim();
+  it("parses the bootstrap Lexer module Token ADT", () => {
+    const input = loadTripSourceFileSync(
+      compilerTripModuleSourcePath("Lexer"),
+    ).trim();
     const program = parseTripLang(input);
 
     // Lightweight "whole file" sanity checks (beyond just the Token ADT)

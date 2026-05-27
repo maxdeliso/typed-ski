@@ -31,8 +31,12 @@ export type BootstrapTripModuleName =
   | "Bridge"
   | "Llvm"
   | "BundleSummary"
+  | "BundleParseSummary"
+  | "BundleInventory"
+  | "ModuleEnv"
   | "CoreToMini"
   | "MiniCore"
+  | "MiniVerify"
   | "Anf"
   | "Compiler"
   | "Telemetry";
@@ -52,8 +56,12 @@ const BOOTSTRAP_MODULE_FILES: Record<BootstrapTripModuleName, string> = {
   Bridge: "bridge.trip",
   Llvm: "llvm.trip",
   BundleSummary: "bundleSummary.trip",
+  BundleParseSummary: "bundleParseSummary.trip",
+  BundleInventory: "bundleInventory.trip",
+  ModuleEnv: "moduleEnv.trip",
   CoreToMini: "coreToMini.trip",
   MiniCore: "miniCore.trip",
+  MiniVerify: "miniVerify.trip",
   Anf: "anf.trip",
   Compiler: "index.trip",
   Telemetry: "telemetry.trip",

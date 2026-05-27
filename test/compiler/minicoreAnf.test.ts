@@ -13,27 +13,31 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
+import {
+  compilerTripModuleSourcePath,
+  type CompilerTripModuleName,
+} from "../../lib/compiler/bootstrapModules.ts";
 import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { evaluateMiniCore } from "../../lib/minicore/evaluator.ts";
 import type { Value } from "../../lib/minicore/ast.ts";
 
-const MODULE_FILES: ReadonlyArray<readonly [string, string]> = [
-  ["Prelude", "lib/prelude.trip"],
-  ["Nat", "lib/nat.trip"],
-  ["Bin", "lib/bin.trip"],
-  ["Avl", "lib/avl.trip"],
-  ["Lexer", "lib/compiler/lexer.trip"],
-  ["Parser", "lib/compiler/parser.trip"],
-  ["Core", "lib/compiler/core.trip"],
-  ["DataEnv", "lib/compiler/dataEnv.trip"],
-  ["CoreToLower", "lib/compiler/coreToLower.trip"],
-  ["Unparse", "lib/compiler/unparse.trip"],
-  ["Lowering", "lib/compiler/lowering.trip"],
-  ["Bridge", "lib/compiler/bridge.trip"],
-  ["CoreToMini", "lib/compiler/coreToMini.trip"],
-  ["MiniCore", "lib/compiler/miniCore.trip"],
-  ["Anf", "lib/compiler/anf.trip"],
-  ["MiniVerify", "lib/compiler/miniVerify.trip"],
+const MODULE_NAMES: readonly CompilerTripModuleName[] = [
+  "Prelude",
+  "Nat",
+  "Bin",
+  "Avl",
+  "Lexer",
+  "Parser",
+  "Core",
+  "DataEnv",
+  "CoreToLower",
+  "Unparse",
+  "Lowering",
+  "Bridge",
+  "CoreToMini",
+  "MiniCore",
+  "Anf",
+  "MiniVerify",
 ];
 
 const CORPUS: ReadonlyArray<readonly [string, string]> = [
@@ -139,10 +143,10 @@ poly main = ${tripAppend(parts)}
 
 describe("MiniCore/ANF self-host verification", () => {
   it("lowers a corpus through the .trip Core->MiniCore->ANF chain", async () => {
-    const modules = await Promise.all(
-      MODULE_FILES.map(async ([name, relPath]) => ({
+    const modules: Array<{ name: string; source: string }> = await Promise.all(
+      MODULE_NAMES.map(async (name) => ({
         name,
-        source: await readFile(join(workspaceRoot, relPath), "utf8"),
+        source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
       })),
     );
     modules.push({ name: "Verify", source: buildHarnessSource() });

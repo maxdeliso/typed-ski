@@ -13,70 +13,14 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
-import {
-  compilerTripModuleSourcePath,
-  type CompilerTripModuleName,
-} from "../../lib/compiler/bootstrapModules.ts";
+import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
 import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { evaluateMiniCore } from "../../lib/minicore/evaluator.ts";
 import type { Value } from "../../lib/minicore/ast.ts";
-
-const MODULE_NAMES: readonly CompilerTripModuleName[] = [
-  "Prelude",
-  "Nat",
-  "Bin",
-  "Avl",
-  "Lexer",
-  "Parser",
-  "Core",
-  "DataEnv",
-  "CoreToLower",
-  "Unparse",
-  "Lowering",
-  "Bridge",
-  "CoreToMini",
-  "MiniCore",
-  "Anf",
-  "MiniVerify",
-];
-
-const CORPUS: ReadonlyArray<readonly [string, string]> = [
-  [
-    "identity",
-    `module Demo
-export main
-poly main = \\x : U8 => x
-`,
-  ],
-  [
-    "letBinding",
-    `module Demo
-export main
-poly main = \\x : U8 => let y = x in y
-`,
-  ],
-  [
-    "nestedCall",
-    `module Demo
-export konst
-export main
-poly konst = \\x : U8 => \\y : U8 => x
-poly main = \\z : U8 => konst (konst z z) z
-`,
-  ],
-  [
-    "adtMatch",
-    `module Demo
-export main
-data Bit = O | I
-poly flip = \\b : Bit => match b {
-  | O => I
-  | I => O
-}
-poly main = flip O
-`,
-  ],
-];
+import {
+  buildMiniVerifyHarnessSource,
+  MINI_VERIFY_MODULE_NAMES,
+} from "./minicoreAnfHarness.ts";
 
 const GOLDEN_FILE = join(
   workspaceRoot,
@@ -109,47 +53,18 @@ function valueToBytes(value: Value): number[] {
   return bytes;
 }
 
-/** Right-nested `append [U8]` over the given trip expressions. */
-function tripAppend(parts: string[]): string {
-  const [first, ...rest] = parts;
-  if (first === undefined) {
-    throw new Error("tripAppend requires at least one part");
-  }
-  const firstPart = first;
-  if (rest.length === 0) {
-    return firstPart;
-  }
-  return `append [U8] (${firstPart}) (${tripAppend(rest)})`;
-}
-
-function buildHarnessSource(): string {
-  const parts: string[] = [];
-  for (const [label, source] of CORPUS) {
-    parts.push(JSON.stringify(`=== ${label} ===\n`));
-    parts.push(`verifyToAnfText ${JSON.stringify(source)}`);
-    parts.push(JSON.stringify("\n"));
-  }
-  return `module Verify
-import Prelude List
-import Prelude U8
-import Prelude append
-import MiniVerify verifyToAnfText
-
-export main
-
-poly main = ${tripAppend(parts)}
-`;
-}
-
 describe("MiniCore/ANF self-host verification", () => {
   it("lowers a corpus through the .trip Core->MiniCore->ANF chain", async () => {
     const modules: Array<{ name: string; source: string }> = await Promise.all(
-      MODULE_NAMES.map(async (name) => ({
+      MINI_VERIFY_MODULE_NAMES.map(async (name) => ({
         name,
         source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
       })),
     );
-    modules.push({ name: "Verify", source: buildHarnessSource() });
+    modules.push({
+      name: "Verify",
+      source: buildMiniVerifyHarnessSource("list"),
+    });
 
     const program = compileMiniCoreModules(modules, "Verify");
     const result = evaluateMiniCore(program);

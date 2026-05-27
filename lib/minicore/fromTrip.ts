@@ -66,6 +66,7 @@ interface LoweringContext {
   functionLocals: Map<string, SymbolId>;
   nextLocalId: number;
   fnSymbol: SymbolId;
+  typeSubst?: ReadonlyMap<string, MiniType>;
 }
 
 type StaticBinding = {
@@ -76,6 +77,7 @@ type StaticBinding = {
 interface Specialization {
   symbolName: string;
   staticBindings: StaticBinding[];
+  typeSubst: ReadonlyMap<string, MiniType>;
 }
 
 const MINI_PRIMITIVES: Array<[string, number, PrimitiveClass]> = [
@@ -747,6 +749,57 @@ class MiniCoreBuilder {
     }
   }
 
+  private functionTypeParams(qName: string): string[] {
+    try {
+      const { definition } = this.functionSource(qName);
+      return collectTopLevelParams(definition.term).typeParams;
+    } catch {
+      return [];
+    }
+  }
+
+  private materializeType(baseType: BaseType, ctx: LoweringContext): MiniType {
+    const mini = this.miniTypeFromBaseType(baseType, ctx.moduleName);
+    return ctx.typeSubst ? substituteMiniType(mini, ctx.typeSubst) : mini;
+  }
+
+  private assertNoFreeTypeVars(
+    paramTypes: readonly MiniType[],
+    resultType: MiniType,
+    typeSubst: ReadonlyMap<string, MiniType>,
+    symbolName: string,
+  ): void {
+    const substituted = new Set(typeSubst.keys());
+    const check = (type: MiniType, where: string): void => {
+      switch (type.kind) {
+        case "var":
+          if (substituted.has(type.name)) {
+            throw new MiniCoreCompileError(
+              `Specialized function ${symbolName} retains free type variable ${type.name} (${where})`,
+            );
+          }
+          return;
+        case "data":
+          type.args.forEach((arg, i) => check(arg, `${where}.arg${i}`));
+          return;
+        case "fn":
+          type.params.forEach((param, i) => check(param, `${where}.param${i}`));
+          check(type.result, `${where}.result`);
+          return;
+        case "forall":
+          // Shadowed names need not be substituted.
+          if (!type.params.some((p) => substituted.has(p))) {
+            check(type.body, `${where}.body`);
+          }
+          return;
+        default:
+          return;
+      }
+    };
+    paramTypes.forEach((p, i) => check(p, `param${i}`));
+    check(resultType, "result");
+  }
+
   private analyzingCallableParams = new Set<string>();
 
   private isSpecialApplication(qName: string): boolean {
@@ -930,28 +983,37 @@ class MiniCoreBuilder {
   private ensureSpecializedCallable(
     qName: string,
     staticBindings: StaticBinding[],
+    typeSubst: ReadonlyMap<string, MiniType>,
   ): SymbolId {
-    const sorted = [...staticBindings].sort((a, b) =>
+    const sortedBindings = [...staticBindings].sort((a, b) =>
       a.paramName.localeCompare(b.paramName),
     );
-    const suffix = sorted
+    const sortedTypeKeys = [...typeSubst.keys()].sort();
+    const bindingSuffix = sortedBindings
       .map((b) => `${b.paramName}=${this.symbols[b.symbol]!.name}`)
       .join("$");
-    const key = `${qName}$${suffix}`;
+    const typeSuffix = sortedTypeKeys
+      .map((k) => `${k}=${miniTypeToString(typeSubst.get(k)!)}`)
+      .join("$");
+    const key = typeSuffix
+      ? `${qName}$${bindingSuffix}$${typeSuffix}`
+      : `${qName}$${bindingSuffix}`;
 
     const existing = this.specializedFunctions.get(key);
     if (existing !== undefined) {
       if (this.functionStates.get(existing) === "declared") {
         this.compileFunction(qName, existing, {
           symbolName: key,
-          staticBindings: sorted,
+          staticBindings: sortedBindings,
+          typeSubst,
         });
       }
       return existing;
     }
     const id = this.declareAndCompileFunction(qName, {
       symbolName: key,
-      staticBindings: sorted,
+      staticBindings: sortedBindings,
+      typeSubst,
     });
     this.specializedFunctions.set(key, id);
     return id;
@@ -1014,6 +1076,9 @@ class MiniCoreBuilder {
     const { typeParams, params, paramTypes, body } = collectTopLevelParams(
       definition.term,
     );
+    const typeSubst = specialization?.typeSubst;
+    const applySubst = (type: MiniType): MiniType =>
+      typeSubst ? substituteMiniType(type, typeSubst) : type;
     const locals = new Map<string, LocalId>();
     const localTypesByName = new Map<string, MiniType>();
     const localTypes = new Map<LocalId, MiniType>();
@@ -1023,7 +1088,9 @@ class MiniCoreBuilder {
 
     for (let i = 0; i < params.length; i++) {
       const param = params[i]!;
-      const paramType = this.miniTypeFromBaseType(paramTypes[i]!, module.name);
+      const paramType = applySubst(
+        this.miniTypeFromBaseType(paramTypes[i]!, module.name),
+      );
       const binding = specialization?.staticBindings.find(
         (b) => b.paramName === param,
       );
@@ -1046,6 +1113,7 @@ class MiniCoreBuilder {
       localTypesByName,
       functionLocals,
       nextLocalId,
+      typeSubst,
     };
 
     const miniParamTypes: MiniType[] = paramIds.map(
@@ -1057,24 +1125,38 @@ class MiniCoreBuilder {
       ? this.miniTypeFromBaseType(definition.type, module.name)
       : undefined;
 
+    // After specialization the body is monomorphic in the substituted type
+    // params; peel the forall layer for those names so downstream consumers
+    // (the Block validator in particular) see a concrete signature.
+    if (typeSubst && typeScheme?.kind === "forall") {
+      const remaining = typeScheme.params.filter((p) => !typeSubst.has(p));
+      const substitutedBody = substituteMiniType(typeScheme.body, typeSubst);
+      typeScheme =
+        remaining.length === 0
+          ? substitutedBody
+          : { kind: "forall", params: remaining, body: substitutedBody };
+    }
+
     let resultTypeHint: MiniType = { kind: "unknown" };
     const strippedBody = stripTypeAbs(body);
     if (strippedBody.kind === "systemF-match") {
-      resultTypeHint = this.miniTypeFromBaseType(
-        strippedBody.returnType,
-        module.name,
+      resultTypeHint = applySubst(
+        this.miniTypeFromBaseType(strippedBody.returnType, module.name),
       );
     } else if (typeScheme) {
       let current = typeScheme;
-      // Skip type parameters in the scheme
-      for (let i = 0; i < typeParams.length; i++) {
+      // Skip type parameters that survived the specialization peel.
+      const remainingTypeParams =
+        typeScheme.kind === "forall" ? typeScheme.params.length : 0;
+      for (let i = 0; i < remainingTypeParams; i++) {
         if (current.kind === "forall") {
           current = current.body;
         } else {
           break;
         }
       }
-      // Skip term parameters in the scheme
+      // Skip the function's surviving term parameters (specialization removes
+      // static bindings, but the source typeScheme still includes them).
       for (let i = 0; i < params.length; i++) {
         if (current.kind === "fn") {
           current = current.result;
@@ -1111,16 +1193,30 @@ class MiniCoreBuilder {
     );
 
     if (!typeScheme && typeParams.length > 0) {
-      const fnType: MiniType = {
-        kind: "fn",
-        params: miniParamTypes,
-        result: resultType,
-      };
-      typeScheme = {
-        kind: "forall",
-        params: typeParams,
-        body: fnType,
-      };
+      const remainingTypeParams = typeSubst
+        ? typeParams.filter((p) => !typeSubst.has(p))
+        : typeParams;
+      if (remainingTypeParams.length > 0) {
+        const fnType: MiniType = {
+          kind: "fn",
+          params: miniParamTypes,
+          result: resultType,
+        };
+        typeScheme = {
+          kind: "forall",
+          params: remainingTypeParams,
+          body: fnType,
+        };
+      }
+    }
+
+    if (specialization) {
+      this.assertNoFreeTypeVars(
+        miniParamTypes,
+        resultType,
+        specialization.typeSubst,
+        specialization.symbolName,
+      );
     }
 
     this.metadata.functions.set(id, {
@@ -1193,7 +1289,7 @@ class MiniCoreBuilder {
           return this.lowerVar(
             inner.name,
             ctx,
-            typeArgs.map((t) => this.miniTypeFromBaseType(t, ctx.moduleName)),
+            typeArgs.map((t) => this.materializeType(t, ctx)),
           );
         }
         return this.lowerTerm(stripTypeAbs(inner), ctx);
@@ -1201,7 +1297,7 @@ class MiniCoreBuilder {
       case "systemF-let": {
         const value = this.lowerTerm(term.value, ctx);
         const valueType = term.typeAnnotation
-          ? this.miniTypeFromBaseType(term.typeAnnotation, ctx.moduleName)
+          ? this.materializeType(term.typeAnnotation, ctx)
           : typeOfMiniCoreExpr(
               value,
               ctx.fnSymbol,
@@ -1346,9 +1442,7 @@ class MiniCoreBuilder {
           localFunction,
           args,
           ctx,
-          strippedHead.args.map((a) =>
-            this.miniTypeFromBaseType(a, ctx.moduleName),
-          ),
+          strippedHead.args.map((a) => this.materializeType(a, ctx)),
         );
       }
 
@@ -1385,9 +1479,7 @@ class MiniCoreBuilder {
           kind: "con",
           target: constructor,
           fields: args.map((arg) => this.lowerTerm(arg, ctx)),
-          typeArgs: strippedHead.args.map((a) =>
-            this.miniTypeFromBaseType(a, ctx.moduleName),
-          ),
+          typeArgs: strippedHead.args.map((a) => this.materializeType(a, ctx)),
         };
       }
 
@@ -1406,9 +1498,7 @@ class MiniCoreBuilder {
           qName,
           args,
           ctx,
-          strippedHead.args.map((a) =>
-            this.miniTypeFromBaseType(a, ctx.moduleName),
-          ),
+          strippedHead.args.map((a) => this.materializeType(a, ctx)),
         );
       }
     }
@@ -1507,7 +1597,7 @@ class MiniCoreBuilder {
       );
     }
     this.assertU8Type(
-      this.miniTypeFromBaseType(lambda.typeAnnotation, ctx.moduleName),
+      this.materializeType(lambda.typeAnnotation, ctx),
       "Prelude.readOne continuation parameter",
     );
     return this.withLocalScope(
@@ -1545,7 +1635,7 @@ class MiniCoreBuilder {
       );
     }
     this.assertU8Type(
-      this.miniTypeFromBaseType(lambda.typeAnnotation, ctx.moduleName),
+      this.materializeType(lambda.typeAnnotation, ctx),
       "Prelude.writeOne continuation parameter",
     );
 
@@ -1932,8 +2022,23 @@ class MiniCoreBuilder {
         }
       }
 
-      const symbol = this.ensureSpecializedCallable(qName, staticBindings);
-      return this.lowerKnownCallable(symbol, runtimeArgs, ctx, typeArgs);
+      const calleeTypeParams = this.functionTypeParams(qName);
+      const typeSubst = new Map<string, MiniType>();
+      for (let i = 0; i < calleeTypeParams.length; i++) {
+        const arg = typeArgs[i];
+        if (arg) {
+          typeSubst.set(calleeTypeParams[i]!, arg);
+        }
+      }
+
+      const symbol = this.ensureSpecializedCallable(
+        qName,
+        staticBindings,
+        typeSubst,
+      );
+      // Type params are baked into the specialized callee; the outer call
+      // carries no remaining type arguments.
+      return this.lowerKnownCallable(symbol, runtimeArgs, ctx, []);
     }
 
     const symbol = this.ensureCallable(qName);

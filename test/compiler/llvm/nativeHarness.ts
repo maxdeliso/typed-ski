@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import {
+  compilerTripModuleSourcePath,
+  isKnownCompilerTripModule,
+  type CompilerTripModuleName,
+} from "../../../lib/compiler/bootstrapModules.ts";
+import {
   compileTripSourceToLlvm,
   type CompileTripSourceToLlvmOptions,
 } from "../../../lib/compiler/index.ts";
@@ -161,10 +166,7 @@ export const bootstrap = {
     const cleanup = () => rm(tempDir, { recursive: true, force: true });
 
     try {
-      const libDir = join(PROJECT_ROOT, "lib");
-      const compilerLibDir = join(libDir, "compiler");
-
-      const moduleNames = [
+      const moduleNames: readonly CompilerTripModuleName[] = [
         "Prelude",
         "Nat",
         "Bin",
@@ -181,22 +183,14 @@ export const bootstrap = {
         "Llvm",
       ];
       const moduleSources = await Promise.all(
-        moduleNames.map(async (name) => {
-          let path = join(libDir, `${name.toLowerCase()}.trip`);
-          try {
-            await readFile(path);
-          } catch {
-            path = join(
-              compilerLibDir,
-              `${name.charAt(0).toLowerCase() + name.slice(1)}.trip`,
-            );
-          }
-          return { name, source: await readFile(path, "utf8") };
-        }),
+        moduleNames.map(async (name) => ({
+          name,
+          source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
+        })),
       );
 
       const compilerSource = await readFile(
-        join(compilerLibDir, "index.trip"),
+        compilerTripModuleSourcePath("Compiler"),
         "utf8",
       );
 
@@ -240,21 +234,15 @@ export const bootstrap = {
 export async function loadCommonModules(
   names: string[],
 ): Promise<Array<{ name: string; source: string }>> {
-  const libDir = join(PROJECT_ROOT, "lib");
-  const compilerLibDir = join(libDir, "compiler");
-
   return Promise.all(
     names.map(async (name) => {
-      let path = join(libDir, `${name.toLowerCase()}.trip`);
-      try {
-        await readFile(path);
-      } catch {
-        path = join(
-          compilerLibDir,
-          `${name.charAt(0).toLowerCase() + name.slice(1)}.trip`,
-        );
+      if (!isKnownCompilerTripModule(name)) {
+        throw new Error(`loadCommonModules: unknown module '${name}'`);
       }
-      return { name, source: await readFile(path, "utf8") };
+      return {
+        name,
+        source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
+      };
     }),
   );
 }

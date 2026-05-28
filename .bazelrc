@@ -23,3 +23,23 @@ build:windows --action_env=APPDATA
 build:windows --action_env=LOCALAPPDATA
 build:windows --action_env=TEMP
 build:windows --action_env=TMP
+
+# --- PARALLEL AGENT DEVELOPMENT CONFIGURATION ---
+
+# Shared Disk Cache: Share compiled build/test actions across all Git worktrees and agents.
+# Placing it in the user home directory (~ expands to %USERPROFILE% on Windows, $HOME on Unix)
+# ensures it persists across worktree deletions and git cleans.
+build --disk_cache=~/bazel_cache
+
+# Protect the shared cache from corruption during concurrent modifications by parallel agents.
+build --guard_against_concurrent_changes
+
+# Explicitly share repository downloads (npm packages, LLVM tarballs, etc.)
+common --repository_cache=~/bazel_repo_cache
+
+# Dynamic Resource Limits: Limit each Bazel instance to 50% of host CPU/RAM to prevent
+# system lockups, thrashing, and OOM crashes during concurrent agent builds.
+build --local_resources=cpu=HOST_CPUS*0.5
+build --local_resources=memory=HOST_RAM*0.5
+
+

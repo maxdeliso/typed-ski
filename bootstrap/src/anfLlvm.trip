@@ -46,7 +46,7 @@ import Anf MkAnfProgram
 export emitProgram
 export compileSourceToLlvmText
 
-data EmitRes = MkEmitRes Bin (List U8) (List U8)
+data EmitRes = MkEmitRes Bin (List (List U8)) (List U8)
 
 poly rec lookupEnv = \env : List (Pair (List U8) (List U8)) => \name : List U8 =>
   matchList [Pair (List U8) (List U8)] [Maybe (List U8)] env
@@ -88,7 +88,7 @@ poly rec emitArgsString = \env : List (Pair (List U8) (List U8)) => \args : List
             }
       })
 
-poly rec emitExpr = \env : List (Pair (List U8) (List U8)) => \counter : Bin => \instrs : List U8 => \e : AnfExpr =>
+poly rec emitExpr = \env : List (Pair (List U8) (List U8)) => \counter : Bin => \instrs : List (List U8) => \e : AnfExpr =>
   match e [Result (List U8) EmitRes] {
     | AE_Var n =>
         match (lookupEnv env n) [Result (List U8) EmitRes] {
@@ -110,7 +110,7 @@ poly rec emitExpr = \env : List (Pair (List U8) (List U8)) => \counter : Bin => 
                       (append [U8] f
                         (append [U8] "("
                           (append [U8] argStr ")\n"))))) in
-              Ok [List U8] [EmitRes] (MkEmitRes counter1 (append [U8] instrs line) dest)
+              Ok [List U8] [EmitRes] (MkEmitRes counter1 (cons [List U8] line instrs) dest)
         }
     | AE_Con tag total arity args => Err [List U8] [EmitRes] "Unsupported expression: constructor"
     | AE_Case scrut arms => Err [List U8] [EmitRes] "Unsupported expression: case"
@@ -144,19 +144,25 @@ poly rec paramEnv = \params : List (List U8) =>
         (MkPair [List U8] [List U8] h (append [U8] "%" h))
         (paramEnv t))
 
+poly rec joinLines = \acc : List U8 => \lines : List (List U8) =>
+  matchList [List U8] [List U8] lines
+    acc
+    (\h : List U8 => \t : List (List U8) => joinLines (append [U8] h acc) t)
+
 poly emitFunc = \fn : AnfFunc =>
   match fn [Result (List U8) (List U8)] { | MkAnfFunc name params body =>
-    match (emitExpr (paramEnv params) BZ (nil [U8]) body) [Result (List U8) (List U8)] {
+    match (emitExpr (paramEnv params) BZ (nil [List U8]) body) [Result (List U8) (List U8)] {
       | Err e => Err [List U8] [List U8] e
       | Ok res =>
           match res [Result (List U8) (List U8)] { | MkEmitRes c instrs op =>
+            let instrText = joinLines (nil [U8]) instrs in
             Ok [List U8] [List U8]
               (append [U8] "define i8 @"
                 (append [U8] name
                   (append [U8] "("
                     (append [U8] (paramDeclsString params true)
                       (append [U8] ") {\nentry:\n"
-                        (append [U8] instrs
+                        (append [U8] instrText
                           (append [U8] "  ret i8 "
                             (append [U8] op "\n}\n\n"))))))))
           }

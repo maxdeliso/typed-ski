@@ -40,6 +40,44 @@ export interface TripModuleSourceFileSpec {
   path: string;
 }
 
+interface ParsedGraphModule extends MiniCoreModuleSource {
+  imports: ReadonlyArray<{ from: string; symbol: string }>;
+  exports: ReadonlySet<string>;
+}
+
+const BUILTIN_IMPORTS = new Set<string>([
+  "Nat.zero",
+  "Nat.succ",
+  "Nat.add",
+  "Nat.mul",
+  "Nat.lte",
+  "Prelude.Bool",
+  "Prelude.false",
+  "Prelude.true",
+  "Prelude.List",
+  "Prelude.nil",
+  "Prelude.cons",
+  "Prelude.matchList",
+  "Prelude.tail",
+  "Prelude.reverse",
+  "Prelude.fst",
+  "Prelude.snd",
+  "Prelude.if",
+  "Prelude.not",
+  "Prelude.and",
+  "Prelude.or",
+  "Prelude.readOne",
+  "Prelude.writeOne",
+  "Prelude.eqU8",
+  "Prelude.ltU8",
+  "Prelude.addU8",
+  "Prelude.subU8",
+  "Prelude.divU8",
+  "Prelude.modU8",
+  "Prelude.error",
+  "Prelude.U8",
+]);
+
 export function parseLlvmTarget(value: string): LlvmTargetProfile {
   switch (value) {
     case "arm64-apple-darwin":
@@ -80,26 +118,117 @@ export async function readModuleSourceSpec(
   return { name: parsed.name, source: await readFile(parsed.path, "utf8") };
 }
 
+function parseGraphModule(module: MiniCoreModuleSource): ParsedGraphModule {
+  const program = parseTripLang(module.source);
+  const moduleTerms = program.terms.filter((term) => term.kind === "module");
+  if (moduleTerms.length === 0) {
+    throw new Error(`module ${module.name} source has no module declaration`);
+  }
+  if (moduleTerms.length > 1) {
+    throw new Error(
+      `module ${module.name} source has multiple module declarations`,
+    );
+  }
+  const declaredModule = moduleTerms[0]!.name;
+  if (declaredModule !== module.name) {
+    throw new Error(
+      `module ${module.name} source declares module ${declaredModule}`,
+    );
+  }
+
+  const imports: Array<{ from: string; symbol: string }> = [];
+  const exports = new Set<string>();
+  for (const term of program.terms) {
+    if (term.kind === "import") {
+      imports.push({ from: term.name, symbol: term.ref });
+    } else if (term.kind === "export") {
+      exports.add(term.name);
+    }
+  }
+  imports.sort((left, right) => {
+    const byModule = compareAscii(left.from, right.from);
+    return byModule === 0 ? compareAscii(left.symbol, right.symbol) : byModule;
+  });
+
+  return { ...module, imports, exports };
+}
+
+function isBuiltinImport(from: string, symbol: string): boolean {
+  return BUILTIN_IMPORTS.has(`${from}.${symbol}`);
+}
+
+function resolveEntryModuleGraph(
+  modules: ReadonlyArray<MiniCoreModuleSource>,
+  entryModule: string,
+): MiniCoreModuleSource[] {
+  const modulesByName = new Map<string, ParsedGraphModule>();
+  for (const module of modules) {
+    if (modulesByName.has(module.name)) {
+      throw new Error(`Duplicate module source: ${module.name}`);
+    }
+    modulesByName.set(module.name, parseGraphModule(module));
+  }
+
+  if (!modulesByName.has(entryModule)) {
+    throw new Error(`Entry module ${entryModule} is not present`);
+  }
+
+  const ordered: ParsedGraphModule[] = [];
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const stack: string[] = [];
+
+  const visit = (moduleName: string): void => {
+    if (visited.has(moduleName)) {
+      return;
+    }
+    if (visiting.has(moduleName)) {
+      const cycleStart = stack.indexOf(moduleName);
+      const cycle = [...stack.slice(cycleStart), moduleName].join(" -> ");
+      throw new Error(`Import cycle detected: ${cycle}`);
+    }
+
+    const module = modulesByName.get(moduleName);
+    if (!module) {
+      throw new Error(`Missing imported module: ${moduleName}`);
+    }
+
+    visiting.add(moduleName);
+    stack.push(moduleName);
+    for (const imported of module.imports) {
+      const dependency = modulesByName.get(imported.from);
+      if (!dependency) {
+        if (isBuiltinImport(imported.from, imported.symbol)) {
+          continue;
+        }
+        throw new Error(
+          `Missing imported module: ${module.name} imports ${imported.from}.${imported.symbol}`,
+        );
+      }
+      if (!dependency.exports.has(imported.symbol)) {
+        throw new Error(
+          `Imported symbol is not exported: ${module.name} imports ${imported.from}.${imported.symbol}`,
+        );
+      }
+      visit(imported.from);
+    }
+    stack.pop();
+    visiting.delete(moduleName);
+    visited.add(moduleName);
+    ordered.push(module);
+  };
+
+  visit(entryModule);
+  return ordered.map(({ name, source }) => ({ name, source }));
+}
+
 export function compileTripModulesToLlvm(
   options: CompileTripModulesToLlvmOptions,
 ): string {
-  const names = new Set<string>();
-  let hasEntry = false;
-  for (const module of options.modules) {
-    if (names.has(module.name)) {
-      throw new Error(`Duplicate module source: ${module.name}`);
-    }
-    names.add(module.name);
-    if (module.name === options.entryModule) {
-      hasEntry = true;
-    }
-  }
-  if (!hasEntry) {
-    throw new Error(`Entry module ${options.entryModule} is not present`);
-  }
+  const modules = resolveEntryModuleGraph(options.modules, options.entryModule);
 
   const program = compileMiniCoreModules(
-    [...options.modules],
+    modules,
     options.entryModule,
     { requireNullaryEntry: false },
   );
@@ -152,14 +281,6 @@ export function compileTripBundleV1ToLlvm(
   const modules = [...bundle.modules].sort((left, right) =>
     compareAscii(left.name, right.name),
   );
-  for (const module of modules) {
-    const declaredModule = moduleNameOfTripSource(module.source);
-    if (declaredModule !== module.name) {
-      throw new Error(
-        `Bundle-v1 module ${module.name} source declares module ${declaredModule}`,
-      );
-    }
-  }
   return compileTripModulesToLlvm({
     ...options,
     modules,

@@ -109,6 +109,99 @@ poly main = seven
       const multiModuleResult = runExecutable(multiModuleExe);
       assert.equal(multiModuleResult.status, 0);
       assert.equal(multiModuleResult.stdout, "");
+
+      const duplicateLocalBundle = serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules: [
+          {
+            name: "A",
+            source: `module A
+import B useB
+export useA
+poly helper = useB
+poly useA = helper
+`,
+          },
+          {
+            name: "B",
+            source: `module B
+export useB
+poly helper = #u8(2)
+poly useB = helper
+`,
+          },
+          {
+            name: "Main",
+            source: `module Main
+import A useA
+export main
+poly main = useA
+`,
+          },
+        ],
+      });
+      const duplicateLocalLl = await bootstrap.runNativeCompiler(
+        compilerExe,
+        duplicateLocalBundle,
+      );
+      assert.ok(!duplicateLocalLl.startsWith("ERR:"), duplicateLocalLl);
+      assert.match(duplicateLocalLl, /define i8 @trip_fn_A_helper\(\)/);
+      assert.match(duplicateLocalLl, /define i8 @trip_fn_B_helper\(\)/);
+      assert.match(duplicateLocalLl, /call i8 @trip_fn_B_useB\(\)/);
+      assert.match(duplicateLocalLl, /call i8 @trip_fn_A_useA\(\)/);
+
+      const missingImportResult = await bootstrap.runNativeCompiler(
+        compilerExe,
+        serializeTripBundleV1({
+          entryModule: "Main",
+          target: { kind: "generic" },
+          emitMainWrapper: true,
+          modules: [
+            {
+              name: "Main",
+              source: `module Main
+import Missing value
+export main
+poly main = #u8(0)
+`,
+            },
+          ],
+        }),
+      );
+      assert.match(
+        missingImportResult,
+        /^ERR:Missing imported module: Main imports Missing\.value/,
+      );
+
+      const cycleResult = await bootstrap.runNativeCompiler(
+        compilerExe,
+        serializeTripBundleV1({
+          entryModule: "A",
+          target: { kind: "generic" },
+          emitMainWrapper: true,
+          modules: [
+            {
+              name: "A",
+              source: `module A
+import B b
+export main
+poly main = #u8(0)
+`,
+            },
+            {
+              name: "B",
+              source: `module B
+import A main
+export b
+poly b = #u8(1)
+`,
+            },
+          ],
+        }),
+      );
+      assert.match(cycleResult, /^ERR:Import cycle detected: A/);
     } finally {
       await Promise.all([
         cleanupBootstrap(),

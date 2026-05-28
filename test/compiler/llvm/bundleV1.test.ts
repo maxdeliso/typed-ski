@@ -982,6 +982,167 @@ poly seven = #u8(7)
     assert.match(llvm, /target triple = "x86_64-unknown-linux-gnu"/);
     assert.match(llvm, /define i8 @trip_fn_Lib_seven\(\)/);
     assert.match(llvm, /define i8 @trip_fn_Main_main\(\)/);
+    assert.match(llvm, /call i8 @trip_fn_Lib_seven\(\)/);
+  });
+
+  it("compiles duplicate local names in separate modules with qualified symbols", () => {
+    const llvm = compileTripBundleV1ToLlvm(
+      serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "x86_64-unknown-linux-gnu" },
+        emitMainWrapper: true,
+        modules: [
+          {
+            name: "A",
+            source: `module A
+import B useB
+export useA
+poly helper = useB
+poly useA = helper
+`,
+          },
+          {
+            name: "B",
+            source: `module B
+export useB
+poly helper = #u8(2)
+poly useB = helper
+`,
+          },
+          {
+            name: "Main",
+            source: `module Main
+import A useA
+export main
+poly main = useA
+`,
+          },
+        ],
+      }),
+    );
+
+    assert.match(llvm, /define i8 @trip_fn_A_helper\(\)/);
+    assert.match(llvm, /define i8 @trip_fn_B_helper\(\)/);
+    assert.match(llvm, /call i8 @trip_fn_B_useB\(\)/);
+    assert.match(llvm, /call i8 @trip_fn_A_useA\(\)/);
+  });
+
+  it("rejects a missing imported module in the entry closure", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+import Missing value
+export main
+poly main = #u8(0)
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        message: /Missing imported module: Main imports Missing\.value/,
+      },
+    );
+  });
+
+  it("does not validate imports outside the entry closure", () => {
+    const llvm = compileTripBundleV1ToLlvm(
+      serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "x86_64-unknown-linux-gnu" },
+        modules: [
+          {
+            name: "Main",
+            source: `module Main
+export main
+poly main = #u8(0)
+`,
+          },
+          {
+            name: "Unused",
+            source: `module Unused
+import Missing value
+export unused
+poly unused = #u8(1)
+`,
+          },
+        ],
+      }),
+    );
+
+    assert.match(llvm, /define i8 @trip_fn_Main_main\(\)/);
+    assert.doesNotMatch(llvm, /trip_fn_Unused_unused/);
+  });
+
+  it("rejects an import of a non-exported symbol", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Lib",
+                source: `module Lib
+poly hidden = #u8(1)
+`,
+              },
+              {
+                name: "Main",
+                source: `module Main
+import Lib hidden
+export main
+poly main = hidden
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        message: /Imported symbol is not exported: Main imports Lib\.hidden/,
+      },
+    );
+  });
+
+  it("rejects import cycles in the entry closure", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "A",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "A",
+                source: `module A
+import B b
+export main
+poly main = #u8(0)
+`,
+              },
+              {
+                name: "B",
+                source: `module B
+import A main
+export b
+poly b = #u8(1)
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        message: /Import cycle detected: A -> B -> A/,
+      },
+    );
   });
 
   it("compiles a stdin List U8 wrapper bundle", () => {

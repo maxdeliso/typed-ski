@@ -45,6 +45,7 @@ import BundleSummary BundleSummary
 import BundleSummary MkBundleSummary
 import BundleSummary ModuleRecord
 import BundleSummary MkModuleRecord
+import ModuleEnv validateBundleGraph
 
 export compileSourceToLlvm
 export compileBundleSummaryToLlvm
@@ -371,9 +372,13 @@ poly compileParsedModulesToLlvm = \entry : List U8 => \wrapper : List U8 => \mod
 
 poly compileBundleSummaryToLlvm = \bundle : BundleSummary =>
   match bundle [Result (List U8) (List U8)] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
-    match (parseModuleRecords mods) [Result (List U8) (List U8)] {
+    match (validateBundleGraph entry mods) [Result (List U8) (List U8)] {
       | Err e => Err [List U8] [List U8] e
-      | Ok parsedMods => compileParsedModulesToLlvm entry wrapper parsedMods
+      | Ok graphOk =>
+          match (parseModuleRecords mods) [Result (List U8) (List U8)] {
+            | Err e => Err [List U8] [List U8] e
+            | Ok parsedMods => compileParsedModulesToLlvm entry wrapper parsedMods
+          }
     }
   }
 

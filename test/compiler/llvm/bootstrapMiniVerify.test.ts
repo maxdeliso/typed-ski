@@ -15,6 +15,10 @@ import { join } from "node:path";
 import { describe, it } from "../../util/test_shim.ts";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import {
+  compileTripBundleV1ToLlvm,
+  serializeTripBundleV1,
+} from "../../../lib/compiler/index.ts";
+import {
   buildMiniVerifyHarnessSource,
   MINI_VERIFY_MODULE_NAMES,
 } from "../minicoreAnfHarness.ts";
@@ -49,6 +53,41 @@ describe("MiniVerify native self-host", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-mini-verify-"));
     try {
       const llPath = join(tempDir, "mini-verify.ll");
+      await writeFile(llPath, llvm, "utf8");
+      const exePath = await compileLlvmToExecutable(llPath);
+      const result = runExecutable(exePath);
+      const expected = await readFile(GOLDEN_FILE, "utf8");
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expected);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("host bundle-v1 path runs the MiniVerify closure against the golden", async () => {
+    const moduleSources = await loadCommonModules([
+      ...MINI_VERIFY_MODULE_NAMES,
+    ]);
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Verify",
+      target: { kind: "generic" },
+      emitMainWrapper: true,
+      modules: [
+        ...moduleSources,
+        {
+          name: "Verify",
+          source: buildMiniVerifyHarnessSource("writeAll"),
+        },
+      ],
+    });
+
+    const llvm = compileTripBundleV1ToLlvm(bundleBytes);
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-mini-verify-bundle-"),
+    );
+    try {
+      const llPath = join(tempDir, "mini-verify-bundle.ll");
       await writeFile(llPath, llvm, "utf8");
       const exePath = await compileLlvmToExecutable(llPath);
       const result = runExecutable(exePath);

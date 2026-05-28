@@ -176,6 +176,7 @@ export const bootstrap = {
         "Parser",
         "Core",
         "DataEnv",
+        "ModuleEnv",
         "CoreToLower",
         "Unparse",
         "Lowering",

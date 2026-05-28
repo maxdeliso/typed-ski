@@ -85,6 +85,7 @@ export MkPrimitiveInfo
 export ModuleEnv
 export MkModuleEnv
 export buildModuleEnv
+export validateBundleGraph
 export lookupModule
 export lookupImport
 export lookupExport
@@ -110,6 +111,7 @@ data ConstructorAliasInfo = MkConstructorAliasInfo (List U8) (Maybe (List U8))
 data OpaqueInfo = MkOpaqueInfo (List U8) (List U8)
 data NativeInfo = MkNativeInfo (List U8) (List U8)
 data PrimitiveInfo = MkPrimitiveInfo (List U8) U8 U8
+data GraphVisit = MkGraphVisit (List (List U8))
 
 data ModuleEnv = MkModuleEnv
   (List ModuleInfo)
@@ -586,6 +588,131 @@ poly rec emitModuleImportsAcc = \moduleName : List U8 => \imports : List ImportI
 
 poly emitModuleImports = \moduleName : List U8 => \imports : List ImportInfo => \mods : List ModuleInfo => \exports : List ExportInfo =>
   emitModuleImportsAcc moduleName (reverse [ImportInfo] imports) mods exports (nil [U8])
+
+poly rec nameInList = \name : List U8 => \names : List (List U8) =>
+  matchList [List U8] [Bool] names
+    false
+    (\h : List U8 => \t : List (List U8) =>
+      if [Bool] (eqListU8 h name)
+        (\u : U8 => true)
+        (\u : U8 => nameInList name t))
+
+poly natBuiltinImports =
+  cons [List U8] "zero"
+    (cons [List U8] "succ"
+      (cons [List U8] "add"
+        (cons [List U8] "mul"
+          (cons [List U8] "lte" (nil [List U8])))))
+
+poly preludeBuiltinImports =
+  cons [List U8] "Bool"
+    (cons [List U8] "false"
+      (cons [List U8] "true"
+        (cons [List U8] "List"
+          (cons [List U8] "nil"
+            (cons [List U8] "cons"
+              (cons [List U8] "matchList"
+                (cons [List U8] "tail"
+                  (cons [List U8] "reverse"
+                    (cons [List U8] "fst"
+                      (cons [List U8] "snd"
+                        (cons [List U8] "if"
+                          (cons [List U8] "not"
+                            (cons [List U8] "and"
+                              (cons [List U8] "or"
+                                (cons [List U8] "readOne"
+                                  (cons [List U8] "writeOne"
+                                    (cons [List U8] "eqU8"
+                                      (cons [List U8] "ltU8"
+                                        (cons [List U8] "addU8"
+                                          (cons [List U8] "subU8"
+                                            (cons [List U8] "divU8"
+                                              (cons [List U8] "modU8"
+                                                (cons [List U8] "error"
+                                                  (cons [List U8] "U8" (nil [List U8])))))))))))))))))))))))))
+
+poly isNatBuiltinImport = \symbolName : List U8 =>
+  nameInList symbolName natBuiltinImports
+
+poly isPreludeBuiltinImport = \symbolName : List U8 =>
+  nameInList symbolName preludeBuiltinImports
+
+poly isBuiltinImport = \fromName : List U8 => \symbolName : List U8 =>
+  if [Bool] (eqListU8 fromName "Prelude")
+    (\u : U8 => isPreludeBuiltinImport symbolName)
+    (\u : U8 =>
+      if [Bool] (eqListU8 fromName "Nat")
+        (\u : U8 => isNatBuiltinImport symbolName)
+        (\u : U8 => false))
+
+poly importMissingMessage = \moduleName : List U8 => \fromName : List U8 => \symbolName : List U8 =>
+  append [U8] "Missing imported module: "
+    (append [U8] moduleName
+      (append [U8] " imports "
+        (append [U8] fromName
+          (append [U8] dot symbolName))))
+
+poly importNotExportedMessage = \moduleName : List U8 => \fromName : List U8 => \symbolName : List U8 =>
+  append [U8] "Imported symbol is not exported: "
+    (append [U8] moduleName
+      (append [U8] " imports "
+        (append [U8] fromName
+          (append [U8] dot symbolName))))
+
+poly cycleMessage = \moduleName : List U8 =>
+  append [U8] "Import cycle detected: " moduleName
+
+poly rec validateGraphModule = \moduleName : List U8 => \mods : List ModuleInfo => \imports : List ImportInfo => \exports : List ExportInfo => \visiting : List (List U8) => \visited : List (List U8) =>
+  if [Result (List U8) GraphVisit] (nameInList moduleName visited)
+    (\u : U8 => Ok [List U8] [GraphVisit] (MkGraphVisit visited))
+    (\u : U8 =>
+      if [Result (List U8) GraphVisit] (nameInList moduleName visiting)
+        (\u : U8 => Err [List U8] [GraphVisit] (cycleMessage moduleName))
+        (\u : U8 =>
+          match (lookupModule moduleName mods) [Result (List U8) GraphVisit] {
+            | None => Err [List U8] [GraphVisit] (append [U8] "Missing imported module: " moduleName)
+            | Some modInfo =>
+                validateGraphImports moduleName (moduleImports moduleName imports) mods imports exports
+                  (cons [List U8] moduleName visiting)
+                  visited
+          }))
+
+poly rec validateGraphImports = \moduleName : List U8 => \moduleImps : List ImportInfo => \mods : List ModuleInfo => \allImports : List ImportInfo => \exports : List ExportInfo => \visiting : List (List U8) => \visited : List (List U8) =>
+  matchList [ImportInfo] [Result (List U8) GraphVisit] moduleImps
+    (Ok [List U8] [GraphVisit] (MkGraphVisit (cons [List U8] moduleName visited)))
+    (\h : ImportInfo => \t : List ImportInfo =>
+      match h [Result (List U8) GraphVisit] { | MkImportInfo hModule hFrom hSymbol =>
+        match (lookupModule hFrom mods) [Result (List U8) GraphVisit] {
+          | None =>
+              if [Result (List U8) GraphVisit] (isBuiltinImport hFrom hSymbol)
+                (\u : U8 => validateGraphImports moduleName t mods allImports exports visiting visited)
+                (\u : U8 => Err [List U8] [GraphVisit] (importMissingMessage moduleName hFrom hSymbol))
+          | Some depMod =>
+              match (lookupExport hFrom hSymbol exports) [Result (List U8) GraphVisit] {
+                | None => Err [List U8] [GraphVisit] (importNotExportedMessage moduleName hFrom hSymbol)
+                | Some exp =>
+                    match (validateGraphModule hFrom mods allImports exports visiting visited) [Result (List U8) GraphVisit] {
+                      | Err e => Err [List U8] [GraphVisit] e
+                      | Ok nextVisit =>
+                          match nextVisit [Result (List U8) GraphVisit] { | MkGraphVisit nextVisited =>
+                            validateGraphImports moduleName t mods allImports exports visiting nextVisited
+                          }
+                    }
+              }
+        }
+      })
+
+poly validateBundleGraph = \entry : List U8 => \records : List ModuleRecord =>
+  match (buildModuleEnv records) [Result (List U8) U8] {
+    | Err e => Err [List U8] [U8] e
+    | Ok env =>
+        match env [Result (List U8) U8] { | MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims =>
+          match (validateGraphModule entry mods imps exps (nil [List U8]) (nil [List U8])) [Result (List U8) U8] {
+            | Err e => Err [List U8] [U8] e
+            | Ok visited => Ok [List U8] [U8] #u8(0)
+          }
+        }
+  }
 
 poly rec emitModuleExportsAcc = \moduleName : List U8 => \exports : List ExportInfo => \defs : List DefinitionInfo => \ctors : List ConstructorMeta => \acc : List U8 =>
   matchList [ExportInfo] [List U8] exports

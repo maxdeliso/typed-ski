@@ -2113,6 +2113,89 @@ class MiniCoreBuilder {
   }
 }
 
+function sortModulesAndValidate(
+  modules: SourceModule[],
+  entryModule: string,
+): SourceModule[] {
+  const moduleMap = new Map<string, SourceModule>();
+  for (const mod of modules) {
+    moduleMap.set(mod.name, mod);
+  }
+
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const order: SourceModule[] = [];
+
+  function dfs(name: string) {
+    if (name === "Prelude" && !moduleMap.has("Prelude")) {
+      return;
+    }
+
+    if (visiting.has(name)) {
+      const path = [...visiting];
+      const startIndex = path.indexOf(name);
+      const cyclePath = path.slice(startIndex).concat(name).join(" -> ");
+      throw new MiniCoreCompileError(`Dependency cycle detected: ${cyclePath}`);
+    }
+    if (visited.has(name)) {
+      return;
+    }
+
+    const mod = moduleMap.get(name);
+    if (!mod) {
+      throw new MiniCoreCompileError(`Unknown module ${name}`);
+    }
+
+    visiting.add(name);
+
+    // Collect direct dependencies, sorted alphabetically for determinism
+    const directDeps = new Set<string>();
+    for (const qName of mod.imports.values()) {
+      const depName = qName.split(".")[0];
+      if (depName && depName !== name) {
+        directDeps.add(depName);
+      }
+    }
+    const sortedDeps = [...directDeps].sort();
+
+    for (const dep of sortedDeps) {
+      dfs(dep);
+    }
+
+    visiting.delete(name);
+    visited.add(name);
+    order.push(mod);
+  }
+
+  dfs(entryModule);
+
+  // Validate imports up-front for reachable modules
+  for (const mod of order) {
+    for (const [localName, qName] of mod.imports.entries()) {
+      const [targetModuleName, targetLocalName] = splitQualifiedName(qName);
+      if (targetModuleName === "Prelude" && !moduleMap.has("Prelude")) {
+        continue;
+      }
+      const targetModule = moduleMap.get(targetModuleName);
+      if (!targetModule) {
+        throw new MiniCoreCompileError(`Module ${mod.name} imports ${targetLocalName} from unknown module ${targetModuleName}`);
+      }
+      if (!targetModule.exports.has(targetLocalName)) {
+        throw new MiniCoreCompileError(`Module ${mod.name} imports ${targetLocalName} which is not exported by module ${targetModuleName}`);
+      }
+    }
+  }
+
+  // Preserve all input modules (including unreachable ones) at the end to keep ADT/constructor loading intact
+  for (const mod of modules) {
+    if (!visited.has(mod.name)) {
+      order.push(mod);
+    }
+  }
+
+  return order;
+}
+
 export function compileMiniCoreModules(
   modules: MiniCoreModuleSource[],
   entryModuleName?: string,
@@ -2125,10 +2208,12 @@ export function compileMiniCoreModules(
   if (!entryModule) {
     throw new MiniCoreCompileError("No MiniCore entry module found");
   }
-  const builder = new MiniCoreBuilder(sourceModules);
+  const sortedModules = sortModulesAndValidate(sourceModules, entryModule);
+  const builder = new MiniCoreBuilder(sortedModules);
   const program = builder.build(`${entryModule}.main`);
   validateMiniCoreProgram(program, {
     requireNullaryEntry: options.requireNullaryEntry,
   });
   return program;
 }
+

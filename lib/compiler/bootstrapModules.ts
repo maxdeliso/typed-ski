@@ -35,6 +35,7 @@ export type BootstrapTripModuleName =
   | "MiniCore"
   | "MiniVerify"
   | "Anf"
+  | "AnfLlvm"
   | "Compiler"
   | "Telemetry";
 
@@ -60,6 +61,7 @@ const BOOTSTRAP_MODULE_FILES: Record<BootstrapTripModuleName, string> = {
   MiniCore: "miniCore.trip",
   MiniVerify: "miniVerify.trip",
   Anf: "anf.trip",
+  AnfLlvm: "anfLlvm.trip",
   Compiler: "index.trip",
   Telemetry: "telemetry.trip",
 };

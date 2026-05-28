@@ -1237,7 +1237,9 @@ poly main = #u8(0)
   });
 
   it("compiles and runs cross-module calls", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-cross-module-test-"));
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-cross-module-test-"),
+    );
     try {
       const bundleBytes = serializeTripBundleV1({
         entryModule: "Main",
@@ -1280,7 +1282,9 @@ poly main = addOne #u8(5)
   });
 
   it("links duplicate local names in separate modules successfully", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-duplicate-names-test-"));
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-duplicate-names-test-"),
+    );
     try {
       const bundleBytes = serializeTripBundleV1({
         entryModule: "Main",
@@ -1433,7 +1437,6 @@ poly main = a_val
     );
   });
 });
-
 
 async function compileBundleSummaryExecutable(
   tempDir: string,

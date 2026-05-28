@@ -2178,10 +2178,14 @@ function sortModulesAndValidate(
       }
       const targetModule = moduleMap.get(targetModuleName);
       if (!targetModule) {
-        throw new MiniCoreCompileError(`Module ${mod.name} imports ${targetLocalName} from unknown module ${targetModuleName}`);
+        throw new MiniCoreCompileError(
+          `Module ${mod.name} imports ${targetLocalName} from unknown module ${targetModuleName}`,
+        );
       }
       if (!targetModule.exports.has(targetLocalName)) {
-        throw new MiniCoreCompileError(`Module ${mod.name} imports ${targetLocalName} which is not exported by module ${targetModuleName}`);
+        throw new MiniCoreCompileError(
+          `Module ${mod.name} imports ${targetLocalName} which is not exported by module ${targetModuleName}`,
+        );
       }
     }
   }
@@ -2216,4 +2220,3 @@ export function compileMiniCoreModules(
   });
   return program;
 }
-

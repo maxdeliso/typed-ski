@@ -1235,6 +1235,207 @@ poly main = #u8(0)
       },
     );
   });
+
+  it("compiles and runs cross-module calls", async () => {
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-cross-module-test-"),
+    );
+    try {
+      const bundleBytes = serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "x86_64-unknown-linux-gnu" },
+        emitMainWrapper: true,
+        modules: [
+          {
+            name: "Math",
+            source: `module Math
+import Prelude U8
+import Prelude addU8
+export addOne
+poly addOne = \\x : U8 => addU8 x #u8(1)
+`,
+          },
+          {
+            name: "Main",
+            source: `module Main
+import Prelude U8
+import Math addOne
+export main
+poly main = addOne #u8(5)
+`,
+          },
+          {
+            name: "Prelude",
+            source: realBootstrapModuleSource("Prelude"),
+          },
+        ],
+      });
+      const llvm = compileTripBundleV1ToLlvm(bundleBytes);
+      const llPath = join(tempDir, "cross-module.ll");
+      await writeFile(llPath, llvm, "utf8");
+      const exePath = await compileLlvmToExecutable(llPath);
+      const result = runExecutable(exePath);
+      assert.equal(result.status, 6);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("links duplicate local names in separate modules successfully", async () => {
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-duplicate-names-test-"),
+    );
+    try {
+      const bundleBytes = serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "x86_64-unknown-linux-gnu" },
+        emitMainWrapper: true,
+        modules: [
+          {
+            name: "A",
+            source: `module A
+import Prelude U8
+export val
+poly val = #u8(10)
+`,
+          },
+          {
+            name: "B",
+            source: `module B
+import Prelude U8
+export val
+export getVal
+poly val = #u8(20)
+poly getVal = val
+`,
+          },
+          {
+            name: "Main",
+            source: `module Main
+import Prelude U8
+import Prelude addU8
+import A val
+import B getVal
+export main
+poly main = addU8 val getVal
+`,
+          },
+          {
+            name: "Prelude",
+            source: realBootstrapModuleSource("Prelude"),
+          },
+        ],
+      });
+      const llvm = compileTripBundleV1ToLlvm(bundleBytes);
+      const llPath = join(tempDir, "duplicate-names.ll");
+      await writeFile(llPath, llvm, "utf8");
+      const exePath = await compileLlvmToExecutable(llPath);
+      const result = runExecutable(exePath);
+      assert.equal(result.status, 30);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("rejects missing module import with a clear compile-time error", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Main",
+                source: `module Main
+import NonExistent foo
+export main
+poly main = foo
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        name: "MiniCoreCompileError",
+        message: /Unknown module NonExistent/,
+      },
+    );
+  });
+
+  it("rejects unexported symbol import with a clear compile-time error", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "Lib",
+                source: `module Lib
+poly foo = #u8(7)
+`,
+              },
+              {
+                name: "Main",
+                source: `module Main
+import Lib foo
+export main
+poly main = foo
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        name: "MiniCoreCompileError",
+        message: /imports foo which is not exported by module Lib/,
+      },
+    );
+  });
+
+  it("rejects circular module dependencies with a clear cycle error", () => {
+    assert.throws(
+      () =>
+        compileTripBundleV1ToLlvm(
+          serializeTripBundleV1({
+            entryModule: "Main",
+            target: { kind: "x86_64-unknown-linux-gnu" },
+            modules: [
+              {
+                name: "A",
+                source: `module A
+import B b_val
+export a_val
+poly a_val = b_val
+`,
+              },
+              {
+                name: "B",
+                source: `module B
+import A a_val
+export b_val
+poly b_val = a_val
+`,
+              },
+              {
+                name: "Main",
+                source: `module Main
+import A a_val
+export main
+poly main = a_val
+`,
+              },
+            ],
+          }),
+        ),
+      {
+        name: "MiniCoreCompileError",
+        message: /Dependency cycle detected: A -> B -> A/,
+      },
+    );
+  });
 });
 
 async function compileBundleSummaryExecutable(

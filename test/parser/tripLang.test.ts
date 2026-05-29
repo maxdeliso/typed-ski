@@ -677,3 +677,121 @@ describe("parse list literal", () => {
     assert.strictEqual(unparseSystemFType(nilApp.typeArg), "U8");
   });
 });
+
+describe("Haskell-style comments", () => {
+  const expectPoly = (input: string) => {
+    const term = requiredAt(parseTripLang(input).terms, 0, "expected poly");
+    if (term.kind !== "poly") {
+      throw new Error(`expected 'poly' term, got '${term.kind}'`);
+    }
+    return term;
+  };
+
+  // Walks the desugared `cons [U8] head tail ... (nil [U8])` list a string
+  // literal produces and reconstructs the original text. Used to prove that
+  // comment delimiters inside a string stay literal.
+  const isNilU8 = (t: SystemFTerm): boolean =>
+    t.kind === "systemF-type-app" &&
+    t.term.kind === "systemF-var" &&
+    t.term.name === "nil";
+
+  const decodeU8ListString = (t: SystemFTerm): string => {
+    const codes: number[] = [];
+    let current = t;
+    while (!isNilU8(current)) {
+      const outer = expectSystemFApp(current); // (cons [U8] head) tail
+      const consApp = expectSystemFApp(outer.lft); // (cons [U8]) head
+      const head = expectSystemFVar(consApp.rgt);
+      const match = /^__trip_u8_(\d+)$/.exec(head.name);
+      if (!match) {
+        throw new Error(`expected u8 list element, got '${head.name}'`);
+      }
+      codes.push(parseInt(match[1]!, 10));
+      current = outer.rgt;
+    }
+    return String.fromCharCode(...codes);
+  };
+
+  it("parses a comment-laden file identically to its bare twin", () => {
+    const commented = loadInput("comments.trip", srcDir);
+    const bare = loadInput("church.trip", srcDir);
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("ignores a line comment on its own line between definitions", () => {
+    const commented = "module M\n-- a standalone comment\npoly id = \\x:A => x";
+    const bare = "module M\npoly id = \\x:A => x";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("ignores a trailing line comment after a definition", () => {
+    const commented = "poly id = \\x:A => x  -- the identity";
+    const bare = "poly id = \\x:A => x";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("requires no whitespace before a trailing line comment", () => {
+    const commented = "poly id = \\x:A => x--touching the comment";
+    const bare = "poly id = \\x:A => x";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("ignores block comments, including between and inside tokens", () => {
+    const commented =
+      "module M {- here -}\npoly id = {- a -} #A => \\x {- b -} : A => x";
+    const bare = "module M\npoly id = #A => \\x : A => x";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("supports nested block comments", () => {
+    const commented = "module M\n{- outer {- inner -} still outer -}\nexport M";
+    const bare = "module M\nexport M";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("treats a trailing comment on a combinator line as the end of the term", () => {
+    const commented = "combinator k = K  -- the K combinator";
+    const bare = "combinator k = K";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("handles an inline block comment within a combinator term", () => {
+    const commented = "combinator s = S {- subst -} K I";
+    const bare = "combinator s = S K I";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("parses a program that is only comments as having no terms", () => {
+    const program = parseTripLang(
+      "-- nothing here\n{- nor here {- nested -} -}\n",
+    );
+    assert.deepStrictEqual(program, { kind: "program", terms: [] });
+  });
+
+  it("does not mistake the arrow tokens for line comments", () => {
+    // `->` and `=>` contain a single dash at most; only `--` is a comment.
+    const program = parseTripLang("module M\ntype F = A->B->C");
+    const typeTerm = requiredAt(program.terms, 1, "expected type");
+    assert.strictEqual(typeTerm.kind, "type");
+    assert.deepStrictEqual(
+      typeTerm,
+      parseTripLang("module M\ntype F = A -> B -> C").terms[1],
+    );
+  });
+
+  it("does not merge a block-comment close with an adjacent arrow", () => {
+    const commented = "module M\ntype F = A {- t -}->B";
+    const bare = "module M\ntype F = A -> B";
+    assert.deepStrictEqual(parseTripLang(commented), parseTripLang(bare));
+  });
+
+  it("keeps comment delimiters inside a string literal literal", () => {
+    const term = expectPoly('poly s = "a--b{-c-}d"');
+    assert.strictEqual(decodeU8ListString(term.term), "a--b{-c-}d");
+  });
+
+  it("keeps a dash inside a character literal literal", () => {
+    const term = expectPoly("poly d = '-'");
+    assert.deepStrictEqual(term.term, mkSystemFVar("__trip_u8_45"));
+  });
+});

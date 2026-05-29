@@ -1,0 +1,20 @@
+-- Church numerals, with Haskell-style comments sprinkled throughout.
+-- This file is the comment-laden twin of church.trip and must parse to the
+-- exact same AST.
+
+module Church  -- the module name
+
+{- Nat is the usual Church encoding of the naturals.
+   Block comments may span multiple lines, and they {- nest -} too. -}
+type Nat = #X->(X->X)->X->X  -- forall X. (X -> X) -> X -> X
+
+poly id = #A=>\x:A=>x  -- polymorphic identity
+
+-- complex is the body of the Y combinator, written in raw SKI:
+combinator complex = S(K(SII))(S(S(KS)K)(K(SII)))  -- trailing line comment
+
+poly two : Nat = succ (succ zero) {- inline block comment -}
+
+{- almost done -}
+poly main : Nat = two
+-- a trailing comment with no newline after it

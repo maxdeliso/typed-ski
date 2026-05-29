@@ -15,6 +15,11 @@
  * - Type arrows use "->": "T -> U" means function type from T to U
  * - Term arrows use "=>": "\\x => body" or "match x { | C => body }"
  *
+ * Comments (Haskell-style, accepted anywhere whitespace is):
+ * - Line comments: "-- ..." through the end of the line
+ * - Block comments: "{- ... -}", which nest
+ * Comment skipping lives in `skipWhitespace` (see `./parserState.ts`).
+ *
  * @module
  */
 import {

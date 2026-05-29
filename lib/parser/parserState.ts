@@ -13,11 +13,14 @@ import { DEFINITION_KEYWORDS } from "./definition.ts";
 import {
   ARROW,
   ASCII_MAX,
+  BLOCK_COMMENT_CLOSE,
+  BLOCK_COMMENT_OPEN,
   COLON,
   DIGIT_REGEX,
   FAT_ARROW,
   IDENTIFIER_CHAR_REGEX,
   LEFT_PAREN,
+  LINE_COMMENT,
   PURELY_NUMERIC_REGEX,
   RIGHT_PAREN,
   WHITESPACE_REGEX,
@@ -47,12 +50,79 @@ export function createParserState(buf: string): ParserState {
   return { buf, idx: 0 };
 }
 
-export function skipWhitespace(state: ParserState): ParserState {
-  let idx = state.idx;
-  while (idx < state.buf.length && WHITESPACE_REGEX.test(state.buf[idx]!)) {
-    idx++;
+/**
+ * Consumes a Haskell-style block comment and returns the index just past its
+ * matching close delimiter. `start` must point at the opening `{-`.
+ *
+ * Block comments nest, so `{- a {- b -} c -}` is a single comment. An
+ * unterminated comment is a parse error.
+ */
+function skipBlockComment(buf: string, start: number): number {
+  let idx = start + BLOCK_COMMENT_OPEN.length;
+  let depth = 1;
+  while (idx < buf.length && depth > 0) {
+    if (buf.startsWith(BLOCK_COMMENT_OPEN, idx)) {
+      depth++;
+      idx += BLOCK_COMMENT_OPEN.length;
+    } else if (buf.startsWith(BLOCK_COMMENT_CLOSE, idx)) {
+      depth--;
+      idx += BLOCK_COMMENT_CLOSE.length;
+    } else {
+      idx++;
+    }
   }
-  return { buf: state.buf, idx };
+  if (depth > 0) {
+    throw new ParseError(
+      withParserState(
+        { buf, idx: start },
+        "unterminated block comment (expected '-}')",
+      ),
+    );
+  }
+  return idx;
+}
+
+/**
+ * Advances past insignificant input: whitespace and Haskell-style comments.
+ *
+ * Two comment forms are recognized:
+ *   - Line comments: `--` through the end of the line.
+ *   - Block comments: `{- ... -}`, which nest.
+ *
+ * Every token-level helper (`peek`, `matchCh`, `parseIdentifier`, `remaining`,
+ * ...) funnels through here, so comments are accepted anywhere whitespace is
+ * without any further changes elsewhere in the parser. String and character
+ * literals are read raw by their own parsers and never re-enter this function,
+ * so `--`/`{-` inside a literal stays literal.
+ *
+ * There is no ambiguity with existing tokens: TripLang has no `-` operator, so
+ * `--` always starts a line comment (the arrows `->`/`=>` never contain `--`),
+ * and a `{` that opens a list/pair/match block is always followed by
+ * whitespace or a type/`|`, never by `-`, so `{-` always starts a comment.
+ *
+ * @throws ParseError on an unterminated block comment.
+ */
+export function skipWhitespace(state: ParserState): ParserState {
+  const { buf } = state;
+  let idx = state.idx;
+  for (;;) {
+    while (idx < buf.length && WHITESPACE_REGEX.test(buf[idx]!)) {
+      idx++;
+    }
+    if (buf.startsWith(LINE_COMMENT, idx)) {
+      idx += LINE_COMMENT.length;
+      while (idx < buf.length && buf[idx] !== "\n") {
+        idx++;
+      }
+      continue;
+    }
+    if (buf.startsWith(BLOCK_COMMENT_OPEN, idx)) {
+      idx = skipBlockComment(buf, idx);
+      continue;
+    }
+    break;
+  }
+  return { buf, idx };
 }
 
 export function peek(state: ParserState): [string | null, ParserState] {

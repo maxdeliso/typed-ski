@@ -491,6 +491,7 @@ function substituteDependencies(
   localName: string,
   ps: ProgramSpace,
   exportIndex: Map<string, Set<string>>,
+  scc?: Set<string>,
 ): TripLangTerm {
   const defValue = extractDefinitionValue(def);
   if (!defValue) return def;
@@ -535,10 +536,16 @@ function substituteDependencies(
         continue;
       }
 
-      const targetQualified = termEnv.get(termRef);
-      if (targetQualified) {
+      const targetQualified =
+        termEnv.get(termRef) ?? qualifiedName(moduleName, termRef);
+      if (scc?.has(targetQualified)) {
+        continue;
+      }
+
+      const importQualified = termEnv.get(termRef);
+      if (importQualified) {
         // It's an import (in termEnv)
-        const targetTerm = ps.terms.get(targetQualified);
+        const targetTerm = ps.terms.get(importQualified);
         if (targetTerm) {
           replacements.set(termRef, targetTerm);
         } else {
@@ -702,11 +709,20 @@ function substituteDependencies(
     let changed = false; // Track if any substitution actually occurred
 
     for (const typeRef of currentExternalTypeRefs) {
-      const targetQualified = typeEnv.get(typeRef);
+      const importQualified = typeEnv.get(typeRef);
+      const localQualified = qualifiedName(moduleName, typeRef);
+      if (
+        (importQualified && scc?.has(importQualified)) ||
+        (!importQualified &&
+          ps.types.has(localQualified) &&
+          scc?.has(localQualified))
+      ) {
+        continue;
+      }
 
       // Case 1: Resolution via Environment (Imports)
-      if (targetQualified) {
-        const targetType = ps.types.get(targetQualified);
+      if (importQualified) {
+        const targetType = ps.types.get(importQualified);
         if (targetType) {
           if (isRecursiveTypeDefinition(targetType)) {
             continue;
@@ -888,6 +904,7 @@ function resolveSCC(
         snapshot.localName,
         ps,
         exportIndex,
+        new Set(scc),
       );
 
       // Use cached hash if available, otherwise compute and cache

@@ -38,16 +38,7 @@ poly isVarNamed = \ty : Type => \name : List U8 =>
 
 poly main =
   let input =
-    cons [Token] T_Hash
-      (cons [Token] (T_Ident "A")
-        (cons [Token] T_Arrow
-          (cons [Token] (T_Ident "A")
-            (cons [Token] T_Arrow
-              (cons [Token] T_LParen
-                (cons [Token] (T_Ident "B")
-                  (cons [Token] (T_Ident "C")
-                    (cons [Token] T_RParen
-                      (cons [Token] T_EOF (nil [Token]))))))))))
+    {Token | T_Hash (T_Ident "A") T_Arrow (T_Ident "A") T_Arrow T_LParen (T_Ident "B") (T_Ident "C") T_RParen T_EOF}
   in
   match (parseType input) [Bool] {
     | Err e => false

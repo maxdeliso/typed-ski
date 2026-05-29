@@ -23,6 +23,7 @@ import {
   type ParserState,
   peek,
   peekArrow,
+  skipWhitespace,
   withParserState,
 } from "./parserState.ts";
 import {
@@ -122,14 +123,40 @@ function parseSimpleSystemFType(
     const stateAfterLP = matchLP(s);
     const [innerLit, innerType, stateAfterInner] =
       parseSystemFType(stateAfterLP);
-    const [closing, sAfterInner] = peek(stateAfterInner);
-    if (closing !== ")") {
-      throw new ParseError(
-        withParserState(sAfterInner, "expected ')' after type expression"),
+    let currentState = skipWhitespace(stateAfterInner);
+    const [nextCh] = peek(currentState);
+    if (nextCh === ",") {
+      currentState = matchCh(currentState, ",");
+      currentState = skipWhitespace(currentState);
+      const [secondLit, secondType, stateAfterSecond] =
+        parseSystemFType(currentState);
+      currentState = skipWhitespace(stateAfterSecond);
+      const [closing, sAfterInner] = peek(currentState);
+      if (closing !== ")") {
+        throw new ParseError(
+          withParserState(
+            sAfterInner,
+            "expected ')' after pair type expression",
+          ),
+        );
+      }
+      const stateAfterRP = matchRP(sAfterInner);
+      const literal = `(${innerLit}, ${secondLit})`;
+      const pairType = typeApp(
+        typeApp(mkTypeVariable("Pair"), innerType),
+        secondType,
       );
+      return [literal, pairType, stateAfterRP];
+    } else {
+      const [closing, sAfterInner] = peek(currentState);
+      if (closing !== ")") {
+        throw new ParseError(
+          withParserState(sAfterInner, "expected ')' after type expression"),
+        );
+      }
+      const stateAfterRP = matchRP(sAfterInner);
+      return [`(${innerLit})`, innerType, stateAfterRP];
     }
-    const stateAfterRP = matchRP(sAfterInner);
-    return [`(${innerLit})`, innerType, stateAfterRP];
   } else {
     // Must be a type variable (a single letter).
     const [varLit, stateAfterVar] = parseIdentifier(s);

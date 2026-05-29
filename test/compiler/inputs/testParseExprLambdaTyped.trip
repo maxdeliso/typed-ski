@@ -35,13 +35,7 @@ export main
 
 poly main =
   let input =
-    cons [Token] T_Backslash
-      (cons [Token] (T_Ident "x")
-        (cons [Token] T_Colon
-          (cons [Token] (T_Ident "Bin")
-            (cons [Token] T_FatArrow
-              (cons [Token] (T_Ident "x")
-                (cons [Token] T_EOF (nil [Token])))))))
+    {Token | T_Backslash (T_Ident "x") T_Colon (T_Ident "Bin") T_FatArrow (T_Ident "x") T_EOF}
   in
   match (parseExpr input) [Bool] {
     | Err e => false

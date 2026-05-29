@@ -20,7 +20,7 @@ poly two : Bin = B0 (B1 BZ)
 
 poly errVal = Err [Bin] [Bin] zeroBin
 poly okVal = Ok [Bin] [Bin] two
-poly pair : Pair Bin Bin = MkPair [Bin] [Bin] one two
+poly pair : (Bin, Bin) = {Bin, Bin | one, two}
 
 type Church = #X -> (X -> X) -> X -> X
 

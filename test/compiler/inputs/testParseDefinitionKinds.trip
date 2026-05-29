@@ -54,20 +54,13 @@ poly eqDefKind = \a : DefKind => \b : DefKind =>
   }
 
 poly main =
-  let t0 = nil [Token] in
-  let t1 = cons [Token] T_EOF t0 in
-  let t2 = cons [Token] T_Dot t1 in
-  let t3 = cons [Token] T_Comma t2 in
-  let t4 = cons [Token] T_Eq t3 in
-  let t5 = cons [Token] (T_Ident "c") t4 in
-  let t6 = cons [Token] T_KwCombinator t5 in
-  let t7 = cons [Token] (T_Ident "p") t6 in
-  let t8 = cons [Token] T_Eq t7 in
-  let t9 = cons [Token] (T_Ident "p") t8 in
-  let t10 = cons [Token] T_KwRec t9 in
-  let t11 = cons [Token] T_KwPoly t10 in
-  let t12 = cons [Token] (T_Ident "M") t11 in
-  let input = cons [Token] T_KwModule t12 in
+  let input =
+    {Token |
+      T_KwModule (T_Ident "M")
+      T_KwPoly T_KwRec (T_Ident "p") T_Eq (T_Ident "p")
+      T_KwCombinator (T_Ident "c") T_Eq T_Comma T_Dot
+      T_EOF}
+  in
   match (parseProgram input) [Bool] {
     | Err e => false
     | Ok decls =>

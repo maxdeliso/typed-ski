@@ -354,7 +354,7 @@ import Lexer T_KwData
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
-exports 97
+exports 103
 export Pattern
 export P_Ctor
 export Expr
@@ -429,11 +429,17 @@ export parsePatternArgs
 export parseMatchArm
 export parseMatchArms
 export isAtomStart
+export parseLiteralAtomWith
+export buildListExpr
+export parseListElements
+export parseBraceBodyWith
 export skipTypeArg
 export parseCtorArity
 export parseAtomWith
 export parseAppLoopWith
 export parseAppWith
+export parseAppLoopNoBraceWith
+export parseAppNoBraceWith
 export parseMatchArmWith
 export parseMatchArmsWith
 export parseAtom
@@ -482,7 +488,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 89
+poly 95
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -542,6 +548,10 @@ poly parseMatchArmWith
 poly parseMatchArmsWith
 poly isAtomStartTag
 poly isAtomStart
+poly buildListExpr
+poly parseLiteralAtomWith
+poly parseListElements
+poly parseBraceBodyWith
 poly parseAtomWith
 poly skipTypeArg
 poly parseSimpleTypeWith
@@ -552,6 +562,8 @@ poly parseType
 poly parseSimpleType
 poly parseTypeApplication
 poly parseAppLoopWith
+poly parseAppLoopNoBraceWith
+poly parseAppNoBraceWith
 poly parseAppWith
 poly parseAtom
 poly parseApp

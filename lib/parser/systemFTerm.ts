@@ -83,7 +83,7 @@ function isTerminator(state: ParserState): boolean {
     ch === RIGHT_BRACE ||
     ch === "]" ||
     ch === "|" ||
-    ch === LEFT_BRACE
+    ch === ","
   ) {
     return true;
   }
@@ -123,8 +123,8 @@ function parseMatchExpression(
 
     const [ch] = peek(currentState);
 
-    // SPECIAL CASE: Stop at '[' because it denotes the return type annotation
-    if (ch === "[") break;
+    // SPECIAL CASE: Stop at '[' or '{' because it denotes either the return type or the match block
+    if (ch === "[" || ch === "{") break;
 
     // Parse next term application
     const [atomLit, atomTerm, nextState] = parseAtomicSystemFTerm(currentState);
@@ -393,6 +393,21 @@ const buildU8List = (codes: number[]): SystemFTerm => {
   return term;
 };
 
+const buildListLiteral = (
+  elementType: BaseType,
+  elements: SystemFTerm[],
+): SystemFTerm => {
+  let term: SystemFTerm = mkSystemFTypeApp(mkSystemFVar("nil"), elementType);
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const consTerm = mkSystemFTypeApp(mkSystemFVar("cons"), elementType);
+    term = createSystemFApplication(
+      createSystemFApplication(consTerm, elements[i]!),
+      term,
+    );
+  }
+  return term;
+};
+
 const parseCharLiteralTerm = (
   state: ParserState,
 ): [string, SystemFTerm, ParserState] => {
@@ -561,6 +576,95 @@ function parseAtomicSystemFTerm(
       parseSystemFTerm(stateAfterLP);
     const stateAfterRP = matchRP(stateAfterTerm);
     return [`(${innerLit})`, innerTerm, stateAfterRP];
+  }
+  // 3.5 List or Pair Literal: { Type | ... } OR { Type1, Type2 | ... }
+  else if (ch === "{") {
+    let currentState = matchCh(state, LEFT_BRACE);
+    currentState = skipWhitespace(currentState);
+
+    // Parse the first type
+    const [type1Lit, type1, stateAfterType1] = parseSystemFType(currentState);
+    currentState = skipWhitespace(stateAfterType1);
+
+    const [nextCh] = peek(currentState);
+    if (nextCh === ",") {
+      // It is a Pair Literal!
+      currentState = matchCh(currentState, ",");
+      currentState = skipWhitespace(currentState);
+
+      // Parse the second type
+      const [type2Lit, type2, stateAfterType2] = parseSystemFType(currentState);
+      currentState = skipWhitespace(stateAfterType2);
+
+      // Expect '|'
+      currentState = matchCh(currentState, "|");
+      currentState = skipWhitespace(currentState);
+
+      // Parse the first term (can be a full term since comma-separated)
+      const [term1Lit, term1, stateAfterTerm1] = parseSystemFTerm(currentState);
+      currentState = skipWhitespace(stateAfterTerm1);
+
+      // Expect ','
+      currentState = matchCh(currentState, ",");
+      currentState = skipWhitespace(currentState);
+
+      // Parse the second term
+      const [term2Lit, term2, stateAfterTerm2] = parseSystemFTerm(currentState);
+      currentState = skipWhitespace(stateAfterTerm2);
+
+      // Expect '}'
+      const [closing, sAfterInner] = peek(currentState);
+      if (closing !== "}") {
+        throw new ParseError(
+          withParserState(sAfterInner, "expected '}' to close pair literal"),
+        );
+      }
+      currentState = matchCh(currentState, "}");
+
+      // Construct the desugared MkPair application:
+      // MkPair [Type1] [Type2] term1 term2
+      const mkPairVar = mkSystemFVar("MkPair");
+      const typeApp1 = mkSystemFTypeApp(mkPairVar, type1);
+      const typeApp2 = mkSystemFTypeApp(typeApp1, type2);
+      const app1 = createSystemFApplication(typeApp2, term1);
+      const finalTerm = createSystemFApplication(app1, term2);
+
+      const literalStr = `{${type1Lit}, ${type2Lit} | ${term1Lit}, ${term2Lit}}`;
+      return [literalStr, finalTerm, currentState];
+    } else {
+      // It is a List Literal!
+      // Expect '|'
+      currentState = matchCh(currentState, "|");
+      currentState = skipWhitespace(currentState);
+
+      // Parse elements until '}'
+      const elementTerms: SystemFTerm[] = [];
+      const elementLits: string[] = [];
+
+      while (true) {
+        currentState = skipWhitespace(currentState);
+        const [nextCh] = peek(currentState);
+        if (nextCh === "}") {
+          currentState = matchCh(currentState, "}");
+          break;
+        }
+        if (nextCh === null) {
+          throw new ParseError(
+            withParserState(currentState, "unterminated list literal"),
+          );
+        }
+
+        const [atomLit, atomTerm, nextState] =
+          parseAtomicSystemFTerm(currentState);
+        elementLits.push(atomLit);
+        elementTerms.push(atomTerm);
+        currentState = nextState;
+      }
+
+      const finalTerm = buildListLiteral(type1, elementTerms);
+      const literalStr = `{${type1Lit} | ${elementLits.join(" ")}}`;
+      return [literalStr, finalTerm, currentState];
+    }
   } // 4. Literals
   else if (ch === "'") {
     return parseCharLiteralTerm(currentState);

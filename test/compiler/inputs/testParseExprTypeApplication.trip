@@ -42,13 +42,7 @@ poly isVarNamed = \expr : Expr => \name : List Bin =>
 
 poly main =
   let input =
-    cons [Token] (T_Ident "n")
-      (cons [Token] T_LBracket
-        (cons [Token] (T_Ident "X")
-          (cons [Token] T_RBracket
-            (cons [Token] (T_Ident "s")
-              (cons [Token] (T_Ident "z")
-                (cons [Token] T_EOF (nil [Token])))))))
+    {Token | (T_Ident "n") T_LBracket (T_Ident "X") T_RBracket (T_Ident "s") (T_Ident "z") T_EOF}
   in
   match (parseExpr input) [Bool] {
     | Err e => false

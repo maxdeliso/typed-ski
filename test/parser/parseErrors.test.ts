@@ -136,6 +136,24 @@ describe("Parser Error Coverage", () => {
         },
       );
     });
+
+    it("unterminated block comment", () => {
+      assert.throws(
+        () => skipWhitespace(createParserState("{- never closed")),
+        {
+          message: /unterminated block comment/,
+        },
+      );
+    });
+
+    it("unterminated nested block comment", () => {
+      assert.throws(
+        () => skipWhitespace(createParserState("{- outer {- inner -} ")),
+        {
+          message: /unterminated block comment/,
+        },
+      );
+    });
   });
 
   describe("systemFTerm.ts errors", () => {

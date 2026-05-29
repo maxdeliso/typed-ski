@@ -180,7 +180,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 108
+poly 112
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -239,6 +239,8 @@ poly u8_dash
 poly u8_eq
 poly u8_n
 poly u8_r
+poly u8_lbrace
+poly u8_rbrace
 poly isSpaceU8
 poly isDigitU8
 poly isAlphaU8
@@ -287,6 +289,8 @@ poly escapedCharValue
 poly charLiteralError
 poly finishCharLiteral
 poly consumeCharLiteral
+poly dropLineComment
+poly skipBlockComment
 poly tokenizeAcc
 poly tokenize
 combinator 0

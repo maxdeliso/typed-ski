@@ -240,6 +240,8 @@ poly u8_dash : U8 = '-'
 poly u8_eq : U8 = '='
 poly u8_n : U8 = 'n'
 poly u8_r : U8 = 'r'
+poly u8_lbrace : U8 = '{'
+poly u8_rbrace : U8 = '}'
 
 poly isSpaceU8 = \c : U8 =>
   if [Bool] (eqU8 c u8_space)   (\u : U8 => true)
@@ -585,6 +587,40 @@ poly consumeCharLiteral = \input : List U8 =>
               finishCharLiteral (escapedCharValue escaped) afterEscaped))
         (\u : U8 => finishCharLiteral h t))
 
+-- Drops a "--" line comment body: returns the input after the next newline
+-- (or nil at end of input). The leading "--" is already detected by the caller.
+poly rec dropLineComment = \input : List U8 =>
+  matchList [U8] [List U8] input
+    (nil [U8])
+    (\h : U8 => \t : List U8 =>
+      if [List U8] (eqU8 h u8_newline)
+        (\u : U8 => t)
+        (\u : U8 => dropLineComment t))
+
+-- Skips a "{- ... -}" block comment body, with `input` positioned just after
+-- the opening "{-". Nesting is handled via the call stack: an inner "{-"
+-- recurses, and the value it returns (the text after the inner "-}") is then
+-- scanned for this level's "-}". Returns the input after the matching close,
+-- or Err on an unterminated comment (mirroring the host parser's error).
+poly rec skipBlockComment = \input : List U8 =>
+  matchList [U8] [Result ParseError (List U8)] input
+    (Err [ParseError] [List U8] (MkParseError (nil [U8])))
+    (\h : U8 => \t : List U8 =>
+      if [Result ParseError (List U8)]
+        (and (eqU8 h u8_lbrace)
+          (matchList [U8] [Bool] t false (\h2 : U8 => \t2 : List U8 => eqU8 u8_dash h2)))
+        (\u : U8 =>
+          match (skipBlockComment (tail [U8] t)) [Result ParseError (List U8)] {
+            | Err e => Err [ParseError] [List U8] e
+            | Ok afterInner => skipBlockComment afterInner
+          })
+        (\u : U8 =>
+          if [Result ParseError (List U8)]
+            (and (eqU8 h u8_dash)
+              (matchList [U8] [Bool] t false (\h2 : U8 => \t2 : List U8 => eqU8 u8_rbrace h2)))
+            (\u : U8 => Ok [ParseError] [List U8] (tail [U8] t))
+            (\u : U8 => skipBlockComment t)))
+
 poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
   matchList [U8] [Result ParseError (List Token)] input
     (Ok [ParseError] [List Token] accRev)
@@ -592,6 +628,21 @@ poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
       if [Result ParseError (List Token)] (isSpaceU8 c)
         (\u : U8 => tokenizeAcc cs accRev)
         (\u : U8 =>
+
+      if [Result ParseError (List Token)]
+        (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_dash h)))
+        (\u : U8 => tokenizeAcc (dropLineComment cs) accRev)
+        (\u : U8 =>
+
+      if [Result ParseError (List Token)]
+        (and (eqU8 c u8_lbrace) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_dash h)))
+        (\u : U8 =>
+          match (skipBlockComment (tail [U8] cs)) [Result ParseError (List Token)] {
+            | Err e => Err [ParseError] [List Token] e
+            | Ok rest => tokenizeAcc rest accRev
+          })
+        (\u : U8 =>
+
       if [Result ParseError (List Token)]
         (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h)))
         (\u : U8 =>
@@ -655,7 +706,7 @@ poly rec tokenizeAcc = \input : List U8 => \accRev : List Token =>
             tokenizeAcc cs (cons [Token] tok accRev)
       }
 
-      ))))
+      ))))))
 
 poly tokenize = \input : List U8 =>
   match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {

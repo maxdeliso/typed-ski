@@ -23,6 +23,13 @@ export const ARROW = "->";
 export const FAT_ARROW = "=>";
 export const PIPE = "|";
 
+// Haskell-style comment delimiters.
+// - LINE_COMMENT runs from "--" to the end of the line.
+// - BLOCK_COMMENT_OPEN/CLOSE delimit "{- ... -}" comments, which nest.
+export const LINE_COMMENT = "--";
+export const BLOCK_COMMENT_OPEN = "{-";
+export const BLOCK_COMMENT_CLOSE = "-}";
+
 // Regex patterns
 export const DIGIT_REGEX = /[0-9]/;
 export const PURELY_NUMERIC_REGEX = /^[0-9]+$/;

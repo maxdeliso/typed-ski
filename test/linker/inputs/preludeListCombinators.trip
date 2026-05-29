@@ -34,8 +34,8 @@ poly one : Bin = B1 BZ
 poly two : Bin = B0 (B1 BZ)
 poly three : Bin = B1 (B1 BZ)
 
-poly list1 = cons [Bin] one (cons [Bin] two (nil [Bin]))
-poly list2 = cons [Bin] three (nil [Bin])
+poly list1 = {Bin | one two}
+poly list2 = {Bin | three}
 poly mapped = map [Bin] [Bin] incBin list1
 poly combined = append [Bin] mapped list2
 poly main = binToChurch (foldl [Bin] [Bin] addBin zeroBin combined)

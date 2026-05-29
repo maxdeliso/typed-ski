@@ -39,7 +39,7 @@ poly isLeadingZero = \n : Bin => isZeroBin n
 poly zeroBin : Bin = BZ
 poly one : Bin = B1 BZ
 
-poly sample = cons [Bin] zeroBin (cons [Bin] zeroBin (cons [Bin] one (nil [Bin])))
+poly sample = {Bin | zeroBin zeroBin one}
 poly taken = takeWhile [Bin] isLeadingZero sample
 poly dropped = dropWhile [Bin] isLeadingZero sample
 poly count = foldl [Bin] [Bin] (\acc : Bin => \_ : Bin => incBin acc) zeroBin taken

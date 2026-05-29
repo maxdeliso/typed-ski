@@ -41,10 +41,7 @@ poly isVarNamed = \expr : Expr => \name : List Bin =>
 
 poly main =
   let input =
-    cons [Token] (T_Ident "f")
-      (cons [Token] (T_Ident "x")
-        (cons [Token] (T_Ident "y")
-          (cons [Token] T_EOF (nil [Token]))))
+    {Token | (T_Ident "f") (T_Ident "x") (T_Ident "y") T_EOF}
   in
   match (parseApp input) [Bool] {
     | Err e => false

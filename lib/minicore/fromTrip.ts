@@ -243,6 +243,10 @@ function applyTermArgs(head: SystemFTerm, args: SystemFTerm[]): SystemFTerm {
   );
 }
 
+function isCallableBaseType(type: BaseType | undefined): boolean {
+  return type?.kind === "non-terminal";
+}
+
 class MiniCoreBuilder {
   private readonly modules: Map<string, SourceModule>;
   private readonly exportModulesByName = new Map<string, Set<string>>();
@@ -908,17 +912,29 @@ class MiniCoreBuilder {
               ) {
                 const calledCallable = this.analyzeCallableParams(calledQName);
                 const calledParams = this.functionParams(calledQName);
+                const calledParamTypes = (() => {
+                  try {
+                    return collectTopLevelParams(
+                      this.functionSource(calledQName).definition.term,
+                    ).paramTypes;
+                  } catch {
+                    return [];
+                  }
+                })();
                 for (
                   let i = 0;
                   i < Math.min(args.length, calledParams.length);
                   i++
                 ) {
-                  if (calledCallable.has(calledParams[i]!)) {
-                    const arg = stripTypeApps(args[i]!).term;
+                  const arg = stripTypeApps(args[i]!).term;
+                  if (
+                    arg.kind === "systemF-var" &&
+                    params.includes(arg.name) &&
+                    !shadowed.has(arg.name)
+                  ) {
                     if (
-                      arg.kind === "systemF-var" &&
-                      params.includes(arg.name) &&
-                      !shadowed.has(arg.name)
+                      calledCallable.has(calledParams[i]!) ||
+                      isCallableBaseType(calledParamTypes[i])
                     ) {
                       callable.add(arg.name);
                     }

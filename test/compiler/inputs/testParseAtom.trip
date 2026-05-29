@@ -31,8 +31,7 @@ export main
 
 poly main =
   let input =
-    cons [Token] (T_Ident "x")
-      (cons [Token] T_EOF (nil [Token]))
+    {Token | (T_Ident "x") T_EOF}
   in
   match (parseAtom input) [Bool] {
     | Err e => false

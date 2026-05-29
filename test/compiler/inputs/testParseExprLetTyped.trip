@@ -47,15 +47,7 @@ poly isVarNamed = \expr : Expr => \name : List U8 =>
 
 poly main =
   let input =
-    cons [Token] T_KwLet
-      (cons [Token] (T_Ident "x")
-        (cons [Token] T_Colon
-          (cons [Token] (T_Ident "Bin")
-            (cons [Token] T_Eq
-              (cons [Token] (T_Nat "1")
-                (cons [Token] T_KwIn
-                  (cons [Token] (T_Ident "x")
-                    (cons [Token] T_EOF (nil [Token])))))))))
+    {Token | T_KwLet (T_Ident "x") T_Colon (T_Ident "Bin") T_Eq (T_Nat "1") T_KwIn (T_Ident "x") T_EOF}
   in
   match (parseExpr input) [Bool] {
     | Err e => false

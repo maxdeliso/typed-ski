@@ -15,6 +15,6 @@ poly one = succ zero
 poly two = succ one
 poly three = succ two
 
-poly list = cons [Nat] one (cons [Nat] two (cons [Nat] three (nil [Nat])))
+poly list = {Nat | one two three}
 
 poly main = foldl [Nat] [Nat] add zero list

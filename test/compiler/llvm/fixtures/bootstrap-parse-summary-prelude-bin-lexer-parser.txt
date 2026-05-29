@@ -482,7 +482,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 89
+poly 94
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -542,6 +542,9 @@ poly parseMatchArmWith
 poly parseMatchArmsWith
 poly isAtomStartTag
 poly isAtomStart
+poly buildListExpr
+poly parseListElements
+poly parseBraceBody
 poly parseAtomWith
 poly skipTypeArg
 poly parseSimpleTypeWith
@@ -552,6 +555,8 @@ poly parseType
 poly parseSimpleType
 poly parseTypeApplication
 poly parseAppLoopWith
+poly parseAppLoopNoBraceWith
+poly parseAppNoBraceWith
 poly parseAppWith
 poly parseAtom
 poly parseApp

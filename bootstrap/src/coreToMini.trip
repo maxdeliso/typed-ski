@@ -37,7 +37,7 @@ data MiniExpr =
   | ME_Native Terminal
   | ME_Match MiniExpr (List MiniExpr)
 
-poly anonName = cons [U8] '_' (nil [U8])
+poly anonName = {U8 | '_'}
 
 poly rec collectSpine = \expr : Core => \acc : List Core =>
   match expr [Pair Core (List Core)] {
@@ -60,7 +60,7 @@ poly rec applyAnon = \head : MiniExpr => \args : List MiniExpr =>
     head
     (\h : MiniExpr => \t : List MiniExpr =>
       applyAnon
-        (ME_Call anonName (cons [MiniExpr] head (cons [MiniExpr] h (nil [MiniExpr]))))
+        (ME_Call anonName {MiniExpr | head h})
         t)
 
 poly rec coreToMini = \expr : Core =>

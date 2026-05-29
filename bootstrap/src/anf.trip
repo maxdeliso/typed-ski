@@ -76,7 +76,7 @@ data AnfFunc = MkAnfFunc (List U8) (List (List U8)) AnfExpr
 
 data AnfProgram = MkAnfProgram (List AnfFunc) (List U8)
 
-poly tempPrefix = cons [U8] '_' (cons [U8] '_' (cons [U8] 't' (nil [U8])))
+poly tempPrefix = {U8 | '_' '_' 't'}
 
 poly freshName = \counter : Bin => append [U8] tempPrefix (binToDigits counter)
 

@@ -630,3 +630,50 @@ describe("parse single poly", () => {
     assert.strictEqual(unparseSystemFType(nilApp.typeArg), "U8");
   });
 });
+
+describe("parse list literal", () => {
+  it("parses list literal in a poly definition", () => {
+    const input = "poly foo = {U8 | 102 111 111}";
+    const result = parseTripLang(input);
+
+    assert.strictEqual(result.kind, "program");
+    assert.strictEqual(result.terms.length, 1);
+    const term = requiredAt(result.terms, 0, "expected poly term");
+
+    if (term.kind !== "poly") {
+      throw new Error(`expected 'poly' term, got '${term.kind}'`);
+    }
+    assert.strictEqual(term.name, "foo");
+    assert.strictEqual(term.type, undefined);
+
+    const expectedCodes = [102, 111, 111];
+    const decodeU8Term = (t: SystemFTerm): number => {
+      if (t.kind !== "systemF-var") {
+        throw new Error(`expected systemF-var for u8 literal, got ${t.kind}`);
+      }
+      const u8Match = /^__trip_u8_(\d+)$/.exec(t.name);
+      if (!u8Match) {
+        throw new Error(`expected __trip_u8_ literal, got ${t.name}`);
+      }
+      return parseInt(u8Match[1]!, 10);
+    };
+    let current: SystemFTerm = term.term;
+    for (const code of expectedCodes) {
+      const outerApp = expectSystemFApp(current);
+      const consApp = expectSystemFApp(outerApp.lft);
+      const consTypeApp = expectSystemFTypeApp(consApp.lft);
+      const consVar = expectSystemFVar(consTypeApp.term);
+      assert.strictEqual(consVar.name, "cons");
+      assert.strictEqual(unparseSystemFType(consTypeApp.typeArg), "U8");
+
+      const decoded = decodeU8Term(consApp.rgt);
+      assert.strictEqual(decoded, code);
+      current = outerApp.rgt;
+    }
+
+    const nilApp = expectSystemFTypeApp(current);
+    const nilVar = expectSystemFVar(nilApp.term);
+    assert.strictEqual(nilVar.name, "nil");
+    assert.strictEqual(unparseSystemFType(nilApp.typeArg), "U8");
+  });
+});

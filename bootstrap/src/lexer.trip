@@ -266,20 +266,8 @@ poly kwPoly : List U8 = "poly"
 poly isKeywordPoly = \word : List U8 => eqListU8 word kwPoly
 
 poly keywordWords =
-  cons [List U8] "poly"
-    (cons [List U8] "rec"
-      (cons [List U8] "let"
-        (cons [List U8] "in"
-          (cons [List U8] "match"
-            (cons [List U8] "module"
-              (cons [List U8] "import"
-                (cons [List U8] "export"
-                  (cons [List U8] "native"
-                    (cons [List U8] "opaque"
-                      (cons [List U8] "combinator"
-                        (cons [List U8] "type"
-                          (cons [List U8] "data"
-                            (nil [List U8])))))))))))))
+  {List U8 | "poly" "rec" "let" "in" "match" "module" "import" "export" "native" "opaque" "combinator" "type" "data"}
+
 
 poly rec anyEqWord = \word : List U8 => \words : List (List U8) =>
   matchList [List U8] [Bool] words false
@@ -500,19 +488,21 @@ poly mapResult = #A => #B => \f : A -> B => \res : Result ParseError A =>
   }
 
 poly simpleTokensU8 =
-  cons [Pair U8 Token] (MkPair [U8] [Token] '(' T_LParen)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] ')' T_RParen)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '{' T_LBrace)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '}' T_RBrace)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '[' T_LBracket)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] ']' T_RBracket)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '\\' T_Backslash)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] ':' T_Colon)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '#' T_Hash)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '|' T_Pipe)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] '.' T_Dot)
-  (cons [Pair U8 Token] (MkPair [U8] [Token] ',' T_Comma)
-  (nil [Pair U8 Token]))))))))))))
+  {Pair U8 Token |
+    (MkPair [U8] [Token] '(' T_LParen)
+    (MkPair [U8] [Token] ')' T_RParen)
+    (MkPair [U8] [Token] '{' T_LBrace)
+    (MkPair [U8] [Token] '}' T_RBrace)
+    (MkPair [U8] [Token] '[' T_LBracket)
+    (MkPair [U8] [Token] ']' T_RBracket)
+    (MkPair [U8] [Token] '\\' T_Backslash)
+    (MkPair [U8] [Token] ':' T_Colon)
+    (MkPair [U8] [Token] '#' T_Hash)
+    (MkPair [U8] [Token] '|' T_Pipe)
+    (MkPair [U8] [Token] '.' T_Dot)
+    (MkPair [U8] [Token] ',' T_Comma)
+  }
+
 
 poly rec lookupTokenU8 = \c : U8 => \list : List (Pair U8 Token) =>
   matchList [Pair U8 Token] [Maybe Token] list

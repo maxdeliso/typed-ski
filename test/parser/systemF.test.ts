@@ -30,8 +30,13 @@ function parseU8CodeFromVar(name: string): number | null {
   if (Number.isNaN(code) || code < 0 || code > 255) return null;
   return code;
 }
-function extractListU8Bytes(term: SystemFTerm): number[] | null {
-  const result: number[] = [];
+// Walks a desugared list literal (cons [T] e … (nil [T])) and returns the
+// element terms, or null if the shape/element type doesn't match.
+function extractListElements(
+  term: SystemFTerm,
+  expectedTypeName: string,
+): SystemFTerm[] | null {
+  const result: SystemFTerm[] = [];
   let current: SystemFTerm = term;
   for (;;) {
     if (current.kind === "systemF-type-app") {
@@ -40,7 +45,7 @@ function extractListU8Bytes(term: SystemFTerm): number[] | null {
       }
       if (
         current.typeArg.kind !== "type-var" ||
-        current.typeArg.typeName !== "U8"
+        current.typeArg.typeName !== expectedTypeName
       )
         return null;
       return result;
@@ -59,15 +64,25 @@ function extractListU8Bytes(term: SystemFTerm): number[] | null {
       return null;
     if (
       consTypeApp.typeArg.kind !== "type-var" ||
-      consTypeApp.typeArg.typeName !== "U8"
+      consTypeApp.typeArg.typeName !== expectedTypeName
     )
       return null;
-    if (head.kind !== "systemF-var") return null;
-    const code = parseU8CodeFromVar(head.name);
-    if (code === null) return null;
-    result.push(code);
+    result.push(head);
     current = tail;
   }
+}
+
+function extractListU8Bytes(term: SystemFTerm): number[] | null {
+  const elements = extractListElements(term, "U8");
+  if (elements === null) return null;
+  const bytes: number[] = [];
+  for (const el of elements) {
+    if (el.kind !== "systemF-var") return null;
+    const code = parseU8CodeFromVar(el.name);
+    if (code === null) return null;
+    bytes.push(code);
+  }
+  return bytes;
 }
 const assertListU8 = (term: SystemFTerm, expected: number[]) => {
   const actual = extractListU8Bytes(term);
@@ -667,6 +682,42 @@ describe("System F Parser", () => {
       );
     });
   });
+
+  describe("list literals", () => {
+    it("parses an empty list literal", () => {
+      const [lit, ast] = parseSystemF("{U8 |}");
+      assert.equal(lit, "{U8 | }");
+      assertListU8(ast, []);
+    });
+
+    it("parses a simple U8 list literal", () => {
+      const [lit, ast] = parseSystemF("{U8 | 97 98}");
+      assert.equal(lit, "{U8 | 97 98}");
+      assertListU8(ast, [97, 98]);
+    });
+
+    it("parses nested applications inside a list literal via parentheses", () => {
+      const [lit, ast] = parseSystemF("{Nat | 1 (f x) 3}");
+      assert.equal(lit, "{Nat | 1 (f x) 3}");
+      // Desugars to cons [Nat] 1 (cons [Nat] (f x) (cons [Nat] 3 (nil [Nat]))).
+      const elements = extractListElements(ast, "Nat");
+      assert.ok(elements !== null, "expected a List Nat cons/nil chain");
+      assert.equal(elements.length, 3);
+
+      // First and last elements are U8-range numeric literals.
+      assertU8Literal(requiredAt(elements, 0, "first element"), 1);
+      assertU8Literal(requiredAt(elements, 2, "third element"), 3);
+
+      // The middle element keeps its parenthesized application (f x).
+      const mid = requiredAt(elements, 1, "second element");
+      assert.equal(mid.kind, "non-terminal");
+      if (mid.kind !== "non-terminal") throw new Error("expected (f x) app");
+      assert.equal(mid.lft.kind, "systemF-var");
+      assert.equal(mid.rgt.kind, "systemF-var");
+      if (mid.lft.kind === "systemF-var") assert.equal(mid.lft.name, "f");
+      if (mid.rgt.kind === "systemF-var") assert.equal(mid.rgt.name, "x");
+    });
+  });
 });
 
 /**
@@ -1111,5 +1162,70 @@ describe("System F type parser", () => {
       listNat,
     );
     assert.equal(unparseSystemFType(pair), "Pair A (List Nat)");
+  });
+
+  it("parses pair types", () => {
+    const [lit, ty] = parseWithEOF("(U8, List U8)", parseSystemFType);
+    const expected = typeApp(
+      typeApp(mkTypeVariable("Pair"), mkTypeVariable("U8")),
+      typeApp(mkTypeVariable("List"), mkTypeVariable("U8")),
+    );
+    assert.equal(lit, "(U8, List U8)");
+    assert.equal(typesLitEq(ty, expected), true);
+  });
+});
+
+describe("System F term parser tuple tests", () => {
+  it("parses and desugars tuple/pair terms", () => {
+    const [lit, term] = parseSystemF(`{U8, List U8 | 'a', "hello"}`);
+    // The literal is reconstructed as `{type1, type2 | term1, term2}`.
+    assert.equal(lit, `{U8, List U8 | 'a', "hello"}`);
+
+    // Desugars to MkPair [U8] [List U8] 'a' "hello", i.e.
+    // App(App(TypeApp(TypeApp(MkPair, U8), List U8), 'a'), "hello").
+    assert.equal(term.kind, "non-terminal");
+    if (term.kind !== "non-terminal") throw new Error("expected application");
+
+    const inner = term.lft;
+    assert.equal(inner.kind, "non-terminal");
+    if (inner.kind !== "non-terminal") throw new Error("expected application");
+
+    // inner.lft should be MkPair [U8] [List U8].
+    const mkPairWithTypes = inner.lft;
+    assert.equal(mkPairWithTypes.kind, "systemF-type-app");
+    if (mkPairWithTypes.kind !== "systemF-type-app") {
+      throw new Error("expected type application");
+    }
+    // Outer type argument is `List U8`.
+    assert.equal(mkPairWithTypes.typeArg.kind, "type-app");
+    if (mkPairWithTypes.typeArg.kind === "type-app") {
+      assert.equal(mkPairWithTypes.typeArg.fn.kind, "type-var");
+      if (mkPairWithTypes.typeArg.fn.kind === "type-var") {
+        assert.equal(mkPairWithTypes.typeArg.fn.typeName, "List");
+      }
+      assert.equal(mkPairWithTypes.typeArg.arg.kind, "type-var");
+      if (mkPairWithTypes.typeArg.arg.kind === "type-var") {
+        assert.equal(mkPairWithTypes.typeArg.arg.typeName, "U8");
+      }
+    }
+
+    // Inner type application is `MkPair [U8]`.
+    assert.equal(mkPairWithTypes.term.kind, "systemF-type-app");
+    if (mkPairWithTypes.term.kind !== "systemF-type-app") {
+      throw new Error("expected nested type application");
+    }
+    assert.equal(mkPairWithTypes.term.typeArg.kind, "type-var");
+    if (mkPairWithTypes.term.typeArg.kind === "type-var") {
+      assert.equal(mkPairWithTypes.term.typeArg.typeName, "U8");
+    }
+    assert.equal(mkPairWithTypes.term.term.kind, "systemF-var");
+    if (mkPairWithTypes.term.term.kind === "systemF-var") {
+      assert.equal(mkPairWithTypes.term.term.name, "MkPair");
+    }
+
+    // First component is the U8 literal 'a' (97).
+    assertU8Literal(inner.rgt, 97);
+    // Second component is the string "hello" desugared to a List U8.
+    assertListU8(term.rgt, [104, 101, 108, 108, 111]);
   });
 });

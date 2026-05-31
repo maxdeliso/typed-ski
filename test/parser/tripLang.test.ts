@@ -631,6 +631,24 @@ describe("parse single poly", () => {
   });
 });
 
+describe("parse cond expression", () => {
+  it("parses cond expression with multiple arms", () => {
+    const input = `poly foo =
+      cond [Maybe U8] {
+        | true => Some [U8] 1
+        | false => None [U8]
+        | otherwise => None [U8]
+      }`;
+    const result = parseTripLang(input);
+
+    assert.strictEqual(result.kind, "program");
+    assert.strictEqual(result.terms.length, 1);
+    const term = result.terms[0]!;
+    assert.strictEqual(term.kind, "poly");
+    assert.strictEqual(term.name, "foo");
+  });
+});
+
 describe("parse list literal", () => {
   it("parses list literal in a poly definition", () => {
     const input = "poly foo = {U8 | 102 111 111}";

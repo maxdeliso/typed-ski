@@ -1,4 +1,4 @@
 module TypedInc
 
 poly inc : Int -> Int =
-  \x : Int => plus x 1
+  \x : Int => plus x #u8(1)

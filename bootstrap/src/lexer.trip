@@ -309,7 +309,7 @@ poly tokenTaggedTextData =
   \tag : U8 =>
     if [List U8] (eqU8 tag #u8(28))
       (\u : U8 => "data")
-      (\u : U8 => nil [U8])
+      (\u : U8 => "")
 
 poly tokenTaggedTextType =
   \tag : U8 =>
@@ -388,14 +388,14 @@ poly tokenText =
     match tok [List U8] {
       | T_Tagged tag => tokenTaggedText tag
       | T_Ident str => str
-      | T_Nat n => nil [U8]
+      | T_Nat n => ""
     }
 
 poly tokenNatValue =
   \tok : Token =>
     match tok [List U8] {
-      | T_Tagged tag => nil [U8]
-      | T_Ident str => nil [U8]
+      | T_Tagged tag => ""
+      | T_Ident str => ""
       | T_Nat digits => digits
     }
 
@@ -446,56 +446,50 @@ poly u8_rbrace : U8 =
 
 poly isSpaceU8 =
   \c : U8 =>
-    if [Bool] (eqU8 c u8_space)
-      (\u : U8 => true)
-      (
-        \u : U8 =>
-          if [Bool] (eqU8 c u8_newline)
-            (\u : U8 => true)
-            (
-              \u : U8 =>
-                if [Bool] (eqU8 c u8_cr)
-                  (\u : U8 => true)
-                  (
-                    \u : U8 =>
-                      if [Bool] (eqU8 c u8_tab)
-                        (\u : U8 => true)
-                        (\u : U8 => false)
-                  )
-            )
-      )
+    cond
+      [Bool]
+      {|
+        (eqU8 c u8_space) =>
+        true |
+        (eqU8 c u8_newline) =>
+        true |
+        (eqU8 c u8_cr) =>
+        true |
+        (eqU8 c u8_tab) =>
+        true |
+        otherwise =>
+        false
+      }
 
 poly isDigitU8 =
   \c : U8 =>
-    if [Bool] (ltU8 c #u8(48))
-      (\u : U8 => false)
-      (
-        \u : U8 =>
-          if [Bool] (ltU8 c #u8(58))
-            (\u : U8 => true)
-            (\u : U8 => false)
-      )
+    cond
+      [Bool]
+      {|
+        (ltU8 c #u8(48)) =>
+        false |
+        (ltU8 c #u8(58)) =>
+        true |
+        otherwise =>
+        false
+      }
 
 poly isAlphaU8 =
   \c : U8 =>
-    if [Bool] (ltU8 c #u8(65))
-      (\u : U8 => false)
-      (
-        \u : U8 =>
-          if [Bool] (ltU8 c #u8(91))
-            (\u : U8 => true)
-            (
-              \u : U8 =>
-                if [Bool] (ltU8 c #u8(97))
-                  (\u : U8 => false)
-                  (
-                    \u : U8 =>
-                      if [Bool] (ltU8 c #u8(123))
-                        (\u : U8 => true)
-                        (\u : U8 => false)
-                  )
-            )
-      )
+    cond
+      [Bool]
+      {|
+        (ltU8 c #u8(65)) =>
+        false |
+        (ltU8 c #u8(91)) =>
+        true |
+        (ltU8 c #u8(97)) =>
+        false |
+        (ltU8 c #u8(123)) =>
+        true |
+        otherwise =>
+        false
+      }
 
 poly isIdentCharU8 =
   \c : U8 => or (isAlphaU8 c) (or (isDigitU8 c) (eqU8 c u8_underscore))
@@ -562,25 +556,31 @@ poly keywordTokenFromWordL =
 
 poly keywordTokenFromWordI =
   \word : List U8 =>
-    if [Token] (eqListU8 word "in")
-      (\u : U8 => T_KwIn)
-      (
-        \u : U8 =>
-          if [Token] (eqListU8 word "import")
-            (\u : U8 => T_KwImport)
-            (\u : U8 => T_Ident word)
-      )
+    cond
+      [Token]
+      {|
+        (eqListU8 word "in") =>
+        T_KwIn |
+        (eqListU8 word "import") =>
+        T_KwImport |
+        otherwise =>
+        T_Ident
+        word
+      }
 
 poly keywordTokenFromWordM =
   \word : List U8 =>
-    if [Token] (eqListU8 word "match")
-      (\u : U8 => T_KwMatch)
-      (
-        \u : U8 =>
-          if [Token] (eqListU8 word "module")
-            (\u : U8 => T_KwModule)
-            (\u : U8 => T_Ident word)
-      )
+    cond
+      [Token]
+      {|
+        (eqListU8 word "match") =>
+        T_KwMatch |
+        (eqListU8 word "module") =>
+        T_KwModule |
+        otherwise =>
+        T_Ident
+        word
+      }
 
 poly keywordTokenFromWordN =
   \word : List U8 =>
@@ -694,95 +694,73 @@ poly keywordTokenFromWord =
       (
         \h : U8 =>
           \t : List U8 =>
-            if [Token] (eqU8 h 'p')
-              (\u : U8 => keywordTokenFromWordP word)
-              (
-                \u : U8 =>
-                  if [Token] (eqU8 h 'r')
-                    (\u : U8 => keywordTokenFromWordR word)
-                    (
-                      \u : U8 =>
-                        if [Token] (eqU8 h 'l')
-                          (\u : U8 => keywordTokenFromWordL word)
-                          (
-                            \u : U8 =>
-                              if [Token] (eqU8 h 'i')
-                                (\u : U8 => keywordTokenFromWordI word)
-                                (
-                                  \u : U8 =>
-                                    if [Token] (eqU8 h 'm')
-                                      (\u : U8 => keywordTokenFromWordM word)
-                                      (
-                                        \u : U8 =>
-                                          if [Token] (eqU8 h 'n')
-                                            (
-                                              \u : U8 => keywordTokenFromWordN word
-                                            )
-                                            (
-                                              \u : U8 =>
-                                                if [Token] (eqU8 h 'o')
-                                                  (
-                                                    \u : U8 => keywordTokenFromWordO word
-                                                  )
-                                                  (
-                                                    \u : U8 =>
-                                                      if [Token] (eqU8 h 'e')
-                                                        (
-                                                          \u : U8 => keywordTokenFromWordE word
-                                                        )
-                                                        (
-                                                          \u : U8 =>
-                                                            if [Token] (eqU8 h 't')
-                                                              (
-                                                                \u : U8 => keywordTokenFromWordT word
-                                                              )
-                                                              (
-                                                                \u : U8 =>
-                                                                  if [Token] (eqU8 h 'c')
-                                                                    (
-                                                                      \u : U8 => keywordTokenFromWordC word
-                                                                    )
-                                                                    (
-                                                                      \u : U8 =>
-                                                                        if [Token] (eqU8 h 'd')
-                                                                          (
-                                                                            \u : U8 => keywordTokenFromWordData word
-                                                                          )
-                                                                          (
-                                                                            \u : U8 => T_Ident word
-                                                                          )
-                                                                    )
-                                                              )
-                                                        )
-                                                  )
-                                            )
-                                      )
-                                )
-                          )
-                    )
-              )
+            cond
+              [Token]
+              {|
+                (eqU8 h 'p') =>
+                keywordTokenFromWordP
+                word |
+                (eqU8 h 'r') =>
+                keywordTokenFromWordR
+                word |
+                (eqU8 h 'l') =>
+                keywordTokenFromWordL
+                word |
+                (eqU8 h 'i') =>
+                keywordTokenFromWordI
+                word |
+                (eqU8 h 'm') =>
+                keywordTokenFromWordM
+                word |
+                (eqU8 h 'n') =>
+                keywordTokenFromWordN
+                word |
+                (eqU8 h 'o') =>
+                keywordTokenFromWordO
+                word |
+                (eqU8 h 'e') =>
+                keywordTokenFromWordE
+                word |
+                (eqU8 h 't') =>
+                keywordTokenFromWordT
+                word |
+                (eqU8 h 'c') =>
+                keywordTokenFromWordC
+                word |
+                (eqU8 h 'd') =>
+                keywordTokenFromWordData
+                word |
+                otherwise =>
+                T_Ident
+                word
+              }
       )
 
 poly simpleTokenFromU8Hash =
   \c : U8 =>
-    if [Maybe Token] (eqU8 c '#')
-      (\u : U8 => Some [Token] T_Hash)
-      (
-        \u : U8 =>
-          if [Maybe Token] (eqU8 c '|')
-            (\u : U8 => Some [Token] T_Pipe)
-            (
-              \u : U8 =>
-                if [Maybe Token] (eqU8 c '.')
-                  (\u : U8 => Some [Token] T_Dot)
-                  (
-                    \u : U8 =>
-                      if [Maybe Token] (eqU8 c ',')
-                        (\u : U8 => Some [Token] T_Comma)
-                        (\u : U8 => None [Token])
-                  )
-            )
-      )
+    cond
+      [Maybe Token]
+      {|
+        (eqU8 c '#') =>
+        Some
+        [Token]
+        T_Hash |
+        (eqU8 c '|') =>
+        Some
+        [Token]
+        T_Pipe |
+        (eqU8 c '.') =>
+        Some
+        [Token]
+        T_Dot |
+        (eqU8 c ',') =>
+        Some
+        [Token]
+        T_Comma |
+        otherwise =>
+        None
+        [Token]
+      }
 
 poly simpleTokenFromU8Colon =
   \c : U8 =>
@@ -798,36 +776,57 @@ poly simpleTokenFromU8Backslash =
 
 poly simpleTokenFromU8Bracket =
   \c : U8 =>
-    if [Maybe Token] (eqU8 c '[')
-      (\u : U8 => Some [Token] T_LBracket)
-      (
-        \u : U8 =>
-          if [Maybe Token] (eqU8 c ']')
-            (\u : U8 => Some [Token] T_RBracket)
-            (\u : U8 => simpleTokenFromU8Backslash c)
-      )
+    cond
+      [Maybe Token]
+      {|
+        (eqU8 c '[') =>
+        Some
+        [Token]
+        T_LBracket |
+        (eqU8 c ']') =>
+        Some
+        [Token]
+        T_RBracket |
+        otherwise =>
+        simpleTokenFromU8Backslash
+        c
+      }
 
 poly simpleTokenFromU8Brace =
   \c : U8 =>
-    if [Maybe Token] (eqU8 c '{')
-      (\u : U8 => Some [Token] T_LBrace)
-      (
-        \u : U8 =>
-          if [Maybe Token] (eqU8 c '}')
-            (\u : U8 => Some [Token] T_RBrace)
-            (\u : U8 => simpleTokenFromU8Bracket c)
-      )
+    cond
+      [Maybe Token]
+      {|
+        (eqU8 c '{') =>
+        Some
+        [Token]
+        T_LBrace |
+        (eqU8 c '}') =>
+        Some
+        [Token]
+        T_RBrace |
+        otherwise =>
+        simpleTokenFromU8Bracket
+        c
+      }
 
 poly simpleTokenFromU8 =
   \c : U8 =>
-    if [Maybe Token] (eqU8 c '(')
-      (\u : U8 => Some [Token] T_LParen)
-      (
-        \u : U8 =>
-          if [Maybe Token] (eqU8 c ')')
-            (\u : U8 => Some [Token] T_RParen)
-            (\u : U8 => simpleTokenFromU8Brace c)
-      )
+    cond
+      [Maybe Token]
+      {|
+        (eqU8 c '(') =>
+        Some
+        [Token]
+        T_LParen |
+        (eqU8 c ')') =>
+        Some
+        [Token]
+        T_RParen |
+        otherwise =>
+        simpleTokenFromU8Brace
+        c
+      }
 
 poly mapResult =
   #A =>
@@ -840,32 +839,32 @@ poly mapResult =
           }
 
 poly simpleTokensU8 =
-  {Pair U8 Token |
-    (MkPair [U8] [Token] '(' T_LParen)
-    (MkPair [U8] [Token] ')' T_RParen)
-    (MkPair [U8] [Token] '{' T_LBrace)
-    (MkPair [U8] [Token] '}' T_RBrace)
-    (MkPair [U8] [Token] '[' T_LBracket)
-    (MkPair [U8] [Token] ']' T_RBracket)
-    (MkPair [U8] [Token] '\\' T_Backslash)
-    (MkPair [U8] [Token] ':' T_Colon)
-    (MkPair [U8] [Token] '#' T_Hash)
-    (MkPair [U8] [Token] '|' T_Pipe)
-    (MkPair [U8] [Token] '.' T_Dot)
-    (MkPair [U8] [Token] ',' T_Comma)
+  {(U8, Token) |
+    ({U8, Token | '(', T_LParen})
+    ({U8, Token | ')', T_RParen})
+    ({U8, Token | '{', T_LBrace})
+    ({U8, Token | '}', T_RBrace})
+    ({U8, Token | '[', T_LBracket})
+    ({U8, Token | ']', T_RBracket})
+    ({U8, Token | '\\', T_Backslash})
+    ({U8, Token | ':', T_Colon})
+    ({U8, Token | '#', T_Hash})
+    ({U8, Token | '|', T_Pipe})
+    ({U8, Token | '.', T_Dot})
+    ({U8, Token | ',', T_Comma})
   }
 
 poly rec lookupTokenU8 =
   \c : U8 =>
-    \list : List (Pair U8 Token) =>
+    \list : List ((U8, Token)) =>
       matchList
-        [Pair U8 Token]
+        [(U8, Token)]
         [Maybe Token]
         list
         (None [Token])
         (
-          \h : Pair U8 Token =>
-            \t : List (Pair U8 Token) =>
+          \h : (U8, Token) =>
+            \t : List ((U8, Token)) =>
               if [Maybe Token] (eqU8 c (fst [U8] [Token] h))
                 (\u : U8 => Some [Token] (snd [U8] [Token] h))
                 (\u : U8 => lookupTokenU8 c t)
@@ -876,15 +875,15 @@ poly rec consumeIdent =
     \input : List U8 =>
       matchList
         [U8]
-        [Pair (List U8) (List U8)]
+        [((List U8), (List U8))]
         input
-        (MkPair [List U8] [List U8] (reverse [U8] acc) (nil [U8]))
+        ({List U8, List U8 | (reverse [U8] acc), (nil [U8])})
         (
           \h : U8 =>
             \t : List U8 =>
-              if [Pair (List U8) (List U8)] (isIdentCharU8 h)
+              if [((List U8), (List U8))] (isIdentCharU8 h)
                 (\u : U8 => consumeIdent (cons [U8] h acc) t)
-                (\u : U8 => MkPair [List U8] [List U8] (reverse [U8] acc) input)
+                (\u : U8 => {List U8, List U8 | (reverse [U8] acc), input})
         )
 
 poly rec consumeDigits =
@@ -892,15 +891,15 @@ poly rec consumeDigits =
     \input : List U8 =>
       matchList
         [U8]
-        [Pair (List U8) (List U8)]
+        [((List U8), (List U8))]
         input
-        (MkPair [List U8] [List U8] (reverse [U8] acc) (nil [U8]))
+        ({List U8, List U8 | (reverse [U8] acc), (nil [U8])})
         (
           \h : U8 =>
             \t : List U8 =>
-              if [Pair (List U8) (List U8)] (isDigitU8 h)
+              if [((List U8), (List U8))] (isDigitU8 h)
                 (\u : U8 => consumeDigits (cons [U8] h acc) t)
-                (\u : U8 => MkPair [List U8] [List U8] (reverse [U8] acc) input)
+                (\u : U8 => {List U8, List U8 | (reverse [U8] acc), input})
         )
 
 poly rec consumeString =
@@ -908,70 +907,63 @@ poly rec consumeString =
     \input : List U8 =>
       matchList
         [U8]
-        [Result ParseError (Pair (List U8) (List U8))]
+        [Result ParseError (((List U8), (List U8)))]
         input
-        (Err [ParseError] [Pair (List U8) (List U8)] (MkParseError (nil [U8])))
+        (Err [ParseError] [((List U8), (List U8))] (MkParseError ("")))
         (
           \h : U8 =>
             \t : List U8 =>
-              if [Result ParseError (Pair (List U8) (List U8))] (eqU8 h u8_quote)
+              if [Result ParseError (((List U8), (List U8)))] (eqU8 h u8_quote)
                 (
                   \u : U8 =>
                     Ok
                       [ParseError]
-                      [Pair (List U8) (List U8)]
-                      (MkPair [List U8] [List U8] (reverse [U8] acc) t)
+                      [((List U8), (List U8))]
+                      ({List U8, List U8 | (reverse [U8] acc), t})
                 )
                 (\u : U8 => consumeString (cons [U8] h acc) t)
         )
 
 poly escapedCharValue =
   \c : U8 =>
-    if [U8] (eqU8 c u8_n)
-      (\u : U8 => u8_newline)
-      (
-        \u : U8 =>
-          if [U8] (eqU8 c u8_r)
-            (\u : U8 => u8_cr)
-            (
-              \u : U8 =>
-                if [U8] (eqU8 c 't')
-                  (\u : U8 => u8_tab)
-                  (
-                    \u : U8 =>
-                      if [U8] (eqU8 c u8_quote)
-                        (\u : U8 => u8_quote)
-                        (
-                          \u : U8 =>
-                            if [U8] (eqU8 c u8_squote)
-                              (\u : U8 => u8_squote)
-                              (\u : U8 => c)
-                        )
-                  )
-            )
-      )
+    cond
+      [U8]
+      {|
+        (eqU8 c u8_n) =>
+        u8_newline |
+        (eqU8 c u8_r) =>
+        u8_cr |
+        (eqU8 c 't') =>
+        u8_tab |
+        (eqU8 c u8_quote) =>
+        u8_quote |
+        (eqU8 c u8_squote) =>
+        u8_squote |
+        otherwise =>
+        c
+      }
 
 poly charLiteralError =
-  Err [ParseError] [Pair U8 (List U8)] (MkParseError (nil [U8]))
+  Err [ParseError] [(U8, (List U8))] (MkParseError (""))
 
 poly finishCharLiteral =
   \value : U8 =>
     \input : List U8 =>
       matchList
         [U8]
-        [Result ParseError (Pair U8 (List U8))]
+        [Result ParseError ((U8, (List U8)))]
         input
         charLiteralError
         (
           \close : U8 =>
             \rest : List U8 =>
-              if [Result ParseError (Pair U8 (List U8))] (eqU8 close u8_squote)
+              if [Result ParseError ((U8, (List U8)))] (eqU8 close u8_squote)
                 (
                   \u : U8 =>
                     Ok
                       [ParseError]
-                      [Pair U8 (List U8)]
-                      (MkPair [U8] [List U8] value rest)
+                      [(U8, (List U8))]
+                      ({U8, List U8 | value, rest})
                 )
                 (\u : U8 => charLiteralError)
         )
@@ -980,18 +972,18 @@ poly consumeCharLiteral =
   \input : List U8 =>
     matchList
       [U8]
-      [Result ParseError (Pair U8 (List U8))]
+      [Result ParseError ((U8, (List U8)))]
       input
       charLiteralError
       (
         \h : U8 =>
           \t : List U8 =>
-            if [Result ParseError (Pair U8 (List U8))] (eqU8 h u8_backslash)
+            if [Result ParseError ((U8, (List U8)))] (eqU8 h u8_backslash)
               (
                 \u : U8 =>
                   matchList
                     [U8]
-                    [Result ParseError (Pair U8 (List U8))]
+                    [Result ParseError ((U8, (List U8)))]
                     t
                     charLiteralError
                     (
@@ -1010,7 +1002,7 @@ poly rec dropLineComment =
       [U8]
       [List U8]
       input
-      (nil [U8])
+      ("")
       (
         \h : U8 =>
           \t : List U8 =>
@@ -1030,24 +1022,27 @@ poly rec skipBlockComment =
       [U8]
       [Result ParseError (List U8)]
       input
-      (Err [ParseError] [List U8] (MkParseError (nil [U8])))
+      (Err [ParseError] [List U8] (MkParseError ("")))
       (
         \h : U8 =>
           \t : List U8 =>
-            if [Result ParseError (List U8)] (and (eqU8 h u8_lbrace) (matchList [U8] [Bool] t false (\h2 : U8 => \t2 : List U8 => eqU8 u8_dash h2)))
-              (
-                \u : U8 =>
-                  match (skipBlockComment (tail [U8] t)) [Result ParseError (List U8)] {
-                    | Err e => Err [ParseError] [List U8] e
-                    | Ok afterInner => skipBlockComment afterInner
-                  }
-              )
-              (
-                \u : U8 =>
-                  if [Result ParseError (List U8)] (and (eqU8 h u8_dash) (matchList [U8] [Bool] t false (\h2 : U8 => \t2 : List U8 => eqU8 u8_rbrace h2)))
-                    (\u : U8 => Ok [ParseError] [List U8] (tail [U8] t))
-                    (\u : U8 => skipBlockComment t)
-              )
+            cond
+              [Result ParseError (List U8)]
+              {|
+                (and (eqU8 h u8_lbrace) (matchList [U8] [Bool] t false (\h2 : U8 => \t2 : List U8 => eqU8 u8_dash h2))) =>
+                match
+                (skipBlockComment (tail [U8] t))
+                [Result ParseError (List U8)]
+                {| Err e => Err [ParseError] [List U8] e | Ok afterInner => skipBlockComment afterInner} |
+                (and (eqU8 h u8_dash) (matchList [U8] [Bool] t false (\h2 : U8 => \t2 : List U8 => eqU8 u8_rbrace h2))) =>
+                Ok
+                [ParseError]
+                [List U8]
+                (tail [U8] t) |
+                otherwise =>
+                skipBlockComment
+                t
+              }
       )
 
 poly rec tokenizeAcc =
@@ -1061,156 +1056,72 @@ poly rec tokenizeAcc =
         (
           \c : U8 =>
             \cs : List U8 =>
-              if [Result ParseError (List Token)] (isSpaceU8 c)
-                (\u : U8 => tokenizeAcc cs accRev)
-                (
-                  \u : U8 =>
-                    if [Result ParseError (List Token)] (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_dash h)))
-                      (\u : U8 => tokenizeAcc (dropLineComment cs) accRev)
-                      (
-                        \u : U8 =>
-                          if [Result ParseError (List Token)] (and (eqU8 c u8_lbrace) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_dash h)))
-                            (
-                              \u : U8 =>
-                                match (skipBlockComment (tail [U8] cs)) [Result ParseError (List Token)] {
-                                  | Err e => Err [ParseError] [List Token] e
-                                  | Ok rest => tokenizeAcc rest accRev
-                                }
-                            )
-                            (
-                              \u : U8 =>
-                                if [Result ParseError (List Token)] (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h)))
-                                  (
-                                    \u : U8 =>
-                                      let rest = tail [U8] cs in
-                                      tokenizeAcc
-                                        rest
-                                        (cons [Token] T_Arrow accRev)
-                                  )
-                                  (
-                                    \u : U8 =>
-                                      if [Result ParseError (List Token)] (and (eqU8 c u8_eq) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h)))
-                                        (
-                                          \u : U8 =>
-                                            let rest = tail [U8] cs in
-                                            tokenizeAcc
-                                              rest
-                                              (cons [Token] T_FatArrow accRev)
-                                        )
-                                        (
-                                          \u : U8 =>
-                                            match (simpleTokenFromU8 c) [Result ParseError (List Token)] {
-                                              | None =>
-                                                if [Result ParseError (List Token)] (or (isAlphaU8 c) (eqU8 c u8_underscore))
-                                                  (
-                                                    \u : U8 =>
-                                                      match (consumeIdent (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
-                                                        | MkPair taken remaining =>
-                                                          let tok = keywordTokenFromWord taken in
-                                                          tokenizeAcc
-                                                            remaining
-                                                            (
-                                                              cons
-                                                                [Token]
-                                                                tok
-                                                                accRev
-                                                            )
-                                                      }
-                                                  )
-                                                  (
-                                                    \u : U8 =>
-                                                      if [Result ParseError (List Token)] (isDigitU8 c)
-                                                        (
-                                                          \u : U8 =>
-                                                            match (consumeDigits (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
-                                                              | MkPair taken remaining =>
-                                                                tokenizeAcc
-                                                                  remaining
-                                                                  (
-                                                                    cons
-                                                                      [Token]
-                                                                      (
-                                                                        T_Nat
-                                                                          taken
-                                                                      )
-                                                                      accRev
-                                                                  )
-                                                            }
-                                                        )
-                                                        (
-                                                          \u : U8 =>
-                                                            if [Result ParseError (List Token)] (eqU8 c u8_quote)
-                                                              (
-                                                                \u : U8 =>
-                                                                  match (consumeString (nil [U8]) cs) [Result ParseError (List Token)] {
-                                                                    | Err e => Err [ParseError] [List Token] e
-                                                                    | Ok strRes =>
-                                                                      let str = fst [List U8] [List U8] strRes in
-                                                                      let remaining = snd [List U8] [List U8] strRes in
-                                                                      tokenizeAcc
-                                                                        remaining
-                                                                        (
-                                                                          cons
-                                                                            [Token]
-                                                                            (
-                                                                              T_Ident
-                                                                                str
-                                                                            )
-                                                                            accRev
-                                                                        )
-                                                                  }
-                                                              )
-                                                              (
-                                                                \u : U8 =>
-                                                                  if [Result ParseError (List Token)] (eqU8 c u8_squote)
-                                                                    (
-                                                                      \u : U8 =>
-                                                                        match (consumeCharLiteral cs) [Result ParseError (List Token)] {
-                                                                          | Err e => Err [ParseError] [List Token] e
-                                                                          | Ok charRes =>
-                                                                            let value = fst [U8] [List U8] charRes in
-                                                                            let remaining = snd [U8] [List U8] charRes in
-                                                                            tokenizeAcc
-                                                                              remaining
-                                                                              (
-                                                                                cons
-                                                                                  [Token]
-                                                                                  (
-                                                                                    T_Nat
-                                                                                      (
-                                                                                        u8ToDigits
-                                                                                          value
-                                                                                      )
-                                                                                  )
-                                                                                  accRev
-                                                                              )
-                                                                        }
-                                                                    )
-                                                                    (
-                                                                      \u : U8 =>
-                                                                        if [Result ParseError (List Token)] (eqU8 c u8_eq)
-                                                                          (
-                                                                            \u : U8 => tokenizeAcc cs (cons [Token] T_Eq accRev)
-                                                                          )
-                                                                          (
-                                                                            \u : U8 => Err [ParseError] [List Token] (MkParseError (nil [U8]))
-                                                                          )
-                                                                    )
-                                                              )
-                                                        )
-                                                  )
-                                              | Some tok => tokenizeAcc cs (cons [Token] tok accRev)
-                                            }
-                                        )
-                                  )
-                            )
-                      )
-                )
+              cond
+                [Result ParseError (List Token)]
+                {|
+                  (isSpaceU8 c) =>
+                  tokenizeAcc
+                  cs
+                  accRev |
+                  (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_dash h))) =>
+                  tokenizeAcc
+                  (dropLineComment cs)
+                  accRev |
+                  (and (eqU8 c u8_lbrace) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_dash h))) =>
+                  match
+                  (skipBlockComment (tail [U8] cs))
+                  [Result ParseError (List Token)]
+                  {| Err e => Err [ParseError] [List Token] e | Ok rest => tokenizeAcc rest accRev} |
+                  (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h))) =>
+                  let
+                  rest =
+                  tail
+                  [U8]
+                  cs
+                  in
+                  tokenizeAcc
+                  rest
+                  (cons [Token] T_Arrow accRev) |
+                  (and (eqU8 c u8_eq) (matchList [U8] [Bool] cs false (\h : U8 => \t : List U8 => eqU8 u8_gt h))) =>
+                  let
+                  rest =
+                  tail
+                  [U8]
+                  cs
+                  in
+                  tokenizeAcc
+                  rest
+                  (cons [Token] T_FatArrow accRev) |
+                  otherwise =>
+                  match
+                  (simpleTokenFromU8 c)
+                  [Result ParseError (List Token)]
+                  {|
+                    None =>
+                    if
+                    [Result ParseError (List Token)]
+                    (or (isAlphaU8 c) (eqU8 c u8_underscore))
+                    (
+                      \u : U8 =>
+                        match (consumeIdent (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {
+                          | MkPair taken remaining =>
+                            let tok = keywordTokenFromWord taken in
+                            tokenizeAcc remaining (cons [Token] tok accRev)
+                        }
+                    )
+                    (\u : U8 => if [Result ParseError (List Token)] (isDigitU8 c) (\u : U8 => match (consumeDigits (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {| MkPair taken remaining => tokenizeAcc remaining (cons [Token] (T_Nat taken) accRev)}) (\u : U8 => if [Result ParseError (List Token)] (eqU8 c u8_quote) (\u : U8 => match (consumeString (nil [U8]) cs) [Result ParseError (List Token)] {| Err e => Err [ParseError] [List Token] e | Ok strRes => let str = fst [List U8] [List U8] strRes in let remaining = snd [List U8] [List U8] strRes in tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)}) (\u : U8 => if [Result ParseError (List Token)] (eqU8 c u8_squote) (\u : U8 => match (consumeCharLiteral cs) [Result ParseError (List Token)] {| Err e => Err [ParseError] [List Token] e | Ok charRes => let value = fst [U8] [List U8] charRes in let remaining = snd [U8] [List U8] charRes in tokenizeAcc remaining (cons [Token] (T_Nat (u8ToDigits value)) accRev)}) (\u : U8 => if [Result ParseError (List Token)] (eqU8 c u8_eq) (\u : U8 => tokenizeAcc cs (cons [Token] T_Eq accRev)) (\u : U8 => Err [ParseError] [List Token] (MkParseError (nil [U8]))))))) |
+                    Some
+                    tok =>
+                    tokenizeAcc
+                    cs
+                    (cons [Token] tok accRev)
+                  }
+                }
         )
 
 poly tokenize =
   \input : List U8 =>
-    match (tokenizeAcc input (nil [Token])) [Result ParseError (List Token)] {
+    match (tokenizeAcc input ({Token |})) [Result ParseError (List Token)] {
       | Err e => Err [ParseError] [List Token] e
       | Ok revWithEnd =>
         Ok

@@ -110,15 +110,15 @@ export main
 
 poly rec lookupMod =
   \key : List U8 =>
-    \table : List (Pair (List U8) (List Decl)) =>
+    \table : List (((List U8), (List Decl))) =>
       matchList
-        [(Pair (List U8) (List Decl))]
+        [(((List U8), (List Decl)))]
         [Maybe (List Decl)]
         table
         (None [List Decl])
         (
-          \h : (Pair (List U8) (List Decl)) =>
-            \t : List (Pair (List U8) (List Decl)) =>
+          \h : (((List U8), (List Decl))) =>
+            \t : List (((List U8), (List Decl))) =>
               if [Maybe (List Decl)] (eqListU8 (fst [List U8] [List Decl] h) key)
                 (\u : U8 => Some [List Decl] (snd [List U8] [List Decl] h))
                 (\u : U8 => lookupMod key t)
@@ -126,15 +126,15 @@ poly rec lookupMod =
 
 poly rec lookupExp =
   \key : List U8 =>
-    \table : List (Pair (List U8) (List (List U8))) =>
+    \table : List (((List U8), (List (List U8)))) =>
       matchList
-        [(Pair (List U8) (List (List U8)))]
+        [(((List U8), (List (List U8))))]
         [Maybe (List (List U8))]
         table
         (None [List (List U8)])
         (
-          \h : (Pair (List U8) (List (List U8))) =>
-            \t : List (Pair (List U8) (List (List U8))) =>
+          \h : (((List U8), (List (List U8)))) =>
+            \t : List (((List U8), (List (List U8)))) =>
               if [Maybe (List (List U8))] (eqListU8 (fst [List U8] [List (List U8)] h) key)
                 (
                   \u : U8 => Some [List (List U8)] (snd [List U8] [List (List U8)] h)
@@ -144,21 +144,21 @@ poly rec lookupExp =
 
 poly rec removeExpEntry =
   \k : List U8 =>
-    \tbl : List (Pair (List U8) (List (List U8))) =>
+    \tbl : List (((List U8), (List (List U8)))) =>
       matchList
-        [(Pair (List U8) (List (List U8)))]
-        [List (Pair (List U8) (List (List U8)))]
+        [(((List U8), (List (List U8))))]
+        [List (((List U8), (List (List U8))))]
         tbl
-        (nil [(Pair (List U8) (List (List U8)))])
+        ({(Pair (List U8) (List (List U8))) |})
         (
-          \hh : (Pair (List U8) (List (List U8))) =>
-            \tt : List (Pair (List U8) (List (List U8))) =>
-              if [List (Pair (List U8) (List (List U8)))] (eqListU8 (fst [List U8] [List (List U8)] hh) k)
+          \hh : (((List U8), (List (List U8)))) =>
+            \tt : List (((List U8), (List (List U8)))) =>
+              if [List (((List U8), (List (List U8))))] (eqListU8 (fst [List U8] [List (List U8)] hh) k)
                 (\u : U8 => tt)
                 (
                   \u : U8 =>
                     cons
-                      [(Pair (List U8) (List (List U8)))]
+                      [(((List U8), (List (List U8))))]
                       hh
                       (removeExpEntry k tt)
                 )
@@ -167,18 +167,18 @@ poly rec removeExpEntry =
 poly rec updateGlobalTable =
   \exports : List (List U8) =>
     \modName : List U8 =>
-      \table : List (Pair (List U8) (List (List U8))) =>
+      \table : List (((List U8), (List (List U8)))) =>
         matchList
           [List U8]
-          [List (Pair (List U8) (List (List U8)))]
+          [List (((List U8), (List (List U8))))]
           exports
           table
           (
             \h : List U8 =>
               \t : List (List U8) =>
                 let current = lookupExp h table in
-                let nextList = match current [List (List U8)] {| None => cons [List U8] modName (nil [List U8]) | Some mods => append [List U8] mods (cons [List U8] modName (nil [List U8]))} in
-                let nextTable = cons [(Pair (List U8) (List (List U8)))] (MkPair [List U8] [List (List U8)] h nextList) (removeExpEntry h table) in
+                let nextList = match current [List (List U8)] {| None => {List U8 | modName} | Some mods => append [List U8] mods ({List U8 | modName})} in
+                let nextTable = cons [(((List U8), (List (List U8))))] ({List U8, List (List U8) | h, nextList}) (removeExpEntry h table) in
                 updateGlobalTable t modName nextTable
           )
 
@@ -207,55 +207,53 @@ poly rec collectModuleExports =
 
 poly rec populateInventoryAcc =
   \mods : List ModuleRecord =>
-    \modTable : List (Pair (List U8) (List Decl)) =>
-      \expTable : List (Pair (List U8) (List (List U8))) =>
+    \modTable : List (((List U8), (List Decl))) =>
+      \expTable : List (((List U8), (List (List U8)))) =>
         matchList
           [ModuleRecord]
-          [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))]
+          [Result (List U8) (((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8))))))]
           mods
           (
             Ok
               [List U8]
-              [Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8))))]
+              [((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8)))))]
               (
-                MkPair
-                  [List (Pair (List U8) (List Decl))]
-                  [List (Pair (List U8) (List (List U8)))]
-                  modTable
+                {List (Pair (List U8) (List Decl)), List (Pair (List U8) (List (List U8))) |
+                  modTable,
                   expTable
+                }
               )
           )
           (
             \h : ModuleRecord =>
               \t : List ModuleRecord =>
-                match h [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] {
+                match h [Result (List U8) (((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8))))))] {
                   | MkModuleRecord name _ source =>
-                    match (tokenize source) [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] {
+                    match (tokenize source) [Result (List U8) (((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8))))))] {
                       | Err e =>
                         Err
                           [List U8]
-                          [Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8))))]
+                          [((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8)))))]
                           "Parse error"
                       | Ok toks =>
-                        match (parseProgram toks) [Result (List U8) (Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8)))))] {
+                        match (parseProgram toks) [Result (List U8) (((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8))))))] {
                           | Err e =>
                             Err
                               [List U8]
-                              [Pair (List (Pair (List U8) (List Decl))) (List (Pair (List U8) (List (List U8))))]
+                              [((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8)))))]
                               "Parse error"
                           | Ok decls =>
-                            let exports = collectModuleExports decls (nil [List U8]) in
+                            let exports = collectModuleExports decls ({List U8 |}) in
                             populateInventoryAcc
                               t
                               (
                                 append
-                                  [(Pair (List U8) (List Decl))]
+                                  [(((List U8), (List Decl)))]
                                   modTable
                                   (
-                                    cons
-                                      [(Pair (List U8) (List Decl))]
+                                    {(Pair (List U8) (List Decl)) |
                                       (MkPair [List U8] [List Decl] name decls)
-                                      (nil [(Pair (List U8) (List Decl))])
+                                    }
                                   )
                               )
                               (updateGlobalTable exports name expTable)
@@ -266,8 +264,8 @@ poly rec populateInventoryAcc =
 
 poly populateInventory =
   \mods : List ModuleRecord =>
-    \modTable : List (Pair (List U8) (List Decl)) =>
-      \expTable : List (Pair (List U8) (List (List U8))) => populateInventoryAcc mods modTable expTable
+    \modTable : List (((List U8), (List Decl))) =>
+      \expTable : List (((List U8), (List (List U8)))) => populateInventoryAcc mods modTable expTable
 
 poly rec symbolInList =
   \symbolName : List U8 =>
@@ -288,25 +286,25 @@ poly rec symbolInList =
 poly isExported =
   \modName : List U8 =>
     \symbolName : List U8 =>
-      \modTable : List (Pair (List U8) (List Decl)) =>
+      \modTable : List (((List U8), (List Decl))) =>
         match (lookupMod modName modTable) [Bool] {
           | None => false
           | Some decls =>
-            let exports = collectModuleExports decls (nil [List U8]) in
+            let exports = collectModuleExports decls ({List U8 |}) in
             symbolInList symbolName exports
         }
 
 poly rec ctorNameInList =
   \name : List U8 =>
-    \cs : List (Pair (List U8) U8) =>
+    \cs : List (((List U8), U8)) =>
       matchList
-        [(Pair (List U8) U8)]
+        [(((List U8), U8))]
         [Bool]
         cs
         false
         (
-          \h : (Pair (List U8) U8) =>
-            \t : List (Pair (List U8) U8) =>
+          \h : (((List U8), U8)) =>
+            \t : List (((List U8), U8)) =>
               if [Bool] (eqListU8 (fst [List U8] [U8] h) name)
                 (\u : U8 => true)
                 (\u : U8 => ctorNameInList name t)
@@ -332,7 +330,7 @@ poly rec isDefined =
 poly emitImportStatus =
   \from : List U8 =>
     \symbol : List U8 =>
-      \modTable : List (Pair (List U8) (List Decl)) =>
+      \modTable : List (((List U8), (List Decl))) =>
         match (lookupMod from modTable) [List U8] {
           | None => "MISSING_MODULE"
           | Some decls =>
@@ -343,7 +341,7 @@ poly emitImportStatus =
 
 poly emitExportStatus =
   \symbol : List U8 =>
-    \expTable : List (Pair (List U8) (List (List U8))) =>
+    \expTable : List (((List U8), (List (List U8)))) =>
       \decls : List Decl =>
         match (lookupExp symbol expTable) [List U8] {
           | None => "OK"
@@ -388,7 +386,7 @@ poly rec filterDeclsAcc =
           )
 
 poly filterDecls =
-  \kind : U8 => \decls : List Decl => filterDeclsAcc kind decls (nil [Decl])
+  \kind : U8 => \decls : List Decl => filterDeclsAcc kind decls ({Decl |})
 
 poly rec countList =
   #A =>
@@ -403,7 +401,7 @@ poly rec countList =
 
 poly rec emitImportsSummary =
   \decls : List Decl =>
-    \modTable : List (Pair (List U8) (List Decl)) =>
+    \modTable : List (((List U8), (List Decl))) =>
       matchList
         [Decl]
         [List U8]
@@ -460,7 +458,7 @@ poly rec emitImportsSummary =
 
 poly rec emitExportsSummary =
   \decls : List Decl =>
-    \expTable : List (Pair (List U8) (List (List U8))) =>
+    \expTable : List (((List U8), (List (List U8)))) =>
       \allDecls : List Decl =>
         matchList
           [Decl]
@@ -507,15 +505,15 @@ poly rec emitExportsSummary =
           )
 
 poly rec emitCtors =
-  \cs : List (Pair (List U8) U8) =>
+  \cs : List (((List U8), U8)) =>
     matchList
-      [(Pair (List U8) U8)]
+      [(((List U8), U8))]
       [List U8]
       cs
       ""
       (
-        \h : (Pair (List U8) U8) =>
-          \t : List (Pair (List U8) U8) =>
+        \h : (((List U8), U8)) =>
+          \t : List (((List U8), U8)) =>
             append
               [U8]
               "ctor "
@@ -670,8 +668,8 @@ poly rec getDeclared =
 poly emitModuleInventory =
   \name : List U8 =>
     \decls : List Decl =>
-      \modTable : List (Pair (List U8) (List Decl)) =>
-        \expTable : List (Pair (List U8) (List (List U8))) =>
+      \modTable : List (((List U8), (List Decl))) =>
+        \expTable : List (((List U8), (List (List U8)))) =>
           let declared = getDeclared decls in
           let imps = filterDecls #u8(1) decls in
           let exps = filterDecls #u8(2) decls in
@@ -786,8 +784,8 @@ poly emitModuleInventory =
 
 poly rec emitInventorySummary =
   \mods : List ModuleRecord =>
-    \modTable : List (Pair (List U8) (List Decl)) =>
-      \expTable : List (Pair (List U8) (List (List U8))) =>
+    \modTable : List (((List U8), (List Decl))) =>
+      \expTable : List (((List U8), (List (List U8)))) =>
         matchList
           [ModuleRecord]
           [List U8]
@@ -820,7 +818,7 @@ poly main =
       | Ok bundle =>
         match bundle [U8] {
           | MkBundleSummary entry target wrapper modsCountDigits mods =>
-            match (populateInventory mods (nil [(Pair (List U8) (List Decl))]) (nil [(Pair (List U8) (List (List U8)))])) [U8] {
+            match (populateInventory mods ({(Pair (List U8) (List Decl)) |}) ({(Pair (List U8) (List (List U8))) |})) [U8] {
               | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
               | Ok inv =>
                 match inv [U8] {

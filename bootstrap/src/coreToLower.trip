@@ -168,64 +168,73 @@ poly rec lookupLocal =
 
 poly resolveNativeName =
   \name : List U8 =>
-    if [Maybe Lower] (eqListU8 name ".")
-      (\u : U8 => Some [Lower] (L_Native T_WriteOne))
-      (
-        \u : U8 =>
-          if [Maybe Lower] (eqListU8 name ",")
-            (\u : U8 => Some [Lower] (L_Native T_ReadOne))
-            (
-              \u : U8 =>
-                if [Maybe Lower] (eqListU8 name "writeOne")
-                  (\u : U8 => Some [Lower] (L_Native T_WriteOne))
-                  (
-                    \u : U8 =>
-                      if [Maybe Lower] (eqListU8 name "readOne")
-                        (\u : U8 => Some [Lower] (L_Native T_ReadOne))
-                        (
-                          \u : U8 =>
-                            if [Maybe Lower] (eqListU8 name "addU8")
-                              (\u : U8 => Some [Lower] (L_Native T_AddU8))
-                              (
-                                \u : U8 =>
-                                  if [Maybe Lower] (eqListU8 name "subU8")
-                                    (\u : U8 => Some [Lower] (L_Native T_SubU8))
-                                    (
-                                      \u : U8 =>
-                                        if [Maybe Lower] (eqListU8 name "divU8")
-                                          (
-                                            \u : U8 => Some [Lower] (L_Native T_DivU8)
-                                          )
-                                          (
-                                            \u : U8 =>
-                                              if [Maybe Lower] (eqListU8 name "modU8")
-                                                (
-                                                  \u : U8 => Some [Lower] (L_Native T_ModU8)
-                                                )
-                                                (
-                                                  \u : U8 =>
-                                                    if [Maybe Lower] (eqListU8 name "eqU8")
-                                                      (
-                                                        \u : U8 => Some [Lower] (L_Native T_EqU8)
-                                                      )
-                                                      (
-                                                        \u : U8 =>
-                                                          if [Maybe Lower] (eqListU8 name "ltU8")
-                                                            (
-                                                              \u : U8 => Some [Lower] (L_Native T_LtU8)
-                                                            )
-                                                            (
-                                                              \u : U8 => None [Lower]
-                                                            )
-                                                      )
-                                                )
-                                          )
-                                    )
-                              )
-                        )
-                  )
-            )
-      )
+    cond
+      [Maybe Lower]
+      {|
+        eqListU8
+        name
+        "." =>
+        Some
+        [Lower]
+        (L_Native T_WriteOne) |
+        eqListU8
+        name
+        "," =>
+        Some
+        [Lower]
+        (L_Native T_ReadOne) |
+        eqListU8
+        name
+        "writeOne" =>
+        Some
+        [Lower]
+        (L_Native T_WriteOne) |
+        eqListU8
+        name
+        "readOne" =>
+        Some
+        [Lower]
+        (L_Native T_ReadOne) |
+        eqListU8
+        name
+        "addU8" =>
+        Some
+        [Lower]
+        (L_Native T_AddU8) |
+        eqListU8
+        name
+        "subU8" =>
+        Some
+        [Lower]
+        (L_Native T_SubU8) |
+        eqListU8
+        name
+        "divU8" =>
+        Some
+        [Lower]
+        (L_Native T_DivU8) |
+        eqListU8
+        name
+        "modU8" =>
+        Some
+        [Lower]
+        (L_Native T_ModU8) |
+        eqListU8
+        name
+        "eqU8" =>
+        Some
+        [Lower]
+        (L_Native T_EqU8) |
+        eqListU8
+        name
+        "ltU8" =>
+        Some
+        [Lower]
+        (L_Native T_LtU8) |
+        otherwise =>
+        None
+        [Lower]
+      }
 
 poly rec applyScottArgs =
   \func : Lower =>

@@ -117,34 +117,47 @@ poly singletonU8 =
 
 poly u8ToDigits =
   \n : U8 =>
-    if [List U8] (ltU8 n #u8(10))
-      (\u : U8 => singletonU8 (digitToAscii n))
-      (
-        \u : U8 =>
-          if [List U8] (ltU8 n #u8(100))
-            (
-              \u : U8 =>
-                cons
-                  [U8]
-                  (digitToAscii (divU8 n #u8(10)))
-                  (singletonU8 (digitToAscii (modU8 n #u8(10))))
-            )
-            (
-              \u : U8 =>
-                let hundreds = divU8 n #u8(100) in
-                let tens = modU8 (divU8 n #u8(10)) #u8(10) in
-                let ones = modU8 n #u8(10) in
-                cons
-                  [U8]
-                  (digitToAscii hundreds)
-                  (
-                    cons
-                      [U8]
-                      (digitToAscii tens)
-                      (singletonU8 (digitToAscii ones))
-                  )
-            )
-      )
+    cond
+      [List U8]
+      {|
+        (ltU8 n #u8(10)) =>
+        singletonU8
+        (digitToAscii n) |
+        (ltU8 n #u8(100)) =>
+        cons
+        [U8]
+        (digitToAscii (divU8 n #u8(10)))
+        (singletonU8 (digitToAscii (modU8 n #u8(10)))) |
+        otherwise =>
+        let
+        hundreds =
+        divU8
+        n
+        #
+        u8
+        (100)
+        in
+        let
+        tens =
+        modU8
+        (divU8 n #u8(10))
+        #
+        u8
+        (10)
+        in
+        let
+        ones =
+        modU8
+        n
+        #
+        u8
+        (10)
+        in
+        cons
+        [U8]
+        (digitToAscii hundreds)
+        (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
+      }
 
 poly digitValue =
   \c : U8 => modU8 c #u8(16)

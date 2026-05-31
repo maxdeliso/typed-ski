@@ -135,7 +135,7 @@ data AnfProgram =
   | MkAnfProgram (List AnfFunc) (List U8)
 
 poly tempPrefix =
-  {U8 | '_' '_' 't'}
+  "__t"
 
 poly freshName =
   \counter : Bin => append [U8] tempPrefix (binToDigits counter)
@@ -171,12 +171,12 @@ poly wrapValue =
                 (AE_Var nm)
             | PVal => MkNormResult state binds value
             | PTail =>
-              MkNormResult state (nil [Binding]) (applyBindings binds value)
+              MkNormResult state ({Binding |}) (applyBindings binds value)
           }
 
 poly trivialAt =
   \state : Bin =>
-    \atom : AnfExpr => \pos : Pos => MkNormResult state (nil [Binding]) atom
+    \atom : AnfExpr => \pos : Pos => MkNormResult state ({Binding |}) atom
 
 poly rec atomizeArgs =
   \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
@@ -187,7 +187,7 @@ poly rec atomizeArgs =
             [MiniExpr]
             [AtomList]
             args
-            (MkAtomList state accBinds (nil [AnfExpr]))
+            (MkAtomList state accBinds ({AnfExpr |}))
             (
               \h : MiniExpr =>
                 \t : List MiniExpr =>
@@ -213,7 +213,7 @@ poly rec normArms =
             [MiniExpr]
             [ArmsRes]
             arms
-            (MkArmsRes state (nil [AnfExpr]))
+            (MkArmsRes state ({AnfExpr |}))
             (
               \h : MiniExpr =>
                 \t : List MiniExpr =>
@@ -234,14 +234,14 @@ poly rec norm =
           | ME_Native t => trivialAt state (AE_Native t) pos
           | ME_Lam n body =>
             match (norm state body PTail) [NormResult] {
-              | MkNormResult s1 _ bExpr => wrapValue s1 (nil [Binding]) (AE_Lam n bExpr) pos
+              | MkNormResult s1 _ bExpr => wrapValue s1 ({Binding |}) (AE_Lam n bExpr) pos
             }
           | ME_Call f args =>
-            match (atomizeArgs norm state args (nil [Binding])) [NormResult] {
+            match (atomizeArgs norm state args ({Binding |})) [NormResult] {
               | MkAtomList s1 binds atoms => wrapValue s1 binds (AE_Call f atoms) pos
             }
           | ME_Con tag total arity fields =>
-            match (atomizeArgs norm state fields (nil [Binding])) [NormResult] {
+            match (atomizeArgs norm state fields ({Binding |})) [NormResult] {
               | MkAtomList s1 binds atoms =>
                 wrapValue s1 binds (AE_Con tag total arity atoms) pos
             }
@@ -260,7 +260,7 @@ poly rec norm =
                       | PTail =>
                         MkNormResult
                           s2
-                          (nil [Binding])
+                          ({Binding |})
                           (
                             applyBindings
                               valBinds
@@ -272,7 +272,7 @@ poly rec norm =
           | ME_Match scrut arms =>
             match (norm state scrut PAtom) [NormResult] {
               | MkNormResult s1 scrBinds scrAtom =>
-                match (normArms norm s1 arms (nil [AnfExpr])) [NormResult] {
+                match (normArms norm s1 arms ({AnfExpr |})) [NormResult] {
                   | MkArmsRes s2 normedArms =>
                     wrapValue s2 scrBinds (AE_Case scrAtom normedArms) pos
                 }
@@ -291,7 +291,7 @@ poly rec normalizeFuncs =
       [MiniFunc]
       [List AnfFunc]
       funcs
-      (nil [AnfFunc])
+      ({AnfFunc |})
       (
         \h : MiniFunc =>
           \t : List MiniFunc =>

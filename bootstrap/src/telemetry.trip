@@ -61,14 +61,14 @@ export phase4
 poly phase1 =
   \source : List U8 =>
     match (tokenize source) [List Token] {
-      | Err e => nil [Token]
+      | Err e => {Token |}
       | Ok toks => toks
     }
 
 poly phase2 =
   \toks : List Token =>
     match (parseProgram toks) [List Decl] {
-      | Err e => nil [Decl]
+      | Err e => {Decl |}
       | Ok decls => decls
     }
 
@@ -83,14 +83,13 @@ poly phase4 =
   \globals : Avl (List U8) Lower =>
     let entries = toListEntries [List U8] [Lower] globals in
     map
-      [Pair (List U8) Lower]
-      [Pair (List U8) Comb]
+      [((List U8), Lower)]
+      [((List U8), Comb)]
       (
-        \entry : Pair (List U8) Lower =>
-          MkPair
-            [List U8]
-            [Comb]
-            (fst [List U8] [Lower] entry)
+        \entry : ((List U8), Lower) =>
+          {List U8, Comb |
+            (fst [List U8] [Lower] entry),
             (lowerToComb (snd [List U8] [Lower] entry))
+          }
       )
       entries

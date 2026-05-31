@@ -207,6 +207,26 @@ poly main = append [Bin] {Bin | a} {Bin | b}
     );
     assert.match(result.fixed, /\{Bin \| a b\}/);
   });
+
+  it("reports and fixes degenerate if chains to cond blocks", () => {
+    const source = `module M
+poly main =
+  if [Lower] c1
+    (\\u : U8 => t1)
+    (\\u : U8 =>
+      if [Lower] c2
+        (\\u : U8 => t2)
+        (\\u : U8 => d))
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-degenerate-if"),
+    );
+    assert.match(result.fixed, /cond \[Lower\]/);
+    assert.match(result.fixed, /\| c1 => t1/);
+    assert.match(result.fixed, /\| c2 => t2/);
+    assert.match(result.fixed, /\| otherwise => d/);
+  });
 });
 
 describe("improvize file discovery", () => {

@@ -433,15 +433,14 @@ poly rec collectDecls =
                                   [ImportInfo]
                                   imps
                                   (
-                                    cons
-                                      [ImportInfo]
+                                    {ImportInfo |
                                       (
                                         MkImportInfo
                                           moduleName
                                           fromName
                                           symbolName
                                       )
-                                      (nil [ImportInfo])
+                                    }
                                   )
                               )
                               exps
@@ -464,10 +463,9 @@ poly rec collectDecls =
                                   [ExportInfo]
                                   exps
                                   (
-                                    cons
-                                      [ExportInfo]
+                                    {ExportInfo |
                                       (MkExportInfo moduleName name)
-                                      (nil [ExportInfo])
+                                    }
                                   )
                               )
                               defs
@@ -491,10 +489,9 @@ poly rec collectDecls =
                                   [DefinitionInfo]
                                   defs
                                   (
-                                    cons
-                                      [DefinitionInfo]
+                                    {DefinitionInfo |
                                       (MkDefinitionInfo moduleName name "data")
-                                      (nil [DefinitionInfo])
+                                    }
                                   )
                               )
                               (
@@ -502,10 +499,9 @@ poly rec collectDecls =
                                   [DataTypeInfo]
                                   dataTypes
                                   (
-                                    cons
-                                      [DataTypeInfo]
+                                    {DataTypeInfo |
                                       (MkDataTypeInfo qName name nextTypeId)
-                                      (nil [DataTypeInfo])
+                                    }
                                   )
                               )
                               opaques
@@ -526,10 +522,9 @@ poly rec collectDecls =
                                   [DefinitionInfo]
                                   defs
                                   (
-                                    cons
-                                      [DefinitionInfo]
+                                    {DefinitionInfo |
                                       (MkDefinitionInfo moduleName name "type")
-                                      (nil [DefinitionInfo])
+                                    }
                                   )
                               )
                               dataTypes
@@ -551,15 +546,14 @@ poly rec collectDecls =
                                   [DefinitionInfo]
                                   defs
                                   (
-                                    cons
-                                      [DefinitionInfo]
+                                    {DefinitionInfo |
                                       (
                                         MkDefinitionInfo
                                           moduleName
                                           name
                                           "opaque"
                                       )
-                                      (nil [DefinitionInfo])
+                                    }
                                   )
                               )
                               dataTypes
@@ -568,10 +562,9 @@ poly rec collectDecls =
                                   [OpaqueInfo]
                                   opaques
                                   (
-                                    cons
-                                      [OpaqueInfo]
+                                    {OpaqueInfo |
                                       (MkOpaqueInfo moduleName name)
-                                      (nil [OpaqueInfo])
+                                    }
                                   )
                               )
                               natives
@@ -591,15 +584,14 @@ poly rec collectDecls =
                                   [DefinitionInfo]
                                   defs
                                   (
-                                    cons
-                                      [DefinitionInfo]
+                                    {DefinitionInfo |
                                       (
                                         MkDefinitionInfo
                                           moduleName
                                           name
                                           "native"
                                       )
-                                      (nil [DefinitionInfo])
+                                    }
                                   )
                               )
                               dataTypes
@@ -609,10 +601,9 @@ poly rec collectDecls =
                                   [NativeInfo]
                                   natives
                                   (
-                                    cons
-                                      [NativeInfo]
+                                    {NativeInfo |
                                       (MkNativeInfo moduleName name)
-                                      (nil [NativeInfo])
+                                    }
                                   )
                               )
                               nextTypeId
@@ -631,15 +622,14 @@ poly rec collectDecls =
                                   [DefinitionInfo]
                                   defs
                                   (
-                                    cons
-                                      [DefinitionInfo]
+                                    {DefinitionInfo |
                                       (
                                         MkDefinitionInfo
                                           moduleName
                                           name
                                           (defKindName kind)
                                       )
-                                      (nil [DefinitionInfo])
+                                    }
                                   )
                               )
                               dataTypes
@@ -672,7 +662,7 @@ poly rec parseModulesAcc =
                         | MkModuleInfo modName decls =>
                           match state [Result (List U8) BuildState] {
                             | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
-                              let withMod = MkBuildState (append [ModuleInfo] mods (cons [ModuleInfo] modInfo (nil [ModuleInfo]))) imps exps defs dataTypes opaques natives nextTypeId in
+                              let withMod = MkBuildState (append [ModuleInfo] mods ({ModuleInfo | modInfo})) imps exps defs dataTypes opaques natives nextTypeId in
                               parseModulesAcc
                                 t
                                 (collectDecls modName decls withMod)
@@ -683,7 +673,7 @@ poly rec parseModulesAcc =
         )
 
 poly initialBuildState =
-  MkBuildState (nil [ModuleInfo]) (nil [ImportInfo]) (nil [ExportInfo]) (nil [DefinitionInfo]) (cons [DataTypeInfo] (MkDataTypeInfo "Prelude.Bool" "Bool" #u8(0)) (cons [DataTypeInfo] (MkDataTypeInfo "Prelude.List" "List" #u8(1)) (nil [DataTypeInfo]))) (nil [OpaqueInfo]) (nil [NativeInfo]) #u8(2)
+  MkBuildState ({ModuleInfo |}) ({ImportInfo |}) ({ExportInfo |}) ({DefinitionInfo |}) ({DataTypeInfo | (MkDataTypeInfo "Prelude.Bool" "Bool" #u8(0)) (MkDataTypeInfo "Prelude.List" "List" #u8(1))}) ({OpaqueInfo |}) ({NativeInfo |}) #u8(2)
 
 poly rec findDataTypeId =
   \qName : List U8 =>
@@ -705,34 +695,34 @@ poly rec findDataTypeId =
         )
 
 poly rec countCtors =
-  \ctors : List (Pair (List U8) U8) =>
+  \ctors : List (((List U8), U8)) =>
     \acc : U8 =>
       matchList
-        [Pair (List U8) U8]
+        [((List U8), U8)]
         [U8]
         ctors
         acc
         (
-          \h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) => countCtors t (inc acc)
+          \h : ((List U8), U8) => \t : List (((List U8), U8)) => countCtors t (inc acc)
         )
 
 poly rec addCtorMetas =
   \moduleName : List U8 =>
     \typeName : List U8 =>
       \dataId : U8 =>
-        \ctors : List (Pair (List U8) U8) =>
+        \ctors : List (((List U8), U8)) =>
           \total : U8 =>
             \tag : U8 =>
               \symbolId : U8 =>
                 \acc : List ConstructorMeta =>
                   matchList
-                    [Pair (List U8) U8]
-                    [Pair (List ConstructorMeta) U8]
+                    [((List U8), U8)]
+                    [((List ConstructorMeta), U8)]
                     ctors
-                    (MkPair [List ConstructorMeta] [U8] acc symbolId)
+                    ({List ConstructorMeta, U8 | acc, symbolId})
                     (
-                      \h : Pair (List U8) U8 =>
-                        \t : List (Pair (List U8) U8) =>
+                      \h : ((List U8), U8) =>
+                        \t : List (((List U8), U8)) =>
                           let ctorName = fst [List U8] [U8] h in
                           let arity = snd [List U8] [U8] h in
                           let qName = qualifyCtor moduleName typeName ctorName in
@@ -750,12 +740,7 @@ poly rec addCtorMetas =
                               append
                                 [ConstructorMeta]
                                 acc
-                                (
-                                  cons
-                                    [ConstructorMeta]
-                                    meta
-                                    (nil [ConstructorMeta])
-                                )
+                                ({ConstructorMeta | meta})
                             )
                     )
 
@@ -767,16 +752,16 @@ poly rec collectConstructorsFromDecls =
           \acc : List ConstructorMeta =>
             matchList
               [Decl]
-              [Pair (List ConstructorMeta) U8]
+              [((List ConstructorMeta), U8)]
               decls
-              (MkPair [List ConstructorMeta] [U8] acc symbolId)
+              ({List ConstructorMeta, U8 | acc, symbolId})
               (
                 \h : Decl =>
                   \t : List Decl =>
-                    match h [Pair (List ConstructorMeta) U8] {
+                    match h [((List ConstructorMeta), U8)] {
                       | D_Data typeName ctors =>
                         let dataQName = qualify moduleName typeName in
-                        match (findDataTypeId dataQName dataTypes) [Pair (List ConstructorMeta) U8] {
+                        match (findDataTypeId dataQName dataTypes) [((List ConstructorMeta), U8)] {
                           | None =>
                             collectConstructorsFromDecls
                               moduleName
@@ -786,7 +771,7 @@ poly rec collectConstructorsFromDecls =
                               acc
                           | Some dataId =>
                             let total = countCtors ctors #u8(0) in
-                            match (addCtorMetas moduleName typeName dataId ctors total #u8(0) symbolId acc) [Pair (List ConstructorMeta) U8] {
+                            match (addCtorMetas moduleName typeName dataId ctors total #u8(0) symbolId acc) [((List ConstructorMeta), U8)] {
                               | MkPair nextAcc nextSymbolId =>
                                 collectConstructorsFromDecls
                                   moduleName
@@ -855,15 +840,15 @@ poly rec collectConstructors =
         \acc : List ConstructorMeta =>
           matchList
             [ModuleInfo]
-            [Pair (List ConstructorMeta) U8]
+            [((List ConstructorMeta), U8)]
             mods
-            (MkPair [List ConstructorMeta] [U8] acc symbolId)
+            ({List ConstructorMeta, U8 | acc, symbolId})
             (
               \h : ModuleInfo =>
                 \t : List ModuleInfo =>
-                  match h [Pair (List ConstructorMeta) U8] {
+                  match h [((List ConstructorMeta), U8)] {
                     | MkModuleInfo moduleName decls =>
-                      match (collectConstructorsFromDecls moduleName decls dataTypes symbolId acc) [Pair (List ConstructorMeta) U8] {
+                      match (collectConstructorsFromDecls moduleName decls dataTypes symbolId acc) [((List ConstructorMeta), U8)] {
                         | MkPair nextAcc nextSymbolId =>
                           collectConstructors t dataTypes nextSymbolId nextAcc
                       }
@@ -871,33 +856,20 @@ poly rec collectConstructors =
             )
 
 poly pseudoConstructors =
-  cons
-    [ConstructorMeta]
+  {ConstructorMeta |
     (
       MkConstructorMeta "Prelude.false" "false" "Prelude.false" "Bool" #u8(0) #u8(0) #u8(0) #u8(2) #u8(0)
     )
     (
-      cons
-        [ConstructorMeta]
-        (
-          MkConstructorMeta "Prelude.true" "true" "Prelude.true" "Bool" #u8(0) #u8(1) #u8(1) #u8(2) #u8(0)
-        )
-        (
-          cons
-            [ConstructorMeta]
-            (
-              MkConstructorMeta "Prelude.nil" "nil" "Prelude.nil" "List" #u8(1) #u8(2) #u8(0) #u8(2) #u8(0)
-            )
-            (
-              cons
-                [ConstructorMeta]
-                (
-                  MkConstructorMeta "Prelude.cons" "cons" "Prelude.cons" "List" #u8(1) #u8(3) #u8(1) #u8(2) #u8(2)
-                )
-                (nil [ConstructorMeta])
-            )
-        )
+      MkConstructorMeta "Prelude.true" "true" "Prelude.true" "Bool" #u8(0) #u8(1) #u8(1) #u8(2) #u8(0)
     )
+    (
+      MkConstructorMeta "Prelude.nil" "nil" "Prelude.nil" "List" #u8(1) #u8(2) #u8(0) #u8(2) #u8(0)
+    )
+    (
+      MkConstructorMeta "Prelude.cons" "cons" "Prelude.cons" "List" #u8(1) #u8(3) #u8(1) #u8(2) #u8(2)
+    )
+  }
 
 poly rec addAlias =
   \alias : List U8 =>
@@ -908,10 +880,9 @@ poly rec addAlias =
           [List ConstructorAliasInfo]
           aliases
           (
-            cons
-              [ConstructorAliasInfo]
+            {ConstructorAliasInfo |
               (MkConstructorAliasInfo alias (Some [List U8] qName))
-              (nil [ConstructorAliasInfo])
+            }
           )
           (
             \h : ConstructorAliasInfo =>
@@ -963,83 +934,20 @@ poly rec buildAliases =
 
 poly primitivesStartingAt =
   \firstSymbolId : U8 =>
-    cons
-      [PrimitiveInfo]
+    {PrimitiveInfo |
       (MkPrimitiveInfo "Nat.succ" firstSymbolId #u8(1))
-      (
-        cons
-          [PrimitiveInfo]
-          (MkPrimitiveInfo "Nat.add" (addU8 firstSymbolId #u8(1)) #u8(2))
-          (
-            cons
-              [PrimitiveInfo]
-              (MkPrimitiveInfo "Nat.mul" (addU8 firstSymbolId #u8(2)) #u8(2))
-              (
-                cons
-                  [PrimitiveInfo]
-                  (
-                    MkPrimitiveInfo "Nat.lte" (addU8 firstSymbolId #u8(3)) #u8(2)
-                  )
-                  (
-                    cons
-                      [PrimitiveInfo]
-                      (
-                        MkPrimitiveInfo "Prelude.not" (addU8 firstSymbolId #u8(4)) #u8(1)
-                      )
-                      (
-                        cons
-                          [PrimitiveInfo]
-                          (
-                            MkPrimitiveInfo "Prelude.eqU8" (addU8 firstSymbolId #u8(5)) #u8(2)
-                          )
-                          (
-                            cons
-                              [PrimitiveInfo]
-                              (
-                                MkPrimitiveInfo "Prelude.ltU8" (addU8 firstSymbolId #u8(6)) #u8(2)
-                              )
-                              (
-                                cons
-                                  [PrimitiveInfo]
-                                  (
-                                    MkPrimitiveInfo "Prelude.addU8" (addU8 firstSymbolId #u8(7)) #u8(2)
-                                  )
-                                  (
-                                    cons
-                                      [PrimitiveInfo]
-                                      (
-                                        MkPrimitiveInfo "Prelude.subU8" (addU8 firstSymbolId #u8(8)) #u8(2)
-                                      )
-                                      (
-                                        cons
-                                          [PrimitiveInfo]
-                                          (
-                                            MkPrimitiveInfo "Prelude.divU8" (addU8 firstSymbolId #u8(9)) #u8(2)
-                                          )
-                                          (
-                                            cons
-                                              [PrimitiveInfo]
-                                              (
-                                                MkPrimitiveInfo "Prelude.modU8" (addU8 firstSymbolId #u8(10)) #u8(2)
-                                              )
-                                              (
-                                                cons
-                                                  [PrimitiveInfo]
-                                                  (
-                                                    MkPrimitiveInfo "Prelude.error" (addU8 firstSymbolId #u8(11)) #u8(0)
-                                                  )
-                                                  (nil [PrimitiveInfo])
-                                              )
-                                          )
-                                      )
-                                  )
-                              )
-                          )
-                      )
-                  )
-              )
-          )
-      )
+      (MkPrimitiveInfo "Nat.add" (addU8 firstSymbolId #u8(1)) #u8(2))
+      (MkPrimitiveInfo "Nat.mul" (addU8 firstSymbolId #u8(2)) #u8(2))
+      (MkPrimitiveInfo "Nat.lte" (addU8 firstSymbolId #u8(3)) #u8(2))
+      (MkPrimitiveInfo "Prelude.not" (addU8 firstSymbolId #u8(4)) #u8(1))
+      (MkPrimitiveInfo "Prelude.eqU8" (addU8 firstSymbolId #u8(5)) #u8(2))
+      (MkPrimitiveInfo "Prelude.ltU8" (addU8 firstSymbolId #u8(6)) #u8(2))
+      (MkPrimitiveInfo "Prelude.addU8" (addU8 firstSymbolId #u8(7)) #u8(2))
+      (MkPrimitiveInfo "Prelude.subU8" (addU8 firstSymbolId #u8(8)) #u8(2))
+      (MkPrimitiveInfo "Prelude.divU8" (addU8 firstSymbolId #u8(9)) #u8(2))
+      (MkPrimitiveInfo "Prelude.modU8" (addU8 firstSymbolId #u8(10)) #u8(2))
+      (MkPrimitiveInfo "Prelude.error" (addU8 firstSymbolId #u8(11)) #u8(0))
+    }
 
 poly buildModuleEnv =
   \records : List ModuleRecord =>
@@ -1050,7 +958,7 @@ poly buildModuleEnv =
           | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
             match (collectConstructors mods dataTypes #u8(4) pseudoConstructors) [Result (List U8) ModuleEnv] {
               | MkPair ctors nextSymbolId =>
-                let aliases = buildAliases ctors (nil [ConstructorAliasInfo]) in
+                let aliases = buildAliases ctors ({ConstructorAliasInfo |}) in
                 let primitives = primitivesStartingAt nextSymbolId in
                 Ok
                   [List U8]
@@ -1337,14 +1245,16 @@ poly exportStatus =
         \defs : List DefinitionInfo =>
           \ctors : List ConstructorMeta =>
             let origins = countExportOrigins symbolName exports #u8(0) in
-            if [List U8] (ltU8 #u8(1) origins)
-              (\u : U8 => "AMBIGUOUS")
-              (
-                \u : U8 =>
-                  if [List U8] (or (isDefined moduleName symbolName defs) (isConstructorDefined moduleName symbolName ctors))
-                    (\u : U8 => "OK")
-                    (\u : U8 => "EXPORT_UNDEFINED")
-              )
+            cond
+              [List U8]
+              {|
+                (ltU8 #u8(1) origins) =>
+                "AMBIGUOUS" |
+                (or (isDefined moduleName symbolName defs) (isConstructorDefined moduleName symbolName ctors)) =>
+                "OK" |
+                otherwise =>
+                "EXPORT_UNDEFINED"
+              }
 
 poly rec emitModuleImportsAcc =
   \moduleName : List U8 =>
@@ -1405,7 +1315,7 @@ poly emitModuleImports =
             (reverse [ImportInfo] imports)
             mods
             exports
-            (nil [U8])
+            ("")
 
 poly rec emitModuleExportsAcc =
   \moduleName : List U8 =>
@@ -1466,7 +1376,7 @@ poly emitModuleExports =
             (reverse [ExportInfo] exports)
             defs
             ctors
-            (nil [U8])
+            ("")
 
 poly rec emitModuleDefsAcc =
   \moduleName : List U8 =>
@@ -1502,7 +1412,7 @@ poly rec emitModuleDefsAcc =
 poly emitModuleDefs =
   \moduleName : List U8 =>
     \defs : List DefinitionInfo =>
-      emitModuleDefsAcc moduleName (reverse [DefinitionInfo] defs) (nil [U8])
+      emitModuleDefsAcc moduleName (reverse [DefinitionInfo] defs) ("")
 
 poly rec emitModuleOpaquesAcc =
   \moduleName : List U8 =>
@@ -1533,7 +1443,7 @@ poly rec emitModuleOpaquesAcc =
 poly emitModuleOpaques =
   \moduleName : List U8 =>
     \opaques : List OpaqueInfo =>
-      emitModuleOpaquesAcc moduleName (reverse [OpaqueInfo] opaques) (nil [U8])
+      emitModuleOpaquesAcc moduleName (reverse [OpaqueInfo] opaques) ("")
 
 poly rec emitModuleNativesAcc =
   \moduleName : List U8 =>
@@ -1564,7 +1474,7 @@ poly rec emitModuleNativesAcc =
 poly emitModuleNatives =
   \moduleName : List U8 =>
     \natives : List NativeInfo =>
-      emitModuleNativesAcc moduleName (reverse [NativeInfo] natives) (nil [U8])
+      emitModuleNativesAcc moduleName (reverse [NativeInfo] natives) ("")
 
 poly rec emitModulesAcc =
   \mods : List ModuleInfo =>
@@ -1623,7 +1533,7 @@ poly emitModules =
                   ctors
                   opaques
                   natives
-                  (nil [U8])
+                  ("")
 
 poly rec moduleImportsAcc =
   \moduleName : List U8 =>
@@ -1652,7 +1562,7 @@ poly moduleImports =
     \imports : List ImportInfo =>
       reverse
         [ImportInfo]
-        (moduleImportsAcc moduleName imports (nil [ImportInfo]))
+        (moduleImportsAcc moduleName imports ({ImportInfo |}))
 
 poly rec moduleExportsAcc =
   \moduleName : List U8 =>
@@ -1681,7 +1591,7 @@ poly moduleExports =
     \exports : List ExportInfo =>
       reverse
         [ExportInfo]
-        (moduleExportsAcc moduleName exports (nil [ExportInfo]))
+        (moduleExportsAcc moduleName exports ({ExportInfo |}))
 
 poly rec moduleDefsAcc =
   \moduleName : List U8 =>
@@ -1710,7 +1620,7 @@ poly moduleDefs =
     \defs : List DefinitionInfo =>
       reverse
         [DefinitionInfo]
-        (moduleDefsAcc moduleName defs (nil [DefinitionInfo]))
+        (moduleDefsAcc moduleName defs ({DefinitionInfo |}))
 
 poly rec moduleOpaquesAcc =
   \moduleName : List U8 =>
@@ -1739,7 +1649,7 @@ poly moduleOpaques =
     \opaques : List OpaqueInfo =>
       reverse
         [OpaqueInfo]
-        (moduleOpaquesAcc moduleName opaques (nil [OpaqueInfo]))
+        (moduleOpaquesAcc moduleName opaques ({OpaqueInfo |}))
 
 poly rec moduleNativesAcc =
   \moduleName : List U8 =>
@@ -1768,7 +1678,7 @@ poly moduleNatives =
     \natives : List NativeInfo =>
       reverse
         [NativeInfo]
-        (moduleNativesAcc moduleName natives (nil [NativeInfo]))
+        (moduleNativesAcc moduleName natives ({NativeInfo |}))
 
 poly emitDataType =
   \info : DataTypeInfo =>
@@ -1809,8 +1719,7 @@ poly rec emitDataTypesAcc =
         )
 
 poly emitDataTypes =
-  \dataTypes : List DataTypeInfo =>
-    emitDataTypesAcc (reverse [DataTypeInfo] dataTypes) (nil [U8])
+  \dataTypes : List DataTypeInfo => emitDataTypesAcc (reverse [DataTypeInfo] dataTypes) ("")
 
 poly emitConstructor =
   \info : ConstructorMeta =>
@@ -1843,8 +1752,7 @@ poly rec emitConstructorsAcc =
         )
 
 poly emitConstructors =
-  \ctors : List ConstructorMeta =>
-    emitConstructorsAcc (reverse [ConstructorMeta] ctors) (nil [U8])
+  \ctors : List ConstructorMeta => emitConstructorsAcc (reverse [ConstructorMeta] ctors) ("")
 
 poly emitAlias =
   \info : ConstructorAliasInfo =>
@@ -1870,8 +1778,7 @@ poly rec emitAliasesAcc =
         )
 
 poly emitAliases =
-  \aliases : List ConstructorAliasInfo =>
-    emitAliasesAcc (reverse [ConstructorAliasInfo] aliases) (nil [U8])
+  \aliases : List ConstructorAliasInfo => emitAliasesAcc (reverse [ConstructorAliasInfo] aliases) ("")
 
 poly emitPrimitive =
   \info : PrimitiveInfo =>
@@ -1917,7 +1824,7 @@ poly rec emitPrimitivesAcc =
         )
 
 poly emitPrimitives =
-  \prims : List PrimitiveInfo => emitPrimitivesAcc (reverse [PrimitiveInfo] prims) (nil [U8])
+  \prims : List PrimitiveInfo => emitPrimitivesAcc (reverse [PrimitiveInfo] prims) ("")
 
 poly rec insertDataEnvCtors =
   \ctors : List ConstructorMeta =>
@@ -1961,7 +1868,7 @@ poly rec ctorNamesForData =
         [ConstructorMeta]
         [List (List U8)]
         ctors
-        (nil [List U8])
+        ({List U8 |})
         (
           \h : ConstructorMeta =>
             \t : List ConstructorMeta =>

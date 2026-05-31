@@ -154,28 +154,21 @@ poly main =
                                                                   if [Bool] (eqDefKind kind2 K_Combinator)
                                                                     (
                                                                       \u : U8 =>
-                                                                        if [Bool] isRec2
-                                                                          (
-                                                                            \u : U8 => false
-                                                                          )
-                                                                          (
-                                                                            \u : U8 =>
-                                                                              if [Bool] (eqListU8 name2 "c")
-                                                                                (
-                                                                                  \u : U8 =>
-                                                                                    matchList
-                                                                                      [Decl]
-                                                                                      [Bool]
-                                                                                      rest2
-                                                                                      true
-                                                                                      (
-                                                                                        \d3 : Decl => \rest3 : List Decl => false
-                                                                                      )
-                                                                                )
-                                                                                (
-                                                                                  \u : U8 => false
-                                                                                )
-                                                                          )
+                                                                        cond
+                                                                          [Bool]
+                                                                          {|
+                                                                            isRec2 =>
+                                                                            false |
+                                                                            (eqListU8 name2 "c") =>
+                                                                            matchList
+                                                                            [Decl]
+                                                                            [Bool]
+                                                                            rest2
+                                                                            true
+                                                                            (\d3 : Decl => \rest3 : List Decl => false) |
+                                                                            otherwise =>
+                                                                            false
+                                                                          }
                                                                     )
                                                                     (
                                                                       \u : U8 => false

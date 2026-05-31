@@ -205,24 +205,32 @@ poly rec readLineAcc =
         [U8]
         [Result (List U8) Line]
         input
-        (Ok [List U8] [Line] (MkLine (reverse [U8] acc) (nil [U8])))
+        (Ok [List U8] [Line] (MkLine (reverse [U8] acc) ("")))
         (
           \h : U8 =>
             \t : List U8 =>
-              if [Result (List U8) Line] (not (isAscii h))
-                (\u : U8 => Err [List U8] [Line] "non-ascii byte")
-                (
-                  \u : U8 =>
-                    if [Result (List U8) Line] (eqU8 h '\n')
-                      (
-                        \u : U8 => Ok [List U8] [Line] (MkLine (reverse [U8] acc) t)
-                      )
-                      (\u : U8 => readLineAcc t (cons [U8] h acc))
-                )
+              cond
+                [Result (List U8) Line]
+                {|
+                  (not (isAscii h)) =>
+                  Err
+                  [List U8]
+                  [Line]
+                  "non-ascii byte" |
+                  (eqU8 h '\n') =>
+                  Ok
+                  [List U8]
+                  [Line]
+                  (MkLine (reverse [U8] acc) t) |
+                  otherwise =>
+                  readLineAcc
+                  t
+                  (cons [U8] h acc)
+                }
         )
 
 poly readLine =
-  \input : List U8 => readLineAcc input (nil [U8])
+  \input : List U8 => readLineAcc input ("")
 
 poly rec stripPrefix =
   \prefix : List U8 =>
@@ -279,7 +287,7 @@ poly rec readWordAcc =
         [U8]
         [Word]
         input
-        (MkWord (reverse [U8] acc) (nil [U8]))
+        (MkWord (reverse [U8] acc) (""))
         (
           \h : U8 =>
             \t : List U8 =>
@@ -289,53 +297,34 @@ poly rec readWordAcc =
         )
 
 poly readWord =
-  \input : List U8 => readWordAcc input (nil [U8])
+  \input : List U8 => readWordAcc input ("")
 
 poly rec decimalDigitValue =
   \digit : U8 =>
-    if [Bin] (eqU8 digit '0')
-      (\u : U8 => BZ)
-      (
-        \u : U8 =>
-          if [Bin] (eqU8 digit '1')
-            (\u : U8 => binOne)
-            (
-              \u : U8 =>
-                if [Bin] (eqU8 digit '2')
-                  (\u : U8 => binTwo)
-                  (
-                    \u : U8 =>
-                      if [Bin] (eqU8 digit '3')
-                        (\u : U8 => binThree)
-                        (
-                          \u : U8 =>
-                            if [Bin] (eqU8 digit '4')
-                              (\u : U8 => binFour)
-                              (
-                                \u : U8 =>
-                                  if [Bin] (eqU8 digit '5')
-                                    (\u : U8 => binFive)
-                                    (
-                                      \u : U8 =>
-                                        if [Bin] (eqU8 digit '6')
-                                          (\u : U8 => binSix)
-                                          (
-                                            \u : U8 =>
-                                              if [Bin] (eqU8 digit '7')
-                                                (\u : U8 => binSeven)
-                                                (
-                                                  \u : U8 =>
-                                                    if [Bin] (eqU8 digit '8')
-                                                      (\u : U8 => binEight)
-                                                      (\u : U8 => binNine)
-                                                )
-                                          )
-                                    )
-                              )
-                        )
-                  )
-            )
-      )
+    cond
+      [Bin]
+      {|
+        (eqU8 digit '0') =>
+        BZ |
+        (eqU8 digit '1') =>
+        binOne |
+        (eqU8 digit '2') =>
+        binTwo |
+        (eqU8 digit '3') =>
+        binThree |
+        (eqU8 digit '4') =>
+        binFour |
+        (eqU8 digit '5') =>
+        binFive |
+        (eqU8 digit '6') =>
+        binSix |
+        (eqU8 digit '7') =>
+        binSeven |
+        (eqU8 digit '8') =>
+        binEight |
+        otherwise =>
+        binNine
+      }
 
 poly rec parseDecimalAcc =
   \digits : List U8 =>
@@ -368,19 +357,25 @@ poly parseDecimal =
       (
         \h : U8 =>
           \t : List U8 =>
-            if [Result (List U8) Bin] (eqU8 h '0')
-              (
-                \u : U8 =>
-                  if [Result (List U8) Bin] (listIsEmpty [U8] t)
-                    (\u : U8 => Ok [List U8] [Bin] BZ)
-                    (\u : U8 => Err [List U8] [Bin] "non-canonical decimal")
-              )
-              (
-                \u : U8 =>
-                  if [Result (List U8) Bin] (isDigit h)
-                    (\u : U8 => parseDecimalAcc t (decimalDigitValue h))
-                    (\u : U8 => Err [List U8] [Bin] "bad decimal")
-              )
+            cond
+              [Result (List U8) Bin]
+              {|
+                (eqU8 h '0') =>
+                if
+                [Result (List U8) Bin]
+                (listIsEmpty [U8] t)
+                (\u : U8 => Ok [List U8] [Bin] BZ)
+                (\u : U8 => Err [List U8] [Bin] "non-canonical decimal") |
+                (isDigit h) =>
+                parseDecimalAcc
+                t
+                (decimalDigitValue h) |
+                otherwise =>
+                Err
+                [List U8]
+                [Bin]
+                "bad decimal"
+              }
       )
 
 poly parseModuleHeader =
@@ -439,7 +434,7 @@ poly rec consumeSourceAcc =
           )
 
 poly consumeSource =
-  \count : Bin => \input : List U8 => consumeSourceAcc count input (nil [U8])
+  \count : Bin => \input : List U8 => consumeSourceAcc count input ("")
 
 poly declaredModuleName =
   \source : List U8 =>
@@ -460,35 +455,57 @@ poly declaredModuleName =
 
 poly parseTarget =
   \value : List U8 =>
-    if [Result (List U8) (List U8)] (eqListU8 value "generic")
-      (\u : U8 => Ok [List U8] [List U8] value)
-      (
-        \u : U8 =>
-          if [Result (List U8) (List U8)] (eqListU8 value "x86_64-unknown-linux-gnu")
-            (\u : U8 => Ok [List U8] [List U8] value)
-            (
-              \u : U8 =>
-                if [Result (List U8) (List U8)] (eqListU8 value "arm64-apple-darwin")
-                  (\u : U8 => Ok [List U8] [List U8] value)
-                  (
-                    \u : U8 =>
-                      if [Result (List U8) (List U8)] (eqListU8 value "x86_64-pc-windows-msvc")
-                        (\u : U8 => Ok [List U8] [List U8] value)
-                        (\u : U8 => Err [List U8] [List U8] "bad target")
-                  )
-            )
-      )
+    cond
+      [Result (List U8) (List U8)]
+      {|
+        (eqListU8 value "generic") =>
+        Ok
+        [List U8]
+        [List U8]
+        value |
+        (eqListU8 value "x86_64-unknown-linux-gnu") =>
+        Ok
+        [List U8]
+        [List U8]
+        value |
+        (eqListU8 value "arm64-apple-darwin") =>
+        Ok
+        [List U8]
+        [List U8]
+        value |
+        (eqListU8 value "x86_64-pc-windows-msvc") =>
+        Ok
+        [List U8]
+        [List U8]
+        value |
+        otherwise =>
+        Err
+        [List U8]
+        [List U8]
+        "bad target"
+      }
 
 poly parseWrapper =
   \value : List U8 =>
-    if [Result (List U8) (List U8)] (eqListU8 value "none")
-      (\u : U8 => Ok [List U8] [List U8] value)
-      (
-        \u : U8 =>
-          if [Result (List U8) (List U8)] (eqListU8 value "enabled")
-            (\u : U8 => Ok [List U8] [List U8] value)
-            (\u : U8 => Err [List U8] [List U8] "bad wrapper")
-      )
+    cond
+      [Result (List U8) (List U8)]
+      {|
+        (eqListU8 value "none") =>
+        Ok
+        [List U8]
+        [List U8]
+        value |
+        (eqListU8 value "enabled") =>
+        Ok
+        [List U8]
+        [List U8]
+        value |
+        otherwise =>
+        Err
+        [List U8]
+        [List U8]
+        "bad wrapper"
+      }
 
 poly rec parseModules =
   \remaining : List U8 =>
@@ -686,7 +703,7 @@ poly parseBundleSummary =
                                                                                 match (parseDecimal modsCountDigits) [Result (List U8) BundleSummary] {
                                                                                   | Err e => Err [List U8] [BundleSummary] e
                                                                                   | Ok modsCount =>
-                                                                                    match (parseModules afterModules modsCount entry (None [List U8]) false (nil [ModuleRecord])) [Result (List U8) BundleSummary] {
+                                                                                    match (parseModules afterModules modsCount entry (None [List U8]) false ({ModuleRecord |})) [Result (List U8) BundleSummary] {
                                                                                       | Err e => Err [List U8] [BundleSummary] e
                                                                                       | Ok parsed =>
                                                                                         match parsed [Result (List U8) BundleSummary] {
@@ -744,7 +761,7 @@ poly rec emitModuleSummaries =
       [ModuleRecord]
       [List U8]
       mods
-      (nil [U8])
+      ("")
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord => append [U8] (emitModuleSummary h) (emitModuleSummaries t)

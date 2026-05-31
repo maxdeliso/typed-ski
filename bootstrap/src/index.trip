@@ -78,20 +78,20 @@ export main
 
 poly compileToComb =
   \source : List U8 =>
-    match (tokenize source) [Result (List U8) (List (Pair (List U8) Comb))] {
+    match (tokenize source) [Result (List U8) (List (((List U8), Comb)))] {
       | Err e =>
-        Err [List U8] [List (Pair (List U8) Comb)] "Lex error"
+        Err [List U8] [List (((List U8), Comb))] "Lex error"
       | Ok toks =>
-        match (parseProgram toks) [Result (List U8) (List (Pair (List U8) Comb))] {
+        match (parseProgram toks) [Result (List U8) (List (((List U8), Comb)))] {
           | Err e =>
-            Err [List U8] [List (Pair (List U8) Comb)] "Parse error"
+            Err [List U8] [List (((List U8), Comb))] "Parse error"
           | Ok decls =>
-            match (elaborateProgram (empty [List U8] [Lower]) decls) [Result (List U8) (List (Pair (List U8) Comb))] {
-              | Err e => Err [List U8] [List (Pair (List U8) Comb)] e
+            match (elaborateProgram (empty [List U8] [Lower]) decls) [Result (List U8) (List (((List U8), Comb)))] {
+              | Err e => Err [List U8] [List (((List U8), Comb))] e
               | Ok globals =>
                 let entries = toListEntries [List U8] [Lower] globals in
-                let results = map [Pair (List U8) Lower] [Pair (List U8) Comb] (\entry : Pair (List U8) Lower => MkPair [List U8] [Comb] (fst [List U8] [Lower] entry) (lowerToComb (snd [List U8] [Lower] entry))) entries in
-                Ok [List U8] [List (Pair (List U8) Comb)] results
+                let results = map [((List U8), Lower)] [((List U8), Comb)] (\entry : ((List U8), Lower) => {List U8, Comb | (fst [List U8] [Lower] entry), (lowerToComb (snd [List U8] [Lower] entry))}) entries in
+                Ok [List U8] [List (((List U8), Comb))] results
             }
         }
     }

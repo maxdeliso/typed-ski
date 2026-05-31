@@ -262,41 +262,28 @@ poly selectOuter6 =
 
 poly rec selectOuter =
   \arity : U8 =>
-    if [Comb] (eqU8 arity #u8(0))
-      (\u : U8 => combI)
-      (
-        \u : U8 =>
-          if [Comb] (eqU8 arity #u8(1))
-            (\u : U8 => combI)
-            (
-              \u : U8 =>
-                if [Comb] (eqU8 arity #u8(2))
-                  (\u : U8 => selectOuter2)
-                  (
-                    \u : U8 =>
-                      if [Comb] (eqU8 arity #u8(3))
-                        (\u : U8 => selectOuter3)
-                        (
-                          \u : U8 =>
-                            if [Comb] (eqU8 arity #u8(4))
-                              (\u : U8 => selectOuter4)
-                              (
-                                \u : U8 =>
-                                  if [Comb] (eqU8 arity #u8(5))
-                                    (\u : U8 => selectOuter5)
-                                    (
-                                      \u : U8 =>
-                                        if [Comb] (eqU8 arity #u8(6))
-                                          (\u : U8 => selectOuter6)
-                                          (
-                                            \u : U8 => C_App (C_App combB (selectOuter (subU8 arity #u8(1)))) combK
-                                          )
-                                    )
-                              )
-                        )
-                  )
-            )
-      )
+    cond
+      [Comb]
+      {|
+        (eqU8 arity #u8(0)) =>
+        combI |
+        (eqU8 arity #u8(1)) =>
+        combI |
+        (eqU8 arity #u8(2)) =>
+        selectOuter2 |
+        (eqU8 arity #u8(3)) =>
+        selectOuter3 |
+        (eqU8 arity #u8(4)) =>
+        selectOuter4 |
+        (eqU8 arity #u8(5)) =>
+        selectOuter5 |
+        (eqU8 arity #u8(6)) =>
+        selectOuter6 |
+        otherwise =>
+        C_App
+        (C_App combB (selectOuter (subU8 arity #u8(1))))
+        combK
+      }
 
 poly rec emitBulkB =
   \depth : U8 =>
@@ -349,32 +336,47 @@ poly emitBulkC =
 poly emitBulk =
   \kind : U8 =>
     \depth : U8 =>
-      if [Comb] (eqU8 kind #u8(0))
-        (\u : U8 => emitBulkS depth)
-        (
-          \u : U8 =>
-            if [Comb] (eqU8 kind #u8(1))
-              (\u : U8 => emitBulkB depth)
-              (\u : U8 => emitBulkC depth)
-        )
+      cond
+        [Comb]
+        {|
+          (eqU8 kind #u8(0)) =>
+          emitBulkS
+          depth |
+          (eqU8 kind #u8(1)) =>
+          emitBulkB
+          depth |
+          otherwise =>
+          emitBulkC
+          depth
+        }
 
 poly rec dropArity =
   \count : U8 =>
-    if [Comb] (eqU8 count #u8(0))
-      (\u : U8 => combI)
-      (
-        \u : U8 =>
-          if [Comb] (eqU8 count #u8(1))
-            (\u : U8 => combK)
-            (
-              \u : U8 =>
-                let half = dropArity (divU8 count #u8(2)) in
-                let doubled = C_App (C_App combB half) half in
-                if [Comb] (eqU8 (modU8 count #u8(2)) #u8(0))
-                  (\u : U8 => doubled)
-                  (\u : U8 => C_App combBK doubled)
-            )
-      )
+    cond
+      [Comb]
+      {|
+        (eqU8 count #u8(0)) =>
+        combI |
+        (eqU8 count #u8(1)) =>
+        combK |
+        otherwise =>
+        let
+        half =
+        dropArity
+        (divU8 count #u8(2))
+        in
+        let
+        doubled =
+        C_App
+        (C_App combB half)
+        half
+        in
+        if
+        [Comb]
+        (eqU8 (modU8 count #u8(2)) #u8(0))
+        (\u : U8 => doubled)
+        (\u : U8 => C_App combBK doubled)
+      }
 
 poly liftArity =
   \expr : Comb =>
@@ -391,63 +393,50 @@ poly zip =
         | MkRes n exprA =>
           match r [Res] {
             | MkRes m exprB =>
-              if [Res] (and (eqU8 n #u8(0)) (eqU8 m #u8(0)))
-                (\u : U8 => MkRes #u8(0) (C_App exprA exprB))
-                (
-                  \u : U8 =>
-                    if [Res] (eqU8 n #u8(0))
-                      (
-                        \u : U8 => MkRes m (C_App (C_App (emitBulk #u8(1) m) exprA) exprB)
-                      )
-                      (
-                        \u : U8 =>
-                          if [Res] (eqU8 m #u8(0))
-                            (
-                              \u : U8 => MkRes n (C_App (C_App (emitBulk #u8(2) n) exprA) exprB)
-                            )
-                            (
-                              \u : U8 =>
-                                if [Res] (eqU8 n m)
-                                  (
-                                    \u : U8 => MkRes n (C_App (C_App (emitBulk #u8(0) n) exprA) exprB)
-                                  )
-                                  (
-                                    \u : U8 =>
-                                      if [Res] (ltU8 n m)
-                                        (
-                                          \u : U8 =>
-                                            let liftedA = liftArity exprA n m in
-                                            MkRes
-                                              m
-                                              (
-                                                C_App
-                                                  (
-                                                    C_App
-                                                      (emitBulk #u8(0) m)
-                                                      liftedA
-                                                  )
-                                                  exprB
-                                              )
-                                        )
-                                        (
-                                          \u : U8 =>
-                                            let liftedB = liftArity exprB m n in
-                                            MkRes
-                                              n
-                                              (
-                                                C_App
-                                                  (
-                                                    C_App
-                                                      (emitBulk #u8(0) n)
-                                                      exprA
-                                                  )
-                                                  liftedB
-                                              )
-                                        )
-                                  )
-                            )
-                      )
-                )
+              cond
+                [Res]
+                {|
+                  (and (eqU8 n #u8(0)) (eqU8 m #u8(0))) =>
+                  MkRes
+                  #
+                  u8
+                  (0)
+                  (C_App exprA exprB) |
+                  (eqU8 n #u8(0)) =>
+                  MkRes
+                  m
+                  (C_App (C_App (emitBulk #u8(1) m) exprA) exprB) |
+                  (eqU8 m #u8(0)) =>
+                  MkRes
+                  n
+                  (C_App (C_App (emitBulk #u8(2) n) exprA) exprB) |
+                  (eqU8 n m) =>
+                  MkRes
+                  n
+                  (C_App (C_App (emitBulk #u8(0) n) exprA) exprB) |
+                  (ltU8 n m) =>
+                  let
+                  liftedA =
+                  liftArity
+                  exprA
+                  n
+                  m
+                  in
+                  MkRes
+                  m
+                  (C_App (C_App (emitBulk #u8(0) m) liftedA) exprB) |
+                  otherwise =>
+                  let
+                  liftedB =
+                  liftArity
+                  exprB
+                  m
+                  n
+                  in
+                  MkRes
+                  n
+                  (C_App (C_App (emitBulk #u8(0) n) exprA) liftedB)
+                }
           }
       }
 

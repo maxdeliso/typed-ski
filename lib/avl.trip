@@ -300,21 +300,19 @@ poly rec extractMin =
   #K =>
     #V =>
       \t : Avl K V =>
-        match t [Pair K (Pair V (Avl K V))] {
-          | Empty => error [Pair K (Pair V (Avl K V))]
+        match t [(K, (Pair V (Avl K V)))] {
+          | Empty => error [(K, (Pair V (Avl K V)))]
           | Node l k v _ r =>
-            match l [Pair K (Pair V (Avl K V))] {
+            match l [(K, (Pair V (Avl K V)))] {
               | Empty =>
-                MkPair [K] [Pair V (Avl K V)] k (MkPair [V] [Avl K V] v r)
+                {K, Pair V (Avl K V) | k, (MkPair [V] [Avl K V] v r)}
               | Node _ _ _ _ _ =>
-                match (extractMin [K] [V] l) [Pair K (Pair V (Avl K V))] {
+                match (extractMin [K] [V] l) [(K, (Pair V (Avl K V)))] {
                   | MkPair minK minRest =>
-                    match minRest [Pair V (Avl K V)] {
+                    match minRest [(V, (Avl K V))] {
                       | MkPair minV newLeft =>
-                        MkPair
-                          [K]
-                          [Pair V (Avl K V)]
-                          minK
+                        {K, Pair V (Avl K V) |
+                          minK,
                           (
                             MkPair
                               [V]
@@ -322,6 +320,7 @@ poly rec extractMin =
                               minV
                               (balance [K] [V] (mkNode [K] [V] newLeft k v r))
                           )
+                        }
                     }
                 }
             }
@@ -335,9 +334,9 @@ poly deleteRoot =
           match r [Avl K V] {
             | Empty => l
             | Node _ _ _ _ _ =>
-              match (extractMin [K] [V] r) [Pair K (Pair V (Avl K V))] {
+              match (extractMin [K] [V] r) [(K, (Pair V (Avl K V)))] {
                 | MkPair minK minRest =>
-                  match minRest [Pair V (Avl K V)] {
+                  match minRest [(V, (Avl K V))] {
                     | MkPair minV newRight =>
                       balance [K] [V] (mkNode [K] [V] l minK minV newRight)
                   }
@@ -398,7 +397,7 @@ poly rec toListKeys =
     #V =>
       \t : Avl K V =>
         match t [List K] {
-          | Empty => nil [K]
+          | Empty => {K |}
           | Node l k _ _ r =>
             append
               [K]
@@ -410,28 +409,28 @@ poly rec toListEntries =
   #K =>
     #V =>
       \t : Avl K V =>
-        match t [List (Pair K V)] {
-          | Empty => nil [Pair K V]
+        match t [List ((K, V))] {
+          | Empty => {Pair K V |}
           | Node l k v _ r =>
             append
-              [Pair K V]
+              [(K, V)]
               (toListEntries [K] [V] l)
-              (cons [Pair K V] (MkPair [K] [V] k v) (toListEntries [K] [V] r))
+              (cons [(K, V)] ({K, V | k, v}) (toListEntries [K] [V] r))
         }
 
 poly rec fromList =
   #K =>
     #V =>
       \lteKey : K -> K -> Bool =>
-        \entries : List (Pair K V) =>
+        \entries : List ((K, V)) =>
           matchList
-            [Pair K V]
+            [(K, V)]
             [Avl K V]
             entries
             (empty [K] [V])
             (
-              \entry : Pair K V =>
-                \rest : List (Pair K V) =>
+              \entry : (K, V) =>
+                \rest : List ((K, V)) =>
                   let acc = fromList [K] [V] lteKey rest in
                   insert
                     [K]

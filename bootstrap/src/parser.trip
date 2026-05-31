@@ -116,6 +116,8 @@ import Lexer T_KwType
 
 import Lexer T_KwData
 
+import Lexer T_KwCond
+
 import Lexer T_Ident
 
 import Lexer T_Nat
@@ -235,6 +237,8 @@ export kwCombinatorTag
 export kwTypeTag
 
 export kwDataTag
+
+export kwCondTag
 
 export fstNameToken
 
@@ -460,6 +464,9 @@ poly kwTypeTag =
 
 poly kwDataTag =
   tokenTag T_KwData
+
+poly kwCondTag =
+  tokenTag T_KwCond
 
 poly fstTypeToken =
   \p : (Type, (List Token)) => fst [Type] [List Token] p
@@ -1058,10 +1065,10 @@ poly parseAtomWith =
               cond
                 [Result ParseError (Pair Expr (List Token))]
                 {|
+                  (eqU8 tag kwCondTag) =>
+                  parseCondWith recurse t |
                   (eqU8 tag identTag) =>
-                  if [Result ParseError (Pair Expr (List Token))] (eqListU8 (tokenText h) "cond")
-                    (\u : U8 => parseCondWith recurse t)
-                    (\u : U8 => Ok [ParseError] [Pair Expr (List Token)] (MkPair [Expr] [List Token] (E_Var (tokenText h)) t)) |
+                  Ok [ParseError] [Pair Expr (List Token)] (MkPair [Expr] [List Token] (E_Var (tokenText h)) t) |
                   (eqU8 tag natTag) =>
                   Ok
                   [ParseError]

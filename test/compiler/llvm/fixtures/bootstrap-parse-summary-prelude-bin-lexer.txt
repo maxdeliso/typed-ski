@@ -103,7 +103,7 @@ import Prelude ltListU8
 import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
-exports 66
+exports 67
 export ParseError
 export MkParseError
 export Token
@@ -135,6 +135,7 @@ export T_KwOpaque
 export T_KwCombinator
 export T_KwType
 export T_KwData
+export T_KwCond
 export T_Ident
 export T_Nat
 export T_EOF
@@ -180,7 +181,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 112
+poly 113
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -209,6 +210,7 @@ poly T_KwOpaque
 poly T_KwCombinator
 poly T_KwType
 poly T_KwData
+poly T_KwCond
 poly T_EOF
 poly tokenTag
 poly tokenTaggedTextData

@@ -132,6 +132,8 @@ export T_KwType
 
 export T_KwData
 
+export T_KwCond
+
 export T_Ident
 
 export T_Nat
@@ -293,6 +295,9 @@ poly T_KwType : Token =
 
 poly T_KwData : Token =
   T_Tagged #u8(28)
+
+poly T_KwCond : Token =
+  T_Tagged #u8(32)
 
 poly T_EOF : Token =
   T_Tagged #u8(31)
@@ -608,9 +613,17 @@ poly keywordTokenFromWordT =
 
 poly keywordTokenFromWordC =
   \word : List U8 =>
-    if [Token] (eqListU8 word "combinator")
-      (\u : U8 => T_KwCombinator)
-      (\u : U8 => T_Ident word)
+    cond
+      [Token]
+      {|
+        (eqListU8 word "combinator") =>
+        T_KwCombinator |
+        (eqListU8 word "cond") =>
+        T_KwCond |
+        otherwise =>
+        T_Ident
+        word
+      }
 
 poly keywordTokenFromWordData =
   \word : List U8 =>

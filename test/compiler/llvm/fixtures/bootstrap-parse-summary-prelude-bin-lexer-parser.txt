@@ -103,7 +103,7 @@ import Prelude ltListU8
 import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
-exports 66
+exports 67
 export ParseError
 export MkParseError
 export Token
@@ -135,6 +135,7 @@ export T_KwOpaque
 export T_KwCombinator
 export T_KwType
 export T_KwData
+export T_KwCond
 export T_Ident
 export T_Nat
 export T_EOF
@@ -180,7 +181,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 112
+poly 113
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -209,6 +210,7 @@ poly T_KwOpaque
 poly T_KwCombinator
 poly T_KwType
 poly T_KwData
+poly T_KwCond
 poly T_EOF
 poly tokenTag
 poly tokenTaggedTextData
@@ -296,7 +298,7 @@ poly tokenize
 combinator 0
 module Parser
 declared Parser
-imports 61
+imports 62
 import Prelude eqListU8
 import Prelude List
 import Prelude nil
@@ -355,10 +357,11 @@ import Lexer T_KwOpaque
 import Lexer T_KwCombinator
 import Lexer T_KwType
 import Lexer T_KwData
+import Lexer T_KwCond
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
-exports 103
+exports 104
 export Pattern
 export P_Ctor
 export Expr
@@ -416,6 +419,7 @@ export kwOpaqueTag
 export kwCombinatorTag
 export kwTypeTag
 export kwDataTag
+export kwCondTag
 export fstNameToken
 export sndNameToken
 export fstExprToken
@@ -492,7 +496,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 95
+poly 100
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -526,6 +530,7 @@ poly kwOpaqueTag
 poly kwCombinatorTag
 poly kwTypeTag
 poly kwDataTag
+poly kwCondTag
 poly fstTypeToken
 poly sndTypeToken
 poly fstNameToken
@@ -556,6 +561,10 @@ poly buildListExpr
 poly parseLiteralAtomWith
 poly parseListElements
 poly parseBraceBodyWith
+poly desugarCondLoop
+poly desugarCond
+poly parseCondArms
+poly parseCondWith
 poly parseAtomWith
 poly skipTypeArg
 poly parseSimpleTypeWith

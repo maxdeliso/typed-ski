@@ -113,7 +113,7 @@ function shouldSkipDir(name: string): boolean {
 
 export async function discoverTripFiles(
   inputPaths: readonly string[],
-  cwd = process.cwd(),
+  cwd: string = process.cwd(),
 ): Promise<string[]> {
   const files: string[] = [];
 

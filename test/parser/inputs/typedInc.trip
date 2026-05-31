@@ -1,3 +1,4 @@
 module TypedInc
 
-poly inc : Int->Int = \x:Int => plus x 1
+poly inc : Int -> Int =
+  \x : Int => plus x 1

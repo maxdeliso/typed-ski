@@ -1,37 +1,61 @@
 module AvlDeleteTraversalTest
 
 import Nat Nat
+
 import Nat zero
+
 import Nat succ
+
 import Nat add
+
 import Nat mul
+
 import Nat lte
+
 import Nat fromBin
+
 import Prelude List
+
 import Prelude Maybe
+
 import Prelude Some
+
 import Prelude None
+
 import Prelude matchList
+
 import Avl empty
+
 import Avl insert
+
 import Avl delete
+
 import Avl lookup
+
 import Avl size
+
 import Avl toListKeys
 
 export main
 
-poly tenBin : Bin = B0 (B1 (B0 (B1 BZ)))
+poly tenBin : Bin =
+  B0 (B1 (B0 (B1 BZ)))
 
-poly natOrZero = \m : Maybe Nat =>
-  match m [Nat] {
-    | None => zero
-    | Some x => x
-  }
+poly natOrZero =
+  \m : Maybe Nat =>
+    match m [Nat] {
+      | None => zero
+      | Some x => x
+    }
 
-poly rec encode = \keys : List Nat =>
-  matchList [Nat] [Nat] keys zero
-    (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin tenBin)))
+poly rec encode =
+  \keys : List Nat =>
+    matchList
+      [Nat]
+      [Nat]
+      keys
+      zero
+      (\h : Nat => \t : List Nat => add h (mul (encode t) (fromBin tenBin)))
 
 poly main =
   let one = succ zero in

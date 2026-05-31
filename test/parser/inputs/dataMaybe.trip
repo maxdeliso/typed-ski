@@ -1,2 +1,5 @@
 module DataMaybe
-data Maybe A = Nothing | Just A
+
+data Maybe A =
+  | Nothing
+  | Just A

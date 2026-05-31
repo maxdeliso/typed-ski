@@ -49,12 +49,12 @@ describe("CLI Integration", () => {
       const result = runTripc([
         "--emit",
         "llvm",
-        "test/compiler/llvm/helloWorld.trip",
+        join(workspaceRoot, "test/compiler/llvm/helloWorld.trip"),
         outPath,
         "--entry-module",
         "Main",
         "--module-source",
-        "Prelude=lib/prelude.trip",
+        `Prelude=${join(workspaceRoot, "lib/prelude.trip")}`,
         "--emit-main-wrapper",
       ]);
 

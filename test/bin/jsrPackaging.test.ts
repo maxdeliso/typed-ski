@@ -28,10 +28,23 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const jsRoot = join(__dirname, "../..");
 const srcRoot = workspaceRoot;
 
+function jsrJsonPath(): string {
+  const candidates = [
+    process.env["TYPED_SKI_JSR_JSON_PATH"],
+    join(srcRoot, "jsr.json"),
+    join(jsRoot, "..", "..", "..", "jsr.json"),
+  ];
+  const found = candidates.find(
+    (candidate): candidate is string =>
+      candidate !== undefined && existsSync(candidate),
+  );
+  return found ?? join(srcRoot, "jsr.json");
+}
+
 describe("JSR Packaging Configuration", () => {
   describe("jsr.json configuration", () => {
     it("has required fields", async () => {
-      const configPath = join(srcRoot, "jsr.json");
+      const configPath = jsrJsonPath();
       assert.strictEqual(existsSync(configPath), true);
 
       const configContent = await readFile(configPath, "utf-8");
@@ -50,19 +63,24 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("exports field configuration", async () => {
-      const configPath = join(srcRoot, "jsr.json");
+      const configPath = jsrJsonPath();
       const configContent = await readFile(configPath, "utf-8");
       const config = parseJsonc(configContent) as any;
 
       assert.ok(config.exports !== undefined);
       assert.ok("./bin/tripc" in config.exports);
+      assert.ok("./bin/improvize" in config.exports);
 
       assert.strictEqual(config.exports["."], "./lib/index.ts");
       assert.strictEqual(config.exports["./bin/tripc"], "./bin/tripc.ts");
+      assert.strictEqual(
+        config.exports["./bin/improvize"],
+        "./bin/improvize.ts",
+      );
     });
 
     it("publish include configuration", async () => {
-      const configPath = join(srcRoot, "jsr.json");
+      const configPath = jsrJsonPath();
       const configContent = await readFile(configPath, "utf-8");
       const config = parseJsonc(configContent) as any;
 
@@ -74,7 +92,7 @@ describe("JSR Packaging Configuration", () => {
     });
 
     it("uses Deno's built-in Node types without requiring node_modules", async () => {
-      const configPath = join(srcRoot, "jsr.json");
+      const configPath = jsrJsonPath();
       const configContent = await readFile(configPath, "utf-8");
       const config = parseJsonc(configContent) as any;
 
@@ -94,14 +112,24 @@ describe("JSR Packaging Configuration", () => {
 
       // Core CLI files
       assert.strictEqual(existsSync(join(binDir, "tripc.ts")), true);
+      assert.strictEqual(existsSync(join(binDir, "improvize.ts")), true);
 
       // Documentation and scripts
     });
 
     it("CLI files have proper shebang", async () => {
       const tripcTs = await readFile(join(srcRoot, "bin/tripc.ts"), "utf-8");
+      const improvizeTs = await readFile(
+        join(srcRoot, "bin/improvize.ts"),
+        "utf-8",
+      );
       assert.ok(
         tripcTs.includes(
+          "#!/usr/bin/env -S node --disable-warning=ExperimentalWarning",
+        ),
+      );
+      assert.ok(
+        improvizeTs.includes(
           "#!/usr/bin/env -S node --disable-warning=ExperimentalWarning",
         ),
       );
@@ -175,8 +203,7 @@ describe("JSR Packaging Configuration", () => {
       const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
       const version = packageJson.version;
 
-      const jsrJsonPath = join(srcRoot, "jsr.json");
-      const jsrJson = JSON.parse(await readFile(jsrJsonPath, "utf-8"));
+      const jsrJson = JSON.parse(await readFile(jsrJsonPath(), "utf-8"));
       assert.strictEqual(jsrJson.version, version);
 
       // Read the VERSION via static import rather than file-system probe.
@@ -239,7 +266,7 @@ describe("JSR Packaging Configuration", () => {
             "--entry-module",
             "Main",
             "--module-source",
-            "Prelude=lib/prelude.trip",
+            `Prelude=${join(srcRoot, "lib/prelude.trip")}`,
             "--emit-main-wrapper",
           ],
           {

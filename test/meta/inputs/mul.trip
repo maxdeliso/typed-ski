@@ -2,23 +2,32 @@ module MulModule
 
 type Nat = #X -> (X -> X) -> X -> X
 
-poly zero = #X => \s : X -> X => \z : X => z
+poly zero =
+  #X => \s : X -> X => \z : X => z
 
-poly succ = \n : Nat =>
-              #a => \s : a -> a => \z : a =>
-                s (n [a] s z)
+poly succ =
+  \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
 
-poly one   = succ zero
-poly two   = succ one
-poly three = succ two
-poly four  = succ three
-poly five  = succ four
+poly one =
+  succ zero
+
+poly two =
+  succ one
+
+poly three =
+  succ two
+
+poly four =
+  succ three
+
+poly five =
+  succ four
 
 poly mul =
-  \m : Nat => \n : Nat =>
-    #a => \s : a -> a => \z : a =>
-      m [a] (n [a] s) z
+  \m : Nat => \n : Nat => #a => \s : a -> a => \z : a => m [a] (n [a] s) z
 
-poly six = mul two three
+poly six =
+  mul two three
 
-poly twentyFour = mul (mul two three) four
+poly twentyFour =
+  mul (mul two three) four

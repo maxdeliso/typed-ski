@@ -1,3 +1,5 @@
 module MyModule
+
 import Foo bar
+
 export Baz

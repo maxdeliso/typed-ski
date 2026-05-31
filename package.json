@@ -1,11 +1,12 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./lib/index.ts",
-    "./bin/tripc": "./bin/tripc.ts"
+    "./bin/tripc": "./bin/tripc.ts",
+    "./bin/improvize": "./bin/improvize.ts"
   },
   "files": [
     "README.md",
@@ -40,6 +41,7 @@
   "scripts": {
     "build:ts": "tsc --project tsconfig.emit.json",
     "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
+    "improvize": "node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js",
     "bench:avl": "node --disable-warning=ExperimentalWarning ts_out/test/avlBenchmark.js",
     "dist": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
     "typecheck": "tsc --noEmit",

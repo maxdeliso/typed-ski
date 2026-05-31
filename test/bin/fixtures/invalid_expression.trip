@@ -1,2 +1,4 @@
 module Test
-poly id = invalid syntax here
+
+poly id =
+  invalid syntax here

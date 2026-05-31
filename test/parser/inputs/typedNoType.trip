@@ -1,3 +1,4 @@
 module TypedNoType
 
-poly id = \x:Int => x
+poly id =
+  \x : Int => x

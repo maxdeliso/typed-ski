@@ -1,166 +1,215 @@
 module Bin
 
 import Prelude Bin
+
 import Prelude BZ
+
 import Prelude B0
+
 import Prelude B1
+
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude Pair
+
 import Prelude MkPair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude eqU8
+
 import Prelude addU8
+
 import Prelude not
+
 import Prelude digitToAscii
+
 import Prelude listIsEmpty
 
 export incBin
+
 export addBin
+
 export mulBin
+
 export subBin
+
 export predBin
+
 export isZeroBin
+
 export eqBin
+
 export ltBin
+
 export lteBin
+
 export gteBin
+
 export u8ToBin
+
 export binToDigits
 
-poly rec isZeroBin = \b : Bin =>
-  match b [Bool] {
-    | BZ => true
-    | B0 rest => isZeroBin rest
-    | B1 _ => false
-  }
+poly rec isZeroBin =
+  \b : Bin =>
+    match b [Bool] {
+      | BZ => true
+      | B0 rest => isZeroBin rest
+      | B1 _ => false
+    }
 
-poly rec incBin = \b : Bin =>
-  match b [Bin] {
-    | BZ => B1 BZ
-    | B0 rest => B1 rest
-    | B1 rest => B0 (incBin rest)
-  }
+poly rec incBin =
+  \b : Bin =>
+    match b [Bin] {
+      | BZ => B1 BZ
+      | B0 rest => B1 rest
+      | B1 rest => B0 (incBin rest)
+    }
 
-poly rec addBin = \a : Bin => \b : Bin =>
-  match a [Bin] {
-    | BZ => b
-    | B0 pa =>
-        match b [Bin] {
-          | BZ => a
-          | B0 pb => B0 (addBin pa pb)
-          | B1 pb => B1 (addBin pa pb)
-        }
-    | B1 pa =>
-        match b [Bin] {
-          | BZ => a
-          | B0 pb => B1 (addBin pa pb)
-          | B1 pb => B0 (incBin (addBin pa pb))
-        }
-  }
+poly rec addBin =
+  \a : Bin =>
+    \b : Bin =>
+      match a [Bin] {
+        | BZ => b
+        | B0 pa =>
+          match b [Bin] {
+            | BZ => a
+            | B0 pb => B0 (addBin pa pb)
+            | B1 pb => B1 (addBin pa pb)
+          }
+        | B1 pa =>
+          match b [Bin] {
+            | BZ => a
+            | B0 pb => B1 (addBin pa pb)
+            | B1 pb => B0 (incBin (addBin pa pb))
+          }
+      }
 
-poly rec mulBin = \a : Bin => \b : Bin =>
-  match b [Bin] {
-    | BZ => BZ
-    | B0 pb => B0 (mulBin a pb)
-    | B1 pb => addBin a (B0 (mulBin a pb))
-  }
+poly rec mulBin =
+  \a : Bin =>
+    \b : Bin =>
+      match b [Bin] {
+        | BZ => BZ
+        | B0 pb => B0 (mulBin a pb)
+        | B1 pb => addBin a (B0 (mulBin a pb))
+      }
 
-poly rec predBin = \b : Bin =>
-  match b [Bin] {
-    | BZ => BZ
-    | B0 rest => B1 (predBin rest)
-    | B1 rest => B0 rest
-  }
+poly rec predBin =
+  \b : Bin =>
+    match b [Bin] {
+      | BZ => BZ
+      | B0 rest => B1 (predBin rest)
+      | B1 rest => B0 rest
+    }
 
-poly rec subBin = \a : Bin => \b : Bin =>
-  match b [Bin] {
-    | BZ => a
-    | B0 pb =>
-        match a [Bin] {
-          | BZ => BZ
-          | B0 pa => B0 (subBin pa pb)
-          | B1 pa => B1 (subBin pa pb)
-        }
-    | B1 pb =>
-        match a [Bin] {
-          | BZ => BZ
-          | B0 pa => B1 (subBin (predBin pa) pb)
-          | B1 pa => B0 (subBin pa pb)
-        }
-  }
+poly rec subBin =
+  \a : Bin =>
+    \b : Bin =>
+      match b [Bin] {
+        | BZ => a
+        | B0 pb =>
+          match a [Bin] {
+            | BZ => BZ
+            | B0 pa => B0 (subBin pa pb)
+            | B1 pa => B1 (subBin pa pb)
+          }
+        | B1 pb =>
+          match a [Bin] {
+            | BZ => BZ
+            | B0 pa => B1 (subBin (predBin pa) pb)
+            | B1 pa => B0 (subBin pa pb)
+          }
+      }
 
-poly rec eqBin = \a : Bin => \b : Bin =>
-  match a [Bool] {
-    | BZ => isZeroBin b
-    | B0 pa =>
-        match b [Bool] {
-          | BZ => false
-          | B0 pb => eqBin pa pb
-          | B1 _ => false
-        }
-    | B1 pa =>
-        match b [Bool] {
-          | BZ => false
-          | B0 _ => false
-          | B1 pb => eqBin pa pb
-        }
-  }
+poly rec eqBin =
+  \a : Bin =>
+    \b : Bin =>
+      match a [Bool] {
+        | BZ => isZeroBin b
+        | B0 pa =>
+          match b [Bool] {
+            | BZ => false
+            | B0 pb => eqBin pa pb
+            | B1 _ => false
+          }
+        | B1 pa =>
+          match b [Bool] {
+            | BZ => false
+            | B0 _ => false
+            | B1 pb => eqBin pa pb
+          }
+      }
 
-poly rec ltBin = \a : Bin => \b : Bin =>
-  not (isZeroBin (subBin b a))
+poly rec ltBin =
+  \a : Bin => \b : Bin => not (isZeroBin (subBin b a))
 
-poly lteBin = \a : Bin => \b : Bin =>
-  isZeroBin (subBin a b)
+poly lteBin =
+  \a : Bin => \b : Bin => isZeroBin (subBin a b)
 
-poly gteBin = \a : Bin => \b : Bin =>
-  lteBin b a
+poly gteBin =
+  \a : Bin => \b : Bin => lteBin b a
 
-poly rec u8ToBinAcc = \count : U8 => \n : U8 => \acc : Bin =>
-  if [Bin] (eqU8 count n)
-    (\u : U8 => acc)
-    (\u : U8 => u8ToBinAcc (addU8 count #u8(1)) n (incBin acc))
+poly rec u8ToBinAcc =
+  \count : U8 =>
+    \n : U8 =>
+      \acc : Bin =>
+        if [Bin] (eqU8 count n)
+          (\u : U8 => acc)
+          (\u : U8 => u8ToBinAcc (addU8 count #u8(1)) n (incBin acc))
 
-poly u8ToBin = \n : U8 =>
-  u8ToBinAcc #u8(0) n BZ
+poly u8ToBin =
+  \n : U8 => u8ToBinAcc #u8(0) n BZ
 
-poly rec divModBinAcc = \n : Bin => \d : Bin => \q : Bin =>
-  if [Pair Bin Bin] (ltBin n d)
-    (\u : U8 => MkPair [Bin] [Bin] q n)
-    (\u : U8 => divModBinAcc (subBin n d) d (incBin q))
+poly rec divModBinAcc =
+  \n : Bin =>
+    \d : Bin =>
+      \q : Bin =>
+        if [Pair Bin Bin] (ltBin n d)
+          (\u : U8 => MkPair [Bin] [Bin] q n)
+          (\u : U8 => divModBinAcc (subBin n d) d (incBin q))
 
-poly divModBin = \n : Bin => \d : Bin =>
-  divModBinAcc n d BZ
+poly divModBin =
+  \n : Bin => \d : Bin => divModBinAcc n d BZ
 
-poly rec binToDigitsAcc = \val : Bin => \acc : List U8 =>
-  let ten = u8ToBin #u8(10) in
-  if [List U8] (isZeroBin val)
-    (\u : U8 => if [List U8] (listIsEmpty [U8] acc) (\u : U8 => "0") (\u : U8 => acc))
-    (\u : U8 =>
-      let res = divModBin val ten in
-      let q = fst [Bin] [Bin] res in
-      let r = snd [Bin] [Bin] res in
-      let digit = 
-        if [U8] (isZeroBin r) (\u : U8 => '0')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(1))) (\u : U8 => '1')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(2))) (\u : U8 => '2')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(3))) (\u : U8 => '3')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(4))) (\u : U8 => '4')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(5))) (\u : U8 => '5')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(6))) (\u : U8 => '6')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(7))) (\u : U8 => '7')
-        (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(8))) (\u : U8 => '8')
-        (\u : U8 => '9'))))))))) in
-      binToDigitsAcc q (cons [U8] digit acc))
+poly rec binToDigitsAcc =
+  \val : Bin =>
+    \acc : List U8 =>
+      let ten = u8ToBin #u8(10) in
+      if [List U8] (isZeroBin val)
+        (
+          \u : U8 =>
+            if [List U8] (listIsEmpty [U8] acc)
+              (\u : U8 => "0")
+              (\u : U8 => acc)
+        )
+        (
+          \u : U8 =>
+            let res = divModBin val ten in
+            let q = fst [Bin] [Bin] res in
+            let r = snd [Bin] [Bin] res in
+            let digit = if [U8] (isZeroBin r) (\u : U8 => '0') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(1))) (\u : U8 => '1') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(2))) (\u : U8 => '2') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(3))) (\u : U8 => '3') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(4))) (\u : U8 => '4') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(5))) (\u : U8 => '5') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(6))) (\u : U8 => '6') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(7))) (\u : U8 => '7') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(8))) (\u : U8 => '8') (\u : U8 => '9'))))))))) in
+            binToDigitsAcc q (cons [U8] digit acc)
+        )
 
-poly binToDigits = \b : Bin =>
-  binToDigitsAcc b (nil [U8])
+poly binToDigits =
+  \b : Bin => binToDigitsAcc b (nil [U8])

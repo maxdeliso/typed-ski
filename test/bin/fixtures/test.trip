@@ -1,6 +1,8 @@
 module TestModule
 
 import Math add
+
 export id
 
-poly id = #a => \x:a => x
+poly id =
+  #a => \x : a => x

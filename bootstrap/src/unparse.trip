@@ -1,39 +1,71 @@
 module Unparse
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude append
+
 import Prelude addU8
+
 import Prelude divU8
+
 import Prelude modU8
+
 import Prelude ltU8
+
 import Prelude U8
 
 export Terminal
+
 export T_S
+
 export T_K
+
 export T_I
+
 export T_B
+
 export T_C
+
 export T_SPrime
+
 export T_BPrime
+
 export T_CPrime
+
 export T_WriteOne
+
 export T_ReadOne
+
 export T_EqU8
+
 export T_LtU8
+
 export T_DivU8
+
 export T_ModU8
+
 export T_AddU8
+
 export T_SubU8
+
 export T_Byte
+
 export Comb
+
 export C_Term
+
 export C_App
+
 export terminalBytes
+
 export unparseCombinator
+
 export terminalTag
+
 export terminalByteValue
 
 data Terminal =
@@ -59,98 +91,122 @@ data Comb =
   | C_Term Terminal
   | C_App Comb Comb
 
-poly terminalBytes = \t : Terminal =>
-  match t [List U8] {
-    | T_S => "S"
-    | T_K => "K"
-    | T_I => "I"
-    | T_B => "B"
-    | T_C => "C"
-    | T_SPrime => "P"
-    | T_BPrime => "Q"
-    | T_CPrime => "R"
-    | T_WriteOne => "."
-    | T_ReadOne => ","
-    | T_EqU8 => "E"
-    | T_LtU8 => "L"
-    | T_DivU8 => "D"
-    | T_ModU8 => "M"
-    | T_AddU8 => "A"
-    | T_SubU8 => "O"
-    | T_Byte b => append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
-  }
+poly terminalBytes =
+  \t : Terminal =>
+    match t [List U8] {
+      | T_S => "S"
+      | T_K => "K"
+      | T_I => "I"
+      | T_B => "B"
+      | T_C => "C"
+      | T_SPrime => "P"
+      | T_BPrime => "Q"
+      | T_CPrime => "R"
+      | T_WriteOne => "."
+      | T_ReadOne => ","
+      | T_EqU8 => "E"
+      | T_LtU8 => "L"
+      | T_DivU8 => "D"
+      | T_ModU8 => "M"
+      | T_AddU8 => "A"
+      | T_SubU8 => "O"
+      | T_Byte b =>
+        append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
+    }
 
-poly rec unparseCombinator = \c : Comb =>
-  match c [List U8] {
-    | C_Term t => terminalBytes t
-    | C_App l r =>
-        append [U8] "(" (append [U8] (unparseCombinator l) (append [U8] " " (append [U8] (unparseCombinator r) ")")))
-  }
+poly rec unparseCombinator =
+  \c : Comb =>
+    match c [List U8] {
+      | C_Term t => terminalBytes t
+      | C_App l r =>
+        append
+          [U8]
+          "("
+          (
+            append
+              [U8]
+              (unparseCombinator l)
+              (append [U8] " " (append [U8] (unparseCombinator r) ")"))
+          )
+    }
 
-poly digitToAscii = \d : U8 =>
-  addU8 d #u8(48)
+poly digitToAscii =
+  \d : U8 => addU8 d #u8(48)
 
-poly singletonU8 = \b : U8 =>
-  cons [U8] b (nil [U8])
+poly singletonU8 =
+  \b : U8 => {U8 | b}
 
-poly u8ToDigits = \n : U8 =>
-  if [List U8] (ltU8 n #u8(10))
-    (\u : U8 => singletonU8 (digitToAscii n))
-    (\u : U8 =>
-      if [List U8] (ltU8 n #u8(100))
-        (\u : U8 =>
-          cons [U8]
-            (digitToAscii (divU8 n #u8(10)))
-            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
-        (\u : U8 =>
-          let hundreds = divU8 n #u8(100) in
-          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
-          let ones = modU8 n #u8(10) in
-          cons [U8]
-            (digitToAscii hundreds)
-            (cons [U8]
-              (digitToAscii tens)
-              (singletonU8 (digitToAscii ones))))
-    )
+poly u8ToDigits =
+  \n : U8 =>
+    if [List U8] (ltU8 n #u8(10))
+      (\u : U8 => singletonU8 (digitToAscii n))
+      (
+        \u : U8 =>
+          if [List U8] (ltU8 n #u8(100))
+            (
+              \u : U8 =>
+                cons
+                  [U8]
+                  (digitToAscii (divU8 n #u8(10)))
+                  (singletonU8 (digitToAscii (modU8 n #u8(10))))
+            )
+            (
+              \u : U8 =>
+                let hundreds = divU8 n #u8(100) in
+                let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+                let ones = modU8 n #u8(10) in
+                cons
+                  [U8]
+                  (digitToAscii hundreds)
+                  (
+                    cons
+                      [U8]
+                      (digitToAscii tens)
+                      (singletonU8 (digitToAscii ones))
+                  )
+            )
+      )
 
-poly terminalTag = \t : Terminal =>
-  match t [U8] {
-    | T_S => #u8(0)
-    | T_K => #u8(1)
-    | T_I => #u8(2)
-    | T_B => #u8(3)
-    | T_C => #u8(4)
-    | T_SPrime => #u8(5)
-    | T_BPrime => #u8(6)
-    | T_CPrime => #u8(7)
-    | T_WriteOne => #u8(8)
-    | T_ReadOne => #u8(9)
-    | T_EqU8 => #u8(10)
-    | T_LtU8 => #u8(11)
-    | T_DivU8 => #u8(12)
-    | T_ModU8 => #u8(13)
-    | T_AddU8 => #u8(14)
-    | T_SubU8 => #u8(15)
-    | T_Byte _ => #u8(16)
-  }
+poly terminalTag =
+  \t : Terminal =>
+    match t [U8] {
+      | T_S => #u8(0)
+      | T_K => #u8(1)
+      | T_I => #u8(2)
+      | T_B => #u8(3)
+      | T_C => #u8(4)
+      | T_SPrime => #u8(5)
+      | T_BPrime => #u8(6)
+      | T_CPrime => #u8(7)
+      | T_WriteOne => #u8(8)
+      | T_ReadOne => #u8(9)
+      | T_EqU8 => #u8(10)
+      | T_LtU8 => #u8(11)
+      | T_DivU8 => #u8(12)
+      | T_ModU8 => #u8(13)
+      | T_AddU8 => #u8(14)
+      | T_SubU8 => #u8(15)
+      | T_Byte _ => #u8(16)
+    }
 
-poly terminalByteValue = \t : Terminal =>
-  match t [U8] {
-    | T_S => #u8(0)
-    | T_K => #u8(0)
-    | T_I => #u8(0)
-    | T_B => #u8(0)
-    | T_C => #u8(0)
-    | T_SPrime => #u8(0)
-    | T_BPrime => #u8(0)
-    | T_CPrime => #u8(0)
-    | T_WriteOne => #u8(0)
-    | T_ReadOne => #u8(0)
-    | T_EqU8 => #u8(0)
-    | T_LtU8 => #u8(0)
-    | T_DivU8 => #u8(0)
-    | T_ModU8 => #u8(0)
-    | T_AddU8 => #u8(0)
-    | T_SubU8 => #u8(0)
-    | T_Byte b => b
-  }
+poly terminalByteValue =
+  \t : Terminal =>
+    match t [U8] {
+      | T_S => #u8(0)
+      | T_K => #u8(0)
+      | T_I => #u8(0)
+      | T_B => #u8(0)
+      | T_C => #u8(0)
+      | T_SPrime => #u8(0)
+      | T_BPrime => #u8(0)
+      | T_CPrime => #u8(0)
+      | T_WriteOne => #u8(0)
+      | T_ReadOne => #u8(0)
+      | T_EqU8 => #u8(0)
+      | T_LtU8 => #u8(0)
+      | T_DivU8 => #u8(0)
+      | T_ModU8 => #u8(0)
+      | T_AddU8 => #u8(0)
+      | T_SubU8 => #u8(0)
+      | T_Byte b => b
+    }

@@ -1,24 +1,32 @@
 module CondSucc
 
-type Nat  = #X -> (X -> X) -> X -> X
+type Nat = #X -> (X -> X) -> X -> X
+
 type Bool = #B -> B -> B -> B
 
-poly zero  = #X => \s : X -> X => \z : X => z
-poly succ  = \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
+poly zero =
+  #X => \s : X -> X => \z : X => z
 
-poly one   = succ zero
-poly two   = succ one
+poly succ =
+  \n : Nat => #a => \s : a -> a => \z : a => s (n [a] s z)
 
-poly true  = #B => \t : B => \f : B => t
-poly false = #B => \t : B => \f : B => f
+poly one =
+  succ zero
+
+poly two =
+  succ one
+
+poly true =
+  #B => \t : B => \f : B => t
+
+poly false =
+  #B => \t : B => \f : B => f
 
 poly cond =
-  #X =>
-    \b : Bool =>
-    \t : X =>
-    \f : X =>
-      b [X] t f
+  #X => \b : Bool => \t : X => \f : X => b [X] t f
 
-poly pickNat = cond [Nat] false (succ two) one
+poly pickNat =
+  cond [Nat] false (succ two) one
 
-poly main = succ (succ pickNat)
+poly main =
+  succ (succ pickNat)

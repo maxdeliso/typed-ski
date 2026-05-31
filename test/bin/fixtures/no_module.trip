@@ -1,1 +1,2 @@
-poly id = #a => \x:a => x
+poly id =
+  #a => \x : a => x

@@ -37,9 +37,8 @@ build --guard_against_concurrent_changes
 # Explicitly share repository downloads (npm packages, LLVM tarballs, etc.)
 common --repository_cache=~/bazel_repo_cache
 
-# Dynamic Resource Limits: Limit each Bazel instance to 50% of host CPU/RAM to prevent
-# system lockups, thrashing, and OOM crashes during concurrent agent builds.
-build --local_resources=cpu=HOST_CPUS*0.5
-build --local_resources=memory=HOST_RAM*0.5
+# Dynamic Resource Limits: Tweak limits to avoid premature CPU throttling
+build --local_resources=cpu=HOST_CPUS*1.0
+build --local_resources=memory=HOST_RAM*0.9
 
 

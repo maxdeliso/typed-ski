@@ -1,19 +1,29 @@
 module Test
 
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude List
+
 import Prelude U8
+
 import Lexer tokenize
+
 import Lexer Token
 
 export main
 
-poly listAt : List U8 = "@"
+poly listAt : List U8 =
+  "@"
 
 poly main =
   match (tokenize listAt) [Bool] {

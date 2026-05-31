@@ -2,4 +2,5 @@ module ExecWrapper
 
 export main
 
-poly main = #X => \x: X => x
+poly main =
+  #X => \x : X => x

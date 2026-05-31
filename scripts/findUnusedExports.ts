@@ -47,7 +47,7 @@ for (const file of files) {
   }
 }
 
-const PROD_ROOTS = ["lib/index.ts", "bin/tripc.ts"];
+const PROD_ROOTS = ["lib/index.ts", "bin/tripc.ts", "bin/improvize.ts"];
 const TEST_ROOTS = files.filter(
   (f) => f.startsWith("test/") && f.endsWith(".test.ts"),
 );

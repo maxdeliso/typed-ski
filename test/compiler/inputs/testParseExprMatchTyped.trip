@@ -1,76 +1,128 @@
 module Test
 
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude if
+
 import Prelude Bin
+
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude U8
+
 import Prelude matchList
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude Pair
+
 import Prelude fst
+
 import Prelude snd
+
 import Lexer Token
+
 import Lexer T_KwMatch
+
 import Lexer T_Ident
+
 import Lexer T_LBracket
+
 import Lexer T_RBracket
+
 import Lexer T_LBrace
+
 import Lexer T_RBrace
+
 import Lexer T_Pipe
+
 import Lexer T_FatArrow
+
 import Lexer T_EOF
+
 import Prelude eqListU8
+
 import Parser parseExpr
+
 import Parser Pattern
+
 import Parser P_Ctor
+
 import Parser Expr
+
 import Parser E_Var
+
 import Parser E_App
+
 import Parser E_Lam
+
 import Parser E_Let
+
 import Parser E_Nat
+
 import Parser E_Match
 
 export main
 
-poly isVarNamed = \expr : Expr => \name : List U8 =>
-  match expr [Bool] {
-    | E_Var n => eqListU8 n name
-    | E_App f x => false
-    | E_Lam name body => false
-    | E_Let name val body => false
-    | E_Nat n => false
-    | E_Match scrutinee arms => false
-  }
+poly isVarNamed =
+  \expr : Expr =>
+    \name : List U8 =>
+      match expr [Bool] {
+        | E_Var n => eqListU8 n name
+        | E_App f x => false
+        | E_Lam name body => false
+        | E_Let name val body => false
+        | E_Nat n => false
+        | E_Match scrutinee arms => false
+      }
 
-poly isSingleArg = \args : List (List Bin) => \name : List Bin =>
-  matchList [List Bin] [Bool] args false
-    (\h : List Bin => \t : List (List Bin) =>
-      if [Bool] (eqListU8 h name)
-        (\u : Bin =>
-          matchList [List Bin] [Bool] t true
-            (\x : List Bin => \xs : List (List Bin) => false))
-        (\u : Bin => false))
+poly isSingleArg =
+  \args : List (List Bin) =>
+    \name : List Bin =>
+      matchList
+        [List Bin]
+        [Bool]
+        args
+        false
+        (
+          \h : List Bin =>
+            \t : List (List Bin) =>
+              if [Bool] (eqListU8 h name)
+                (
+                  \u : Bin =>
+                    matchList
+                      [List Bin]
+                      [Bool]
+                      t
+                      true
+                      (\x : List Bin => \xs : List (List Bin) => false)
+                )
+                (\u : Bin => false)
+        )
 
-poly isNoArgs = \args : List (List Bin) =>
-  matchList [List Bin] [Bool] args true
-    (\h : List Bin => \t : List (List Bin) => false)
+poly isNoArgs =
+  \args : List (List Bin) =>
+    matchList
+      [List Bin]
+      [Bool]
+      args
+      true
+      (\h : List Bin => \t : List (List Bin) => false)
 
 poly main =
-  let input =
-    {Token |
-      T_KwMatch (T_Ident "res") T_LBracket (T_Ident "List") (T_Ident "Token") T_RBracket T_LBrace
-      T_Pipe (T_Ident "Some") (T_Ident "x") T_FatArrow (T_Ident "x")
-      T_Pipe (T_Ident "None") T_FatArrow (T_Ident "res")
-      T_RBrace T_EOF}
-  in
+  let input = {Token | T_KwMatch (T_Ident "res") T_LBracket (T_Ident "List") (T_Ident "Token") T_RBracket T_LBrace T_Pipe (T_Ident "Some") (T_Ident "x") T_FatArrow (T_Ident "x") T_Pipe (T_Ident "None") T_FatArrow (T_Ident "res") T_RBrace T_EOF} in
   match (parseExpr input) [Bool] {
     | Err e => false
     | Ok res =>
@@ -83,46 +135,51 @@ poly main =
         | E_Nat n => false
         | E_Match scrutinee arms =>
           if [Bool] (isVarNamed scrutinee "res")
-            (\u : Bin =>
-              matchList [Pair Pattern Expr] [Bool] arms false
-                (\arm1 : Pair Pattern Expr => \rest1 : List (Pair Pattern Expr) =>
-                  let pat1 = fst [Pattern] [Expr] arm1 in
-                  let body1 = snd [Pattern] [Expr] arm1 in
-                  let arm1Ok =
-                    match pat1 [Bool] {
-                      | P_Ctor ctor args =>
-                        if [Bool] (eqListU8 ctor "Some")
-                          (\u : Bin =>
-                            if [Bool] (isSingleArg args "x")
-                              (\u : Bin => isVarNamed body1 "x")
-                              (\u : Bin => false))
+            (
+              \u : Bin =>
+                matchList
+                  [Pair Pattern Expr]
+                  [Bool]
+                  arms
+                  false
+                  (
+                    \arm1 : Pair Pattern Expr =>
+                      \rest1 : List (Pair Pattern Expr) =>
+                        let pat1 = fst [Pattern] [Expr] arm1 in
+                        let body1 = snd [Pattern] [Expr] arm1 in
+                        let arm1Ok = match pat1 [Bool] {| P_Ctor ctor args => if [Bool] (eqListU8 ctor "Some") (\u : Bin => if [Bool] (isSingleArg args "x") (\u : Bin => isVarNamed body1 "x") (\u : Bin => false)) (\u : Bin => false)} in
+                        if [Bool] arm1Ok
+                          (
+                            \u : Bin =>
+                              matchList
+                                [Pair Pattern Expr]
+                                [Bool]
+                                rest1
+                                false
+                                (
+                                  \arm2 : Pair Pattern Expr =>
+                                    \rest2 : List (Pair Pattern Expr) =>
+                                      let pat2 = fst [Pattern] [Expr] arm2 in
+                                      let body2 = snd [Pattern] [Expr] arm2 in
+                                      let arm2Ok = match pat2 [Bool] {| P_Ctor ctor args => if [Bool] (eqListU8 ctor "None") (\u : Bin => if [Bool] (isNoArgs args) (\u : Bin => isVarNamed body2 "res") (\u : Bin => false)) (\u : Bin => false)} in
+                                      if [Bool] arm2Ok
+                                        (
+                                          \u : Bin =>
+                                            matchList
+                                              [Pair Pattern Expr]
+                                              [Bool]
+                                              rest2
+                                              true
+                                              (
+                                                \extra : Pair Pattern Expr => \extraRest : List (Pair Pattern Expr) => false
+                                              )
+                                        )
+                                        (\u : Bin => false)
+                                )
+                          )
                           (\u : Bin => false)
-                    }
-                  in
-                  if [Bool] arm1Ok
-                    (\u : Bin =>
-                      matchList [Pair Pattern Expr] [Bool] rest1 false
-                        (\arm2 : Pair Pattern Expr => \rest2 : List (Pair Pattern Expr) =>
-                          let pat2 = fst [Pattern] [Expr] arm2 in
-                          let body2 = snd [Pattern] [Expr] arm2 in
-                          let arm2Ok =
-                            match pat2 [Bool] {
-                              | P_Ctor ctor args =>
-                                if [Bool] (eqListU8 ctor "None")
-                                  (\u : Bin =>
-                                    if [Bool] (isNoArgs args)
-                                      (\u : Bin => isVarNamed body2 "res")
-                                      (\u : Bin => false))
-                                  (\u : Bin => false)
-                            }
-                          in
-                          if [Bool] arm2Ok
-                            (\u : Bin =>
-                              matchList [Pair Pattern Expr] [Bool] rest2 true
-                                (\extra : Pair Pattern Expr => \extraRest : List (Pair Pattern Expr) => false))
-                            (\u : Bin => false))
-                    )
-                    (\u : Bin => false)))
+                  )
+            )
             (\u : Bin => false)
       }
   }

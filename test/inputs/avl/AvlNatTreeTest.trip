@@ -1,26 +1,39 @@
 module AvlNatTreeTest
 
 import Nat Nat
+
 import Nat zero
+
 import Nat succ
+
 import Nat add
+
 import Nat lte
+
 import Prelude Maybe
+
 import Prelude Some
+
 import Prelude None
+
 import Avl Avl
+
 import Avl empty
+
 import Avl insert
+
 import Avl lookup
+
 import Avl size
 
 export main
 
-poly natOrZero = \m : Maybe Nat =>
-  match m [Nat] {
-    | None => zero
-    | Some x => x
-  }
+poly natOrZero =
+  \m : Maybe Nat =>
+    match m [Nat] {
+      | None => zero
+      | Some x => x
+    }
 
 poly main =
   let one = succ zero in

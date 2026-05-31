@@ -1,8 +1,10 @@
 module EchoOne
 
 import Prelude readOne
+
 import Prelude writeOne
 
 export main
 
-combinator main = , (C . I)
+combinator main =
+  , (C . I)

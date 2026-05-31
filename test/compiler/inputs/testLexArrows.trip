@@ -1,68 +1,72 @@
 module Test
 
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude if
+
 import Prelude eqU8
+
 import Prelude U8
+
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Lexer tokenize
+
 import Lexer Token
+
 import Lexer tokenTag
+
 import Lexer T_Arrow
+
 import Lexer T_FatArrow
+
 import Lexer T_Eq
 
 export main
 
-poly isArrowToken = \tok : Token =>
-  eqU8 (tokenTag tok) (tokenTag T_Arrow)
+poly isArrowToken =
+  \tok : Token => eqU8 (tokenTag tok) (tokenTag T_Arrow)
 
-poly isFatArrowToken = \tok : Token =>
-  eqU8 (tokenTag tok) (tokenTag T_FatArrow)
+poly isFatArrowToken =
+  \tok : Token => eqU8 (tokenTag tok) (tokenTag T_FatArrow)
 
-poly isEqToken = \tok : Token =>
-  eqU8 (tokenTag tok) (tokenTag T_Eq)
+poly isEqToken =
+  \tok : Token => eqU8 (tokenTag tok) (tokenTag T_Eq)
 
-poly listArrow : List U8 = "->"
-poly listFatArrow : List U8 = "=>"
-poly listEq : List U8 = "="
+poly listArrow : List U8 =
+  "->"
+
+poly listFatArrow : List U8 =
+  "=>"
+
+poly listEq : List U8 =
+  "="
 
 poly main =
-  let testArrow =
-    match (tokenize listArrow) [Bool] {
-      | Err e => false
-      | Ok toks =>
-          matchList [Token] [Bool] toks false
-            (\h : Token => \t : List Token => isArrowToken h)
-    }
-  in
-  let testFatArrow =
-    match (tokenize listFatArrow) [Bool] {
-      | Err e => false
-      | Ok toks =>
-          matchList [Token] [Bool] toks false
-            (\h : Token => \t : List Token => isFatArrowToken h)
-    }
-  in
-  let testEq =
-    match (tokenize listEq) [Bool] {
-      | Err e => false
-      | Ok toks =>
-          matchList [Token] [Bool] toks false
-            (\h : Token => \t : List Token => isEqToken h)
-    }
-  in
+  let testArrow = match (tokenize listArrow) [Bool] {| Err e => false | Ok toks => matchList [Token] [Bool] toks false (\h : Token => \t : List Token => isArrowToken h)} in
+  let testFatArrow = match (tokenize listFatArrow) [Bool] {| Err e => false | Ok toks => matchList [Token] [Bool] toks false (\h : Token => \t : List Token => isFatArrowToken h)} in
+  let testEq = match (tokenize listEq) [Bool] {| Err e => false | Ok toks => matchList [Token] [Bool] toks false (\h : Token => \t : List Token => isEqToken h)} in
   if [Bool] testArrow
-    (\u : U8 =>
-      if [Bool] testFatArrow
-        (\u : U8 => testEq)
-        (\u : U8 => false))
+    (
+      \u : U8 =>
+        if [Bool] testFatArrow
+          (\u : U8 => testEq)
+          (\u : U8 => false)
+    )
     (\u : U8 => false)

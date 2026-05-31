@@ -50,6 +50,17 @@ export type {
 // ─── TripLang LLVM backend (single entry for source → native IR) ────────
 export { compileTripSourceToLlvm } from "./compiler/llvmCompiler.ts";
 
+// ─── TripLang source tools ──────────────────────────────────────────────
+export {
+  discoverTripFiles,
+  formatTripSource,
+  lintTripSource,
+  type TripFormatResult,
+  type TripLintDiagnostic,
+  type TripLintFix,
+  type TripLintResult,
+} from "./improvize/index.ts";
+
 // ─── Built-in module providers ─────────────────────────────────────────
 export { getAvlObject } from "./avl.ts";
 export { getBinObject } from "./bin.ts";

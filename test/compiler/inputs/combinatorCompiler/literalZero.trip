@@ -1,3 +1,6 @@
 module Main
+
 export main
-poly main = 0
+
+poly main =
+  #u8(0)

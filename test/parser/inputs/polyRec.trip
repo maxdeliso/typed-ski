@@ -1,2 +1,4 @@
 module PolyRec
-poly rec fact = \n : Nat => fact n
+
+poly rec fact =
+  \n : Nat => fact n

@@ -1,8 +1,13 @@
 module LetScoping
+
 import Nat Nat
+
 import Nat zero
+
 import Nat succ
+
 export main
+
 poly main =
   let x = succ zero in
   let x = succ x in

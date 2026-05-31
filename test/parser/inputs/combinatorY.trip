@@ -1,3 +1,4 @@
 module CombinatorY
 
-combinator Y = S(K(SII))(S(S(KS)K)(K(SII)))
+combinator Y =
+  S (K (SII)) (S (S (KS) K) (K (SII)))

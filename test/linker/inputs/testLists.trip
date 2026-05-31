@@ -1,20 +1,34 @@
 module Test
 
 import Nat zero
+
 import Nat succ
+
 import Nat add
+
 import Nat Nat
+
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude foldl
 
 export main
 
-poly one = succ zero
-poly two = succ one
-poly three = succ two
+poly one =
+  succ zero
 
-poly list = {Nat | one two three}
+poly two =
+  succ one
 
-poly main = foldl [Nat] [Nat] add zero list
+poly three =
+  succ two
+
+poly list =
+  {Nat | one two three}
+
+poly main =
+  foldl [Nat] [Nat] add zero list

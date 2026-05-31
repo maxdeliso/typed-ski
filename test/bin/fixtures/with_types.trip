@@ -1,5 +1,10 @@
 module WithTypes
+
 export Nat
+
 export zero
+
 type Nat = Int
-poly zero = #a => \s:a->a => \z:a => z
+
+poly zero =
+  #a => \s : a -> a => \z : a => z

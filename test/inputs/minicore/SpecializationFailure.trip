@@ -1,13 +1,24 @@
 module SpecializationFailure
+
 import Nat Nat
+
 import Nat zero
+
 import Nat succ
+
 import Prelude Bool
+
 import Prelude true
+
 import Prelude if
+
 import Prelude U8
+
 export main
-poly high = \f : Nat -> Nat => f zero
+
+poly high =
+  \f : Nat -> Nat => f zero
+
 poly main =
   let x = zero in
   high x

@@ -1,37 +1,61 @@
 module Test
 
 import Prelude Bool
+
 import Prelude false
+
 import Prelude if
+
 import Prelude eqU8
+
 import Prelude eqListU8
+
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude U8
+
 import Lexer tokenize
+
 import Lexer Token
+
 import Lexer tokenTag
+
 import Lexer tokenNatValue
 
 export main
 
-poly natTag : U8 = #u8(30)
-poly isNat123Token = \tok : Token =>
-  if [Bool] (eqU8 (tokenTag tok) natTag)
-    (\u : U8 => eqListU8 (tokenNatValue tok) list123)
-    (\u : U8 => false)
+poly natTag : U8 =
+  #u8(30)
 
-poly list123 : List U8 = "123"
+poly isNat123Token =
+  \tok : Token =>
+    if [Bool] (eqU8 (tokenTag tok) natTag)
+      (\u : U8 => eqListU8 (tokenNatValue tok) list123)
+      (\u : U8 => false)
+
+poly list123 : List U8 =
+  "123"
 
 poly main =
   match (tokenize list123) [Bool] {
     | Err e => false
     | Ok toks =>
-        matchList [Token] [Bool] toks false
-          (\h : Token => \t : List Token => isNat123Token h)
+      matchList
+        [Token]
+        [Bool]
+        toks
+        false
+        (\h : Token => \t : List Token => isNat123Token h)
   }

@@ -1,20 +1,29 @@
 module SNatLike
 
 import Nat Nat
+
 import Nat add
+
 import Nat succ
+
 import Nat zero
 
 export SNat
+
 export SZ
+
 export SS
+
 export toSNat
+
 export fromSNat
 
 data SNat =
   | SZ
   | SS SNat
 
-poly toSNat = \n : Nat => n [SNat] (\x : SNat => SS x) SZ
+poly toSNat =
+  \n : Nat => n [SNat] (SS) SZ
 
-poly fromSNat = \s : SNat => s [Nat] (\n : Nat => succ n) zero
+poly fromSNat =
+  \s : SNat => s [Nat] (succ) zero

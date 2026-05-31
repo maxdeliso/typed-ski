@@ -102,11 +102,11 @@ function llvmArgs(): string[] {
   return [
     "--emit",
     "llvm",
-    "test/compiler/llvm/helloWorld.trip",
+    join(srcRoot, "test/compiler/llvm/helloWorld.trip"),
     "--entry-module",
     "Main",
     "--module-source",
-    "Prelude=lib/prelude.trip",
+    `Prelude=${join(srcRoot, "lib/prelude.trip")}`,
     "--emit-main-wrapper",
     "--stdout",
   ];
@@ -169,7 +169,7 @@ describe("CLI Tests", () => {
         "bin/tripc.js",
         "--emit",
         "llvm",
-        "test/bin/fixtures/invalid_syntax.trip",
+        join(srcRoot, "test/bin/fixtures/invalid_syntax.trip"),
       ]);
 
       assert.strictEqual(result.success, false);
@@ -282,7 +282,7 @@ describe("CLI Tests", () => {
       const result = await runCommand([
         process.execPath,
         "bin/tripc.js",
-        "test/bin/fixtures/empty.txt",
+        join(srcRoot, "test/bin/fixtures/empty.txt"),
       ]);
       assert.strictEqual(result.success, false);
       assert.ok(result.stderr.includes("must have .trip extension"));

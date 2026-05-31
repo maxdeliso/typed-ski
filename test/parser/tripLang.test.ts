@@ -73,11 +73,7 @@ describe("parseTripLang", () => {
       name: "fact",
       rec: true,
       type: undefined,
-      term: mkSystemFAbs(
-        "n",
-        { kind: "type-var", typeName: "Nat" },
-        createSystemFApplication(mkSystemFVar("fact"), mkSystemFVar("n")),
-      ),
+      term: mkSystemFVar("fact"),
     });
   });
 

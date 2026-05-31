@@ -2,4 +2,5 @@ module Helper
 
 export helper
 
-poly helper = #X => \x: X => x
+poly helper =
+  #X => \x : X => x

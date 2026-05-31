@@ -1,8 +1,10 @@
 module Test
 
 import Lexer isSpaceU8
+
 import Prelude Bool
 
 export main
 
-poly main = isSpaceU8 (#u8(0))
+poly main =
+  isSpaceU8 (#u8(0))

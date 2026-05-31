@@ -1,7 +1,11 @@
 module A
 
 export addA
+
 export main
 
-poly addA = #X => \x: X => \y: X => x
-poly main = addA
+poly addA =
+  #X => \x : X => \y : X => x
+
+poly main =
+  addA

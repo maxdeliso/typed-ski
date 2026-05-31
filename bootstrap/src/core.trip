@@ -1,15 +1,23 @@
 module Core
 
 import Prelude List
+
 import Prelude U8
+
 import Unparse Terminal
 
 export Core
+
 export Cr_Var
+
 export Cr_App
+
 export Cr_Lam
+
 export Cr_Native
+
 export Cr_Ctor
+
 export Cr_Match
 
 data Core =

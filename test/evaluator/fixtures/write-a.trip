@@ -1,6 +1,10 @@
 module Main
+
 import Prelude writeOne
+
 import Prelude U8
 
 export main
-poly main = writeOne #u8(65) [U8] (\x : U8 => x)
+
+poly main =
+  writeOne #u8(65) [U8] (\x : U8 => x)

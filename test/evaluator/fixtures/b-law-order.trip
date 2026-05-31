@@ -1,9 +1,16 @@
 module Main
+
 import Prelude U8
+
 import Prelude subU8
 
-poly outer = \x : U8 => subU8 #u8(10) x
-poly inner = \x : U8 => subU8 #u8(5) x
+poly outer =
+  \x : U8 => subU8 #u8(10) x
+
+poly inner =
+  \x : U8 => subU8 #u8(5) x
 
 export main
-poly main = outer (inner #u8(3))
+
+poly main =
+  outer (inner #u8(3))

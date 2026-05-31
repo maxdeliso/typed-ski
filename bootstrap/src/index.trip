@@ -1,84 +1,118 @@
 module Compiler
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude U8
+
 import Prelude append
+
 import Prelude writeOne
+
 import Prelude Pair
+
 import Prelude MkPair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude map
+
 import Prelude matchList
+
 import Lexer tokenize
+
 import Parser parseProgram
+
 import Parser D_Def
+
 import Parser Decl
+
 import Avl empty
+
 import Avl lookup
+
 import Avl toListEntries
+
 import Bridge elaborateProgram
+
 import Lowering Lower
+
 import Lowering lowerToComb
+
 import Unparse Terminal
+
 import Unparse Comb
+
 import Unparse C_Term
+
 import Unparse C_App
+
 import Unparse T_I
+
 import Unparse unparseCombinator
+
 import Llvm compileSourceToLlvm
+
 import Llvm compileBundleSummaryToLlvm
+
 import BundleSummary parseBundleSummary
 
 export compileToComb
+
 export compileToLlvm
+
 export compileBundleToLlvm
+
 export main
 
-poly compileToComb = \source : List U8 =>
-  match (tokenize source) [Result (List U8) (List (Pair (List U8) Comb))] {
-    | Err e => Err [List U8] [List (Pair (List U8) Comb)] "Lex error"
-    | Ok toks =>
+poly compileToComb =
+  \source : List U8 =>
+    match (tokenize source) [Result (List U8) (List (Pair (List U8) Comb))] {
+      | Err e =>
+        Err [List U8] [List (Pair (List U8) Comb)] "Lex error"
+      | Ok toks =>
         match (parseProgram toks) [Result (List U8) (List (Pair (List U8) Comb))] {
-          | Err e => Err [List U8] [List (Pair (List U8) Comb)] "Parse error"
+          | Err e =>
+            Err [List U8] [List (Pair (List U8) Comb)] "Parse error"
           | Ok decls =>
-              match (elaborateProgram (empty [List U8] [Lower]) decls) [Result (List U8) (List (Pair (List U8) Comb))] {
-                | Err e => Err [List U8] [List (Pair (List U8) Comb)] e
-                | Ok globals =>
-                    let entries = toListEntries [List U8] [Lower] globals in
-                    let results = map [Pair (List U8) Lower] [Pair (List U8) Comb]
-                      (\entry : Pair (List U8) Lower =>
-                        MkPair [List U8] [Comb]
-                          (fst [List U8] [Lower] entry)
-                          (lowerToComb (snd [List U8] [Lower] entry)))
-                      entries in
-                    Ok [List U8] [List (Pair (List U8) Comb)] results
-              }
+            match (elaborateProgram (empty [List U8] [Lower]) decls) [Result (List U8) (List (Pair (List U8) Comb))] {
+              | Err e => Err [List U8] [List (Pair (List U8) Comb)] e
+              | Ok globals =>
+                let entries = toListEntries [List U8] [Lower] globals in
+                let results = map [Pair (List U8) Lower] [Pair (List U8) Comb] (\entry : Pair (List U8) Lower => MkPair [List U8] [Comb] (fst [List U8] [Lower] entry) (lowerToComb (snd [List U8] [Lower] entry))) entries in
+                Ok [List U8] [List (Pair (List U8) Comb)] results
+            }
         }
-  }
+    }
 
-poly compileToLlvm = \source : List U8 =>
-  compileSourceToLlvm source
+poly compileToLlvm =
+  compileSourceToLlvm
 
-poly compileBundleToLlvm = \source : List U8 =>
-  match (parseBundleSummary source) [Result (List U8) (List U8)] {
-    | Err e => Err [List U8] [List U8] e
-    | Ok bundle => compileBundleSummaryToLlvm bundle
-  }
+poly compileBundleToLlvm =
+  \source : List U8 =>
+    match (parseBundleSummary source) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] e
+      | Ok bundle => compileBundleSummaryToLlvm bundle
+    }
 
-poly rec writeAll = \bytes : List U8 =>
-  matchList [U8] [U8] bytes
-    #u8(0)
-    (\h : U8 => \t : List U8 =>
-      writeOne h [U8] (\u : U8 => writeAll t))
+poly rec writeAll =
+  \bytes : List U8 =>
+    matchList [U8] [U8] bytes #u8(0) (\h : U8 => \t : List U8 => writeOne h [U8] (\u : U8 => writeAll t))
 
-poly main = \source : List U8 =>
-  match (compileBundleToLlvm source) [U8] {
-    | Err e => writeAll (append [U8] "ERR:" e)
-    | Ok llvm => writeAll llvm
-  }
+poly main =
+  \source : List U8 =>
+    match (compileBundleToLlvm source) [U8] {
+      | Err e => writeAll (append [U8] "ERR:" e)
+      | Ok llvm => writeAll llvm
+    }

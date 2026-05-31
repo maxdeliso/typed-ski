@@ -1,234 +1,467 @@
 module Prelude
 
 export Bool
+
 export id
+
 export true
+
 export false
+
 export pair
+
 export fst
+
 export snd
+
 export if
+
 export not
+
 export and
+
 export or
+
 export readOne
+
 export writeOne
+
 export List
+
 export nil
+
 export cons
+
 export matchList
+
 export listIsEmpty
+
 export head
+
 export tail
+
 export error
+
 export Pair
+
 export MkPair
+
 export Result
+
 export Err
+
 export Ok
+
 export Maybe
+
 export Some
+
 export None
+
 export append
+
 export map
+
 export foldl
+
 export takeWhile
+
 export dropWhile
+
 export span
+
 export reverse
+
 export Bin
+
 export BZ
+
 export B0
+
 export B1
+
 export eqU8
+
 export ltU8
+
 export lteU8
+
 export addU8
+
 export subU8
+
 export divU8
+
 export modU8
+
 export U8
+
 export eqListU8
+
 export ltListU8
+
 export lteListU8
+
 export digitToAscii
+
 export singletonU8
+
 export u8ToDigits
 
-opaque type U8
+opaque
+
+type U8
+
 native eqU8 : U8 -> U8 -> Bool
+
 native ltU8 : U8 -> U8 -> Bool
+
 native addU8 : U8 -> U8 -> U8
+
 native subU8 : U8 -> U8 -> U8
+
 native divU8 : U8 -> U8 -> U8
+
 native modU8 : U8 -> U8 -> U8
+
 native readOne : #R -> (U8 -> R) -> R
+
 native writeOne : U8 -> #R -> (U8 -> R) -> R
 
 type Bool = #B -> B -> B -> B
+
 type List = #A -> #R -> R -> (A -> R -> R) -> R
+
 type Parser = #A -> List Bin -> Result ParseError (Pair A (List Bin))
 
-data Pair A B = MkPair A B
-data Result E T = Err E | Ok T
-data Bin = BZ | B0 Bin | B1 Bin
-data ParseError = MkParseError (List U8)
-data Maybe A = None | Some A
+data Pair A B =
+  | MkPair A B
 
-poly id : #a->a->a = #a => \x:a => x
+data Result E T =
+  | Err E
+  | Ok T
 
-poly true = #B => \t : B => \f : B => t
+data Bin =
+  | BZ
+  | B0 Bin
+  | B1 Bin
 
-poly false = #B => \t : B => \f : B => f
+data ParseError =
+  | MkParseError (List U8)
 
-poly pair = #A => #B => \a : A => \b : B => #Y => \k : A -> B -> Y => k a b
+data Maybe A =
+  | None
+  | Some A
 
-poly fst = #A => #B => \p : #Y -> (A->B->Y)->Y =>
-  p [A] (\x:A => \y:B => x)
+poly id : #a -> a -> a =
+  #a => \x : a => x
 
-poly snd = #A => #B => \p : #Y -> (A->B->Y)->Y =>
-  p [B] (\x:A => \y:B => y)
+poly true =
+  #B => \t : B => \f : B => t
 
-poly not = \b : Bool =>
-  b [Bool] false true
+poly false =
+  #B => \t : B => \f : B => f
 
-poly and = \a : Bool => \b : Bool =>
-  a [Bool] b false
+poly pair =
+  #A => #B => \a : A => \b : B => #Y => \k : A -> B -> Y => k a b
 
-poly or = \a : Bool => \b : Bool =>
-  a [Bool] true b
+poly fst =
+  #A =>
+    #B =>
+      \p : #Y -> (A -> B -> Y) -> Y => p [A] (\x : A => \y : B => x)
 
-poly lteU8 = \a : U8 => \b : U8 => or (eqU8 a b) (ltU8 a b)
+poly snd =
+  #A =>
+    #B =>
+      \p : #Y -> (A -> B -> Y) -> Y => p [B] (\x : A => \y : B => y)
 
-poly if = #A => \b : Bool => \t : U8 -> A => \f : U8 -> A =>
-  b [U8 -> A] t f #u8(0)
+poly not =
+  \b : Bool => b [Bool] false true
 
-poly nil = #A => #R => \n : R => \c : (A -> List A -> R) => n
+poly and =
+  \a : Bool => \b : Bool => a [Bool] b false
 
-poly cons = #A => \x : A => \xs : List A =>
-  #R => \n : R => \c : (A -> List A -> R) => c x xs
+poly or =
+  \a : Bool => \b : Bool => a [Bool] true b
 
-poly matchList = #A => #R => \l : List A => \onNil : R =>
-  \onCons : (A -> List A -> R) =>
-    l [R] onNil onCons
+poly lteU8 =
+  \a : U8 => \b : U8 => or (eqU8 a b) (ltU8 a b)
 
-poly listIsEmpty = #A => \xs : List A =>
-  matchList [A] [Bool] xs true (\h : A => \t : List A => false)
+poly if =
+  #A =>
+    \b : Bool => \t : U8 -> A => \f : U8 -> A => b [U8 -> A] t f #u8(0)
 
-poly head = #A => \l : List A =>
-  l [A] (error [A]) (\h : A => \t : List A => h)
+poly nil =
+  #A => #R => \n : R => \c : (A -> List A -> R) => n
 
-poly tail = #A => \l : List A =>
-  l [List A] (nil [A]) (\h : A => \t : List A => t)
+poly cons =
+  #A =>
+    \x : A =>
+      \xs : List A => #R => \n : R => \c : (A -> List A -> R) => c x xs
 
-poly rec appendAcc = #A => \xs : List A => \acc : List A =>
-  matchList [A] [List A] xs acc
-    (\h : A => \t : List A => appendAcc [A] t (cons [A] h acc))
+poly matchList =
+  #A =>
+    #R =>
+      \l : List A =>
+        \onNil : R => \onCons : (A -> List A -> R) => l [R] onNil onCons
 
-poly append = #A => \xs : List A => \ys : List A =>
-  appendAcc [A] (reverse [A] xs) ys
+poly listIsEmpty =
+  #A =>
+    \xs : List A =>
+      matchList [A] [Bool] xs true (\h : A => \t : List A => false)
 
-poly rec map = #A => #B => \f : A -> B => \l : List A =>
-  matchList [A] [List B] l (nil [B])
-    (\h : A => \t : List A => cons [B] (f h) (map [A] [B] f t))
+poly head =
+  #A =>
+    \l : List A => l [A] (error [A]) (\h : A => \t : List A => h)
 
-poly rec foldl = #A => #B => \f : B -> A -> B => \acc : B => \l : List A =>
-  matchList [A] [B] l acc
-    (\h : A => \t : List A => foldl [A] [B] f (f acc h) t)
+poly tail =
+  #A =>
+    \l : List A => l [List A] (nil [A]) (\h : A => \t : List A => t)
 
-poly rec takeWhile = #A => \p : A -> Bool => \l : List A =>
-  matchList [A] [List A] l (nil [A])
-    (\h : A => \t : List A =>
-      if [List A] (p h)
-        (\u : U8 => cons [A] h (takeWhile [A] p t))
-        (\u : U8 => nil [A]))
+poly rec appendAcc =
+  #A =>
+    \xs : List A =>
+      \acc : List A =>
+        matchList
+          [A]
+          [List A]
+          xs
+          acc
+          (\h : A => \t : List A => appendAcc [A] t (cons [A] h acc))
 
-poly rec dropWhile = #A => \p : A -> Bool => \l : List A =>
-  matchList [A] [List A] l (nil [A])
-    (\h : A => \t : List A =>
-      if [List A] (p h)
-        (\u : U8 => dropWhile [A] p t)
-        (\u : U8 => cons [A] h t))
+poly append =
+  #A =>
+    \xs : List A => \ys : List A => appendAcc [A] (reverse [A] xs) ys
 
-poly rec span = #A => \p : A -> Bool => \l : List A =>
-  matchList [A] [Pair (List A) (List A)] l
-    (MkPair [List A] [List A] (nil [A]) (nil [A]))
-    (\h : A => \t : List A =>
-      if [Pair (List A) (List A)] (p h)
-        (\u : U8 =>
-          let res = span [A] p t in
-          MkPair [List A] [List A]
-            (cons [A] h (fst [List A] [List A] res))
-            (snd [List A] [List A] res))
-        (\u : U8 => MkPair [List A] [List A] (nil [A]) l))
+poly rec map =
+  #A =>
+    #B =>
+      \f : A -> B =>
+        \l : List A =>
+          matchList
+            [A]
+            [List B]
+            l
+            (nil [B])
+            (\h : A => \t : List A => cons [B] (f h) (map [A] [B] f t))
 
-poly rec reverseAcc = #A => \xs : List A => \acc : List A =>
-  matchList [A] [List A] xs acc
-    (\h : A => \t : List A => reverseAcc [A] t (cons [A] h acc))
+poly rec foldl =
+  #A =>
+    #B =>
+      \f : B -> A -> B =>
+        \acc : B =>
+          \l : List A =>
+            matchList
+              [A]
+              [B]
+              l
+              acc
+              (\h : A => \t : List A => foldl [A] [B] f (f acc h) t)
 
-poly reverse = #A => \xs : List A =>
-  foldl [A] [List A]
-    (\acc : List A => \x : A => cons [A] x acc)
-    (nil [A])
-    xs
+poly rec takeWhile =
+  #A =>
+    \p : A -> Bool =>
+      \l : List A =>
+        matchList
+          [A]
+          [List A]
+          l
+          (nil [A])
+          (
+            \h : A =>
+              \t : List A =>
+                if [List A] (p h)
+                  (\u : U8 => cons [A] h (takeWhile [A] p t))
+                  (\u : U8 => nil [A])
+          )
 
-poly error = #A =>
-  (\x : A => x) (\x : A => x)
+poly rec dropWhile =
+  #A =>
+    \p : A -> Bool =>
+      \l : List A =>
+        matchList
+          [A]
+          [List A]
+          l
+          (nil [A])
+          (
+            \h : A =>
+              \t : List A =>
+                if [List A] (p h)
+                  (\u : U8 => dropWhile [A] p t)
+                  (\u : U8 => cons [A] h t)
+          )
 
-poly rec eqListU8 = \a : List U8 => \b : List U8 =>
-  matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b true (\h : U8 => \t : List U8 => false))
-    (\ha : U8 => \ta : List U8 =>
-      matchList [U8] [Bool] b
-        false
-        (\hb : U8 => \tb : List U8 =>
-          if [Bool] (eqU8 ha hb)
-            (\u : U8 => eqListU8 ta tb)
-            (\u : U8 => false)))
+poly rec span =
+  #A =>
+    \p : A -> Bool =>
+      \l : List A =>
+        matchList
+          [A]
+          [Pair (List A) (List A)]
+          l
+          (MkPair [List A] [List A] (nil [A]) (nil [A]))
+          (
+            \h : A =>
+              \t : List A =>
+                if [Pair (List A) (List A)] (p h)
+                  (
+                    \u : U8 =>
+                      let res = span [A] p t in
+                      MkPair
+                        [List A]
+                        [List A]
+                        (cons [A] h (fst [List A] [List A] res))
+                        (snd [List A] [List A] res)
+                  )
+                  (\u : U8 => MkPair [List A] [List A] (nil [A]) l)
+          )
 
-poly rec ltListU8 = \a : List U8 => \b : List U8 =>
-  matchList [U8] [Bool] a
-    (matchList [U8] [Bool] b false (\h : U8 => \t : List U8 => true))
-    (\ha : U8 => \ta : List U8 =>
-      matchList [U8] [Bool] b
-        false
-        (\hb : U8 => \tb : List U8 =>
-          if [Bool] (eqU8 ha hb)
-            (\u : U8 => ltListU8 ta tb)
-            (\u : U8 => ltU8 ha hb)))
+poly rec reverseAcc =
+  #A =>
+    \xs : List A =>
+      \acc : List A =>
+        matchList
+          [A]
+          [List A]
+          xs
+          acc
+          (\h : A => \t : List A => reverseAcc [A] t (cons [A] h acc))
 
-poly lteListU8 = \a : List U8 => \b : List U8 =>
-  or (eqListU8 a b) (ltListU8 a b)
+poly reverse =
+  #A =>
+    \xs : List A =>
+      foldl
+        [A]
+        [List A]
+        (\acc : List A => \x : A => cons [A] x acc)
+        (nil [A])
+        xs
 
-poly digitToAscii = \n : U8 =>
-  if [U8] (eqU8 n #u8(0)) (\u : U8 => '0')
-  (if [U8] (eqU8 n #u8(1)) (\u : U8 => '1')
-  (if [U8] (eqU8 n #u8(2)) (\u : U8 => '2')
-  (if [U8] (eqU8 n #u8(3)) (\u : U8 => '3')
-  (if [U8] (eqU8 n #u8(4)) (\u : U8 => '4')
-  (if [U8] (eqU8 n #u8(5)) (\u : U8 => '5')
-  (if [U8] (eqU8 n #u8(6)) (\u : U8 => '6')
-  (if [U8] (eqU8 n #u8(7)) (\u : U8 => '7')
-  (if [U8] (eqU8 n #u8(8)) (\u : U8 => '8')
-  ('9')))))))))
+poly error =
+  #A => (\x : A => x) (\x : A => x)
 
-poly singletonU8 = \c : U8 => cons [U8] c (nil [U8])
+poly rec eqListU8 =
+  \a : List U8 =>
+    \b : List U8 =>
+      matchList
+        [U8]
+        [Bool]
+        a
+        (matchList [U8] [Bool] b true (\h : U8 => \t : List U8 => false))
+        (
+          \ha : U8 =>
+            \ta : List U8 =>
+              matchList
+                [U8]
+                [Bool]
+                b
+                false
+                (
+                  \hb : U8 =>
+                    \tb : List U8 =>
+                      if [Bool] (eqU8 ha hb)
+                        (\u : U8 => eqListU8 ta tb)
+                        (\u : U8 => false)
+                )
+        )
 
-poly u8ToDigits = \n : U8 =>
-  if [List U8] (ltU8 n #u8(10))
-    (\u : U8 => singletonU8 (digitToAscii n))
-    (\u : U8 =>
-      if [List U8] (ltU8 n #u8(100))
-        (\u : U8 =>
-          cons [U8]
-            (digitToAscii (divU8 n #u8(10)))
-            (singletonU8 (digitToAscii (modU8 n #u8(10)))))
-        (\u : U8 =>
-          let hundreds = divU8 n #u8(100) in
-          let tens = modU8 (divU8 n #u8(10)) #u8(10) in
-          let ones = modU8 n #u8(10) in
-          cons [U8]
-            (digitToAscii hundreds)
-            (cons [U8]
-              (digitToAscii tens)
-              (singletonU8 (digitToAscii ones)))))
+poly rec ltListU8 =
+  \a : List U8 =>
+    \b : List U8 =>
+      matchList
+        [U8]
+        [Bool]
+        a
+        (matchList [U8] [Bool] b false (\h : U8 => \t : List U8 => true))
+        (
+          \ha : U8 =>
+            \ta : List U8 =>
+              matchList
+                [U8]
+                [Bool]
+                b
+                false
+                (
+                  \hb : U8 =>
+                    \tb : List U8 =>
+                      if [Bool] (eqU8 ha hb)
+                        (\u : U8 => ltListU8 ta tb)
+                        (\u : U8 => ltU8 ha hb)
+                )
+        )
+
+poly lteListU8 =
+  \a : List U8 => \b : List U8 => or (eqListU8 a b) (ltListU8 a b)
+
+poly digitToAscii =
+  \n : U8 =>
+    if [U8] (eqU8 n #u8(0))
+      (\u : U8 => '0')
+      (
+        if [U8] (eqU8 n #u8(1))
+          (\u : U8 => '1')
+          (
+            if [U8] (eqU8 n #u8(2))
+              (\u : U8 => '2')
+              (
+                if [U8] (eqU8 n #u8(3))
+                  (\u : U8 => '3')
+                  (
+                    if [U8] (eqU8 n #u8(4))
+                      (\u : U8 => '4')
+                      (
+                        if [U8] (eqU8 n #u8(5))
+                          (\u : U8 => '5')
+                          (
+                            if [U8] (eqU8 n #u8(6))
+                              (\u : U8 => '6')
+                              (
+                                if [U8] (eqU8 n #u8(7))
+                                  (\u : U8 => '7')
+                                  (
+                                    if [U8] (eqU8 n #u8(8))
+                                      (\u : U8 => '8')
+                                      ('9')
+                                  )
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+
+poly singletonU8 =
+  \c : U8 => cons [U8] c (nil [U8])
+
+poly u8ToDigits =
+  \n : U8 =>
+    if [List U8] (ltU8 n #u8(10))
+      (\u : U8 => singletonU8 (digitToAscii n))
+      (
+        \u : U8 =>
+          if [List U8] (ltU8 n #u8(100))
+            (
+              \u : U8 =>
+                cons
+                  [U8]
+                  (digitToAscii (divU8 n #u8(10)))
+                  (singletonU8 (digitToAscii (modU8 n #u8(10))))
+            )
+            (
+              \u : U8 =>
+                let hundreds = divU8 n #u8(100) in
+                let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+                let ones = modU8 n #u8(10) in
+                cons
+                  [U8]
+                  (digitToAscii hundreds)
+                  (
+                    cons
+                      [U8]
+                      (digitToAscii tens)
+                      (singletonU8 (digitToAscii ones))
+                  )
+            )
+      )

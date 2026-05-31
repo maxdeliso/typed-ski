@@ -4,4 +4,5 @@ import Nat Nat
 
 export lit
 
-poly lit = 3
+poly lit =
+  #u8(3)

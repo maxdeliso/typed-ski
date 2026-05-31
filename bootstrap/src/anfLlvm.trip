@@ -1,210 +1,346 @@
 module AnfLlvm
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude append
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude Maybe
+
 import Prelude Some
+
 import Prelude None
+
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude if
+
 import Prelude U8
+
 import Prelude eqListU8
+
 import Prelude Pair
+
 import Prelude MkPair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude Bin
+
 import Prelude BZ
+
 import Bin incBin
+
 import Bin binToDigits
+
 import Lexer tokenize
+
 import Parser parseProgram
+
 import Bridge elaborateProgramToCore
+
 import MiniCore buildMiniProgram
+
 import Anf normalizeProgram
+
 import Anf AnfExpr
+
 import Anf AE_Var
+
 import Anf AE_Native
+
 import Anf AE_Lam
+
 import Anf AE_Call
+
 import Anf AE_Con
+
 import Anf AE_Case
+
 import Anf AE_Let
+
 import Anf AnfFunc
+
 import Anf MkAnfFunc
+
 import Anf AnfProgram
+
 import Anf MkAnfProgram
 
 export emitProgram
+
 export compileSourceToLlvmText
 
-data EmitRes = MkEmitRes Bin (List (List U8)) (List U8)
+data EmitRes =
+  | MkEmitRes Bin (List (List U8)) (List U8)
 
-poly rec lookupEnv = \env : List (Pair (List U8) (List U8)) => \name : List U8 =>
-  matchList [Pair (List U8) (List U8)] [Maybe (List U8)] env
-    (None [List U8])
-    (\h : Pair (List U8) (List U8) => \t : List (Pair (List U8) (List U8)) =>
-      if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
-        (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
-        (\u : U8 => lookupEnv t name))
+poly rec lookupEnv =
+  \env : List (Pair (List U8) (List U8)) =>
+    \name : List U8 =>
+      matchList
+        [Pair (List U8) (List U8)]
+        [Maybe (List U8)]
+        env
+        (None [List U8])
+        (
+          \h : Pair (List U8) (List U8) =>
+            \t : List (Pair (List U8) (List U8)) =>
+              if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
+                (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
+                (\u : U8 => lookupEnv t name)
+        )
 
-poly atomOperand = \env : List (Pair (List U8) (List U8)) => \e : AnfExpr =>
-  match e [Result (List U8) (List U8)] {
-    | AE_Var n =>
-        match (lookupEnv env n) [Result (List U8) (List U8)] {
-          | None => Err [List U8] [List U8] (append [U8] "Unbound variable: " n)
-          | Some op => Ok [List U8] [List U8] op
-        }
-    | AE_Native t => Err [List U8] [List U8] "Unsupported atom: native"
-    | AE_Lam n b => Err [List U8] [List U8] "Unsupported atom: lambda"
-    | AE_Call f args => Err [List U8] [List U8] "Unsupported atom: call"
-    | AE_Con tag total arity args => Err [List U8] [List U8] "Unsupported atom: constructor"
-    | AE_Case scrut arms => Err [List U8] [List U8] "Unsupported atom: case"
-    | AE_Let name val body => Err [List U8] [List U8] "Unsupported atom: let"
-  }
-
-poly rec emitArgsString = \env : List (Pair (List U8) (List U8)) => \args : List AnfExpr => \leading : Bool =>
-  matchList [AnfExpr] [Result (List U8) (List U8)] args
-    (Ok [List U8] [List U8] (nil [U8]))
-    (\h : AnfExpr => \t : List AnfExpr =>
-      match (atomOperand env h) [Result (List U8) (List U8)] {
-        | Err e => Err [List U8] [List U8] e
-        | Ok op =>
-            let piece =
-              if [List U8] leading
-                (\u : U8 => append [U8] "i8 " op)
-                (\u : U8 => append [U8] ", i8 " op) in
-            match (emitArgsString env t false) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok rest => Ok [List U8] [List U8] (append [U8] piece rest)
-            }
-      })
-
-poly rec emitExpr = \env : List (Pair (List U8) (List U8)) => \counter : Bin => \instrs : List (List U8) => \e : AnfExpr =>
-  match e [Result (List U8) EmitRes] {
-    | AE_Var n =>
-        match (lookupEnv env n) [Result (List U8) EmitRes] {
-          | None => Err [List U8] [EmitRes] (append [U8] "Unbound variable: " n)
-          | Some op => Ok [List U8] [EmitRes] (MkEmitRes counter instrs op)
-        }
-    | AE_Native t => Err [List U8] [EmitRes] "Unsupported expression: native"
-    | AE_Lam n b => Err [List U8] [EmitRes] "Unsupported expression: lambda"
-    | AE_Call f args =>
-        match (emitArgsString env args true) [Result (List U8) EmitRes] {
-          | Err e => Err [List U8] [EmitRes] e
-          | Ok argStr =>
-              let dest = append [U8] "%__ll" (binToDigits counter) in
-              let counter1 = incBin counter in
-              let line =
-                append [U8] "  "
-                  (append [U8] dest
-                    (append [U8] " = call i8 @"
-                      (append [U8] f
-                        (append [U8] "("
-                          (append [U8] argStr ")\n"))))) in
-              Ok [List U8] [EmitRes] (MkEmitRes counter1 (cons [List U8] line instrs) dest)
-        }
-    | AE_Con tag total arity args => Err [List U8] [EmitRes] "Unsupported expression: constructor"
-    | AE_Case scrut arms => Err [List U8] [EmitRes] "Unsupported expression: case"
-    | AE_Let name val body =>
-        match (emitExpr env counter instrs val) [Result (List U8) EmitRes] {
-          | Err e => Err [List U8] [EmitRes] e
-          | Ok midRes =>
-              match midRes [Result (List U8) EmitRes] { | MkEmitRes c1 i1 vop =>
-                emitExpr
-                  (cons [Pair (List U8) (List U8)] (MkPair [List U8] [List U8] name vop) env)
-                  c1 i1 body
-              }
-        }
-  }
-
-poly rec paramDeclsString = \params : List (List U8) => \leading : Bool =>
-  matchList [List U8] [List U8] params
-    (nil [U8])
-    (\h : List U8 => \t : List (List U8) =>
-      let piece =
-        if [List U8] leading
-          (\u : U8 => append [U8] "i8 %" h)
-          (\u : U8 => append [U8] ", i8 %" h) in
-      append [U8] piece (paramDeclsString t false))
-
-poly rec paramEnv = \params : List (List U8) =>
-  matchList [List U8] [List (Pair (List U8) (List U8))] params
-    (nil [Pair (List U8) (List U8)])
-    (\h : List U8 => \t : List (List U8) =>
-      cons [Pair (List U8) (List U8)]
-        (MkPair [List U8] [List U8] h (append [U8] "%" h))
-        (paramEnv t))
-
-poly rec joinLines = \acc : List U8 => \lines : List (List U8) =>
-  matchList [List U8] [List U8] lines
-    acc
-    (\h : List U8 => \t : List (List U8) => joinLines (append [U8] h acc) t)
-
-poly emitFunc = \fn : AnfFunc =>
-  match fn [Result (List U8) (List U8)] { | MkAnfFunc name params body =>
-    match (emitExpr (paramEnv params) BZ (nil [List U8]) body) [Result (List U8) (List U8)] {
-      | Err e => Err [List U8] [List U8] e
-      | Ok res =>
-          match res [Result (List U8) (List U8)] { | MkEmitRes c instrs op =>
-            let instrText = joinLines (nil [U8]) instrs in
-            Ok [List U8] [List U8]
-              (append [U8] "define i8 @"
-                (append [U8] name
-                  (append [U8] "("
-                    (append [U8] (paramDeclsString params true)
-                      (append [U8] ") {\nentry:\n"
-                        (append [U8] instrText
-                          (append [U8] "  ret i8 "
-                            (append [U8] op "\n}\n\n"))))))))
+poly atomOperand =
+  \env : List (Pair (List U8) (List U8)) =>
+    \e : AnfExpr =>
+      match e [Result (List U8) (List U8)] {
+        | AE_Var n =>
+          match (lookupEnv env n) [Result (List U8) (List U8)] {
+            | None =>
+              Err [List U8] [List U8] (append [U8] "Unbound variable: " n)
+            | Some op => Ok [List U8] [List U8] op
           }
-    }
-  }
+        | AE_Native t => Err [List U8] [List U8] "Unsupported atom: native"
+        | AE_Lam n b => Err [List U8] [List U8] "Unsupported atom: lambda"
+        | AE_Call f args => Err [List U8] [List U8] "Unsupported atom: call"
+        | AE_Con tag total arity args =>
+          Err [List U8] [List U8] "Unsupported atom: constructor"
+        | AE_Case scrut arms => Err [List U8] [List U8] "Unsupported atom: case"
+        | AE_Let name val body => Err [List U8] [List U8] "Unsupported atom: let"
+      }
 
-poly rec emitFuncs = \fns : List AnfFunc =>
-  matchList [AnfFunc] [Result (List U8) (List U8)] fns
-    (Ok [List U8] [List U8] (nil [U8]))
-    (\h : AnfFunc => \t : List AnfFunc =>
-      match (emitFunc h) [Result (List U8) (List U8)] {
-        | Err e => Err [List U8] [List U8] e
-        | Ok block =>
-            match (emitFuncs t) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok rest => Ok [List U8] [List U8] (append [U8] block rest)
+poly rec emitArgsString =
+  \env : List (Pair (List U8) (List U8)) =>
+    \args : List AnfExpr =>
+      \leading : Bool =>
+        matchList
+          [AnfExpr]
+          [Result (List U8) (List U8)]
+          args
+          (Ok [List U8] [List U8] (nil [U8]))
+          (
+            \h : AnfExpr =>
+              \t : List AnfExpr =>
+                match (atomOperand env h) [Result (List U8) (List U8)] {
+                  | Err e => Err [List U8] [List U8] e
+                  | Ok op =>
+                    let piece = if [List U8] leading (\u : U8 => append [U8] "i8 " op) (\u : U8 => append [U8] ", i8 " op) in
+                    match (emitArgsString env t false) [Result (List U8) (List U8)] {
+                      | Err e => Err [List U8] [List U8] e
+                      | Ok rest => Ok [List U8] [List U8] (append [U8] piece rest)
+                    }
+                }
+          )
+
+poly rec emitExpr =
+  \env : List (Pair (List U8) (List U8)) =>
+    \counter : Bin =>
+      \instrs : List (List U8) =>
+        \e : AnfExpr =>
+          match e [Result (List U8) EmitRes] {
+            | AE_Var n =>
+              match (lookupEnv env n) [Result (List U8) EmitRes] {
+                | None =>
+                  Err [List U8] [EmitRes] (append [U8] "Unbound variable: " n)
+                | Some op =>
+                  Ok [List U8] [EmitRes] (MkEmitRes counter instrs op)
+              }
+            | AE_Native t =>
+              Err [List U8] [EmitRes] "Unsupported expression: native"
+            | AE_Lam n b =>
+              Err [List U8] [EmitRes] "Unsupported expression: lambda"
+            | AE_Call f args =>
+              match (emitArgsString env args true) [Result (List U8) EmitRes] {
+                | Err e => Err [List U8] [EmitRes] e
+                | Ok argStr =>
+                  let dest = append [U8] "%__ll" (binToDigits counter) in
+                  let counter1 = incBin counter in
+                  let line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n"))))) in
+                  Ok
+                    [List U8]
+                    [EmitRes]
+                    (MkEmitRes counter1 (cons [List U8] line instrs) dest)
+              }
+            | AE_Con tag total arity args =>
+              Err [List U8] [EmitRes] "Unsupported expression: constructor"
+            | AE_Case scrut arms =>
+              Err [List U8] [EmitRes] "Unsupported expression: case"
+            | AE_Let name val body =>
+              match (emitExpr env counter instrs val) [Result (List U8) EmitRes] {
+                | Err e => Err [List U8] [EmitRes] e
+                | Ok midRes =>
+                  match midRes [Result (List U8) EmitRes] {
+                    | MkEmitRes c1 i1 vop =>
+                      emitExpr
+                        (
+                          cons
+                            [Pair (List U8) (List U8)]
+                            (MkPair [List U8] [List U8] name vop)
+                            env
+                        )
+                        c1
+                        i1
+                        body
+                  }
+              }
+          }
+
+poly rec paramDeclsString =
+  \params : List (List U8) =>
+    \leading : Bool =>
+      matchList
+        [List U8]
+        [List U8]
+        params
+        (nil [U8])
+        (
+          \h : List U8 =>
+            \t : List (List U8) =>
+              let piece = if [List U8] leading (\u : U8 => append [U8] "i8 %" h) (\u : U8 => append [U8] ", i8 %" h) in
+              append [U8] piece (paramDeclsString t false)
+        )
+
+poly rec paramEnv =
+  \params : List (List U8) =>
+    matchList
+      [List U8]
+      [List (Pair (List U8) (List U8))]
+      params
+      (nil [Pair (List U8) (List U8)])
+      (
+        \h : List U8 =>
+          \t : List (List U8) =>
+            cons
+              [Pair (List U8) (List U8)]
+              (MkPair [List U8] [List U8] h (append [U8] "%" h))
+              (paramEnv t)
+      )
+
+poly rec joinLines =
+  \acc : List U8 =>
+    \lines : List (List U8) =>
+      matchList
+        [List U8]
+        [List U8]
+        lines
+        acc
+        (\h : List U8 => \t : List (List U8) => joinLines (append [U8] h acc) t)
+
+poly emitFunc =
+  \fn : AnfFunc =>
+    match fn [Result (List U8) (List U8)] {
+      | MkAnfFunc name params body =>
+        match (emitExpr (paramEnv params) BZ (nil [List U8]) body) [Result (List U8) (List U8)] {
+          | Err e => Err [List U8] [List U8] e
+          | Ok res =>
+            match res [Result (List U8) (List U8)] {
+              | MkEmitRes c instrs op =>
+                let instrText = joinLines (nil [U8]) instrs in
+                Ok
+                  [List U8]
+                  [List U8]
+                  (
+                    append
+                      [U8]
+                      "define i8 @"
+                      (
+                        append
+                          [U8]
+                          name
+                          (
+                            append
+                              [U8]
+                              "("
+                              (
+                                append
+                                  [U8]
+                                  (paramDeclsString params true)
+                                  (
+                                    append
+                                      [U8]
+                                      ") {\nentry:\n"
+                                      (
+                                        append
+                                          [U8]
+                                          instrText
+                                          (
+                                            append
+                                              [U8]
+                                              "  ret i8 "
+                                              (append [U8] op "\n}\n\n")
+                                          )
+                                      )
+                                  )
+                              )
+                          )
+                      )
+                  )
             }
-      })
+        }
+    }
 
-poly emitProgram = \prog : AnfProgram =>
-  match prog [Result (List U8) (List U8)] { | MkAnfProgram funcs entry =>
-    emitFuncs funcs
-  }
+poly rec emitFuncs =
+  \fns : List AnfFunc =>
+    matchList
+      [AnfFunc]
+      [Result (List U8) (List U8)]
+      fns
+      (Ok [List U8] [List U8] (nil [U8]))
+      (
+        \h : AnfFunc =>
+          \t : List AnfFunc =>
+            match (emitFunc h) [Result (List U8) (List U8)] {
+              | Err e => Err [List U8] [List U8] e
+              | Ok block =>
+                match (emitFuncs t) [Result (List U8) (List U8)] {
+                  | Err e => Err [List U8] [List U8] e
+                  | Ok rest => Ok [List U8] [List U8] (append [U8] block rest)
+                }
+            }
+      )
 
-poly compileSourceToLlvmText = \source : List U8 =>
-  match (tokenize source) [List U8] {
-    | Err e => append [U8] "ERR:" "Lex error"
-    | Ok toks =>
+poly emitProgram =
+  \prog : AnfProgram =>
+    match prog [Result (List U8) (List U8)] {
+      | MkAnfProgram funcs entry => emitFuncs funcs
+    }
+
+poly compileSourceToLlvmText =
+  \source : List U8 =>
+    match (tokenize source) [List U8] {
+      | Err e => append [U8] "ERR:" "Lex error"
+      | Ok toks =>
         match (parseProgram toks) [List U8] {
           | Err e => append [U8] "ERR:" "Parse error"
           | Ok decls =>
-              match (elaborateProgramToCore decls) [List U8] {
-                | Err e => append [U8] "ERR:" e
-                | Ok coreDefs =>
-                    match (buildMiniProgram coreDefs "main") [List U8] {
+            match (elaborateProgramToCore decls) [List U8] {
+              | Err e => append [U8] "ERR:" e
+              | Ok coreDefs =>
+                match (buildMiniProgram coreDefs "main") [List U8] {
+                  | Err e => append [U8] "ERR:" e
+                  | Ok prog =>
+                    match (emitProgram (normalizeProgram prog)) [List U8] {
                       | Err e => append [U8] "ERR:" e
-                      | Ok prog =>
-                          match (emitProgram (normalizeProgram prog)) [List U8] {
-                            | Err e => append [U8] "ERR:" e
-                            | Ok llvm => llvm
-                          }
+                      | Ok llvm => llvm
                     }
-              }
+                }
+            }
         }
-  }
+    }

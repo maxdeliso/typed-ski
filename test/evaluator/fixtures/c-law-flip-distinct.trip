@@ -1,8 +1,13 @@
 module Main
+
 import Prelude U8
+
 import Prelude subU8
 
-poly flip_sub = \x : U8 => \y : U8 => subU8 y x
+poly flip_sub =
+  \x : U8 => \y : U8 => subU8 y x
 
 export main
-poly main = flip_sub #u8(10) #u8(20)
+
+poly main =
+  flip_sub #u8(10) #u8(20)

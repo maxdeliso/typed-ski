@@ -1,5 +1,11 @@
 module WithCombinators
+
 export K
+
 export S
-combinator K = K
-combinator S = S
+
+combinator K =
+  K
+
+combinator S =
+  S

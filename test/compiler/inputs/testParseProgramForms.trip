@@ -1,69 +1,101 @@
 module Test
 
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Lexer Token
+
 import Lexer T_KwRec
+
 import Lexer T_KwPoly
+
 import Lexer T_KwCombinator
+
 import Lexer T_KwData
+
 import Lexer T_KwType
+
 import Lexer T_KwExport
+
 import Lexer T_KwImport
+
 import Lexer T_KwModule
+
 import Lexer T_Ident
+
 import Lexer T_Eq
+
 import Lexer T_Hash
+
 import Lexer T_Arrow
+
 import Lexer T_Comma
+
 import Lexer T_Dot
+
 import Lexer T_EOF
+
 import Prelude eqListU8
+
 import Parser parseProgram
+
 import Parser Decl
+
 import Parser D_Module
+
 import Parser D_Import
+
 import Parser D_Export
+
 import Parser D_Opaque
+
 import Parser D_Native
+
 import Parser D_Type
+
 import Parser D_Data
+
 import Parser D_Def
 
 export main
 
 poly main =
-  let input =
-    {Token |
-      T_KwModule (T_Ident "M")
-      T_KwImport (T_Ident "Prelude") (T_Ident "id")
-      T_KwExport (T_Ident "main")
-      T_KwType (T_Ident "Nat") T_Eq T_Hash (T_Ident "X") T_Arrow (T_Ident "X")
-      T_KwData (T_Ident "Maybe") (T_Ident "A") T_Eq (T_Ident "None") (T_Ident "Some") (T_Ident "A")
-      T_KwCombinator (T_Ident "io") T_Eq T_Comma T_Dot
-      T_KwPoly T_KwRec (T_Ident "main") T_Eq (T_Ident "id")
-      T_EOF}
-  in
+  let input = {Token | T_KwModule (T_Ident "M") T_KwImport (T_Ident "Prelude") (T_Ident "id") T_KwExport (T_Ident "main") T_KwType (T_Ident "Nat") T_Eq T_Hash (T_Ident "X") T_Arrow (T_Ident "X") T_KwData (T_Ident "Maybe") (T_Ident "A") T_Eq (T_Ident "None") (T_Ident "Some") (T_Ident "A") T_KwCombinator (T_Ident "io") T_Eq T_Comma T_Dot T_KwPoly T_KwRec (T_Ident "main") T_Eq (T_Ident "id") T_EOF} in
   match (parseProgram input) [Bool] {
     | Err e => false
     | Ok decls =>
-      matchList [Decl] [Bool] decls false
-        (\h : Decl => \t : List Decl =>
-          match h [Bool] {
-            | D_Module name => eqListU8 name "M"
-            | D_Import m s => false
-            | D_Export x => false
-            | D_Opaque x => false
-            | D_Native x => false
-            | D_Type x => false
-            | D_Data x ctors => false
-            | D_Def kind isRec x body => false
-          })
+      matchList
+        [Decl]
+        [Bool]
+        decls
+        false
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [Bool] {
+                | D_Module name => eqListU8 name "M"
+                | D_Import m s => false
+                | D_Export x => false
+                | D_Opaque x => false
+                | D_Native x => false
+                | D_Type x => false
+                | D_Data x ctors => false
+                | D_Def kind isRec x body => false
+              }
+        )
   }

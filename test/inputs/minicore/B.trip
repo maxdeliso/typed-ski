@@ -1,3 +1,6 @@
 module B
+
 export Foo
-data Foo = Bar
+
+data Foo =
+  | Bar

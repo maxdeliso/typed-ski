@@ -2,4 +2,5 @@ module NoMain
 
 export other
 
-poly other = \x: Int => x
+poly other =
+  \x : Int => x

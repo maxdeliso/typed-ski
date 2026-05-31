@@ -1,31 +1,55 @@
 module CoreToMini
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude Pair
+
 import Prelude MkPair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude U8
+
 import Core Core
+
 import Core Cr_Var
+
 import Core Cr_App
+
 import Core Cr_Lam
+
 import Core Cr_Native
+
 import Core Cr_Ctor
+
 import Core Cr_Match
+
 import Unparse Terminal
 
 export MiniExpr
+
 export ME_Var
+
 export ME_Lam
+
 export ME_Call
+
 export ME_Con
+
 export ME_Let
+
 export ME_Native
+
 export ME_Match
+
 export coreToMini
 
 data MiniExpr =
@@ -37,58 +61,85 @@ data MiniExpr =
   | ME_Native Terminal
   | ME_Match MiniExpr (List MiniExpr)
 
-poly anonName = {U8 | '_'}
+poly anonName =
+  {U8 | '_'}
 
-poly rec collectSpine = \expr : Core => \acc : List Core =>
-  match expr [Pair Core (List Core)] {
-    | Cr_Var name => MkPair [Core] [List Core] expr acc
-    | Cr_App f x => collectSpine f (cons [Core] x acc)
-    | Cr_Lam n b => MkPair [Core] [List Core] expr acc
-    | Cr_Native t => MkPair [Core] [List Core] expr acc
-    | Cr_Ctor t n a => MkPair [Core] [List Core] expr acc
-    | Cr_Match s arms => MkPair [Core] [List Core] expr acc
-  }
+poly rec collectSpine =
+  \expr : Core =>
+    \acc : List Core =>
+      match expr [Pair Core (List Core)] {
+        | Cr_Var name => MkPair [Core] [List Core] expr acc
+        | Cr_App f x => collectSpine f (cons [Core] x acc)
+        | Cr_Lam n b => MkPair [Core] [List Core] expr acc
+        | Cr_Native t => MkPair [Core] [List Core] expr acc
+        | Cr_Ctor t n a => MkPair [Core] [List Core] expr acc
+        | Cr_Match s arms => MkPair [Core] [List Core] expr acc
+      }
 
-poly rec mapWith = \f : Core -> MiniExpr => \exprs : List Core =>
-  matchList [Core] [List MiniExpr] exprs
-    (nil [MiniExpr])
-    (\h : Core => \t : List Core =>
-      cons [MiniExpr] (f h) (mapWith f t))
+poly rec mapWith =
+  \f : Core -> MiniExpr =>
+    \exprs : List Core =>
+      matchList
+        [Core]
+        [List MiniExpr]
+        exprs
+        (nil [MiniExpr])
+        (\h : Core => \t : List Core => cons [MiniExpr] (f h) (mapWith f t))
 
-poly rec applyAnon = \head : MiniExpr => \args : List MiniExpr =>
-  matchList [MiniExpr] [MiniExpr] args
-    head
-    (\h : MiniExpr => \t : List MiniExpr =>
-      applyAnon
-        (ME_Call anonName {MiniExpr | head h})
-        t)
+poly rec applyAnon =
+  \head : MiniExpr =>
+    \args : List MiniExpr =>
+      matchList
+        [MiniExpr]
+        [MiniExpr]
+        args
+        head
+        (
+          \h : MiniExpr =>
+            \t : List MiniExpr => applyAnon (ME_Call anonName {MiniExpr | head h}) t
+        )
 
-poly rec coreToMini = \expr : Core =>
-  match expr [MiniExpr] {
-    | Cr_Var name => ME_Var name
-    | Cr_Lam name body => ME_Lam name (coreToMini body)
-    | Cr_Native t => ME_Native t
-    | Cr_Ctor tag total arity => ME_Con tag total arity (nil [MiniExpr])
-    | Cr_App lf rg =>
-        match (collectSpine (Cr_App lf rg) (nil [Core])) [MiniExpr] { | MkPair head args =>
-          let miniArgs = mapWith coreToMini args in
-          match head [MiniExpr] {
-            | Cr_Var name => ME_Call name miniArgs
-            | Cr_Ctor tag total arity => ME_Con tag total arity miniArgs
-            | Cr_Lam name body =>
-                matchList [MiniExpr] [MiniExpr] miniArgs
+poly rec coreToMini =
+  \expr : Core =>
+    match expr [MiniExpr] {
+      | Cr_Var name => ME_Var name
+      | Cr_Lam name body => ME_Lam name (coreToMini body)
+      | Cr_Native t => ME_Native t
+      | Cr_Ctor tag total arity => ME_Con tag total arity (nil [MiniExpr])
+      | Cr_App lf rg =>
+        match (collectSpine (Cr_App lf rg) (nil [Core])) [MiniExpr] {
+          | MkPair head args =>
+            let miniArgs = mapWith coreToMini args in
+            match head [MiniExpr] {
+              | Cr_Var name => ME_Call name miniArgs
+              | Cr_Ctor tag total arity => ME_Con tag total arity miniArgs
+              | Cr_Lam name body =>
+                matchList
+                  [MiniExpr]
+                  [MiniExpr]
+                  miniArgs
                   (ME_Lam name (coreToMini body))
-                  (\firstArg : MiniExpr => \rest : List MiniExpr =>
-                    matchList [MiniExpr] [MiniExpr] rest
-                      (ME_Let name firstArg (coreToMini body))
-                      (\rh : MiniExpr => \rt : List MiniExpr =>
-                        ME_Let name firstArg (applyAnon (coreToMini body) rest)))
-            | Cr_Native t => applyAnon (ME_Native t) miniArgs
-            | Cr_App _ _ => ME_Call anonName miniArgs
-            | Cr_Match s arms =>
-                applyAnon (ME_Match (coreToMini s) (mapWith coreToMini arms)) miniArgs
-          }
+                  (
+                    \firstArg : MiniExpr =>
+                      \rest : List MiniExpr =>
+                        matchList
+                          [MiniExpr]
+                          [MiniExpr]
+                          rest
+                          (ME_Let name firstArg (coreToMini body))
+                          (
+                            \rh : MiniExpr =>
+                              \rt : List MiniExpr => ME_Let name firstArg (applyAnon (coreToMini body) rest)
+                          )
+                  )
+              | Cr_Native t => applyAnon (ME_Native t) miniArgs
+              | Cr_App _ _ => ME_Call anonName miniArgs
+              | Cr_Match s arms =>
+                applyAnon
+                  (ME_Match (coreToMini s) (mapWith coreToMini arms))
+                  miniArgs
+            }
         }
-    | Cr_Match scrut arms =>
+      | Cr_Match scrut arms =>
         ME_Match (coreToMini scrut) (mapWith coreToMini arms)
-  }
+    }

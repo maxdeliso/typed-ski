@@ -1,104 +1,173 @@
 module MiniCore
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude Pair
+
 import Prelude MkPair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude U8
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude or
+
 import Prelude if
+
 import Prelude append
+
 import Core Core
+
 import Core Cr_Var
+
 import Core Cr_App
+
 import Core Cr_Lam
+
 import Core Cr_Native
+
 import Core Cr_Ctor
+
 import Core Cr_Match
+
 import CoreToMini MiniExpr
+
 import CoreToMini ME_Var
+
 import CoreToMini ME_Lam
+
 import CoreToMini ME_Call
+
 import CoreToMini ME_Con
+
 import CoreToMini ME_Let
+
 import CoreToMini ME_Native
+
 import CoreToMini ME_Match
+
 import CoreToMini coreToMini
 
 export MiniFunc
+
 export MkMiniFunc
+
 export MiniProgram
+
 export MkMiniProgram
+
 export buildMiniProgram
 
-data MiniFunc = MkMiniFunc (List U8) (List (List U8)) MiniExpr
+data MiniFunc =
+  | MkMiniFunc (List U8) (List (List U8)) MiniExpr
 
-data MiniProgram = MkMiniProgram (List MiniFunc) (List U8)
+data MiniProgram =
+  | MkMiniProgram (List MiniFunc) (List U8)
 
-poly rec peelLams = \expr : Core =>
-  match expr [Pair (List (List U8)) Core] {
-    | Cr_Var n => MkPair [List (List U8)] [Core] (nil [List U8]) expr
-    | Cr_App a b => MkPair [List (List U8)] [Core] (nil [List U8]) expr
-    | Cr_Lam name body =>
+poly rec peelLams =
+  \expr : Core =>
+    match expr [Pair (List (List U8)) Core] {
+      | Cr_Var n =>
+        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+      | Cr_App a b =>
+        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+      | Cr_Lam name body =>
         match (peelLams body) [Pair (List (List U8)) Core] {
           | MkPair ps inner =>
-              MkPair [List (List U8)] [Core] (cons [List U8] name ps) inner
+            MkPair [List (List U8)] [Core] (cons [List U8] name ps) inner
         }
-    | Cr_Native t => MkPair [List (List U8)] [Core] (nil [List U8]) expr
-    | Cr_Ctor t n a => MkPair [List (List U8)] [Core] (nil [List U8]) expr
-    | Cr_Match s arms => MkPair [List (List U8)] [Core] (nil [List U8]) expr
-  }
+      | Cr_Native t =>
+        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+      | Cr_Ctor t n a =>
+        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+      | Cr_Match s arms =>
+        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+    }
 
-poly rec listAnyLam = \f : MiniExpr -> Bool => \es : List MiniExpr =>
-  matchList [MiniExpr] [Bool] es
-    false
-    (\h : MiniExpr => \t : List MiniExpr => or (f h) (listAnyLam f t))
+poly rec listAnyLam =
+  \f : MiniExpr -> Bool =>
+    \es : List MiniExpr =>
+      matchList
+        [MiniExpr]
+        [Bool]
+        es
+        false
+        (\h : MiniExpr => \t : List MiniExpr => or (f h) (listAnyLam f t))
 
-poly rec exprHasLam = \e : MiniExpr =>
-  match e [Bool] {
-    | ME_Var n => false
-    | ME_Lam n b => true
-    | ME_Call fn args => listAnyLam exprHasLam args
-    | ME_Con tag total arity fields => listAnyLam exprHasLam fields
-    | ME_Let n v b => or (exprHasLam v) (exprHasLam b)
-    | ME_Native t => false
-    | ME_Match s arms => or (exprHasLam s) (listAnyLam exprHasLam arms)
-  }
+poly rec exprHasLam =
+  \e : MiniExpr =>
+    match e [Bool] {
+      | ME_Var n => false
+      | ME_Lam n b => true
+      | ME_Call fn args => listAnyLam exprHasLam args
+      | ME_Con tag total arity fields => listAnyLam exprHasLam fields
+      | ME_Let n v b => or (exprHasLam v) (exprHasLam b)
+      | ME_Native t => false
+      | ME_Match s arms => or (exprHasLam s) (listAnyLam exprHasLam arms)
+    }
 
-poly rec buildFuncs = \defs : List (Pair (List U8) Core) =>
-  matchList [Pair (List U8) Core] [Result (List U8) (List MiniFunc)] defs
-    (Ok [List U8] [List MiniFunc] (nil [MiniFunc]))
-    (\h : Pair (List U8) Core => \t : List (Pair (List U8) Core) =>
-      let name = fst [List U8] [Core] h in
-      let core = snd [List U8] [Core] h in
-      match (peelLams core) [Result (List U8) (List MiniFunc)] {
-        | MkPair params inner =>
-            let body = coreToMini inner in
-            if [Result (List U8) (List MiniFunc)] (exprHasLam body)
-              (\u : U8 =>
-                Err [List U8] [List MiniFunc]
-                  (append [U8] "escaping lambda in function " name))
-              (\u : U8 =>
-                match (buildFuncs t) [Result (List U8) (List MiniFunc)] {
-                  | Err e => Err [List U8] [List MiniFunc] e
-                  | Ok rest =>
-                      Ok [List U8] [List MiniFunc]
-                        (cons [MiniFunc] (MkMiniFunc name params body) rest)
-                })
-      })
+poly rec buildFuncs =
+  \defs : List (Pair (List U8) Core) =>
+    matchList
+      [Pair (List U8) Core]
+      [Result (List U8) (List MiniFunc)]
+      defs
+      (Ok [List U8] [List MiniFunc] (nil [MiniFunc]))
+      (
+        \h : Pair (List U8) Core =>
+          \t : List (Pair (List U8) Core) =>
+            let name = fst [List U8] [Core] h in
+            let core = snd [List U8] [Core] h in
+            match (peelLams core) [Result (List U8) (List MiniFunc)] {
+              | MkPair params inner =>
+                let body = coreToMini inner in
+                if [Result (List U8) (List MiniFunc)] (exprHasLam body)
+                  (
+                    \u : U8 =>
+                      Err
+                        [List U8]
+                        [List MiniFunc]
+                        (append [U8] "escaping lambda in function " name)
+                  )
+                  (
+                    \u : U8 =>
+                      match (buildFuncs t) [Result (List U8) (List MiniFunc)] {
+                        | Err e => Err [List U8] [List MiniFunc] e
+                        | Ok rest =>
+                          Ok
+                            [List U8]
+                            [List MiniFunc]
+                            (cons [MiniFunc] (MkMiniFunc name params body) rest)
+                      }
+                  )
+            }
+      )
 
-poly buildMiniProgram = \defs : List (Pair (List U8) Core) => \entry : List U8 =>
-  match (buildFuncs defs) [Result (List U8) MiniProgram] {
-    | Err e => Err [List U8] [MiniProgram] e
-    | Ok funcs => Ok [List U8] [MiniProgram] (MkMiniProgram funcs entry)
-  }
+poly buildMiniProgram =
+  \defs : List (Pair (List U8) Core) =>
+    \entry : List U8 =>
+      match (buildFuncs defs) [Result (List U8) MiniProgram] {
+        | Err e => Err [List U8] [MiniProgram] e
+        | Ok funcs =>
+          Ok [List U8] [MiniProgram] (MkMiniProgram funcs entry)
+      }

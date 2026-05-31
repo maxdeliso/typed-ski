@@ -1,5 +1,11 @@
 module A
+
 export Foo
+
 export main
-data Foo = Bar
-poly main = Bar
+
+data Foo =
+  | Bar
+
+poly main =
+  Bar

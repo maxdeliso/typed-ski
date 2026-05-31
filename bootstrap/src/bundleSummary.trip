@@ -1,458 +1,822 @@
 module BundleSummary
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude append
+
 import Prelude reverse
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude Maybe
+
 import Prelude Some
+
 import Prelude None
+
 import Prelude Pair
+
 import Prelude MkPair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude if
+
 import Prelude and
+
 import Prelude or
+
 import Prelude not
+
 import Prelude U8
+
 import Prelude eqU8
+
 import Prelude ltU8
+
 import Prelude lteU8
+
 import Prelude eqListU8
+
 import Prelude ltListU8
+
 import Prelude digitToAscii
+
 import Prelude singletonU8
+
 import Prelude u8ToDigits
+
 import Prelude writeOne
+
 import Prelude Bin
+
 import Prelude BZ
+
 import Prelude B0
+
 import Prelude B1
+
 import Bin addBin
+
 import Bin mulBin
+
 import Bin predBin
+
 import Bin isZeroBin
 
 export parseBundleSummary
+
 export emitBundleSummary
+
 export BundleSummary
+
 export MkBundleSummary
+
 export ModuleRecord
+
 export MkModuleRecord
+
 export main
 
-poly directiveEntry : List U8 = "entry"
-poly directiveTarget : List U8 = "target"
-poly directiveWrapper : List U8 = "wrapper"
-poly directiveModules : List U8 = "modules"
+poly directiveEntry : List U8 =
+  "entry"
 
-data Line = MkLine (List U8) (List U8)
-data Word = MkWord (List U8) (List U8)
-data ModuleRecord = MkModuleRecord (List U8) (List U8) (List U8)
-data BundleSummary = MkBundleSummary (List U8) (List U8) (List U8) (List U8) (List ModuleRecord)
-data ModuleHeader = MkModuleHeader (List U8) (List U8) Bin
-data SourcePayload = MkSourcePayload (List U8) (List U8)
-data ParsedModules = MkParsedModules Bool (List ModuleRecord) (List U8)
+poly directiveTarget : List U8 =
+  "target"
 
-poly binOne = B1 BZ
-poly binTwo = B0 (B1 BZ)
-poly binThree = B1 (B1 BZ)
-poly binFour = B0 (B0 (B1 BZ))
-poly binFive = B1 (B0 (B1 BZ))
-poly binSix = B0 (B1 (B1 BZ))
-poly binSeven = B1 (B1 (B1 BZ))
-poly binEight = B0 (B0 (B0 (B1 BZ)))
-poly binNine = B1 (B0 (B0 (B1 BZ)))
-poly binTen : Bin = B0 (B1 (B0 (B1 BZ)))
+poly directiveWrapper : List U8 =
+  "wrapper"
 
-poly isAscii = \b : U8 =>
-  ltU8 b #u8(128)
+poly directiveModules : List U8 =
+  "modules"
 
-poly isDigit = \b : U8 =>
-  and (lteU8 '0' b) (lteU8 b '9')
+data Line =
+  | MkLine (List U8) (List U8)
 
-poly isUpper = \b : U8 =>
-  and (lteU8 'A' b) (lteU8 b 'Z')
+data Word =
+  | MkWord (List U8) (List U8)
 
-poly isLower = \b : U8 =>
-  and (lteU8 'a' b) (lteU8 b 'z')
+data ModuleRecord =
+  | MkModuleRecord (List U8) (List U8) (List U8)
 
-poly isAlpha = \b : U8 =>
-  or (isUpper b) (isLower b)
+data BundleSummary =
+  | MkBundleSummary (List U8) (List U8) (List U8) (List U8) (List ModuleRecord)
 
-poly isNameStart = \b : U8 =>
-  or (isAlpha b) (eqU8 b '_')
+data ModuleHeader =
+  | MkModuleHeader (List U8) (List U8) Bin
 
-poly isNameChar = \b : U8 =>
-  or (isNameStart b) (isDigit b)
+data SourcePayload =
+  | MkSourcePayload (List U8) (List U8)
 
-poly rec validateNameRest = \name : List U8 =>
-  matchList [U8] [Bool] name
-    true
-    (\h : U8 => \t : List U8 =>
-      and (isNameChar h) (validateNameRest t))
+data ParsedModules =
+  | MkParsedModules Bool (List ModuleRecord) (List U8)
 
-poly validateName = \name : List U8 =>
-  matchList [U8] [Bool] name
-    false
-    (\h : U8 => \t : List U8 =>
-      and (isNameStart h) (validateNameRest t))
+poly binOne =
+  B1 BZ
 
-poly rec readLineAcc = \input : List U8 => \acc : List U8 =>
-  matchList [U8] [Result (List U8) Line] input
-    (Ok [List U8] [Line] (MkLine (reverse [U8] acc) (nil [U8])))
-    (\h : U8 => \t : List U8 =>
-      if [Result (List U8) Line] (not (isAscii h))
-        (\u : U8 => Err [List U8] [Line] "non-ascii byte")
-        (\u : U8 =>
-          if [Result (List U8) Line] (eqU8 h '\n')
-            (\u : U8 => Ok [List U8] [Line] (MkLine (reverse [U8] acc) t))
-            (\u : U8 => readLineAcc t (cons [U8] h acc))))
+poly binTwo =
+  B0 (B1 BZ)
 
-poly readLine = \input : List U8 =>
-  readLineAcc input (nil [U8])
+poly binThree =
+  B1 (B1 BZ)
 
-poly rec stripPrefix = \prefix : List U8 => \input : List U8 =>
-  matchList [U8] [Result (List U8) (List U8)] prefix
-    (Ok [List U8] [List U8] input)
-    (\ph : U8 => \pt : List U8 =>
-      matchList [U8] [Result (List U8) (List U8)] input
-        (Err [List U8] [List U8] "bad directive")
-        (\ih : U8 => \it : List U8 =>
-          if [Result (List U8) (List U8)] (eqU8 ph ih)
-            (\u : U8 => stripPrefix pt it)
-            (\u : U8 => Err [List U8] [List U8] "bad directive")))
+poly binFour =
+  B0 (B0 (B1 BZ))
 
-poly requireDirective = \name : List U8 => \line : List U8 =>
-  match (stripPrefix (append [U8] name " ") line) [Result (List U8) (List U8)] {
-    | Err e => Err [List U8] [List U8] e
-    | Ok value =>
-        if [Result (List U8) (List U8)] (listIsEmpty [U8] value)
-          (\u : U8 => Err [List U8] [List U8] "empty directive")
-          (\u : U8 => Ok [List U8] [List U8] value)
-  }
+poly binFive =
+  B1 (B0 (B1 BZ))
 
-poly requireEntry = \line : List U8 =>
-  requireDirective directiveEntry line
+poly binSix =
+  B0 (B1 (B1 BZ))
 
-poly requireTarget = \line : List U8 =>
-  requireDirective directiveTarget line
+poly binSeven =
+  B1 (B1 (B1 BZ))
 
-poly requireWrapper = \line : List U8 =>
-  requireDirective directiveWrapper line
+poly binEight =
+  B0 (B0 (B0 (B1 BZ)))
 
-poly requireModules = \line : List U8 =>
-  requireDirective directiveModules line
+poly binNine =
+  B1 (B0 (B0 (B1 BZ)))
 
-poly rec readWordAcc = \input : List U8 => \acc : List U8 =>
-  matchList [U8] [Word] input
-    (MkWord (reverse [U8] acc) (nil [U8]))
-    (\h : U8 => \t : List U8 =>
-      if [Word] (eqU8 h ' ')
-        (\u : U8 => MkWord (reverse [U8] acc) t)
-        (\u : U8 => readWordAcc t (cons [U8] h acc)))
+poly binTen : Bin =
+  B0 (B1 (B0 (B1 BZ)))
 
-poly readWord = \input : List U8 =>
-  readWordAcc input (nil [U8])
+poly isAscii =
+  \b : U8 => ltU8 b #u8(128)
 
-poly rec decimalDigitValue = \digit : U8 =>
-  if [Bin] (eqU8 digit '0')
-    (\u : U8 => BZ)
-    (\u : U8 =>
-      if [Bin] (eqU8 digit '1')
-        (\u : U8 => binOne)
-        (\u : U8 =>
-          if [Bin] (eqU8 digit '2')
-            (\u : U8 => binTwo)
-            (\u : U8 =>
-              if [Bin] (eqU8 digit '3')
-                (\u : U8 => binThree)
-                (\u : U8 =>
-                  if [Bin] (eqU8 digit '4')
-                    (\u : U8 => binFour)
-                    (\u : U8 =>
-                      if [Bin] (eqU8 digit '5')
-                        (\u : U8 => binFive)
-                        (\u : U8 =>
-                          if [Bin] (eqU8 digit '6')
-                            (\u : U8 => binSix)
-                            (\u : U8 =>
-                              if [Bin] (eqU8 digit '7')
-                                (\u : U8 => binSeven)
-                                (\u : U8 =>
-                                  if [Bin] (eqU8 digit '8')
-                                    (\u : U8 => binEight)
-                                    (\u : U8 => binNine)))))))))
+poly isDigit =
+  \b : U8 => and (lteU8 '0' b) (lteU8 b '9')
 
-poly rec parseDecimalAcc = \digits : List U8 => \acc : Bin =>
-  matchList [U8] [Result (List U8) Bin] digits
-    (Ok [List U8] [Bin] acc)
-    (\h : U8 => \t : List U8 =>
-      if [Result (List U8) Bin] (isDigit h)
-        (\u : U8 =>
-          parseDecimalAcc t (addBin (mulBin acc binTen) (decimalDigitValue h)))
-        (\u : U8 => Err [List U8] [Bin] "bad decimal"))
+poly isUpper =
+  \b : U8 => and (lteU8 'A' b) (lteU8 b 'Z')
 
-poly parseDecimal = \digits : List U8 =>
-  matchList [U8] [Result (List U8) Bin] digits
-    (Err [List U8] [Bin] "empty decimal")
-    (\h : U8 => \t : List U8 =>
-      if [Result (List U8) Bin] (eqU8 h '0')
-        (\u : U8 =>
-          if [Result (List U8) Bin] (listIsEmpty [U8] t)
-            (\u : U8 => Ok [List U8] [Bin] BZ)
-            (\u : U8 => Err [List U8] [Bin] "non-canonical decimal"))
-        (\u : U8 =>
-          if [Result (List U8) Bin] (isDigit h)
-            (\u : U8 => parseDecimalAcc t (decimalDigitValue h))
-            (\u : U8 => Err [List U8] [Bin] "bad decimal")))
+poly isLower =
+  \b : U8 => and (lteU8 'a' b) (lteU8 b 'z')
 
-poly parseModuleHeader = \line : List U8 =>
-  match (stripPrefix "module " line) [Result (List U8) (List U8)] {
-    | Err e => Err [List U8] [ModuleHeader] "bad module header"
-    | Ok rest =>
-        match (readWord rest) [Result (List U8) ModuleHeader] { | MkWord name lengthDigits =>
-          if [Result (List U8) ModuleHeader] (validateName name)
-            (\u : U8 =>
-              match (parseDecimal lengthDigits) [Result (List U8) ModuleHeader] {
-                | Err e => Err [List U8] [ModuleHeader] e
-                | Ok length =>
-                    Ok [List U8] [ModuleHeader] (MkModuleHeader name lengthDigits length)
-              })
-            (\u : U8 => Err [List U8] [ModuleHeader] "bad module name")
+poly isAlpha =
+  \b : U8 => or (isUpper b) (isLower b)
+
+poly isNameStart =
+  \b : U8 => or (isAlpha b) (eqU8 b '_')
+
+poly isNameChar =
+  \b : U8 => or (isNameStart b) (isDigit b)
+
+poly rec validateNameRest =
+  \name : List U8 =>
+    matchList
+      [U8]
+      [Bool]
+      name
+      true
+      (\h : U8 => \t : List U8 => and (isNameChar h) (validateNameRest t))
+
+poly validateName =
+  \name : List U8 =>
+    matchList
+      [U8]
+      [Bool]
+      name
+      false
+      (\h : U8 => \t : List U8 => and (isNameStart h) (validateNameRest t))
+
+poly rec readLineAcc =
+  \input : List U8 =>
+    \acc : List U8 =>
+      matchList
+        [U8]
+        [Result (List U8) Line]
+        input
+        (Ok [List U8] [Line] (MkLine (reverse [U8] acc) (nil [U8])))
+        (
+          \h : U8 =>
+            \t : List U8 =>
+              if [Result (List U8) Line] (not (isAscii h))
+                (\u : U8 => Err [List U8] [Line] "non-ascii byte")
+                (
+                  \u : U8 =>
+                    if [Result (List U8) Line] (eqU8 h '\n')
+                      (
+                        \u : U8 => Ok [List U8] [Line] (MkLine (reverse [U8] acc) t)
+                      )
+                      (\u : U8 => readLineAcc t (cons [U8] h acc))
+                )
+        )
+
+poly readLine =
+  \input : List U8 => readLineAcc input (nil [U8])
+
+poly rec stripPrefix =
+  \prefix : List U8 =>
+    \input : List U8 =>
+      matchList
+        [U8]
+        [Result (List U8) (List U8)]
+        prefix
+        (Ok [List U8] [List U8] input)
+        (
+          \ph : U8 =>
+            \pt : List U8 =>
+              matchList
+                [U8]
+                [Result (List U8) (List U8)]
+                input
+                (Err [List U8] [List U8] "bad directive")
+                (
+                  \ih : U8 =>
+                    \it : List U8 =>
+                      if [Result (List U8) (List U8)] (eqU8 ph ih)
+                        (\u : U8 => stripPrefix pt it)
+                        (\u : U8 => Err [List U8] [List U8] "bad directive")
+                )
+        )
+
+poly requireDirective =
+  \name : List U8 =>
+    \line : List U8 =>
+      match (stripPrefix (append [U8] name " ") line) [Result (List U8) (List U8)] {
+        | Err e => Err [List U8] [List U8] e
+        | Ok value =>
+          if [Result (List U8) (List U8)] (listIsEmpty [U8] value)
+            (\u : U8 => Err [List U8] [List U8] "empty directive")
+            (\u : U8 => Ok [List U8] [List U8] value)
+      }
+
+poly requireEntry =
+  \line : List U8 => requireDirective directiveEntry line
+
+poly requireTarget =
+  \line : List U8 => requireDirective directiveTarget line
+
+poly requireWrapper =
+  \line : List U8 => requireDirective directiveWrapper line
+
+poly requireModules =
+  \line : List U8 => requireDirective directiveModules line
+
+poly rec readWordAcc =
+  \input : List U8 =>
+    \acc : List U8 =>
+      matchList
+        [U8]
+        [Word]
+        input
+        (MkWord (reverse [U8] acc) (nil [U8]))
+        (
+          \h : U8 =>
+            \t : List U8 =>
+              if [Word] (eqU8 h ' ')
+                (\u : U8 => MkWord (reverse [U8] acc) t)
+                (\u : U8 => readWordAcc t (cons [U8] h acc))
+        )
+
+poly readWord =
+  \input : List U8 => readWordAcc input (nil [U8])
+
+poly rec decimalDigitValue =
+  \digit : U8 =>
+    if [Bin] (eqU8 digit '0')
+      (\u : U8 => BZ)
+      (
+        \u : U8 =>
+          if [Bin] (eqU8 digit '1')
+            (\u : U8 => binOne)
+            (
+              \u : U8 =>
+                if [Bin] (eqU8 digit '2')
+                  (\u : U8 => binTwo)
+                  (
+                    \u : U8 =>
+                      if [Bin] (eqU8 digit '3')
+                        (\u : U8 => binThree)
+                        (
+                          \u : U8 =>
+                            if [Bin] (eqU8 digit '4')
+                              (\u : U8 => binFour)
+                              (
+                                \u : U8 =>
+                                  if [Bin] (eqU8 digit '5')
+                                    (\u : U8 => binFive)
+                                    (
+                                      \u : U8 =>
+                                        if [Bin] (eqU8 digit '6')
+                                          (\u : U8 => binSix)
+                                          (
+                                            \u : U8 =>
+                                              if [Bin] (eqU8 digit '7')
+                                                (\u : U8 => binSeven)
+                                                (
+                                                  \u : U8 =>
+                                                    if [Bin] (eqU8 digit '8')
+                                                      (\u : U8 => binEight)
+                                                      (\u : U8 => binNine)
+                                                )
+                                          )
+                                    )
+                              )
+                        )
+                  )
+            )
+      )
+
+poly rec parseDecimalAcc =
+  \digits : List U8 =>
+    \acc : Bin =>
+      matchList
+        [U8]
+        [Result (List U8) Bin]
+        digits
+        (Ok [List U8] [Bin] acc)
+        (
+          \h : U8 =>
+            \t : List U8 =>
+              if [Result (List U8) Bin] (isDigit h)
+                (
+                  \u : U8 =>
+                    parseDecimalAcc
+                      t
+                      (addBin (mulBin acc binTen) (decimalDigitValue h))
+                )
+                (\u : U8 => Err [List U8] [Bin] "bad decimal")
+        )
+
+poly parseDecimal =
+  \digits : List U8 =>
+    matchList
+      [U8]
+      [Result (List U8) Bin]
+      digits
+      (Err [List U8] [Bin] "empty decimal")
+      (
+        \h : U8 =>
+          \t : List U8 =>
+            if [Result (List U8) Bin] (eqU8 h '0')
+              (
+                \u : U8 =>
+                  if [Result (List U8) Bin] (listIsEmpty [U8] t)
+                    (\u : U8 => Ok [List U8] [Bin] BZ)
+                    (\u : U8 => Err [List U8] [Bin] "non-canonical decimal")
+              )
+              (
+                \u : U8 =>
+                  if [Result (List U8) Bin] (isDigit h)
+                    (\u : U8 => parseDecimalAcc t (decimalDigitValue h))
+                    (\u : U8 => Err [List U8] [Bin] "bad decimal")
+              )
+      )
+
+poly parseModuleHeader =
+  \line : List U8 =>
+    match (stripPrefix "module " line) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [ModuleHeader] "bad module header"
+      | Ok rest =>
+        match (readWord rest) [Result (List U8) ModuleHeader] {
+          | MkWord name lengthDigits =>
+            if [Result (List U8) ModuleHeader] (validateName name)
+              (
+                \u : U8 =>
+                  match (parseDecimal lengthDigits) [Result (List U8) ModuleHeader] {
+                    | Err e => Err [List U8] [ModuleHeader] e
+                    | Ok length =>
+                      Ok
+                        [List U8]
+                        [ModuleHeader]
+                        (MkModuleHeader name lengthDigits length)
+                  }
+              )
+              (\u : U8 => Err [List U8] [ModuleHeader] "bad module name")
         }
-  }
+    }
 
-poly rec consumeSourceAcc = \count : Bin => \input : List U8 => \acc : List U8 =>
-  if [Result (List U8) SourcePayload] (isZeroBin count)
-    (\u : U8 => Ok [List U8] [SourcePayload] (MkSourcePayload (reverse [U8] acc) input))
-    (\u : U8 =>
-      matchList [U8] [Result (List U8) SourcePayload] input
-        (Err [List U8] [SourcePayload] "source ended early")
-        (\h : U8 => \t : List U8 =>
-          if [Result (List U8) SourcePayload] (isAscii h)
-            (\u : U8 => consumeSourceAcc (predBin count) t (cons [U8] h acc))
-            (\u : U8 => Err [List U8] [SourcePayload] "non-ascii byte")))
+poly rec consumeSourceAcc =
+  \count : Bin =>
+    \input : List U8 =>
+      \acc : List U8 =>
+        if [Result (List U8) SourcePayload] (isZeroBin count)
+          (
+            \u : U8 =>
+              Ok
+                [List U8]
+                [SourcePayload]
+                (MkSourcePayload (reverse [U8] acc) input)
+          )
+          (
+            \u : U8 =>
+              matchList
+                [U8]
+                [Result (List U8) SourcePayload]
+                input
+                (Err [List U8] [SourcePayload] "source ended early")
+                (
+                  \h : U8 =>
+                    \t : List U8 =>
+                      if [Result (List U8) SourcePayload] (isAscii h)
+                        (
+                          \u : U8 => consumeSourceAcc (predBin count) t (cons [U8] h acc)
+                        )
+                        (
+                          \u : U8 => Err [List U8] [SourcePayload] "non-ascii byte"
+                        )
+                )
+          )
 
-poly consumeSource = \count : Bin => \input : List U8 =>
-  consumeSourceAcc count input (nil [U8])
+poly consumeSource =
+  \count : Bin => \input : List U8 => consumeSourceAcc count input (nil [U8])
 
-poly declaredModuleName = \source : List U8 =>
-  match (readLine source) [Result (List U8) (List U8)] {
-    | Err e => Err [List U8] [List U8] e
-    | Ok lineRes =>
-        match lineRes [Result (List U8) (List U8)] { | MkLine line rest =>
-          match (stripPrefix "module " line) [Result (List U8) (List U8)] {
-            | Err e => Err [List U8] [List U8] "bad source module"
-            | Ok name =>
+poly declaredModuleName =
+  \source : List U8 =>
+    match (readLine source) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] e
+      | Ok lineRes =>
+        match lineRes [Result (List U8) (List U8)] {
+          | MkLine line rest =>
+            match (stripPrefix "module " line) [Result (List U8) (List U8)] {
+              | Err e => Err [List U8] [List U8] "bad source module"
+              | Ok name =>
                 if [Result (List U8) (List U8)] (validateName name)
                   (\u : U8 => Ok [List U8] [List U8] name)
                   (\u : U8 => Err [List U8] [List U8] "bad source module")
-          }
-        }
-  }
-
-poly parseTarget = \value : List U8 =>
-  if [Result (List U8) (List U8)] (eqListU8 value "generic")
-    (\u : U8 => Ok [List U8] [List U8] value)
-    (\u : U8 =>
-      if [Result (List U8) (List U8)] (eqListU8 value "x86_64-unknown-linux-gnu")
-        (\u : U8 => Ok [List U8] [List U8] value)
-        (\u : U8 =>
-          if [Result (List U8) (List U8)] (eqListU8 value "arm64-apple-darwin")
-            (\u : U8 => Ok [List U8] [List U8] value)
-            (\u : U8 =>
-              if [Result (List U8) (List U8)] (eqListU8 value "x86_64-pc-windows-msvc")
-                (\u : U8 => Ok [List U8] [List U8] value)
-                (\u : U8 => Err [List U8] [List U8] "bad target"))))
-
-poly parseWrapper = \value : List U8 =>
-  if [Result (List U8) (List U8)] (eqListU8 value "none")
-    (\u : U8 => Ok [List U8] [List U8] value)
-    (\u : U8 =>
-      if [Result (List U8) (List U8)] (eqListU8 value "enabled")
-        (\u : U8 => Ok [List U8] [List U8] value)
-        (\u : U8 => Err [List U8] [List U8] "bad wrapper"))
-
-poly rec parseModules = \remaining : List U8 => \count : Bin => \entry : List U8 => \previous : Maybe (List U8) => \entryFound : Bool => \accRev : List ModuleRecord =>
-  if [Result (List U8) ParsedModules] (isZeroBin count)
-    (\u : U8 =>
-      if [Result (List U8) ParsedModules] (listIsEmpty [U8] remaining)
-        (\u : U8 =>
-          if [Result (List U8) ParsedModules] entryFound
-            (\u : U8 => Ok [List U8] [ParsedModules] (MkParsedModules entryFound (reverse [ModuleRecord] accRev) remaining))
-            (\u : U8 => Err [List U8] [ParsedModules] "missing entry"))
-        (\u : U8 => Err [List U8] [ParsedModules] "trailing bytes"))
-    (\u : U8 =>
-      match (readLine remaining) [Result (List U8) ParsedModules] {
-        | Err e => Err [List U8] [ParsedModules] e
-        | Ok lineRes =>
-            match lineRes [Result (List U8) ParsedModules] { | MkLine line afterHeader =>
-              match (parseModuleHeader line) [Result (List U8) ParsedModules] {
-                | Err e => Err [List U8] [ParsedModules] e
-                | Ok header =>
-                    match header [Result (List U8) ParsedModules] { | MkModuleHeader name lengthDigits length =>
-                      let orderOk =
-                        match previous [Bool] {
-                          | None => true
-                          | Some prev => ltListU8 prev name
-                        } in
-                      if [Result (List U8) ParsedModules] orderOk
-                        (\u : U8 =>
-                          match (consumeSource length afterHeader) [Result (List U8) ParsedModules] {
-                            | Err e => Err [List U8] [ParsedModules] e
-                            | Ok payload =>
-                                match payload [Result (List U8) ParsedModules] { | MkSourcePayload source afterSource =>
-                                  match (declaredModuleName source) [Result (List U8) ParsedModules] {
-                                    | Err e => Err [List U8] [ParsedModules] e
-                                    | Ok declared =>
-                                        if [Result (List U8) ParsedModules] (eqListU8 declared name)
-                                          (\u : U8 =>
-                                            let nextCount = predBin count in
-                                            let nextEntryFound = or entryFound (eqListU8 name entry) in
-                                            let nextAcc = cons [ModuleRecord] (MkModuleRecord name lengthDigits source) accRev in
-                                            if [Result (List U8) ParsedModules] (isZeroBin nextCount)
-                                              (\u : U8 => parseModules afterSource nextCount entry (Some [List U8] name) nextEntryFound nextAcc)
-                                              (\u : U8 =>
-                                                matchList [U8] [Result (List U8) ParsedModules] afterSource
-                                                  (Err [List U8] [ParsedModules] "missing module separator")
-                                                  (\sep : U8 => \afterSep : List U8 =>
-                                                    if [Result (List U8) ParsedModules] (eqU8 sep '\n')
-                                                      (\u : U8 => parseModules afterSep nextCount entry (Some [List U8] name) nextEntryFound nextAcc)
-                                                      (\u : U8 => Err [List U8] [ParsedModules] "missing module separator"))))
-                                          (\u : U8 => Err [List U8] [ParsedModules] "source module mismatch")
-                                  }
-                                }
-                          })
-                        (\u : U8 =>
-                          match previous [Result (List U8) ParsedModules] {
-                            | None => Err [List U8] [ParsedModules] "module order"
-                            | Some prev =>
-                                if [Result (List U8) ParsedModules] (eqListU8 prev name)
-                                  (\u : U8 => Err [List U8] [ParsedModules] "duplicate module")
-                                  (\u : U8 => Err [List U8] [ParsedModules] "module order")
-                          })
-                    }
-              }
             }
-      })
+        }
+    }
 
-poly parseBundleSummary = \input : List U8 =>
-  match (readLine input) [Result (List U8) BundleSummary] {
-    | Err e => Err [List U8] [BundleSummary] e
-    | Ok magicRes =>
-        match magicRes [Result (List U8) BundleSummary] { | MkLine magic afterMagic =>
-          if [Result (List U8) BundleSummary] (eqListU8 magic "TRIP-BUNDLE-V1")
-            (\u : U8 =>
-              match (readLine afterMagic) [Result (List U8) BundleSummary] {
-                | Err e => Err [List U8] [BundleSummary] e
-                | Ok entryLineRes =>
-                    match entryLineRes [Result (List U8) BundleSummary] { | MkLine entryLine afterEntry =>
-                      match (requireEntry entryLine) [Result (List U8) BundleSummary] {
-                        | Err e => Err [List U8] [BundleSummary] e
-                        | Ok entry =>
-                            if [Result (List U8) BundleSummary] (validateName entry)
-                              (\u : U8 =>
-                                match (readLine afterEntry) [Result (List U8) BundleSummary] {
-                                  | Err e => Err [List U8] [BundleSummary] e
-                                  | Ok targetLineRes =>
-                                      match targetLineRes [Result (List U8) BundleSummary] { | MkLine targetLine afterTarget =>
-                                        match (requireTarget targetLine) [Result (List U8) BundleSummary] {
-                                          | Err e => Err [List U8] [BundleSummary] e
-                                          | Ok targetValue =>
-                                              match (parseTarget targetValue) [Result (List U8) BundleSummary] {
-                                                | Err e => Err [List U8] [BundleSummary] e
-                                                | Ok target =>
+poly parseTarget =
+  \value : List U8 =>
+    if [Result (List U8) (List U8)] (eqListU8 value "generic")
+      (\u : U8 => Ok [List U8] [List U8] value)
+      (
+        \u : U8 =>
+          if [Result (List U8) (List U8)] (eqListU8 value "x86_64-unknown-linux-gnu")
+            (\u : U8 => Ok [List U8] [List U8] value)
+            (
+              \u : U8 =>
+                if [Result (List U8) (List U8)] (eqListU8 value "arm64-apple-darwin")
+                  (\u : U8 => Ok [List U8] [List U8] value)
+                  (
+                    \u : U8 =>
+                      if [Result (List U8) (List U8)] (eqListU8 value "x86_64-pc-windows-msvc")
+                        (\u : U8 => Ok [List U8] [List U8] value)
+                        (\u : U8 => Err [List U8] [List U8] "bad target")
+                  )
+            )
+      )
+
+poly parseWrapper =
+  \value : List U8 =>
+    if [Result (List U8) (List U8)] (eqListU8 value "none")
+      (\u : U8 => Ok [List U8] [List U8] value)
+      (
+        \u : U8 =>
+          if [Result (List U8) (List U8)] (eqListU8 value "enabled")
+            (\u : U8 => Ok [List U8] [List U8] value)
+            (\u : U8 => Err [List U8] [List U8] "bad wrapper")
+      )
+
+poly rec parseModules =
+  \remaining : List U8 =>
+    \count : Bin =>
+      \entry : List U8 =>
+        \previous : Maybe (List U8) =>
+          \entryFound : Bool =>
+            \accRev : List ModuleRecord =>
+              if [Result (List U8) ParsedModules] (isZeroBin count)
+                (
+                  \u : U8 =>
+                    if [Result (List U8) ParsedModules] (listIsEmpty [U8] remaining)
+                      (
+                        \u : U8 =>
+                          if [Result (List U8) ParsedModules] entryFound
+                            (
+                              \u : U8 =>
+                                Ok
+                                  [List U8]
+                                  [ParsedModules]
+                                  (
+                                    MkParsedModules
+                                      entryFound
+                                      (reverse [ModuleRecord] accRev)
+                                      remaining
+                                  )
+                            )
+                            (
+                              \u : U8 => Err [List U8] [ParsedModules] "missing entry"
+                            )
+                      )
+                      (
+                        \u : U8 => Err [List U8] [ParsedModules] "trailing bytes"
+                      )
+                )
+                (
+                  \u : U8 =>
+                    match (readLine remaining) [Result (List U8) ParsedModules] {
+                      | Err e => Err [List U8] [ParsedModules] e
+                      | Ok lineRes =>
+                        match lineRes [Result (List U8) ParsedModules] {
+                          | MkLine line afterHeader =>
+                            match (parseModuleHeader line) [Result (List U8) ParsedModules] {
+                              | Err e => Err [List U8] [ParsedModules] e
+                              | Ok header =>
+                                match header [Result (List U8) ParsedModules] {
+                                  | MkModuleHeader name lengthDigits length =>
+                                    let orderOk = match previous [Bool] {| None => true | Some prev => ltListU8 prev name} in
+                                    if [Result (List U8) ParsedModules] orderOk
+                                      (
+                                        \u : U8 =>
+                                          match (consumeSource length afterHeader) [Result (List U8) ParsedModules] {
+                                            | Err e => Err [List U8] [ParsedModules] e
+                                            | Ok payload =>
+                                              match payload [Result (List U8) ParsedModules] {
+                                                | MkSourcePayload source afterSource =>
+                                                  match (declaredModuleName source) [Result (List U8) ParsedModules] {
+                                                    | Err e => Err [List U8] [ParsedModules] e
+                                                    | Ok declared =>
+                                                      if [Result (List U8) ParsedModules] (eqListU8 declared name)
+                                                        (
+                                                          \u : U8 =>
+                                                            let nextCount = predBin count in
+                                                            let nextEntryFound = or entryFound (eqListU8 name entry) in
+                                                            let nextAcc = cons [ModuleRecord] (MkModuleRecord name lengthDigits source) accRev in
+                                                            if [Result (List U8) ParsedModules] (isZeroBin nextCount)
+                                                              (
+                                                                \u : U8 =>
+                                                                  parseModules
+                                                                    afterSource
+                                                                    nextCount
+                                                                    entry
+                                                                    (
+                                                                      Some
+                                                                        [List U8]
+                                                                        name
+                                                                    )
+                                                                    nextEntryFound
+                                                                    nextAcc
+                                                              )
+                                                              (
+                                                                \u : U8 =>
+                                                                  matchList
+                                                                    [U8]
+                                                                    [Result (List U8) ParsedModules]
+                                                                    afterSource
+                                                                    (
+                                                                      Err
+                                                                        [List U8]
+                                                                        [ParsedModules]
+                                                                        "missing module separator"
+                                                                    )
+                                                                    (
+                                                                      \sep : U8 =>
+                                                                        \afterSep : List U8 =>
+                                                                          if [Result (List U8) ParsedModules] (eqU8 sep '\n')
+                                                                            (
+                                                                              \u : U8 =>
+                                                                                parseModules
+                                                                                  afterSep
+                                                                                  nextCount
+                                                                                  entry
+                                                                                  (
+                                                                                    Some
+                                                                                      [List U8]
+                                                                                      name
+                                                                                  )
+                                                                                  nextEntryFound
+                                                                                  nextAcc
+                                                                            )
+                                                                            (
+                                                                              \u : U8 => Err [List U8] [ParsedModules] "missing module separator"
+                                                                            )
+                                                                    )
+                                                              )
+                                                        )
+                                                        (
+                                                          \u : U8 => Err [List U8] [ParsedModules] "source module mismatch"
+                                                        )
+                                                  }
+                                              }
+                                          }
+                                      )
+                                      (
+                                        \u : U8 =>
+                                          match previous [Result (List U8) ParsedModules] {
+                                            | None => Err [List U8] [ParsedModules] "module order"
+                                            | Some prev =>
+                                              if [Result (List U8) ParsedModules] (eqListU8 prev name)
+                                                (
+                                                  \u : U8 => Err [List U8] [ParsedModules] "duplicate module"
+                                                )
+                                                (
+                                                  \u : U8 => Err [List U8] [ParsedModules] "module order"
+                                                )
+                                          }
+                                      )
+                                }
+                            }
+                        }
+                    }
+                )
+
+poly parseBundleSummary =
+  \input : List U8 =>
+    match (readLine input) [Result (List U8) BundleSummary] {
+      | Err e => Err [List U8] [BundleSummary] e
+      | Ok magicRes =>
+        match magicRes [Result (List U8) BundleSummary] {
+          | MkLine magic afterMagic =>
+            if [Result (List U8) BundleSummary] (eqListU8 magic "TRIP-BUNDLE-V1")
+              (
+                \u : U8 =>
+                  match (readLine afterMagic) [Result (List U8) BundleSummary] {
+                    | Err e => Err [List U8] [BundleSummary] e
+                    | Ok entryLineRes =>
+                      match entryLineRes [Result (List U8) BundleSummary] {
+                        | MkLine entryLine afterEntry =>
+                          match (requireEntry entryLine) [Result (List U8) BundleSummary] {
+                            | Err e => Err [List U8] [BundleSummary] e
+                            | Ok entry =>
+                              if [Result (List U8) BundleSummary] (validateName entry)
+                                (
+                                  \u : U8 =>
+                                    match (readLine afterEntry) [Result (List U8) BundleSummary] {
+                                      | Err e => Err [List U8] [BundleSummary] e
+                                      | Ok targetLineRes =>
+                                        match targetLineRes [Result (List U8) BundleSummary] {
+                                          | MkLine targetLine afterTarget =>
+                                            match (requireTarget targetLine) [Result (List U8) BundleSummary] {
+                                              | Err e => Err [List U8] [BundleSummary] e
+                                              | Ok targetValue =>
+                                                match (parseTarget targetValue) [Result (List U8) BundleSummary] {
+                                                  | Err e => Err [List U8] [BundleSummary] e
+                                                  | Ok target =>
                                                     match (readLine afterTarget) [Result (List U8) BundleSummary] {
                                                       | Err e => Err [List U8] [BundleSummary] e
                                                       | Ok wrapperLineRes =>
-                                                          match wrapperLineRes [Result (List U8) BundleSummary] { | MkLine wrapperLine afterWrapper =>
+                                                        match wrapperLineRes [Result (List U8) BundleSummary] {
+                                                          | MkLine wrapperLine afterWrapper =>
                                                             match (requireWrapper wrapperLine) [Result (List U8) BundleSummary] {
                                                               | Err e => Err [List U8] [BundleSummary] e
                                                               | Ok wrapperValue =>
-                                                                  match (parseWrapper wrapperValue) [Result (List U8) BundleSummary] {
-                                                                    | Err e => Err [List U8] [BundleSummary] e
-                                                                    | Ok wrapper =>
-                                                                        match (readLine afterWrapper) [Result (List U8) BundleSummary] {
-                                                                          | Err e => Err [List U8] [BundleSummary] e
-                                                                          | Ok modulesLineRes =>
-                                                                              match modulesLineRes [Result (List U8) BundleSummary] { | MkLine modsLine afterModules =>
-                                                                                match (requireModules modsLine) [Result (List U8) BundleSummary] {
+                                                                match (parseWrapper wrapperValue) [Result (List U8) BundleSummary] {
+                                                                  | Err e => Err [List U8] [BundleSummary] e
+                                                                  | Ok wrapper =>
+                                                                    match (readLine afterWrapper) [Result (List U8) BundleSummary] {
+                                                                      | Err e => Err [List U8] [BundleSummary] e
+                                                                      | Ok modulesLineRes =>
+                                                                        match modulesLineRes [Result (List U8) BundleSummary] {
+                                                                          | MkLine modsLine afterModules =>
+                                                                            match (requireModules modsLine) [Result (List U8) BundleSummary] {
+                                                                              | Err e => Err [List U8] [BundleSummary] e
+                                                                              | Ok modsCountDigits =>
+                                                                                match (parseDecimal modsCountDigits) [Result (List U8) BundleSummary] {
                                                                                   | Err e => Err [List U8] [BundleSummary] e
-                                                                                  | Ok modsCountDigits =>
-                                                                                      match (parseDecimal modsCountDigits) [Result (List U8) BundleSummary] {
-                                                                                        | Err e => Err [List U8] [BundleSummary] e
-                                                                                        | Ok modsCount =>
-                                                                                            match (parseModules afterModules modsCount entry (None [List U8]) false (nil [ModuleRecord])) [Result (List U8) BundleSummary] {
-                                                                                              | Err e => Err [List U8] [BundleSummary] e
-                                                                                              | Ok parsed =>
-                                                                                                  match parsed [Result (List U8) BundleSummary] { | MkParsedModules found mods rest =>
-                                                                                                    Ok [List U8] [BundleSummary] (MkBundleSummary entry target wrapper modsCountDigits mods)
-                                                                                                  }
-                                                                                            }
-                                                                                      }
+                                                                                  | Ok modsCount =>
+                                                                                    match (parseModules afterModules modsCount entry (None [List U8]) false (nil [ModuleRecord])) [Result (List U8) BundleSummary] {
+                                                                                      | Err e => Err [List U8] [BundleSummary] e
+                                                                                      | Ok parsed =>
+                                                                                        match parsed [Result (List U8) BundleSummary] {
+                                                                                          | MkParsedModules found mods rest =>
+                                                                                            Ok
+                                                                                              [List U8]
+                                                                                              [BundleSummary]
+                                                                                              (
+                                                                                                MkBundleSummary
+                                                                                                  entry
+                                                                                                  target
+                                                                                                  wrapper
+                                                                                                  modsCountDigits
+                                                                                                  mods
+                                                                                              )
+                                                                                        }
+                                                                                    }
                                                                                 }
-                                                                              }
+                                                                            }
                                                                         }
-                                                                  }
+                                                                    }
+                                                                }
                                                             }
-                                                          }
+                                                        }
                                                     }
-                                              }
+                                                }
+                                            }
                                         }
-                                      }
-                                })
-                              (\u : U8 => Err [List U8] [BundleSummary] "bad entry name")
+                                    }
+                                )
+                                (
+                                  \u : U8 => Err [List U8] [BundleSummary] "bad entry name"
+                                )
+                          }
                       }
-                    }
-              })
-            (\u : U8 => Err [List U8] [BundleSummary] "bad magic")
+                  }
+              )
+              (\u : U8 => Err [List U8] [BundleSummary] "bad magic")
         }
-  }
+    }
 
-poly emitModuleSummary = \modRec : ModuleRecord =>
-  match modRec [List U8] { | MkModuleRecord name lengthDigits source =>
-    append [U8] "module " (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
-  }
+poly emitModuleSummary =
+  \modRec : ModuleRecord =>
+    match modRec [List U8] {
+      | MkModuleRecord name lengthDigits source =>
+        append
+          [U8]
+          "module "
+          (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
+    }
 
-poly rec emitModuleSummaries = \mods : List ModuleRecord =>
-  matchList [ModuleRecord] [List U8] mods
-    (nil [U8])
-    (\h : ModuleRecord => \t : List ModuleRecord =>
-      append [U8] (emitModuleSummary h) (emitModuleSummaries t))
+poly rec emitModuleSummaries =
+  \mods : List ModuleRecord =>
+    matchList
+      [ModuleRecord]
+      [List U8]
+      mods
+      (nil [U8])
+      (
+        \h : ModuleRecord =>
+          \t : List ModuleRecord => append [U8] (emitModuleSummary h) (emitModuleSummaries t)
+      )
 
-poly emitBundleSummary = \bundle : BundleSummary =>
-  match bundle [List U8] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
-    append [U8] "OK\n"
-      (append [U8] "version bundle-v1\n"
-        (append [U8] "entry "
-          (append [U8] entry
-            (append [U8] "\ntarget "
-              (append [U8] target
-                (append [U8] "\nwrapper "
-                  (append [U8] wrapper
-                    (append [U8] "\nmodules "
-                      (append [U8] modsCountDigits
-                        (append [U8] "\n" (emitModuleSummaries mods)))))))))))
-  }
+poly emitBundleSummary =
+  \bundle : BundleSummary =>
+    match bundle [List U8] {
+      | MkBundleSummary entry target wrapper modsCountDigits mods =>
+        append
+          [U8]
+          "OK\n"
+          (
+            append
+              [U8]
+              "version bundle-v1\n"
+              (
+                append
+                  [U8]
+                  "entry "
+                  (
+                    append
+                      [U8]
+                      entry
+                      (
+                        append
+                          [U8]
+                          "\ntarget "
+                          (
+                            append
+                              [U8]
+                              target
+                              (
+                                append
+                                  [U8]
+                                  "\nwrapper "
+                                  (
+                                    append
+                                      [U8]
+                                      wrapper
+                                      (
+                                        append
+                                          [U8]
+                                          "\nmodules "
+                                          (
+                                            append
+                                              [U8]
+                                              modsCountDigits
+                                              (
+                                                append
+                                                  [U8]
+                                                  "\n"
+                                                  (emitModuleSummaries mods)
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+    }
 
-poly rec writeAll = \bytes : List U8 =>
-  matchList [U8] [U8] bytes
-    #u8(0)
-    (\h : U8 => \t : List U8 =>
-      writeOne h [U8] (\u : U8 => writeAll t))
+poly rec writeAll =
+  \bytes : List U8 =>
+    matchList [U8] [U8] bytes #u8(0) (\h : U8 => \t : List U8 => writeOne h [U8] (\u : U8 => writeAll t))
 
-poly main = \source : List U8 =>
-  match (parseBundleSummary source) [U8] {
-    | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
-    | Ok bundle => writeAll (emitBundleSummary bundle)
-  }
+poly main =
+  \source : List U8 =>
+    match (parseBundleSummary source) [U8] {
+      | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+      | Ok bundle => writeAll (emitBundleSummary bundle)
+    }

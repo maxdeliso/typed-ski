@@ -1,7 +1,11 @@
 module Main
+
 import Prelude U8
 
-poly id_u8 = \x : U8 => x
+poly id_u8 =
+  \x : U8 => x
 
 export main
-poly main = id_u8 #u8(42)
+
+poly main =
+  id_u8 #u8(42)

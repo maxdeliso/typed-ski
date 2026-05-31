@@ -1,3 +1,6 @@
 module AmbiguousB
+
 export Bar
-data J = Bar
+
+data J =
+  | Bar

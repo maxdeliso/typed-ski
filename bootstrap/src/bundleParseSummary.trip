@@ -1,454 +1,753 @@
 module BundleParseSummary
 
 import Prelude List
+
 import Prelude nil
+
 import Prelude cons
+
 import Prelude matchList
+
 import Prelude append
+
 import Prelude Result
+
 import Prelude Ok
+
 import Prelude Err
+
 import Prelude Maybe
+
 import Prelude Some
+
 import Prelude None
+
 import Prelude Pair
+
 import Prelude fst
+
 import Prelude snd
+
 import Prelude Bool
+
 import Prelude true
+
 import Prelude false
+
 import Prelude if
+
 import Prelude U8
+
 import Prelude eqU8
+
 import Prelude ltU8
+
 import Prelude addU8
+
 import Prelude divU8
+
 import Prelude modU8
+
 import Prelude eqListU8
+
 import Prelude ltListU8
+
 import Prelude digitToAscii
+
 import Prelude singletonU8
+
 import Prelude u8ToDigits
+
 import Prelude writeOne
+
 import BundleSummary parseBundleSummary
+
 import BundleSummary BundleSummary
+
 import BundleSummary MkBundleSummary
+
 import BundleSummary ModuleRecord
+
 import BundleSummary MkModuleRecord
+
 import Lexer tokenize
+
 import Lexer ParseError
+
 import Lexer MkParseError
+
 import Parser Decl
+
 import Parser D_Module
+
 import Parser D_Import
+
 import Parser D_Export
+
 import Parser D_Opaque
+
 import Parser D_Native
+
 import Parser D_Type
+
 import Parser D_Data
+
 import Parser D_Def
+
 import Parser DefKind
+
 import Parser K_Poly
+
 import Parser K_Combinator
+
 import Parser parseProgram
 
 export emitBundleParseSummary
+
 export main
 
-poly prefixModule : List U8 = "module "
-poly prefixDeclared : List U8 = "declared "
-poly prefixImport : List U8 = "import "
-poly prefixExport : List U8 = "export "
-poly prefixData : List U8 = "data "
-poly prefixType : List U8 = "type "
-poly prefixOpaque : List U8 = "opaque "
-poly prefixCtor : List U8 = "ctor "
-poly prefixPoly : List U8 = "poly "
-poly prefixCombinator : List U8 = "combinator "
-poly prefixImportsCount : List U8 = "imports "
-poly prefixExportsCount : List U8 = "exports "
-poly prefixNative : List U8 = "native "
-poly prefixSummaryEntry : List U8 = "OK\nversion bundle-parse-summary-v1\nentry "
-poly prefixSummaryTarget : List U8 = "\ntarget "
-poly prefixSummaryWrapper : List U8 = "\nwrapper "
-poly prefixSummaryModules : List U8 = "\nmodules "
-poly newline : List U8 = "\n"
-poly space : List U8 = " "
+poly prefixModule : List U8 =
+  "module "
 
-poly inc = \n : U8 =>
-  addU8 n #u8(1)
+poly prefixDeclared : List U8 =
+  "declared "
 
-poly rec declaredModuleAcc = \decls : List Decl => \seen : Maybe (List U8) =>
-  matchList [Decl] [Result (List U8) (List U8)] decls
-    (match seen [Result (List U8) (List U8)] {
-      | None => Err [List U8] [List U8] "missing module declaration"
-      | Some name => Ok [List U8] [List U8] name
-    })
-    (\h : Decl => \t : List Decl =>
-      match h [Result (List U8) (List U8)] {
-        | D_Module name =>
-            match seen [Result (List U8) (List U8)] {
-              | None => declaredModuleAcc t (Some [List U8] name)
-              | Some prev => Err [List U8] [List U8] "multiple module declarations"
-            }
-        | D_Import fromName symbolName => declaredModuleAcc t seen
-        | D_Export name => declaredModuleAcc t seen
-        | D_Opaque name => declaredModuleAcc t seen
-        | D_Native name => declaredModuleAcc t seen
-        | D_Type name => declaredModuleAcc t seen
-        | D_Data name ctors => declaredModuleAcc t seen
-        | D_Def kind isRec name body => declaredModuleAcc t seen
-      })
+poly prefixImport : List U8 =
+  "import "
 
-poly declaredModule = \decls : List Decl =>
-  declaredModuleAcc decls (None [List U8])
+poly prefixExport : List U8 =
+  "export "
 
-poly rec countImports = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Import fromName symbolName => countImports t (inc count)
-        | D_Module name => countImports t count
-        | D_Export name => countImports t count
-        | D_Opaque name => countImports t count
-        | D_Native name => countImports t count
-        | D_Type name => countImports t count
-        | D_Data name ctors => countImports t count
-        | D_Def kind isRec name body => countImports t count
-      })
+poly prefixData : List U8 =
+  "data "
 
-poly rec countExports = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Export name => countExports t (inc count)
-        | D_Module name => countExports t count
-        | D_Import fromName symbolName => countExports t count
-        | D_Opaque name => countExports t count
-        | D_Native name => countExports t count
-        | D_Type name => countExports t count
-        | D_Data name ctors => countExports t count
-        | D_Def kind isRec name body => countExports t count
-      })
+poly prefixType : List U8 =
+  "type "
 
-poly rec countData = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Data name ctors => countData t (inc count)
-        | D_Module name => countData t count
-        | D_Import fromName symbolName => countData t count
-        | D_Export name => countData t count
-        | D_Opaque name => countData t count
-        | D_Native name => countData t count
-        | D_Type name => countData t count
-        | D_Def kind isRec name body => countData t count
-      })
+poly prefixOpaque : List U8 =
+  "opaque "
 
-poly rec countTypes = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Type name => countTypes t (inc count)
-        | D_Module name => countTypes t count
-        | D_Import fromName symbolName => countTypes t count
-        | D_Export name => countTypes t count
-        | D_Opaque name => countTypes t count
-        | D_Native name => countTypes t count
-        | D_Data name ctors => countTypes t count
-        | D_Def kind isRec name body => countTypes t count
-      })
+poly prefixCtor : List U8 =
+  "ctor "
 
-poly rec countOpaque = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Opaque name => countOpaque t (inc count)
-        | D_Module name => countOpaque t count
-        | D_Import fromName symbolName => countOpaque t count
-        | D_Export name => countOpaque t count
-        | D_Native name => countOpaque t count
-        | D_Type name => countOpaque t count
-        | D_Data name ctors => countOpaque t count
-        | D_Def kind isRec name body => countOpaque t count
-      })
+poly prefixPoly : List U8 =
+  "poly "
 
-poly rec countNative = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Native name => countNative t (inc count)
-        | D_Module name => countNative t count
-        | D_Import fromName symbolName => countNative t count
-        | D_Export name => countNative t count
-        | D_Opaque name => countNative t count
-        | D_Type name => countNative t count
-        | D_Data name ctors => countNative t count
-        | D_Def kind isRec name body => countNative t count
-      })
+poly prefixCombinator : List U8 =
+  "combinator "
 
-poly isPolyKind = \kind : DefKind =>
-  match kind [Bool] {
-    | K_Poly => true
-    | K_Combinator => false
-  }
+poly prefixImportsCount : List U8 =
+  "imports "
 
-poly isCombinatorKind = \kind : DefKind =>
-  match kind [Bool] {
-    | K_Poly => false
-    | K_Combinator => true
-  }
+poly prefixExportsCount : List U8 =
+  "exports "
 
-poly emitOneNameLine = \prefix : List U8 => \name : List U8 =>
-  append [U8] prefix (append [U8] name newline)
+poly prefixNative : List U8 =
+  "native "
 
-poly emitTwoNameLine = \prefix : List U8 => \left : List U8 => \right : List U8 =>
-  append [U8] prefix (append [U8] left (append [U8] space (append [U8] right newline)))
+poly prefixSummaryEntry : List U8 =
+  "OK\nversion bundle-parse-summary-v1\nentry "
 
-poly emitNameCountLine = \prefix : List U8 => \name : List U8 => \count : U8 =>
-  append [U8] prefix (append [U8] name (append [U8] space (append [U8] (u8ToDigits count) newline)))
+poly prefixSummaryTarget : List U8 =
+  "\ntarget "
 
-poly emitCountLine = \prefix : List U8 => \count : U8 =>
-  append [U8] prefix (append [U8] (u8ToDigits count) newline)
+poly prefixSummaryWrapper : List U8 =
+  "\nwrapper "
 
-poly rec countPoly = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Def kind isRec name body =>
-            if [U8] (isPolyKind kind)
-              (\u : U8 => countPoly t (inc count))
-              (\u : U8 => countPoly t count)
-        | D_Module name => countPoly t count
-        | D_Import fromName symbolName => countPoly t count
-        | D_Export name => countPoly t count
-        | D_Opaque name => countPoly t count
-        | D_Native name => countPoly t count
-        | D_Type name => countPoly t count
-        | D_Data name ctors => countPoly t count
-      })
+poly prefixSummaryModules : List U8 =
+  "\nmodules "
 
-poly rec countCombinator = \decls : List Decl => \count : U8 =>
-  matchList [Decl] [U8] decls
-    count
-    (\h : Decl => \t : List Decl =>
-      match h [U8] {
-        | D_Def kind isRec name body =>
-            if [U8] (isCombinatorKind kind)
-              (\u : U8 => countCombinator t (inc count))
-              (\u : U8 => countCombinator t count)
-        | D_Module name => countCombinator t count
-        | D_Import fromName symbolName => countCombinator t count
-        | D_Export name => countCombinator t count
-        | D_Opaque name => countCombinator t count
-        | D_Native name => countCombinator t count
-        | D_Type name => countCombinator t count
-        | D_Data name ctors => countCombinator t count
-      })
+poly newline : List U8 =
+  "\n"
 
-poly rec emitImportsAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Import fromName symbolName =>
-            emitImportsAcc t (append [U8] (emitTwoNameLine prefixImport fromName symbolName) acc)
-        | D_Module name => emitImportsAcc t acc
-        | D_Export name => emitImportsAcc t acc
-        | D_Opaque name => emitImportsAcc t acc
-        | D_Native name => emitImportsAcc t acc
-        | D_Type name => emitImportsAcc t acc
-        | D_Data name ctors => emitImportsAcc t acc
-        | D_Def kind isRec name body => emitImportsAcc t acc
-      })
+poly space : List U8 =
+  " "
 
-poly emitImports = \decls : List Decl =>
-  emitImportsAcc (reverse [Decl] decls) (nil [U8])
+poly inc =
+  \n : U8 => addU8 n #u8(1)
 
-poly rec emitExportsAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Export name => emitExportsAcc t (append [U8] (emitOneNameLine prefixExport name) acc)
-        | D_Module name => emitExportsAcc t acc
-        | D_Import fromName symbolName => emitExportsAcc t acc
-        | D_Opaque name => emitExportsAcc t acc
-        | D_Native name => emitExportsAcc t acc
-        | D_Type name => emitExportsAcc t acc
-        | D_Data name ctors => emitExportsAcc t acc
-        | D_Def kind isRec name body => emitExportsAcc t acc
-      })
-
-poly emitExports = \decls : List Decl =>
-  emitExportsAcc (reverse [Decl] decls) (nil [U8])
-
-poly emitCtor = \ctor : Pair (List U8) U8 =>
-  let name = fst [List U8] [U8] ctor in
-  let arity = snd [List U8] [U8] ctor in
-  emitNameCountLine prefixCtor name arity
-
-poly rec emitCtorsAcc = \ctors : List (Pair (List U8) U8) => \acc : List U8 =>
-  matchList [Pair (List U8) U8] [List U8] ctors
-    acc
-    (\h : Pair (List U8) U8 => \t : List (Pair (List U8) U8) =>
-      emitCtorsAcc t (append [U8] (emitCtor h) acc))
-
-poly emitCtors = \ctors : List (Pair (List U8) U8) =>
-  emitCtorsAcc (reverse [Pair (List U8) U8] ctors) (nil [U8])
-
-poly rec emitDataDefsAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Data name ctors =>
-            let dataLine = emitOneNameLine prefixData name in
-            let ctorsText = emitCtors ctors in
-            emitDataDefsAcc t (append [U8] (append [U8] dataLine ctorsText) acc)
-        | D_Module name => emitDataDefsAcc t acc
-        | D_Import fromName symbolName => emitDataDefsAcc t acc
-        | D_Export name => emitDataDefsAcc t acc
-        | D_Opaque name => emitDataDefsAcc t acc
-        | D_Native name => emitDataDefsAcc t acc
-        | D_Type name => emitDataDefsAcc t acc
-        | D_Def kind isRec name body => emitDataDefsAcc t acc
-      })
-
-poly emitDataDefs = \decls : List Decl =>
-  emitDataDefsAcc (reverse [Decl] decls) (nil [U8])
-
-poly rec emitTypesAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Type name => emitTypesAcc t (append [U8] (emitOneNameLine prefixType name) acc)
-        | D_Module name => emitTypesAcc t acc
-        | D_Import fromName symbolName => emitTypesAcc t acc
-        | D_Export name => emitTypesAcc t acc
-        | D_Opaque name => emitTypesAcc t acc
-        | D_Native name => emitTypesAcc t acc
-        | D_Data name ctors => emitTypesAcc t acc
-        | D_Def kind isRec name body => emitTypesAcc t acc
-      })
-
-poly emitTypes = \decls : List Decl =>
-  emitTypesAcc (reverse [Decl] decls) (nil [U8])
-
-poly rec emitOpaquesAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Opaque name => emitOpaquesAcc t (append [U8] (emitOneNameLine prefixOpaque name) acc)
-        | D_Module name => emitOpaquesAcc t acc
-        | D_Import fromName symbolName => emitOpaquesAcc t acc
-        | D_Export name => emitOpaquesAcc t acc
-        | D_Native name => emitOpaquesAcc t acc
-        | D_Type name => emitOpaquesAcc t acc
-        | D_Data name ctors => emitOpaquesAcc t acc
-        | D_Def kind isRec name body => emitOpaquesAcc t acc
-      })
-
-poly emitOpaques = \decls : List Decl =>
-  emitOpaquesAcc (reverse [Decl] decls) (nil [U8])
-
-poly rec emitNativesAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Native name => emitNativesAcc t (append [U8] (emitOneNameLine prefixNative name) acc)
-        | D_Module name => emitNativesAcc t acc
-        | D_Import fromName symbolName => emitNativesAcc t acc
-        | D_Export name => emitNativesAcc t acc
-        | D_Opaque name => emitNativesAcc t acc
-        | D_Type name => emitNativesAcc t acc
-        | D_Data name ctors => emitNativesAcc t acc
-        | D_Def kind isRec name body => emitNativesAcc t acc
-      })
-
-poly emitNatives = \decls : List Decl =>
-  emitNativesAcc (reverse [Decl] decls) (nil [U8])
-
-poly rec emitPolyDefsAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Def kind isRec name body =>
-            if [List U8] (isPolyKind kind)
-              (\u : U8 => emitPolyDefsAcc t (append [U8] (emitOneNameLine prefixPoly name) acc))
-              (\u : U8 => emitPolyDefsAcc t acc)
-        | D_Module name => emitPolyDefsAcc t acc
-        | D_Import fromName symbolName => emitPolyDefsAcc t acc
-        | D_Export name => emitPolyDefsAcc t acc
-        | D_Opaque name => emitPolyDefsAcc t acc
-        | D_Native name => emitPolyDefsAcc t acc
-        | D_Type name => emitPolyDefsAcc t acc
-        | D_Data name ctors => emitPolyDefsAcc t acc
-      })
-
-poly emitPolyDefs = \decls : List Decl =>
-  emitPolyDefsAcc (reverse [Decl] decls) (nil [U8])
-
-poly rec emitCombinatorDefsAcc = \decls : List Decl => \acc : List U8 =>
-  matchList [Decl] [List U8] decls
-    acc
-    (\h : Decl => \t : List Decl =>
-      match h [List U8] {
-        | D_Def kind isRec name body =>
-            if [List U8] (isCombinatorKind kind)
-              (\u : U8 => emitCombinatorDefsAcc t (append [U8] (emitOneNameLine prefixCombinator name) acc))
-              (\u : U8 => emitCombinatorDefsAcc t acc)
-        | D_Module name => emitCombinatorDefsAcc t acc
-        | D_Import fromName symbolName => emitCombinatorDefsAcc t acc
-        | D_Export name => emitCombinatorDefsAcc t acc
-        | D_Opaque name => emitCombinatorDefsAcc t acc
-        | D_Native name => emitCombinatorDefsAcc t acc
-        | D_Type name => emitCombinatorDefsAcc t acc
-        | D_Data name ctors => emitCombinatorDefsAcc t acc
-      })
-
-poly emitCombinatorDefs = \decls : List Decl =>
-  emitCombinatorDefsAcc (reverse [Decl] decls) (nil [U8])
-
-poly parseModuleSource = \bundleName : List U8 => \source : List U8 =>
-  match (tokenize source) [Result (List U8) (List Decl)] {
-    | Err e => Err [List U8] [List Decl] "Lex error"
-    | Ok toks =>
-        match (parseProgram toks) [Result (List U8) (List Decl)] {
-          | Err e =>
-              match e [Result (List U8) (List Decl)] { | MkParseError msg =>
-                Err [List U8] [List Decl] msg
+poly rec declaredModuleAcc =
+  \decls : List Decl =>
+    \seen : Maybe (List U8) =>
+      matchList
+        [Decl]
+        [Result (List U8) (List U8)]
+        decls
+        (
+          match seen [Result (List U8) (List U8)] {
+            | None =>
+              Err [List U8] [List U8] "missing module declaration"
+            | Some name => Ok [List U8] [List U8] name
+          }
+        )
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [Result (List U8) (List U8)] {
+                | D_Module name =>
+                  match seen [Result (List U8) (List U8)] {
+                    | None => declaredModuleAcc t (Some [List U8] name)
+                    | Some prev =>
+                      Err [List U8] [List U8] "multiple module declarations"
+                  }
+                | D_Import fromName symbolName => declaredModuleAcc t seen
+                | D_Export name => declaredModuleAcc t seen
+                | D_Opaque name => declaredModuleAcc t seen
+                | D_Native name => declaredModuleAcc t seen
+                | D_Type name => declaredModuleAcc t seen
+                | D_Data name ctors => declaredModuleAcc t seen
+                | D_Def kind isRec name body => declaredModuleAcc t seen
               }
-          | Ok decls =>
+        )
+
+poly declaredModule =
+  \decls : List Decl => declaredModuleAcc decls (None [List U8])
+
+poly rec countImports =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Import fromName symbolName => countImports t (inc count)
+                | D_Module name => countImports t count
+                | D_Export name => countImports t count
+                | D_Opaque name => countImports t count
+                | D_Native name => countImports t count
+                | D_Type name => countImports t count
+                | D_Data name ctors => countImports t count
+                | D_Def kind isRec name body => countImports t count
+              }
+        )
+
+poly rec countExports =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Export name => countExports t (inc count)
+                | D_Module name => countExports t count
+                | D_Import fromName symbolName => countExports t count
+                | D_Opaque name => countExports t count
+                | D_Native name => countExports t count
+                | D_Type name => countExports t count
+                | D_Data name ctors => countExports t count
+                | D_Def kind isRec name body => countExports t count
+              }
+        )
+
+poly rec countData =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Data name ctors => countData t (inc count)
+                | D_Module name => countData t count
+                | D_Import fromName symbolName => countData t count
+                | D_Export name => countData t count
+                | D_Opaque name => countData t count
+                | D_Native name => countData t count
+                | D_Type name => countData t count
+                | D_Def kind isRec name body => countData t count
+              }
+        )
+
+poly rec countTypes =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Type name => countTypes t (inc count)
+                | D_Module name => countTypes t count
+                | D_Import fromName symbolName => countTypes t count
+                | D_Export name => countTypes t count
+                | D_Opaque name => countTypes t count
+                | D_Native name => countTypes t count
+                | D_Data name ctors => countTypes t count
+                | D_Def kind isRec name body => countTypes t count
+              }
+        )
+
+poly rec countOpaque =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Opaque name => countOpaque t (inc count)
+                | D_Module name => countOpaque t count
+                | D_Import fromName symbolName => countOpaque t count
+                | D_Export name => countOpaque t count
+                | D_Native name => countOpaque t count
+                | D_Type name => countOpaque t count
+                | D_Data name ctors => countOpaque t count
+                | D_Def kind isRec name body => countOpaque t count
+              }
+        )
+
+poly rec countNative =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Native name => countNative t (inc count)
+                | D_Module name => countNative t count
+                | D_Import fromName symbolName => countNative t count
+                | D_Export name => countNative t count
+                | D_Opaque name => countNative t count
+                | D_Type name => countNative t count
+                | D_Data name ctors => countNative t count
+                | D_Def kind isRec name body => countNative t count
+              }
+        )
+
+poly isPolyKind =
+  \kind : DefKind =>
+    match kind [Bool] {
+      | K_Poly => true
+      | K_Combinator => false
+    }
+
+poly isCombinatorKind =
+  \kind : DefKind =>
+    match kind [Bool] {
+      | K_Poly => false
+      | K_Combinator => true
+    }
+
+poly emitOneNameLine =
+  \prefix : List U8 =>
+    \name : List U8 => append [U8] prefix (append [U8] name newline)
+
+poly emitTwoNameLine =
+  \prefix : List U8 =>
+    \left : List U8 =>
+      \right : List U8 =>
+        append
+          [U8]
+          prefix
+          (append [U8] left (append [U8] space (append [U8] right newline)))
+
+poly emitNameCountLine =
+  \prefix : List U8 =>
+    \name : List U8 =>
+      \count : U8 =>
+        append
+          [U8]
+          prefix
+          (
+            append
+              [U8]
+              name
+              (append [U8] space (append [U8] (u8ToDigits count) newline))
+          )
+
+poly emitCountLine =
+  \prefix : List U8 =>
+    \count : U8 => append [U8] prefix (append [U8] (u8ToDigits count) newline)
+
+poly rec countPoly =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Def kind isRec name body =>
+                  if [U8] (isPolyKind kind)
+                    (\u : U8 => countPoly t (inc count))
+                    (\u : U8 => countPoly t count)
+                | D_Module name => countPoly t count
+                | D_Import fromName symbolName => countPoly t count
+                | D_Export name => countPoly t count
+                | D_Opaque name => countPoly t count
+                | D_Native name => countPoly t count
+                | D_Type name => countPoly t count
+                | D_Data name ctors => countPoly t count
+              }
+        )
+
+poly rec countCombinator =
+  \decls : List Decl =>
+    \count : U8 =>
+      matchList
+        [Decl]
+        [U8]
+        decls
+        count
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [U8] {
+                | D_Def kind isRec name body =>
+                  if [U8] (isCombinatorKind kind)
+                    (\u : U8 => countCombinator t (inc count))
+                    (\u : U8 => countCombinator t count)
+                | D_Module name => countCombinator t count
+                | D_Import fromName symbolName => countCombinator t count
+                | D_Export name => countCombinator t count
+                | D_Opaque name => countCombinator t count
+                | D_Native name => countCombinator t count
+                | D_Type name => countCombinator t count
+                | D_Data name ctors => countCombinator t count
+              }
+        )
+
+poly rec emitImportsAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Import fromName symbolName =>
+                  emitImportsAcc
+                    t
+                    (
+                      append
+                        [U8]
+                        (emitTwoNameLine prefixImport fromName symbolName)
+                        acc
+                    )
+                | D_Module name => emitImportsAcc t acc
+                | D_Export name => emitImportsAcc t acc
+                | D_Opaque name => emitImportsAcc t acc
+                | D_Native name => emitImportsAcc t acc
+                | D_Type name => emitImportsAcc t acc
+                | D_Data name ctors => emitImportsAcc t acc
+                | D_Def kind isRec name body => emitImportsAcc t acc
+              }
+        )
+
+poly emitImports =
+  \decls : List Decl => emitImportsAcc (reverse [Decl] decls) (nil [U8])
+
+poly rec emitExportsAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Export name =>
+                  emitExportsAcc
+                    t
+                    (append [U8] (emitOneNameLine prefixExport name) acc)
+                | D_Module name => emitExportsAcc t acc
+                | D_Import fromName symbolName => emitExportsAcc t acc
+                | D_Opaque name => emitExportsAcc t acc
+                | D_Native name => emitExportsAcc t acc
+                | D_Type name => emitExportsAcc t acc
+                | D_Data name ctors => emitExportsAcc t acc
+                | D_Def kind isRec name body => emitExportsAcc t acc
+              }
+        )
+
+poly emitExports =
+  \decls : List Decl => emitExportsAcc (reverse [Decl] decls) (nil [U8])
+
+poly emitCtor =
+  \ctor : Pair (List U8) U8 =>
+    let name = fst [List U8] [U8] ctor in
+    let arity = snd [List U8] [U8] ctor in
+    emitNameCountLine prefixCtor name arity
+
+poly rec emitCtorsAcc =
+  \ctors : List (Pair (List U8) U8) =>
+    \acc : List U8 =>
+      matchList
+        [Pair (List U8) U8]
+        [List U8]
+        ctors
+        acc
+        (
+          \h : Pair (List U8) U8 =>
+            \t : List (Pair (List U8) U8) => emitCtorsAcc t (append [U8] (emitCtor h) acc)
+        )
+
+poly emitCtors =
+  \ctors : List (Pair (List U8) U8) => emitCtorsAcc (reverse [Pair (List U8) U8] ctors) (nil [U8])
+
+poly rec emitDataDefsAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Data name ctors =>
+                  let dataLine = emitOneNameLine prefixData name in
+                  let ctorsText = emitCtors ctors in
+                  emitDataDefsAcc
+                    t
+                    (append [U8] (append [U8] dataLine ctorsText) acc)
+                | D_Module name => emitDataDefsAcc t acc
+                | D_Import fromName symbolName => emitDataDefsAcc t acc
+                | D_Export name => emitDataDefsAcc t acc
+                | D_Opaque name => emitDataDefsAcc t acc
+                | D_Native name => emitDataDefsAcc t acc
+                | D_Type name => emitDataDefsAcc t acc
+                | D_Def kind isRec name body => emitDataDefsAcc t acc
+              }
+        )
+
+poly emitDataDefs =
+  \decls : List Decl => emitDataDefsAcc (reverse [Decl] decls) (nil [U8])
+
+poly rec emitTypesAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Type name =>
+                  emitTypesAcc
+                    t
+                    (append [U8] (emitOneNameLine prefixType name) acc)
+                | D_Module name => emitTypesAcc t acc
+                | D_Import fromName symbolName => emitTypesAcc t acc
+                | D_Export name => emitTypesAcc t acc
+                | D_Opaque name => emitTypesAcc t acc
+                | D_Native name => emitTypesAcc t acc
+                | D_Data name ctors => emitTypesAcc t acc
+                | D_Def kind isRec name body => emitTypesAcc t acc
+              }
+        )
+
+poly emitTypes =
+  \decls : List Decl => emitTypesAcc (reverse [Decl] decls) (nil [U8])
+
+poly rec emitOpaquesAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Opaque name =>
+                  emitOpaquesAcc
+                    t
+                    (append [U8] (emitOneNameLine prefixOpaque name) acc)
+                | D_Module name => emitOpaquesAcc t acc
+                | D_Import fromName symbolName => emitOpaquesAcc t acc
+                | D_Export name => emitOpaquesAcc t acc
+                | D_Native name => emitOpaquesAcc t acc
+                | D_Type name => emitOpaquesAcc t acc
+                | D_Data name ctors => emitOpaquesAcc t acc
+                | D_Def kind isRec name body => emitOpaquesAcc t acc
+              }
+        )
+
+poly emitOpaques =
+  \decls : List Decl => emitOpaquesAcc (reverse [Decl] decls) (nil [U8])
+
+poly rec emitNativesAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Native name =>
+                  emitNativesAcc
+                    t
+                    (append [U8] (emitOneNameLine prefixNative name) acc)
+                | D_Module name => emitNativesAcc t acc
+                | D_Import fromName symbolName => emitNativesAcc t acc
+                | D_Export name => emitNativesAcc t acc
+                | D_Opaque name => emitNativesAcc t acc
+                | D_Type name => emitNativesAcc t acc
+                | D_Data name ctors => emitNativesAcc t acc
+                | D_Def kind isRec name body => emitNativesAcc t acc
+              }
+        )
+
+poly emitNatives =
+  \decls : List Decl => emitNativesAcc (reverse [Decl] decls) (nil [U8])
+
+poly rec emitPolyDefsAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Def kind isRec name body =>
+                  if [List U8] (isPolyKind kind)
+                    (
+                      \u : U8 =>
+                        emitPolyDefsAcc
+                          t
+                          (append [U8] (emitOneNameLine prefixPoly name) acc)
+                    )
+                    (\u : U8 => emitPolyDefsAcc t acc)
+                | D_Module name => emitPolyDefsAcc t acc
+                | D_Import fromName symbolName => emitPolyDefsAcc t acc
+                | D_Export name => emitPolyDefsAcc t acc
+                | D_Opaque name => emitPolyDefsAcc t acc
+                | D_Native name => emitPolyDefsAcc t acc
+                | D_Type name => emitPolyDefsAcc t acc
+                | D_Data name ctors => emitPolyDefsAcc t acc
+              }
+        )
+
+poly emitPolyDefs =
+  \decls : List Decl => emitPolyDefsAcc (reverse [Decl] decls) (nil [U8])
+
+poly rec emitCombinatorDefsAcc =
+  \decls : List Decl =>
+    \acc : List U8 =>
+      matchList
+        [Decl]
+        [List U8]
+        decls
+        acc
+        (
+          \h : Decl =>
+            \t : List Decl =>
+              match h [List U8] {
+                | D_Def kind isRec name body =>
+                  if [List U8] (isCombinatorKind kind)
+                    (
+                      \u : U8 =>
+                        emitCombinatorDefsAcc
+                          t
+                          (
+                            append
+                              [U8]
+                              (emitOneNameLine prefixCombinator name)
+                              acc
+                          )
+                    )
+                    (\u : U8 => emitCombinatorDefsAcc t acc)
+                | D_Module name => emitCombinatorDefsAcc t acc
+                | D_Import fromName symbolName => emitCombinatorDefsAcc t acc
+                | D_Export name => emitCombinatorDefsAcc t acc
+                | D_Opaque name => emitCombinatorDefsAcc t acc
+                | D_Native name => emitCombinatorDefsAcc t acc
+                | D_Type name => emitCombinatorDefsAcc t acc
+                | D_Data name ctors => emitCombinatorDefsAcc t acc
+              }
+        )
+
+poly emitCombinatorDefs =
+  \decls : List Decl => emitCombinatorDefsAcc (reverse [Decl] decls) (nil [U8])
+
+poly parseModuleSource =
+  \bundleName : List U8 =>
+    \source : List U8 =>
+      match (tokenize source) [Result (List U8) (List Decl)] {
+        | Err e => Err [List U8] [List Decl] "Lex error"
+        | Ok toks =>
+          match (parseProgram toks) [Result (List U8) (List Decl)] {
+            | Err e =>
+              match e [Result (List U8) (List Decl)] {
+                | MkParseError msg => Err [List U8] [List Decl] msg
+              }
+            | Ok decls =>
               match (declaredModule decls) [Result (List U8) (List Decl)] {
                 | Err e => Err [List U8] [List Decl] e
                 | Ok declared =>
-                    if [Result (List U8) (List Decl)] (eqListU8 declared bundleName)
-                      (\u : U8 => Ok [List U8] [List Decl] decls)
-                      (\u : U8 => Err [List U8] [List Decl] "source module mismatch")
+                  if [Result (List U8) (List Decl)] (eqListU8 declared bundleName)
+                    (\u : U8 => Ok [List U8] [List Decl] decls)
+                    (
+                      \u : U8 => Err [List U8] [List Decl] "source module mismatch"
+                    )
               }
-        }
-  }
+          }
+      }
 
-poly emitParsedModule = \record : ModuleRecord =>
-  match record [Result (List U8) (List U8)] { | MkModuleRecord name lengthDigits source =>
-    match (parseModuleSource name source) [Result (List U8) (List U8)] {
-      | Err e => Err [List U8] [List U8] e
-      | Ok decls =>
-          match (declaredModule decls) [Result (List U8) (List U8)] {
-            | Err e => Err [List U8] [List U8] e
-            | Ok declared =>
+poly emitParsedModule =
+  \record : ModuleRecord =>
+    match record [Result (List U8) (List U8)] {
+      | MkModuleRecord name lengthDigits source =>
+        match (parseModuleSource name source) [Result (List U8) (List U8)] {
+          | Err e => Err [List U8] [List U8] e
+          | Ok decls =>
+            match (declaredModule decls) [Result (List U8) (List U8)] {
+              | Err e => Err [List U8] [List U8] e
+              | Ok declared =>
                 let modLine = emitOneNameLine prefixModule name in
                 let declaredLine = emitOneNameLine prefixDeclared declared in
                 let impBlock = append [U8] (emitCountLine prefixImportsCount (countImports decls #u8(0))) (emitImports decls) in
@@ -467,55 +766,62 @@ poly emitParsedModule = \record : ModuleRecord =>
                 let tail5 = append [U8] expBlock tail4 in
                 let tail6 = append [U8] impBlock tail5 in
                 let tail7 = append [U8] declaredLine tail6 in
-                Ok [List U8] [List U8]
-                  (append [U8] modLine tail7)
-          }
-    }
-  }
-
-poly rec emitParsedModules = \recs : List ModuleRecord =>
-  matchList [ModuleRecord] [Result (List U8) (List U8)] recs
-    (Ok [List U8] [List U8] (nil [U8]))
-    (\h : ModuleRecord => \t : List ModuleRecord =>
-      match (emitParsedModule h) [Result (List U8) (List U8)] {
-        | Err e => Err [List U8] [List U8] e
-        | Ok headText =>
-            match (emitParsedModules t) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok tailText => Ok [List U8] [List U8] (append [U8] headText tailText)
+                Ok [List U8] [List U8] (append [U8] modLine tail7)
             }
-      })
-
-poly emitBundleParseSummary = \bundle : BundleSummary =>
-  match bundle [Result (List U8) (List U8)] { | MkBundleSummary entry target wrapper modsCountDigits mods =>
-    match (emitParsedModules mods) [Result (List U8) (List U8)] {
-      | Err e => Err [List U8] [List U8] e
-      | Ok modsText =>
-          let tail0 = append [U8] newline modsText in
-          let tail1 = append [U8] modsCountDigits tail0 in
-          let tail2 = append [U8] prefixSummaryModules tail1 in
-          let tail3 = append [U8] wrapper tail2 in
-          let tail4 = append [U8] prefixSummaryWrapper tail3 in
-          let tail5 = append [U8] target tail4 in
-          let tail6 = append [U8] prefixSummaryTarget tail5 in
-          let tail7 = append [U8] entry tail6 in
-          Ok [List U8] [List U8]
-            (append [U8] prefixSummaryEntry tail7)
+        }
     }
-  }
 
-poly rec writeAll = \bytes : List U8 =>
-  matchList [U8] [U8] bytes
-    #u8(0)
-    (\h : U8 => \t : List U8 =>
-      writeOne h [U8] (\u : U8 => writeAll t))
+poly rec emitParsedModules =
+  \recs : List ModuleRecord =>
+    matchList
+      [ModuleRecord]
+      [Result (List U8) (List U8)]
+      recs
+      (Ok [List U8] [List U8] (nil [U8]))
+      (
+        \h : ModuleRecord =>
+          \t : List ModuleRecord =>
+            match (emitParsedModule h) [Result (List U8) (List U8)] {
+              | Err e => Err [List U8] [List U8] e
+              | Ok headText =>
+                match (emitParsedModules t) [Result (List U8) (List U8)] {
+                  | Err e => Err [List U8] [List U8] e
+                  | Ok tailText =>
+                    Ok [List U8] [List U8] (append [U8] headText tailText)
+                }
+            }
+      )
 
-poly main = \source : List U8 =>
-  match (parseBundleSummary source) [U8] {
-    | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
-    | Ok bundle =>
+poly emitBundleParseSummary =
+  \bundle : BundleSummary =>
+    match bundle [Result (List U8) (List U8)] {
+      | MkBundleSummary entry target wrapper modsCountDigits mods =>
+        match (emitParsedModules mods) [Result (List U8) (List U8)] {
+          | Err e => Err [List U8] [List U8] e
+          | Ok modsText =>
+            let tail0 = append [U8] newline modsText in
+            let tail1 = append [U8] modsCountDigits tail0 in
+            let tail2 = append [U8] prefixSummaryModules tail1 in
+            let tail3 = append [U8] wrapper tail2 in
+            let tail4 = append [U8] prefixSummaryWrapper tail3 in
+            let tail5 = append [U8] target tail4 in
+            let tail6 = append [U8] prefixSummaryTarget tail5 in
+            let tail7 = append [U8] entry tail6 in
+            Ok [List U8] [List U8] (append [U8] prefixSummaryEntry tail7)
+        }
+    }
+
+poly rec writeAll =
+  \bytes : List U8 =>
+    matchList [U8] [U8] bytes #u8(0) (\h : U8 => \t : List U8 => writeOne h [U8] (\u : U8 => writeAll t))
+
+poly main =
+  \source : List U8 =>
+    match (parseBundleSummary source) [U8] {
+      | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+      | Ok bundle =>
         match (emitBundleParseSummary bundle) [U8] {
           | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
           | Ok summary => writeAll summary
         }
-  }
+    }

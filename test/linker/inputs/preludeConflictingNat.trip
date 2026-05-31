@@ -4,7 +4,14 @@ export Nat
 
 type Nat = #X -> (X -> X) -> X -> X
 
-poly one = succ zero
-poly two = succ one
-poly three = succ two
-poly main = three
+poly one =
+  succ zero
+
+poly two =
+  succ one
+
+poly three =
+  succ two
+
+poly main =
+  three

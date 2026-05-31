@@ -319,8 +319,14 @@ function parseCondExpression(
   currentState = matchCh(currentState, LEFT_BRACE);
   currentState = skipWhitespace(currentState);
 
-  const arms: { condLit: string; cond: SystemFTerm; bodyLit: string; body: SystemFTerm }[] = [];
-  let defaultArm: { bodyLit: string; body: SystemFTerm } | undefined = undefined;
+  const arms: {
+    condLit: string;
+    cond: SystemFTerm;
+    bodyLit: string;
+    body: SystemFTerm;
+  }[] = [];
+  let defaultArm: { bodyLit: string; body: SystemFTerm } | undefined =
+    undefined;
 
   for (let armLength = 0; ; armLength = armLength + 1) {
     currentState = skipWhitespace(currentState);
@@ -385,9 +391,9 @@ function parseCondExpression(
       const ifCall = createSystemFApplication(
         createSystemFApplication(
           createSystemFApplication(ifTyped, arm.cond),
-          thenBranch
+          thenBranch,
         ),
-        currentElse
+        currentElse,
       );
       currentElse = mkSystemFAbs("u", u8Type, ifCall);
     }
@@ -396,16 +402,19 @@ function parseCondExpression(
     finalTerm = createSystemFApplication(
       createSystemFApplication(
         createSystemFApplication(ifTyped, outermostArm.cond),
-        thenBranch
+        thenBranch,
       ),
-      currentElse
+      currentElse,
     );
   }
 
-  const armLits = arms.map(arm => `| ${arm.condLit} => ${arm.bodyLit}`).join(" ");
-  const literalStr = arms.length === 0
-    ? `cond [${returnTypeLit}] { | otherwise => ${defaultArm.bodyLit} }`
-    : `cond [${returnTypeLit}] { ${armLits} | otherwise => ${defaultArm.bodyLit} }`;
+  const armLits = arms
+    .map((arm) => `| ${arm.condLit} => ${arm.bodyLit}`)
+    .join(" ");
+  const literalStr =
+    arms.length === 0
+      ? `cond [${returnTypeLit}] { | otherwise => ${defaultArm.bodyLit} }`
+      : `cond [${returnTypeLit}] { ${armLits} | otherwise => ${defaultArm.bodyLit} }`;
 
   return [literalStr, finalTerm, currentState];
 }

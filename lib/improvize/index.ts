@@ -1361,7 +1361,8 @@ function parseDelayLambda(
   if (idx >= stripped.length || stripped[idx]!.text !== "\\") return undefined;
   idx++;
   while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
-  if (idx >= stripped.length || stripped[idx]!.kind !== "ident") return undefined;
+  if (idx >= stripped.length || stripped[idx]!.kind !== "ident")
+    return undefined;
   idx++;
   while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
   if (idx >= stripped.length || stripped[idx]!.text !== ":") return undefined;
@@ -1645,7 +1646,9 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
     // 6. Degenerate if chain simplification to cond
     const condChainMatch = parseCondChain(tokens, i);
     if (condChainMatch) {
-      const armLines = condChainMatch.arms.map(arm => `| ${arm.condText} => ${arm.bodyText}`).join("\n      ");
+      const armLines = condChainMatch.arms
+        .map((arm) => `| ${arm.condText} => ${arm.bodyText}`)
+        .join("\n      ");
       const replacement = `cond [${condChainMatch.typeText}] {
       ${armLines}
       | otherwise => ${condChainMatch.defaultBodyText}

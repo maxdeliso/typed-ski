@@ -948,6 +948,101 @@ poly parseBraceBodyWith =
             )
       }
 
+poly rec desugarCondLoop =
+  \arms : List ((Expr, Expr)) =>
+    \currentElse : Expr =>
+      matchList
+        [(Expr, Expr)]
+        [Expr]
+        arms
+        currentElse
+        (
+          \h : (Expr, Expr) =>
+            \t : List ((Expr, Expr)) =>
+              let condExpr = fst [Expr] [Expr] h in
+              let bodyExpr = snd [Expr] [Expr] h in
+              let lazyThen = E_Lam ("u") bodyExpr in
+              let lazyElse = E_Lam ("u") currentElse in
+              let ifCall = E_App (E_App (E_App (E_Var "if") condExpr) lazyThen) lazyElse in
+              desugarCondLoop t ifCall
+        )
+
+poly desugarCond =
+  \arms : List ((Expr, Expr)) =>
+    matchList
+      [(Expr, Expr)]
+      [Expr]
+      arms
+      (E_Var "error")
+      (
+        \h : (Expr, Expr) =>
+          \t : List ((Expr, Expr)) => desugarCondLoop t (snd [Expr] [Expr] h)
+      )
+
+poly rec parseCondArms =
+  \recurse : (List Token -> Result ParseError ((Expr, (List Token)))) =>
+    \toks : List Token =>
+      \acc : List ((Expr, Expr)) =>
+        matchList
+          [Token]
+          [Result ParseError ((Expr, (List Token)))]
+          toks
+          (Err [ParseError] [(Expr, (List Token))] parseError)
+          (
+            \h : Token =>
+              \t : List Token =>
+                let tag = tokenTag h in
+                cond
+                  [Result ParseError (Pair Expr (List Token))]
+                  {|
+                    (eqU8 tag rBraceTag) =>
+                    Ok
+                    [ParseError]
+                    [Pair Expr (List Token)]
+                    (MkPair [Expr] [List Token] (desugarCond acc) t) |
+                    (eqU8 tag pipeTag) =>
+                    match (recurse t) [Result ParseError (Pair Expr (List Token))] {
+                      | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                      | Ok condRes =>
+                        let condExpr = fstExprToken condRes in
+                        let afterCond = sndExprToken condRes in
+                        match (expect afterCond fatArrowTag) [Result ParseError (Pair Expr (List Token))] {
+                          | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                          | Ok afterArrow =>
+                            match (recurse afterArrow) [Result ParseError (Pair Expr (List Token))] {
+                              | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                              | Ok bodyRes =>
+                                let bodyExpr = fstExprToken bodyRes in
+                                let afterBody = sndExprToken bodyRes in
+                                parseCondArms recurse afterBody (cons [(Expr, Expr)] (MkPair [Expr] [Expr] condExpr bodyExpr) acc)
+                            }
+                        }
+                    } |
+                    otherwise => Err [ParseError] [Pair Expr (List Token)] parseError
+                  }
+          )
+
+poly parseCondWith =
+  \recurse : (List Token -> Result ParseError ((Expr, (List Token)))) =>
+    \toks : List Token =>
+      match (expect toks lBracketTag) [Result ParseError ((Expr, (List Token)))] {
+        | Err e => Err [ParseError] [(Expr, (List Token))] e
+        | Ok afterOpen =>
+          match (parseType afterOpen) [Result ParseError ((Expr, (List Token)))] {
+            | Err e => Err [ParseError] [(Expr, (List Token))] e
+            | Ok typeRes =>
+              let afterType = sndTypeToken typeRes in
+              match (expect afterType rBracketTag) [Result ParseError ((Expr, (List Token)))] {
+                | Err e => Err [ParseError] [(Expr, (List Token))] e
+                | Ok afterClose =>
+                  match (expect afterClose lBraceTag) [Result ParseError ((Expr, (List Token)))] {
+                    | Err e => Err [ParseError] [(Expr, (List Token))] e
+                    | Ok inside => parseCondArms recurse inside (nil [(Expr, Expr)])
+                  }
+              }
+          }
+      }
+
 poly parseAtomWith =
   \recurse : (List Token -> Result ParseError ((Expr, (List Token)))) =>
     \toks : List Token =>
@@ -964,10 +1059,9 @@ poly parseAtomWith =
                 [Result ParseError (Pair Expr (List Token))]
                 {|
                   (eqU8 tag identTag) =>
-                  Ok
-                  [ParseError]
-                  [Pair Expr (List Token)]
-                  (MkPair [Expr] [List Token] (E_Var (tokenText h)) t) |
+                  if [Result ParseError (Pair Expr (List Token))] (eqListU8 (tokenText h) "cond")
+                    (\u : U8 => parseCondWith recurse t)
+                    (\u : U8 => Ok [ParseError] [Pair Expr (List Token)] (MkPair [Expr] [List Token] (E_Var (tokenText h)) t)) |
                   (eqU8 tag natTag) =>
                   Ok
                   [ParseError]

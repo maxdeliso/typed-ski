@@ -1191,7 +1191,7 @@ poly parseAtomWith =
                   (eqU8 tag identTag) =>
                   Ok [ParseError] [Pair Expr (List Token)] (MkPair [Expr] [List Token] (E_Var (tokenText h)) t) |
                   (eqU8 tag kwDoTag) =>
-                  parseDoWith
+                  parseDoWith recurse
                   t |
                   (eqU8 tag natTag) =>
                   Ok
@@ -2260,251 +2260,254 @@ poly desugarDo =
       )
 
 poly parseSingleStep =
-  \toks : List Token =>
-    matchList
-      [Token]
-      [Result ParseError DoStep]
-      toks
-      (Err [ParseError] [DoStep] parseError)
-      (
-        \h : Token =>
-          \t : List Token =>
-            let tag = tokenTag h in
-            cond
-              [Result ParseError DoStep]
-              {|
-                (and (eqU8 tag identTag) (eqListU8 (tokenText h) "assert")) =>
-                let
-                splitRes =
-                splitCondErrorAcc
-                t
-                #
-                u8
-                (0)
-                (nil [Token])
-                in
-                let
-                condToks =
-                fst
-                [List Token]
-                [List Token]
-                splitRes
-                in
-                let
-                elseToks =
-                snd
-                [List Token]
-                [List Token]
-                splitRes
-                in
-                match
-                (expect elseToks identTag)
-                [Result ParseError DoStep]
-                {| Err e => Err [ParseError] [DoStep] e | Ok errorToks => match (parseExpr condToks) [Result ParseError (Pair Expr (List Token))] {| Err e => Err [ParseError] [DoStep] e | Ok condRes => match (parseExpr errorToks) [Result ParseError (Pair Expr (List Token))] {| Err e => Err [ParseError] [DoStep] e | Ok errorRes => Ok [ParseError] [DoStep] (S_Assert (fstExprToken condRes) (fstExprToken errorRes))}}} |
-                (and (eqU8 tag identTag) (eqListU8 (tokenText h) "return")) =>
-                match
-                (parseExpr t)
-                [Result ParseError (Pair Expr (List Token))]
-                {| Err e => Err [ParseError] [DoStep] e | Ok res => Ok [ParseError] [DoStep] (S_Return (fstExprToken res))} |
-                otherwise =>
-                matchList
-                [Token]
-                [Result ParseError DoStep]
-                t
-                (
-                  let splitRes = splitPatternExprAcc toks #u8(0) (nil [Token]) in
-                  let patToks = fst [List Token] [List Token] splitRes in
-                  let exprToks = snd [List Token] [List Token] splitRes in
-                  matchList
-                    [Token]
-                    [Result ParseError DoStep]
-                    exprToks
-                    (
-                      match (parseExpr toks) [Result ParseError (Pair Expr (List Token))] {
-                        | Err e => Err [ParseError] [DoStep] e
-                        | Ok res =>
-                          Ok [ParseError] [DoStep] (S_Expr (fstExprToken res))
-                      }
-                    )
-                    (
-                      \h3 : Token =>
-                        \t3 : List Token =>
-                          match (parsePatternToks patToks) [Result ParseError (Pair (List U8) (List (List U8)))] {
-                            | Err e => Err [ParseError] [DoStep] e
-                            | Ok patRes =>
-                              let ctor = fst [List U8] [List (List U8)] patRes in
-                              let params = snd [List U8] [List (List U8)] patRes in
-                              match (expect exprToks eqTag) [Result ParseError DoStep] {
-                                | Err e => Err [ParseError] [DoStep] e
-                                | Ok realExprToks =>
-                                  match (parseExpr realExprToks) [Result ParseError (Pair Expr (List Token))] {
-                                    | Err e => Err [ParseError] [DoStep] e
-                                    | Ok exprRes =>
-                                      matchList
-                                        [List U8]
-                                        [Result ParseError DoStep]
-                                        params
-                                        (
-                                          Ok
-                                            [ParseError]
-                                            [DoStep]
-                                            (S_Let ctor (fstExprToken exprRes))
-                                        )
-                                        (
-                                          \h4 : List U8 =>
-                                            \t4 : List (List U8) =>
-                                              Ok
-                                                [ParseError]
-                                                [DoStep]
-                                                (
-                                                  S_Match
-                                                    ctor
-                                                    params
-                                                    (fstExprToken exprRes)
-                                                )
-                                        )
-                                  }
-                              }
-                          }
-                    )
-                )
-                (
-                  \h2 : Token =>
-                    \t2 : List Token =>
-                      if [Result ParseError DoStep] (and (eqU8 tag identTag) (eqU8 (tokenTag h2) lArrowTag))
-                        (
-                          \u : U8 =>
-                            match (parseExpr t2) [Result ParseError (Pair Expr (List Token))] {
-                              | Err e => Err [ParseError] [DoStep] e
-                              | Ok res =>
-                                Ok
-                                  [ParseError]
-                                  [DoStep]
-                                  (S_Bind (tokenText h) (fstExprToken res))
-                            }
-                        )
-                        (
-                          \u : U8 =>
-                            let splitRes = splitPatternExprAcc toks #u8(0) (nil [Token]) in
-                            let patToks = fst [List Token] [List Token] splitRes in
-                            let exprToks = snd [List Token] [List Token] splitRes in
-                            matchList
-                              [Token]
-                              [Result ParseError DoStep]
-                              exprToks
-                              (
-                                match (parseExpr toks) [Result ParseError (Pair Expr (List Token))] {
-                                  | Err e => Err [ParseError] [DoStep] e
-                                  | Ok res =>
-                                    Ok
-                                      [ParseError]
-                                      [DoStep]
-                                      (S_Expr (fstExprToken res))
-                                }
-                              )
-                              (
-                                \h3 : Token =>
-                                  \t3 : List Token =>
-                                    match (parsePatternToks patToks) [Result ParseError (Pair (List U8) (List (List U8)))] {
-                                      | Err e => Err [ParseError] [DoStep] e
-                                      | Ok patRes =>
-                                        let ctor = fst [List U8] [List (List U8)] patRes in
-                                        let params = snd [List U8] [List (List U8)] patRes in
-                                        match (expect exprToks eqTag) [Result ParseError DoStep] {
-                                          | Err e => Err [ParseError] [DoStep] e
-                                          | Ok realExprToks =>
-                                            match (parseExpr realExprToks) [Result ParseError (Pair Expr (List Token))] {
-                                              | Err e => Err [ParseError] [DoStep] e
-                                              | Ok exprRes =>
-                                                matchList
-                                                  [List U8]
-                                                  [Result ParseError DoStep]
-                                                  params
-                                                  (
-                                                    Ok
-                                                      [ParseError]
-                                                      [DoStep]
-                                                      (
-                                                        S_Let
-                                                          ctor
-                                                          (fstExprToken exprRes)
-                                                      )
-                                                  )
-                                                  (
-                                                    \h4 : List U8 =>
-                                                      \t4 : List (List U8) =>
-                                                        Ok
-                                                          [ParseError]
-                                                          [DoStep]
-                                                          (
-                                                            S_Match
-                                                              ctor
-                                                              params
-                                                              (
-                                                                fstExprToken
-                                                                  exprRes
-                                                              )
-                                                          )
-                                                  )
-                                            }
-                                        }
-                                    }
-                              )
-                        )
-                )
-              }
-      )
-
-poly rec parseDoStepsRec =
-  \toks : List Token =>
-    \acc : List DoStep =>
+  \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) =>
+    \toks : List Token =>
       matchList
         [Token]
-        [Result ParseError (Pair (List DoStep) (List Token))]
+        [Result ParseError DoStep]
         toks
-        (Err [ParseError] [Pair (List DoStep) (List Token)] parseError)
+        (Err [ParseError] [DoStep] parseError)
         (
           \h : Token =>
             \t : List Token =>
               let tag = tokenTag h in
-              if [Result ParseError (Pair (List DoStep) (List Token))] (eqU8 tag rBraceTag)
-                (
-                  \u : U8 =>
-                    Ok
-                      [ParseError]
-                      [Pair (List DoStep) (List Token)]
-                      (MkPair [List DoStep] [List Token] acc t)
-                )
-                (
-                  \u : U8 =>
-                    let splitRes = splitNextStepAcc toks #u8(0) (nil [Token]) in
-                    let stepToks = fst [List Token] [List Token] splitRes in
-                    let remaining = snd [List Token] [List Token] splitRes in
-                    match (parseSingleStep stepToks) [Result ParseError (Pair (List DoStep) (List Token))] {
-                      | Err e =>
-                        Err [ParseError] [Pair (List DoStep) (List Token)] e
-                      | Ok step => parseDoStepsRec remaining (cons [DoStep] step acc)
-                    }
-                )
+              cond
+                [Result ParseError DoStep]
+                {|
+                  (and (eqU8 tag identTag) (eqListU8 (tokenText h) "assert")) =>
+                  let
+                  splitRes =
+                  splitCondErrorAcc
+                  t
+                  #
+                  u8
+                  (0)
+                  (nil [Token])
+                  in
+                  let
+                  condToks =
+                  fst
+                  [List Token]
+                  [List Token]
+                  splitRes
+                  in
+                  let
+                  elseToks =
+                  snd
+                  [List Token]
+                  [List Token]
+                  splitRes
+                  in
+                  match
+                  (expect elseToks identTag)
+                  [Result ParseError DoStep]
+                  {| Err e => Err [ParseError] [DoStep] e | Ok errorToks => match (recurse condToks) [Result ParseError (Pair Expr (List Token))] {| Err e => Err [ParseError] [DoStep] e | Ok condRes => match (recurse errorToks) [Result ParseError (Pair Expr (List Token))] {| Err e => Err [ParseError] [DoStep] e | Ok errorRes => Ok [ParseError] [DoStep] (S_Assert (fstExprToken condRes) (fstExprToken errorRes))}}} |
+                  (and (eqU8 tag identTag) (eqListU8 (tokenText h) "return")) =>
+                  match
+                  (recurse t)
+                  [Result ParseError (Pair Expr (List Token))]
+                  {| Err e => Err [ParseError] [DoStep] e | Ok res => Ok [ParseError] [DoStep] (S_Return (fstExprToken res))} |
+                  otherwise =>
+                  matchList
+                  [Token]
+                  [Result ParseError DoStep]
+                  t
+                  (
+                    let splitRes = splitPatternExprAcc toks #u8(0) (nil [Token]) in
+                    let patToks = fst [List Token] [List Token] splitRes in
+                    let exprToks = snd [List Token] [List Token] splitRes in
+                    matchList
+                      [Token]
+                      [Result ParseError DoStep]
+                      exprToks
+                      (
+                        match (recurse toks) [Result ParseError (Pair Expr (List Token))] {
+                          | Err e => Err [ParseError] [DoStep] e
+                          | Ok res =>
+                            Ok [ParseError] [DoStep] (S_Expr (fstExprToken res))
+                        }
+                      )
+                      (
+                        \h3 : Token =>
+                          \t3 : List Token =>
+                            match (parsePatternToks patToks) [Result ParseError (Pair (List U8) (List (List U8)))] {
+                              | Err e => Err [ParseError] [DoStep] e
+                              | Ok patRes =>
+                                let ctor = fst [List U8] [List (List U8)] patRes in
+                                let params = snd [List U8] [List (List U8)] patRes in
+                                match (expect exprToks eqTag) [Result ParseError DoStep] {
+                                  | Err e => Err [ParseError] [DoStep] e
+                                  | Ok realExprToks =>
+                                    match (recurse realExprToks) [Result ParseError (Pair Expr (List Token))] {
+                                      | Err e => Err [ParseError] [DoStep] e
+                                      | Ok exprRes =>
+                                        matchList
+                                          [List U8]
+                                          [Result ParseError DoStep]
+                                          params
+                                          (
+                                            Ok
+                                              [ParseError]
+                                              [DoStep]
+                                              (S_Let ctor (fstExprToken exprRes))
+                                          )
+                                          (
+                                            \h4 : List U8 =>
+                                              \t4 : List (List U8) =>
+                                                Ok
+                                                  [ParseError]
+                                                  [DoStep]
+                                                  (
+                                                    S_Match
+                                                      ctor
+                                                      params
+                                                      (fstExprToken exprRes)
+                                                  )
+                                          )
+                                    }
+                                }
+                            }
+                      )
+                  )
+                  (
+                    \h2 : Token =>
+                      \t2 : List Token =>
+                        if [Result ParseError DoStep] (and (eqU8 tag identTag) (eqU8 (tokenTag h2) lArrowTag))
+                          (
+                            \u : U8 =>
+                              match (recurse t2) [Result ParseError (Pair Expr (List Token))] {
+                                | Err e => Err [ParseError] [DoStep] e
+                                | Ok res =>
+                                  Ok
+                                    [ParseError]
+                                    [DoStep]
+                                    (S_Bind (tokenText h) (fstExprToken res))
+                              }
+                          )
+                          (
+                            \u : U8 =>
+                              let splitRes = splitPatternExprAcc toks #u8(0) (nil [Token]) in
+                              let patToks = fst [List Token] [List Token] splitRes in
+                              let exprToks = snd [List Token] [List Token] splitRes in
+                              matchList
+                                [Token]
+                                [Result ParseError DoStep]
+                                exprToks
+                                (
+                                  match (recurse toks) [Result ParseError (Pair Expr (List Token))] {
+                                    | Err e => Err [ParseError] [DoStep] e
+                                    | Ok res =>
+                                      Ok
+                                        [ParseError]
+                                        [DoStep]
+                                        (S_Expr (fstExprToken res))
+                                  }
+                                )
+                                (
+                                  \h3 : Token =>
+                                    \t3 : List Token =>
+                                      match (parsePatternToks patToks) [Result ParseError (Pair (List U8) (List (List U8)))] {
+                                        | Err e => Err [ParseError] [DoStep] e
+                                        | Ok patRes =>
+                                          let ctor = fst [List U8] [List (List U8)] patRes in
+                                          let params = snd [List U8] [List (List U8)] patRes in
+                                          match (expect exprToks eqTag) [Result ParseError DoStep] {
+                                            | Err e => Err [ParseError] [DoStep] e
+                                            | Ok realExprToks =>
+                                              match (recurse realExprToks) [Result ParseError (Pair Expr (List Token))] {
+                                                | Err e => Err [ParseError] [DoStep] e
+                                                | Ok exprRes =>
+                                                  matchList
+                                                    [List U8]
+                                                    [Result ParseError DoStep]
+                                                    params
+                                                    (
+                                                      Ok
+                                                        [ParseError]
+                                                        [DoStep]
+                                                        (
+                                                          S_Let
+                                                            ctor
+                                                            (fstExprToken exprRes)
+                                                        )
+                                                    )
+                                                    (
+                                                      \h4 : List U8 =>
+                                                        \t4 : List (List U8) =>
+                                                          Ok
+                                                            [ParseError]
+                                                            [DoStep]
+                                                            (
+                                                              S_Match
+                                                                ctor
+                                                                params
+                                                                (
+                                                                  fstExprToken
+                                                                    exprRes
+                                                                )
+                                                            )
+                                                    )
+                                              }
+                                          }
+                                      }
+                                )
+                          )
+                  )
+                }
         )
 
+poly rec parseDoStepsRec =
+  \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) =>
+    \toks : List Token =>
+      \acc : List DoStep =>
+        matchList
+          [Token]
+          [Result ParseError (Pair (List DoStep) (List Token))]
+          toks
+          (Err [ParseError] [Pair (List DoStep) (List Token)] parseError)
+          (
+            \h : Token =>
+              \t : List Token =>
+                let tag = tokenTag h in
+                if [Result ParseError (Pair (List DoStep) (List Token))] (eqU8 tag rBraceTag)
+                  (
+                    \u : U8 =>
+                      Ok
+                        [ParseError]
+                        [Pair (List DoStep) (List Token)]
+                        (MkPair [List DoStep] [List Token] acc t)
+                  )
+                  (
+                    \u : U8 =>
+                      let splitRes = splitNextStepAcc toks #u8(0) (nil [Token]) in
+                      let stepToks = fst [List Token] [List Token] splitRes in
+                      let remaining = snd [List Token] [List Token] splitRes in
+                      match (parseSingleStep recurse stepToks) [Result ParseError DoStep] {
+                        | Err e =>
+                          Err [ParseError] [Pair (List DoStep) (List Token)] e
+                        | Ok step => parseDoStepsRec recurse remaining (cons [DoStep] step acc)
+                      }
+                  )
+          )
+
 poly parseDoWith =
-  \toks : List Token =>
-    match (skipTypeArg toks) [Result ParseError (List Token)] {
-      | Err e => Err [ParseError] [(Expr, (List Token))] e
-      | Ok afterType =>
-        match (expect afterType lBraceTag) [Result ParseError ((Expr, (List Token)))] {
-          | Err e => Err [ParseError] [(Expr, (List Token))] e
-          | Ok inside =>
-            match (parseDoStepsRec inside (nil [DoStep])) [Result ParseError (Pair (List DoStep) (List Token))] {
-              | Err e => Err [ParseError] [(Expr, (List Token))] e
-              | Ok res =>
-                let steps = fst [List DoStep] [List Token] res in
-                let remaining = snd [List DoStep] [List Token] res in
-                Ok
-                  [ParseError]
-                  [(Expr, (List Token))]
-                  ({Expr, List Token | (desugarDo steps), remaining})
-            }
-        }
-    }
+  \recurse : (List Token -> Result ParseError (Pair Expr (List Token))) =>
+    \toks : List Token =>
+      match (skipTypeArg toks) [Result ParseError (List Token)] {
+        | Err e => Err [ParseError] [(Expr, (List Token))] e
+        | Ok afterType =>
+          match (expect afterType lBraceTag) [Result ParseError ((Expr, (List Token)))] {
+            | Err e => Err [ParseError] [(Expr, (List Token))] e
+            | Ok inside =>
+              match (parseDoStepsRec recurse inside (nil [DoStep])) [Result ParseError (Pair (List DoStep) (List Token))] {
+                | Err e => Err [ParseError] [(Expr, (List Token))] e
+                | Ok res =>
+                  let steps = fst [List DoStep] [List Token] res in
+                  let remaining = snd [List DoStep] [List Token] res in
+                  Ok
+                    [ParseError]
+                    [(Expr, (List Token))]
+                    ({Expr, List Token | (desugarDo steps), remaining})
+              }
+          }
+      }

@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -32,12 +32,7 @@
   "engines": {
     "node": "26.x"
   },
-  "packageManager": "pnpm@11.1.1",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
+  "packageManager": "pnpm@11.5.0",
   "scripts": {
     "build:ts": "tsc --project tsconfig.emit.json",
     "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
@@ -56,7 +51,7 @@
     "@types/random-seed": "^0.3.5",
     "esbuild": "^0.28.0",
     "json-stringify-safe": "5.0.1",
-    "pnpm": "11.1.1",
+    "pnpm": "11.5.0",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3"
   }

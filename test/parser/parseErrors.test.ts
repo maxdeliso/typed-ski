@@ -189,8 +189,7 @@ describe("Parser Error Coverage", () => {
 
     it("cond requires otherwise to be the final arm", () => {
       assert.throws(
-        () =>
-          parseSystemF("cond [U8] { | otherwise => 1 | true => 2 }"),
+        () => parseSystemF("cond [U8] { | otherwise => 1 | true => 2 }"),
         {
           message: /expected '\}'/,
         },

@@ -240,53 +240,19 @@ poly rec lteListU8 =
 
 poly resolveNativeName =
   \name : List U8 =>
-    cond
-      [Maybe Lower]
-      {|
-        (eqListU8 name ".") =>
-        Some
-        [Lower]
-        (L_Native T_WriteOne) |
-        (eqListU8 name ",") =>
-        Some
-        [Lower]
-        (L_Native T_ReadOne) |
-        (eqListU8 name "writeOne") =>
-        Some
-        [Lower]
-        (L_Native T_WriteOne) |
-        (eqListU8 name "readOne") =>
-        Some
-        [Lower]
-        (L_Native T_ReadOne) |
-        (eqListU8 name "addU8") =>
-        Some
-        [Lower]
-        (L_Native T_AddU8) |
-        (eqListU8 name "subU8") =>
-        Some
-        [Lower]
-        (L_Native T_SubU8) |
-        (eqListU8 name "divU8") =>
-        Some
-        [Lower]
-        (L_Native T_DivU8) |
-        (eqListU8 name "modU8") =>
-        Some
-        [Lower]
-        (L_Native T_ModU8) |
-        (eqListU8 name "eqU8") =>
-        Some
-        [Lower]
-        (L_Native T_EqU8) |
-        (eqListU8 name "ltU8") =>
-        Some
-        [Lower]
-        (L_Native T_LtU8) |
-        otherwise =>
-        None
-        [Lower]
-      }
+    cond [Maybe Lower] {
+      | (eqListU8 name ".") => Some [Lower] (L_Native T_WriteOne)
+      | (eqListU8 name ",") => Some [Lower] (L_Native T_ReadOne)
+      | (eqListU8 name "writeOne") => Some [Lower] (L_Native T_WriteOne)
+      | (eqListU8 name "readOne") => Some [Lower] (L_Native T_ReadOne)
+      | (eqListU8 name "addU8") => Some [Lower] (L_Native T_AddU8)
+      | (eqListU8 name "subU8") => Some [Lower] (L_Native T_SubU8)
+      | (eqListU8 name "divU8") => Some [Lower] (L_Native T_DivU8)
+      | (eqListU8 name "modU8") => Some [Lower] (L_Native T_ModU8)
+      | (eqListU8 name "eqU8") => Some [Lower] (L_Native T_EqU8)
+      | (eqListU8 name "ltU8") => Some [Lower] (L_Native T_LtU8)
+      | otherwise => None [Lower]
+    }
 
 poly unboundNameError =
   \name : List U8 => append [U8] "Unbound variable: " name
@@ -577,13 +543,13 @@ poly rec elaborateArms =
             \h : (Pattern, Expr) =>
               \t : List ((Pattern, Expr)) =>
                 do [Result (List U8) (List Core)] {
-      MkPair pat body = h
-      P_Ctor name args = pat
-      coreBody <- (elaborate dEnv body)
-      wrapped = wrapInLambdas args coreBody
-      rest <- (elaborateArms elaborate dEnv t)
-      return Ok [List U8] [List Core] (cons [Core] wrapped rest)
-    }
+                  MkPair pat body = h
+                  P_Ctor name args = pat
+                  coreBody <- (elaborate dEnv body)
+                  wrapped = wrapInLambdas args coreBody
+                  rest <- (elaborateArms elaborate dEnv t)
+                  return Ok [List U8] [List Core] (cons [Core] wrapped rest)
+                }
           )
 
 poly elaborateMatchWith =
@@ -619,21 +585,21 @@ poly rec elaborateExpr =
         | E_Var name => Ok [List U8] [Core] (resolveCoreName dEnv name)
         | E_App l r =>
           do [Result (List U8) Core] {
-      left <- (elaborateExpr dEnv l)
-      right <- (elaborateExpr dEnv r)
-      return Ok [List U8] [Core] (Cr_App left right)
-    }
+            left <- (elaborateExpr dEnv l)
+            right <- (elaborateExpr dEnv r)
+            return Ok [List U8] [Core] (Cr_App left right)
+          }
         | E_Lam name body =>
           do [Result (List U8) Core] {
-      coreBody <- (elaborateExpr dEnv body)
-      return Ok [List U8] [Core] (Cr_Lam name coreBody)
-    }
+            coreBody <- (elaborateExpr dEnv body)
+            return Ok [List U8] [Core] (Cr_Lam name coreBody)
+          }
         | E_Let name val body =>
           do [Result (List U8) Core] {
-      coreVal <- (elaborateExpr dEnv val)
-      coreBody <- (elaborateExpr dEnv body)
-      return Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
-    }
+            coreVal <- (elaborateExpr dEnv val)
+            coreBody <- (elaborateExpr dEnv body)
+            return Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
+          }
         | E_Nat digits => natToCore digits
         | E_Match scrut arms => elaborateMatchWith elaborateExpr dEnv scrut arms
       }
@@ -783,9 +749,9 @@ poly rec elaborateProgramRec =
         decls
         (
           do [Result (List U8) (Avl (List U8) Lower)] {
-      MkState globals dEnv = state
-      return Ok [List U8] [Avl (List U8) Lower] globals
-    }
+            MkState globals dEnv = state
+            return Ok [List U8] [Avl (List U8) Lower] globals
+          }
         )
         (
           \h : Decl =>

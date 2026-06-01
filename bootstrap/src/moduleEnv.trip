@@ -393,10 +393,13 @@ poly parseModuleSource =
               }
             | Ok decls =>
               do [Result (List U8) ModuleInfo] {
-      declared <- (declaredModule decls)
-      assert (eqListU8 declared bundleName) else "source module mismatch"
-      return Ok [List U8] [ModuleInfo] (MkModuleInfo bundleName decls)
-    }
+                declared <- (declaredModule decls)
+                assert
+                  (eqListU8 declared bundleName)
+                  else
+                  "source module mismatch"
+                return Ok [List U8] [ModuleInfo] (MkModuleInfo bundleName decls)
+              }
           }
       }
 
@@ -951,7 +954,23 @@ poly buildModuleEnv =
       MkPair ctors nextSymbolId = (collectConstructors mods dataTypes #u8(4) pseudoConstructors)
       aliases = buildAliases ctors ({ConstructorAliasInfo |})
       primitives = primitivesStartingAt nextSymbolId
-      return Ok [List U8] [ModuleEnv] (MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives primitives)
+      return
+        Ok
+        [List U8]
+        [ModuleEnv]
+        (
+          MkModuleEnv
+            mods
+            imps
+            exps
+            defs
+            dataTypes
+            ctors
+            aliases
+            opaques
+            natives
+            primitives
+        )
     }
 
 poly rec lookupModule =
@@ -1219,16 +1238,11 @@ poly exportStatus =
         \defs : List DefinitionInfo =>
           \ctors : List ConstructorMeta =>
             let origins = countExportOrigins symbolName exports #u8(0) in
-            cond
-              [List U8]
-              {|
-                (ltU8 #u8(1) origins) =>
-                "AMBIGUOUS" |
-                (or (isDefined moduleName symbolName defs) (isConstructorDefined moduleName symbolName ctors)) =>
-                "OK" |
-                otherwise =>
-                "EXPORT_UNDEFINED"
-              }
+            cond [List U8] {
+              | (ltU8 #u8(1) origins) => "AMBIGUOUS"
+              | (or (isDefined moduleName symbolName defs) (isConstructorDefined moduleName symbolName ctors)) => "OK"
+              | otherwise => "EXPORT_UNDEFINED"
+            }
 
 poly rec emitModuleImportsAcc =
   \moduleName : List U8 =>

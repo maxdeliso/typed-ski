@@ -727,10 +727,13 @@ poly parseModuleSource =
               }
             | Ok decls =>
               do [Result (List U8) (List Decl)] {
-      declared <- (declaredModule decls)
-      assert (eqListU8 declared bundleName) else "source module mismatch"
-      return Ok [List U8] [List Decl] decls
-    }
+                declared <- (declaredModule decls)
+                assert
+                  (eqListU8 declared bundleName)
+                  else
+                  "source module mismatch"
+                return Ok [List U8] [List Decl] decls
+              }
           }
       }
 
@@ -772,10 +775,10 @@ poly rec emitParsedModules =
         \h : ModuleRecord =>
           \t : List ModuleRecord =>
             do [Result (List U8) (List U8)] {
-      headText <- (emitParsedModule h)
-      tailText <- (emitParsedModules t)
-      return Ok [List U8] [List U8] (append [U8] headText tailText)
-    }
+              headText <- (emitParsedModule h)
+              tailText <- (emitParsedModules t)
+              return Ok [List U8] [List U8] (append [U8] headText tailText)
+            }
       )
 
 poly emitBundleParseSummary =

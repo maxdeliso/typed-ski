@@ -209,24 +209,11 @@ poly rec readLineAcc =
         (
           \h : U8 =>
             \t : List U8 =>
-              cond
-                [Result (List U8) Line]
-                {|
-                  (not (isAscii h)) =>
-                  Err
-                  [List U8]
-                  [Line]
-                  "non-ascii byte" |
-                  (eqU8 h '\n') =>
-                  Ok
-                  [List U8]
-                  [Line]
-                  (MkLine (reverse [U8] acc) t) |
-                  otherwise =>
-                  readLineAcc
-                  t
-                  (cons [U8] h acc)
-                }
+              cond [Result (List U8) Line] {
+                | (not (isAscii h)) => Err [List U8] [Line] "non-ascii byte"
+                | (eqU8 h '\n') => Ok [List U8] [Line] (MkLine (reverse [U8] acc) t)
+                | otherwise => readLineAcc t (cons [U8] h acc)
+              }
         )
 
 poly readLine =
@@ -301,30 +288,18 @@ poly readWord =
 
 poly rec decimalDigitValue =
   \digit : U8 =>
-    cond
-      [Bin]
-      {|
-        (eqU8 digit '0') =>
-        BZ |
-        (eqU8 digit '1') =>
-        binOne |
-        (eqU8 digit '2') =>
-        binTwo |
-        (eqU8 digit '3') =>
-        binThree |
-        (eqU8 digit '4') =>
-        binFour |
-        (eqU8 digit '5') =>
-        binFive |
-        (eqU8 digit '6') =>
-        binSix |
-        (eqU8 digit '7') =>
-        binSeven |
-        (eqU8 digit '8') =>
-        binEight |
-        otherwise =>
-        binNine
-      }
+    cond [Bin] {
+      | (eqU8 digit '0') => BZ
+      | (eqU8 digit '1') => binOne
+      | (eqU8 digit '2') => binTwo
+      | (eqU8 digit '3') => binThree
+      | (eqU8 digit '4') => binFour
+      | (eqU8 digit '5') => binFive
+      | (eqU8 digit '6') => binSix
+      | (eqU8 digit '7') => binSeven
+      | (eqU8 digit '8') => binEight
+      | otherwise => binNine
+    }
 
 poly rec parseDecimalAcc =
   \digits : List U8 =>
@@ -357,25 +332,14 @@ poly parseDecimal =
       (
         \h : U8 =>
           \t : List U8 =>
-            cond
-              [Result (List U8) Bin]
-              {|
-                (eqU8 h '0') =>
-                if
-                [Result (List U8) Bin]
-                (listIsEmpty [U8] t)
-                (\u : U8 => Ok [List U8] [Bin] BZ)
-                (\u : U8 => Err [List U8] [Bin] "non-canonical decimal") |
-                (isDigit h) =>
-                parseDecimalAcc
-                t
-                (decimalDigitValue h) |
-                otherwise =>
-                Err
-                [List U8]
-                [Bin]
-                "bad decimal"
-              }
+            cond [Result (List U8) Bin] {
+              | (eqU8 h '0') =>
+                if [Result (List U8) Bin] (listIsEmpty [U8] t)
+                  (\u : U8 => Ok [List U8] [Bin] BZ)
+                  (\u : U8 => Err [List U8] [Bin] "non-canonical decimal")
+              | (isDigit h) => parseDecimalAcc t (decimalDigitValue h)
+              | otherwise => Err [List U8] [Bin] "bad decimal"
+            }
       )
 
 poly parseModuleHeader =
@@ -384,11 +348,15 @@ poly parseModuleHeader =
       | Err e => Err [List U8] [ModuleHeader] "bad module header"
       | Ok rest =>
         do [Result (List U8) ModuleHeader] {
-      MkWord name lengthDigits = (readWord rest)
-      assert (validateName name) else "bad module name"
-      length <- (parseDecimal lengthDigits)
-      return Ok [List U8] [ModuleHeader] (MkModuleHeader name lengthDigits length)
-    }
+          MkWord name lengthDigits = (readWord rest)
+          assert (validateName name) else "bad module name"
+          length <- (parseDecimal lengthDigits)
+          return
+            Ok
+            [List U8]
+            [ModuleHeader]
+            (MkModuleHeader name lengthDigits length)
+        }
     }
 
 poly rec consumeSourceAcc =
@@ -445,57 +413,21 @@ poly declaredModuleName =
 
 poly parseTarget =
   \value : List U8 =>
-    cond
-      [Result (List U8) (List U8)]
-      {|
-        (eqListU8 value "generic") =>
-        Ok
-        [List U8]
-        [List U8]
-        value |
-        (eqListU8 value "x86_64-unknown-linux-gnu") =>
-        Ok
-        [List U8]
-        [List U8]
-        value |
-        (eqListU8 value "arm64-apple-darwin") =>
-        Ok
-        [List U8]
-        [List U8]
-        value |
-        (eqListU8 value "x86_64-pc-windows-msvc") =>
-        Ok
-        [List U8]
-        [List U8]
-        value |
-        otherwise =>
-        Err
-        [List U8]
-        [List U8]
-        "bad target"
-      }
+    cond [Result (List U8) (List U8)] {
+      | (eqListU8 value "generic") => Ok [List U8] [List U8] value
+      | (eqListU8 value "x86_64-unknown-linux-gnu") => Ok [List U8] [List U8] value
+      | (eqListU8 value "arm64-apple-darwin") => Ok [List U8] [List U8] value
+      | (eqListU8 value "x86_64-pc-windows-msvc") => Ok [List U8] [List U8] value
+      | otherwise => Err [List U8] [List U8] "bad target"
+    }
 
 poly parseWrapper =
   \value : List U8 =>
-    cond
-      [Result (List U8) (List U8)]
-      {|
-        (eqListU8 value "none") =>
-        Ok
-        [List U8]
-        [List U8]
-        value |
-        (eqListU8 value "enabled") =>
-        Ok
-        [List U8]
-        [List U8]
-        value |
-        otherwise =>
-        Err
-        [List U8]
-        [List U8]
-        "bad wrapper"
-      }
+    cond [Result (List U8) (List U8)] {
+      | (eqListU8 value "none") => Ok [List U8] [List U8] value
+      | (eqListU8 value "enabled") => Ok [List U8] [List U8] value
+      | otherwise => Err [List U8] [List U8] "bad wrapper"
+    }
 
 poly rec parseModules =
   \remaining : List U8 =>
@@ -645,31 +577,29 @@ poly parseBundleSummary =
       magicRes <- readLine input
       MkLine magic afterMagic = magicRes
       assert (eqListU8 magic "TRIP-BUNDLE-V1") else "bad magic"
-
       entryLineRes <- readLine afterMagic
       MkLine entryLine afterEntry = entryLineRes
       entry <- requireEntry entryLine
       assert (validateName entry) else "bad entry name"
-
       targetLineRes <- readLine afterEntry
       MkLine targetLine afterTarget = targetLineRes
       targetValue <- requireTarget targetLine
       target <- parseTarget targetValue
-
       wrapperLineRes <- readLine afterTarget
       MkLine wrapperLine afterWrapper = wrapperLineRes
       wrapperValue <- requireWrapper wrapperLine
       wrapper <- parseWrapper wrapperValue
-
       modulesLineRes <- readLine afterWrapper
       MkLine modsLine afterModules = modulesLineRes
       modsCountDigits <- requireModules modsLine
       modsCount <- parseDecimal modsCountDigits
-
       parsed <- parseModules afterModules modsCount entry (None [List U8]) false ({ModuleRecord |})
       MkParsedModules found mods rest = parsed
-
-      return Ok [List U8] [BundleSummary] (MkBundleSummary entry target wrapper modsCountDigits mods)
+      return
+        Ok
+        [List U8]
+        [BundleSummary]
+        (MkBundleSummary entry target wrapper modsCountDigits mods)
     }
 
 poly emitModuleSummary =

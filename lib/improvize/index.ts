@@ -527,7 +527,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         let eqIdx = -1;
         let depth = 0;
         const first = tokens[startIdx]!;
-        const startsWithCtor = first.kind === "ident" && first.text[0]! >= "A" && first.text[0]! <= "Z";
+        const startsWithCtor =
+          first.kind === "ident" &&
+          first.text[0]! >= "A" &&
+          first.text[0]! <= "Z";
         for (let j = i; j < tokens.length; j++) {
           const t = tokens[j]!;
           if (!isComment(t)) {
@@ -1141,10 +1144,20 @@ export function formatTripSource(source: string): TripFormatResult {
       const after = JSON.stringify(parseTripLang(formatted));
       if (after !== before) {
         console.error("AST mismatch!");
-        throw new Error("AST mismatch: " + JSON.stringify({ before: JSON.parse(before), after: JSON.parse(after) }, null, 2));
+        throw new Error(
+          "AST mismatch: " +
+            JSON.stringify(
+              { before: JSON.parse(before), after: JSON.parse(after) },
+              null,
+              2,
+            ),
+        );
       }
     } catch (e) {
-      console.error("Formatter produced invalid or different code! Error:", (e as any).message);
+      console.error(
+        "Formatter produced invalid or different code! Error:",
+        (e as any).message,
+      );
       throw e;
     }
   }

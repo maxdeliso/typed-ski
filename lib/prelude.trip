@@ -390,110 +390,37 @@ poly lteListU8 =
 
 poly digitToAscii =
   \n : U8 =>
-    cond
-      [U8]
-      {|
-        eqU8
-        n
-        #
-        u8
-        (0) =>
-        '0' |
-        eqU8
-        n
-        #
-        u8
-        (1) =>
-        '1' |
-        eqU8
-        n
-        #
-        u8
-        (2) =>
-        '2' |
-        eqU8
-        n
-        #
-        u8
-        (3) =>
-        '3' |
-        eqU8
-        n
-        #
-        u8
-        (4) =>
-        '4' |
-        eqU8
-        n
-        #
-        u8
-        (5) =>
-        '5' |
-        eqU8
-        n
-        #
-        u8
-        (6) =>
-        '6' |
-        eqU8
-        n
-        #
-        u8
-        (7) =>
-        '7' |
-        eqU8
-        n
-        #
-        u8
-        (8) =>
-        '8' |
-        otherwise =>
-        '9'
-      }
+    cond [U8] {
+      | eqU8 n #u8(0) => '0'
+      | eqU8 n #u8(1) => '1'
+      | eqU8 n #u8(2) => '2'
+      | eqU8 n #u8(3) => '3'
+      | eqU8 n #u8(4) => '4'
+      | eqU8 n #u8(5) => '5'
+      | eqU8 n #u8(6) => '6'
+      | eqU8 n #u8(7) => '7'
+      | eqU8 n #u8(8) => '8'
+      | otherwise => '9'
+    }
 
 poly singletonU8 =
   \c : U8 => {U8 | c}
 
 poly u8ToDigits =
   \n : U8 =>
-    cond
-      [List U8]
-      {|
-        (ltU8 n #u8(10)) =>
-        singletonU8
-        (digitToAscii n) |
-        (ltU8 n #u8(100)) =>
+    cond [List U8] {
+      | (ltU8 n #u8(10)) => singletonU8 (digitToAscii n)
+      | (ltU8 n #u8(100)) =>
         cons
-        [U8]
-        (digitToAscii (divU8 n #u8(10)))
-        (singletonU8 (digitToAscii (modU8 n #u8(10)))) |
-        otherwise =>
-        let
-        hundreds =
-        divU8
-        n
-        #
-        u8
-        (100)
-        in
-        let
-        tens =
-        modU8
-        (divU8 n #u8(10))
-        #
-        u8
-        (10)
-        in
-        let
-        ones =
-        modU8
-        n
-        #
-        u8
-        (10)
-        in
+          [U8]
+          (digitToAscii (divU8 n #u8(10)))
+          (singletonU8 (digitToAscii (modU8 n #u8(10))))
+      | otherwise =>
+        let hundreds = divU8 n #u8(100) in
+        let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+        let ones = modU8 n #u8(10) in
         cons
-        [U8]
-        (digitToAscii hundreds)
-        (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
-      }
+          [U8]
+          (digitToAscii hundreds)
+          (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
+    }

@@ -1,0 +1,8 @@
+module Types
+
+type Bool
+
+type List A
+
+poly id =
+  #A => \x : A => x

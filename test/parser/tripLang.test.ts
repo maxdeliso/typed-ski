@@ -150,11 +150,7 @@ describe("parseTripLang", () => {
   });
 
   it("parses bare type declarations with optional parameters", () => {
-    const program = parseTripLang(`module Types
-type Bool
-type List A
-poly id = #A => \\x : A => x
-`);
+    const program = parseTripLang(loadInput("bareTypes.trip", srcDir));
 
     assert.deepStrictEqual(program.terms.slice(0, 3), [
       { kind: "module", name: "Types" },
@@ -198,11 +194,7 @@ poly id = #A => \\x : A => x
       Parser must: (1) accept optional leading | and whitespace before the first
      */
 
-    const input = `module Lexer
-data Token =
-  | T_LParen
-  | T_Keyword (List Nat)
-  | T_EOF`;
+    const input = loadInput("dataToken.trip", srcDir);
     const [moduleDecl, term] = parseTripLang(input).terms;
 
     assert.deepStrictEqual(moduleDecl, {
@@ -574,7 +566,7 @@ data Token =
 
 describe("parse single poly", () => {
   it("parses single poly", () => {
-    const input = 'poly foo = "foo"';
+    const input = loadInput("singlePoly.trip", srcDir);
     const result = parseTripLang(input);
 
     assert.strictEqual(result.kind, "program");
@@ -629,12 +621,7 @@ describe("parse single poly", () => {
 
 describe("parse cond expression", () => {
   it("parses cond expression with multiple arms", () => {
-    const input = `poly foo =
-      cond [Maybe U8] {
-        | true => Some [U8] 1
-        | false => None [U8]
-        | otherwise => None [U8]
-      }`;
+    const input = loadInput("condArms.trip", srcDir);
     const result = parseTripLang(input);
 
     assert.strictEqual(result.kind, "program");
@@ -645,12 +632,7 @@ describe("parse cond expression", () => {
   });
 
   it("does not capture an outer u when desugaring cond branches", () => {
-    const input = `poly foo =
-      \\u : U8 =>
-        cond [U8] {
-          | true => u
-          | otherwise => 0
-        }`;
+    const input = loadInput("condNoCapture.trip", srcDir);
     const result = parseTripLang(input);
     const term = requiredAt(result.terms, 0, "expected poly term");
     assert.strictEqual(term.kind, "poly");
@@ -672,13 +654,7 @@ describe("parse cond expression", () => {
 
 describe("parse do expression", () => {
   it("parses do expression with monadic binds and guards", () => {
-    const input = `poly foo =
-      do [Result U8 U8] {
-        x <- readLine
-        MkLine magic = x
-        assert true else 1
-        return Ok [U8] [U8] magic
-      }`;
+    const input = loadInput("doMonadic.trip", srcDir);
     const result = parseTripLang(input);
 
     assert.strictEqual(result.kind, "program");
@@ -720,7 +696,7 @@ describe("parse do expression", () => {
 
 describe("parse list literal", () => {
   it("parses list literal in a poly definition", () => {
-    const input = "poly foo = {U8 | 102 111 111}";
+    const input = loadInput("listLiteral.trip", srcDir);
     const result = parseTripLang(input);
 
     assert.strictEqual(result.kind, "program");

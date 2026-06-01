@@ -92,7 +92,13 @@ function isStartOfDoStep(state: ParserState): boolean {
     let depth = 0;
     while (pCursor < stateAfterWord.buf.length) {
       const char = stateAfterWord.buf[pCursor];
-      if (char === "\n" || char === "\r" || char === ";" || char === "|" || char === "}") {
+      if (
+        char === "\n" ||
+        char === "\r" ||
+        char === ";" ||
+        char === "|" ||
+        char === "}"
+      ) {
         break;
       }
       if (char === "(" || char === "[" || char === "{") depth++;
@@ -532,8 +538,20 @@ function parseCondExpression(
 type DoStep =
   | { kind: "bind"; name: string; exprLit: string; expr: SystemFTerm }
   | { kind: "let"; name: string; exprLit: string; expr: SystemFTerm }
-  | { kind: "match"; constructorName: string; params: string[]; exprLit: string; expr: SystemFTerm }
-  | { kind: "assert"; condLit: string; cond: SystemFTerm; errorLit: string; error: SystemFTerm }
+  | {
+      kind: "match";
+      constructorName: string;
+      params: string[];
+      exprLit: string;
+      expr: SystemFTerm;
+    }
+  | {
+      kind: "assert";
+      condLit: string;
+      cond: SystemFTerm;
+      errorLit: string;
+      error: SystemFTerm;
+    }
   | { kind: "return"; valLit: string; val: SystemFTerm }
   | { kind: "expr"; exprLit: string; expr: SystemFTerm };
 
@@ -595,20 +613,31 @@ function parseDoExpressionInternal(
 
     if (firstWord === "assert") {
       currentState = stateAfterFirstWS;
-      const [condLit, condTerm, stateAfterCond] = parseSystemFTerm(currentState);
+      const [condLit, condTerm, stateAfterCond] =
+        parseSystemFTerm(currentState);
       currentState = skipWhitespace(stateAfterCond);
 
       const [elseWord, stateAfterElse] = parseIdentifier(currentState);
       if (elseWord !== "else") {
         throw new ParseError(
-          withParserState(currentState, "expected 'else' after assert condition"),
+          withParserState(
+            currentState,
+            "expected 'else' after assert condition",
+          ),
         );
       }
       currentState = skipWhitespace(stateAfterElse);
-      const [errorLit, errorTerm, stateAfterError] = parseSystemFTerm(currentState);
+      const [errorLit, errorTerm, stateAfterError] =
+        parseSystemFTerm(currentState);
       currentState = stateAfterError;
 
-      steps.push({ kind: "assert", condLit, cond: condTerm, errorLit, error: errorTerm });
+      steps.push({
+        kind: "assert",
+        condLit,
+        cond: condTerm,
+        errorLit,
+        error: errorTerm,
+      });
     } else if (firstWord === "return") {
       currentState = stateAfterFirstWS;
       const [valLit, valTerm, stateAfterVal] = parseSystemFTerm(currentState);
@@ -619,7 +648,8 @@ function parseDoExpressionInternal(
       const [isBind, stateAfterCheck] = peekBindArrow(stateAfterFirst);
       if (isBind) {
         currentState = matchBindArrow(stateAfterCheck);
-        const [exprLit, exprTerm, stateAfterExpr] = parseSystemFTerm(currentState);
+        const [exprLit, exprTerm, stateAfterExpr] =
+          parseSystemFTerm(currentState);
         currentState = stateAfterExpr;
 
         steps.push({ kind: "bind", name: firstWord, exprLit, expr: exprTerm });
@@ -666,16 +696,32 @@ function parseDoExpressionInternal(
           }
 
           currentState = skipWhitespace(patternState);
-          const [exprLit, exprTerm, stateAfterExpr] = parseSystemFTerm(currentState);
+          const [exprLit, exprTerm, stateAfterExpr] =
+            parseSystemFTerm(currentState);
           currentState = stateAfterExpr;
 
-          if (params.length === 0 && firstWord[0] === firstWord[0]!.toLowerCase()) {
-            steps.push({ kind: "let", name: firstWord, exprLit, expr: exprTerm });
+          if (
+            params.length === 0 &&
+            firstWord[0] === firstWord[0]!.toLowerCase()
+          ) {
+            steps.push({
+              kind: "let",
+              name: firstWord,
+              exprLit,
+              expr: exprTerm,
+            });
           } else {
-            steps.push({ kind: "match", constructorName: firstWord, params, exprLit, expr: exprTerm });
+            steps.push({
+              kind: "match",
+              constructorName: firstWord,
+              params,
+              exprLit,
+              expr: exprTerm,
+            });
           }
         } else {
-          const [exprLit, exprTerm, stateAfterExpr] = parseSystemFTerm(currentState);
+          const [exprLit, exprTerm, stateAfterExpr] =
+            parseSystemFTerm(currentState);
           currentState = stateAfterExpr;
           steps.push({ kind: "expr", exprLit, expr: exprTerm });
         }
@@ -703,14 +749,20 @@ function parseDoExpressionInternal(
 
   const makeErrTerm = (err: SystemFTerm): SystemFTerm => {
     return createSystemFApplication(
-      mkSystemFTypeApp(mkSystemFTypeApp(mkSystemFVar("Err"), errorType!), okType!),
+      mkSystemFTypeApp(
+        mkSystemFTypeApp(mkSystemFVar("Err"), errorType!),
+        okType!,
+      ),
       err,
     );
   };
 
   const makeOkTerm = (val: SystemFTerm): SystemFTerm => {
     return createSystemFApplication(
-      mkSystemFTypeApp(mkSystemFTypeApp(mkSystemFVar("Ok"), errorType!), okType!),
+      mkSystemFTypeApp(
+        mkSystemFTypeApp(mkSystemFVar("Ok"), errorType!),
+        okType!,
+      ),
       val,
     );
   };
@@ -724,7 +776,10 @@ function parseDoExpressionInternal(
     currentTerm = lastStep.expr;
   } else {
     throw new ParseError(
-      withParserState(currentState, "do block final step must be an expression or a return statement"),
+      withParserState(
+        currentState,
+        "do block final step must be an expression or a return statement",
+      ),
     );
   }
 
@@ -792,14 +847,18 @@ function parseDoExpressionInternal(
     }
   }
 
-  const stepLits = steps.map(step => {
-    if (step.kind === "bind") return `${step.name} <- ${step.exprLit}`;
-    if (step.kind === "let") return `${step.name} = ${step.exprLit}`;
-    if (step.kind === "match") return `${step.constructorName} ${step.params.join(" ")} = ${step.exprLit}`;
-    if (step.kind === "assert") return `assert ${step.condLit} else ${step.errorLit}`;
-    if (step.kind === "return") return `return ${step.valLit}`;
-    return step.exprLit;
-  }).join("\n      ");
+  const stepLits = steps
+    .map((step) => {
+      if (step.kind === "bind") return `${step.name} <- ${step.exprLit}`;
+      if (step.kind === "let") return `${step.name} = ${step.exprLit}`;
+      if (step.kind === "match")
+        return `${step.constructorName} ${step.params.join(" ")} = ${step.exprLit}`;
+      if (step.kind === "assert")
+        return `assert ${step.condLit} else ${step.errorLit}`;
+      if (step.kind === "return") return `return ${step.valLit}`;
+      return step.exprLit;
+    })
+    .join("\n      ");
 
   const literalStr = `do [${returnTypeLit}] {
       ${stepLits}

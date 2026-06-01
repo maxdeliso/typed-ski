@@ -205,7 +205,7 @@ poly rec readLineAcc =
         [U8]
         [Result (List U8) Line]
         input
-        (Ok [List U8] [Line] (MkLine (reverse [U8] acc) ("")))
+        (Ok [List U8] [Line] (MkLine (reverse [U8] acc) ""))
         (
           \h : U8 =>
             \t : List U8 =>
@@ -230,7 +230,7 @@ poly rec readLineAcc =
         )
 
 poly readLine =
-  \input : List U8 => readLineAcc input ("")
+  \input : List U8 => readLineAcc input ""
 
 poly rec stripPrefix =
   \prefix : List U8 =>
@@ -287,7 +287,7 @@ poly rec readWordAcc =
         [U8]
         [Word]
         input
-        (MkWord (reverse [U8] acc) (""))
+        (MkWord (reverse [U8] acc) "")
         (
           \h : U8 =>
             \t : List U8 =>
@@ -297,7 +297,7 @@ poly rec readWordAcc =
         )
 
 poly readWord =
-  \input : List U8 => readWordAcc input ("")
+  \input : List U8 => readWordAcc input ""
 
 poly rec decimalDigitValue =
   \digit : U8 =>
@@ -383,22 +383,12 @@ poly parseModuleHeader =
     match (stripPrefix "module " line) [Result (List U8) (List U8)] {
       | Err e => Err [List U8] [ModuleHeader] "bad module header"
       | Ok rest =>
-        match (readWord rest) [Result (List U8) ModuleHeader] {
-          | MkWord name lengthDigits =>
-            if [Result (List U8) ModuleHeader] (validateName name)
-              (
-                \u : U8 =>
-                  match (parseDecimal lengthDigits) [Result (List U8) ModuleHeader] {
-                    | Err e => Err [List U8] [ModuleHeader] e
-                    | Ok length =>
-                      Ok
-                        [List U8]
-                        [ModuleHeader]
-                        (MkModuleHeader name lengthDigits length)
-                  }
-              )
-              (\u : U8 => Err [List U8] [ModuleHeader] "bad module name")
-        }
+        do [Result (List U8) ModuleHeader] {
+      MkWord name lengthDigits = (readWord rest)
+      assert (validateName name) else "bad module name"
+      length <- (parseDecimal lengthDigits)
+      return Ok [List U8] [ModuleHeader] (MkModuleHeader name lengthDigits length)
+    }
     }
 
 poly rec consumeSourceAcc =
@@ -434,7 +424,7 @@ poly rec consumeSourceAcc =
           )
 
 poly consumeSource =
-  \count : Bin => \input : List U8 => consumeSourceAcc count input ("")
+  \count : Bin => \input : List U8 => consumeSourceAcc count input ""
 
 poly declaredModuleName =
   \source : List U8 =>
@@ -651,98 +641,35 @@ poly rec parseModules =
 
 poly parseBundleSummary =
   \input : List U8 =>
-    match (readLine input) [Result (List U8) BundleSummary] {
-      | Err e => Err [List U8] [BundleSummary] e
-      | Ok magicRes =>
-        match magicRes [Result (List U8) BundleSummary] {
-          | MkLine magic afterMagic =>
-            if [Result (List U8) BundleSummary] (eqListU8 magic "TRIP-BUNDLE-V1")
-              (
-                \u : U8 =>
-                  match (readLine afterMagic) [Result (List U8) BundleSummary] {
-                    | Err e => Err [List U8] [BundleSummary] e
-                    | Ok entryLineRes =>
-                      match entryLineRes [Result (List U8) BundleSummary] {
-                        | MkLine entryLine afterEntry =>
-                          match (requireEntry entryLine) [Result (List U8) BundleSummary] {
-                            | Err e => Err [List U8] [BundleSummary] e
-                            | Ok entry =>
-                              if [Result (List U8) BundleSummary] (validateName entry)
-                                (
-                                  \u : U8 =>
-                                    match (readLine afterEntry) [Result (List U8) BundleSummary] {
-                                      | Err e => Err [List U8] [BundleSummary] e
-                                      | Ok targetLineRes =>
-                                        match targetLineRes [Result (List U8) BundleSummary] {
-                                          | MkLine targetLine afterTarget =>
-                                            match (requireTarget targetLine) [Result (List U8) BundleSummary] {
-                                              | Err e => Err [List U8] [BundleSummary] e
-                                              | Ok targetValue =>
-                                                match (parseTarget targetValue) [Result (List U8) BundleSummary] {
-                                                  | Err e => Err [List U8] [BundleSummary] e
-                                                  | Ok target =>
-                                                    match (readLine afterTarget) [Result (List U8) BundleSummary] {
-                                                      | Err e => Err [List U8] [BundleSummary] e
-                                                      | Ok wrapperLineRes =>
-                                                        match wrapperLineRes [Result (List U8) BundleSummary] {
-                                                          | MkLine wrapperLine afterWrapper =>
-                                                            match (requireWrapper wrapperLine) [Result (List U8) BundleSummary] {
-                                                              | Err e => Err [List U8] [BundleSummary] e
-                                                              | Ok wrapperValue =>
-                                                                match (parseWrapper wrapperValue) [Result (List U8) BundleSummary] {
-                                                                  | Err e => Err [List U8] [BundleSummary] e
-                                                                  | Ok wrapper =>
-                                                                    match (readLine afterWrapper) [Result (List U8) BundleSummary] {
-                                                                      | Err e => Err [List U8] [BundleSummary] e
-                                                                      | Ok modulesLineRes =>
-                                                                        match modulesLineRes [Result (List U8) BundleSummary] {
-                                                                          | MkLine modsLine afterModules =>
-                                                                            match (requireModules modsLine) [Result (List U8) BundleSummary] {
-                                                                              | Err e => Err [List U8] [BundleSummary] e
-                                                                              | Ok modsCountDigits =>
-                                                                                match (parseDecimal modsCountDigits) [Result (List U8) BundleSummary] {
-                                                                                  | Err e => Err [List U8] [BundleSummary] e
-                                                                                  | Ok modsCount =>
-                                                                                    match (parseModules afterModules modsCount entry (None [List U8]) false ({ModuleRecord |})) [Result (List U8) BundleSummary] {
-                                                                                      | Err e => Err [List U8] [BundleSummary] e
-                                                                                      | Ok parsed =>
-                                                                                        match parsed [Result (List U8) BundleSummary] {
-                                                                                          | MkParsedModules found mods rest =>
-                                                                                            Ok
-                                                                                              [List U8]
-                                                                                              [BundleSummary]
-                                                                                              (
-                                                                                                MkBundleSummary
-                                                                                                  entry
-                                                                                                  target
-                                                                                                  wrapper
-                                                                                                  modsCountDigits
-                                                                                                  mods
-                                                                                              )
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                )
-                                (
-                                  \u : U8 => Err [List U8] [BundleSummary] "bad entry name"
-                                )
-                          }
-                      }
-                  }
-              )
-              (\u : U8 => Err [List U8] [BundleSummary] "bad magic")
-        }
+    do [Result (List U8) BundleSummary] {
+      magicRes <- readLine input
+      MkLine magic afterMagic = magicRes
+      assert (eqListU8 magic "TRIP-BUNDLE-V1") else "bad magic"
+
+      entryLineRes <- readLine afterMagic
+      MkLine entryLine afterEntry = entryLineRes
+      entry <- requireEntry entryLine
+      assert (validateName entry) else "bad entry name"
+
+      targetLineRes <- readLine afterEntry
+      MkLine targetLine afterTarget = targetLineRes
+      targetValue <- requireTarget targetLine
+      target <- parseTarget targetValue
+
+      wrapperLineRes <- readLine afterTarget
+      MkLine wrapperLine afterWrapper = wrapperLineRes
+      wrapperValue <- requireWrapper wrapperLine
+      wrapper <- parseWrapper wrapperValue
+
+      modulesLineRes <- readLine afterWrapper
+      MkLine modsLine afterModules = modulesLineRes
+      modsCountDigits <- requireModules modsLine
+      modsCount <- parseDecimal modsCountDigits
+
+      parsed <- parseModules afterModules modsCount entry (None [List U8]) false ({ModuleRecord |})
+      MkParsedModules found mods rest = parsed
+
+      return Ok [List U8] [BundleSummary] (MkBundleSummary entry target wrapper modsCountDigits mods)
     }
 
 poly emitModuleSummary =
@@ -761,7 +688,7 @@ poly rec emitModuleSummaries =
       [ModuleRecord]
       [List U8]
       mods
-      ("")
+      ""
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord => append [U8] (emitModuleSummary h) (emitModuleSummaries t)

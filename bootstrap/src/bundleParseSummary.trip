@@ -470,7 +470,7 @@ poly rec emitImportsAcc =
         )
 
 poly emitImports =
-  \decls : List Decl => emitImportsAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitImportsAcc (reverse [Decl] decls) ""
 
 poly rec emitExportsAcc =
   \decls : List Decl =>
@@ -499,7 +499,7 @@ poly rec emitExportsAcc =
         )
 
 poly emitExports =
-  \decls : List Decl => emitExportsAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitExportsAcc (reverse [Decl] decls) ""
 
 poly emitCtor =
   \ctor : ((List U8), U8) =>
@@ -521,7 +521,7 @@ poly rec emitCtorsAcc =
         )
 
 poly emitCtors =
-  \ctors : List (((List U8), U8)) => emitCtorsAcc (reverse [((List U8), U8)] ctors) ("")
+  \ctors : List (((List U8), U8)) => emitCtorsAcc (reverse [((List U8), U8)] ctors) ""
 
 poly rec emitDataDefsAcc =
   \decls : List Decl =>
@@ -552,7 +552,7 @@ poly rec emitDataDefsAcc =
         )
 
 poly emitDataDefs =
-  \decls : List Decl => emitDataDefsAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitDataDefsAcc (reverse [Decl] decls) ""
 
 poly rec emitTypesAcc =
   \decls : List Decl =>
@@ -581,7 +581,7 @@ poly rec emitTypesAcc =
         )
 
 poly emitTypes =
-  \decls : List Decl => emitTypesAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitTypesAcc (reverse [Decl] decls) ""
 
 poly rec emitOpaquesAcc =
   \decls : List Decl =>
@@ -610,7 +610,7 @@ poly rec emitOpaquesAcc =
         )
 
 poly emitOpaques =
-  \decls : List Decl => emitOpaquesAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitOpaquesAcc (reverse [Decl] decls) ""
 
 poly rec emitNativesAcc =
   \decls : List Decl =>
@@ -639,7 +639,7 @@ poly rec emitNativesAcc =
         )
 
 poly emitNatives =
-  \decls : List Decl => emitNativesAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitNativesAcc (reverse [Decl] decls) ""
 
 poly rec emitPolyDefsAcc =
   \decls : List Decl =>
@@ -673,7 +673,7 @@ poly rec emitPolyDefsAcc =
         )
 
 poly emitPolyDefs =
-  \decls : List Decl => emitPolyDefsAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitPolyDefsAcc (reverse [Decl] decls) ""
 
 poly rec emitCombinatorDefsAcc =
   \decls : List Decl =>
@@ -712,7 +712,7 @@ poly rec emitCombinatorDefsAcc =
         )
 
 poly emitCombinatorDefs =
-  \decls : List Decl => emitCombinatorDefsAcc (reverse [Decl] decls) ("")
+  \decls : List Decl => emitCombinatorDefsAcc (reverse [Decl] decls) ""
 
 poly parseModuleSource =
   \bundleName : List U8 =>
@@ -726,15 +726,11 @@ poly parseModuleSource =
                 | MkParseError msg => Err [List U8] [List Decl] msg
               }
             | Ok decls =>
-              match (declaredModule decls) [Result (List U8) (List Decl)] {
-                | Err e => Err [List U8] [List Decl] e
-                | Ok declared =>
-                  if [Result (List U8) (List Decl)] (eqListU8 declared bundleName)
-                    (\u : U8 => Ok [List U8] [List Decl] decls)
-                    (
-                      \u : U8 => Err [List U8] [List Decl] "source module mismatch"
-                    )
-              }
+              do [Result (List U8) (List Decl)] {
+      declared <- (declaredModule decls)
+      assert (eqListU8 declared bundleName) else "source module mismatch"
+      return Ok [List U8] [List Decl] decls
+    }
           }
       }
 
@@ -777,19 +773,15 @@ poly rec emitParsedModules =
       [ModuleRecord]
       [Result (List U8) (List U8)]
       recs
-      (Ok [List U8] [List U8] (""))
+      (Ok [List U8] [List U8] "")
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord =>
-            match (emitParsedModule h) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok headText =>
-                match (emitParsedModules t) [Result (List U8) (List U8)] {
-                  | Err e => Err [List U8] [List U8] e
-                  | Ok tailText =>
-                    Ok [List U8] [List U8] (append [U8] headText tailText)
-                }
-            }
+            do [Result (List U8) (List U8)] {
+      headText <- (emitParsedModule h)
+      tailText <- (emitParsedModules t)
+      return Ok [List U8] [List U8] (append [U8] headText tailText)
+    }
       )
 
 poly emitBundleParseSummary =

@@ -149,7 +149,7 @@ poly rec removeExpEntry =
         [(((List U8), (List (List U8))))]
         [List (((List U8), (List (List U8))))]
         tbl
-        ({(Pair (List U8) (List (List U8))) |})
+        ({(((List U8), (List (List U8)))) |})
         (
           \hh : (((List U8), (List (List U8)))) =>
             \tt : List (((List U8), (List (List U8)))) =>
@@ -211,14 +211,14 @@ poly rec populateInventoryAcc =
       \expTable : List (((List U8), (List (List U8)))) =>
         matchList
           [ModuleRecord]
-          [Result (List U8) (((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8))))))]
+          [Result (List U8) (((List (((List U8), (List Decl)))), (List (((List U8), (List (List U8)))))))]
           mods
           (
             Ok
               [List U8]
-              [((List (Pair (List U8) (List Decl))), (List (Pair (List U8) (List (List U8)))))]
+              [((List (((List U8), (List Decl)))), (List (((List U8), (List (List U8))))))]
               (
-                {List (Pair (List U8) (List Decl)), List (Pair (List U8) (List (List U8))) |
+                {List (((List U8), (List Decl))), List (((List U8), (List (List U8)))) |
                   modTable,
                   expTable
                 }

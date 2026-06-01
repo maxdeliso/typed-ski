@@ -135,7 +135,7 @@ poly rec renderList =
         [AnfExpr]
         [List U8]
         es
-        ("")
+        ""
         (
           \h : AnfExpr =>
             \t : List AnfExpr => append [U8] (cons [U8] ' ' (f h)) (renderList f t)
@@ -147,7 +147,7 @@ poly rec renderParams =
       [List U8]
       [List U8]
       ps
-      ("")
+      ""
       (
         \h : List U8 =>
           \t : List (List U8) => append [U8] (cons [U8] ' ' h) (renderParams t)
@@ -256,7 +256,7 @@ poly rec unparseAnfFuncs =
       [AnfFunc]
       [List U8]
       fns
-      ("")
+      ""
       (
         \h : AnfFunc =>
           \t : List AnfFunc => append [U8] (unparseAnfFunc h) (unparseAnfFuncs t)

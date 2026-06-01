@@ -670,6 +670,54 @@ describe("parse cond expression", () => {
   });
 });
 
+describe("parse do expression", () => {
+  it("parses do expression with monadic binds and guards", () => {
+    const input = `poly foo =
+      do [Result U8 U8] {
+        x <- readLine
+        MkLine magic = x
+        assert true else 1
+        return Ok [U8] [U8] magic
+      }`;
+    const result = parseTripLang(input);
+
+    assert.strictEqual(result.kind, "program");
+    assert.strictEqual(result.terms.length, 1);
+    const term = result.terms[0]!;
+    assert.strictEqual(term.kind, "poly");
+    assert.strictEqual(term.name, "foo");
+
+    // Let's assert on the desugared term structure
+    assert.strictEqual(term.term.kind, "systemF-match");
+    const firstMatch = term.term;
+    assert.strictEqual(firstMatch.scrutinee.kind, "systemF-var");
+    assert.strictEqual(firstMatch.scrutinee.name, "readLine");
+    assert.strictEqual(firstMatch.arms.length, 2);
+
+    const errArm = firstMatch.arms[0]!;
+    assert.strictEqual(errArm.constructorName, "Err");
+    assert.deepStrictEqual(errArm.params, ["e"]);
+
+    const okArm = firstMatch.arms[1]!;
+    assert.strictEqual(okArm.constructorName, "Ok");
+    assert.deepStrictEqual(okArm.params, ["x"]);
+
+    const secondMatch = okArm.body;
+    assert.strictEqual(secondMatch.kind, "systemF-match");
+    assert.strictEqual(secondMatch.scrutinee.kind, "systemF-var");
+    assert.strictEqual(secondMatch.scrutinee.name, "x");
+    assert.strictEqual(secondMatch.arms.length, 1);
+
+    const mkLineArm = secondMatch.arms[0]!;
+    assert.strictEqual(mkLineArm.constructorName, "MkLine");
+    assert.deepStrictEqual(mkLineArm.params, ["magic"]);
+
+    // assert true else 1 desugars to application of `if`
+    const assertApp = mkLineArm.body;
+    assert.strictEqual(assertApp.kind, "non-terminal"); // application is non-terminal in binary representation
+  });
+});
+
 describe("parse list literal", () => {
   it("parses list literal in a poly definition", () => {
     const input = "poly foo = {U8 | 102 111 111}";

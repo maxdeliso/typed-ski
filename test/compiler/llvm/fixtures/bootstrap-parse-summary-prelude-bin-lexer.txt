@@ -103,7 +103,7 @@ import Prelude ltListU8
 import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
-exports 67
+exports 70
 export ParseError
 export MkParseError
 export Token
@@ -136,6 +136,9 @@ export T_KwCombinator
 export T_KwType
 export T_KwData
 export T_KwCond
+export T_KwDo
+export T_LArrow
+export T_Tagged
 export T_Ident
 export T_Nat
 export T_EOF
@@ -181,7 +184,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 113
+poly 119
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -211,8 +214,12 @@ poly T_KwCombinator
 poly T_KwType
 poly T_KwData
 poly T_KwCond
+poly T_KwDo
+poly T_LArrow
 poly T_EOF
 poly tokenTag
+poly tokenTaggedTextDo
+poly tokenTaggedTextLArrow
 poly tokenTaggedTextData
 poly tokenTaggedTextType
 poly tokenTaggedTextCombinator
@@ -237,6 +244,7 @@ poly u8_quote
 poly u8_squote
 poly u8_backslash
 poly u8_gt
+poly u8_lt
 poly u8_dash
 poly u8_eq
 poly u8_n
@@ -262,6 +270,7 @@ poly keywordTokenFromWordO
 poly keywordTokenFromWordE
 poly keywordTokenFromWordT
 poly keywordTokenFromWordC
+poly keywordTokenFromWordDo
 poly keywordTokenFromWordData
 poly keywordTokenFromWordType
 poly keywordTokenFromWordCombinator

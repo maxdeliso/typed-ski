@@ -216,6 +216,26 @@ export function matchFatArrow(state: ParserState): ParserState {
   return { buf: newState.buf, idx: newState.idx + FAT_ARROW.length };
 }
 
+export function peekBindArrow(state: ParserState): [boolean, ParserState] {
+  const newState = skipWhitespace(state);
+  return [
+    newState.buf.slice(newState.idx, newState.idx + 2) === "<-",
+    newState,
+  ];
+}
+
+export function matchBindArrow(state: ParserState): ParserState {
+  const [isArrow, newState] = peekBindArrow(state);
+  if (!isArrow) {
+    const next =
+      newState.idx < newState.buf.length ? newState.buf[newState.idx] : "EOF";
+    throw new ParseError(
+      withParserState(newState, `expected '<-' but found '${next}'`),
+    );
+  }
+  return { buf: newState.buf, idx: newState.idx + 2 };
+}
+
 export function parseIdentifier(state: ParserState): [string, ParserState] {
   let id = "";
   let currentState = skipWhitespace(state);

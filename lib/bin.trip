@@ -212,4 +212,4 @@ poly rec binToDigitsAcc =
         )
 
 poly binToDigits =
-  \b : Bin => binToDigitsAcc b ("")
+  \b : Bin => binToDigitsAcc b ""

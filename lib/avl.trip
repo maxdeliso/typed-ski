@@ -300,14 +300,13 @@ poly rec extractMin =
   #K =>
     #V =>
       \t : Avl K V =>
-        match t [(K, (Pair V (Avl K V)))] {
-          | Empty => error [(K, (Pair V (Avl K V)))]
+        match t [(K, ((V, (Avl K V))))] {
+          | Empty => error [(K, ((V, (Avl K V))))]
           | Node l k v _ r =>
-            match l [(K, (Pair V (Avl K V)))] {
-              | Empty =>
-                {K, Pair V (Avl K V) | k, (MkPair [V] [Avl K V] v r)}
+            match l [(K, ((V, (Avl K V))))] {
+              | Empty => {K, (V, (Avl K V)) | k, ({V, Avl K V | v, r})}
               | Node _ _ _ _ _ =>
-                match (extractMin [K] [V] l) [(K, (Pair V (Avl K V)))] {
+                match (extractMin [K] [V] l) [(K, ((V, (Avl K V))))] {
                   | MkPair minK minRest =>
                     match minRest [(V, (Avl K V))] {
                       | MkPair minV newLeft =>
@@ -334,7 +333,7 @@ poly deleteRoot =
           match r [Avl K V] {
             | Empty => l
             | Node _ _ _ _ _ =>
-              match (extractMin [K] [V] r) [(K, (Pair V (Avl K V)))] {
+              match (extractMin [K] [V] r) [(K, ((V, (Avl K V))))] {
                 | MkPair minK minRest =>
                   match minRest [(V, (Avl K V))] {
                     | MkPair minV newRight =>
@@ -410,7 +409,7 @@ poly rec toListEntries =
     #V =>
       \t : Avl K V =>
         match t [List ((K, V))] {
-          | Empty => {Pair K V |}
+          | Empty => {(K, V) |}
           | Node l k v _ r =>
             append
               [(K, V)]

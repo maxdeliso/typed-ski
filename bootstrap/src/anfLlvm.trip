@@ -134,7 +134,7 @@ poly rec emitArgsString =
           [AnfExpr]
           [Result (List U8) (List U8)]
           args
-          (Ok [List U8] [List U8] (""))
+          (Ok [List U8] [List U8] "")
           (
             \h : AnfExpr =>
               \t : List AnfExpr =>
@@ -209,7 +209,7 @@ poly rec paramDeclsString =
         [List U8]
         [List U8]
         params
-        ("")
+        ""
         (
           \h : List U8 =>
             \t : List (List U8) =>
@@ -223,7 +223,7 @@ poly rec paramEnv =
       [List U8]
       [List (((List U8), (List U8)))]
       params
-      ({Pair (List U8) (List U8) |})
+      ({((List U8), (List U8)) |})
       (
         \h : List U8 =>
           \t : List (List U8) =>
@@ -302,18 +302,15 @@ poly rec emitFuncs =
       [AnfFunc]
       [Result (List U8) (List U8)]
       fns
-      (Ok [List U8] [List U8] (""))
+      (Ok [List U8] [List U8] "")
       (
         \h : AnfFunc =>
           \t : List AnfFunc =>
-            match (emitFunc h) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok block =>
-                match (emitFuncs t) [Result (List U8) (List U8)] {
-                  | Err e => Err [List U8] [List U8] e
-                  | Ok rest => Ok [List U8] [List U8] (append [U8] block rest)
-                }
-            }
+            do [Result (List U8) (List U8)] {
+      block <- (emitFunc h)
+      rest <- (emitFuncs t)
+      return Ok [List U8] [List U8] (append [U8] block rest)
+    }
       )
 
 poly emitProgram =

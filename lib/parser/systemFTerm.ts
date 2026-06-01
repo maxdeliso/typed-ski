@@ -25,6 +25,8 @@ import {
   parseNumericLiteral,
   peek,
   peekFatArrow,
+  peekBindArrow,
+  matchBindArrow,
   skipWhitespace,
   withParserState,
 } from "./parserState.ts";
@@ -71,9 +73,49 @@ import { unparseSystemFType } from "./systemFType.ts";
  * - A keyword that starts a new structure: `in` (for let)
  * - The start of a new definition line
  */
+let parsingDoBlockDepth = 0;
+
+function isStartOfDoStep(state: ParserState): boolean {
+  try {
+    const newState = skipWhitespace(state);
+    const [ch] = peek(newState);
+    if (ch === null || !/[a-zA-Z]/.test(ch)) return false;
+
+    const [word, stateAfterWord] = parseIdentifier(newState);
+    if (word === "assert" || word === "return") return true;
+
+    const [isBind] = peekBindArrow(stateAfterWord);
+    if (isBind) return true;
+
+    // Check if followed by =
+    let pCursor = stateAfterWord.idx;
+    let depth = 0;
+    while (pCursor < stateAfterWord.buf.length) {
+      const char = stateAfterWord.buf[pCursor];
+      if (char === "\n" || char === "\r" || char === ";" || char === "|" || char === "}") {
+        break;
+      }
+      if (char === "(" || char === "[" || char === "{") depth++;
+      else if (char === ")" || char === "]" || char === "}") depth--;
+
+      if (depth === 0 && char === "=") {
+        if (stateAfterWord.buf[pCursor + 1] !== ">") {
+          return true;
+        }
+      }
+      pCursor++;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 function isTerminator(state: ParserState): boolean {
   const [isFatArrow] = peekFatArrow(state);
   if (isFatArrow) return true;
+
+  if (parsingDoBlockDepth > 0 && isStartOfDoStep(state)) return true;
 
   const [ch, _] = peek(state);
 
@@ -91,11 +133,11 @@ function isTerminator(state: ParserState): boolean {
     return true;
   }
 
-  // Keywords that end expressions (specifically 'in' for let-bindings)
+  // Keywords that end expressions (specifically 'in' for let-bindings and 'else' for assert guards)
   if (/[a-zA-Z]/.test(ch)) {
     try {
       const [id] = parseIdentifier(state);
-      if (id === "in") return true;
+      if (id === "in" || id === "else") return true;
     } catch {
       return false;
     }
@@ -485,6 +527,285 @@ function parseCondExpression(
       : `cond [${returnTypeLit}] { ${armLits} | otherwise => ${defaultArm.bodyLit} }`;
 
   return [literalStr, finalTerm, currentState];
+}
+
+type DoStep =
+  | { kind: "bind"; name: string; exprLit: string; expr: SystemFTerm }
+  | { kind: "let"; name: string; exprLit: string; expr: SystemFTerm }
+  | { kind: "match"; constructorName: string; params: string[]; exprLit: string; expr: SystemFTerm }
+  | { kind: "assert"; condLit: string; cond: SystemFTerm; errorLit: string; error: SystemFTerm }
+  | { kind: "return"; valLit: string; val: SystemFTerm }
+  | { kind: "expr"; exprLit: string; expr: SystemFTerm };
+
+function parseDoExpression(
+  state: ParserState,
+): [string, SystemFTerm, ParserState] {
+  parsingDoBlockDepth++;
+  try {
+    return parseDoExpressionInternal(state);
+  } finally {
+    parsingDoBlockDepth--;
+  }
+}
+
+function parseDoExpressionInternal(
+  state: ParserState,
+): [string, SystemFTerm, ParserState] {
+  let currentState = skipWhitespace(state);
+  const [nextCh, peekState] = peek(currentState);
+  if (nextCh !== "[") {
+    throw new ParseError(
+      withParserState(
+        peekState,
+        "do requires an explicit return type: do [Type] { ... }",
+      ),
+    );
+  }
+  currentState = matchCh(peekState, "[");
+  currentState = skipWhitespace(currentState);
+  const [returnTypeLit, returnType, stateAfterType] =
+    parseSystemFType(currentState);
+
+  currentState = skipWhitespace(stateAfterType);
+  currentState = matchCh(currentState, "]");
+
+  currentState = skipWhitespace(currentState);
+  currentState = matchCh(currentState, LEFT_BRACE);
+  currentState = skipWhitespace(currentState);
+
+  const steps: DoStep[] = [];
+
+  for (;;) {
+    currentState = skipWhitespace(currentState);
+    const [nextArmCh] = peek(currentState);
+
+    if (nextArmCh === RIGHT_BRACE) {
+      currentState = matchCh(currentState, RIGHT_BRACE);
+      break;
+    }
+
+    if (nextArmCh === null) {
+      throw new ParseError(
+        withParserState(currentState, "unterminated do block"),
+      );
+    }
+
+    const [firstWord, stateAfterFirst] = parseIdentifier(currentState);
+    const stateAfterFirstWS = skipWhitespace(stateAfterFirst);
+
+    if (firstWord === "assert") {
+      currentState = stateAfterFirstWS;
+      const [condLit, condTerm, stateAfterCond] = parseSystemFTerm(currentState);
+      currentState = skipWhitespace(stateAfterCond);
+
+      const [elseWord, stateAfterElse] = parseIdentifier(currentState);
+      if (elseWord !== "else") {
+        throw new ParseError(
+          withParserState(currentState, "expected 'else' after assert condition"),
+        );
+      }
+      currentState = skipWhitespace(stateAfterElse);
+      const [errorLit, errorTerm, stateAfterError] = parseSystemFTerm(currentState);
+      currentState = stateAfterError;
+
+      steps.push({ kind: "assert", condLit, cond: condTerm, errorLit, error: errorTerm });
+    } else if (firstWord === "return") {
+      currentState = stateAfterFirstWS;
+      const [valLit, valTerm, stateAfterVal] = parseSystemFTerm(currentState);
+      currentState = stateAfterVal;
+
+      steps.push({ kind: "return", valLit, val: valTerm });
+    } else {
+      const [isBind, stateAfterCheck] = peekBindArrow(stateAfterFirst);
+      if (isBind) {
+        currentState = matchBindArrow(stateAfterCheck);
+        const [exprLit, exprTerm, stateAfterExpr] = parseSystemFTerm(currentState);
+        currentState = stateAfterExpr;
+
+        steps.push({ kind: "bind", name: firstWord, exprLit, expr: exprTerm });
+      } else {
+        let hasEq = false;
+        let pCursor = stateAfterFirstWS.idx;
+        let depthP = 0;
+        let depthB = 0;
+        let depthBr = 0;
+        while (pCursor < stateAfterFirstWS.buf.length) {
+          const char = stateAfterFirstWS.buf[pCursor];
+          if (char === "}") break;
+          if (char === "\n" || char === ";" || char === "|") {
+            break;
+          }
+          if (char === "(") depthP++;
+          else if (char === ")") depthP--;
+          else if (char === "[") depthB++;
+          else if (char === "]") depthB--;
+          else if (char === "{") depthBr++;
+          else if (char === "}") depthBr--;
+
+          if (depthP === 0 && depthB === 0 && depthBr === 0 && char === "=") {
+            if (stateAfterFirstWS.buf[pCursor + 1] !== ">") {
+              hasEq = true;
+              break;
+            }
+          }
+          pCursor++;
+        }
+
+        if (hasEq) {
+          let patternState = stateAfterFirstWS;
+          const params: string[] = [];
+          for (;;) {
+            const [nextCh] = peek(patternState);
+            if (nextCh === "=") {
+              patternState = matchCh(patternState, "=");
+              break;
+            }
+            const [param, stateAfterParam] = parseIdentifier(patternState);
+            params.push(param);
+            patternState = skipWhitespace(stateAfterParam);
+          }
+
+          currentState = skipWhitespace(patternState);
+          const [exprLit, exprTerm, stateAfterExpr] = parseSystemFTerm(currentState);
+          currentState = stateAfterExpr;
+
+          if (params.length === 0 && firstWord[0] === firstWord[0]!.toLowerCase()) {
+            steps.push({ kind: "let", name: firstWord, exprLit, expr: exprTerm });
+          } else {
+            steps.push({ kind: "match", constructorName: firstWord, params, exprLit, expr: exprTerm });
+          }
+        } else {
+          const [exprLit, exprTerm, stateAfterExpr] = parseSystemFTerm(currentState);
+          currentState = stateAfterExpr;
+          steps.push({ kind: "expr", exprLit, expr: exprTerm });
+        }
+      }
+    }
+  }
+
+  if (steps.length === 0) {
+    throw new ParseError(
+      withParserState(currentState, "do block requires at least one step"),
+    );
+  }
+
+  let errorType: BaseType | undefined;
+  let okType: BaseType | undefined;
+  if (returnType.kind === "type-app" && returnType.fn.kind === "type-app") {
+    errorType = returnType.fn.arg;
+    okType = returnType.arg;
+  } else {
+    errorType = mkTypeVariable("List U8");
+    okType = returnType;
+  }
+
+  const u8Type = mkTypeVariable("U8");
+
+  const makeErrTerm = (err: SystemFTerm): SystemFTerm => {
+    return createSystemFApplication(
+      mkSystemFTypeApp(mkSystemFTypeApp(mkSystemFVar("Err"), errorType!), okType!),
+      err,
+    );
+  };
+
+  const makeOkTerm = (val: SystemFTerm): SystemFTerm => {
+    return createSystemFApplication(
+      mkSystemFTypeApp(mkSystemFTypeApp(mkSystemFVar("Ok"), errorType!), okType!),
+      val,
+    );
+  };
+
+  const lastStep = steps[steps.length - 1]!;
+  let currentTerm: SystemFTerm;
+
+  if (lastStep.kind === "return") {
+    currentTerm = lastStep.val;
+  } else if (lastStep.kind === "expr") {
+    currentTerm = lastStep.expr;
+  } else {
+    throw new ParseError(
+      withParserState(currentState, "do block final step must be an expression or a return statement"),
+    );
+  }
+
+  for (let i = steps.length - 2; i >= 0; i--) {
+    const step = steps[i]!;
+    if (step.kind === "bind") {
+      currentTerm = {
+        kind: "systemF-match",
+        scrutinee: step.expr,
+        returnType,
+        arms: [
+          {
+            constructorName: "Err",
+            params: ["e"],
+            body: makeErrTerm(mkSystemFVar("e")),
+          },
+          {
+            constructorName: "Ok",
+            params: [step.name],
+            body: currentTerm,
+          },
+        ],
+      };
+    } else if (step.kind === "match") {
+      currentTerm = {
+        kind: "systemF-match",
+        scrutinee: step.expr,
+        returnType,
+        arms: [
+          {
+            constructorName: step.constructorName,
+            params: step.params,
+            body: currentTerm,
+          },
+        ],
+      };
+    } else if (step.kind === "let") {
+      currentTerm = {
+        kind: "systemF-let",
+        name: step.name,
+        value: step.expr,
+        body: currentTerm,
+      };
+    } else if (step.kind === "assert") {
+      const ifVar = mkSystemFVar("if");
+      const ifTyped = mkSystemFTypeApp(ifVar, returnType);
+      const thenBranch = mkSystemFAbs("u", u8Type, currentTerm);
+      const elseBranch = mkSystemFAbs("u", u8Type, makeErrTerm(step.error));
+
+      currentTerm = createSystemFApplication(
+        createSystemFApplication(
+          createSystemFApplication(ifTyped, step.cond),
+          thenBranch,
+        ),
+        elseBranch,
+      );
+    } else {
+      const exprValue = step.kind === "return" ? step.val : step.expr;
+      currentTerm = {
+        kind: "systemF-let",
+        name: "_",
+        value: exprValue,
+        body: currentTerm,
+      };
+    }
+  }
+
+  const stepLits = steps.map(step => {
+    if (step.kind === "bind") return `${step.name} <- ${step.exprLit}`;
+    if (step.kind === "let") return `${step.name} = ${step.exprLit}`;
+    if (step.kind === "match") return `${step.constructorName} ${step.params.join(" ")} = ${step.exprLit}`;
+    if (step.kind === "assert") return `assert ${step.condLit} else ${step.errorLit}`;
+    if (step.kind === "return") return `return ${step.valLit}`;
+    return step.exprLit;
+  }).join("\n      ");
+
+  const literalStr = `do [${returnTypeLit}] {
+      ${stepLits}
+    }`;
+
+  return [literalStr, currentTerm, currentState];
 }
 
 const ASCII_PRINTABLE_MIN = 32;
@@ -898,6 +1219,9 @@ function parseAtomicSystemFTerm(
     }
     if (varLit === "cond") {
       return parseCondExpression(stateAfterVar);
+    }
+    if (varLit === "do") {
+      return parseDoExpression(stateAfterVar);
     }
     return [varLit, { kind: "systemF-var", name: varLit }, stateAfterVar];
   } else {

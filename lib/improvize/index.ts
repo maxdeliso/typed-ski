@@ -1436,6 +1436,293 @@ function matchIfExpression(
   };
 }
 
+function splitArms(tokens: readonly Token[]): Token[][] {
+  const arms: Token[][] = [];
+  let currentArm: Token[] = [];
+  let depthP = 0, depthB = 0, depthBr = 0;
+  for (const t of tokens) {
+    if (t.text === "(") depthP++;
+    else if (t.text === ")") depthP--;
+    else if (t.text === "[") depthB++;
+    else if (t.text === "]") depthB--;
+    else if (t.text === "{") depthBr++;
+    else if (t.text === "}") depthBr--;
+
+    if (depthP === 0 && depthB === 0 && depthBr === 0 && t.text === "|") {
+      if (currentArm.length > 0) {
+        arms.push(currentArm);
+        currentArm = [];
+      }
+    } else {
+      currentArm.push(t);
+    }
+  }
+  if (currentArm.length > 0) {
+    arms.push(currentArm);
+  }
+  return arms;
+}
+
+function parseMatchHeader(
+  tokens: readonly Token[],
+  index: number,
+): {
+  scrutineeText: string;
+  typeText: string;
+  armsTokens: Token[];
+  endIndex: number;
+} | undefined {
+  const token = tokens[index];
+  if (token?.text !== "match") return undefined;
+
+  let cursor = index + 1;
+  let lbracketIdx = -1;
+  while (cursor < tokens.length) {
+    if (tokens[cursor]!.text === "[") {
+      lbracketIdx = cursor;
+      break;
+    }
+    cursor++;
+  }
+  if (lbracketIdx === -1) return undefined;
+
+  const scrutineeTokens = tokens.slice(index + 1, lbracketIdx);
+
+  let depth = 1;
+  cursor = lbracketIdx + 1;
+  const typeTokens: Token[] = [];
+  while (cursor < tokens.length) {
+    const t = tokens[cursor]!;
+    if (t.text === "[") depth++;
+    else if (t.text === "]") depth--;
+    if (depth === 0) break;
+    typeTokens.push(t);
+    cursor++;
+  }
+  if (cursor >= tokens.length) return undefined;
+  const rbracketIdx = cursor;
+
+  const braceMatch = nextSyntaxWithIndex(tokens, rbracketIdx);
+  if (braceMatch?.token.text !== "{") return undefined;
+
+  let braceDepth = 1;
+  cursor = braceMatch.index + 1;
+  const armsTokens: Token[] = [];
+  while (cursor < tokens.length) {
+    const t = tokens[cursor]!;
+    if (t.text === "{") braceDepth++;
+    else if (t.text === "}") braceDepth--;
+    if (braceDepth === 0) break;
+    armsTokens.push(t);
+    cursor++;
+  }
+  if (braceDepth !== 0) return undefined;
+
+  return {
+    scrutineeText: formatInline(scrutineeTokens),
+    typeText: formatInline(typeTokens),
+    armsTokens,
+    endIndex: cursor,
+  };
+}
+
+function matchMonadicBind(
+  tokens: readonly Token[],
+  index: number,
+): {
+  scrutinee: string;
+  typeText: string;
+  varName: string;
+  body: Token[];
+  endIndex: number;
+} | undefined {
+  const header = parseMatchHeader(tokens, index);
+  if (!header) return undefined;
+
+  const arms = splitArms(header.armsTokens);
+  if (arms.length !== 2) return undefined;
+
+  let errArm: Token[] | undefined;
+  let okArm: Token[] | undefined;
+
+  for (const arm of arms) {
+    const first = arm.find(t => !isComment(t));
+    if (first?.text === "Err") {
+      errArm = arm;
+    } else if (first?.text === "Ok") {
+      okArm = arm;
+    }
+  }
+
+  if (!errArm || !okArm) return undefined;
+
+  const errClean = errArm.filter(t => !isComment(t));
+  if (errClean.length < 8) return undefined;
+  if (errClean[0]!.text !== "Err" || errClean[2]!.text !== "=>" || errClean[3]!.text !== "Err") return undefined;
+  const eVar = errClean[1]!.text;
+  if (errClean[errClean.length - 1]!.text !== eVar) return undefined;
+
+  const okClean = okArm.filter(t => !isComment(t));
+  if (okClean.length < 4) return undefined;
+  if (okClean[0]!.text !== "Ok" || okClean[2]!.text !== "=>") return undefined;
+  const varName = okClean[1]!.text;
+
+  const arrowIdx = okArm.findIndex(t => t.text === "=>");
+  const body = okArm.slice(arrowIdx + 1);
+
+  return {
+    scrutinee: header.scrutineeText,
+    typeText: header.typeText,
+    varName,
+    body,
+    endIndex: header.endIndex,
+  };
+}
+
+function matchDestructuringMatch(
+  tokens: readonly Token[],
+  index: number,
+): {
+  scrutinee: string;
+  typeText: string;
+  ctorName: string;
+  params: string[];
+  body: Token[];
+  endIndex: number;
+} | undefined {
+  const header = parseMatchHeader(tokens, index);
+  if (!header) return undefined;
+
+  const arms = splitArms(header.armsTokens);
+  if (arms.length !== 1) return undefined;
+
+  const arm = arms[0]!;
+  const arrowIdx = arm.findIndex(t => t.text === "=>");
+  if (arrowIdx === -1) return undefined;
+
+  const patternTokens = arm.slice(0, arrowIdx).filter(t => !isComment(t));
+  if (patternTokens.length === 0) return undefined;
+
+  const ctorName = patternTokens[0]!.text;
+  const params = patternTokens.slice(1).map(t => t.text);
+  const body = arm.slice(arrowIdx + 1);
+
+  return {
+    scrutinee: header.scrutineeText,
+    typeText: header.typeText,
+    ctorName,
+    params,
+    body,
+    endIndex: header.endIndex,
+  };
+}
+
+function matchErrTermTokens(
+  tokens: readonly Token[],
+): { errText: string } | undefined {
+  const clean = tokens.filter(t => !isComment(t));
+  if (clean.length < 6) return undefined;
+  if (clean[0]!.text !== "Err") return undefined;
+  let rbracketCount = 0;
+  let idx = 0;
+  for (let i = 0; i < clean.length; i++) {
+    if (clean[i]!.text === "]") {
+      rbracketCount++;
+      if (rbracketCount === 2) {
+        idx = i + 1;
+        break;
+      }
+    }
+  }
+  if (idx === 0 || idx >= clean.length) return undefined;
+  const errTokens = clean.slice(idx);
+  return {
+    errText: formatInline(errTokens),
+  };
+}
+
+function collectDoSteps(
+  tokens: readonly Token[],
+  returnType: string,
+): { steps: string[]; isReturn: boolean } | undefined {
+  const stripped = stripOuterParens(tokens);
+
+  const bindMatch = matchMonadicBind(stripped, 0);
+  if (bindMatch && bindMatch.typeText === returnType) {
+    const sub = collectDoSteps(bindMatch.body, returnType);
+    if (sub) {
+      return {
+        steps: [`${bindMatch.varName} <- ${bindMatch.scrutinee}`, ...sub.steps],
+        isReturn: sub.isReturn,
+      };
+    }
+  }
+
+  const destructMatch = matchDestructuringMatch(stripped, 0);
+  if (destructMatch && destructMatch.typeText === returnType) {
+    const sub = collectDoSteps(destructMatch.body, returnType);
+    if (sub) {
+      const patternText = [destructMatch.ctorName, ...destructMatch.params].join(" ");
+      return {
+        steps: [`${patternText} = ${destructMatch.scrutinee}`, ...sub.steps],
+        isReturn: sub.isReturn,
+      };
+    }
+  }
+
+  const ifMatch = matchIfExpression(stripped, 0);
+  if (ifMatch && ifMatch.typeText === returnType) {
+    const errMatch = matchErrTermTokens(ifMatch.elseBody);
+    if (errMatch) {
+      const sub = collectDoSteps(ifMatch.thenBody, returnType);
+      if (sub) {
+        return {
+          steps: [`assert ${ifMatch.condText} else ${errMatch.errText}`, ...sub.steps],
+          isReturn: sub.isReturn,
+        };
+      }
+    }
+  }
+
+  const text = formatInline(stripped);
+  if (text.startsWith("Ok ")) {
+    return {
+      steps: [`return ${text}`],
+      isReturn: true,
+    };
+  }
+
+  if (stripped.filter(t => !isComment(t)).length === 0) return undefined;
+
+  return {
+    steps: [text],
+    isReturn: false,
+  };
+}
+
+function parseDoChain(
+  tokens: readonly Token[],
+  index: number,
+): {
+  typeText: string;
+  steps: string[];
+  endIndex: number;
+} | undefined {
+  const header = parseMatchHeader(tokens, index);
+  if (!header) return undefined;
+
+  const collected = collectDoSteps(tokens.slice(index), header.typeText);
+  if (!collected) return undefined;
+
+  if (collected.steps.length < 2) return undefined;
+
+  return {
+    typeText: header.typeText,
+    steps: collected.steps,
+    endIndex: header.endIndex,
+  };
+}
+
 function parseCondChain(
   tokens: readonly Token[],
   index: number,
@@ -1649,6 +1936,29 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
         i = pairTypeMatch.endIndex;
         continue;
       }
+    }
+
+    // 6a. Degenerate match chain simplification to do
+    const doChainMatch = parseDoChain(tokens, i);
+    if (doChainMatch) {
+      const stepLines = doChainMatch.steps.join("\n      ");
+      const replacement = `do [${doChainMatch.typeText}] {
+      ${stepLines}
+    }`;
+      diagnostics.push(
+        diagnostic(
+          "trip-degenerate-do",
+          `Use do [${doChainMatch.typeText}] {...} to flatten nested monadic match chains`,
+          tokens[i]!,
+          {
+            start: tokens[i]!.start,
+            end: tokens[doChainMatch.endIndex]!.end,
+            replacement,
+          },
+        ),
+      );
+      i = doChainMatch.endIndex;
+      continue;
     }
 
     // 6. Degenerate if chain simplification to cond
@@ -2007,6 +2317,7 @@ const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
   "trip-u8-literal",
   "trip-formatting-deviation",
   "trip-degenerate-if",
+  "trip-degenerate-do",
 ]);
 
 /**

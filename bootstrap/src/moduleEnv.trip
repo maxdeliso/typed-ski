@@ -392,17 +392,11 @@ poly parseModuleSource =
                 | MkParseError msg => Err [List U8] [ModuleInfo] msg
               }
             | Ok decls =>
-              match (declaredModule decls) [Result (List U8) ModuleInfo] {
-                | Err e => Err [List U8] [ModuleInfo] e
-                | Ok declared =>
-                  if [Result (List U8) ModuleInfo] (eqListU8 declared bundleName)
-                    (
-                      \u : U8 => Ok [List U8] [ModuleInfo] (MkModuleInfo bundleName decls)
-                    )
-                    (
-                      \u : U8 => Err [List U8] [ModuleInfo] "source module mismatch"
-                    )
-              }
+              do [Result (List U8) ModuleInfo] {
+      declared <- (declaredModule decls)
+      assert (eqListU8 declared bundleName) else "source module mismatch"
+      return Ok [List U8] [ModuleInfo] (MkModuleInfo bundleName decls)
+    }
           }
       }
 
@@ -1315,7 +1309,7 @@ poly emitModuleImports =
             (reverse [ImportInfo] imports)
             mods
             exports
-            ("")
+            ""
 
 poly rec emitModuleExportsAcc =
   \moduleName : List U8 =>
@@ -1376,7 +1370,7 @@ poly emitModuleExports =
             (reverse [ExportInfo] exports)
             defs
             ctors
-            ("")
+            ""
 
 poly rec emitModuleDefsAcc =
   \moduleName : List U8 =>
@@ -1412,7 +1406,7 @@ poly rec emitModuleDefsAcc =
 poly emitModuleDefs =
   \moduleName : List U8 =>
     \defs : List DefinitionInfo =>
-      emitModuleDefsAcc moduleName (reverse [DefinitionInfo] defs) ("")
+      emitModuleDefsAcc moduleName (reverse [DefinitionInfo] defs) ""
 
 poly rec emitModuleOpaquesAcc =
   \moduleName : List U8 =>
@@ -1443,7 +1437,7 @@ poly rec emitModuleOpaquesAcc =
 poly emitModuleOpaques =
   \moduleName : List U8 =>
     \opaques : List OpaqueInfo =>
-      emitModuleOpaquesAcc moduleName (reverse [OpaqueInfo] opaques) ("")
+      emitModuleOpaquesAcc moduleName (reverse [OpaqueInfo] opaques) ""
 
 poly rec emitModuleNativesAcc =
   \moduleName : List U8 =>
@@ -1474,7 +1468,7 @@ poly rec emitModuleNativesAcc =
 poly emitModuleNatives =
   \moduleName : List U8 =>
     \natives : List NativeInfo =>
-      emitModuleNativesAcc moduleName (reverse [NativeInfo] natives) ("")
+      emitModuleNativesAcc moduleName (reverse [NativeInfo] natives) ""
 
 poly rec emitModulesAcc =
   \mods : List ModuleInfo =>
@@ -1533,7 +1527,7 @@ poly emitModules =
                   ctors
                   opaques
                   natives
-                  ("")
+                  ""
 
 poly rec moduleImportsAcc =
   \moduleName : List U8 =>
@@ -1719,7 +1713,7 @@ poly rec emitDataTypesAcc =
         )
 
 poly emitDataTypes =
-  \dataTypes : List DataTypeInfo => emitDataTypesAcc (reverse [DataTypeInfo] dataTypes) ("")
+  \dataTypes : List DataTypeInfo => emitDataTypesAcc (reverse [DataTypeInfo] dataTypes) ""
 
 poly emitConstructor =
   \info : ConstructorMeta =>
@@ -1752,7 +1746,7 @@ poly rec emitConstructorsAcc =
         )
 
 poly emitConstructors =
-  \ctors : List ConstructorMeta => emitConstructorsAcc (reverse [ConstructorMeta] ctors) ("")
+  \ctors : List ConstructorMeta => emitConstructorsAcc (reverse [ConstructorMeta] ctors) ""
 
 poly emitAlias =
   \info : ConstructorAliasInfo =>
@@ -1778,7 +1772,7 @@ poly rec emitAliasesAcc =
         )
 
 poly emitAliases =
-  \aliases : List ConstructorAliasInfo => emitAliasesAcc (reverse [ConstructorAliasInfo] aliases) ("")
+  \aliases : List ConstructorAliasInfo => emitAliasesAcc (reverse [ConstructorAliasInfo] aliases) ""
 
 poly emitPrimitive =
   \info : PrimitiveInfo =>
@@ -1824,7 +1818,7 @@ poly rec emitPrimitivesAcc =
         )
 
 poly emitPrimitives =
-  \prims : List PrimitiveInfo => emitPrimitivesAcc (reverse [PrimitiveInfo] prims) ("")
+  \prims : List PrimitiveInfo => emitPrimitivesAcc (reverse [PrimitiveInfo] prims) ""
 
 poly rec insertDataEnvCtors =
   \ctors : List ConstructorMeta =>
@@ -1948,12 +1942,10 @@ poly emitModuleEnvSummary =
 
 poly emitBundleModuleEnvSummary =
   \bundle : BundleSummary =>
-    match bundle [Result (List U8) (List U8)] {
-      | MkBundleSummary entry target wrapper modsCountDigits mods =>
-        match (buildModuleEnv mods) [Result (List U8) (List U8)] {
-          | Err e => Err [List U8] [List U8] e
-          | Ok env => Ok [List U8] [List U8] (emitModuleEnvSummary env)
-        }
+    do [Result (List U8) (List U8)] {
+      MkBundleSummary entry target wrapper modsCountDigits mods = bundle
+      env <- (buildModuleEnv mods)
+      return Ok [List U8] [List U8] (emitModuleEnvSummary env)
     }
 
 poly rec writeAll =

@@ -210,14 +210,10 @@ poly rec collectWriteBytes =
                         | E_Nat digits =>
                           match cont [Result (List U8) (List U8)] {
                             | E_Lam name body =>
-                              match (collectWriteBytes body) [Result (List U8) (List U8)] {
-                                | Err e => Err [List U8] [List U8] e
-                                | Ok rest =>
-                                  Ok
-                                    [List U8]
-                                    [List U8]
-                                    (cons [U8] (parseByteDigits digits) rest)
-                              }
+                              do [Result (List U8) (List U8)] {
+      rest <- (collectWriteBytes body)
+      return Ok [List U8] [List U8] (cons [U8] (parseByteDigits digits) rest)
+    }
                             | E_Var name =>
                               Ok
                                 [List U8]
@@ -356,21 +352,12 @@ poly rec parseModuleRecords =
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord =>
-            match h [Result (List U8) (List ParsedModule)] {
-              | MkModuleRecord name lengthDigits source =>
-                match (parseModuleSource name source) [Result (List U8) (List ParsedModule)] {
-                  | Err e => Err [List U8] [List ParsedModule] e
-                  | Ok parsed =>
-                    match (parseModuleRecords t) [Result (List U8) (List ParsedModule)] {
-                      | Err e => Err [List U8] [List ParsedModule] e
-                      | Ok rest =>
-                        Ok
-                          [List U8]
-                          [List ParsedModule]
-                          (cons [ParsedModule] parsed rest)
-                    }
-                }
-            }
+            do [Result (List U8) (List ParsedModule)] {
+      MkModuleRecord name lengthDigits source = h
+      parsed <- (parseModuleSource name source)
+      rest <- (parseModuleRecords t)
+      return Ok [List U8] [List ParsedModule] (cons [ParsedModule] parsed rest)
+    }
       )
 
 poly rec findParsedModule =
@@ -602,18 +589,10 @@ poly emitWriteBody =
     \name : List U8 =>
       \body : Expr =>
         \state : EmitState =>
-          match (collectWriteBytes body) [Result (List U8) EmitState] {
-            | Err e => Err [List U8] [EmitState] e
-            | Ok bytes =>
-              Ok
-                [List U8]
-                [EmitState]
-                (
-                  appendStateText
-                    state
-                    (emitWriteFunction moduleName name bytes)
-                )
-          }
+          do [Result (List U8) EmitState] {
+      bytes <- (collectWriteBytes body)
+      return Ok [List U8] [EmitState] (appendStateText state (emitWriteFunction moduleName name bytes))
+    }
 
 poly emitFunctionBody =
   \mods : List ParsedModule =>
@@ -633,31 +612,12 @@ poly emitFunctionBody =
                         (emitLiteralFunction moduleName name digits)
                     )
                 | E_Var callee =>
-                  match (resolveCallee moduleName decls callee) [Result (List U8) EmitState] {
-                    | Err e => Err [List U8] [EmitState] e
-                    | Ok qualified =>
-                      match qualified [Result (List U8) EmitState] {
-                        | MkQualifiedName calleeModule calleeName =>
-                          match (emitRequiredFunction mods calleeModule calleeName state) [Result (List U8) EmitState] {
-                            | Err e => Err [List U8] [EmitState] e
-                            | Ok depState =>
-                              Ok
-                                [List U8]
-                                [EmitState]
-                                (
-                                  appendStateText
-                                    depState
-                                    (
-                                      emitCallFunction
-                                        moduleName
-                                        name
-                                        calleeModule
-                                        calleeName
-                                    )
-                                )
-                          }
-                      }
-                  }
+                  do [Result (List U8) EmitState] {
+      qualified <- (resolveCallee moduleName decls callee)
+      MkQualifiedName calleeModule calleeName = qualified
+      depState <- (emitRequiredFunction mods calleeModule calleeName state)
+      return Ok [List U8] [EmitState] (appendStateText depState (emitCallFunction moduleName name calleeModule calleeName))
+    }
                 | E_App f x => emitWriteBody moduleName name body state
                 | E_Lam arg inner =>
                   Err [List U8] [EmitState] "Unsupported LLVM expression"
@@ -711,11 +671,10 @@ poly compileSourceToLlvm =
             match (findMainBody decls) [Result (List U8) (List U8)] {
               | None => Err [List U8] [List U8] "Missing main"
               | Some body =>
-                match (collectWriteBytes body) [Result (List U8) (List U8)] {
-                  | Err e => Err [List U8] [List U8] e
-                  | Ok bytes =>
-                    Ok [List U8] [List U8] (emitLlvmForWriteBytes bytes)
-                }
+                do [Result (List U8) (List U8)] {
+      bytes <- (collectWriteBytes body)
+      return Ok [List U8] [List U8] (emitLlvmForWriteBytes bytes)
+    }
             }
         }
     }

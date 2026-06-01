@@ -300,7 +300,7 @@ poly rec span =
           [A]
           [((List A), (List A))]
           l
-          ({List A, List A | (nil [A]), (nil [A])})
+          ({List A, List A | ({A |}), ({A |})})
           (
             \h : A =>
               \t : List A =>
@@ -313,7 +313,7 @@ poly rec span =
                         (snd [List A] [List A] res)
                       }
                   )
-                  (\u : U8 => {List A, List A | (nil [A]), l})
+                  (\u : U8 => {List A, List A | ({A |}), l})
           )
 
 poly rec reverseAcc =

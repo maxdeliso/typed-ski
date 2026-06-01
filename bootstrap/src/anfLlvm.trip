@@ -134,19 +134,16 @@ poly rec emitArgsString =
           [AnfExpr]
           [Result (List U8) (List U8)]
           args
-          (Ok [List U8] [List U8] (""))
+          (Ok [List U8] [List U8] "")
           (
             \h : AnfExpr =>
               \t : List AnfExpr =>
-                match (atomOperand env h) [Result (List U8) (List U8)] {
-                  | Err e => Err [List U8] [List U8] e
-                  | Ok op =>
-                    let piece = if [List U8] leading (\u : U8 => append [U8] "i8 " op) (\u : U8 => append [U8] ", i8 " op) in
-                    match (emitArgsString env t false) [Result (List U8) (List U8)] {
-                      | Err e => Err [List U8] [List U8] e
-                      | Ok rest => Ok [List U8] [List U8] (append [U8] piece rest)
-                    }
-                }
+                do [Result (List U8) (List U8)] {
+      op <- (atomOperand env h)
+      piece = if [List U8] leading (\u : U8 => append [U8] "i8 " op) (\u : U8 => append [U8] ", i8 " op)
+      rest <- (emitArgsString env t false)
+      return Ok [List U8] [List U8] (append [U8] piece rest)
+    }
           )
 
 poly rec emitExpr =
@@ -167,17 +164,13 @@ poly rec emitExpr =
             | AE_Lam n b =>
               Err [List U8] [EmitRes] "Unsupported expression: lambda"
             | AE_Call f args =>
-              match (emitArgsString env args true) [Result (List U8) EmitRes] {
-                | Err e => Err [List U8] [EmitRes] e
-                | Ok argStr =>
-                  let dest = append [U8] "%__ll" (binToDigits counter) in
-                  let counter1 = incBin counter in
-                  let line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n"))))) in
-                  Ok
-                    [List U8]
-                    [EmitRes]
-                    (MkEmitRes counter1 (cons [List U8] line instrs) dest)
-              }
+              do [Result (List U8) EmitRes] {
+      argStr <- (emitArgsString env args true)
+      dest = append [U8] "%__ll" (binToDigits counter)
+      counter1 = incBin counter
+      line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n")))))
+      return Ok [List U8] [EmitRes] (MkEmitRes counter1 (cons [List U8] line instrs) dest)
+    }
             | AE_Con tag total arity args =>
               Err [List U8] [EmitRes] "Unsupported expression: constructor"
             | AE_Case scrut arms =>
@@ -209,7 +202,7 @@ poly rec paramDeclsString =
         [List U8]
         [List U8]
         params
-        ("")
+        ""
         (
           \h : List U8 =>
             \t : List (List U8) =>
@@ -223,7 +216,7 @@ poly rec paramEnv =
       [List U8]
       [List (((List U8), (List U8)))]
       params
-      ({Pair (List U8) (List U8) |})
+      ({((List U8), (List U8)) |})
       (
         \h : List U8 =>
           \t : List (List U8) =>
@@ -245,55 +238,12 @@ poly rec joinLines =
 
 poly emitFunc =
   \fn : AnfFunc =>
-    match fn [Result (List U8) (List U8)] {
-      | MkAnfFunc name params body =>
-        match (emitExpr (paramEnv params) BZ ({List U8 |}) body) [Result (List U8) (List U8)] {
-          | Err e => Err [List U8] [List U8] e
-          | Ok res =>
-            match res [Result (List U8) (List U8)] {
-              | MkEmitRes c instrs op =>
-                let instrText = joinLines ("") instrs in
-                Ok
-                  [List U8]
-                  [List U8]
-                  (
-                    append
-                      [U8]
-                      "define i8 @"
-                      (
-                        append
-                          [U8]
-                          name
-                          (
-                            append
-                              [U8]
-                              "("
-                              (
-                                append
-                                  [U8]
-                                  (paramDeclsString params true)
-                                  (
-                                    append
-                                      [U8]
-                                      ") {\nentry:\n"
-                                      (
-                                        append
-                                          [U8]
-                                          instrText
-                                          (
-                                            append
-                                              [U8]
-                                              "  ret i8 "
-                                              (append [U8] op "\n}\n\n")
-                                          )
-                                      )
-                                  )
-                              )
-                          )
-                      )
-                  )
-            }
-        }
+    do [Result (List U8) (List U8)] {
+      MkAnfFunc name params body = fn
+      res <- (emitExpr (paramEnv params) BZ ({List U8 |}) body)
+      MkEmitRes c instrs op = res
+      instrText = joinLines ("") instrs
+      return Ok [List U8] [List U8] (append [U8] "define i8 @" (append [U8] name (append [U8] "(" (append [U8] (paramDeclsString params true) (append [U8] ") {\nentry:\n" (append [U8] instrText (append [U8] "  ret i8 " (append [U8] op "\n}\n\n"))))))))
     }
 
 poly rec emitFuncs =
@@ -302,18 +252,15 @@ poly rec emitFuncs =
       [AnfFunc]
       [Result (List U8) (List U8)]
       fns
-      (Ok [List U8] [List U8] (""))
+      (Ok [List U8] [List U8] "")
       (
         \h : AnfFunc =>
           \t : List AnfFunc =>
-            match (emitFunc h) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok block =>
-                match (emitFuncs t) [Result (List U8) (List U8)] {
-                  | Err e => Err [List U8] [List U8] e
-                  | Ok rest => Ok [List U8] [List U8] (append [U8] block rest)
-                }
-            }
+            do [Result (List U8) (List U8)] {
+      block <- (emitFunc h)
+      rest <- (emitFuncs t)
+      return Ok [List U8] [List U8] (append [U8] block rest)
+    }
       )
 
 poly emitProgram =

@@ -13,7 +13,6 @@ import {
   formatTripSource,
   lintTripSource,
   type TripLintDiagnostic,
-  getTrainedLMSync,
 } from "../lib/improvize/index.ts";
 import { VERSION } from "../lib/shared/version.ts";
 
@@ -204,17 +203,9 @@ function formatDiagnostic(file: string, diag: TripLintDiagnostic): string {
 }
 
 async function runLint(paths: string[], fix: boolean, verbose: boolean) {
-  const startLM = Date.now();
-  const lm = getTrainedLMSync();
-  if (verbose) {
-    console.log(
-      `[init] Trained Kneser-Ney Language Model in ${Date.now() - startLM}ms`,
-    );
-  }
-
   if (paths.length === 0) {
     const input = await readStdin();
-    const result = lintTripSource(input, { fix, lm, verbose });
+    const result = lintTripSource(input, { fix, verbose });
     for (const diag of result.diagnostics) {
       console.log(formatDiagnostic("<stdin>", diag));
     }
@@ -222,7 +213,6 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
       process.stdout.write(result.fixed);
       const afterFix = lintTripSource(result.fixed, {
         fix: false,
-        lm,
         verbose,
       });
       return afterFix.diagnostics.length > 0 ? 1 : 0;
@@ -241,7 +231,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
       const timeRead = Date.now() - startFile;
 
       const startLint = Date.now();
-      const result = lintTripSource(input, { fix, lm, verbose });
+      const result = lintTripSource(input, { fix, verbose });
       const timeLint = Date.now() - startLint;
 
       if (verbose) {
@@ -256,7 +246,6 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
         const startSecond = Date.now();
         afterFixResult = lintTripSource(result.changed ? result.fixed : input, {
           fix: false,
-          lm,
           verbose,
         });
         timeVerify = Date.now() - startSecond;

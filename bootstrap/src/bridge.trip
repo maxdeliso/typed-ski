@@ -307,7 +307,7 @@ poly rec trimLeadingZeros =
       [U8]
       [List U8]
       digits
-      ("")
+      ""
       (
         \h : U8 =>
           \t : List U8 =>
@@ -390,7 +390,7 @@ poly rec div2DigitsAcc =
             )
 
 poly div2Digits =
-  \digits : List U8 => div2DigitsAcc digits #u8(0) false ("")
+  \digits : List U8 => div2DigitsAcc digits #u8(0) false ""
 
 poly rec collectBits =
   \digits : List U8 =>
@@ -448,7 +448,7 @@ poly rec buildBinLiteralCoreAcc =
         )
 
 poly buildBinLiteralCore =
-  \digits : List U8 => buildBinLiteralCoreAcc (collectBits digits ("")) binZeroCore
+  \digits : List U8 => buildBinLiteralCoreAcc (collectBits digits "") binZeroCore
 
 poly natToCore =
   \digits : List U8 =>
@@ -516,7 +516,7 @@ poly rec findArmByName =
         [(Pattern, Expr)]
         [(Pattern, Expr)]
         arms
-        ({Pattern, Expr | (P_Ctor name (nil [List U8])), (E_Var "MISSING_ARM")})
+        ({Pattern, Expr | (P_Ctor name ({List U8 |})), (E_Var "MISSING_ARM")})
         (
           \h : (Pattern, Expr) =>
             \t : List ((Pattern, Expr)) =>
@@ -535,7 +535,7 @@ poly rec sortArms =
         [List U8]
         [List ((Pattern, Expr))]
         expectedNames
-        ({Pair Pattern Expr |})
+        ({(Pattern, Expr) |})
         (
           \name : List U8 =>
             \tNames : List (List U8) =>
@@ -576,25 +576,14 @@ poly rec elaborateArms =
           (
             \h : (Pattern, Expr) =>
               \t : List ((Pattern, Expr)) =>
-                match h [Result (List U8) (List Core)] {
-                  | MkPair pat body =>
-                    match pat [Result (List U8) (List Core)] {
-                      | P_Ctor name args =>
-                        match (elaborate dEnv body) [Result (List U8) (List Core)] {
-                          | Err e => Err [List U8] [List Core] e
-                          | Ok coreBody =>
-                            let wrapped = wrapInLambdas args coreBody in
-                            match (elaborateArms elaborate dEnv t) [Result (List U8) (List Core)] {
-                              | Err e => Err [List U8] [List Core] e
-                              | Ok rest =>
-                                Ok
-                                  [List U8]
-                                  [List Core]
-                                  (cons [Core] wrapped rest)
-                            }
-                        }
-                    }
-                }
+                do [Result (List U8) (List Core)] {
+      MkPair pat body = h
+      P_Ctor name args = pat
+      coreBody <- (elaborate dEnv body)
+      wrapped = wrapInLambdas args coreBody
+      rest <- (elaborateArms elaborate dEnv t)
+      return Ok [List U8] [List Core] (cons [Core] wrapped rest)
+    }
           )
 
 poly elaborateMatchWith =
@@ -629,29 +618,22 @@ poly rec elaborateExpr =
       match expr [Result (List U8) Core] {
         | E_Var name => Ok [List U8] [Core] (resolveCoreName dEnv name)
         | E_App l r =>
-          match (elaborateExpr dEnv l) [Result (List U8) Core] {
-            | Err e => Err [List U8] [Core] e
-            | Ok left =>
-              match (elaborateExpr dEnv r) [Result (List U8) Core] {
-                | Err e => Err [List U8] [Core] e
-                | Ok right => Ok [List U8] [Core] (Cr_App left right)
-              }
-          }
+          do [Result (List U8) Core] {
+      left <- (elaborateExpr dEnv l)
+      right <- (elaborateExpr dEnv r)
+      return Ok [List U8] [Core] (Cr_App left right)
+    }
         | E_Lam name body =>
-          match (elaborateExpr dEnv body) [Result (List U8) Core] {
-            | Err e => Err [List U8] [Core] e
-            | Ok coreBody => Ok [List U8] [Core] (Cr_Lam name coreBody)
-          }
+          do [Result (List U8) Core] {
+      coreBody <- (elaborateExpr dEnv body)
+      return Ok [List U8] [Core] (Cr_Lam name coreBody)
+    }
         | E_Let name val body =>
-          match (elaborateExpr dEnv val) [Result (List U8) Core] {
-            | Err e => Err [List U8] [Core] e
-            | Ok coreVal =>
-              match (elaborateExpr dEnv body) [Result (List U8) Core] {
-                | Err e => Err [List U8] [Core] e
-                | Ok coreBody =>
-                  Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
-              }
-          }
+          do [Result (List U8) Core] {
+      coreVal <- (elaborateExpr dEnv val)
+      coreBody <- (elaborateExpr dEnv body)
+      return Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
+    }
         | E_Nat digits => natToCore digits
         | E_Match scrut arms => elaborateMatchWith elaborateExpr dEnv scrut arms
       }
@@ -800,9 +782,10 @@ poly rec elaborateProgramRec =
         [Result (List U8) (Avl (List U8) Lower)]
         decls
         (
-          match state [Result (List U8) (Avl (List U8) Lower)] {
-            | MkState globals dEnv => Ok [List U8] [Avl (List U8) Lower] globals
-          }
+          do [Result (List U8) (Avl (List U8) Lower)] {
+      MkState globals dEnv = state
+      return Ok [List U8] [Avl (List U8) Lower] globals
+    }
         )
         (
           \h : Decl =>
@@ -826,7 +809,7 @@ poly rec elaborateToCoreRec =
         [Decl]
         [Result (List U8) (List (((List U8), Core)))]
         decls
-        (Ok [List U8] [List (((List U8), Core))] ({Pair (List U8) Core |}))
+        (Ok [List U8] [List (((List U8), Core))] ({((List U8), Core) |}))
         (
           \h : Decl =>
             \t : List Decl =>

@@ -103,7 +103,7 @@ import Prelude ltListU8
 import Prelude digitToAscii
 import Prelude singletonU8
 import Prelude u8ToDigits
-exports 67
+exports 70
 export ParseError
 export MkParseError
 export Token
@@ -136,6 +136,9 @@ export T_KwCombinator
 export T_KwType
 export T_KwData
 export T_KwCond
+export T_KwDo
+export T_LArrow
+export T_Tagged
 export T_Ident
 export T_Nat
 export T_EOF
@@ -181,7 +184,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 113
+poly 119
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -211,8 +214,12 @@ poly T_KwCombinator
 poly T_KwType
 poly T_KwData
 poly T_KwCond
+poly T_KwDo
+poly T_LArrow
 poly T_EOF
 poly tokenTag
+poly tokenTaggedTextDo
+poly tokenTaggedTextLArrow
 poly tokenTaggedTextData
 poly tokenTaggedTextType
 poly tokenTaggedTextCombinator
@@ -237,6 +244,7 @@ poly u8_quote
 poly u8_squote
 poly u8_backslash
 poly u8_gt
+poly u8_lt
 poly u8_dash
 poly u8_eq
 poly u8_n
@@ -262,6 +270,7 @@ poly keywordTokenFromWordO
 poly keywordTokenFromWordE
 poly keywordTokenFromWordT
 poly keywordTokenFromWordC
+poly keywordTokenFromWordDo
 poly keywordTokenFromWordData
 poly keywordTokenFromWordType
 poly keywordTokenFromWordCombinator
@@ -298,7 +307,7 @@ poly tokenize
 combinator 0
 module Parser
 declared Parser
-imports 64
+imports 67
 import Prelude eqListU8
 import Prelude List
 import Prelude nil
@@ -360,10 +369,13 @@ import Lexer T_KwCombinator
 import Lexer T_KwType
 import Lexer T_KwData
 import Lexer T_KwCond
+import Lexer T_KwDo
+import Lexer T_LArrow
+import Lexer T_Tagged
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
-exports 104
+exports 106
 export Pattern
 export P_Ctor
 export Expr
@@ -422,6 +434,8 @@ export kwCombinatorTag
 export kwTypeTag
 export kwDataTag
 export kwCondTag
+export kwDoTag
+export lArrowTag
 export fstNameToken
 export sndNameToken
 export fstExprToken
@@ -468,7 +482,7 @@ export parseSimpleType
 export parseTypeApplication
 export parseType
 export arrowTag
-data 5
+data 6
 data Type
 ctor Ty_Var 1
 ctor Ty_App 2
@@ -476,6 +490,13 @@ ctor Ty_Arrow 2
 ctor Ty_Forall 2
 data Pattern
 ctor P_Ctor 2
+data DoStep
+ctor S_Bind 2
+ctor S_Match 3
+ctor S_Let 2
+ctor S_Assert 2
+ctor S_Return 1
+ctor S_Expr 1
 data Expr
 ctor E_Var 1
 ctor E_App 2
@@ -498,7 +519,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 106
+poly 125
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -533,6 +554,8 @@ poly kwCombinatorTag
 poly kwTypeTag
 poly kwDataTag
 poly kwCondTag
+poly kwDoTag
+poly lArrowTag
 poly fstTypeToken
 poly sndTypeToken
 poly fstNameToken
@@ -605,6 +628,23 @@ poly parsePolyDecl
 poly parseDecl
 poly parseProgramAcc
 poly parseProgram
+poly isUppercaseU8
+poly isNotEmptyTokenList
+poly isCtorToken
+poly patternIdentCount
+poly isPatternStart
+poly splitCondErrorAcc
+poly splitPatternExprAcc
+poly allIdentToks
+poly notOpenPattern
+poly splitNextStepAcc
+poly mapIdents
+poly parsePatternToks
+poly desugarDoLoop
+poly desugarDo
+poly parseSingleStep
+poly parseDoStepsRec
+poly parseDoWith
 combinator 0
 module Prelude
 declared Prelude

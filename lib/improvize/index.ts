@@ -1361,8 +1361,10 @@ function parseDelayLambda(
   if (idx >= stripped.length || stripped[idx]!.text !== "\\") return undefined;
   idx++;
   while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
-  if (idx >= stripped.length || stripped[idx]!.kind !== "ident")
+  const nameToken = stripped[idx];
+  if (idx >= stripped.length || !nameToken || nameToken.kind !== "ident")
     return undefined;
+  if (nameToken.text !== "u") return undefined;
   idx++;
   while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
   if (idx >= stripped.length || stripped[idx]!.text !== ":") return undefined;
@@ -1375,6 +1377,12 @@ function parseDelayLambda(
   idx++;
 
   const bodyTokens = stripped.slice(idx);
+  for (let i = 0; i < bodyTokens.length; i++) {
+    const token = bodyTokens[i]!;
+    if (token.kind !== "ident" || token.text !== nameToken.text) continue;
+    if (previousSyntax(bodyTokens, i)?.text === "\\") continue;
+    return undefined;
+  }
   return { bodyTokens, endIndex: arg.endIndex };
 }
 

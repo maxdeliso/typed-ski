@@ -290,6 +290,104 @@ function parseLetExpression(
   ];
 }
 
+const DEFAULT_DELAY_PARAM = "u";
+const GENERATED_DELAY_PARAM_PREFIX = "__cond_u";
+
+function collectFreeSystemFTermNames(
+  term: SystemFTerm,
+  bound: ReadonlySet<string>,
+  free: Set<string>,
+): void {
+  switch (term.kind) {
+    case "systemF-var": {
+      if (
+        !bound.has(term.name) &&
+        parseNatLiteralIdentifier(term.name) === null &&
+        !/^__trip_u8_\d+$/.test(term.name)
+      ) {
+        free.add(term.name);
+      }
+      return;
+    }
+    case "non-terminal":
+      collectFreeSystemFTermNames(term.lft, bound, free);
+      collectFreeSystemFTermNames(term.rgt, bound, free);
+      return;
+    case "systemF-abs": {
+      const nextBound = new Set(bound);
+      nextBound.add(term.name);
+      collectFreeSystemFTermNames(term.body, nextBound, free);
+      return;
+    }
+    case "systemF-type-abs":
+      collectFreeSystemFTermNames(term.body, bound, free);
+      return;
+    case "systemF-type-app":
+      collectFreeSystemFTermNames(term.term, bound, free);
+      return;
+    case "systemF-let": {
+      collectFreeSystemFTermNames(term.value, bound, free);
+      const nextBound = new Set(bound);
+      nextBound.add(term.name);
+      collectFreeSystemFTermNames(term.body, nextBound, free);
+      return;
+    }
+    case "systemF-match":
+      collectFreeSystemFTermNames(term.scrutinee, bound, free);
+      for (const arm of term.arms) {
+        const armBound = new Set(bound);
+        for (const param of arm.params) {
+          armBound.add(param);
+        }
+        collectFreeSystemFTermNames(arm.body, armBound, free);
+      }
+      return;
+  }
+}
+
+function freshCondDelayParam(terms: readonly SystemFTerm[]): string {
+  const free = new Set<string>();
+  for (const term of terms) {
+    collectFreeSystemFTermNames(term, new Set(), free);
+  }
+  if (!free.has(DEFAULT_DELAY_PARAM)) return DEFAULT_DELAY_PARAM;
+
+  for (let i = 0; ; i++) {
+    const candidate = `${GENERATED_DELAY_PARAM_PREFIX}_${i}`;
+    if (!free.has(candidate)) return candidate;
+  }
+}
+
+function buildCondIf(
+  returnType: BaseType,
+  condition: SystemFTerm,
+  thenBody: SystemFTerm,
+  elseBody: SystemFTerm,
+): SystemFTerm {
+  const delayParam = freshCondDelayParam([thenBody, elseBody]);
+  const ifTyped = mkSystemFTypeApp(mkSystemFVar("if"), returnType);
+  return createSystemFApplication(
+    createSystemFApplication(
+      createSystemFApplication(ifTyped, condition),
+      mkSystemFAbs(delayParam, mkTypeVariable("U8"), thenBody),
+    ),
+    mkSystemFAbs(delayParam, mkTypeVariable("U8"), elseBody),
+  );
+}
+
+function desugarCond(
+  returnType: BaseType,
+  arms: readonly { cond: SystemFTerm; body: SystemFTerm }[],
+  defaultBody: SystemFTerm,
+): SystemFTerm {
+  let currentElse = defaultBody;
+  for (let i = arms.length - 1; i >= 0; i--) {
+    const arm = arms[i]!;
+    currentElse = buildCondIf(returnType, arm.cond, arm.body, currentElse);
+  }
+  return currentElse;
+}
+
 /**
  * Parses a cond expression:
  * `cond [Type] { | Cond_1 => Body_1 ... | otherwise => Default_Body }`
@@ -376,37 +474,7 @@ function parseCondExpression(
     );
   }
 
-  const u8Type = mkTypeVariable("U8");
-  const ifVar = mkSystemFVar("if");
-  const ifTyped = mkSystemFTypeApp(ifVar, returnType);
-
-  let finalTerm: SystemFTerm;
-  if (arms.length === 0) {
-    finalTerm = defaultArm.body;
-  } else {
-    let currentElse = mkSystemFAbs("u", u8Type, defaultArm.body);
-    for (let i = arms.length - 1; i > 0; i--) {
-      const arm = arms[i]!;
-      const thenBranch = mkSystemFAbs("u", u8Type, arm.body);
-      const ifCall = createSystemFApplication(
-        createSystemFApplication(
-          createSystemFApplication(ifTyped, arm.cond),
-          thenBranch,
-        ),
-        currentElse,
-      );
-      currentElse = mkSystemFAbs("u", u8Type, ifCall);
-    }
-    const outermostArm = arms[0]!;
-    const thenBranch = mkSystemFAbs("u", u8Type, outermostArm.body);
-    finalTerm = createSystemFApplication(
-      createSystemFApplication(
-        createSystemFApplication(ifTyped, outermostArm.cond),
-        thenBranch,
-      ),
-      currentElse,
-    );
-  }
+  const finalTerm = desugarCond(returnType, arms, defaultArm.body);
 
   const armLits = arms
     .map((arm) => `| ${arm.condLit} => ${arm.bodyLit}`)

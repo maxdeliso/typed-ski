@@ -384,9 +384,16 @@ poly tokenTaggedTextRec =
 
 poly tokenTaggedText =
   \tag : U8 =>
-    if [List U8] (eqU8 tag #u8(16))
-      (\u : U8 => "poly")
-      (\u : U8 => tokenTaggedTextRec tag)
+    cond
+      [List U8]
+      {|
+        (eqU8 tag #u8(16)) =>
+        "poly" |
+        (eqU8 tag #u8(32)) =>
+        "cond" |
+        otherwise =>
+        tokenTaggedTextRec tag
+      }
 
 poly tokenText =
   \tok : Token =>
@@ -520,6 +527,7 @@ poly keywordWords =
     "combinator"
     "type"
     "data"
+    "cond"
   }
 
 poly rec anyEqWord =

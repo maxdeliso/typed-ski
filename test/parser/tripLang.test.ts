@@ -643,6 +643,31 @@ describe("parse cond expression", () => {
     assert.strictEqual(term.kind, "poly");
     assert.strictEqual(term.name, "foo");
   });
+
+  it("does not capture an outer u when desugaring cond branches", () => {
+    const input = `poly foo =
+      \\u : U8 =>
+        cond [U8] {
+          | true => u
+          | otherwise => 0
+        }`;
+    const result = parseTripLang(input);
+    const term = requiredAt(result.terms, 0, "expected poly term");
+    assert.strictEqual(term.kind, "poly");
+    assert.strictEqual(term.term.kind, "systemF-abs");
+    assert.strictEqual(term.term.name, "u");
+
+    const ifApp = expectSystemFApp(term.term.body);
+    const elseBranch = ifApp.rgt;
+    assert.strictEqual(elseBranch.kind, "systemF-abs");
+    assert.notStrictEqual(elseBranch.name, "u");
+
+    const ifThenApp = expectSystemFApp(ifApp.lft);
+    const thenBranch = ifThenApp.rgt;
+    assert.strictEqual(thenBranch.kind, "systemF-abs");
+    assert.notStrictEqual(thenBranch.name, "u");
+    assert.deepStrictEqual(thenBranch.body, mkSystemFVar("u"));
+  });
 });
 
 describe("parse list literal", () => {

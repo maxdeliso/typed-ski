@@ -227,6 +227,40 @@ poly main =
     assert.match(result.fixed, /\| c2 => t2/);
     assert.match(result.fixed, /\| otherwise => d/);
   });
+
+  it("does not rewrite if chains with nonstandard delay binders", () => {
+    const source = `module M
+poly main =
+  if [Lower] c1
+    (\\x : U8 => t1)
+    (\\x : U8 =>
+      if [Lower] c2
+        (\\x : U8 => t2)
+        (\\x : U8 => d))
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      !result.diagnostics.some((diag) => diag.code === "trip-degenerate-if"),
+    );
+    assert.doesNotMatch(result.fixed, /cond \[Lower\]/);
+  });
+
+  it("does not rewrite if chains when delay binders are used", () => {
+    const source = `module M
+poly main =
+  if [Lower] c1
+    (\\u : U8 => u)
+    (\\u : U8 =>
+      if [Lower] c2
+        (\\u : U8 => t2)
+        (\\u : U8 => d))
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      !result.diagnostics.some((diag) => diag.code === "trip-degenerate-if"),
+    );
+    assert.doesNotMatch(result.fixed, /cond \[Lower\]/);
+  });
 });
 
 describe("improvize file discovery", () => {

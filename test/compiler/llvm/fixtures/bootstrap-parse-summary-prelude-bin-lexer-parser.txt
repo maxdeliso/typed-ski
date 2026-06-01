@@ -298,7 +298,7 @@ poly tokenize
 combinator 0
 module Parser
 declared Parser
-imports 62
+imports 64
 import Prelude eqListU8
 import Prelude List
 import Prelude nil
@@ -316,7 +316,9 @@ import Prelude snd
 import Prelude eqU8
 import Prelude ltU8
 import Prelude addU8
+import Prelude append
 import Prelude subU8
+import Prelude u8ToDigits
 import Prelude U8
 import Prelude Bool
 import Prelude true
@@ -496,7 +498,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 100
+poly 106
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -561,6 +563,12 @@ poly buildListExpr
 poly parseLiteralAtomWith
 poly parseListElements
 poly parseBraceBodyWith
+poly prependArmBodies
+poly exprListMentionsName
+poly exprMentionsName
+poly freshCondDelayNameFrom
+poly freshCondDelayName
+poly isOtherwiseExpr
 poly desugarCondLoop
 poly desugarCond
 poly parseCondArms

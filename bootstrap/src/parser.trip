@@ -34,7 +34,11 @@ import Prelude ltU8
 
 import Prelude addU8
 
+import Prelude append
+
 import Prelude subU8
+
+import Prelude u8ToDigits
 
 import Prelude U8
 
@@ -955,6 +959,89 @@ poly parseBraceBodyWith =
             )
       }
 
+poly rec prependArmBodies =
+  \arms : List (Pair Pattern Expr) =>
+    \rest : List Expr =>
+      matchList
+        [Pair Pattern Expr]
+        [List Expr]
+        arms
+        rest
+        (
+          \h : Pair Pattern Expr =>
+            \t : List (Pair Pattern Expr) =>
+              prependArmBodies t (cons [Expr] (snd [Pattern] [Expr] h) rest)
+        )
+
+poly rec exprListMentionsName =
+  \name : List U8 =>
+    \exprs : List Expr =>
+      matchList
+        [Expr]
+        [Bool]
+        exprs
+        false
+        (
+          \expr : Expr =>
+            \rest : List Expr =>
+              match expr [Bool] {
+                | E_Var varName =>
+                  if [Bool] (eqListU8 name varName)
+                    (\u : U8 => true)
+                    (\u : U8 => exprListMentionsName name rest)
+                | E_App l r =>
+                  exprListMentionsName name (cons [Expr] l (cons [Expr] r rest))
+                | E_Lam varName body =>
+                  if [Bool] (eqListU8 name varName)
+                    (\u : U8 => true)
+                    (\u : U8 => exprListMentionsName name (cons [Expr] body rest))
+                | E_Let varName value body =>
+                  if [Bool] (eqListU8 name varName)
+                    (\u : U8 => true)
+                    (\u : U8 => exprListMentionsName name (cons [Expr] value (cons [Expr] body rest)))
+                | E_Nat n => exprListMentionsName name rest
+                | E_Match scrutinee arms =>
+                  exprListMentionsName name (cons [Expr] scrutinee (prependArmBodies arms rest))
+              }
+        )
+
+poly exprMentionsName =
+  \name : List U8 =>
+    \expr : Expr =>
+      exprListMentionsName name (cons [Expr] expr ({Expr |}))
+
+poly rec freshCondDelayNameFrom =
+  \thenExpr : Expr =>
+    \elseExpr : Expr =>
+      \n : U8 =>
+        let candidate = append [U8] "__cond_u" (u8ToDigits n) in
+        if [List U8] (or (exprMentionsName candidate thenExpr) (exprMentionsName candidate elseExpr))
+          (
+            \u : U8 =>
+              if [List U8] (ltU8 n #u8(255))
+                (\u2 : U8 => freshCondDelayNameFrom thenExpr elseExpr (addU8 n #u8(1)))
+                (\u2 : U8 => "__cond_u_overflow")
+          )
+          (\u : U8 => candidate)
+
+poly freshCondDelayName =
+  \thenExpr : Expr =>
+    \elseExpr : Expr =>
+      if [List U8] (or (exprMentionsName "u" thenExpr) (exprMentionsName "u" elseExpr))
+        (\u : U8 => freshCondDelayNameFrom thenExpr elseExpr #u8(0))
+        (\u : U8 => "u")
+
+poly isOtherwiseExpr =
+  \expr : Expr =>
+    match expr [Bool] {
+      | E_Var name => eqListU8 name "otherwise"
+      | E_App l r => false
+      | E_Lam name body => false
+      | E_Let name value body => false
+      | E_Nat n => false
+      | E_Match scrutinee arms => false
+    }
+
 poly rec desugarCondLoop =
   \arms : List ((Expr, Expr)) =>
     \currentElse : Expr =>
@@ -968,8 +1055,9 @@ poly rec desugarCondLoop =
             \t : List ((Expr, Expr)) =>
               let condExpr = fst [Expr] [Expr] h in
               let bodyExpr = snd [Expr] [Expr] h in
-              let lazyThen = E_Lam ("u") bodyExpr in
-              let lazyElse = E_Lam ("u") currentElse in
+              let delayName = freshCondDelayName bodyExpr currentElse in
+              let lazyThen = E_Lam delayName bodyExpr in
+              let lazyElse = E_Lam delayName currentElse in
               let ifCall = E_App (E_App (E_App (E_Var "if") condExpr) lazyThen) lazyElse in
               desugarCondLoop t ifCall
         )
@@ -1003,10 +1091,7 @@ poly rec parseCondArms =
                   [Result ParseError (Pair Expr (List Token))]
                   {|
                     (eqU8 tag rBraceTag) =>
-                    Ok
-                    [ParseError]
-                    [Pair Expr (List Token)]
-                    (MkPair [Expr] [List Token] (desugarCond acc) t) |
+                    Err [ParseError] [Pair Expr (List Token)] parseError |
                     (eqU8 tag pipeTag) =>
                     match (recurse t) [Result ParseError (Pair Expr (List Token))] {
                       | Err e => Err [ParseError] [Pair Expr (List Token)] e
@@ -1021,7 +1106,19 @@ poly rec parseCondArms =
                               | Ok bodyRes =>
                                 let bodyExpr = fstExprToken bodyRes in
                                 let afterBody = sndExprToken bodyRes in
-                                parseCondArms recurse afterBody (cons [(Expr, Expr)] (MkPair [Expr] [Expr] condExpr bodyExpr) acc)
+                                if [Result ParseError (Pair Expr (List Token))] (isOtherwiseExpr condExpr)
+                                  (
+                                    \u : U8 =>
+                                      match (expect afterBody rBraceTag) [Result ParseError (Pair Expr (List Token))] {
+                                        | Err e => Err [ParseError] [Pair Expr (List Token)] e
+                                        | Ok rest =>
+                                          Ok
+                                            [ParseError]
+                                            [Pair Expr (List Token)]
+                                            (MkPair [Expr] [List Token] (desugarCond (cons [(Expr, Expr)] (MkPair [Expr] [Expr] condExpr bodyExpr) acc)) rest)
+                                      }
+                                  )
+                                  (\u : U8 => parseCondArms recurse afterBody (cons [(Expr, Expr)] (MkPair [Expr] [Expr] condExpr bodyExpr) acc))
                             }
                         }
                     } |

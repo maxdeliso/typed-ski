@@ -106,29 +106,22 @@ NODE_26_REPOSITORIES = {
     ],
 }
 
-nodejs_repository = use_repo_rule(
-    "@rules_nodejs//nodejs:repositories.bzl",
-    "_nodejs_repositories",
-)
-
-# Define nodejs repositories for different platforms
-[
-    nodejs_repository(
-        name = name,
-        node_repositories = NODE_26_REPOSITORIES,
-        node_version = NODE_26_VERSION,
-        platform = platform,
-    )
-    for platform, name in [
-        ("darwin_arm64", "typed_ski_node26_darwin_arm64"),
-        ("linux_amd64", "typed_ski_node26_linux_amd64"),
-        ("windows_amd64", "typed_ski_node26_windows_amd64"),
-    ]
-]
-
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
-node.toolchain(node_version = "26.1.0")
-use_repo(node, "nodejs_darwin_arm64", "nodejs_linux_amd64", "nodejs_windows_amd64")
+node.toolchain(
+    name = "typed_ski_node26",
+    node_repositories = NODE_26_REPOSITORIES,
+    node_version = NODE_26_VERSION,
+)
+node.toolchain(node_version = NODE_26_VERSION)
+use_repo(
+    node,
+    "nodejs_darwin_arm64",
+    "nodejs_linux_amd64",
+    "nodejs_windows_amd64",
+    "typed_ski_node26_darwin_arm64",
+    "typed_ski_node26_linux_amd64",
+    "typed_ski_node26_windows_amd64",
+)
 
 register_toolchains(
     "//bazel:node26_darwin_arm64_toolchain",

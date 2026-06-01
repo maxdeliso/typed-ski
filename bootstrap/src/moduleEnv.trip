@@ -945,33 +945,13 @@ poly primitivesStartingAt =
 
 poly buildModuleEnv =
   \records : List ModuleRecord =>
-    match (parseModulesAcc records initialBuildState) [Result (List U8) ModuleEnv] {
-      | Err e => Err [List U8] [ModuleEnv] e
-      | Ok state =>
-        match state [Result (List U8) ModuleEnv] {
-          | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
-            match (collectConstructors mods dataTypes #u8(4) pseudoConstructors) [Result (List U8) ModuleEnv] {
-              | MkPair ctors nextSymbolId =>
-                let aliases = buildAliases ctors ({ConstructorAliasInfo |}) in
-                let primitives = primitivesStartingAt nextSymbolId in
-                Ok
-                  [List U8]
-                  [ModuleEnv]
-                  (
-                    MkModuleEnv
-                      mods
-                      imps
-                      exps
-                      defs
-                      dataTypes
-                      ctors
-                      aliases
-                      opaques
-                      natives
-                      primitives
-                  )
-            }
-        }
+    do [Result (List U8) ModuleEnv] {
+      state <- (parseModulesAcc records initialBuildState)
+      MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId = state
+      MkPair ctors nextSymbolId = (collectConstructors mods dataTypes #u8(4) pseudoConstructors)
+      aliases = buildAliases ctors ({ConstructorAliasInfo |})
+      primitives = primitivesStartingAt nextSymbolId
+      return Ok [List U8] [ModuleEnv] (MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives primitives)
     }
 
 poly rec lookupModule =

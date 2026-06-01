@@ -932,7 +932,7 @@ poly rec consumeIdent =
         [U8]
         [((List U8), (List U8))]
         input
-        ({List U8, List U8 | (reverse [U8] acc), ("")})
+        ({List U8, List U8 | (reverse [U8] acc), ""})
         (
           \h : U8 =>
             \t : List U8 =>
@@ -948,7 +948,7 @@ poly rec consumeDigits =
         [U8]
         [((List U8), (List U8))]
         input
-        ({List U8, List U8 | (reverse [U8] acc), ("")})
+        ({List U8, List U8 | (reverse [U8] acc), ""})
         (
           \h : U8 =>
             \t : List U8 =>
@@ -1164,12 +1164,12 @@ poly rec tokenizeAcc =
                   {|
                     None =>
                     cond [Result ParseError (List Token)] {
-      | (or (isAlphaU8 c) (eqU8 c u8_underscore)) => match (consumeIdent (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {| MkPair taken remaining => let tok = keywordTokenFromWord taken in tokenizeAcc remaining (cons [Token] tok accRev)}
-      | (isDigitU8 c) => match (consumeDigits (cons [U8] c (nil [U8])) cs) [Result ParseError (List Token)] {| MkPair taken remaining => tokenizeAcc remaining (cons [Token] (T_Nat taken) accRev)}
-      | (eqU8 c u8_quote) => match (consumeString (nil [U8]) cs) [Result ParseError (List Token)] {| Err e => Err [ParseError] [List Token] e | Ok strRes => let str = fst [List U8] [List U8] strRes in let remaining = snd [List U8] [List U8] strRes in tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)}
+      | (or (isAlphaU8 c) (eqU8 c u8_underscore)) => match (consumeIdent ({U8 | c}) cs) [Result ParseError (List Token)] {| MkPair taken remaining => let tok = keywordTokenFromWord taken in tokenizeAcc remaining (cons [Token] tok accRev)}
+      | (isDigitU8 c) => match (consumeDigits ({U8 | c}) cs) [Result ParseError (List Token)] {| MkPair taken remaining => tokenizeAcc remaining (cons [Token] (T_Nat taken) accRev)}
+      | (eqU8 c u8_quote) => match (consumeString ("") cs) [Result ParseError (List Token)] {| Err e => Err [ParseError] [List Token] e | Ok strRes => let str = fst [List U8] [List U8] strRes in let remaining = snd [List U8] [List U8] strRes in tokenizeAcc remaining (cons [Token] (T_Ident str) accRev)}
       | (eqU8 c u8_squote) => match (consumeCharLiteral cs) [Result ParseError (List Token)] {| Err e => Err [ParseError] [List Token] e | Ok charRes => let value = fst [U8] [List U8] charRes in let remaining = snd [U8] [List U8] charRes in tokenizeAcc remaining (cons [Token] (T_Nat (u8ToDigits value)) accRev)}
       | (eqU8 c u8_eq) => tokenizeAcc cs (cons [Token] T_Eq accRev)
-      | otherwise => Err [ParseError] [List Token] (MkParseError (nil [U8]))
+      | otherwise => Err [ParseError] [List Token] (MkParseError "")
     } |
                     Some
                     tok =>

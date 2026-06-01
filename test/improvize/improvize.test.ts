@@ -286,6 +286,30 @@ poly main =
     assert.match(result.fixed, /assert true else "bad magic"/);
     assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
   });
+
+  it("reports and fixes monadic match chains with intermediate lets to do blocks", () => {
+    const source = `module M
+poly main =
+  match (readLine input) [Result (List U8) BundleSummary] {
+    | Err e => Err [List U8] [BundleSummary] e
+    | Ok magicRes =>
+      let temp = magicRes in
+      match temp [Result (List U8) BundleSummary] {
+        | MkLine magic afterMagic =>
+          Ok [List U8] [BundleSummary] val
+      }
+  }
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+    assert.match(result.fixed, /do \[Result \(List U8\) BundleSummary\]/);
+    assert.match(result.fixed, /magicRes <- \(readLine input\)/);
+    assert.match(result.fixed, /temp = magicRes/);
+    assert.match(result.fixed, /MkLine magic afterMagic = temp/);
+    assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
+  });
 });
 
 describe("improvize file discovery", () => {

@@ -1641,11 +1641,73 @@ function matchErrTermTokens(
   };
 }
 
+function matchLetExpression(
+  tokens: readonly Token[],
+  index: number,
+): {
+  varName: string;
+  valueText: string;
+  body: Token[];
+  endIndex: number;
+} | undefined {
+  const token = tokens[index];
+  if (token?.text !== "let") return undefined;
+
+  const next1 = nextSyntaxWithIndex(tokens, index);
+  if (!next1 || next1.token.kind !== "ident") return undefined;
+  const varName = next1.token.text;
+
+  const next2 = nextSyntaxWithIndex(tokens, next1.index);
+  if (next2?.token.text !== "=") return undefined;
+
+  const valueTokens: Token[] = [];
+  let cursor = next2.index + 1;
+  let depthP = 0, depthB = 0, depthBr = 0;
+  while (cursor < tokens.length) {
+    const t = tokens[cursor]!;
+    if (t.text === "(") depthP++;
+    else if (t.text === ")") depthP--;
+    else if (t.text === "[") depthB++;
+    else if (t.text === "]") depthB--;
+    else if (t.text === "{") depthBr++;
+    else if (t.text === "}") depthBr--;
+
+    if (depthP === 0 && depthB === 0 && depthBr === 0 && t.text === "in") {
+      break;
+    }
+    valueTokens.push(t);
+    cursor++;
+  }
+
+  if (cursor >= tokens.length) return undefined;
+  const inIndex = cursor;
+
+  const body = tokens.slice(inIndex + 1);
+
+  return {
+    varName,
+    valueText: formatInline(valueTokens),
+    body,
+    endIndex: tokens.length - 1,
+  };
+}
+
 function collectDoSteps(
   tokens: readonly Token[],
   returnType: string,
 ): { steps: string[]; isReturn: boolean } | undefined {
   const stripped = stripOuterParens(tokens);
+
+  const letMatch = matchLetExpression(stripped, 0);
+  if (letMatch) {
+    const sub = collectDoSteps(letMatch.body, returnType);
+    if (sub) {
+      return {
+        steps: [`${letMatch.varName} = ${letMatch.valueText}`, ...sub.steps],
+        isReturn: sub.isReturn,
+      };
+    }
+  }
 
   const bindMatch = matchMonadicBind(stripped, 0);
   if (bindMatch && bindMatch.typeText === returnType) {

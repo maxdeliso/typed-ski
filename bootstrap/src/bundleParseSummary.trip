@@ -736,35 +736,29 @@ poly parseModuleSource =
 
 poly emitParsedModule =
   \record : ModuleRecord =>
-    match record [Result (List U8) (List U8)] {
-      | MkModuleRecord name lengthDigits source =>
-        match (parseModuleSource name source) [Result (List U8) (List U8)] {
-          | Err e => Err [List U8] [List U8] e
-          | Ok decls =>
-            match (declaredModule decls) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok declared =>
-                let modLine = emitOneNameLine prefixModule name in
-                let declaredLine = emitOneNameLine prefixDeclared declared in
-                let impBlock = append [U8] (emitCountLine prefixImportsCount (countImports decls #u8(0))) (emitImports decls) in
-                let expBlock = append [U8] (emitCountLine prefixExportsCount (countExports decls #u8(0))) (emitExports decls) in
-                let datBlock = append [U8] (emitCountLine prefixData (countData decls #u8(0))) (emitDataDefs decls) in
-                let typBlock = append [U8] (emitCountLine prefixType (countTypes decls #u8(0))) (emitTypes decls) in
-                let opaqueBlock = append [U8] (emitCountLine prefixOpaque (countOpaque decls #u8(0))) (emitOpaques decls) in
-                let nativeBlock = append [U8] (emitCountLine prefixNative (countNative decls #u8(0))) (emitNatives decls) in
-                let defBlock = append [U8] (emitCountLine prefixPoly (countPoly decls #u8(0))) (emitPolyDefs decls) in
-                let combBlock = append [U8] (emitCountLine prefixCombinator (countCombinator decls #u8(0))) (emitCombinatorDefs decls) in
-                let tail0 = append [U8] defBlock combBlock in
-                let tail1 = append [U8] nativeBlock tail0 in
-                let tail2 = append [U8] opaqueBlock tail1 in
-                let tail3 = append [U8] typBlock tail2 in
-                let tail4 = append [U8] datBlock tail3 in
-                let tail5 = append [U8] expBlock tail4 in
-                let tail6 = append [U8] impBlock tail5 in
-                let tail7 = append [U8] declaredLine tail6 in
-                Ok [List U8] [List U8] (append [U8] modLine tail7)
-            }
-        }
+    do [Result (List U8) (List U8)] {
+      MkModuleRecord name lengthDigits source = record
+      decls <- (parseModuleSource name source)
+      declared <- (declaredModule decls)
+      modLine = emitOneNameLine prefixModule name
+      declaredLine = emitOneNameLine prefixDeclared declared
+      impBlock = append [U8] (emitCountLine prefixImportsCount (countImports decls #u8(0))) (emitImports decls)
+      expBlock = append [U8] (emitCountLine prefixExportsCount (countExports decls #u8(0))) (emitExports decls)
+      datBlock = append [U8] (emitCountLine prefixData (countData decls #u8(0))) (emitDataDefs decls)
+      typBlock = append [U8] (emitCountLine prefixType (countTypes decls #u8(0))) (emitTypes decls)
+      opaqueBlock = append [U8] (emitCountLine prefixOpaque (countOpaque decls #u8(0))) (emitOpaques decls)
+      nativeBlock = append [U8] (emitCountLine prefixNative (countNative decls #u8(0))) (emitNatives decls)
+      defBlock = append [U8] (emitCountLine prefixPoly (countPoly decls #u8(0))) (emitPolyDefs decls)
+      combBlock = append [U8] (emitCountLine prefixCombinator (countCombinator decls #u8(0))) (emitCombinatorDefs decls)
+      tail0 = append [U8] defBlock combBlock
+      tail1 = append [U8] nativeBlock tail0
+      tail2 = append [U8] opaqueBlock tail1
+      tail3 = append [U8] typBlock tail2
+      tail4 = append [U8] datBlock tail3
+      tail5 = append [U8] expBlock tail4
+      tail6 = append [U8] impBlock tail5
+      tail7 = append [U8] declaredLine tail6
+      return Ok [List U8] [List U8] (append [U8] modLine tail7)
     }
 
 poly rec emitParsedModules =
@@ -786,21 +780,18 @@ poly rec emitParsedModules =
 
 poly emitBundleParseSummary =
   \bundle : BundleSummary =>
-    match bundle [Result (List U8) (List U8)] {
-      | MkBundleSummary entry target wrapper modsCountDigits mods =>
-        match (emitParsedModules mods) [Result (List U8) (List U8)] {
-          | Err e => Err [List U8] [List U8] e
-          | Ok modsText =>
-            let tail0 = append [U8] newline modsText in
-            let tail1 = append [U8] modsCountDigits tail0 in
-            let tail2 = append [U8] prefixSummaryModules tail1 in
-            let tail3 = append [U8] wrapper tail2 in
-            let tail4 = append [U8] prefixSummaryWrapper tail3 in
-            let tail5 = append [U8] target tail4 in
-            let tail6 = append [U8] prefixSummaryTarget tail5 in
-            let tail7 = append [U8] entry tail6 in
-            Ok [List U8] [List U8] (append [U8] prefixSummaryEntry tail7)
-        }
+    do [Result (List U8) (List U8)] {
+      MkBundleSummary entry target wrapper modsCountDigits mods = bundle
+      modsText <- (emitParsedModules mods)
+      tail0 = append [U8] newline modsText
+      tail1 = append [U8] modsCountDigits tail0
+      tail2 = append [U8] prefixSummaryModules tail1
+      tail3 = append [U8] wrapper tail2
+      tail4 = append [U8] prefixSummaryWrapper tail3
+      tail5 = append [U8] target tail4
+      tail6 = append [U8] prefixSummaryTarget tail5
+      tail7 = append [U8] entry tail6
+      return Ok [List U8] [List U8] (append [U8] prefixSummaryEntry tail7)
     }
 
 poly rec writeAll =

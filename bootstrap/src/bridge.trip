@@ -576,25 +576,14 @@ poly rec elaborateArms =
           (
             \h : (Pattern, Expr) =>
               \t : List ((Pattern, Expr)) =>
-                match h [Result (List U8) (List Core)] {
-                  | MkPair pat body =>
-                    match pat [Result (List U8) (List Core)] {
-                      | P_Ctor name args =>
-                        match (elaborate dEnv body) [Result (List U8) (List Core)] {
-                          | Err e => Err [List U8] [List Core] e
-                          | Ok coreBody =>
-                            let wrapped = wrapInLambdas args coreBody in
-                            match (elaborateArms elaborate dEnv t) [Result (List U8) (List Core)] {
-                              | Err e => Err [List U8] [List Core] e
-                              | Ok rest =>
-                                Ok
-                                  [List U8]
-                                  [List Core]
-                                  (cons [Core] wrapped rest)
-                            }
-                        }
-                    }
-                }
+                do [Result (List U8) (List Core)] {
+      MkPair pat body = h
+      P_Ctor name args = pat
+      coreBody <- (elaborate dEnv body)
+      wrapped = wrapInLambdas args coreBody
+      rest <- (elaborateArms elaborate dEnv t)
+      return Ok [List U8] [List Core] (cons [Core] wrapped rest)
+    }
           )
 
 poly elaborateMatchWith =

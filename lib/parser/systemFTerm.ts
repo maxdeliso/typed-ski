@@ -72,6 +72,9 @@ import { unparseSystemFType } from "./systemFType.ts";
  * - The start of a new definition line
  */
 function isTerminator(state: ParserState): boolean {
+  const [isFatArrow] = peekFatArrow(state);
+  if (isFatArrow) return true;
+
   const [ch, _] = peek(state);
 
   if (ch === null) return true;
@@ -285,6 +288,203 @@ function parseLetExpression(
     { kind: "systemF-let", name, value: valueTerm, body: bodyTerm },
     stateAfterBody,
   ];
+}
+
+const DEFAULT_DELAY_PARAM = "u";
+const GENERATED_DELAY_PARAM_PREFIX = "__cond_u";
+
+function collectFreeSystemFTermNames(
+  term: SystemFTerm,
+  bound: ReadonlySet<string>,
+  free: Set<string>,
+): void {
+  switch (term.kind) {
+    case "systemF-var": {
+      if (
+        !bound.has(term.name) &&
+        parseNatLiteralIdentifier(term.name) === null &&
+        !/^__trip_u8_\d+$/.test(term.name)
+      ) {
+        free.add(term.name);
+      }
+      return;
+    }
+    case "non-terminal":
+      collectFreeSystemFTermNames(term.lft, bound, free);
+      collectFreeSystemFTermNames(term.rgt, bound, free);
+      return;
+    case "systemF-abs": {
+      const nextBound = new Set(bound);
+      nextBound.add(term.name);
+      collectFreeSystemFTermNames(term.body, nextBound, free);
+      return;
+    }
+    case "systemF-type-abs":
+      collectFreeSystemFTermNames(term.body, bound, free);
+      return;
+    case "systemF-type-app":
+      collectFreeSystemFTermNames(term.term, bound, free);
+      return;
+    case "systemF-let": {
+      collectFreeSystemFTermNames(term.value, bound, free);
+      const nextBound = new Set(bound);
+      nextBound.add(term.name);
+      collectFreeSystemFTermNames(term.body, nextBound, free);
+      return;
+    }
+    case "systemF-match":
+      collectFreeSystemFTermNames(term.scrutinee, bound, free);
+      for (const arm of term.arms) {
+        const armBound = new Set(bound);
+        for (const param of arm.params) {
+          armBound.add(param);
+        }
+        collectFreeSystemFTermNames(arm.body, armBound, free);
+      }
+      return;
+  }
+}
+
+function freshCondDelayParam(terms: readonly SystemFTerm[]): string {
+  const free = new Set<string>();
+  for (const term of terms) {
+    collectFreeSystemFTermNames(term, new Set(), free);
+  }
+  if (!free.has(DEFAULT_DELAY_PARAM)) return DEFAULT_DELAY_PARAM;
+
+  for (let i = 0; ; i++) {
+    const candidate = `${GENERATED_DELAY_PARAM_PREFIX}_${i}`;
+    if (!free.has(candidate)) return candidate;
+  }
+}
+
+function buildCondIf(
+  returnType: BaseType,
+  condition: SystemFTerm,
+  thenBody: SystemFTerm,
+  elseBody: SystemFTerm,
+): SystemFTerm {
+  const delayParam = freshCondDelayParam([thenBody, elseBody]);
+  const ifTyped = mkSystemFTypeApp(mkSystemFVar("if"), returnType);
+  return createSystemFApplication(
+    createSystemFApplication(
+      createSystemFApplication(ifTyped, condition),
+      mkSystemFAbs(delayParam, mkTypeVariable("U8"), thenBody),
+    ),
+    mkSystemFAbs(delayParam, mkTypeVariable("U8"), elseBody),
+  );
+}
+
+function desugarCond(
+  returnType: BaseType,
+  arms: readonly { cond: SystemFTerm; body: SystemFTerm }[],
+  defaultBody: SystemFTerm,
+): SystemFTerm {
+  let currentElse = defaultBody;
+  for (let i = arms.length - 1; i >= 0; i--) {
+    const arm = arms[i]!;
+    currentElse = buildCondIf(returnType, arm.cond, arm.body, currentElse);
+  }
+  return currentElse;
+}
+
+/**
+ * Parses a cond expression:
+ * `cond [Type] { | Cond_1 => Body_1 ... | otherwise => Default_Body }`
+ */
+function parseCondExpression(
+  state: ParserState,
+): [string, SystemFTerm, ParserState] {
+  let currentState = skipWhitespace(state);
+  const [nextCh, peekState] = peek(currentState);
+  if (nextCh !== "[") {
+    throw new ParseError(
+      withParserState(
+        peekState,
+        "cond requires an explicit return type: cond [Type] { ... }",
+      ),
+    );
+  }
+  currentState = matchCh(peekState, "[");
+  currentState = skipWhitespace(currentState);
+  const [returnTypeLit, returnType, stateAfterType] =
+    parseSystemFType(currentState);
+
+  currentState = skipWhitespace(stateAfterType);
+  currentState = matchCh(currentState, "]");
+
+  currentState = skipWhitespace(currentState);
+  currentState = matchCh(currentState, LEFT_BRACE);
+  currentState = skipWhitespace(currentState);
+
+  const arms: {
+    condLit: string;
+    cond: SystemFTerm;
+    bodyLit: string;
+    body: SystemFTerm;
+  }[] = [];
+  let defaultArm: { bodyLit: string; body: SystemFTerm } | undefined =
+    undefined;
+
+  for (let armLength = 0; ; armLength = armLength + 1) {
+    currentState = skipWhitespace(currentState);
+    const [nextArmCh] = peek(currentState);
+
+    if (nextArmCh === RIGHT_BRACE) {
+      currentState = matchCh(currentState, RIGHT_BRACE);
+      break;
+    }
+
+    if (nextArmCh !== "|") {
+      throw new ParseError(
+        withParserState(currentState, "expected '|' to start cond arm"),
+      );
+    }
+    currentState = matchCh(currentState, "|");
+    currentState = skipWhitespace(currentState);
+
+    const [condLit, condTerm, stateAfterCond] = parseSystemFTerm(currentState);
+    currentState = skipWhitespace(stateAfterCond);
+
+    const [isArrow, arrowState] = peekFatArrow(currentState);
+    if (!isArrow) {
+      throw new ParseError(
+        withParserState(currentState, "expected '=>' after cond arm condition"),
+      );
+    }
+    currentState = matchFatArrow(arrowState);
+    currentState = skipWhitespace(currentState);
+
+    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(currentState);
+    currentState = skipWhitespace(stateAfterBody);
+
+    if (condTerm.kind === "systemF-var" && condTerm.name === "otherwise") {
+      defaultArm = { bodyLit, body: bodyTerm };
+      currentState = skipWhitespace(currentState);
+      currentState = matchCh(currentState, RIGHT_BRACE);
+      break;
+    } else {
+      arms.push({ condLit, cond: condTerm, bodyLit, body: bodyTerm });
+    }
+  }
+
+  if (defaultArm === undefined) {
+    throw new ParseError(
+      withParserState(currentState, "cond requires a default 'otherwise' arm"),
+    );
+  }
+
+  const finalTerm = desugarCond(returnType, arms, defaultArm.body);
+
+  const armLits = arms
+    .map((arm) => `| ${arm.condLit} => ${arm.bodyLit}`)
+    .join(" ");
+  const literalStr =
+    arms.length === 0
+      ? `cond [${returnTypeLit}] { | otherwise => ${defaultArm.bodyLit} }`
+      : `cond [${returnTypeLit}] { ${armLits} | otherwise => ${defaultArm.bodyLit} }`;
+
+  return [literalStr, finalTerm, currentState];
 }
 
 const ASCII_PRINTABLE_MIN = 32;
@@ -695,6 +895,9 @@ function parseAtomicSystemFTerm(
     }
     if (varLit === "let") {
       return parseLetExpression(stateAfterVar);
+    }
+    if (varLit === "cond") {
+      return parseCondExpression(stateAfterVar);
     }
     return [varLit, { kind: "systemF-var", name: varLit }, stateAfterVar];
   } else {

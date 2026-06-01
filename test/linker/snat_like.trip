@@ -23,7 +23,7 @@ data SNat =
   | SS SNat
 
 poly toSNat =
-  \n : Nat => n [SNat] (SS) SZ
+  \n : Nat => n [SNat] SS SZ
 
 poly fromSNat =
-  \s : SNat => s [Nat] (succ) zero
+  \s : SNat => s [Nat] succ zero

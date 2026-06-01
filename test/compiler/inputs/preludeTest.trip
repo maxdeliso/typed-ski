@@ -37,9 +37,9 @@ import Nat Nat
 export main
 
 poly main =
-  let a = (true) [Nat] (succ zero) zero in
-  let b = add a ((true) [Nat] (succ zero) zero) in
-  let c = add b ((true) [Nat] (succ zero) zero) in
+  let a = true [Nat] (succ zero) zero in
+  let b = add a (true [Nat] (succ zero) zero) in
+  let c = add b (true [Nat] (succ zero) zero) in
   let d = add c (pred (succ (succ zero))) in
   let e = add d (sub (succ (succ (succ zero))) (succ zero)) in
   let f = add e ((lte (succ zero) (succ (succ zero))) [Nat] (succ zero) zero) in

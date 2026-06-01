@@ -138,13 +138,13 @@ poly main =
             (
               \u : Bin =>
                 matchList
-                  [Pair Pattern Expr]
+                  [(Pattern, Expr)]
                   [Bool]
                   arms
                   false
                   (
-                    \arm1 : Pair Pattern Expr =>
-                      \rest1 : List (Pair Pattern Expr) =>
+                    \arm1 : (Pattern, Expr) =>
+                      \rest1 : List ((Pattern, Expr)) =>
                         let pat1 = fst [Pattern] [Expr] arm1 in
                         let body1 = snd [Pattern] [Expr] arm1 in
                         let arm1Ok = match pat1 [Bool] {| P_Ctor ctor args => if [Bool] (eqListU8 ctor "Some") (\u : Bin => if [Bool] (isSingleArg args "x") (\u : Bin => isVarNamed body1 "x") (\u : Bin => false)) (\u : Bin => false)} in
@@ -152,13 +152,13 @@ poly main =
                           (
                             \u : Bin =>
                               matchList
-                                [Pair Pattern Expr]
+                                [(Pattern, Expr)]
                                 [Bool]
                                 rest1
                                 false
                                 (
-                                  \arm2 : Pair Pattern Expr =>
-                                    \rest2 : List (Pair Pattern Expr) =>
+                                  \arm2 : (Pattern, Expr) =>
+                                    \rest2 : List ((Pattern, Expr)) =>
                                       let pat2 = fst [Pattern] [Expr] arm2 in
                                       let body2 = snd [Pattern] [Expr] arm2 in
                                       let arm2Ok = match pat2 [Bool] {| P_Ctor ctor args => if [Bool] (eqListU8 ctor "None") (\u : Bin => if [Bool] (isNoArgs args) (\u : Bin => isVarNamed body2 "res") (\u : Bin => false)) (\u : Bin => false)} in
@@ -166,12 +166,12 @@ poly main =
                                         (
                                           \u : Bin =>
                                             matchList
-                                              [Pair Pattern Expr]
+                                              [(Pattern, Expr)]
                                               [Bool]
                                               rest2
                                               true
                                               (
-                                                \extra : Pair Pattern Expr => \extraRest : List (Pair Pattern Expr) => false
+                                                \extra : (Pattern, Expr) => \extraRest : List ((Pattern, Expr)) => false
                                               )
                                         )
                                         (\u : Bin => false)

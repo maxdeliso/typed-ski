@@ -184,8 +184,8 @@ poly rec divModBinAcc =
   \n : Bin =>
     \d : Bin =>
       \q : Bin =>
-        if [Pair Bin Bin] (ltBin n d)
-          (\u : U8 => MkPair [Bin] [Bin] q n)
+        if [(Bin, Bin)] (ltBin n d)
+          (\u : U8 => {Bin, Bin | q, n})
           (\u : U8 => divModBinAcc (subBin n d) d (incBin q))
 
 poly divModBin =
@@ -207,9 +207,9 @@ poly rec binToDigitsAcc =
             let res = divModBin val ten in
             let q = fst [Bin] [Bin] res in
             let r = snd [Bin] [Bin] res in
-            let digit = if [U8] (isZeroBin r) (\u : U8 => '0') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(1))) (\u : U8 => '1') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(2))) (\u : U8 => '2') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(3))) (\u : U8 => '3') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(4))) (\u : U8 => '4') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(5))) (\u : U8 => '5') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(6))) (\u : U8 => '6') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(7))) (\u : U8 => '7') (\u : U8 => if [U8] (eqBin r (u8ToBin #u8(8))) (\u : U8 => '8') (\u : U8 => '9'))))))))) in
+            let digit = cond [U8] {| (isZeroBin r) => '0' | (eqBin r (u8ToBin #u8(1))) => '1' | (eqBin r (u8ToBin #u8(2))) => '2' | (eqBin r (u8ToBin #u8(3))) => '3' | (eqBin r (u8ToBin #u8(4))) => '4' | (eqBin r (u8ToBin #u8(5))) => '5' | (eqBin r (u8ToBin #u8(6))) => '6' | (eqBin r (u8ToBin #u8(7))) => '7' | (eqBin r (u8ToBin #u8(8))) => '8' | otherwise => '9'} in
             binToDigitsAcc q (cons [U8] digit acc)
         )
 
 poly binToDigits =
-  \b : Bin => binToDigitsAcc b (nil [U8])
+  \b : Bin => binToDigitsAcc b ("")

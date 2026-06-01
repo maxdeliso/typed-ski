@@ -240,64 +240,53 @@ poly rec lteListU8 =
 
 poly resolveNativeName =
   \name : List U8 =>
-    if [Maybe Lower] (eqListU8 name ".")
-      (\u : U8 => Some [Lower] (L_Native T_WriteOne))
-      (
-        \u : U8 =>
-          if [Maybe Lower] (eqListU8 name ",")
-            (\u : U8 => Some [Lower] (L_Native T_ReadOne))
-            (
-              \u : U8 =>
-                if [Maybe Lower] (eqListU8 name "writeOne")
-                  (\u : U8 => Some [Lower] (L_Native T_WriteOne))
-                  (
-                    \u : U8 =>
-                      if [Maybe Lower] (eqListU8 name "readOne")
-                        (\u : U8 => Some [Lower] (L_Native T_ReadOne))
-                        (
-                          \u : U8 =>
-                            if [Maybe Lower] (eqListU8 name "addU8")
-                              (\u : U8 => Some [Lower] (L_Native T_AddU8))
-                              (
-                                \u : U8 =>
-                                  if [Maybe Lower] (eqListU8 name "subU8")
-                                    (\u : U8 => Some [Lower] (L_Native T_SubU8))
-                                    (
-                                      \u : U8 =>
-                                        if [Maybe Lower] (eqListU8 name "divU8")
-                                          (
-                                            \u : U8 => Some [Lower] (L_Native T_DivU8)
-                                          )
-                                          (
-                                            \u : U8 =>
-                                              if [Maybe Lower] (eqListU8 name "modU8")
-                                                (
-                                                  \u : U8 => Some [Lower] (L_Native T_ModU8)
-                                                )
-                                                (
-                                                  \u : U8 =>
-                                                    if [Maybe Lower] (eqListU8 name "eqU8")
-                                                      (
-                                                        \u : U8 => Some [Lower] (L_Native T_EqU8)
-                                                      )
-                                                      (
-                                                        \u : U8 =>
-                                                          if [Maybe Lower] (eqListU8 name "ltU8")
-                                                            (
-                                                              \u : U8 => Some [Lower] (L_Native T_LtU8)
-                                                            )
-                                                            (
-                                                              \u : U8 => None [Lower]
-                                                            )
-                                                      )
-                                                )
-                                          )
-                                    )
-                              )
-                        )
-                  )
-            )
-      )
+    cond
+      [Maybe Lower]
+      {|
+        (eqListU8 name ".") =>
+        Some
+        [Lower]
+        (L_Native T_WriteOne) |
+        (eqListU8 name ",") =>
+        Some
+        [Lower]
+        (L_Native T_ReadOne) |
+        (eqListU8 name "writeOne") =>
+        Some
+        [Lower]
+        (L_Native T_WriteOne) |
+        (eqListU8 name "readOne") =>
+        Some
+        [Lower]
+        (L_Native T_ReadOne) |
+        (eqListU8 name "addU8") =>
+        Some
+        [Lower]
+        (L_Native T_AddU8) |
+        (eqListU8 name "subU8") =>
+        Some
+        [Lower]
+        (L_Native T_SubU8) |
+        (eqListU8 name "divU8") =>
+        Some
+        [Lower]
+        (L_Native T_DivU8) |
+        (eqListU8 name "modU8") =>
+        Some
+        [Lower]
+        (L_Native T_ModU8) |
+        (eqListU8 name "eqU8") =>
+        Some
+        [Lower]
+        (L_Native T_EqU8) |
+        (eqListU8 name "ltU8") =>
+        Some
+        [Lower]
+        (L_Native T_LtU8) |
+        otherwise =>
+        None
+        [Lower]
+      }
 
 poly unboundNameError =
   \name : List U8 => append [U8] "Unbound variable: " name
@@ -318,7 +307,7 @@ poly rec trimLeadingZeros =
       [U8]
       [List U8]
       digits
-      (nil [U8])
+      ("")
       (
         \h : U8 =>
           \t : List U8 =>
@@ -386,9 +375,9 @@ poly rec div2DigitsAcc =
         \accRev : List U8 =>
           matchList
             [U8]
-            [Pair (List U8) U8]
+            [((List U8), U8)]
             digits
-            (MkPair [List U8] [U8] (reverse [U8] accRev) carry)
+            ({List U8, U8 | (reverse [U8] accRev), carry})
             (
               \h : U8 =>
                 \t : List U8 =>
@@ -401,12 +390,12 @@ poly rec div2DigitsAcc =
             )
 
 poly div2Digits =
-  \digits : List U8 => div2DigitsAcc digits #u8(0) false (nil [U8])
+  \digits : List U8 => div2DigitsAcc digits #u8(0) false ("")
 
 poly rec collectBits =
   \digits : List U8 =>
     \acc : List U8 =>
-      match (div2Digits digits) [Pair (List U8) U8] {
+      match (div2Digits digits) [((List U8), U8)] {
         | MkPair quotient remainder =>
           let nextAcc = cons [U8] remainder acc in
           matchList
@@ -459,8 +448,7 @@ poly rec buildBinLiteralCoreAcc =
         )
 
 poly buildBinLiteralCore =
-  \digits : List U8 =>
-    buildBinLiteralCoreAcc (collectBits digits (nil [U8])) binZeroCore
+  \digits : List U8 => buildBinLiteralCoreAcc (collectBits digits ("")) binZeroCore
 
 poly natToCore =
   \digits : List U8 =>
@@ -503,15 +491,15 @@ poly resolveCoreName =
 
 poly rec findCtorInfoInArms =
   \dEnv : DataEnv =>
-    \arms : List (Pair Pattern Expr) =>
+    \arms : List ((Pattern, Expr)) =>
       matchList
-        [Pair Pattern Expr]
+        [(Pattern, Expr)]
         [Maybe CtorInfo]
         arms
         (None [CtorInfo])
         (
-          \h : Pair Pattern Expr =>
-            \t : List (Pair Pattern Expr) =>
+          \h : (Pattern, Expr) =>
+            \t : List ((Pattern, Expr)) =>
               match (fst [Pattern] [Expr] h) [Maybe CtorInfo] {
                 | P_Ctor name args =>
                   match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Maybe CtorInfo] {
@@ -523,24 +511,18 @@ poly rec findCtorInfoInArms =
 
 poly rec findArmByName =
   \name : List U8 =>
-    \arms : List (Pair Pattern Expr) =>
+    \arms : List ((Pattern, Expr)) =>
       matchList
-        [Pair Pattern Expr]
-        [Pair Pattern Expr]
+        [(Pattern, Expr)]
+        [(Pattern, Expr)]
         arms
+        ({Pattern, Expr | (P_Ctor name (nil [List U8])), (E_Var "MISSING_ARM")})
         (
-          MkPair
-            [Pattern]
-            [Expr]
-            (P_Ctor name (nil [List U8]))
-            (E_Var "MISSING_ARM")
-        )
-        (
-          \h : Pair Pattern Expr =>
-            \t : List (Pair Pattern Expr) =>
-              match (fst [Pattern] [Expr] h) [Pair Pattern Expr] {
+          \h : (Pattern, Expr) =>
+            \t : List ((Pattern, Expr)) =>
+              match (fst [Pattern] [Expr] h) [(Pattern, Expr)] {
                 | P_Ctor cName args =>
-                  if [Pair Pattern Expr] (eqListU8 name cName)
+                  if [(Pattern, Expr)] (eqListU8 name cName)
                     (\u : U8 => h)
                     (\u : U8 => findArmByName name t)
               }
@@ -548,17 +530,17 @@ poly rec findArmByName =
 
 poly rec sortArms =
   \expectedNames : List (List U8) =>
-    \arms : List (Pair Pattern Expr) =>
+    \arms : List ((Pattern, Expr)) =>
       matchList
         [List U8]
-        [List (Pair Pattern Expr)]
+        [List ((Pattern, Expr))]
         expectedNames
-        (nil [Pair Pattern Expr])
+        ({Pair Pattern Expr |})
         (
           \name : List U8 =>
             \tNames : List (List U8) =>
               let arm = findArmByName name arms in
-              cons [Pair Pattern Expr] arm (sortArms tNames arms)
+              cons [(Pattern, Expr)] arm (sortArms tNames arms)
         )
 
 poly rec wrapInLambdas =
@@ -585,15 +567,15 @@ poly rec prependAll =
 poly rec elaborateArms =
   \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
     \dEnv : DataEnv =>
-      \arms : List (Pair Pattern Expr) =>
+      \arms : List ((Pattern, Expr)) =>
         matchList
-          [Pair Pattern Expr]
+          [(Pattern, Expr)]
           [Result (List U8) (List Core)]
           arms
-          (Ok [List U8] [List Core] (nil [Core]))
+          (Ok [List U8] [List Core] ({Core |}))
           (
-            \h : Pair Pattern Expr =>
-              \t : List (Pair Pattern Expr) =>
+            \h : (Pattern, Expr) =>
+              \t : List ((Pattern, Expr)) =>
                 match h [Result (List U8) (List Core)] {
                   | MkPair pat body =>
                     match pat [Result (List U8) (List Core)] {
@@ -619,7 +601,7 @@ poly elaborateMatchWith =
   \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
     \dEnv : DataEnv =>
       \scrut : Expr =>
-        \arms : List (Pair Pattern Expr) =>
+        \arms : List ((Pattern, Expr)) =>
           match (elaborate dEnv scrut) [Result (List U8) Core] {
             | Err e => Err [List U8] [Core] e
             | Ok coreScrut =>
@@ -699,18 +681,18 @@ poly rec checkedLengthU8 =
 
 poly rec populateDataEnv =
   \adtName : List U8 =>
-    \ctors : List (Pair (List U8) U8) =>
+    \ctors : List (((List U8), U8)) =>
       \total : U8 =>
         \idx : U8 =>
           \datEnv : DataEnv =>
             matchList
-              [Pair (List U8) U8]
+              [((List U8), U8)]
               [DataEnv]
               ctors
               datEnv
               (
-                \h : Pair (List U8) U8 =>
-                  \t : List (Pair (List U8) U8) =>
+                \h : ((List U8), U8) =>
+                  \t : List (((List U8), U8)) =>
                     let ctorName = fst [List U8] [U8] h in
                     let arity = snd [List U8] [U8] h in
                     let info = MkCtorInfo idx total arity adtName in
@@ -727,15 +709,15 @@ poly rec populateDataEnv =
               )
 
 poly rec getCtorNames =
-  \ctors : List (Pair (List U8) U8) =>
+  \ctors : List (((List U8), U8)) =>
     matchList
-      [Pair (List U8) U8]
+      [((List U8), U8)]
       [List (List U8)]
       ctors
-      (nil [List U8])
+      ({List U8 |})
       (
-        \h : Pair (List U8) U8 =>
-          \t : List (Pair (List U8) U8) => cons [List U8] (fst [List U8] [U8] h) (getCtorNames t)
+        \h : ((List U8), U8) =>
+          \t : List (((List U8), U8)) => cons [List U8] (fst [List U8] [U8] h) (getCtorNames t)
       )
 
 poly rec filterElaboratableDecls =
@@ -744,7 +726,7 @@ poly rec filterElaboratableDecls =
       [Decl]
       [List Decl]
       decls
-      (nil [Decl])
+      ({Decl |})
       (
         \h : Decl =>
           \t : List Decl =>
@@ -771,7 +753,7 @@ poly elaborateElaboratableDecl =
               match (elaborateExpr dEnv body) [Result (List U8) State] {
                 | Err e => Err [List U8] [State] e
                 | Ok core =>
-                  let finalLow = if [Lower] isRec (\u : U8 => applyFixpoint (coreToLower globals (nil [List U8]) recName core)) (\u : U8 => coreToLower globals (nil [List U8]) recName core) in
+                  let finalLow = if [Lower] isRec (\u : U8 => applyFixpoint (coreToLower globals ({List U8 |}) recName core)) (\u : U8 => coreToLower globals ({List U8 |}) recName core) in
                   Ok
                     [List U8]
                     [State]
@@ -790,7 +772,7 @@ poly elaborateElaboratableDecl =
                     )
               }
             | D_Data name ctors =>
-              match (checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)) [Result (List U8) State] {
+              match (checkedLengthU8 [((List U8), U8)] ctors #u8(0)) [Result (List U8) State] {
                 | Err e => Err [List U8] [State] e
                 | Ok total =>
                   let nextDEnv = populateDataEnv name ctors total #u8(0) dEnv in
@@ -842,36 +824,36 @@ poly rec elaborateToCoreRec =
     \decls : List Decl =>
       matchList
         [Decl]
-        [Result (List U8) (List (Pair (List U8) Core))]
+        [Result (List U8) (List (((List U8), Core)))]
         decls
-        (Ok [List U8] [List (Pair (List U8) Core)] (nil [Pair (List U8) Core]))
+        (Ok [List U8] [List (((List U8), Core))] ({Pair (List U8) Core |}))
         (
           \h : Decl =>
             \t : List Decl =>
-              match h [Result (List U8) (List (Pair (List U8) Core))] {
+              match h [Result (List U8) (List (((List U8), Core)))] {
                 | D_Def kind isRec name body =>
-                  match (elaborateExpr dEnv body) [Result (List U8) (List (Pair (List U8) Core))] {
-                    | Err e => Err [List U8] [List (Pair (List U8) Core)] e
+                  match (elaborateExpr dEnv body) [Result (List U8) (List (((List U8), Core)))] {
+                    | Err e => Err [List U8] [List (((List U8), Core))] e
                     | Ok core =>
-                      match (elaborateToCoreRec dEnv t) [Result (List U8) (List (Pair (List U8) Core))] {
-                        | Err e2 => Err [List U8] [List (Pair (List U8) Core)] e2
+                      match (elaborateToCoreRec dEnv t) [Result (List U8) (List (((List U8), Core)))] {
+                        | Err e2 => Err [List U8] [List (((List U8), Core))] e2
                         | Ok rest =>
                           Ok
                             [List U8]
-                            [List (Pair (List U8) Core)]
+                            [List (((List U8), Core))]
                             (
                               cons
-                                [Pair (List U8) Core]
-                                (MkPair [List U8] [Core] name core)
+                                [((List U8), Core)]
+                                ({List U8, Core | name, core})
                                 rest
                             )
                       }
                   }
                 | D_Data name ctors =>
-                  match (checkedLengthU8 [Pair (List U8) U8] ctors #u8(0)) [Result (List U8) (List (Pair (List U8) Core))] {
-                    | Err e => Err [List U8] [List (Pair (List U8) Core)] e
+                  match (checkedLengthU8 [((List U8), U8)] ctors #u8(0)) [Result (List U8) (List (((List U8), Core)))] {
+                    | Err e => Err [List U8] [List (((List U8), Core))] e
                     | Ok total =>
-                      match (populateDataEnv name ctors total #u8(0) dEnv) [Result (List U8) (List (Pair (List U8) Core))] {
+                      match (populateDataEnv name ctors total #u8(0) dEnv) [Result (List U8) (List (((List U8), Core)))] {
                         | MkDataEnv cEnv aEnv =>
                           let adtInfo = MkADTInfo (getCtorNames ctors) in
                           let nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv) in

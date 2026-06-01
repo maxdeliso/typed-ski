@@ -92,23 +92,23 @@ data EmitRes =
   | MkEmitRes Bin (List (List U8)) (List U8)
 
 poly rec lookupEnv =
-  \env : List (Pair (List U8) (List U8)) =>
+  \env : List (((List U8), (List U8))) =>
     \name : List U8 =>
       matchList
-        [Pair (List U8) (List U8)]
+        [((List U8), (List U8))]
         [Maybe (List U8)]
         env
         (None [List U8])
         (
-          \h : Pair (List U8) (List U8) =>
-            \t : List (Pair (List U8) (List U8)) =>
+          \h : ((List U8), (List U8)) =>
+            \t : List (((List U8), (List U8))) =>
               if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
                 (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
                 (\u : U8 => lookupEnv t name)
         )
 
 poly atomOperand =
-  \env : List (Pair (List U8) (List U8)) =>
+  \env : List (((List U8), (List U8))) =>
     \e : AnfExpr =>
       match e [Result (List U8) (List U8)] {
         | AE_Var n =>
@@ -127,14 +127,14 @@ poly atomOperand =
       }
 
 poly rec emitArgsString =
-  \env : List (Pair (List U8) (List U8)) =>
+  \env : List (((List U8), (List U8))) =>
     \args : List AnfExpr =>
       \leading : Bool =>
         matchList
           [AnfExpr]
           [Result (List U8) (List U8)]
           args
-          (Ok [List U8] [List U8] (nil [U8]))
+          (Ok [List U8] [List U8] (""))
           (
             \h : AnfExpr =>
               \t : List AnfExpr =>
@@ -150,7 +150,7 @@ poly rec emitArgsString =
           )
 
 poly rec emitExpr =
-  \env : List (Pair (List U8) (List U8)) =>
+  \env : List (((List U8), (List U8))) =>
     \counter : Bin =>
       \instrs : List (List U8) =>
         \e : AnfExpr =>
@@ -191,8 +191,8 @@ poly rec emitExpr =
                       emitExpr
                         (
                           cons
-                            [Pair (List U8) (List U8)]
-                            (MkPair [List U8] [List U8] name vop)
+                            [((List U8), (List U8))]
+                            ({List U8, List U8 | name, vop})
                             env
                         )
                         c1
@@ -209,7 +209,7 @@ poly rec paramDeclsString =
         [List U8]
         [List U8]
         params
-        (nil [U8])
+        ("")
         (
           \h : List U8 =>
             \t : List (List U8) =>
@@ -221,15 +221,15 @@ poly rec paramEnv =
   \params : List (List U8) =>
     matchList
       [List U8]
-      [List (Pair (List U8) (List U8))]
+      [List (((List U8), (List U8)))]
       params
-      (nil [Pair (List U8) (List U8)])
+      ({Pair (List U8) (List U8) |})
       (
         \h : List U8 =>
           \t : List (List U8) =>
             cons
-              [Pair (List U8) (List U8)]
-              (MkPair [List U8] [List U8] h (append [U8] "%" h))
+              [((List U8), (List U8))]
+              ({List U8, List U8 | h, (append [U8] "%" h)})
               (paramEnv t)
       )
 
@@ -247,12 +247,12 @@ poly emitFunc =
   \fn : AnfFunc =>
     match fn [Result (List U8) (List U8)] {
       | MkAnfFunc name params body =>
-        match (emitExpr (paramEnv params) BZ (nil [List U8]) body) [Result (List U8) (List U8)] {
+        match (emitExpr (paramEnv params) BZ ({List U8 |}) body) [Result (List U8) (List U8)] {
           | Err e => Err [List U8] [List U8] e
           | Ok res =>
             match res [Result (List U8) (List U8)] {
               | MkEmitRes c instrs op =>
-                let instrText = joinLines (nil [U8]) instrs in
+                let instrText = joinLines ("") instrs in
                 Ok
                   [List U8]
                   [List U8]
@@ -302,7 +302,7 @@ poly rec emitFuncs =
       [AnfFunc]
       [Result (List U8) (List U8)]
       fns
-      (Ok [List U8] [List U8] (nil [U8]))
+      (Ok [List U8] [List U8] (""))
       (
         \h : AnfFunc =>
           \t : List AnfFunc =>

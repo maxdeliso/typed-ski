@@ -82,38 +82,51 @@ poly digitToAscii =
   \d : U8 => addU8 d #u8(48)
 
 poly singletonU8 =
-  \b : U8 => cons [U8] b (nil [U8])
+  \b : U8 => {U8 | b}
 
 poly u8ToDigits =
   \n : U8 =>
-    if [List U8] (ltU8 n #u8(10))
-      (\u : U8 => singletonU8 (digitToAscii n))
-      (
-        \u : U8 =>
-          if [List U8] (ltU8 n #u8(100))
-            (
-              \u : U8 =>
-                cons
-                  [U8]
-                  (digitToAscii (divU8 n #u8(10)))
-                  (singletonU8 (digitToAscii (modU8 n #u8(10))))
-            )
-            (
-              \u : U8 =>
-                let hundreds = divU8 n #u8(100) in
-                let tens = modU8 (divU8 n #u8(10)) #u8(10) in
-                let ones = modU8 n #u8(10) in
-                cons
-                  [U8]
-                  (digitToAscii hundreds)
-                  (
-                    cons
-                      [U8]
-                      (digitToAscii tens)
-                      (singletonU8 (digitToAscii ones))
-                  )
-            )
-      )
+    cond
+      [List U8]
+      {|
+        (ltU8 n #u8(10)) =>
+        singletonU8
+        (digitToAscii n) |
+        (ltU8 n #u8(100)) =>
+        cons
+        [U8]
+        (digitToAscii (divU8 n #u8(10)))
+        (singletonU8 (digitToAscii (modU8 n #u8(10)))) |
+        otherwise =>
+        let
+        hundreds =
+        divU8
+        n
+        #
+        u8
+        (100)
+        in
+        let
+        tens =
+        modU8
+        (divU8 n #u8(10))
+        #
+        u8
+        (10)
+        in
+        let
+        ones =
+        modU8
+        n
+        #
+        u8
+        (10)
+        in
+        cons
+        [U8]
+        (digitToAscii hundreds)
+        (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
+      }
 
 poly rec renderList =
   \f : AnfExpr -> List U8 =>
@@ -122,7 +135,7 @@ poly rec renderList =
         [AnfExpr]
         [List U8]
         es
-        (nil [U8])
+        ("")
         (
           \h : AnfExpr =>
             \t : List AnfExpr => append [U8] (cons [U8] ' ' (f h)) (renderList f t)
@@ -134,7 +147,7 @@ poly rec renderParams =
       [List U8]
       [List U8]
       ps
-      (nil [U8])
+      ("")
       (
         \h : List U8 =>
           \t : List (List U8) => append [U8] (cons [U8] ' ' h) (renderParams t)
@@ -243,7 +256,7 @@ poly rec unparseAnfFuncs =
       [AnfFunc]
       [List U8]
       fns
-      (nil [U8])
+      ("")
       (
         \h : AnfFunc =>
           \t : List AnfFunc => append [U8] (unparseAnfFunc h) (unparseAnfFuncs t)

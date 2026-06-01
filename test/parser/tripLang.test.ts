@@ -73,11 +73,7 @@ describe("parseTripLang", () => {
       name: "fact",
       rec: true,
       type: undefined,
-      term: mkSystemFAbs(
-        "n",
-        { kind: "type-var", typeName: "Nat" },
-        createSystemFApplication(mkSystemFVar("fact"), mkSystemFVar("n")),
-      ),
+      term: mkSystemFVar("fact"),
     });
   });
 
@@ -628,6 +624,49 @@ describe("parse single poly", () => {
     const nilVar = expectSystemFVar(nilApp.term);
     assert.strictEqual(nilVar.name, "nil");
     assert.strictEqual(unparseSystemFType(nilApp.typeArg), "U8");
+  });
+});
+
+describe("parse cond expression", () => {
+  it("parses cond expression with multiple arms", () => {
+    const input = `poly foo =
+      cond [Maybe U8] {
+        | true => Some [U8] 1
+        | false => None [U8]
+        | otherwise => None [U8]
+      }`;
+    const result = parseTripLang(input);
+
+    assert.strictEqual(result.kind, "program");
+    assert.strictEqual(result.terms.length, 1);
+    const term = result.terms[0]!;
+    assert.strictEqual(term.kind, "poly");
+    assert.strictEqual(term.name, "foo");
+  });
+
+  it("does not capture an outer u when desugaring cond branches", () => {
+    const input = `poly foo =
+      \\u : U8 =>
+        cond [U8] {
+          | true => u
+          | otherwise => 0
+        }`;
+    const result = parseTripLang(input);
+    const term = requiredAt(result.terms, 0, "expected poly term");
+    assert.strictEqual(term.kind, "poly");
+    assert.strictEqual(term.term.kind, "systemF-abs");
+    assert.strictEqual(term.term.name, "u");
+
+    const ifApp = expectSystemFApp(term.term.body);
+    const elseBranch = ifApp.rgt;
+    assert.strictEqual(elseBranch.kind, "systemF-abs");
+    assert.notStrictEqual(elseBranch.name, "u");
+
+    const ifThenApp = expectSystemFApp(ifApp.lft);
+    const thenBranch = ifThenApp.rgt;
+    assert.strictEqual(thenBranch.kind, "systemF-abs");
+    assert.notStrictEqual(thenBranch.name, "u");
+    assert.deepStrictEqual(thenBranch.body, mkSystemFVar("u"));
   });
 });
 

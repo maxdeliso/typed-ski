@@ -181,6 +181,21 @@ describe("Parser Error Coverage", () => {
       });
     });
 
+    it("cond requires an otherwise arm", () => {
+      assert.throws(() => parseSystemF("cond [U8] { | true => 1 }"), {
+        message: /cond requires a default 'otherwise' arm/,
+      });
+    });
+
+    it("cond requires otherwise to be the final arm", () => {
+      assert.throws(
+        () => parseSystemF("cond [U8] { | otherwise => 1 | true => 2 }"),
+        {
+          message: /expected '\}'/,
+        },
+      );
+    });
+
     it("expected 'in' after let binding", () => {
       assert.throws(() => parseSystemF("let x = 1"));
     });

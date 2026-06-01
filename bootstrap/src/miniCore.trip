@@ -86,22 +86,17 @@ data MiniProgram =
 
 poly rec peelLams =
   \expr : Core =>
-    match expr [Pair (List (List U8)) Core] {
-      | Cr_Var n =>
-        MkPair [List (List U8)] [Core] (nil [List U8]) expr
-      | Cr_App a b =>
-        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+    match expr [((List (List U8)), Core)] {
+      | Cr_Var n => {List (List U8), Core | (nil [List U8]), expr}
+      | Cr_App a b => {List (List U8), Core | (nil [List U8]), expr}
       | Cr_Lam name body =>
-        match (peelLams body) [Pair (List (List U8)) Core] {
+        match (peelLams body) [((List (List U8)), Core)] {
           | MkPair ps inner =>
-            MkPair [List (List U8)] [Core] (cons [List U8] name ps) inner
+            {List (List U8), Core | (cons [List U8] name ps), inner}
         }
-      | Cr_Native t =>
-        MkPair [List (List U8)] [Core] (nil [List U8]) expr
-      | Cr_Ctor t n a =>
-        MkPair [List (List U8)] [Core] (nil [List U8]) expr
-      | Cr_Match s arms =>
-        MkPair [List (List U8)] [Core] (nil [List U8]) expr
+      | Cr_Native t => {List (List U8), Core | (nil [List U8]), expr}
+      | Cr_Ctor t n a => {List (List U8), Core | (nil [List U8]), expr}
+      | Cr_Match s arms => {List (List U8), Core | (nil [List U8]), expr}
     }
 
 poly rec listAnyLam =
@@ -127,15 +122,15 @@ poly rec exprHasLam =
     }
 
 poly rec buildFuncs =
-  \defs : List (Pair (List U8) Core) =>
+  \defs : List (((List U8), Core)) =>
     matchList
-      [Pair (List U8) Core]
+      [((List U8), Core)]
       [Result (List U8) (List MiniFunc)]
       defs
-      (Ok [List U8] [List MiniFunc] (nil [MiniFunc]))
+      (Ok [List U8] [List MiniFunc] ({MiniFunc |}))
       (
-        \h : Pair (List U8) Core =>
-          \t : List (Pair (List U8) Core) =>
+        \h : ((List U8), Core) =>
+          \t : List (((List U8), Core)) =>
             let name = fst [List U8] [Core] h in
             let core = snd [List U8] [Core] h in
             match (peelLams core) [Result (List U8) (List MiniFunc)] {
@@ -164,7 +159,7 @@ poly rec buildFuncs =
       )
 
 poly buildMiniProgram =
-  \defs : List (Pair (List U8) Core) =>
+  \defs : List (((List U8), Core)) =>
     \entry : List U8 =>
       match (buildFuncs defs) [Result (List U8) MiniProgram] {
         | Err e => Err [List U8] [MiniProgram] e

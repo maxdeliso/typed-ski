@@ -1348,6 +1348,149 @@ function matchPairType(
   };
 }
 
+function parseDelayLambda(
+  tokens: readonly Token[],
+  index: number,
+): { bodyTokens: Token[]; endIndex: number } | undefined {
+  const arg = parseArgExpression(tokens, index);
+  if (!arg) return undefined;
+
+  const stripped = stripOuterParens(arg.tokens);
+  let idx = 0;
+  while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
+  if (idx >= stripped.length || stripped[idx]!.text !== "\\") return undefined;
+  idx++;
+  while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
+  const nameToken = stripped[idx];
+  if (idx >= stripped.length || !nameToken || nameToken.kind !== "ident")
+    return undefined;
+  if (nameToken.text !== "u") return undefined;
+  idx++;
+  while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
+  if (idx >= stripped.length || stripped[idx]!.text !== ":") return undefined;
+  idx++;
+  while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
+  if (idx >= stripped.length || stripped[idx]!.text !== "U8") return undefined;
+  idx++;
+  while (idx < stripped.length && isComment(stripped[idx]!)) idx++;
+  if (idx >= stripped.length || stripped[idx]!.text !== "=>") return undefined;
+  idx++;
+
+  const bodyTokens = stripped.slice(idx);
+  for (let i = 0; i < bodyTokens.length; i++) {
+    const token = bodyTokens[i]!;
+    if (token.kind !== "ident" || token.text !== nameToken.text) continue;
+    if (previousSyntax(bodyTokens, i)?.text === "\\") continue;
+    return undefined;
+  }
+  return { bodyTokens, endIndex: arg.endIndex };
+}
+
+function matchIfExpression(
+  tokens: readonly Token[],
+  index: number,
+):
+  | {
+      typeText: string;
+      condText: string;
+      thenBody: Token[];
+      elseBody: Token[];
+      endIndex: number;
+    }
+  | undefined {
+  const token = tokens[index];
+  if (token?.text !== "if") return undefined;
+
+  const next1 = nextSyntaxWithIndex(tokens, index);
+  if (next1?.token.text !== "[") return undefined;
+
+  const typeTokens: Token[] = [];
+  let cursor = next1.index + 1;
+  let depth = 1;
+  while (cursor < tokens.length) {
+    const t = tokens[cursor]!;
+    if (t.text === "[") depth++;
+    if (t.text === "]") depth--;
+    if (depth === 0) break;
+    typeTokens.push(t);
+    cursor++;
+  }
+  if (cursor >= tokens.length) return undefined;
+  const endTypeIdx = cursor;
+
+  const condArg = parseArgExpression(tokens, endTypeIdx + 1);
+  if (!condArg) return undefined;
+
+  const thenLambda = parseDelayLambda(tokens, condArg.endIndex + 1);
+  if (!thenLambda) return undefined;
+
+  const elseLambda = parseDelayLambda(tokens, thenLambda.endIndex + 1);
+  if (!elseLambda) return undefined;
+
+  return {
+    typeText: formatInline(typeTokens),
+    condText: formatInline(condArg.tokens),
+    thenBody: thenLambda.bodyTokens,
+    elseBody: elseLambda.bodyTokens,
+    endIndex: elseLambda.endIndex,
+  };
+}
+
+function parseCondChain(
+  tokens: readonly Token[],
+  index: number,
+):
+  | {
+      typeText: string;
+      arms: { condText: string; bodyText: string }[];
+      defaultBodyText: string;
+      endIndex: number;
+    }
+  | undefined {
+  const firstIf = matchIfExpression(tokens, index);
+  if (!firstIf) return undefined;
+
+  const typeText = firstIf.typeText;
+  const arms: { condText: string; bodyText: string }[] = [];
+
+  arms.push({
+    condText: firstIf.condText,
+    bodyText: formatInline(firstIf.thenBody),
+  });
+
+  let currentElseTokens = firstIf.elseBody;
+  let currentEndIndex = firstIf.endIndex;
+
+  for (;;) {
+    const stripped = stripOuterParens(currentElseTokens);
+    const elseIfMatch = matchIfExpression(stripped, 0);
+    if (
+      elseIfMatch &&
+      elseIfMatch.typeText === typeText &&
+      elseIfMatch.endIndex === stripped.length - 1
+    ) {
+      arms.push({
+        condText: elseIfMatch.condText,
+        bodyText: formatInline(elseIfMatch.thenBody),
+      });
+      currentElseTokens = elseIfMatch.elseBody;
+      continue;
+    }
+    break;
+  }
+
+  if (arms.length < 2) return undefined;
+
+  const defaultBodyText = formatInline(currentElseTokens);
+
+  return {
+    typeText,
+    arms,
+    defaultBodyText,
+    endIndex: currentEndIndex,
+  };
+}
+
 function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
   const diagnostics: TripLintDiagnostic[] = [];
   const topLevel = collectTopLevelBindings(tokens);
@@ -1507,6 +1650,33 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
         continue;
       }
     }
+
+    // 6. Degenerate if chain simplification to cond
+    const condChainMatch = parseCondChain(tokens, i);
+    if (condChainMatch) {
+      const armLines = condChainMatch.arms
+        .map((arm) => `| ${arm.condText} => ${arm.bodyText}`)
+        .join("\n      ");
+      const replacement = `cond [${condChainMatch.typeText}] {
+      ${armLines}
+      | otherwise => ${condChainMatch.defaultBodyText}
+    }`;
+      diagnostics.push(
+        diagnostic(
+          "trip-degenerate-if",
+          `Use cond [${condChainMatch.typeText}] {...} to flatten nested if chains`,
+          tokens[i]!,
+          {
+            start: tokens[i]!.start,
+            end: tokens[condChainMatch.endIndex]!.end,
+            replacement,
+          },
+        ),
+      );
+      i = condChainMatch.endIndex;
+      continue;
+    }
+
     if (token.kind === "number") {
       const value = Number(token.text);
       if (
@@ -1836,6 +2006,7 @@ const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
   "trip-redundant-parens",
   "trip-u8-literal",
   "trip-formatting-deviation",
+  "trip-degenerate-if",
 ]);
 
 /**

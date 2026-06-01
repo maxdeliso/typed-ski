@@ -470,7 +470,7 @@ poly rec emitImportsAcc =
         )
 
 poly emitImports =
-  \decls : List Decl => emitImportsAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitImportsAcc (reverse [Decl] decls) ("")
 
 poly rec emitExportsAcc =
   \decls : List Decl =>
@@ -499,29 +499,29 @@ poly rec emitExportsAcc =
         )
 
 poly emitExports =
-  \decls : List Decl => emitExportsAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitExportsAcc (reverse [Decl] decls) ("")
 
 poly emitCtor =
-  \ctor : Pair (List U8) U8 =>
+  \ctor : ((List U8), U8) =>
     let name = fst [List U8] [U8] ctor in
     let arity = snd [List U8] [U8] ctor in
     emitNameCountLine prefixCtor name arity
 
 poly rec emitCtorsAcc =
-  \ctors : List (Pair (List U8) U8) =>
+  \ctors : List (((List U8), U8)) =>
     \acc : List U8 =>
       matchList
-        [Pair (List U8) U8]
+        [((List U8), U8)]
         [List U8]
         ctors
         acc
         (
-          \h : Pair (List U8) U8 =>
-            \t : List (Pair (List U8) U8) => emitCtorsAcc t (append [U8] (emitCtor h) acc)
+          \h : ((List U8), U8) =>
+            \t : List (((List U8), U8)) => emitCtorsAcc t (append [U8] (emitCtor h) acc)
         )
 
 poly emitCtors =
-  \ctors : List (Pair (List U8) U8) => emitCtorsAcc (reverse [Pair (List U8) U8] ctors) (nil [U8])
+  \ctors : List (((List U8), U8)) => emitCtorsAcc (reverse [((List U8), U8)] ctors) ("")
 
 poly rec emitDataDefsAcc =
   \decls : List Decl =>
@@ -552,7 +552,7 @@ poly rec emitDataDefsAcc =
         )
 
 poly emitDataDefs =
-  \decls : List Decl => emitDataDefsAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitDataDefsAcc (reverse [Decl] decls) ("")
 
 poly rec emitTypesAcc =
   \decls : List Decl =>
@@ -581,7 +581,7 @@ poly rec emitTypesAcc =
         )
 
 poly emitTypes =
-  \decls : List Decl => emitTypesAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitTypesAcc (reverse [Decl] decls) ("")
 
 poly rec emitOpaquesAcc =
   \decls : List Decl =>
@@ -610,7 +610,7 @@ poly rec emitOpaquesAcc =
         )
 
 poly emitOpaques =
-  \decls : List Decl => emitOpaquesAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitOpaquesAcc (reverse [Decl] decls) ("")
 
 poly rec emitNativesAcc =
   \decls : List Decl =>
@@ -639,7 +639,7 @@ poly rec emitNativesAcc =
         )
 
 poly emitNatives =
-  \decls : List Decl => emitNativesAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitNativesAcc (reverse [Decl] decls) ("")
 
 poly rec emitPolyDefsAcc =
   \decls : List Decl =>
@@ -673,7 +673,7 @@ poly rec emitPolyDefsAcc =
         )
 
 poly emitPolyDefs =
-  \decls : List Decl => emitPolyDefsAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitPolyDefsAcc (reverse [Decl] decls) ("")
 
 poly rec emitCombinatorDefsAcc =
   \decls : List Decl =>
@@ -712,7 +712,7 @@ poly rec emitCombinatorDefsAcc =
         )
 
 poly emitCombinatorDefs =
-  \decls : List Decl => emitCombinatorDefsAcc (reverse [Decl] decls) (nil [U8])
+  \decls : List Decl => emitCombinatorDefsAcc (reverse [Decl] decls) ("")
 
 poly parseModuleSource =
   \bundleName : List U8 =>
@@ -777,7 +777,7 @@ poly rec emitParsedModules =
       [ModuleRecord]
       [Result (List U8) (List U8)]
       recs
-      (Ok [List U8] [List U8] (nil [U8]))
+      (Ok [List U8] [List U8] (""))
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord =>

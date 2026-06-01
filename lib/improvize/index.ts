@@ -1439,7 +1439,9 @@ function matchIfExpression(
 function splitArms(tokens: readonly Token[]): Token[][] {
   const arms: Token[][] = [];
   let currentArm: Token[] = [];
-  let depthP = 0, depthB = 0, depthBr = 0;
+  let depthP = 0,
+    depthB = 0,
+    depthBr = 0;
   for (const t of tokens) {
     if (t.text === "(") depthP++;
     else if (t.text === ")") depthP--;
@@ -1466,12 +1468,14 @@ function splitArms(tokens: readonly Token[]): Token[][] {
 function parseMatchHeader(
   tokens: readonly Token[],
   index: number,
-): {
-  scrutineeText: string;
-  typeText: string;
-  armsTokens: Token[];
-  endIndex: number;
-} | undefined {
+):
+  | {
+      scrutineeText: string;
+      typeText: string;
+      armsTokens: Token[];
+      endIndex: number;
+    }
+  | undefined {
   const token = tokens[index];
   if (token?.text !== "match") return undefined;
 
@@ -1529,13 +1533,15 @@ function parseMatchHeader(
 function matchMonadicBind(
   tokens: readonly Token[],
   index: number,
-): {
-  scrutinee: string;
-  typeText: string;
-  varName: string;
-  body: Token[];
-  endIndex: number;
-} | undefined {
+):
+  | {
+      scrutinee: string;
+      typeText: string;
+      varName: string;
+      body: Token[];
+      endIndex: number;
+    }
+  | undefined {
   const header = parseMatchHeader(tokens, index);
   if (!header) return undefined;
 
@@ -1546,7 +1552,7 @@ function matchMonadicBind(
   let okArm: Token[] | undefined;
 
   for (const arm of arms) {
-    const first = arm.find(t => !isComment(t));
+    const first = arm.find((t) => !isComment(t));
     if (first?.text === "Err") {
       errArm = arm;
     } else if (first?.text === "Ok") {
@@ -1556,18 +1562,23 @@ function matchMonadicBind(
 
   if (!errArm || !okArm) return undefined;
 
-  const errClean = errArm.filter(t => !isComment(t));
+  const errClean = errArm.filter((t) => !isComment(t));
   if (errClean.length < 8) return undefined;
-  if (errClean[0]!.text !== "Err" || errClean[2]!.text !== "=>" || errClean[3]!.text !== "Err") return undefined;
+  if (
+    errClean[0]!.text !== "Err" ||
+    errClean[2]!.text !== "=>" ||
+    errClean[3]!.text !== "Err"
+  )
+    return undefined;
   const eVar = errClean[1]!.text;
   if (errClean[errClean.length - 1]!.text !== eVar) return undefined;
 
-  const okClean = okArm.filter(t => !isComment(t));
+  const okClean = okArm.filter((t) => !isComment(t));
   if (okClean.length < 4) return undefined;
   if (okClean[0]!.text !== "Ok" || okClean[2]!.text !== "=>") return undefined;
   const varName = okClean[1]!.text;
 
-  const arrowIdx = okArm.findIndex(t => t.text === "=>");
+  const arrowIdx = okArm.findIndex((t) => t.text === "=>");
   const body = okArm.slice(arrowIdx + 1);
 
   return {
@@ -1582,14 +1593,16 @@ function matchMonadicBind(
 function matchDestructuringMatch(
   tokens: readonly Token[],
   index: number,
-): {
-  scrutinee: string;
-  typeText: string;
-  ctorName: string;
-  params: string[];
-  body: Token[];
-  endIndex: number;
-} | undefined {
+):
+  | {
+      scrutinee: string;
+      typeText: string;
+      ctorName: string;
+      params: string[];
+      body: Token[];
+      endIndex: number;
+    }
+  | undefined {
   const header = parseMatchHeader(tokens, index);
   if (!header) return undefined;
 
@@ -1597,14 +1610,14 @@ function matchDestructuringMatch(
   if (arms.length !== 1) return undefined;
 
   const arm = arms[0]!;
-  const arrowIdx = arm.findIndex(t => t.text === "=>");
+  const arrowIdx = arm.findIndex((t) => t.text === "=>");
   if (arrowIdx === -1) return undefined;
 
-  const patternTokens = arm.slice(0, arrowIdx).filter(t => !isComment(t));
+  const patternTokens = arm.slice(0, arrowIdx).filter((t) => !isComment(t));
   if (patternTokens.length === 0) return undefined;
 
   const ctorName = patternTokens[0]!.text;
-  const params = patternTokens.slice(1).map(t => t.text);
+  const params = patternTokens.slice(1).map((t) => t.text);
   const body = arm.slice(arrowIdx + 1);
 
   return {
@@ -1620,7 +1633,7 @@ function matchDestructuringMatch(
 function matchErrTermTokens(
   tokens: readonly Token[],
 ): { errText: string } | undefined {
-  const clean = tokens.filter(t => !isComment(t));
+  const clean = tokens.filter((t) => !isComment(t));
   if (clean.length < 6) return undefined;
   if (clean[0]!.text !== "Err") return undefined;
   let rbracketCount = 0;
@@ -1644,12 +1657,14 @@ function matchErrTermTokens(
 function matchLetExpression(
   tokens: readonly Token[],
   index: number,
-): {
-  varName: string;
-  valueText: string;
-  body: Token[];
-  endIndex: number;
-} | undefined {
+):
+  | {
+      varName: string;
+      valueText: string;
+      body: Token[];
+      endIndex: number;
+    }
+  | undefined {
   const token = tokens[index];
   if (token?.text !== "let") return undefined;
 
@@ -1662,7 +1677,9 @@ function matchLetExpression(
 
   const valueTokens: Token[] = [];
   let cursor = next2.index + 1;
-  let depthP = 0, depthB = 0, depthBr = 0;
+  let depthP = 0,
+    depthB = 0,
+    depthBr = 0;
   while (cursor < tokens.length) {
     const t = tokens[cursor]!;
     if (t.text === "(") depthP++;
@@ -1724,7 +1741,10 @@ function collectDoSteps(
   if (destructMatch && destructMatch.typeText === returnType) {
     const sub = collectDoSteps(destructMatch.body, returnType);
     if (sub) {
-      const patternText = [destructMatch.ctorName, ...destructMatch.params].join(" ");
+      const patternText = [
+        destructMatch.ctorName,
+        ...destructMatch.params,
+      ].join(" ");
       return {
         steps: [`${patternText} = ${destructMatch.scrutinee}`, ...sub.steps],
         isReturn: sub.isReturn,
@@ -1739,7 +1759,10 @@ function collectDoSteps(
       const sub = collectDoSteps(ifMatch.thenBody, returnType);
       if (sub) {
         return {
-          steps: [`assert ${ifMatch.condText} else ${errMatch.errText}`, ...sub.steps],
+          steps: [
+            `assert ${ifMatch.condText} else ${errMatch.errText}`,
+            ...sub.steps,
+          ],
           isReturn: sub.isReturn,
         };
       }
@@ -1754,7 +1777,7 @@ function collectDoSteps(
     };
   }
 
-  if (stripped.filter(t => !isComment(t)).length === 0) return undefined;
+  if (stripped.filter((t) => !isComment(t)).length === 0) return undefined;
 
   return {
     steps: [text],
@@ -1765,11 +1788,13 @@ function collectDoSteps(
 function parseDoChain(
   tokens: readonly Token[],
   index: number,
-): {
-  typeText: string;
-  steps: string[];
-  endIndex: number;
-} | undefined {
+):
+  | {
+      typeText: string;
+      steps: string[];
+      endIndex: number;
+    }
+  | undefined {
   const header = parseMatchHeader(tokens, index);
   if (!header) return undefined;
 

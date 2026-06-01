@@ -117,47 +117,22 @@ poly singletonU8 =
 
 poly u8ToDigits =
   \n : U8 =>
-    cond
-      [List U8]
-      {|
-        (ltU8 n #u8(10)) =>
-        singletonU8
-        (digitToAscii n) |
-        (ltU8 n #u8(100)) =>
+    cond [List U8] {
+      | (ltU8 n #u8(10)) => singletonU8 (digitToAscii n)
+      | (ltU8 n #u8(100)) =>
         cons
-        [U8]
-        (digitToAscii (divU8 n #u8(10)))
-        (singletonU8 (digitToAscii (modU8 n #u8(10)))) |
-        otherwise =>
-        let
-        hundreds =
-        divU8
-        n
-        #
-        u8
-        (100)
-        in
-        let
-        tens =
-        modU8
-        (divU8 n #u8(10))
-        #
-        u8
-        (10)
-        in
-        let
-        ones =
-        modU8
-        n
-        #
-        u8
-        (10)
-        in
+          [U8]
+          (digitToAscii (divU8 n #u8(10)))
+          (singletonU8 (digitToAscii (modU8 n #u8(10))))
+      | otherwise =>
+        let hundreds = divU8 n #u8(100) in
+        let tens = modU8 (divU8 n #u8(10)) #u8(10) in
+        let ones = modU8 n #u8(10) in
         cons
-        [U8]
-        (digitToAscii hundreds)
-        (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
-      }
+          [U8]
+          (digitToAscii hundreds)
+          (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
+    }
 
 poly digitValue =
   \c : U8 => modU8 c #u8(16)
@@ -211,9 +186,13 @@ poly rec collectWriteBytes =
                           match cont [Result (List U8) (List U8)] {
                             | E_Lam name body =>
                               do [Result (List U8) (List U8)] {
-      rest <- (collectWriteBytes body)
-      return Ok [List U8] [List U8] (cons [U8] (parseByteDigits digits) rest)
-    }
+                                rest <- (collectWriteBytes body)
+                                return
+                                  Ok
+                                  [List U8]
+                                  [List U8]
+                                  (cons [U8] (parseByteDigits digits) rest)
+                              }
                             | E_Var name =>
                               Ok
                                 [List U8]
@@ -353,11 +332,15 @@ poly rec parseModuleRecords =
         \h : ModuleRecord =>
           \t : List ModuleRecord =>
             do [Result (List U8) (List ParsedModule)] {
-      MkModuleRecord name lengthDigits source = h
-      parsed <- (parseModuleSource name source)
-      rest <- (parseModuleRecords t)
-      return Ok [List U8] [List ParsedModule] (cons [ParsedModule] parsed rest)
-    }
+              MkModuleRecord name lengthDigits source = h
+              parsed <- (parseModuleSource name source)
+              rest <- (parseModuleRecords t)
+              return
+                Ok
+                [List U8]
+                [List ParsedModule]
+                (cons [ParsedModule] parsed rest)
+            }
       )
 
 poly rec findParsedModule =
@@ -590,9 +573,13 @@ poly emitWriteBody =
       \body : Expr =>
         \state : EmitState =>
           do [Result (List U8) EmitState] {
-      bytes <- (collectWriteBytes body)
-      return Ok [List U8] [EmitState] (appendStateText state (emitWriteFunction moduleName name bytes))
-    }
+            bytes <- (collectWriteBytes body)
+            return
+              Ok
+              [List U8]
+              [EmitState]
+              (appendStateText state (emitWriteFunction moduleName name bytes))
+          }
 
 poly emitFunctionBody =
   \mods : List ParsedModule =>
@@ -613,11 +600,25 @@ poly emitFunctionBody =
                     )
                 | E_Var callee =>
                   do [Result (List U8) EmitState] {
-      qualified <- (resolveCallee moduleName decls callee)
-      MkQualifiedName calleeModule calleeName = qualified
-      depState <- (emitRequiredFunction mods calleeModule calleeName state)
-      return Ok [List U8] [EmitState] (appendStateText depState (emitCallFunction moduleName name calleeModule calleeName))
-    }
+                    qualified <- (resolveCallee moduleName decls callee)
+                    MkQualifiedName calleeModule calleeName = qualified
+                    depState <- (emitRequiredFunction mods calleeModule calleeName state)
+                    return
+                      Ok
+                      [List U8]
+                      [EmitState]
+                      (
+                        appendStateText
+                          depState
+                          (
+                            emitCallFunction
+                              moduleName
+                              name
+                              calleeModule
+                              calleeName
+                          )
+                      )
+                  }
                 | E_App f x => emitWriteBody moduleName name body state
                 | E_Lam arg inner =>
                   Err [List U8] [EmitState] "Unsupported LLVM expression"
@@ -672,9 +673,9 @@ poly compileSourceToLlvm =
               | None => Err [List U8] [List U8] "Missing main"
               | Some body =>
                 do [Result (List U8) (List U8)] {
-      bytes <- (collectWriteBytes body)
-      return Ok [List U8] [List U8] (emitLlvmForWriteBytes bytes)
-    }
+                  bytes <- (collectWriteBytes body)
+                  return Ok [List U8] [List U8] (emitLlvmForWriteBytes bytes)
+                }
             }
         }
     }

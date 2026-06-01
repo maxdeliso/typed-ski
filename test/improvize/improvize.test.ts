@@ -97,8 +97,7 @@ poly main = #u8(1)
     assert.ok(files.length > 0);
     assert.ok(parseChecked > 0);
   });
-
-  it("aligns closing brackets with their matched opening bracket when multi-line", () => {
+  it("formats square brackets on a single line to preserve parse-equivalence of type applications", () => {
     const input = `module M
 poly main = foo [VeryLongTypeNameThatWillMakeThisBracketedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively]
 `;
@@ -109,9 +108,7 @@ poly main = foo [VeryLongTypeNameThatWillMakeThisBracketedExpressionExceedEighty
 
 poly main =
   foo
-    [
-      VeryLongTypeNameThatWillMakeThisBracketedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively
-    ]
+    [VeryLongTypeNameThatWillMakeThisBracketedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively]
 `,
     );
   });

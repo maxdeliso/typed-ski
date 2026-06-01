@@ -158,12 +158,8 @@ poly main =
                                                                           | isRec2 => false
                                                                           | (eqListU8 name2 "c") =>
                                                                             matchList
-                                                                              [
-                                                                                Decl
-                                                                              ]
-                                                                              [
-                                                                                Bool
-                                                                              ]
+                                                                              [Decl]
+                                                                              [Bool]
                                                                               rest2
                                                                               true
                                                                               (

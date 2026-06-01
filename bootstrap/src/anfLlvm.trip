@@ -139,11 +139,14 @@ poly rec emitArgsString =
             \h : AnfExpr =>
               \t : List AnfExpr =>
                 do [Result (List U8) (List U8)] {
-      op <- (atomOperand env h)
-      piece = if [List U8] leading (\u : U8 => append [U8] "i8 " op) (\u : U8 => append [U8] ", i8 " op)
-      rest <- (emitArgsString env t false)
-      return Ok [List U8] [List U8] (append [U8] piece rest)
-    }
+                  op <- (atomOperand env h)
+                  piece =
+                  if [List U8] leading
+                    (\u : U8 => append [U8] "i8 " op)
+                    (\u : U8 => append [U8] ", i8 " op)
+                  rest <- (emitArgsString env t false)
+                  return Ok [List U8] [List U8] (append [U8] piece rest)
+                }
           )
 
 poly rec emitExpr =
@@ -165,12 +168,17 @@ poly rec emitExpr =
               Err [List U8] [EmitRes] "Unsupported expression: lambda"
             | AE_Call f args =>
               do [Result (List U8) EmitRes] {
-      argStr <- (emitArgsString env args true)
-      dest = append [U8] "%__ll" (binToDigits counter)
-      counter1 = incBin counter
-      line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n")))))
-      return Ok [List U8] [EmitRes] (MkEmitRes counter1 (cons [List U8] line instrs) dest)
-    }
+                argStr <- (emitArgsString env args true)
+                dest = append [U8]
+                "%__ll" (binToDigits counter)
+                counter1 = incBin counter
+                line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n")))))
+                return
+                  Ok
+                  [List U8]
+                  [EmitRes]
+                  (MkEmitRes counter1 (cons [List U8] line instrs) dest)
+              }
             | AE_Con tag total arity args =>
               Err [List U8] [EmitRes] "Unsupported expression: constructor"
             | AE_Case scrut arms =>
@@ -243,7 +251,46 @@ poly emitFunc =
       res <- (emitExpr (paramEnv params) BZ ({List U8 |}) body)
       MkEmitRes c instrs op = res
       instrText = joinLines ("") instrs
-      return Ok [List U8] [List U8] (append [U8] "define i8 @" (append [U8] name (append [U8] "(" (append [U8] (paramDeclsString params true) (append [U8] ") {\nentry:\n" (append [U8] instrText (append [U8] "  ret i8 " (append [U8] op "\n}\n\n"))))))))
+      return
+        Ok
+        [List U8]
+        [List U8]
+        (
+          append
+            [U8]
+            "define i8 @"
+            (
+              append
+                [U8]
+                name
+                (
+                  append
+                    [U8]
+                    "("
+                    (
+                      append
+                        [U8]
+                        (paramDeclsString params true)
+                        (
+                          append
+                            [U8]
+                            ") {\nentry:\n"
+                            (
+                              append
+                                [U8]
+                                instrText
+                                (
+                                  append
+                                    [U8]
+                                    "  ret i8 "
+                                    (append [U8] op "\n}\n\n")
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
     }
 
 poly rec emitFuncs =
@@ -257,10 +304,10 @@ poly rec emitFuncs =
         \h : AnfFunc =>
           \t : List AnfFunc =>
             do [Result (List U8) (List U8)] {
-      block <- (emitFunc h)
-      rest <- (emitFuncs t)
-      return Ok [List U8] [List U8] (append [U8] block rest)
-    }
+              block <- (emitFunc h)
+              rest <- (emitFuncs t)
+              return Ok [List U8] [List U8] (append [U8] block rest)
+            }
       )
 
 poly emitProgram =

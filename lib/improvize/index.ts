@@ -1,4 +1,5 @@
 import { stat, readdir } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { scanTrip, type ScanKind, type ScanToken } from "./lexer.ts";
@@ -394,6 +395,9 @@ function isStartOfDoStep(tokens: readonly Token[], idx: number): boolean {
 
   // Check if it is a let/match step: starts with pattern, then '='
   let depth = 0;
+  const isParenthesizedPattern = first.text === "(" || first.text === "[";
+  let hasBeenOpen = false;
+
   for (let j = idx; j < tokens.length; j++) {
     const t = tokens[j]!;
     if (isComment(t)) continue;
@@ -404,7 +408,20 @@ function isStartOfDoStep(tokens: readonly Token[], idx: number): boolean {
       }
       return true;
     }
-    depth += bracketDepthDelta(t);
+    const delta = bracketDepthDelta(t);
+    depth += delta;
+    if (depth > 0) {
+      hasBeenOpen = true;
+    }
+    if (isParenthesizedPattern && hasBeenOpen && depth === 0 && delta < 0) {
+      let nextIdx = j + 1;
+      while (nextIdx < tokens.length && isComment(tokens[nextIdx]!)) {
+        nextIdx++;
+      }
+      if (nextIdx >= tokens.length || tokens[nextIdx]!.text !== "=") {
+        break;
+      }
+    }
     if (depth < 0) break;
     // Stop if we hit a known start of another step
     if (
@@ -509,6 +526,8 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
       } else {
         let eqIdx = -1;
         let depth = 0;
+        const first = tokens[startIdx]!;
+        const startsWithCtor = first.kind === "ident" && first.text[0]! >= "A" && first.text[0]! <= "Z";
         for (let j = i; j < tokens.length; j++) {
           const t = tokens[j]!;
           if (!isComment(t)) {
@@ -516,8 +535,12 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
               eqIdx = j;
               break;
             }
-            if (j > i && depth === 0 && isStartOfDoStep(tokens, j)) {
-              break;
+            if (j > i && depth === 0) {
+              const isSameLine = t.line === first.line;
+              const skipCheck = startsWithCtor && isSameLine;
+              if (!skipCheck && isStartOfDoStep(tokens, j)) {
+                break;
+              }
             }
             depth += bracketDepthDelta(t);
           }
@@ -850,27 +873,8 @@ function formatExpressionRecursiveRaw(
     findMatchingBrace(tokens, 0, "[", "]") === tokens.length - 1
   ) {
     const inner = tokens.slice(1, tokens.length - 1);
-    const innerLines = formatExpressionRecursiveRaw(inner, indent + 2);
-    if (innerLines.length > 0) {
-      if (innerLines.length > 1) {
-        return [
-          `${" ".repeat(indent)}[`,
-          ...innerLines,
-          `${" ".repeat(indent)}]`,
-        ];
-      } else {
-        const inlineStr = `${" ".repeat(indent)}[${innerLines[0]!.trim()}]`;
-        if (inlineStr.length <= 80) {
-          return [inlineStr];
-        } else {
-          return [
-            `${" ".repeat(indent)}[`,
-            innerLines[0]!,
-            `${" ".repeat(indent)}]`,
-          ];
-        }
-      }
-    }
+    const inlineStr = `${" ".repeat(indent)}[${formatInline(inner)}]`;
+    return [inlineStr];
   }
 
   // Check 6: List and Pair literals
@@ -1132,8 +1136,17 @@ export function formatTripSource(source: string): TripFormatResult {
   // a parseable program, the output must parse to the same AST. If it does not,
   // fall back to the input untouched rather than emit a divergent reformat.
   const before = parseProgramOrNull(normalized);
-  if (before !== undefined && parseProgramOrNull(formatted) !== before) {
-    return { formatted: normalized, changed: false };
+  if (before !== undefined) {
+    try {
+      const after = JSON.stringify(parseTripLang(formatted));
+      if (after !== before) {
+        console.error("AST mismatch!");
+        throw new Error("AST mismatch: " + JSON.stringify({ before: JSON.parse(before), after: JSON.parse(after) }, null, 2));
+      }
+    } catch (e) {
+      console.error("Formatter produced invalid or different code! Error:", (e as any).message);
+      throw e;
+    }
   }
 
   return { formatted, changed: formatted !== normalized };

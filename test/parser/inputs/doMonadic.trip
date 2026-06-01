@@ -1,0 +1,7 @@
+poly foo =
+  do [Result U8 U8] {
+    x <- readLine
+    MkLine magic = x
+    assert true else 1
+    return Ok [U8] [U8] magic
+  }

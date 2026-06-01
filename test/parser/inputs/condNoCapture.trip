@@ -1,0 +1,2 @@
+poly foo =
+  \u : U8 => cond [U8] {| true => u | otherwise => 0}

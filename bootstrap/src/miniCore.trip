@@ -162,6 +162,6 @@ poly buildMiniProgram =
   \defs : List (((List U8), Core)) =>
     \entry : List U8 =>
       do [Result (List U8) MiniProgram] {
-      funcs <- (buildFuncs defs)
-      return Ok [List U8] [MiniProgram] (MkMiniProgram funcs entry)
-    }
+        funcs <- (buildFuncs defs)
+        return Ok [List U8] [MiniProgram] (MkMiniProgram funcs entry)
+      }

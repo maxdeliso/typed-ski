@@ -178,6 +178,7 @@ function isOperatorLike(token: Token): boolean {
 
 function needsInlineSpace(prev: Token | undefined, current: Token): boolean {
   if (!prev) return false;
+  if (prev.text === "<" && current.text === "-") return false;
   if (prev.text === "#") return false;
   if (current.text === "(" && prev.text === "u8") return false;
   if (prev.text === "(" || current.text === ")") return false;
@@ -363,6 +364,203 @@ function findMatchingBrace(
   return -1;
 }
 
+function isStartOfDoStep(tokens: readonly Token[], idx: number): boolean {
+  if (idx >= tokens.length) return false;
+  const first = tokens[idx]!;
+  if (isComment(first)) return false;
+
+  if (first.text === "assert" || first.text === "return") {
+    return true;
+  }
+
+  // Check if it is a bind step: `ident < -`
+  if (
+    idx + 2 < tokens.length &&
+    first.kind === "ident" &&
+    tokens[idx + 1]!.text === "<" &&
+    tokens[idx + 2]!.text === "-"
+  ) {
+    return true;
+  }
+
+  // If it starts with a lowercase identifier, it must be either bind or a simple let: `ident =`
+  if (
+    first.kind === "ident" &&
+    first.text[0]! >= "a" &&
+    first.text[0]! <= "z"
+  ) {
+    return idx + 1 < tokens.length && tokens[idx + 1]!.text === "=";
+  }
+
+  // Check if it is a let/match step: starts with pattern, then '='
+  let depth = 0;
+  for (let j = idx; j < tokens.length; j++) {
+    const t = tokens[j]!;
+    if (isComment(t)) continue;
+    if (depth === 0 && t.text === "=") {
+      // Verify it's not '=>'
+      if (j + 1 < tokens.length && tokens[j + 1]!.text === ">") {
+        return false;
+      }
+      return true;
+    }
+    depth += bracketDepthDelta(t);
+    if (depth < 0) break;
+    // Stop if we hit a known start of another step
+    if (
+      j > idx &&
+      depth === 0 &&
+      (t.text === "assert" || t.text === "return")
+    ) {
+      break;
+    }
+    if (
+      j > idx &&
+      depth === 0 &&
+      j + 2 < tokens.length &&
+      t.kind === "ident" &&
+      tokens[j + 1]!.text === "<" &&
+      tokens[j + 2]!.text === "-"
+    ) {
+      break;
+    }
+  }
+
+  return false;
+}
+
+function splitDoSteps(tokens: readonly Token[]): Token[][] {
+  const steps: Token[][] = [];
+  let i = 0;
+
+  while (i < tokens.length) {
+    while (i < tokens.length && isComment(tokens[i]!)) {
+      i++;
+    }
+    if (i >= tokens.length) break;
+
+    const startIdx = i;
+    const firstWord = tokens[i]!.text;
+
+    if (firstWord === "assert") {
+      i++;
+      let depth = 0;
+      while (i < tokens.length) {
+        const t = tokens[i]!;
+        if (!isComment(t)) {
+          if (depth === 0 && t.text === "else") {
+            break;
+          }
+          depth += bracketDepthDelta(t);
+        }
+        i++;
+      }
+      if (i < tokens.length && tokens[i]!.text === "else") {
+        i++;
+        let errDepth = 0;
+        while (i < tokens.length) {
+          const t = tokens[i]!;
+          if (!isComment(t)) {
+            if (errDepth === 0 && isStartOfDoStep(tokens, i)) {
+              break;
+            }
+            errDepth += bracketDepthDelta(t);
+          }
+          i++;
+        }
+      }
+    } else if (firstWord === "return") {
+      i++;
+      let depth = 0;
+      while (i < tokens.length) {
+        const t = tokens[i]!;
+        if (!isComment(t)) {
+          if (depth === 0 && isStartOfDoStep(tokens, i)) {
+            break;
+          }
+          depth += bracketDepthDelta(t);
+        }
+        i++;
+      }
+    } else {
+      let isBind = false;
+      if (
+        i + 2 < tokens.length &&
+        tokens[i]!.kind === "ident" &&
+        tokens[i + 1]!.text === "<" &&
+        tokens[i + 2]!.text === "-"
+      ) {
+        isBind = true;
+      }
+
+      if (isBind) {
+        i += 3;
+        let depth = 0;
+        while (i < tokens.length) {
+          const t = tokens[i]!;
+          if (!isComment(t)) {
+            if (depth === 0 && isStartOfDoStep(tokens, i)) {
+              break;
+            }
+            depth += bracketDepthDelta(t);
+          }
+          i++;
+        }
+      } else {
+        let eqIdx = -1;
+        let depth = 0;
+        for (let j = i; j < tokens.length; j++) {
+          const t = tokens[j]!;
+          if (!isComment(t)) {
+            if (depth === 0 && t.text === "=") {
+              eqIdx = j;
+              break;
+            }
+            if (j > i && depth === 0 && isStartOfDoStep(tokens, j)) {
+              break;
+            }
+            depth += bracketDepthDelta(t);
+          }
+        }
+
+        if (eqIdx !== -1) {
+          i = eqIdx + 1;
+          let exprDepth = 0;
+          while (i < tokens.length) {
+            const t = tokens[i]!;
+            if (!isComment(t)) {
+              if (exprDepth === 0 && isStartOfDoStep(tokens, i)) {
+                break;
+              }
+              exprDepth += bracketDepthDelta(t);
+            }
+            i++;
+          }
+        } else {
+          let exprDepth = 0;
+          while (i < tokens.length) {
+            const t = tokens[i]!;
+            if (!isComment(t)) {
+              if (
+                i > startIdx &&
+                exprDepth === 0 &&
+                isStartOfDoStep(tokens, i)
+              ) {
+                break;
+              }
+              exprDepth += bracketDepthDelta(t);
+            }
+            i++;
+          }
+        }
+      }
+    }
+
+    steps.push([...tokens.slice(startIdx, i)]);
+  }
+  return steps;
+}
+
 function formatExpressionRecursiveRaw(
   tokens: readonly Token[],
   indent: number,
@@ -484,6 +682,108 @@ function formatExpressionRecursiveRaw(
     }
   }
 
+  // Check 3b: Do expressions
+  const doIdx = findTopLevel(tokens, (t) => t.text === "do");
+  if (doIdx !== -1) {
+    const openBraceIdx = findTopLevel(tokens, (t) => t.text === "{", doIdx + 1);
+    if (openBraceIdx !== -1) {
+      const closeBraceIdx = findMatchingBrace(tokens, openBraceIdx, "{", "}");
+      if (closeBraceIdx !== -1) {
+        const beforeDo = tokens.slice(0, doIdx);
+        const doHeader = tokens.slice(doIdx, openBraceIdx);
+        const insideBraces = tokens.slice(openBraceIdx + 1, closeBraceIdx);
+        const afterDo = tokens.slice(closeBraceIdx + 1);
+
+        const headerStr = formatInline(doHeader) + " {";
+        const lines: string[] = [];
+
+        if (beforeDo.length > 0) {
+          lines.push(`${" ".repeat(indent)}${formatInline(beforeDo)}`);
+        }
+        lines.push(`${" ".repeat(indent)}${headerStr}`);
+
+        const steps = splitDoSteps(insideBraces);
+        for (const step of steps) {
+          lines.push(...formatExpressionRecursive(step, indent + 2));
+        }
+
+        lines.push(`${" ".repeat(indent)}}`);
+        if (afterDo.length > 0) {
+          lines.push(...formatExpressionRecursive(afterDo, indent));
+        }
+        return lines;
+      }
+    }
+  }
+
+  // Check 3c: Cond expressions
+  const condIdx = findTopLevel(tokens, (t) => t.text === "cond");
+  if (condIdx !== -1) {
+    const openBraceIdx = findTopLevel(
+      tokens,
+      (t) => t.text === "{",
+      condIdx + 1,
+    );
+    if (openBraceIdx !== -1) {
+      const closeBraceIdx = findMatchingBrace(tokens, openBraceIdx, "{", "}");
+      if (closeBraceIdx !== -1) {
+        const beforeCond = tokens.slice(0, condIdx);
+        const condHeader = tokens.slice(condIdx, openBraceIdx);
+        const insideBraces = tokens.slice(openBraceIdx + 1, closeBraceIdx);
+        const afterCond = tokens.slice(closeBraceIdx + 1);
+
+        const headerStr = formatInline(condHeader) + " {";
+        const lines: string[] = [];
+
+        if (beforeCond.length > 0) {
+          lines.push(`${" ".repeat(indent)}${formatInline(beforeCond)}`);
+        }
+        lines.push(`${" ".repeat(indent)}${headerStr}`);
+
+        const arms = splitTopLevel(insideBraces, isPipe).filter(
+          (arm) => arm.length > 0,
+        );
+
+        for (const arm of arms) {
+          let fatArrowIdx = -1;
+          for (let i = 0; i < arm.length; i++) {
+            if (arm[i]!.text === "=>") {
+              fatArrowIdx = i;
+              break;
+            }
+          }
+          if (fatArrowIdx !== -1) {
+            const patternTokens = arm.slice(0, fatArrowIdx);
+            const armBodyTokens = arm.slice(fatArrowIdx + 1);
+            const patternStr = `| ${formatInline(patternTokens)} =>`;
+
+            if (
+              isBlockLike(armBodyTokens) ||
+              formatInline(armBodyTokens).length > 50
+            ) {
+              lines.push(`${" ".repeat(indent + 2)}${patternStr}`);
+              lines.push(
+                ...formatExpressionRecursive(armBodyTokens, indent + 4),
+              );
+            } else {
+              lines.push(
+                `${" ".repeat(indent + 2)}${patternStr} ${formatInline(armBodyTokens)}`,
+              );
+            }
+          } else {
+            lines.push(`${" ".repeat(indent + 2)}${formatInline(arm)}`);
+          }
+        }
+
+        lines.push(`${" ".repeat(indent)}}`);
+        if (afterCond.length > 0) {
+          lines.push(...formatExpressionRecursive(afterCond, indent));
+        }
+        return lines;
+      }
+    }
+  }
+
   // Check 4: Structured 'if' expressions
   const ifIdx = findTopLevel(tokens, (t) => t.text === "if");
 
@@ -537,6 +837,36 @@ function formatExpressionRecursiveRaw(
             `${" ".repeat(indent)}(`,
             innerLines[0]!,
             `${" ".repeat(indent)})`,
+          ];
+        }
+      }
+    }
+  }
+
+  // Check 5b: Bracketed expressions
+  if (
+    tokens.length >= 2 &&
+    tokens[0]!.text === "[" &&
+    findMatchingBrace(tokens, 0, "[", "]") === tokens.length - 1
+  ) {
+    const inner = tokens.slice(1, tokens.length - 1);
+    const innerLines = formatExpressionRecursiveRaw(inner, indent + 2);
+    if (innerLines.length > 0) {
+      if (innerLines.length > 1) {
+        return [
+          `${" ".repeat(indent)}[`,
+          ...innerLines,
+          `${" ".repeat(indent)}]`,
+        ];
+      } else {
+        const inlineStr = `${" ".repeat(indent)}[${innerLines[0]!.trim()}]`;
+        if (inlineStr.length <= 80) {
+          return [inlineStr];
+        } else {
+          return [
+            `${" ".repeat(indent)}[`,
+            innerLines[0]!,
+            `${" ".repeat(indent)}]`,
           ];
         }
       }
@@ -2114,25 +2444,62 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       ) {
         continue;
       }
-      const atomMatch = nextSyntaxWithIndex(tokens, i);
-      if (atomMatch) {
-        const closeMatch = nextSyntaxWithIndex(tokens, atomMatch.index);
-        if (
-          closeMatch?.token.text === ")" &&
-          simpleTokenReplacement(atomMatch.token)
-        ) {
-          diagnostics.push(
-            diagnostic(
-              "trip-redundant-parens",
-              "Remove redundant parentheses around an atomic expression",
-              token,
-              {
-                start: token.start,
-                end: closeMatch.token.end,
-                replacement: atomMatch.token.text,
-              },
-            ),
-          );
+      const outerCloseIdx = findMatchingBrace(tokens, i, "(", ")");
+      if (outerCloseIdx !== -1) {
+        const outerCloseToken = tokens[outerCloseIdx]!;
+        const innerTokens = tokens.slice(i + 1, outerCloseIdx);
+        if (innerTokens.length > 0) {
+          const firstInner = innerTokens[0]!;
+          let isRedundant = false;
+          let replacement = "";
+
+          // Case 1: Inner is atomic expression
+          if (innerTokens.length === 1 && simpleTokenReplacement(firstInner)) {
+            isRedundant = true;
+            replacement = firstInner.text;
+          }
+          // Case 2: Inner is already parenthesized ( (expr) )
+          else if (
+            firstInner.text === "(" &&
+            findMatchingBrace(innerTokens, 0, "(", ")") ===
+              innerTokens.length - 1
+          ) {
+            isRedundant = true;
+            replacement = formatInline(innerTokens);
+          }
+          // Case 3: Inner is bracketed ( [expr] )
+          else if (
+            firstInner.text === "[" &&
+            findMatchingBrace(innerTokens, 0, "[", "]") ===
+              innerTokens.length - 1
+          ) {
+            isRedundant = true;
+            replacement = formatInline(innerTokens);
+          }
+          // Case 4: Inner is braced ( {expr} )
+          else if (
+            firstInner.text === "{" &&
+            findMatchingBrace(innerTokens, 0, "{", "}") ===
+              innerTokens.length - 1
+          ) {
+            isRedundant = true;
+            replacement = formatInline(innerTokens);
+          }
+
+          if (isRedundant) {
+            diagnostics.push(
+              diagnostic(
+                "trip-redundant-parens",
+                "Remove redundant parentheses",
+                token,
+                {
+                  start: token.start,
+                  end: outerCloseToken.end,
+                  replacement,
+                },
+              ),
+            );
+          }
         }
       }
     }

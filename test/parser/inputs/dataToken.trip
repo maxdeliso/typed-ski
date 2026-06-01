@@ -1,0 +1,6 @@
+module Lexer
+
+data Token =
+  | T_LParen
+  | T_Keyword (List Nat)
+  | T_EOF

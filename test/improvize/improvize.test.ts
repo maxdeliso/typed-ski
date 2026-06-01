@@ -97,6 +97,80 @@ poly main = #u8(1)
     assert.ok(files.length > 0);
     assert.ok(parseChecked > 0);
   });
+
+  it("aligns closing brackets with their matched opening bracket when multi-line", () => {
+    const input = `module M
+poly main = foo [VeryLongTypeNameThatWillMakeThisBracketedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively]
+`;
+    const result = formatTripSource(input).formatted;
+    assert.equal(
+      result,
+      `module M
+
+poly main =
+  foo
+    [
+      VeryLongTypeNameThatWillMakeThisBracketedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively
+    ]
+`,
+    );
+  });
+
+  it("aligns closing parens with their matched opening paren when multi-line", () => {
+    const input = `module M
+poly main = foo (VeryLongTypeNameThatWillMakeThisParenthesizedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively)
+`;
+    const result = formatTripSource(input).formatted;
+    assert.equal(
+      result,
+      `module M
+
+poly main =
+  foo
+    (
+      VeryLongTypeNameThatWillMakeThisParenthesizedExpressionExceedEightyCharactersLimitSoItMustBeSplitAcrossLinesAndFormattedRecursively
+    )
+`,
+    );
+  });
+
+  it("formats monadic do blocks correctly with multi-line layout and proper indentation", () => {
+    const input = `module M
+poly main = do [Result U8 U8] { x <- foo  y = bar  assert c else e  return x }
+`;
+    const result = formatTripSource(input).formatted;
+    assert.equal(
+      result,
+      `module M
+
+poly main =
+  do [Result U8 U8] {
+    x <- foo
+    y = bar
+    assert c else e
+    return x
+  }
+`,
+    );
+  });
+
+  it("formats conditional cond blocks correctly with multi-line layout and proper indentation", () => {
+    const input = `module M
+poly main = cond [U8] { | c1 => a | otherwise => b }
+`;
+    const result = formatTripSource(input).formatted;
+    assert.equal(
+      result,
+      `module M
+
+poly main =
+  cond [U8] {
+    | c1 => a
+    | otherwise => b
+  }
+`,
+    );
+  });
 });
 
 describe("improvize linter", () => {
@@ -309,6 +383,25 @@ poly main =
     assert.match(result.fixed, /temp = magicRes/);
     assert.match(result.fixed, /MkLine magic afterMagic = temp/);
     assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
+  });
+
+  it("reports and fixes redundant parentheses around atomic, parenthesized, bracketed, or braced expressions", () => {
+    const source = `module M
+poly main = (A)
+poly main2 = ((x))
+poly main3 = ([x])
+poly main4 = ({x})
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.deepEqual(
+      result.diagnostics.filter((diag) => diag.code === "trip-redundant-parens")
+        .length,
+      5,
+    );
+    assert.match(result.fixed, /poly main =\s+A\s+/);
+    assert.match(result.fixed, /poly main2 =\s+\(x\)\s+/);
+    assert.match(result.fixed, /poly main3 =\s+\[x\]\s+/);
+    assert.match(result.fixed, /poly main4 =\s+\{x\}\s+/);
   });
 });
 

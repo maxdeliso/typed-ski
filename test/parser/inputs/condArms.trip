@@ -1,0 +1,6 @@
+poly foo =
+  cond [Maybe U8] {
+    | true => Some [U8] 1
+    | false => None [U8]
+    | otherwise => None [U8]
+  }

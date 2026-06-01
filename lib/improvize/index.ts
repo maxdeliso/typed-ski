@@ -2,12 +2,6 @@ import { stat, readdir } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { scanTrip, type ScanKind, type ScanToken } from "./lexer.ts";
-import {
-  KneserNeyLM,
-  getTrainedLMSync,
-  getStatisticalDiagnostics,
-} from "./statistical.ts";
-export { getTrainedLMSync };
 
 type TokenKind = Exclude<ScanKind, "space" | "newline">;
 
@@ -1865,6 +1859,17 @@ function parseCondChain(
   };
 }
 
+/**
+ * Leading whitespace of the line containing `offset`. A generated multi-line
+ * replacement (e.g. a `do`/`cond` block) lands at the column of the construct it
+ * replaces, so its inner lines and closing brace must be indented relative to
+ * that line's indentation rather than a hard-coded amount.
+ */
+function lineIndentAt(source: string, offset: number): string {
+  const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+  return /^[ \t]*/.exec(source.slice(lineStart))![0];
+}
+
 function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
   const diagnostics: TripLintDiagnostic[] = [];
   const topLevel = collectTopLevelBindings(tokens);
@@ -2028,10 +2033,12 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
     // 6a. Degenerate match chain simplification to do
     const doChainMatch = parseDoChain(tokens, i);
     if (doChainMatch) {
-      const stepLines = doChainMatch.steps.join("\n      ");
-      const replacement = `do [${doChainMatch.typeText}] {
-      ${stepLines}
-    }`;
+      const baseIndent = lineIndentAt(source, tokens[i]!.start);
+      const stepIndent = `${baseIndent}  `;
+      const stepLines = doChainMatch.steps
+        .map((step) => `${stepIndent}${step}`)
+        .join("\n");
+      const replacement = `do [${doChainMatch.typeText}] {\n${stepLines}\n${baseIndent}}`;
       diagnostics.push(
         diagnostic(
           "trip-degenerate-do",
@@ -2051,13 +2058,12 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
     // 6. Degenerate if chain simplification to cond
     const condChainMatch = parseCondChain(tokens, i);
     if (condChainMatch) {
+      const baseIndent = lineIndentAt(source, tokens[i]!.start);
+      const stepIndent = `${baseIndent}  `;
       const armLines = condChainMatch.arms
-        .map((arm) => `| ${arm.condText} => ${arm.bodyText}`)
-        .join("\n      ");
-      const replacement = `cond [${condChainMatch.typeText}] {
-      ${armLines}
-      | otherwise => ${condChainMatch.defaultBodyText}
-    }`;
+        .map((arm) => `${stepIndent}| ${arm.condText} => ${arm.bodyText}`)
+        .join("\n");
+      const replacement = `cond [${condChainMatch.typeText}] {\n${armLines}\n${stepIndent}| otherwise => ${condChainMatch.defaultBodyText}\n${baseIndent}}`;
       diagnostics.push(
         diagnostic(
           "trip-degenerate-if",
@@ -2402,7 +2408,6 @@ const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
   "trip-string-literal",
   "trip-redundant-parens",
   "trip-u8-literal",
-  "trip-formatting-deviation",
   "trip-degenerate-if",
   "trip-degenerate-do",
 ]);
@@ -2458,7 +2463,7 @@ function applyVerifiedFixes(
 
 export function lintTripSource(
   sourceText: string,
-  options: { fix?: boolean; lm?: KneserNeyLM; verbose?: boolean } = {},
+  options: { fix?: boolean; verbose?: boolean } = {},
 ): TripLintResult {
   const source = normalizeSource(sourceText);
 
@@ -2477,23 +2482,6 @@ export function lintTripSource(
       `[profile-lint] lintTokens completed in ${Date.now() - tStartLintTokens}ms`,
     );
   }
-
-  const tStartTrainLM = Date.now();
-  const lm = options.lm || getTrainedLMSync();
-  if (options.verbose) {
-    console.log(
-      `[profile-lint] getTrainedLMSync completed in ${Date.now() - tStartTrainLM}ms`,
-    );
-  }
-
-  const tStartStats = Date.now();
-  const statDiagnostics = getStatisticalDiagnostics(source, lm);
-  if (options.verbose) {
-    console.log(
-      `[profile-lint] getStatisticalDiagnostics completed in ${Date.now() - tStartStats}ms`,
-    );
-  }
-  diagnostics.push(...statDiagnostics);
 
   if (!options.fix || diagnostics.every((diag) => !diag.fix)) {
     return { diagnostics, fixed: source, changed: false };

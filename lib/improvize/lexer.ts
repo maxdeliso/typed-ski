@@ -1,13 +1,10 @@
 /**
  * Shared TripLang scanner.
  *
- * The formatter's lexer (`lexTrip`) and the statistical tokenizer
- * (`tokenizeFormatting`) must agree on TripLang's lexical grammar: the same
- * comment, arrow, string, identifier, number, and symbol rules. They differ
- * only in presentation -- the formatter discards whitespace and coarsens
- * keywords/symbols, while the statistics path keeps whitespace and a
- * fine-grained kind per keyword and symbol. This module owns the one scanner;
- * each consumer adapts the stream to its own token shape.
+ * `lexTrip` reads TripLang's lexical grammar -- comment, arrow, string,
+ * identifier, number, and symbol rules -- for the formatter and linter, which
+ * discard whitespace and coarsen keywords/symbols. This module owns the one
+ * scanner; consumers adapt the stream to their own token shape.
  *
  * @module
  */

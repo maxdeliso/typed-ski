@@ -1,9 +1,4 @@
-import {
-  spawnSync,
-  type SpawnSyncOptions,
-  type SpawnSyncReturns,
-} from "node:child_process";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -28,32 +23,6 @@ export async function cleanupTempWorkspace(
     return;
   }
   await rm(workspacePath, { recursive: true, force: true }).catch(() => {});
-}
-
-export async function copyFixtures(
-  sourceDir: string,
-  destinationDir: string,
-  fileNames: readonly string[],
-): Promise<void> {
-  await Promise.all(
-    fileNames.map(async (fileName) => {
-      await copyFile(join(sourceDir, fileName), join(destinationDir, fileName));
-    }),
-  );
-}
-
-export function runTripcSync(
-  args: string[],
-  options: SpawnSyncOptions = {},
-): SpawnSyncReturns<string> {
-  return spawnSync(
-    process.execPath,
-    ["--disable-warning=ExperimentalWarning", tripcScriptPath, ...args],
-    {
-      ...options,
-      encoding: "utf8",
-    },
-  );
 }
 
 export function resolveDistPath(

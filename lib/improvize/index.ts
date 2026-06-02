@@ -2891,7 +2891,3 @@ export function lintTripSource(
     changed: formatted !== source,
   };
 }
-
-export function lintAndFormatTripSource(source: string): TripLintResult {
-  return lintTripSource(formatTripSource(source).formatted, { fix: false });
-}

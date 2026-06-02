@@ -1,7 +1,6 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 
-import { Y } from "../util/combinators.ts";
 import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
@@ -21,6 +20,8 @@ import {
   SPrime,
   WriteOne,
 } from "../../lib/ski/terminal.ts";
+
+const Y = parseSKI("S(K(SII))(S(S(KS)K)(K(SII)))");
 
 const assertReparse = (expr: string) => {
   const parsed = parseSKI(expr);

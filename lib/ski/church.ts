@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { B, False, One, Succ, True, Zero } from "../consts/combinators.ts";
+import { B, One, Succ, Zero } from "../consts/combinators.ts";
 import { apply, applyMany, type SKIExpression } from "./expression.ts";
 import type { Evaluator } from "../evaluator/evaluator.ts";
 import { SKITerminalSymbol } from "./terminal.ts";
@@ -356,22 +356,3 @@ export const UnChurchNumber = async (
     return 0n;
   }
 };
-
-/**
- * @internal
- * UnChurchBoolean applies the Church boolean expression to two Church numerals
- * (here ChurchN(1) and ChurchN(0)) and then reduces and uses UnChurch to obtain a bigint.
- * If the result is 1, then the Church boolean was true; if 0, then it was false.
- */
-export const UnChurchBoolean = async (
-  expr: SKIExpression,
-  evaluator: Evaluator,
-): Promise<boolean> => {
-  // Apply the Church boolean to ChurchN(1) (for true) and ChurchN(0) (for false)
-  const applied = applyMany(expr, ChurchN(1), ChurchN(0));
-  const testExpr = await evaluator.reduce(applied);
-  return (await UnChurchNumber(testExpr, evaluator)) === 1n;
-};
-
-/** @internal */
-export const ChurchB = (b: boolean): SKIExpression => (b ? True : False);

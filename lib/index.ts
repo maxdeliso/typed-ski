@@ -8,8 +8,9 @@
  * 2. **System F + typed lambda** — parser, printer, type inference, erasure.
  * 3. **TripLang compiler** — frontend `compile`, LLVM emit, module providers.
  * Library internals (MiniCore IR, Bundle-v1 serialization, topoDagWire
- * protocol, frontend implementation modules) are not part of the public API. They are importable from their specific module
- * paths but may change without a major version bump.
+ * protocol, frontend implementation modules) are not part of the public API.
+ * They are importable from their specific module paths but may change without a
+ * major version bump.
  *
  * @example
  * ```ts

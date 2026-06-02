@@ -95,9 +95,9 @@ bazelisk test //:node_tests --test_arg=test/path/to/test.ts
 The public API is intentionally small — `compile`, `compileTripSourceToLlvm`,
 the SKI utilities, System F utilities, and the module providers. See
 [`lib/index.ts`](lib/index.ts) for the full surface. Other
-internal modules (MiniCore IR, Bundle-v1 serialization, legacy SKI-linker
-helpers, TopoDagWire protocol) are importable from their specific paths but are not
-part of the stable contract.
+internal modules (MiniCore IR, Bundle-v1 serialization, TopoDagWire protocol)
+are importable from their specific paths but are not part of the stable
+contract.
 
 ---
 

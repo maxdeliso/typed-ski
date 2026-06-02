@@ -23,7 +23,7 @@ import { CompilationError } from "./errors.ts";
 interface IndexSymbolsOptions {
   /**
    * ADT metadata indexed by imported module name.
-   * This is typically sourced from imported `.tripc` objects.
+   * This is typically sourced from caller-provided module metadata.
    */
   importedDataDefinitionsByModule?:
     | ReadonlyMap<string, ReadonlyArray<DataDefinition>>
@@ -236,7 +236,7 @@ export function indexSymbols(
     }
   }
 
-  // Third pass: enrich with imported constructor metadata from .tripc files.
+  // Third pass: enrich with imported constructor metadata.
   indexImportedConstructors(
     program,
     dataMap,

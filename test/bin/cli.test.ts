@@ -124,6 +124,7 @@ describe("CLI Tests", () => {
       assert.ok(tripcTs.includes("compileTripBundleV1ToLlvm"));
       assert.ok(!tripcTs.includes("linkModules"));
       assert.ok(!tripcTs.includes("loadTripModuleObject"));
+      assert.ok(!tripcTs.includes(".tripc"));
     });
   });
 

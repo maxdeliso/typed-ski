@@ -3,15 +3,12 @@
  *
  * The self-hosted Trip compiler lives in bootstrap/src/ as .trip
  * modules. This file is the single source of truth for their
- * name -> path mapping, extending the four public Trip modules from
- * lib/tripModules.ts.
+ * name -> path mapping, extending the built-in Trip module source registry.
  *
  * @module
  */
 import { join } from "node:path";
 import { workspaceRoot } from "../shared/workspaceRoot.ts";
-import { loadTripModuleObject } from "../tripSourceLoader.ts";
-import type { TripCObject } from "./objectFile.ts";
 import {
   tripModuleSourcePath,
   type PublicTripModuleName,
@@ -101,10 +98,4 @@ export function compilerTripModuleSourcePath(
     );
   }
   return tripModuleSourcePath(name);
-}
-
-export function loadCompilerTripModule(
-  name: CompilerTripModuleName,
-): Promise<TripCObject> {
-  return loadTripModuleObject(compilerTripModuleSourcePath(name));
 }

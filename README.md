@@ -93,7 +93,7 @@ bazelisk test //:node_tests --test_arg=test/path/to/test.ts
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
 
 The public API is intentionally small — `compile`, `compileTripSourceToLlvm`,
-the SKI utilities, System F utilities, and the module providers. See
+the SKI utilities, System F utilities, and source tools. See
 [`lib/index.ts`](lib/index.ts) for the full surface. Other
 internal modules (MiniCore IR, Bundle-v1 serialization, TopoDagWire protocol)
 are importable from their specific paths but are not part of the stable

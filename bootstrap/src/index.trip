@@ -2,6 +2,10 @@ module Compiler
 
 import Prelude List
 
+import Prelude nil
+
+import Prelude cons
+
 import Prelude Result
 
 import Prelude Ok
@@ -14,13 +18,63 @@ import Prelude append
 
 import Prelude writeOne
 
+import Prelude Pair
+
+import Prelude MkPair
+
+import Prelude fst
+
+import Prelude snd
+
 import Prelude matchList
 
-import Llvm compileSourceToLlvm
+import Prelude Bool
 
-import Llvm compileBundleSummaryToLlvm
+import Prelude false
+
+import Prelude true
+
+import Prelude if
+
+import Lexer tokenize
+
+import Parser parseProgram
+
+import Parser D_Def
+
+import Parser Decl
+
+import Parser D_Data
+
+import Prelude eqListU8
+
+import Bridge elaborateProgramToCore
+
+import MiniCore buildMiniProgram
+
+import Anf normalizeProgram
+
+import Anf AnfFunc
+
+import Anf MkAnfFunc
+
+import Anf AnfProgram
+
+import Anf MkAnfProgram
+
+import AnfLlvm emitProgram
+
+import AnfLlvm compileSourceToLlvmText
 
 import AnfLlvm compileBundleSummaryToAnfLlvm
+
+import BundleSummary BundleSummary
+
+import BundleSummary MkBundleSummary
+
+import BundleSummary ModuleRecord
+
+import BundleSummary MkModuleRecord
 
 import BundleSummary parseBundleSummary
 
@@ -32,14 +86,156 @@ export compileBundleToAnfLlvm
 
 export main
 
+poly rec filterDataDecls =
+  \decls : List Decl =>
+    matchList
+      [Decl]
+      [List Decl]
+      decls
+      ({Decl |})
+      (
+        \h : Decl =>
+          \t : List Decl =>
+            match h [List Decl] {
+              | D_Data name ctors => cons [Decl] h (filterDataDecls t)
+              | D_Module name => filterDataDecls t
+              | D_Import m n => filterDataDecls t
+              | D_Export name => filterDataDecls t
+              | D_Opaque name => filterDataDecls t
+              | D_Native name => filterDataDecls t
+              | D_Type name => filterDataDecls t
+              | D_Def kind isRec name body => filterDataDecls t
+            }
+      )
+
+poly rec filterDefDecls =
+  \decls : List Decl =>
+    matchList
+      [Decl]
+      [List Decl]
+      decls
+      ({Decl |})
+      (
+        \h : Decl =>
+          \t : List Decl =>
+            match h [List Decl] {
+              | D_Def kind isRec name body => cons [Decl] h (filterDefDecls t)
+              | D_Module name => filterDefDecls t
+              | D_Import m n => filterDefDecls t
+              | D_Export name => filterDefDecls t
+              | D_Opaque name => filterDefDecls t
+              | D_Native name => filterDefDecls t
+              | D_Type name => filterDefDecls t
+              | D_Data name ctors => filterDefDecls t
+            }
+      )
+
+poly rec collectAllDecls =
+  \records : List ModuleRecord =>
+    matchList
+      [ModuleRecord]
+      [Result (List U8) (List Decl)]
+      records
+      (Ok [List U8] [List Decl] ({Decl |}))
+      (
+        \h : ModuleRecord =>
+          \t : List ModuleRecord =>
+            match h [Result (List U8) (List Decl)] {
+              | MkModuleRecord name lengthDigits source =>
+                match (tokenize source) [Result (List U8) (List Decl)] {
+                  | Err e => Err [List U8] [List Decl] "Lex error"
+                  | Ok toks =>
+                    match (parseProgram toks) [Result (List U8) (List Decl)] {
+                      | Err e => Err [List U8] [List Decl] "Parse error"
+                      | Ok decls =>
+                        match (collectAllDecls t) [Result (List U8) (List Decl)] {
+                          | Err e2 => Err [List U8] [List Decl] e2
+                          | Ok rest =>
+                            Ok [List U8] [List Decl] (append [Decl] decls rest)
+                        }
+                    }
+                }
+            }
+      )
+
 poly compileToLlvm =
-  compileSourceToLlvm
+  compileSourceToLlvmText
+
+poly rec entryHasParam =
+  \funcs : List AnfFunc =>
+    \name : List U8 =>
+      matchList
+        [AnfFunc]
+        [Bool]
+        funcs
+        false
+        (
+          \h : AnfFunc =>
+            \t : List AnfFunc =>
+              match h [Bool] {
+                | MkAnfFunc fnName params body =>
+                  if [Bool] (eqListU8 fnName name)
+                    (
+                      \u : U8 =>
+                        matchList
+                          [List U8]
+                          [Bool]
+                          params
+                          false
+                          (\p : List U8 => \pt : List (List U8) => true)
+                    )
+                    (\u : U8 => entryHasParam t name)
+              }
+        )
 
 poly compileBundleToLlvm =
   \source : List U8 =>
     match (parseBundleSummary source) [Result (List U8) (List U8)] {
       | Err e => Err [List U8] [List U8] e
-      | Ok bundle => compileBundleSummaryToLlvm bundle
+      | Ok bundle =>
+        match bundle [Result (List U8) (List U8)] {
+          | MkBundleSummary entry target wrapper modsCountDigits mods =>
+            match (collectAllDecls mods) [Result (List U8) (List U8)] {
+              | Err e => Err [List U8] [List U8] e
+              | Ok allDecls =>
+                let orderedDecls = append [Decl] (filterDataDecls allDecls) (filterDefDecls allDecls) in
+                match (elaborateProgramToCore orderedDecls) [Result (List U8) (List U8)] {
+                  | Err e => Err [List U8] [List U8] e
+                  | Ok coreDefs =>
+                    match (buildMiniProgram coreDefs entry) [Result (List U8) (List U8)] {
+                      | Err e => Err [List U8] [List U8] e
+                      | Ok prog =>
+                        let normalized = normalizeProgram prog in
+                        match normalized [Result (List U8) (List U8)] {
+                          | MkAnfProgram funcs entryName =>
+                            match (emitProgram normalized) [Result (List U8) (List U8)] {
+                              | Err e => Err [List U8] [List U8] e
+                              | Ok llvm =>
+                                let decls = "declare void @trip_write_one(i8)\ndeclare i8 @trip_read_one()\ndeclare ptr @trip_alloc_obj(i64, i64)\ndeclare void @trip_obj_set_field(ptr, i64, i64)\ndeclare i64 @trip_obj_tag(ptr)\ndeclare i64 @trip_obj_field(ptr, i64)\n\n" in
+                                let withDecls = append [U8] decls llvm in
+                                if [List U8] (eqListU8 wrapper "enabled")
+                                  (
+                                    \u : U8 =>
+                                      let fullName = append [U8] "trip_fn_" (append [U8] entryName "_main") in
+                                      if [List U8] (entryHasParam funcs fullName)
+                                        (
+                                          \u2 : U8 =>
+                                            let mainWrapper = append [U8] "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @" (append [U8] fullName "(i64 %trip_source_cast)\n  ret i32 0\n}\n") in
+                                            append [U8] withDecls mainWrapper
+                                        )
+                                        (
+                                          \u2 : U8 =>
+                                            let mainWrapper = append [U8] "define i32 @main() {\nentry:\n  %trip_result = call i64 @" (append [U8] fullName "()\n  ret i32 0\n}\n") in
+                                            append [U8] withDecls mainWrapper
+                                        )
+                                  )
+                                  (\u : U8 => withDecls)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
 poly compileBundleToAnfLlvm =

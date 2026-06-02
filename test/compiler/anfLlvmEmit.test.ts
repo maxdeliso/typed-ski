@@ -84,16 +84,23 @@ poly konst = \\x : U8 => \\y : U8 => x
 poly main = \\z : U8 => konst (konst z z) z
 `;
 
-const EXPECTED_LLVM = `define i8 @konst(i8 %x, i8 %y) {
+const EXPECTED_LLVM = `declare void @trip_write_one(i8)
+declare i8 @trip_read_one()
+declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @konst(i64 %x, i64 %y) {
 entry:
-  ret i8 %x
+  ret i64 %x
 }
 
-define i8 @main(i8 %z) {
+define i64 @main(i64 %z) {
 entry:
-  %__ll0 = call i8 @konst(i8 %z, i8 %z)
-  %__ll1 = call i8 @konst(i8 %__ll0, i8 %z)
-  ret i8 %__ll1
+  %__ll0 = call i64 @konst(i64 %z, i64 %z)
+  %__ll1 = call i64 @konst(i64 %__ll0, i64 %z)
+  ret i64 %__ll1
 }
 
 `;

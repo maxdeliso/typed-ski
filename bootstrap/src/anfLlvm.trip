@@ -50,6 +50,16 @@ import Bin incBin
 
 import Bin binToDigits
 
+import BundleSummary parseBundleSummary
+
+import BundleSummary BundleSummary
+
+import BundleSummary MkBundleSummary
+
+import BundleSummary ModuleRecord
+
+import BundleSummary MkModuleRecord
+
 import Lexer tokenize
 
 import Parser parseProgram
@@ -86,7 +96,13 @@ import Anf MkAnfProgram
 
 export emitProgram
 
+export compileSourceToLlvm
+
 export compileSourceToLlvmText
+
+export compileBundleSummaryToAnfLlvm
+
+export compileBundleToAnfLlvm
 
 data EmitRes =
   | MkEmitRes Bin (List (List U8)) (List U8)
@@ -316,25 +332,113 @@ poly emitProgram =
       | MkAnfProgram funcs entry => emitFuncs funcs
     }
 
-poly compileSourceToLlvmText =
+poly compileSourceToLlvm =
   \source : List U8 =>
-    match (tokenize source) [List U8] {
-      | Err e => append [U8] "ERR:" "Lex error"
+    match (tokenize source) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] "Lex error"
       | Ok toks =>
-        match (parseProgram toks) [List U8] {
-          | Err e => append [U8] "ERR:" "Parse error"
+        match (parseProgram toks) [Result (List U8) (List U8)] {
+          | Err e => Err [List U8] [List U8] "Parse error"
           | Ok decls =>
-            match (elaborateProgramToCore decls) [List U8] {
-              | Err e => append [U8] "ERR:" e
+            match (elaborateProgramToCore decls) [Result (List U8) (List U8)] {
+              | Err e => Err [List U8] [List U8] e
               | Ok coreDefs =>
-                match (buildMiniProgram coreDefs "main") [List U8] {
-                  | Err e => append [U8] "ERR:" e
+                match (buildMiniProgram coreDefs "main") [Result (List U8) (List U8)] {
+                  | Err e => Err [List U8] [List U8] e
                   | Ok prog =>
-                    match (emitProgram (normalizeProgram prog)) [List U8] {
-                      | Err e => append [U8] "ERR:" e
-                      | Ok llvm => llvm
-                    }
+                    emitProgram (normalizeProgram prog)
                 }
             }
         }
+    }
+
+poly compileSourceToLlvmText =
+  \source : List U8 =>
+    match (compileSourceToLlvm source) [List U8] {
+      | Err e => append [U8] "ERR:" e
+      | Ok llvm => llvm
+    }
+
+poly singleEntryModuleSource =
+  \entry : List U8 =>
+    \mods : List ModuleRecord =>
+      matchList
+        [ModuleRecord]
+        [Result (List U8) (List U8)]
+        mods
+        (
+          Err
+            [List U8]
+            [List U8]
+            "Unsupported ANF LLVM bundle: expected one module"
+        )
+        (
+          \h : ModuleRecord =>
+            \t : List ModuleRecord =>
+              matchList
+                [ModuleRecord]
+                [Result (List U8) (List U8)]
+                t
+                (
+                  match h [Result (List U8) (List U8)] {
+                    | MkModuleRecord name lengthDigits source =>
+                      if [Result (List U8) (List U8)] (eqListU8 name entry)
+                        (\u : U8 => Ok [List U8] [List U8] source)
+                        (
+                          \u : U8 =>
+                            Err
+                              [List U8]
+                              [List U8]
+                              "Unsupported ANF LLVM bundle: entry module mismatch"
+                        )
+                  }
+                )
+                (
+                  \h2 : ModuleRecord =>
+                    \t2 : List ModuleRecord =>
+                      Err
+                        [List U8]
+                        [List U8]
+                        "Unsupported ANF LLVM bundle: expected one module"
+                )
+        )
+
+poly compileBundleSummaryToAnfLlvm =
+  \bundle : BundleSummary =>
+    match bundle [Result (List U8) (List U8)] {
+      | MkBundleSummary entry target wrapper modsCountDigits mods =>
+        if [Result (List U8) (List U8)] (eqListU8 target "generic")
+          (
+            \u : U8 =>
+              if [Result (List U8) (List U8)] (eqListU8 wrapper "none")
+                (
+                  \u2 : U8 =>
+                    do [Result (List U8) (List U8)] {
+                      source <- (singleEntryModuleSource entry mods)
+                      llvm <- (compileSourceToLlvm source)
+                      return Ok [List U8] [List U8] llvm
+                    }
+                )
+                (
+                  \u2 : U8 =>
+                    Err
+                      [List U8]
+                      [List U8]
+                      "Unsupported ANF LLVM bundle: wrapper must be none"
+                )
+          )
+          (
+            \u : U8 =>
+              Err
+                [List U8]
+                [List U8]
+                "Unsupported ANF LLVM bundle: target must be generic"
+          )
+    }
+
+poly compileBundleToAnfLlvm =
+  \source : List U8 =>
+    match (parseBundleSummary source) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] e
+      | Ok bundle => compileBundleSummaryToAnfLlvm bundle
     }

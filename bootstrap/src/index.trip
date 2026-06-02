@@ -20,11 +20,15 @@ import Llvm compileSourceToLlvm
 
 import Llvm compileBundleSummaryToLlvm
 
+import AnfLlvm compileBundleSummaryToAnfLlvm
+
 import BundleSummary parseBundleSummary
 
 export compileToLlvm
 
 export compileBundleToLlvm
+
+export compileBundleToAnfLlvm
 
 export main
 
@@ -36,6 +40,13 @@ poly compileBundleToLlvm =
     match (parseBundleSummary source) [Result (List U8) (List U8)] {
       | Err e => Err [List U8] [List U8] e
       | Ok bundle => compileBundleSummaryToLlvm bundle
+    }
+
+poly compileBundleToAnfLlvm =
+  \source : List U8 =>
+    match (parseBundleSummary source) [Result (List U8) (List U8)] {
+      | Err e => Err [List U8] [List U8] e
+      | Ok bundle => compileBundleSummaryToAnfLlvm bundle
     }
 
 poly rec writeAll =

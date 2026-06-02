@@ -181,6 +181,10 @@ export const bootstrap = {
         "Lowering",
         "Bridge",
         "Llvm",
+        "CoreToMini",
+        "MiniCore",
+        "Anf",
+        "AnfLlvm",
       ];
       const moduleSources = await Promise.all(
         moduleNames.map(async (name) => ({

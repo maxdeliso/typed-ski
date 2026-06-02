@@ -10,12 +10,9 @@
  *   type TripLangProgram,
  *   unparseSystemF,
  *   unparseSystemFType,
- *   unparseTypedLambda,
- *   unparseUntypedLambda,
  *   unparseSKI,
  *   typecheckSystemF,
  *   eraseSystemF,
- *   eraseTypedLambda,
  *   bracketLambda,
  *   resolvePoly,
  * } from "jsr:@maxdeliso/typed-ski";
@@ -36,16 +33,11 @@
  * console.log("1. System F:", unparseSystemF(mainPoly.term));
  * console.log("   Type:", unparseSystemFType(typecheckSystemF(mainPoly.term)));
  *
- * const typedLambda = eraseSystemF(mainPoly.term);
- * console.log("2. Typed Lambda:", unparseTypedLambda(typedLambda));
- *
- * const untypedLambda = eraseTypedLambda(typedLambda);
- * console.log("3. Untyped Lambda:", unparseUntypedLambda(untypedLambda));
- *
+ * const untypedLambda = eraseSystemF(mainPoly.term);
  * const skiCombinators = bracketLambda(untypedLambda);
- * console.log("4. SKI Combinators:", unparseSKI(skiCombinators));
+ * console.log("2. SKI Combinators:", unparseSKI(skiCombinators));
  *
- * console.log("5. SKI Result:", unparseSKI(skiCombinators));
+ * console.log("3. SKI Result:", unparseSKI(skiCombinators));
  * ```
  *
  * @module

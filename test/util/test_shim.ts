@@ -6,23 +6,6 @@ import { TEST_TIMEOUT_MS } from "../../lib/constants.ts";
 
 let testRunner: any;
 
-const universalWaitFor = async (
-  fn: () => any,
-  options?: { interval?: number; timeout?: number },
-) => {
-  const interval = options?.interval ?? 50;
-  const timeout = options?.timeout ?? TEST_TIMEOUT_MS;
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    try {
-      return await fn();
-    } catch (e) {
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-  }
-  return await fn();
-};
-
 const parseArgs = (arg2: any, arg3?: any) => {
   let fn: any;
   const defaultTimeout = TEST_TIMEOUT_MS;
@@ -61,48 +44,18 @@ if (typeof Bun !== "undefined") {
   // @ts-ignore
   const bunTest = await import("bun:test");
 
-  const shimmedMock = {
-    ...bunTest.mock,
-    method: (obj: any, methodName: string, implementation: any) => {
-      const spy = bunTest.spyOn(obj, methodName);
-      if (implementation) {
-        spy.mockImplementation(implementation);
-      }
-      return {
-        mock: {
-          restore: () => spy.mockRestore(),
-        },
-      };
-    },
-  };
-
   testRunner = {
-    ...bunTest,
+    describe: bunTest.describe,
     it: wrapItBun(bunTest.it),
-    test: wrapItBun(bunTest.test),
-    before: bunTest.beforeAll,
-    after: bunTest.afterAll,
-    mock: shimmedMock,
-    waitFor: universalWaitFor,
   };
 } else {
   // @ts-ignore
   const nodeTest = await import("node:test");
   testRunner = {
-    ...nodeTest,
+    describe: nodeTest.describe,
     it: wrapItNode(nodeTest.it),
-    test: wrapItNode(nodeTest.test),
-    waitFor: universalWaitFor,
   };
 }
 
 export const describe = testRunner.describe;
 export const it = testRunner.it;
-export const test = testRunner.test;
-export const before = testRunner.before;
-export const after = testRunner.after;
-export const beforeEach = testRunner.beforeEach;
-export const afterEach = testRunner.afterEach;
-export const mock = testRunner.mock;
-export const waitFor = testRunner.waitFor;
-export type TestContext = any;

@@ -122,8 +122,6 @@ describe("CLI Tests", () => {
       const tripcTs = await readFile(join(srcRoot, "bin/tripc.ts"), "utf-8");
       assert.ok(tripcTs.includes("TripLang LLVM compiler CLI"));
       assert.ok(tripcTs.includes("compileTripBundleV1ToLlvm"));
-      assert.ok(!tripcTs.includes("linkModules"));
-      assert.ok(!tripcTs.includes("loadTripModuleObject"));
     });
   });
 

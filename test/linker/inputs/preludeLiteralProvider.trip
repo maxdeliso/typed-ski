@@ -1,8 +1,0 @@
-module LiteralProvider
-
-import Nat Nat
-
-export lit
-
-poly lit =
-  #u8(3)

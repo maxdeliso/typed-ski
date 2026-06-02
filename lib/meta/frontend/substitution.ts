@@ -37,7 +37,8 @@ import {
  */
 
 /**
- * Global cache for free variables to avoid O(N^2) behavior in linker.
+ * Global cache for free variables to avoid O(N^2) behavior during
+ * repeated substitution over large terms.
  */
 const freeVarCache = new WeakMap<TripLangValueType, Set<string>>();
 
@@ -1665,70 +1666,5 @@ export function substituteTripLangTermDirectBatch(
     case "import":
     case "export":
       return current;
-  }
-}
-
-/**
- * Direct type substitution without lowering - preserves term levels with hygienic binding
- */
-export function substituteTripLangTypeDirect(
-  current: TripLangTerm,
-  type: TripLangTerm,
-): TripLangTerm {
-  if (type.kind !== "type") {
-    throw new CompilationError(
-      "Expected type definition for type substitution",
-      "resolve",
-      { type },
-    );
-  }
-
-  const currentDefinitionValue = extractDefinitionValue(current);
-  if (!currentDefinitionValue) {
-    return current;
-  }
-
-  const typeDefinitionValue = extractDefinitionValue(type);
-  if (!typeDefinitionValue) {
-    return current;
-  }
-
-  switch (current.kind) {
-    case "poly": {
-      return {
-        ...current,
-        type: current.type
-          ? substituteTypeHygienic(current.type, type.name, typeDefinitionValue)
-          : current.type,
-        term: substituteTypeHygienic(
-          current.term,
-          type.name,
-          typeDefinitionValue,
-        ),
-      };
-    }
-    case "type": {
-      return {
-        ...current,
-        type: substituteTypeHygienic(
-          current.type,
-          type.name,
-          typeDefinitionValue,
-        ),
-      };
-    }
-    case "data":
-    case "combinator":
-    case "native":
-    case "module":
-    case "import":
-    case "export":
-      return current;
-    default:
-      throw new CompilationError(
-        "Unexpected term kind for type substitution",
-        "resolve",
-        { current },
-      );
   }
 }

@@ -6,8 +6,6 @@
  *
  * @module
  */
-import { untypedAbs } from "../terms/lambda.ts";
-import type { UntypedLambda } from "../terms/lambda.ts";
 import { unparseType } from "../parser/type.ts";
 import { TypeError } from "./typeError.ts";
 import { typesLitEq } from "./types.ts";
@@ -170,33 +168,5 @@ export const typecheckTypedLambda = (
     }
     default:
       throw new TypeError("Unknown term kind");
-  }
-};
-
-/**
- * Erases type annotations from a simply typed lambda expression.
- *
- * This function converts a typed lambda term into an untyped lambda term by
- * removing all type annotations while preserving the structure of the expression.
- * Variables remain variables, abstractions remain abstractions (without type
- * annotations), and applications remain applications.
- *
- * @param t The typechecked lambda expression to erase types from
- * @returns An equivalent untyped lambda expression
- */
-export const eraseTypedLambda = (t: TypedLambda): UntypedLambda => {
-  switch (t.kind) {
-    case "lambda-var":
-      return t;
-    case "typed-lambda-abstraction":
-      return untypedAbs(t.varName, eraseTypedLambda(t.body));
-    case "non-terminal":
-      return {
-        kind: "non-terminal",
-        lft: eraseTypedLambda(t.lft),
-        rgt: eraseTypedLambda(t.rgt),
-      };
-    default:
-      throw new Error("Unknown term kind");
   }
 };

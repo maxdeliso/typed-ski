@@ -1,6 +1,0 @@
-module NoMain
-
-export other
-
-poly other =
-  \x : Int => x

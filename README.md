@@ -93,11 +93,11 @@ bazelisk test //:node_tests --test_arg=test/path/to/test.ts
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
 
 The public API is intentionally small — `compile`, `compileTripSourceToLlvm`,
-the SKI utilities, System F utilities, and the module providers. See
+the SKI utilities, System F utilities, and source tools. See
 [`lib/index.ts`](lib/index.ts) for the full surface. Other
-internal modules (MiniCore IR, Bundle-v1 serialization, legacy SKI-linker
-helpers, TopoDagWire protocol) are importable from their specific paths but are not
-part of the stable contract.
+internal modules (MiniCore IR, Bundle-v1 serialization, TopoDagWire protocol)
+are importable from their specific paths but are not part of the stable
+contract.
 
 ---
 
@@ -132,9 +132,9 @@ reproducible builds and byte-level diffing:
 
 - Top-level Trip unparse preserves the original source-level definition
   kind (`poly rec`, `combinator`, etc.) and emits parseable canonical
-  syntax. Internal lowering stages use `lambda` during linking and
+  syntax. Internal lowering stages use `lambda` during lowering and
   execution.
-- Link-time dependency traversal and SCC processing use explicit ASCII
+- Cross-module resolution and bundle serialization use explicit ASCII
   ordering rather than incidental `Map`/`Set` iteration order.
 - Final SKI output is the fully parenthesized canonical `unparseSKI` form
   and should be compared as UTF-8 bytes.

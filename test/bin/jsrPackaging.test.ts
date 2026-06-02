@@ -140,11 +140,7 @@ describe("JSR Packaging Configuration", () => {
 
   describe("library integration", () => {
     it("compiler library exports", async () => {
-      // Guards the slim public API surface. Internal symbols (TripCObject,
-      // compileToObjectFile, MiniCore IR types, Bundle-v1 helpers, etc.) are
-      // intentionally not re-exported from lib/index.ts; they remain
-      // importable from their specific module paths but are not part of the
-      // stable contract.
+      // Guards the slim public API surface.
       const libIndex = await readFile(join(srcRoot, "lib/index.ts"), "utf-8");
 
       assert.ok(libIndex.includes("compile"));
@@ -153,8 +149,6 @@ describe("JSR Packaging Configuration", () => {
       assert.ok(libIndex.includes("unparseSKI"));
       assert.ok(libIndex.includes("bracketLambda"));
       assert.ok(libIndex.includes("typecheckSystemF"));
-      assert.ok(!libIndex.includes("create" + "Thana" + "tosEvaluator"));
-      assert.ok(libIndex.includes("getPreludeObject"));
     });
 
     it("compiler module structure", () => {
@@ -162,11 +156,11 @@ describe("JSR Packaging Configuration", () => {
       assert.strictEqual(existsSync(compilerDir), true);
 
       assert.strictEqual(existsSync(join(compilerDir, "index.ts")), true);
-      assert.strictEqual(existsSync(join(compilerDir, "objectFile.ts")), true);
       assert.strictEqual(
-        existsSync(join(compilerDir, "singleFileCompiler.ts")),
+        existsSync(join(compilerDir, "llvmCompiler.ts")),
         true,
       );
+      assert.strictEqual(existsSync(join(compilerDir, "bundleV1.ts")), true);
     });
   });
 

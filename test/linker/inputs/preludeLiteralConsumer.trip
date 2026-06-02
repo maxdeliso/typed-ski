@@ -1,8 +1,0 @@
-module LiteralConsumer
-
-import LiteralProvider lit
-
-export main
-
-poly main =
-  lit

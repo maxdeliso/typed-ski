@@ -1,6 +1,0 @@
-module Complex
-
-export main
-
-poly main =
-  #X => \x : X => \y : X => \z : X => x

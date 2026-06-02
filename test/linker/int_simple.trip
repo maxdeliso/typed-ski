@@ -1,6 +1,0 @@
-module Simple
-
-export main
-
-poly main =
-  #X => \x : X => x

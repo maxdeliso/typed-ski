@@ -1,6 +1,0 @@
-module A
-
-export addA
-
-poly addA =
-  #X => \x : X => \y : X => x

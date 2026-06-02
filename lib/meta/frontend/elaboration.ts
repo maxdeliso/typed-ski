@@ -123,12 +123,10 @@ function elaborateMatch(
   const constructorInfos = match.arms.map((arm) => {
     const info = syms.constructors.get(arm.constructorName);
     if (!info) {
-      // If the constructor is imported, defer validation until linking
+      // An imported constructor's definition isn't available in this unit.
       if (syms.imports.has(arm.constructorName)) {
-        // For imported constructors, we can't validate them here.
-        // We'll create a placeholder info that will be validated during linking.
-        // For now, we'll skip the detailed validation and just proceed.
-        // The linker will catch any issues with imported constructors.
+        // We can't resolve its fields here, so skip detailed validation
+        // and proceed with a placeholder.
         return { arm, info: null, isImported: true };
       }
       throw new CompilationError(
@@ -144,16 +142,15 @@ function elaborateMatch(
   const hasImportedConstructors = constructorInfos.some((ci) => ci.isImported);
 
   if (hasImportedConstructors) {
-    // For imported constructors, we can't do full validation here.
-    // We'll just elaborate the arms without strict validation.
-    // The linker will validate imported constructors later.
+    // For imported constructors, we can't do full validation here,
+    // so we elaborate the arms without strict validation.
     const orderedArms = constructorInfos.map(({ arm }) => {
       // For imported constructors, we don't know the field types,
       // so we'll just elaborate the body and create abstractions
       // based on the number of parameters provided.
       let body = elaborateSystemF(arm.body, syms);
       // Create type annotations based on parameter count
-      // We'll use a placeholder type - the linker will fix this
+      // We'll use a placeholder type for the unknown field types
       for (let i = arm.params.length - 1; i >= 0; i--) {
         body = mkSystemFAbs(
           arm.params[i]!,

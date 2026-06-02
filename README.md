@@ -132,9 +132,9 @@ reproducible builds and byte-level diffing:
 
 - Top-level Trip unparse preserves the original source-level definition
   kind (`poly rec`, `combinator`, etc.) and emits parseable canonical
-  syntax. Internal lowering stages use `lambda` during linking and
+  syntax. Internal lowering stages use `lambda` during lowering and
   execution.
-- Link-time dependency traversal and SCC processing use explicit ASCII
+- Cross-module resolution and bundle serialization use explicit ASCII
   ordering rather than incidental `Map`/`Set` iteration order.
 - Final SKI output is the fully parenthesized canonical `unparseSKI` form
   and should be compared as UTF-8 bytes.

@@ -1,6 +1,0 @@
-module Main
-
-export main
-
-poly main =
-  #u8(0)

@@ -37,7 +37,8 @@ import {
  */
 
 /**
- * Global cache for free variables to avoid O(N^2) behavior in linker.
+ * Global cache for free variables to avoid O(N^2) behavior during
+ * repeated substitution over large terms.
  */
 const freeVarCache = new WeakMap<TripLangValueType, Set<string>>();
 

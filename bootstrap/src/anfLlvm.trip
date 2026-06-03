@@ -206,6 +206,56 @@ poly rec emitArgsString =
                 }
           )
 
+poly twoArgs =
+  \name : List U8 =>
+    \args : List AnfExpr =>
+      matchList
+        [AnfExpr]
+        [Result (List U8) (AnfExpr, AnfExpr)]
+        args
+        (
+          Err
+            [List U8]
+            [(AnfExpr, AnfExpr)]
+            (append [U8] name " expects two arguments")
+        )
+        (
+          \a1 : AnfExpr =>
+            \r1 : List AnfExpr =>
+              matchList
+                [AnfExpr]
+                [Result (List U8) (AnfExpr, AnfExpr)]
+                r1
+                (
+                  Err
+                    [List U8]
+                    [(AnfExpr, AnfExpr)]
+                    (append [U8] name " expects two arguments")
+                )
+                (
+                  \a2 : AnfExpr =>
+                    \r2 : List AnfExpr =>
+                      matchList
+                        [AnfExpr]
+                        [Result (List U8) (AnfExpr, AnfExpr)]
+                        r2
+                        (
+                          Ok
+                            [List U8]
+                            [(AnfExpr, AnfExpr)]
+                            {AnfExpr, AnfExpr | a1, a2}
+                        )
+                        (
+                          \x : AnfExpr =>
+                            \y : List AnfExpr =>
+                              Err
+                                [List U8]
+                                [(AnfExpr, AnfExpr)]
+                                (append [U8] name " expects two arguments")
+                        )
+                )
+        )
+
 poly emitArithBin =
   \opcode : List U8 =>
     \name : List U8 =>
@@ -213,73 +263,21 @@ poly emitArithBin =
         \counter : Bin =>
           \instrs : List (List U8) =>
             \args : List AnfExpr =>
-              matchList
-                [AnfExpr]
-                [Result (List U8) EmitRes]
-                args
-                (
-                  Err
-                    [List U8]
-                    [EmitRes]
-                    (append [U8] name " expects two arguments")
-                )
-                (
-                  \a1 : AnfExpr =>
-                    \r1 : List AnfExpr =>
-                      matchList
-                        [AnfExpr]
-                        [Result (List U8) EmitRes]
-                        r1
-                        (
-                          Err
-                            [List U8]
-                            [EmitRes]
-                            (append [U8] name " expects two arguments")
-                        )
-                        (
-                          \a2 : AnfExpr =>
-                            \r2 : List AnfExpr =>
-                              matchList
-                                [AnfExpr]
-                                [Result (List U8) EmitRes]
-                                r2
-                                (
-                                  match (atomOperand env a1) [Result (List U8) EmitRes] {
-                                    | Err e => Err [List U8] [EmitRes] e
-                                    | Ok op1 =>
-                                      match (atomOperand env a2) [Result (List U8) EmitRes] {
-                                        | Err e => Err [List U8] [EmitRes] e
-                                        | Ok op2 =>
-                                          let dest = append [U8] "%__ll" (binToDigits counter) in
-                                          let counter1 = incBin counter in
-                                          let line = append [U8] "  " (append [U8] dest (append [U8] " = " (append [U8] opcode (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] op2 "\n"))))))) in
-                                          Ok
-                                            [List U8]
-                                            [EmitRes]
-                                            (
-                                              MkEmitRes
-                                                counter1
-                                                (cons [List U8] line instrs)
-                                                dest
-                                            )
-                                      }
-                                  }
-                                )
-                                (
-                                  \x : AnfExpr =>
-                                    \y : List AnfExpr =>
-                                      Err
-                                        [List U8]
-                                        [EmitRes]
-                                        (
-                                          append
-                                            [U8]
-                                            name
-                                            " expects two arguments"
-                                        )
-                                )
-                        )
-                )
+              do [Result (List U8) EmitRes] {
+                pair <- (twoArgs name args)
+                MkPair a1 a2 = pair
+                op1 <- (atomOperand env a1)
+                op2 <- (atomOperand env a2)
+                dest = append [U8]
+                "%__ll" (binToDigits counter)
+                counter1 = incBin counter
+                line = append [U8] "  " (append [U8] dest (append [U8] " = " (append [U8] opcode (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] op2 "\n")))))))
+                return
+                  Ok
+                  [List U8]
+                  [EmitRes]
+                  (MkEmitRes counter1 (cons [List U8] line instrs) dest)
+              }
 
 poly emitCmpBin =
   \predOp : List U8 =>
@@ -288,84 +286,54 @@ poly emitCmpBin =
         \counter : Bin =>
           \instrs : List (List U8) =>
             \args : List AnfExpr =>
-              matchList
-                [AnfExpr]
-                [Result (List U8) EmitRes]
-                args
-                (
-                  Err
-                    [List U8]
-                    [EmitRes]
-                    (append [U8] name " expects two arguments")
-                )
-                (
-                  \a1 : AnfExpr =>
-                    \r1 : List AnfExpr =>
-                      matchList
-                        [AnfExpr]
-                        [Result (List U8) EmitRes]
-                        r1
-                        (
-                          Err
-                            [List U8]
-                            [EmitRes]
-                            (append [U8] name " expects two arguments")
-                        )
-                        (
-                          \a2 : AnfExpr =>
-                            \r2 : List AnfExpr =>
-                              matchList
-                                [AnfExpr]
-                                [Result (List U8) EmitRes]
-                                r2
-                                (
-                                  match (atomOperand env a1) [Result (List U8) EmitRes] {
-                                    | Err e => Err [List U8] [EmitRes] e
-                                    | Ok op1 =>
-                                      match (atomOperand env a2) [Result (List U8) EmitRes] {
-                                        | Err e => Err [List U8] [EmitRes] e
-                                        | Ok op2 =>
-                                          let dest = append [U8] "%__ll" (binToDigits counter) in
-                                          let counter1 = incBin counter in
-                                          let cmpLine = append [U8] "  " (append [U8] dest (append [U8] "_c = icmp " (append [U8] predOp (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] op2 "\n"))))))) in
-                                          let extLine = append [U8] "  " (append [U8] dest (append [U8] " = zext i1 " (append [U8] dest "_c to i8\n"))) in
-                                          Ok
-                                            [List U8]
-                                            [EmitRes]
-                                            (
-                                              MkEmitRes
-                                                counter1
-                                                (
-                                                  cons
-                                                    [List U8]
-                                                    extLine
-                                                    (
-                                                      cons
-                                                        [List U8]
-                                                        cmpLine
-                                                        instrs
-                                                    )
-                                                )
-                                                dest
-                                            )
-                                      }
-                                  }
-                                )
-                                (
-                                  \x : AnfExpr =>
-                                    \y : List AnfExpr =>
-                                      Err
-                                        [List U8]
-                                        [EmitRes]
-                                        (
-                                          append
-                                            [U8]
-                                            name
-                                            " expects two arguments"
-                                        )
-                                )
-                        )
-                )
+              do [Result (List U8) EmitRes] {
+                pair <- (twoArgs name args)
+                MkPair a1 a2 = pair
+                op1 <- (atomOperand env a1)
+                op2 <- (atomOperand env a2)
+                dest = append [U8]
+                "%__ll" (binToDigits counter)
+                counter1 = incBin counter
+                cmpLine = append [U8]
+                "  "
+                  (
+                    append
+                      [U8]
+                      dest
+                      (
+                        append
+                          [U8]
+                          "_c = icmp "
+                          (
+                            append
+                              [U8]
+                              predOp
+                              (
+                                append
+                                  [U8]
+                                  " i8 "
+                                  (
+                                    append
+                                      [U8]
+                                      op1
+                                      (append [U8] ", " (append [U8] op2 "\n"))
+                                  )
+                              )
+                          )
+                      )
+                  )
+                extLine = append [U8] "  " (append [U8] dest (append [U8] " = zext i1 " (append [U8] dest "_c to i8\n")))
+                return
+                  Ok
+                  [List U8]
+                  [EmitRes]
+                  (
+                    MkEmitRes
+                      counter1
+                      (cons [List U8] extLine (cons [List U8] cmpLine instrs))
+                      dest
+                  )
+              }
 
 poly emitDivMod =
   \opcode : List U8 =>
@@ -374,96 +342,110 @@ poly emitDivMod =
         \counter : Bin =>
           \instrs : List (List U8) =>
             \args : List AnfExpr =>
-              matchList
-                [AnfExpr]
-                [Result (List U8) EmitRes]
-                args
-                (
-                  Err
-                    [List U8]
-                    [EmitRes]
-                    (append [U8] name " expects two arguments")
-                )
-                (
-                  \a1 : AnfExpr =>
-                    \r1 : List AnfExpr =>
-                      matchList
-                        [AnfExpr]
-                        [Result (List U8) EmitRes]
-                        r1
-                        (
-                          Err
-                            [List U8]
-                            [EmitRes]
-                            (append [U8] name " expects two arguments")
-                        )
-                        (
-                          \a2 : AnfExpr =>
-                            \r2 : List AnfExpr =>
-                              matchList
-                                [AnfExpr]
-                                [Result (List U8) EmitRes]
-                                r2
-                                (
-                                  match (atomOperand env a1) [Result (List U8) EmitRes] {
-                                    | Err e => Err [List U8] [EmitRes] e
-                                    | Ok op1 =>
-                                      match (atomOperand env a2) [Result (List U8) EmitRes] {
-                                        | Err e => Err [List U8] [EmitRes] e
-                                        | Ok op2 =>
-                                          let dest = append [U8] "%__ll" (binToDigits counter) in
-                                          let counter1 = incBin counter in
-                                          let zeroLine = append [U8] "  " (append [U8] dest (append [U8] "_zero = icmp eq i8 " (append [U8] op2 ", 0\n"))) in
-                                          let safeLine = append [U8] "  " (append [U8] dest (append [U8] "_safe = select i1 " (append [U8] dest (append [U8] "_zero, i8 1, i8 " (append [U8] op2 "\n"))))) in
-                                          let rawLine = append [U8] "  " (append [U8] dest (append [U8] "_raw = " (append [U8] opcode (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] dest "_safe\n"))))))) in
-                                          let resLine = append [U8] "  " (append [U8] dest (append [U8] " = select i1 " (append [U8] dest (append [U8] "_zero, i8 0, i8 " (append [U8] dest "_raw\n"))))) in
-                                          Ok
-                                            [List U8]
-                                            [EmitRes]
-                                            (
-                                              MkEmitRes
-                                                counter1
-                                                (
-                                                  cons
-                                                    [List U8]
-                                                    resLine
-                                                    (
-                                                      cons
-                                                        [List U8]
-                                                        rawLine
-                                                        (
-                                                          cons
-                                                            [List U8]
-                                                            safeLine
-                                                            (
-                                                              cons
-                                                                [List U8]
-                                                                zeroLine
-                                                                instrs
-                                                            )
-                                                        )
-                                                    )
-                                                )
-                                                dest
-                                            )
-                                      }
-                                  }
-                                )
-                                (
-                                  \x : AnfExpr =>
-                                    \y : List AnfExpr =>
-                                      Err
-                                        [List U8]
-                                        [EmitRes]
-                                        (
-                                          append
-                                            [U8]
-                                            name
-                                            " expects two arguments"
-                                        )
-                                )
-                        )
-                )
+              do [Result (List U8) EmitRes] {
+                pair <- (twoArgs name args)
+                MkPair a1 a2 = pair
+                op1 <- (atomOperand env a1)
+                op2 <- (atomOperand env a2)
+                dest = append [U8]
+                "%__ll" (binToDigits counter)
+                counter1 = incBin counter
+                zeroLine = append [U8]
+                "  "
+                  (
+                    append
+                      [U8]
+                      dest
+                      (
+                        append
+                          [U8]
+                          "_zero = icmp eq i8 "
+                          (append [U8] op2 ", 0\n")
+                      )
+                  )
+                safeLine = append [U8]
+                "  "
+                  (
+                    append
+                      [U8]
+                      dest
+                      (
+                        append
+                          [U8]
+                          "_safe = select i1 "
+                          (
+                            append
+                              [U8]
+                              dest
+                              (
+                                append
+                                  [U8]
+                                  "_zero, i8 1, i8 "
+                                  (append [U8] op2 "\n")
+                              )
+                          )
+                      )
+                  )
+                rawLine = append [U8]
+                "  "
+                  (
+                    append
+                      [U8]
+                      dest
+                      (
+                        append
+                          [U8]
+                          "_raw = "
+                          (
+                            append
+                              [U8]
+                              opcode
+                              (
+                                append
+                                  [U8]
+                                  " i8 "
+                                  (
+                                    append
+                                      [U8]
+                                      op1
+                                      (
+                                        append
+                                          [U8]
+                                          ", "
+                                          (append [U8] dest "_safe\n")
+                                      )
+                                  )
+                              )
+                          )
+                      )
+                  )
+                resLine = append [U8] "  " (append [U8] dest (append [U8] " = select i1 " (append [U8] dest (append [U8] "_zero, i8 0, i8 " (append [U8] dest "_raw\n")))))
+                return
+                  Ok
+                  [List U8]
+                  [EmitRes]
+                  (
+                    MkEmitRes
+                      counter1
+                      (
+                        cons
+                          [List U8]
+                          resLine
+                          (
+                            cons
+                              [List U8]
+                              rawLine
+                              (
+                                cons
+                                  [List U8]
+                                  safeLine
+                                  (cons [List U8] zeroLine instrs)
+                              )
+                          )
+                      )
+                      dest
+                  )
+              }
 
 poly rec emitExpr =
   \env : List (((List U8), (List U8))) =>

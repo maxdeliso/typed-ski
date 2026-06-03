@@ -299,6 +299,39 @@ entry:
 
 `,
       ],
+      [
+        "match on a nullary enum lowers to switch + alloca/store/load",
+        `module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = \\c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
+`,
+        `define i8 @main(i8 %c) {
+entry:
+  %__case0.slot = alloca i8
+  switch i8 %c, label %__case0.default [
+    i8 0, label %__case0.arm0
+    i8 1, label %__case0.arm1
+    i8 2, label %__case0.arm2
+  ]
+__case0.arm0:
+  store i8 10, ptr %__case0.slot
+  br label %__case0.end
+__case0.arm1:
+  store i8 20, ptr %__case0.slot
+  br label %__case0.end
+__case0.arm2:
+  store i8 30, ptr %__case0.slot
+  br label %__case0.end
+__case0.default:
+  unreachable
+__case0.end:
+  %__case0.result = load i8, ptr %__case0.slot
+  ret i8 %__case0.result
+}
+
+`,
+      ],
     ];
 
     for (const [label, source, expected] of cases) {

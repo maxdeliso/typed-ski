@@ -17,6 +17,7 @@ import {
   compileTripToLlvm,
   loadCommonModules,
   runExecutable,
+  type RunResult,
 } from "./nativeHarness.ts";
 
 const ANF_LLVM_MODULE_NAMES: readonly CompilerTripModuleName[] = [
@@ -56,6 +57,57 @@ entry:
 
 `;
 
+// Exercises the nullary-constructor path (AE_Con with no fields -> its i8
+// tag, added in #186). `Green` is the second constructor of `Color`, so its
+// declaration-order tag is 1. No `declare` prelude: the program uses no IO.
+const NULLARY_CON_SOURCE = String.raw`module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = Green
+`;
+
+const NULLARY_CON_EXPECTED = `define i8 @main() {
+entry:
+  ret i8 1
+}
+
+`;
+
+// Exercises the AE_Case path: a match on a nullary enum lowers to a `switch`
+// on the scrutinee's i8 tag, with each arm storing to an alloca slot that a
+// shared `end` block loads (alloca/store/load rather than phi).
+const MATCH_SOURCE = String.raw`module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
+`;
+
+const MATCH_EXPECTED = `define i8 @main(i8 %c) {
+entry:
+  %__case0.slot = alloca i8
+  switch i8 %c, label %__case0.default [
+    i8 0, label %__case0.arm0
+    i8 1, label %__case0.arm1
+    i8 2, label %__case0.arm2
+  ]
+__case0.arm0:
+  store i8 10, ptr %__case0.slot
+  br label %__case0.end
+__case0.arm1:
+  store i8 20, ptr %__case0.slot
+  br label %__case0.end
+__case0.arm2:
+  store i8 30, ptr %__case0.slot
+  br label %__case0.end
+__case0.default:
+  unreachable
+__case0.end:
+  %__case0.result = load i8, ptr %__case0.slot
+  ret i8 %__case0.result
+}
+
+`;
+
 function buildVerifySource(source: string): string {
   return String.raw`module Verify
 import Prelude List
@@ -75,28 +127,53 @@ poly main = writeAll (compileSourceToLlvmText ${JSON.stringify(source)})
 `;
 }
 
+/**
+ * Compiles the `Verify` harness wrapped around `demoSource` to a native
+ * executable, runs it, and returns the result. The executable's stdout is the
+ * LLVM text the native AnfLlvm emitter produced for `demoSource`.
+ */
+async function emitNatively(demoSource: string): Promise<RunResult> {
+  const moduleSources = await loadCommonModules([...ANF_LLVM_MODULE_NAMES]);
+  const verifySource = buildVerifySource(demoSource);
+  const llvm = await compileTripToLlvm(verifySource, {
+    entryModule: "Verify",
+    moduleSources,
+    emitMainWrapper: true,
+  });
+
+  const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-anf-llvm-"));
+  try {
+    const llPath = join(tempDir, "anf-llvm-verify.ll");
+    await writeFile(llPath, llvm, "utf8");
+    const exePath = await compileLlvmToExecutable(llPath);
+    return runExecutable(exePath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 describe("AnfLlvm native self-host", () => {
   it("stage-0 emits a native executable whose AnfLlvm output matches the host expectation", async () => {
-    const moduleSources = await loadCommonModules([...ANF_LLVM_MODULE_NAMES]);
-    const verifySource = buildVerifySource(DEMO_SOURCE);
-    const llvm = await compileTripToLlvm(verifySource, {
-      entryModule: "Verify",
-      moduleSources,
-      emitMainWrapper: true,
-    });
+    const result = await emitNatively(DEMO_SOURCE);
 
-    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-anf-llvm-"));
-    try {
-      const llPath = join(tempDir, "anf-llvm-verify.ll");
-      await writeFile(llPath, llvm, "utf8");
-      const exePath = await compileLlvmToExecutable(llPath);
-      const result = runExecutable(exePath);
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, EXPECTED_LLVM);
+  });
 
-      assert.equal(result.status, 0);
-      assert.equal(result.stderr, "");
-      assert.equal(result.stdout, EXPECTED_LLVM);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
+  it("stage-0 emits nullary constructors as their i8 tag through the native path", async () => {
+    const result = await emitNatively(NULLARY_CON_SOURCE);
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, NULLARY_CON_EXPECTED);
+  });
+
+  it("stage-0 lowers a match on a nullary enum to a switch through the native path", async () => {
+    const result = await emitNatively(MATCH_SOURCE);
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, MATCH_EXPECTED);
   });
 });

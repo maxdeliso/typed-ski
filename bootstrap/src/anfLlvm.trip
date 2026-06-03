@@ -131,6 +131,9 @@ export compileSourceToLlvmText
 data EmitRes =
   | MkEmitRes Bin (List (List U8)) (List U8)
 
+data CaseArmsRes =
+  | MkCaseArmsRes Bin (List (List U8))
+
 poly rec lookupEnv =
   \env : List ((List U8), (List U8)) =>
     \name : List U8 =>
@@ -556,6 +559,69 @@ poly emitReadOne =
                       )
               )
 
+poly rec caseSwitchTable =
+  \base : List U8 =>
+    \idx : Bin =>
+      \arms : List AnfExpr =>
+        matchList
+          [AnfExpr]
+          [List U8]
+          arms
+          ""
+          (
+            \h : AnfExpr =>
+              \t : List AnfExpr =>
+                append
+                  [U8]
+                  (
+                    concat
+                      [U8]
+                      {List U8 |
+                        "    i8 "
+                        (binToDigits idx)
+                        ", label %"
+                        base
+                        ".arm"
+                        (binToDigits idx)
+                        "\n"
+                      }
+                  )
+                  (caseSwitchTable base (incBin idx) t)
+          )
+
+poly rec emitCaseArms =
+  \emitFn : List ((List U8), (List U8)) -> Bin -> List (List U8) -> AnfExpr -> Result (List U8) EmitRes =>
+    \env : List ((List U8), (List U8)) =>
+      \base : List U8 =>
+        \slot : List U8 =>
+          \counter : Bin =>
+            \idx : Bin =>
+              \instrs : List (List U8) =>
+                \arms : List AnfExpr =>
+                  matchList
+                    [AnfExpr]
+                    [Result (List U8) CaseArmsRes]
+                    arms
+                    (Ok [List U8] [CaseArmsRes] (MkCaseArmsRes counter instrs))
+                    (
+                      \h : AnfExpr =>
+                        \t : List AnfExpr =>
+                          do [Result (List U8) CaseArmsRes] {
+                            labelLine = concat [U8]
+                            {List U8 | base ".arm" (binToDigits idx) ":\n"}
+                            instrsL = cons [List U8] labelLine instrs
+                            res <- (emitFn env counter instrsL h)
+                            MkEmitRes c1 instrsB armOp = res
+                            storeLine = concat [U8]
+                            {List U8 | "  store i8 " armOp ", ptr " slot "\n"}
+                            brLine = concat [U8]
+                            {List U8 | "  br label %" base ".end\n"}
+                            instrsBr = cons [List U8] brLine (cons [List U8] storeLine instrsB)
+                            rest <- (emitCaseArms emitFn env base slot c1 (incBin idx) instrsBr t)
+                            return Ok [List U8] [CaseArmsRes] rest
+                          }
+                    )
+
 poly rec emitExpr =
   \env : List ((List U8), (List U8)) =>
     \counter : Bin =>
@@ -710,7 +776,44 @@ poly rec emitExpr =
                         "Unsupported expression: constructor with fields"
                 )
             | AE_Case scrut arms =>
-              Err [List U8] [EmitRes] "Unsupported expression: case"
+              do [Result (List U8) EmitRes] {
+                scrutOp <- (atomOperand env scrut)
+                caseId = counter
+                counter1 = incBin counter
+                base = append [U8]
+                "__case" (binToDigits caseId)
+                slot = concat [U8]
+                {List U8 | "%" base ".slot"}
+                allocaLine = concat [U8]
+                {List U8 | "  " slot " = alloca i8\n"}
+                switchLine = concat [U8]
+                {List U8 |
+                  "  switch i8 "
+                  scrutOp
+                  ", label %"
+                  base
+                  ".default [\n"
+                  (caseSwitchTable base BZ arms)
+                  "  ]\n"
+                }
+                instrs1 = cons [List U8] switchLine (cons [List U8] allocaLine instrs)
+                armsRes <- (emitCaseArms emitExpr env base slot counter1 BZ instrs1 arms)
+                MkCaseArmsRes counter2 instrs2 = armsRes
+                defaultLine = concat [U8]
+                {List U8 | base ".default:\n  unreachable\n"}
+                endLine = concat [U8]
+                {List U8 | base ".end:\n"}
+                resultOp = concat [U8]
+                {List U8 | "%" base ".result"}
+                loadLine = concat [U8]
+                {List U8 | "  " resultOp " = load i8, ptr " slot "\n"}
+                instrs3 = cons [List U8] loadLine (cons [List U8] endLine (cons [List U8] defaultLine instrs2))
+                return
+                  Ok
+                  [List U8]
+                  [EmitRes]
+                  (MkEmitRes counter2 instrs3 resultOp)
+              }
             | AE_Let name val body =>
               match (emitExpr env counter instrs val) [Result (List U8) EmitRes] {
                 | Err e => Err [List U8] [EmitRes] e

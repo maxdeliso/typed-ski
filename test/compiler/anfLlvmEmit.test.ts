@@ -234,6 +234,42 @@ entry:
 
 `,
       ],
+      [
+        "writeOne compilation",
+        `module Demo
+import Prelude writeOne
+export main
+poly main = \\a : U8 => writeOne a [U8] (\\u : U8 => a)
+`,
+        `declare void @trip_write_one(i8)
+declare i8 @trip_read_one()
+
+define i8 @main(i8 %a) {
+entry:
+  call void @trip_write_one(i8 %a)
+  ret i8 %a
+}
+
+`,
+      ],
+      [
+        "readOne compilation",
+        `module Demo
+import Prelude readOne
+export main
+poly main = \\u : U8 => readOne [U8] (\\b : U8 => b)
+`,
+        `declare void @trip_write_one(i8)
+declare i8 @trip_read_one()
+
+define i8 @main(i8 %u) {
+entry:
+  %__ll0 = call i8 @trip_read_one()
+  ret i8 %__ll0
+}
+
+`,
+      ],
     ];
 
     for (const [label, source, expected] of cases) {

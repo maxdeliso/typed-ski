@@ -1415,6 +1415,32 @@ function stripOuterParens(tokens: readonly Token[]): Token[] {
   return list;
 }
 
+function parseBracketedTypeArgument(
+  tokens: readonly Token[],
+  index: number,
+): { typeText: string; endIndex: number } | undefined {
+  const next = nextSyntaxWithIndex(tokens, index);
+  if (next?.token.text !== "[") return undefined;
+
+  const typeTokens: Token[] = [];
+  let cursor = next.index + 1;
+  let depth = 1;
+  while (cursor < tokens.length) {
+    const t = tokens[cursor]!;
+    if (t.text === "[") depth++;
+    if (t.text === "]") depth--;
+    if (depth === 0) break;
+    typeTokens.push(t);
+    cursor++;
+  }
+  if (cursor >= tokens.length) return undefined;
+
+  return {
+    typeText: formatInline(typeTokens),
+    endIndex: cursor,
+  };
+}
+
 function parseListChain(
   tokens: readonly Token[],
   index: number,
@@ -1482,6 +1508,52 @@ function parseListChain(
   }
 
   return undefined;
+}
+
+function parseConsPrefixChain(
+  tokens: readonly Token[],
+  index: number,
+):
+  | {
+      typeText: string;
+      elements: Token[][];
+      tailTokens: Token[];
+      endIndex: number;
+    }
+  | undefined {
+  const token = tokens[index];
+  if (token?.text !== "cons") return undefined;
+
+  const typeArg = parseBracketedTypeArgument(tokens, index);
+  if (!typeArg) return undefined;
+
+  const firstArg = parseArgExpression(tokens, typeArg.endIndex + 1);
+  if (!firstArg) return undefined;
+
+  const secondArg = parseArgExpression(tokens, firstArg.endIndex + 1);
+  if (!secondArg) return undefined;
+
+  const innerTokens = stripOuterParens(secondArg.tokens);
+  const nested = parseConsPrefixChain(innerTokens, 0);
+  if (
+    nested &&
+    nested.typeText === typeArg.typeText &&
+    nested.endIndex === innerTokens.length - 1
+  ) {
+    return {
+      typeText: typeArg.typeText,
+      elements: [firstArg.tokens, ...nested.elements],
+      tailTokens: nested.tailTokens,
+      endIndex: secondArg.endIndex,
+    };
+  }
+
+  return {
+    typeText: typeArg.typeText,
+    elements: [firstArg.tokens],
+    tailTokens: secondArg.tokens,
+    endIndex: secondArg.endIndex,
+  };
 }
 
 function parseListLiteral(
@@ -1568,6 +1640,78 @@ function parseAppendChain(
   }
 
   return undefined;
+}
+
+function parseAppendSegmentChain(
+  tokens: readonly Token[],
+  index: number,
+):
+  | {
+      typeText: string;
+      segments: Token[][];
+      appendCount: number;
+      endIndex: number;
+    }
+  | undefined {
+  const token = tokens[index];
+  if (token?.text !== "append") return undefined;
+
+  const typeArg = parseBracketedTypeArgument(tokens, index);
+  if (!typeArg) return undefined;
+
+  const arg1 = parseArgExpression(tokens, typeArg.endIndex + 1);
+  if (!arg1) return undefined;
+
+  const arg2 = parseArgExpression(tokens, arg1.endIndex + 1);
+  if (!arg2) return undefined;
+
+  const left = parseNestedAppendSegment(arg1.tokens, typeArg.typeText);
+  const right = parseNestedAppendSegment(arg2.tokens, typeArg.typeText);
+
+  return {
+    typeText: typeArg.typeText,
+    segments: [
+      ...(left?.segments ?? [arg1.tokens]),
+      ...(right?.segments ?? [arg2.tokens]),
+    ],
+    appendCount: 1 + (left?.appendCount ?? 0) + (right?.appendCount ?? 0),
+    endIndex: arg2.endIndex,
+  };
+}
+
+function parseNestedAppendSegment(
+  tokens: readonly Token[],
+  typeText: string,
+):
+  | {
+      segments: Token[][];
+      appendCount: number;
+    }
+  | undefined {
+  const stripped = stripOuterParens(tokens);
+  const nested = parseAppendSegmentChain(stripped, 0);
+  if (
+    nested &&
+    nested.typeText === typeText &&
+    nested.endIndex === stripped.length - 1
+  ) {
+    return {
+      segments: nested.segments,
+      appendCount: nested.appendCount,
+    };
+  }
+  return undefined;
+}
+
+function typeTextForListElementType(typeText: string): string {
+  const trimmed = typeText.trim();
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+    return `List ${trimmed}`;
+  }
+  if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+    return `List ${trimmed}`;
+  }
+  return `List (${trimmed})`;
 }
 
 function resolveAsStaticList(
@@ -2276,6 +2420,37 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       continue;
     }
 
+    // 1b. Append chain simplification to concat
+    const appendSegmentMatch = parseAppendSegmentChain(tokens, i);
+    if (
+      appendSegmentMatch &&
+      appendSegmentMatch.appendCount >= 2 &&
+      canUsePrelude(topLevel, "append") &&
+      canUsePrelude(topLevel, "concat")
+    ) {
+      const segmentTypeText = typeTextForListElementType(
+        appendSegmentMatch.typeText,
+      );
+      const segmentsStr = appendSegmentMatch.segments
+        .map((t) => formatInline(t))
+        .join(" ");
+      const replacement = `concat [${appendSegmentMatch.typeText}] {${segmentTypeText} | ${segmentsStr}}`;
+      diagnostics.push(
+        diagnostic(
+          "trip-append-concat",
+          `Use concat [${appendSegmentMatch.typeText}] to flatten nested append calls`,
+          tokens[i]!,
+          {
+            start: tokens[i]!.start,
+            end: tokens[appendSegmentMatch.endIndex]!.end,
+            replacement,
+          },
+        ),
+      );
+      i = appendSegmentMatch.endIndex;
+      continue;
+    }
+
     // 2. List cons/nil chain simplification
     const listChainMatch = parseListChain(tokens, i);
     if (listChainMatch) {
@@ -2317,6 +2492,38 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       );
       i = listChainMatch.endIndex;
       continue;
+    }
+
+    // 2b. Cons prefix simplification to a literal chunk plus tail append
+    const consPrefixMatch = parseConsPrefixChain(tokens, i);
+    if (
+      consPrefixMatch &&
+      consPrefixMatch.elements.length >= 2 &&
+      canUsePrelude(topLevel, "cons") &&
+      canUsePrelude(topLevel, "append")
+    ) {
+      const staticTail = resolveAsStaticList(consPrefixMatch.tailTokens);
+      if (staticTail?.typeText !== consPrefixMatch.typeText) {
+        const elementsStr = consPrefixMatch.elements
+          .map((t) => formatInline(t))
+          .join(" ");
+        const tailText = formatInline(consPrefixMatch.tailTokens);
+        const replacement = `append [${consPrefixMatch.typeText}] {${consPrefixMatch.typeText} | ${elementsStr}} ${tailText}`;
+        diagnostics.push(
+          diagnostic(
+            "trip-cons-prefix",
+            `Use syntactic sugar {${consPrefixMatch.typeText} | ...} for nested cons prefix`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[consPrefixMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = consPrefixMatch.endIndex;
+        continue;
+      }
     }
 
     // 3. List literal to string literal conversion (for U8 chars)

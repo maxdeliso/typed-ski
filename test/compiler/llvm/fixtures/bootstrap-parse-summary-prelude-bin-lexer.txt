@@ -308,7 +308,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 54
+exports 55
 export Bool
 export id
 export true
@@ -339,6 +339,7 @@ export Maybe
 export Some
 export None
 export append
+export concat
 export map
 export foldl
 export takeWhile
@@ -393,7 +394,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 33
+poly 34
 poly id
 poly true
 poly false
@@ -413,6 +414,7 @@ poly head
 poly tail
 poly appendAcc
 poly append
+poly concat
 poly map
 poly foldl
 poly takeWhile

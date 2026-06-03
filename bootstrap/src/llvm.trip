@@ -128,10 +128,10 @@ poly u8ToDigits =
         let hundreds = divU8 n #u8(100) in
         let tens = modU8 (divU8 n #u8(10)) #u8(10) in
         let ones = modU8 n #u8(10) in
-        cons
+        append
           [U8]
-          (digitToAscii hundreds)
-          (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
+          {U8 | (digitToAscii hundreds) (digitToAscii tens)}
+          (singletonU8 (digitToAscii ones))
     }
 
 poly digitValue =

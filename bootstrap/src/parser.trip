@@ -1033,7 +1033,7 @@ poly rec exprListMentionsName =
                     (\u : U8 => true)
                     (\u : U8 => exprListMentionsName name rest)
                 | E_App l r =>
-                  exprListMentionsName name (cons [Expr] l (cons [Expr] r rest))
+                  exprListMentionsName name (append [Expr] {Expr | l r} rest)
                 | E_Lam varName body =>
                   if [Bool] (eqListU8 name varName)
                     (\u : U8 => true)
@@ -1047,7 +1047,7 @@ poly rec exprListMentionsName =
                       \u : U8 =>
                         exprListMentionsName
                           name
-                          (cons [Expr] value (cons [Expr] body rest))
+                          (append [Expr] {Expr | value body} rest)
                     )
                 | E_Nat n => exprListMentionsName name rest
                 | E_Match scrutinee arms =>

@@ -246,6 +246,19 @@ poly main = cons [Bin] a (cons [Bin] b (nil [Bin]))
     assert.match(result.fixed, /\{Bin \| a b\}/);
   });
 
+  it("reports and fixes nested cons prefixes to list literal chunks", () => {
+    const source = `module M
+import Prelude cons
+import Prelude append
+poly main = cons [Bin] a (cons [Bin] b (cons [Bin] c rest))
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-cons-prefix"),
+    );
+    assert.match(result.fixed, /append \[Bin\] \{Bin \| a b c\} rest/);
+  });
+
   it("reports and fixes U8 list to double-quoted string literals", () => {
     const source = `module M
 poly main = cons [U8] 'h' (cons [U8] 'i' (nil [U8]))
@@ -277,6 +290,31 @@ poly main = append [Bin] {Bin | a} {Bin | b}
       result.diagnostics.some((diag) => diag.code === "trip-list-append"),
     );
     assert.match(result.fixed, /\{Bin \| a b\}/);
+  });
+
+  it("reports and fixes nested append chains to concat", () => {
+    const source = `module M
+import Prelude append
+import Prelude concat
+poly main = append [U8] "a" (append [U8] b (append [U8] c d))
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-append-concat"),
+    );
+    assert.match(result.fixed, /concat \[U8\] \{List U8 \| "a" b c d\}/);
+  });
+
+  it("does not introduce concat without the Prelude import", () => {
+    const source = `module M
+import Prelude append
+poly main = append [U8] a (append [U8] b c)
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      !result.diagnostics.some((diag) => diag.code === "trip-append-concat"),
+    );
+    assert.doesNotMatch(result.fixed, /concat \[U8\]/);
   });
 
   it("reports and fixes degenerate if chains to cond blocks", () => {

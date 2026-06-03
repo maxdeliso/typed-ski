@@ -474,7 +474,7 @@ poly rec emitExpr =
                                                     "%__ll"
                                                       (binToDigits counter)
                                                     counter1 = incBin counter
-                                                    line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n")))))
+                                                    line = concat [U8] {List U8 | "  " dest " = call i8 @" f "(" argStr ")\n"}
                                                     return
                                                       Ok
                                                       [List U8]
@@ -574,40 +574,19 @@ poly emitFunc =
         [List U8]
         [List U8]
         (
-          append
+          concat
             [U8]
-            "define i8 @"
-            (
-              append
-                [U8]
-                name
-                (
-                  append
-                    [U8]
-                    "("
-                    (
-                      append
-                        [U8]
-                        (paramDeclsString params true)
-                        (
-                          append
-                            [U8]
-                            ") {\nentry:\n"
-                            (
-                              append
-                                [U8]
-                                instrText
-                                (
-                                  append
-                                    [U8]
-                                    "  ret i8 "
-                                    (append [U8] op "\n}\n\n")
-                                )
-                            )
-                        )
-                    )
-                )
-            )
+            {List U8 |
+              "define i8 @"
+              name
+              "("
+              (paramDeclsString params true)
+              ") {\nentry:\n"
+              instrText
+              "  ret i8 "
+              op
+              "\n}\n\n"
+            }
         )
     }
 

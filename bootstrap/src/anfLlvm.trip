@@ -180,7 +180,19 @@ poly atomOperand =
         | AE_Lam n b => Err [List U8] [List U8] "Unsupported atom: lambda"
         | AE_Call f args => Err [List U8] [List U8] "Unsupported atom: call"
         | AE_Con tag total arity args =>
-          Err [List U8] [List U8] "Unsupported atom: constructor"
+          matchList
+            [AnfExpr]
+            [Result (List U8) (List U8)]
+            args
+            (Ok [List U8] [List U8] (u8ToDigits tag))
+            (
+              \h : AnfExpr =>
+                \t : List AnfExpr =>
+                  Err
+                    [List U8]
+                    [List U8]
+                    "Unsupported atom: constructor with fields"
+            )
         | AE_Case scrut arms => Err [List U8] [List U8] "Unsupported atom: case"
         | AE_Let name val body => Err [List U8] [List U8] "Unsupported atom: let"
       }
@@ -679,7 +691,24 @@ poly rec emitExpr =
                       )
                 )
             | AE_Con tag total arity args =>
-              Err [List U8] [EmitRes] "Unsupported expression: constructor"
+              matchList
+                [AnfExpr]
+                [Result (List U8) EmitRes]
+                args
+                (
+                  Ok
+                    [List U8]
+                    [EmitRes]
+                    (MkEmitRes counter instrs (u8ToDigits tag))
+                )
+                (
+                  \h : AnfExpr =>
+                    \t : List AnfExpr =>
+                      Err
+                        [List U8]
+                        [EmitRes]
+                        "Unsupported expression: constructor with fields"
+                )
             | AE_Case scrut arms =>
               Err [List U8] [EmitRes] "Unsupported expression: case"
             | AE_Let name val body =>

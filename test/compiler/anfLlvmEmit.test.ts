@@ -2,10 +2,11 @@
  * Stage-0 verification of the .trip ANF -> LLVM emitter (anfLlvm.trip).
  *
  * Runs `AnfLlvm.compileSourceToLlvmText` under the TypeScript MiniCore
- * evaluator on a small straight-line `U8` corpus (params, let-bindings,
- * and direct known-symbol calls) and asserts the emitted LLVM text. This
- * is the minimal slice of the ANF->LLVM tail: no constructors, cases,
- * inner lambdas, or runtime primitives yet.
+ * evaluator on a small `U8` corpus (params, let-bindings, direct
+ * known-symbol calls, the read/write runtime primitives, and nullary
+ * constructors emitted as their i8 tag) and asserts the emitted LLVM
+ * text. Constructors with fields, cases, and inner lambdas are not yet
+ * supported by the emitter.
  */
 
 import { describe, it } from "../util/test_shim.ts";
@@ -266,6 +267,34 @@ define i8 @main(i8 %u) {
 entry:
   %__ll0 = call i8 @trip_read_one()
   ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "nullary constructor emits its i8 tag (first arm = 0)",
+        `module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = Red
+`,
+        `define i8 @main() {
+entry:
+  ret i8 0
+}
+
+`,
+      ],
+      [
+        "declaration order drives the tag (middle arm = 1)",
+        `module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = Green
+`,
+        `define i8 @main() {
+entry:
+  ret i8 1
 }
 
 `,

@@ -87,16 +87,16 @@ data MiniProgram =
 poly rec peelLams =
   \expr : Core =>
     match expr [((List (List U8)), Core)] {
-      | Cr_Var n => {List (List U8), Core | ({List U8 |}), expr}
-      | Cr_App a b => {List (List U8), Core | ({List U8 |}), expr}
+      | Cr_Var n => {List (List U8), Core | {List U8 |}, expr}
+      | Cr_App a b => {List (List U8), Core | {List U8 |}, expr}
       | Cr_Lam name body =>
         match (peelLams body) [((List (List U8)), Core)] {
           | MkPair ps inner =>
             {List (List U8), Core | (cons [List U8] name ps), inner}
         }
-      | Cr_Native t => {List (List U8), Core | ({List U8 |}), expr}
-      | Cr_Ctor t n a => {List (List U8), Core | ({List U8 |}), expr}
-      | Cr_Match s arms => {List (List U8), Core | ({List U8 |}), expr}
+      | Cr_Native t => {List (List U8), Core | {List U8 |}, expr}
+      | Cr_Ctor t n a => {List (List U8), Core | {List U8 |}, expr}
+      | Cr_Match s arms => {List (List U8), Core | {List U8 |}, expr}
     }
 
 poly rec listAnyLam =
@@ -122,15 +122,15 @@ poly rec exprHasLam =
     }
 
 poly rec buildFuncs =
-  \defs : List (((List U8), Core)) =>
+  \defs : List ((List U8), Core) =>
     matchList
       [((List U8), Core)]
       [Result (List U8) (List MiniFunc)]
       defs
-      (Ok [List U8] [List MiniFunc] ({MiniFunc |}))
+      (Ok [List U8] [List MiniFunc] {MiniFunc |})
       (
         \h : ((List U8), Core) =>
-          \t : List (((List U8), Core)) =>
+          \t : List ((List U8), Core) =>
             let name = fst [List U8] [Core] h in
             let core = snd [List U8] [Core] h in
             match (peelLams core) [Result (List U8) (List MiniFunc)] {
@@ -159,7 +159,7 @@ poly rec buildFuncs =
       )
 
 poly buildMiniProgram =
-  \defs : List (((List U8), Core)) =>
+  \defs : List ((List U8), Core) =>
     \entry : List U8 =>
       do [Result (List U8) MiniProgram] {
         funcs <- (buildFuncs defs)

@@ -781,23 +781,23 @@ poly mapResult =
 
 poly simpleTokensU8 =
   {(U8, Token) |
-    ({U8, Token | '(', T_LParen})
-    ({U8, Token | ')', T_RParen})
-    ({U8, Token | '{', T_LBrace})
-    ({U8, Token | '}', T_RBrace})
-    ({U8, Token | '[', T_LBracket})
-    ({U8, Token | ']', T_RBracket})
-    ({U8, Token | '\\', T_Backslash})
-    ({U8, Token | ':', T_Colon})
-    ({U8, Token | '#', T_Hash})
-    ({U8, Token | '|', T_Pipe})
-    ({U8, Token | '.', T_Dot})
-    ({U8, Token | ',', T_Comma})
+    {U8, Token | '(', T_LParen}
+    {U8, Token | ')', T_RParen}
+    {U8, Token | '{', T_LBrace}
+    {U8, Token | '}', T_RBrace}
+    {U8, Token | '[', T_LBracket}
+    {U8, Token | ']', T_RBracket}
+    {U8, Token | '\\', T_Backslash}
+    {U8, Token | ':', T_Colon}
+    {U8, Token | '#', T_Hash}
+    {U8, Token | '|', T_Pipe}
+    {U8, Token | '.', T_Dot}
+    {U8, Token | ',', T_Comma}
   }
 
 poly rec lookupTokenU8 =
   \c : U8 =>
-    \list : List ((U8, Token)) =>
+    \list : List (U8, Token) =>
       matchList
         [(U8, Token)]
         [Maybe Token]
@@ -805,7 +805,7 @@ poly rec lookupTokenU8 =
         (None [Token])
         (
           \h : (U8, Token) =>
-            \t : List ((U8, Token)) =>
+            \t : List (U8, Token) =>
               if [Maybe Token] (eqU8 c (fst [U8] [Token] h))
                 (\u : U8 => Some [Token] (snd [U8] [Token] h))
                 (\u : U8 => lookupTokenU8 c t)
@@ -818,7 +818,7 @@ poly rec consumeIdent =
         [U8]
         [((List U8), (List U8))]
         input
-        ({List U8, List U8 | (reverse [U8] acc), ""})
+        {List U8, List U8 | (reverse [U8] acc), ""}
         (
           \h : U8 =>
             \t : List U8 =>
@@ -834,7 +834,7 @@ poly rec consumeDigits =
         [U8]
         [((List U8), (List U8))]
         input
-        ({List U8, List U8 | (reverse [U8] acc), ""})
+        {List U8, List U8 | (reverse [U8] acc), ""}
         (
           \h : U8 =>
             \t : List U8 =>
@@ -848,19 +848,19 @@ poly rec consumeString =
     \input : List U8 =>
       matchList
         [U8]
-        [Result ParseError (((List U8), (List U8)))]
+        [Result ParseError ((List U8), (List U8))]
         input
         (Err [ParseError] [((List U8), (List U8))] (MkParseError ""))
         (
           \h : U8 =>
             \t : List U8 =>
-              if [Result ParseError (((List U8), (List U8)))] (eqU8 h u8_quote)
+              if [Result ParseError ((List U8), (List U8))] (eqU8 h u8_quote)
                 (
                   \u : U8 =>
                     Ok
                       [ParseError]
                       [((List U8), (List U8))]
-                      ({List U8, List U8 | (reverse [U8] acc), t})
+                      {List U8, List U8 | (reverse [U8] acc), t}
                 )
                 (\u : U8 => consumeString (cons [U8] h acc) t)
         )
@@ -884,19 +884,19 @@ poly finishCharLiteral =
     \input : List U8 =>
       matchList
         [U8]
-        [Result ParseError ((U8, (List U8)))]
+        [Result ParseError (U8, (List U8))]
         input
         charLiteralError
         (
           \close : U8 =>
             \rest : List U8 =>
-              if [Result ParseError ((U8, (List U8)))] (eqU8 close u8_squote)
+              if [Result ParseError (U8, (List U8))] (eqU8 close u8_squote)
                 (
                   \u : U8 =>
                     Ok
                       [ParseError]
                       [(U8, (List U8))]
-                      ({U8, List U8 | value, rest})
+                      {U8, List U8 | value, rest}
                 )
                 (\u : U8 => charLiteralError)
         )
@@ -905,18 +905,18 @@ poly consumeCharLiteral =
   \input : List U8 =>
     matchList
       [U8]
-      [Result ParseError ((U8, (List U8)))]
+      [Result ParseError (U8, (List U8))]
       input
       charLiteralError
       (
         \h : U8 =>
           \t : List U8 =>
-            if [Result ParseError ((U8, (List U8)))] (eqU8 h u8_backslash)
+            if [Result ParseError (U8, (List U8))] (eqU8 h u8_backslash)
               (
                 \u : U8 =>
                   matchList
                     [U8]
-                    [Result ParseError ((U8, (List U8)))]
+                    [Result ParseError (U8, (List U8))]
                     t
                     charLiteralError
                     (
@@ -1059,7 +1059,7 @@ poly rec tokenizeAcc =
 poly tokenize =
   \input : List U8 =>
     do [Result ParseError (List Token)] {
-      revWithEnd <- (tokenizeAcc input ({Token |}))
+      revWithEnd <- (tokenizeAcc input {Token |})
       return
         Ok
         [ParseError]

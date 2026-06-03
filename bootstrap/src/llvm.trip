@@ -327,7 +327,7 @@ poly rec parseModuleRecords =
       [ModuleRecord]
       [Result (List U8) (List ParsedModule)]
       records
-      (Ok [List U8] [List ParsedModule] ({ParsedModule |}))
+      (Ok [List U8] [List ParsedModule] {ParsedModule |})
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord =>

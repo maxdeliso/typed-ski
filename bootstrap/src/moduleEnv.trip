@@ -670,7 +670,7 @@ poly rec parseModulesAcc =
         )
 
 poly initialBuildState =
-  MkBuildState ({ModuleInfo |}) ({ImportInfo |}) ({ExportInfo |}) ({DefinitionInfo |}) ({DataTypeInfo | (MkDataTypeInfo "Prelude.Bool" "Bool" #u8(0)) (MkDataTypeInfo "Prelude.List" "List" #u8(1))}) ({OpaqueInfo |}) ({NativeInfo |}) #u8(2)
+  MkBuildState {ModuleInfo |} {ImportInfo |} {ExportInfo |} {DefinitionInfo |} {DataTypeInfo | (MkDataTypeInfo "Prelude.Bool" "Bool" #u8(0)) (MkDataTypeInfo "Prelude.List" "List" #u8(1))} {OpaqueInfo |} {NativeInfo |} #u8(2)
 
 poly rec findDataTypeId =
   \qName : List U8 =>
@@ -692,7 +692,7 @@ poly rec findDataTypeId =
         )
 
 poly rec countCtors =
-  \ctors : List (((List U8), U8)) =>
+  \ctors : List ((List U8), U8) =>
     \acc : U8 =>
       matchList
         [((List U8), U8)]
@@ -700,14 +700,14 @@ poly rec countCtors =
         ctors
         acc
         (
-          \h : ((List U8), U8) => \t : List (((List U8), U8)) => countCtors t (inc acc)
+          \h : ((List U8), U8) => \t : List ((List U8), U8) => countCtors t (inc acc)
         )
 
 poly rec addCtorMetas =
   \moduleName : List U8 =>
     \typeName : List U8 =>
       \dataId : U8 =>
-        \ctors : List (((List U8), U8)) =>
+        \ctors : List ((List U8), U8) =>
           \total : U8 =>
             \tag : U8 =>
               \symbolId : U8 =>
@@ -716,10 +716,10 @@ poly rec addCtorMetas =
                     [((List U8), U8)]
                     [((List ConstructorMeta), U8)]
                     ctors
-                    ({List ConstructorMeta, U8 | acc, symbolId})
+                    {List ConstructorMeta, U8 | acc, symbolId}
                     (
                       \h : ((List U8), U8) =>
-                        \t : List (((List U8), U8)) =>
+                        \t : List ((List U8), U8) =>
                           let ctorName = fst [List U8] [U8] h in
                           let arity = snd [List U8] [U8] h in
                           let qName = qualifyCtor moduleName typeName ctorName in
@@ -737,7 +737,7 @@ poly rec addCtorMetas =
                               append
                                 [ConstructorMeta]
                                 acc
-                                ({ConstructorMeta | meta})
+                                {ConstructorMeta | meta}
                             )
                     )
 
@@ -751,7 +751,7 @@ poly rec collectConstructorsFromDecls =
               [Decl]
               [((List ConstructorMeta), U8)]
               decls
-              ({List ConstructorMeta, U8 | acc, symbolId})
+              {List ConstructorMeta, U8 | acc, symbolId}
               (
                 \h : Decl =>
                   \t : List Decl =>
@@ -839,7 +839,7 @@ poly rec collectConstructors =
             [ModuleInfo]
             [((List ConstructorMeta), U8)]
             mods
-            ({List ConstructorMeta, U8 | acc, symbolId})
+            {List ConstructorMeta, U8 | acc, symbolId}
             (
               \h : ModuleInfo =>
                 \t : List ModuleInfo =>
@@ -876,11 +876,9 @@ poly rec addAlias =
           [ConstructorAliasInfo]
           [List ConstructorAliasInfo]
           aliases
-          (
-            {ConstructorAliasInfo |
-              (MkConstructorAliasInfo alias (Some [List U8] qName))
-            }
-          )
+          {ConstructorAliasInfo |
+            (MkConstructorAliasInfo alias (Some [List U8] qName))
+          }
           (
             \h : ConstructorAliasInfo =>
               \t : List ConstructorAliasInfo =>
@@ -952,7 +950,8 @@ poly buildModuleEnv =
       state <- (parseModulesAcc records initialBuildState)
       MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId = state
       MkPair ctors nextSymbolId = (collectConstructors mods dataTypes #u8(4) pseudoConstructors)
-      aliases = buildAliases ctors ({ConstructorAliasInfo |})
+      aliases = buildAliases ctors
+      {ConstructorAliasInfo |}
       primitives = primitivesStartingAt nextSymbolId
       return
         Ok
@@ -1548,9 +1547,7 @@ poly rec moduleImportsAcc =
 poly moduleImports =
   \moduleName : List U8 =>
     \imports : List ImportInfo =>
-      reverse
-        [ImportInfo]
-        (moduleImportsAcc moduleName imports ({ImportInfo |}))
+      reverse [ImportInfo] (moduleImportsAcc moduleName imports {ImportInfo |})
 
 poly rec moduleExportsAcc =
   \moduleName : List U8 =>
@@ -1577,9 +1574,7 @@ poly rec moduleExportsAcc =
 poly moduleExports =
   \moduleName : List U8 =>
     \exports : List ExportInfo =>
-      reverse
-        [ExportInfo]
-        (moduleExportsAcc moduleName exports ({ExportInfo |}))
+      reverse [ExportInfo] (moduleExportsAcc moduleName exports {ExportInfo |})
 
 poly rec moduleDefsAcc =
   \moduleName : List U8 =>
@@ -1608,7 +1603,7 @@ poly moduleDefs =
     \defs : List DefinitionInfo =>
       reverse
         [DefinitionInfo]
-        (moduleDefsAcc moduleName defs ({DefinitionInfo |}))
+        (moduleDefsAcc moduleName defs {DefinitionInfo |})
 
 poly rec moduleOpaquesAcc =
   \moduleName : List U8 =>
@@ -1635,9 +1630,7 @@ poly rec moduleOpaquesAcc =
 poly moduleOpaques =
   \moduleName : List U8 =>
     \opaques : List OpaqueInfo =>
-      reverse
-        [OpaqueInfo]
-        (moduleOpaquesAcc moduleName opaques ({OpaqueInfo |}))
+      reverse [OpaqueInfo] (moduleOpaquesAcc moduleName opaques {OpaqueInfo |})
 
 poly rec moduleNativesAcc =
   \moduleName : List U8 =>
@@ -1664,9 +1657,7 @@ poly rec moduleNativesAcc =
 poly moduleNatives =
   \moduleName : List U8 =>
     \natives : List NativeInfo =>
-      reverse
-        [NativeInfo]
-        (moduleNativesAcc moduleName natives ({NativeInfo |}))
+      reverse [NativeInfo] (moduleNativesAcc moduleName natives {NativeInfo |})
 
 poly emitDataType =
   \info : DataTypeInfo =>
@@ -1856,7 +1847,7 @@ poly rec ctorNamesForData =
         [ConstructorMeta]
         [List (List U8)]
         ctors
-        ({List U8 |})
+        {List U8 |}
         (
           \h : ConstructorMeta =>
             \t : List ConstructorMeta =>

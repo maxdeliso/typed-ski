@@ -593,7 +593,8 @@ poly parseBundleSummary =
       MkLine modsLine afterModules = modulesLineRes
       modsCountDigits <- requireModules modsLine
       modsCount <- parseDecimal modsCountDigits
-      parsed <- parseModules afterModules modsCount entry (None [List U8]) false ({ModuleRecord |})
+      parsed <- parseModules afterModules modsCount entry (None [List U8]) false
+      {ModuleRecord |}
       MkParsedModules found mods rest = parsed
       return
         Ok

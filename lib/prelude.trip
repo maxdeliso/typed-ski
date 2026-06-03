@@ -60,6 +60,8 @@ export None
 
 export append
 
+export concat
+
 export map
 
 export foldl
@@ -232,6 +234,16 @@ poly rec appendAcc =
 poly append =
   #A =>
     \xs : List A => \ys : List A => appendAcc [A] (reverse [A] xs) ys
+
+poly rec concat =
+  #A =>
+    \xss : List (List A) =>
+      matchList
+        [List A]
+        [List A]
+        xss
+        ({A |})
+        (\h : List A => \t : List (List A) => append [A] h (concat [A] t))
 
 poly rec map =
   #A =>

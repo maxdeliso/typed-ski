@@ -508,7 +508,7 @@ poly emitCtor =
     emitNameCountLine prefixCtor name arity
 
 poly rec emitCtorsAcc =
-  \ctors : List (((List U8), U8)) =>
+  \ctors : List ((List U8), U8) =>
     \acc : List U8 =>
       matchList
         [((List U8), U8)]
@@ -517,11 +517,11 @@ poly rec emitCtorsAcc =
         acc
         (
           \h : ((List U8), U8) =>
-            \t : List (((List U8), U8)) => emitCtorsAcc t (append [U8] (emitCtor h) acc)
+            \t : List ((List U8), U8) => emitCtorsAcc t (append [U8] (emitCtor h) acc)
         )
 
 poly emitCtors =
-  \ctors : List (((List U8), U8)) => emitCtorsAcc (reverse [((List U8), U8)] ctors) ""
+  \ctors : List ((List U8), U8) => emitCtorsAcc (reverse [((List U8), U8)] ctors) ""
 
 poly rec emitDataDefsAcc =
   \decls : List Decl =>

@@ -113,13 +113,14 @@ poly main =
     (cons [List U8] (renderExprSrc "cons a (cons b nil)")
     (cons [List U8] (renderExprSrc "{U8, U8 | a, b}")
     (cons [List U8] (renderExprSrc "MkPair a b")
+    (cons [List U8] (renderExprSrc "{(U8, U8) | {U8, U8 | a, b}}")
     (cons [List U8] (renderExprSrc "{U8 | }")
     (cons [List U8] (renderExprSrc "{U8 | (f x) y}")
     (cons [List U8] (renderTypeSrc "(U8, U8)")
     (cons [List U8] (renderTypeSrc "Pair U8 U8")
     (cons [List U8] (renderTypeSrc "(U8)")
     (cons [List U8] (renderTypeSrc "(U8 -> U8)")
-    (nil [List U8])))))))))))
+    (nil [List U8]))))))))))))
 `;
 
 /** Decodes a Scott/ADT-encoded `List U8` MiniCore value to a byte array. */
@@ -165,6 +166,7 @@ describe("bootstrap parser list/tuple literals", () => {
       listDesugared,
       pairLiteral,
       pairDesugared,
+      barePairInList,
       emptyList,
       nestedList,
       tupleType,
@@ -180,6 +182,9 @@ describe("bootstrap parser list/tuple literals", () => {
     // Pair-term literal `{T1, T2 | a, b}` == `MkPair a b`.
     assert.equal(pairLiteral, "((MkPair a) b)");
     assert.equal(pairLiteral, pairDesugared);
+
+    // Pair literals can be list elements without extra parentheses.
+    assert.equal(barePairInList, "((cons ((MkPair a) b)) nil)");
 
     // Empty list desugars to bare `nil`.
     assert.equal(emptyList, "nil");

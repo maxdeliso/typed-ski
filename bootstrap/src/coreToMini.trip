@@ -83,7 +83,7 @@ poly rec mapWith =
         [Core]
         [List MiniExpr]
         exprs
-        ({MiniExpr |})
+        {MiniExpr |}
         (\h : Core => \t : List Core => cons [MiniExpr] (f h) (mapWith f t))
 
 poly rec applyAnon =
@@ -105,7 +105,7 @@ poly rec coreToMini =
       | Cr_Var name => ME_Var name
       | Cr_Lam name body => ME_Lam name (coreToMini body)
       | Cr_Native t => ME_Native t
-      | Cr_Ctor tag total arity => ME_Con tag total arity ({MiniExpr |})
+      | Cr_Ctor tag total arity => ME_Con tag total arity {MiniExpr |}
       | Cr_App lf rg =>
         match (collectSpine (Cr_App lf rg) ({Core |})) [MiniExpr] {
           | MkPair head args =>

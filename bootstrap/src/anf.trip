@@ -171,12 +171,12 @@ poly wrapValue =
                 (AE_Var nm)
             | PVal => MkNormResult state binds value
             | PTail =>
-              MkNormResult state ({Binding |}) (applyBindings binds value)
+              MkNormResult state {Binding |} (applyBindings binds value)
           }
 
 poly trivialAt =
   \state : Bin =>
-    \atom : AnfExpr => \pos : Pos => MkNormResult state ({Binding |}) atom
+    \atom : AnfExpr => \pos : Pos => MkNormResult state {Binding |} atom
 
 poly rec atomizeArgs =
   \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
@@ -187,7 +187,7 @@ poly rec atomizeArgs =
             [MiniExpr]
             [AtomList]
             args
-            (MkAtomList state accBinds ({AnfExpr |}))
+            (MkAtomList state accBinds {AnfExpr |})
             (
               \h : MiniExpr =>
                 \t : List MiniExpr =>
@@ -213,7 +213,7 @@ poly rec normArms =
             [MiniExpr]
             [ArmsRes]
             arms
-            (MkArmsRes state ({AnfExpr |}))
+            (MkArmsRes state {AnfExpr |})
             (
               \h : MiniExpr =>
                 \t : List MiniExpr =>
@@ -291,7 +291,7 @@ poly rec normalizeFuncs =
       [MiniFunc]
       [List AnfFunc]
       funcs
-      ({AnfFunc |})
+      {AnfFunc |}
       (
         \h : MiniFunc =>
           \t : List MiniFunc =>

@@ -343,7 +343,7 @@ poly rec div2DigitsAcc =
             [U8]
             [((List U8), U8)]
             digits
-            ({List U8, U8 | (reverse [U8] accRev), carry})
+            {List U8, U8 | (reverse [U8] accRev), carry}
             (
               \h : U8 =>
                 \t : List U8 =>
@@ -457,7 +457,7 @@ poly resolveCoreName =
 
 poly rec findCtorInfoInArms =
   \dEnv : DataEnv =>
-    \arms : List ((Pattern, Expr)) =>
+    \arms : List (Pattern, Expr) =>
       matchList
         [(Pattern, Expr)]
         [Maybe CtorInfo]
@@ -465,7 +465,7 @@ poly rec findCtorInfoInArms =
         (None [CtorInfo])
         (
           \h : (Pattern, Expr) =>
-            \t : List ((Pattern, Expr)) =>
+            \t : List (Pattern, Expr) =>
               match (fst [Pattern] [Expr] h) [Maybe CtorInfo] {
                 | P_Ctor name args =>
                   match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Maybe CtorInfo] {
@@ -477,15 +477,15 @@ poly rec findCtorInfoInArms =
 
 poly rec findArmByName =
   \name : List U8 =>
-    \arms : List ((Pattern, Expr)) =>
+    \arms : List (Pattern, Expr) =>
       matchList
         [(Pattern, Expr)]
         [(Pattern, Expr)]
         arms
-        ({Pattern, Expr | (P_Ctor name ({List U8 |})), (E_Var "MISSING_ARM")})
+        {Pattern, Expr | (P_Ctor name {List U8 |}), (E_Var "MISSING_ARM")}
         (
           \h : (Pattern, Expr) =>
-            \t : List ((Pattern, Expr)) =>
+            \t : List (Pattern, Expr) =>
               match (fst [Pattern] [Expr] h) [(Pattern, Expr)] {
                 | P_Ctor cName args =>
                   if [(Pattern, Expr)] (eqListU8 name cName)
@@ -496,12 +496,12 @@ poly rec findArmByName =
 
 poly rec sortArms =
   \expectedNames : List (List U8) =>
-    \arms : List ((Pattern, Expr)) =>
+    \arms : List (Pattern, Expr) =>
       matchList
         [List U8]
-        [List ((Pattern, Expr))]
+        [List (Pattern, Expr)]
         expectedNames
-        ({(Pattern, Expr) |})
+        {(Pattern, Expr) |}
         (
           \name : List U8 =>
             \tNames : List (List U8) =>
@@ -533,15 +533,15 @@ poly rec prependAll =
 poly rec elaborateArms =
   \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
     \dEnv : DataEnv =>
-      \arms : List ((Pattern, Expr)) =>
+      \arms : List (Pattern, Expr) =>
         matchList
           [(Pattern, Expr)]
           [Result (List U8) (List Core)]
           arms
-          (Ok [List U8] [List Core] ({Core |}))
+          (Ok [List U8] [List Core] {Core |})
           (
             \h : (Pattern, Expr) =>
-              \t : List ((Pattern, Expr)) =>
+              \t : List (Pattern, Expr) =>
                 do [Result (List U8) (List Core)] {
                   MkPair pat body = h
                   P_Ctor name args = pat
@@ -556,7 +556,7 @@ poly elaborateMatchWith =
   \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
     \dEnv : DataEnv =>
       \scrut : Expr =>
-        \arms : List ((Pattern, Expr)) =>
+        \arms : List (Pattern, Expr) =>
           match (elaborate dEnv scrut) [Result (List U8) Core] {
             | Err e => Err [List U8] [Core] e
             | Ok coreScrut =>
@@ -629,7 +629,7 @@ poly rec checkedLengthU8 =
 
 poly rec populateDataEnv =
   \adtName : List U8 =>
-    \ctors : List (((List U8), U8)) =>
+    \ctors : List ((List U8), U8) =>
       \total : U8 =>
         \idx : U8 =>
           \datEnv : DataEnv =>
@@ -640,7 +640,7 @@ poly rec populateDataEnv =
               datEnv
               (
                 \h : ((List U8), U8) =>
-                  \t : List (((List U8), U8)) =>
+                  \t : List ((List U8), U8) =>
                     let ctorName = fst [List U8] [U8] h in
                     let arity = snd [List U8] [U8] h in
                     let info = MkCtorInfo idx total arity adtName in
@@ -657,15 +657,15 @@ poly rec populateDataEnv =
               )
 
 poly rec getCtorNames =
-  \ctors : List (((List U8), U8)) =>
+  \ctors : List ((List U8), U8) =>
     matchList
       [((List U8), U8)]
       [List (List U8)]
       ctors
-      ({List U8 |})
+      {List U8 |}
       (
         \h : ((List U8), U8) =>
-          \t : List (((List U8), U8)) => cons [List U8] (fst [List U8] [U8] h) (getCtorNames t)
+          \t : List ((List U8), U8) => cons [List U8] (fst [List U8] [U8] h) (getCtorNames t)
       )
 
 poly rec filterElaboratableDecls =
@@ -674,7 +674,7 @@ poly rec filterElaboratableDecls =
       [Decl]
       [List Decl]
       decls
-      ({Decl |})
+      {Decl |}
       (
         \h : Decl =>
           \t : List Decl =>
@@ -773,13 +773,13 @@ poly rec elaborateToCoreRec =
     \decls : List Decl =>
       matchList
         [Decl]
-        [Result (List U8) (List (((List U8), Core)))]
+        [Result (List U8) (List ((List U8), Core))]
         decls
-        (Ok [List U8] [List (((List U8), Core))] ({((List U8), Core) |}))
+        (Ok [List U8] [List ((List U8), Core)] {((List U8), Core) |})
         (
           \h : Decl =>
             \t : List Decl =>
-              match h [Result (List U8) (List (((List U8), Core)))] {
+              match h [Result (List U8) (List ((List U8), Core))] {
                 | D_Def kind isRec name body =>
                   match (elaborateExpr dEnv body) [Result (List U8) (List (((List U8), Core)))] {
                     | Err e => Err [List U8] [List (((List U8), Core))] e
@@ -799,8 +799,8 @@ poly rec elaborateToCoreRec =
                       }
                   }
                 | D_Data name ctors =>
-                  match (checkedLengthU8 [((List U8), U8)] ctors #u8(0)) [Result (List U8) (List (((List U8), Core)))] {
-                    | Err e => Err [List U8] [List (((List U8), Core))] e
+                  match (checkedLengthU8 [((List U8), U8)] ctors #u8(0)) [Result (List U8) (List ((List U8), Core))] {
+                    | Err e => Err [List U8] [List ((List U8), Core)] e
                     | Ok total =>
                       match (populateDataEnv name ctors total #u8(0) dEnv) [Result (List U8) (List (((List U8), Core)))] {
                         | MkDataEnv cEnv aEnv =>

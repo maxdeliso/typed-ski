@@ -132,7 +132,7 @@ data EmitRes =
   | MkEmitRes Bin (List (List U8)) (List U8)
 
 poly rec lookupEnv =
-  \env : List (((List U8), (List U8))) =>
+  \env : List ((List U8), (List U8)) =>
     \name : List U8 =>
       matchList
         [((List U8), (List U8))]
@@ -141,14 +141,14 @@ poly rec lookupEnv =
         (None [List U8])
         (
           \h : ((List U8), (List U8)) =>
-            \t : List (((List U8), (List U8))) =>
+            \t : List ((List U8), (List U8)) =>
               if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
                 (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
                 (\u : U8 => lookupEnv t name)
         )
 
 poly atomOperand =
-  \env : List (((List U8), (List U8))) =>
+  \env : List ((List U8), (List U8)) =>
     \e : AnfExpr =>
       match e [Result (List U8) (List U8)] {
         | AE_Var n =>
@@ -186,7 +186,7 @@ poly atomOperand =
       }
 
 poly rec emitArgsString =
-  \env : List (((List U8), (List U8))) =>
+  \env : List ((List U8), (List U8)) =>
     \args : List AnfExpr =>
       \leading : Bool =>
         matchList
@@ -261,7 +261,7 @@ poly twoArgs =
 poly emitArithBin =
   \opcode : List U8 =>
     \name : List U8 =>
-      \env : List (((List U8), (List U8))) =>
+      \env : List ((List U8), (List U8)) =>
         \counter : Bin =>
           \instrs : List (List U8) =>
             \args : List AnfExpr =>
@@ -284,7 +284,7 @@ poly emitArithBin =
 poly emitCmpBin =
   \predOp : List U8 =>
     \name : List U8 =>
-      \env : List (((List U8), (List U8))) =>
+      \env : List ((List U8), (List U8)) =>
         \counter : Bin =>
           \instrs : List (List U8) =>
             \args : List AnfExpr =>
@@ -324,7 +324,7 @@ poly emitCmpBin =
 poly emitDivMod =
   \opcode : List U8 =>
     \name : List U8 =>
-      \env : List (((List U8), (List U8))) =>
+      \env : List ((List U8), (List U8)) =>
         \counter : Bin =>
           \instrs : List (List U8) =>
             \args : List AnfExpr =>
@@ -379,7 +379,7 @@ poly emitDivMod =
               }
 
 poly rec emitExpr =
-  \env : List (((List U8), (List U8))) =>
+  \env : List ((List U8), (List U8)) =>
     \counter : Bin =>
       \instrs : List (List U8) =>
         \e : AnfExpr =>
@@ -540,15 +540,15 @@ poly rec paramEnv =
   \params : List (List U8) =>
     matchList
       [List U8]
-      [List (((List U8), (List U8)))]
+      [List ((List U8), (List U8))]
       params
-      ({((List U8), (List U8)) |})
+      {((List U8), (List U8)) |}
       (
         \h : List U8 =>
           \t : List (List U8) =>
             cons
               [((List U8), (List U8))]
-              ({List U8, List U8 | h, (append [U8] "%" h)})
+              {List U8, List U8 | h, (append [U8] "%" h)}
               (paramEnv t)
       )
 
@@ -566,9 +566,9 @@ poly emitFunc =
   \fn : AnfFunc =>
     do [Result (List U8) (List U8)] {
       MkAnfFunc name params body = fn
-      res <- (emitExpr (paramEnv params) BZ ({List U8 |}) body)
+      res <- (emitExpr (paramEnv params) BZ {List U8 |} body)
       MkEmitRes c instrs op = res
-      instrText = joinLines ("") instrs
+      instrText = joinLines "" instrs
       return
         Ok
         [List U8]

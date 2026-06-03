@@ -50,6 +50,44 @@ import Bin incBin
 
 import Bin binToDigits
 
+import Prelude u8ToDigits
+
+import Unparse Terminal
+
+import Unparse T_S
+
+import Unparse T_K
+
+import Unparse T_I
+
+import Unparse T_B
+
+import Unparse T_C
+
+import Unparse T_SPrime
+
+import Unparse T_BPrime
+
+import Unparse T_CPrime
+
+import Unparse T_WriteOne
+
+import Unparse T_ReadOne
+
+import Unparse T_EqU8
+
+import Unparse T_LtU8
+
+import Unparse T_DivU8
+
+import Unparse T_ModU8
+
+import Unparse T_AddU8
+
+import Unparse T_SubU8
+
+import Unparse T_Byte
+
 import Lexer tokenize
 
 import Parser parseProgram
@@ -117,7 +155,26 @@ poly atomOperand =
               Err [List U8] [List U8] (append [U8] "Unbound variable: " n)
             | Some op => Ok [List U8] [List U8] op
           }
-        | AE_Native t => Err [List U8] [List U8] "Unsupported atom: native"
+        | AE_Native t =>
+          match t [Result (List U8) (List U8)] {
+            | T_Byte b => Ok [List U8] [List U8] (u8ToDigits b)
+            | T_S => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_K => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_I => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_B => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_C => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_SPrime => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_BPrime => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_CPrime => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_WriteOne => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_ReadOne => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_EqU8 => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_LtU8 => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_DivU8 => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_ModU8 => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_AddU8 => Err [List U8] [List U8] "Unsupported atom: native"
+            | T_SubU8 => Err [List U8] [List U8] "Unsupported atom: native"
+          }
         | AE_Lam n b => Err [List U8] [List U8] "Unsupported atom: lambda"
         | AE_Call f args => Err [List U8] [List U8] "Unsupported atom: call"
         | AE_Con tag total arity args =>
@@ -149,6 +206,265 @@ poly rec emitArgsString =
                 }
           )
 
+poly emitArithBin =
+  \opcode : List U8 =>
+    \name : List U8 =>
+      \env : List (((List U8), (List U8))) =>
+        \counter : Bin =>
+          \instrs : List (List U8) =>
+            \args : List AnfExpr =>
+              matchList
+                [AnfExpr]
+                [Result (List U8) EmitRes]
+                args
+                (
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    (append [U8] name " expects two arguments")
+                )
+                (
+                  \a1 : AnfExpr =>
+                    \r1 : List AnfExpr =>
+                      matchList
+                        [AnfExpr]
+                        [Result (List U8) EmitRes]
+                        r1
+                        (
+                          Err
+                            [List U8]
+                            [EmitRes]
+                            (append [U8] name " expects two arguments")
+                        )
+                        (
+                          \a2 : AnfExpr =>
+                            \r2 : List AnfExpr =>
+                              matchList
+                                [AnfExpr]
+                                [Result (List U8) EmitRes]
+                                r2
+                                (
+                                  match (atomOperand env a1) [Result (List U8) EmitRes] {
+                                    | Err e => Err [List U8] [EmitRes] e
+                                    | Ok op1 =>
+                                      match (atomOperand env a2) [Result (List U8) EmitRes] {
+                                        | Err e => Err [List U8] [EmitRes] e
+                                        | Ok op2 =>
+                                          let dest = append [U8] "%__ll" (binToDigits counter) in
+                                          let counter1 = incBin counter in
+                                          let line = append [U8] "  " (append [U8] dest (append [U8] " = " (append [U8] opcode (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] op2 "\n"))))))) in
+                                          Ok
+                                            [List U8]
+                                            [EmitRes]
+                                            (
+                                              MkEmitRes
+                                                counter1
+                                                (cons [List U8] line instrs)
+                                                dest
+                                            )
+                                      }
+                                  }
+                                )
+                                (
+                                  \x : AnfExpr =>
+                                    \y : List AnfExpr =>
+                                      Err
+                                        [List U8]
+                                        [EmitRes]
+                                        (
+                                          append
+                                            [U8]
+                                            name
+                                            " expects two arguments"
+                                        )
+                                )
+                        )
+                )
+
+poly emitCmpBin =
+  \predOp : List U8 =>
+    \name : List U8 =>
+      \env : List (((List U8), (List U8))) =>
+        \counter : Bin =>
+          \instrs : List (List U8) =>
+            \args : List AnfExpr =>
+              matchList
+                [AnfExpr]
+                [Result (List U8) EmitRes]
+                args
+                (
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    (append [U8] name " expects two arguments")
+                )
+                (
+                  \a1 : AnfExpr =>
+                    \r1 : List AnfExpr =>
+                      matchList
+                        [AnfExpr]
+                        [Result (List U8) EmitRes]
+                        r1
+                        (
+                          Err
+                            [List U8]
+                            [EmitRes]
+                            (append [U8] name " expects two arguments")
+                        )
+                        (
+                          \a2 : AnfExpr =>
+                            \r2 : List AnfExpr =>
+                              matchList
+                                [AnfExpr]
+                                [Result (List U8) EmitRes]
+                                r2
+                                (
+                                  match (atomOperand env a1) [Result (List U8) EmitRes] {
+                                    | Err e => Err [List U8] [EmitRes] e
+                                    | Ok op1 =>
+                                      match (atomOperand env a2) [Result (List U8) EmitRes] {
+                                        | Err e => Err [List U8] [EmitRes] e
+                                        | Ok op2 =>
+                                          let dest = append [U8] "%__ll" (binToDigits counter) in
+                                          let counter1 = incBin counter in
+                                          let cmpLine = append [U8] "  " (append [U8] dest (append [U8] "_c = icmp " (append [U8] predOp (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] op2 "\n"))))))) in
+                                          let extLine = append [U8] "  " (append [U8] dest (append [U8] " = zext i1 " (append [U8] dest "_c to i8\n"))) in
+                                          Ok
+                                            [List U8]
+                                            [EmitRes]
+                                            (
+                                              MkEmitRes
+                                                counter1
+                                                (
+                                                  cons
+                                                    [List U8]
+                                                    extLine
+                                                    (
+                                                      cons
+                                                        [List U8]
+                                                        cmpLine
+                                                        instrs
+                                                    )
+                                                )
+                                                dest
+                                            )
+                                      }
+                                  }
+                                )
+                                (
+                                  \x : AnfExpr =>
+                                    \y : List AnfExpr =>
+                                      Err
+                                        [List U8]
+                                        [EmitRes]
+                                        (
+                                          append
+                                            [U8]
+                                            name
+                                            " expects two arguments"
+                                        )
+                                )
+                        )
+                )
+
+poly emitDivMod =
+  \opcode : List U8 =>
+    \name : List U8 =>
+      \env : List (((List U8), (List U8))) =>
+        \counter : Bin =>
+          \instrs : List (List U8) =>
+            \args : List AnfExpr =>
+              matchList
+                [AnfExpr]
+                [Result (List U8) EmitRes]
+                args
+                (
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    (append [U8] name " expects two arguments")
+                )
+                (
+                  \a1 : AnfExpr =>
+                    \r1 : List AnfExpr =>
+                      matchList
+                        [AnfExpr]
+                        [Result (List U8) EmitRes]
+                        r1
+                        (
+                          Err
+                            [List U8]
+                            [EmitRes]
+                            (append [U8] name " expects two arguments")
+                        )
+                        (
+                          \a2 : AnfExpr =>
+                            \r2 : List AnfExpr =>
+                              matchList
+                                [AnfExpr]
+                                [Result (List U8) EmitRes]
+                                r2
+                                (
+                                  match (atomOperand env a1) [Result (List U8) EmitRes] {
+                                    | Err e => Err [List U8] [EmitRes] e
+                                    | Ok op1 =>
+                                      match (atomOperand env a2) [Result (List U8) EmitRes] {
+                                        | Err e => Err [List U8] [EmitRes] e
+                                        | Ok op2 =>
+                                          let dest = append [U8] "%__ll" (binToDigits counter) in
+                                          let counter1 = incBin counter in
+                                          let zeroLine = append [U8] "  " (append [U8] dest (append [U8] "_zero = icmp eq i8 " (append [U8] op2 ", 0\n"))) in
+                                          let safeLine = append [U8] "  " (append [U8] dest (append [U8] "_safe = select i1 " (append [U8] dest (append [U8] "_zero, i8 1, i8 " (append [U8] op2 "\n"))))) in
+                                          let rawLine = append [U8] "  " (append [U8] dest (append [U8] "_raw = " (append [U8] opcode (append [U8] " i8 " (append [U8] op1 (append [U8] ", " (append [U8] dest "_safe\n"))))))) in
+                                          let resLine = append [U8] "  " (append [U8] dest (append [U8] " = select i1 " (append [U8] dest (append [U8] "_zero, i8 0, i8 " (append [U8] dest "_raw\n"))))) in
+                                          Ok
+                                            [List U8]
+                                            [EmitRes]
+                                            (
+                                              MkEmitRes
+                                                counter1
+                                                (
+                                                  cons
+                                                    [List U8]
+                                                    resLine
+                                                    (
+                                                      cons
+                                                        [List U8]
+                                                        rawLine
+                                                        (
+                                                          cons
+                                                            [List U8]
+                                                            safeLine
+                                                            (
+                                                              cons
+                                                                [List U8]
+                                                                zeroLine
+                                                                instrs
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                                dest
+                                            )
+                                      }
+                                  }
+                                )
+                                (
+                                  \x : AnfExpr =>
+                                    \y : List AnfExpr =>
+                                      Err
+                                        [List U8]
+                                        [EmitRes]
+                                        (
+                                          append
+                                            [U8]
+                                            name
+                                            " expects two arguments"
+                                        )
+                                )
+                        )
+                )
+
 poly rec emitExpr =
   \env : List (((List U8), (List U8))) =>
     \counter : Bin =>
@@ -163,22 +479,111 @@ poly rec emitExpr =
                   Ok [List U8] [EmitRes] (MkEmitRes counter instrs op)
               }
             | AE_Native t =>
-              Err [List U8] [EmitRes] "Unsupported expression: native"
+              match t [Result (List U8) EmitRes] {
+                | T_Byte b =>
+                  Ok
+                    [List U8]
+                    [EmitRes]
+                    (MkEmitRes counter instrs (u8ToDigits b))
+                | T_S =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_K =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_I =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_B =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_C =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_SPrime =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_BPrime =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_CPrime =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_WriteOne =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_ReadOne =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_EqU8 =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_LtU8 =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_DivU8 =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_ModU8 =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_AddU8 =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+                | T_SubU8 =>
+                  Err [List U8] [EmitRes] "Unsupported expression: native"
+              }
             | AE_Lam n b =>
               Err [List U8] [EmitRes] "Unsupported expression: lambda"
             | AE_Call f args =>
-              do [Result (List U8) EmitRes] {
-                argStr <- (emitArgsString env args true)
-                dest = append [U8]
-                "%__ll" (binToDigits counter)
-                counter1 = incBin counter
-                line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n")))))
-                return
-                  Ok
-                  [List U8]
-                  [EmitRes]
-                  (MkEmitRes counter1 (cons [List U8] line instrs) dest)
-              }
+              if [Result (List U8) EmitRes] (eqListU8 f "addU8")
+                (\u : U8 => emitArithBin "add" "addU8" env counter instrs args)
+                (
+                  \u : U8 =>
+                    if [Result (List U8) EmitRes] (eqListU8 f "subU8")
+                      (
+                        \u2 : U8 => emitArithBin "sub" "subU8" env counter instrs args
+                      )
+                      (
+                        \u2 : U8 =>
+                          if [Result (List U8) EmitRes] (eqListU8 f "divU8")
+                            (
+                              \u3 : U8 => emitDivMod "udiv" "divU8" env counter instrs args
+                            )
+                            (
+                              \u3 : U8 =>
+                                if [Result (List U8) EmitRes] (eqListU8 f "modU8")
+                                  (
+                                    \u4 : U8 => emitDivMod "urem" "modU8" env counter instrs args
+                                  )
+                                  (
+                                    \u4 : U8 =>
+                                      if [Result (List U8) EmitRes] (eqListU8 f "eqU8")
+                                        (
+                                          \u5 : U8 => emitCmpBin "eq" "eqU8" env counter instrs args
+                                        )
+                                        (
+                                          \u5 : U8 =>
+                                            if [Result (List U8) EmitRes] (eqListU8 f "ltU8")
+                                              (
+                                                \u6 : U8 => emitCmpBin "ult" "ltU8" env counter instrs args
+                                              )
+                                              (
+                                                \u6 : U8 =>
+                                                  do [Result (List U8) EmitRes] {
+                                                    argStr <- (emitArgsString env args true)
+                                                    dest = append [U8]
+                                                    "%__ll"
+                                                      (binToDigits counter)
+                                                    counter1 = incBin counter
+                                                    line = append [U8] "  " (append [U8] dest (append [U8] " = call i8 @" (append [U8] f (append [U8] "(" (append [U8] argStr ")\n")))))
+                                                    return
+                                                      Ok
+                                                      [List U8]
+                                                      [EmitRes]
+                                                      (
+                                                        MkEmitRes
+                                                          counter1
+                                                          (
+                                                            cons
+                                                              [List U8]
+                                                              line
+                                                              instrs
+                                                          )
+                                                          dest
+                                                      )
+                                                  }
+                                              )
+                                        )
+                                  )
+                            )
+                      )
+                )
             | AE_Con tag total arity args =>
               Err [List U8] [EmitRes] "Unsupported expression: constructor"
             | AE_Case scrut arms =>

@@ -79,31 +79,165 @@ entry:
 
 `;
 
-describe("ANF -> LLVM emitter (.trip)", () => {
-  it("emits LLVM for the straight-line U8 subset (params, lets, calls)", async () => {
-    const modules: Array<{ name: string; source: string }> = await Promise.all(
-      MODULE_NAMES.map(async (name) => ({
-        name,
-        source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
-      })),
-    );
-    modules.push({
-      name: "Verify",
-      source: `module Verify
+/**
+ * Runs `AnfLlvm.compileSourceToLlvmText` on `source` under the host MiniCore
+ * evaluator and returns the emitted LLVM text.
+ */
+async function compileSourceToLlvm(source: string): Promise<string> {
+  const modules: Array<{ name: string; source: string }> = await Promise.all(
+    MODULE_NAMES.map(async (name) => ({
+      name,
+      source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
+    })),
+  );
+  modules.push({
+    name: "Verify",
+    source: `module Verify
 import Prelude List
 import Prelude U8
 import AnfLlvm compileSourceToLlvmText
 
 export main
 
-poly main = compileSourceToLlvmText ${JSON.stringify(DEMO_SOURCE)}
+poly main = compileSourceToLlvmText ${JSON.stringify(source)}
 `,
-    });
+  });
 
-    const program = compileMiniCoreModules(modules, "Verify");
-    const result = evaluateMiniCore(program);
-    const actual = Buffer.from(valueToBytes(result.value)).toString("utf8");
+  const program = compileMiniCoreModules(modules, "Verify");
+  const result = evaluateMiniCore(program);
+  return Buffer.from(valueToBytes(result.value)).toString("utf8");
+}
 
-    assert.equal(actual, EXPECTED_LLVM);
+/** Wraps a function body as `module Demo` with `main` taking U8 params `names`. */
+function demoMain(names: readonly string[], body: string): string {
+  const binders = names.map((n) => `\\${n} : U8 => `).join("");
+  return `module Demo
+export main
+poly main = ${binders}${body}
+`;
+}
+
+describe("ANF -> LLVM emitter (.trip)", () => {
+  it("emits LLVM for the straight-line U8 subset (params, lets, calls)", async () => {
+    assert.equal(await compileSourceToLlvm(DEMO_SOURCE), EXPECTED_LLVM);
+  });
+
+  it("emits inline LLVM for U8 literals and arithmetic/comparison primitives", async () => {
+    const cases: ReadonlyArray<readonly [string, string, string]> = [
+      [
+        "byte literal",
+        `module Demo
+export main
+poly main = #u8(7)
+`,
+        `define i8 @main() {
+entry:
+  ret i8 7
+}
+
+`,
+      ],
+      [
+        "addU8",
+        demoMain(["a", "b"], "addU8 a b"),
+        `define i8 @main(i8 %a, i8 %b) {
+entry:
+  %__ll0 = add i8 %a, %b
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "subU8",
+        demoMain(["a", "b"], "subU8 a b"),
+        `define i8 @main(i8 %a, i8 %b) {
+entry:
+  %__ll0 = sub i8 %a, %b
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "divU8 (guards divide-by-zero)",
+        demoMain(["a", "b"], "divU8 a b"),
+        `define i8 @main(i8 %a, i8 %b) {
+entry:
+  %__ll0_zero = icmp eq i8 %b, 0
+  %__ll0_safe = select i1 %__ll0_zero, i8 1, i8 %b
+  %__ll0_raw = udiv i8 %a, %__ll0_safe
+  %__ll0 = select i1 %__ll0_zero, i8 0, i8 %__ll0_raw
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "modU8 (guards divide-by-zero)",
+        demoMain(["a", "b"], "modU8 a b"),
+        `define i8 @main(i8 %a, i8 %b) {
+entry:
+  %__ll0_zero = icmp eq i8 %b, 0
+  %__ll0_safe = select i1 %__ll0_zero, i8 1, i8 %b
+  %__ll0_raw = urem i8 %a, %__ll0_safe
+  %__ll0 = select i1 %__ll0_zero, i8 0, i8 %__ll0_raw
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "eqU8 (zext i1 result to i8)",
+        demoMain(["a", "b"], "eqU8 a b"),
+        `define i8 @main(i8 %a, i8 %b) {
+entry:
+  %__ll0_c = icmp eq i8 %a, %b
+  %__ll0 = zext i1 %__ll0_c to i8
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "ltU8 (zext i1 result to i8)",
+        demoMain(["a", "b"], "ltU8 a b"),
+        `define i8 @main(i8 %a, i8 %b) {
+entry:
+  %__ll0_c = icmp ult i8 %a, %b
+  %__ll0 = zext i1 %__ll0_c to i8
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "byte literal as an operand",
+        demoMain(["a"], "addU8 a #u8(1)"),
+        `define i8 @main(i8 %a) {
+entry:
+  %__ll0 = add i8 %a, 1
+  ret i8 %__ll0
+}
+
+`,
+      ],
+      [
+        "nested arithmetic threads SSA temps through a let",
+        demoMain(["a", "b", "c"], "addU8 (addU8 a b) c"),
+        `define i8 @main(i8 %a, i8 %b, i8 %c) {
+entry:
+  %__ll0 = add i8 %a, %b
+  %__ll1 = add i8 %__ll0, %c
+  ret i8 %__ll1
+}
+
+`,
+      ],
+    ];
+
+    for (const [label, source, expected] of cases) {
+      assert.equal(await compileSourceToLlvm(source), expected, label);
+    }
   });
 });

@@ -378,6 +378,172 @@ poly emitDivMod =
                   )
               }
 
+poly emitWriteOne =
+  \emitFn : List ((List U8), (List U8)) -> Bin -> List (List U8) -> AnfExpr -> Result (List U8) EmitRes =>
+    \env : List ((List U8), (List U8)) =>
+      \counter : Bin =>
+        \instrs : List (List U8) =>
+          \args : List AnfExpr =>
+            matchList
+              [AnfExpr]
+              [Result (List U8) EmitRes]
+              args
+              (
+                Err
+                  [List U8]
+                  [EmitRes]
+                  "writeOne expects byte and continuation arguments"
+              )
+              (
+                \byteArg : AnfExpr =>
+                  \r1 : List AnfExpr =>
+                    matchList
+                      [AnfExpr]
+                      [Result (List U8) EmitRes]
+                      r1
+                      (
+                        Err
+                          [List U8]
+                          [EmitRes]
+                          "writeOne expects byte and continuation arguments"
+                      )
+                      (
+                        \cont : AnfExpr =>
+                          \r2 : List AnfExpr =>
+                            matchList
+                              [AnfExpr]
+                              [Result (List U8) EmitRes]
+                              r2
+                              (
+                                match cont [Result (List U8) EmitRes] {
+                                  | AE_Lam param body =>
+                                    do [Result (List U8) EmitRes] {
+                                      op <- (atomOperand env byteArg)
+                                      line = concat [U8]
+                                      {List U8 |
+                                        "  call void @trip_write_one(i8 "
+                                        op
+                                        ")\n"
+                                      }
+                                      nextEnv = cons [((List U8), (List U8))] {List U8, List U8 | param, op} env
+                                      res <- (emitFn nextEnv counter (cons [List U8] line instrs) body)
+                                      return Ok [List U8] [EmitRes] res
+                                    }
+                                  | AE_Var _ =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne continuation must be a lambda"
+                                  | AE_Native _ =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne continuation must be a lambda"
+                                  | AE_Call _ _ =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne continuation must be a lambda"
+                                  | AE_Con _ _ _ _ =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne continuation must be a lambda"
+                                  | AE_Case _ _ =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne continuation must be a lambda"
+                                  | AE_Let _ _ _ =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne continuation must be a lambda"
+                                }
+                              )
+                              (
+                                \x : AnfExpr =>
+                                  \y : List AnfExpr =>
+                                    Err
+                                      [List U8]
+                                      [EmitRes]
+                                      "writeOne expects exactly two arguments"
+                              )
+                      )
+              )
+
+poly emitReadOne =
+  \emitFn : List ((List U8), (List U8)) -> Bin -> List (List U8) -> AnfExpr -> Result (List U8) EmitRes =>
+    \env : List ((List U8), (List U8)) =>
+      \counter : Bin =>
+        \instrs : List (List U8) =>
+          \args : List AnfExpr =>
+            matchList
+              [AnfExpr]
+              [Result (List U8) EmitRes]
+              args
+              (Err [List U8] [EmitRes] "readOne expects continuation argument")
+              (
+                \cont : AnfExpr =>
+                  \r1 : List AnfExpr =>
+                    matchList
+                      [AnfExpr]
+                      [Result (List U8) EmitRes]
+                      r1
+                      (
+                        match cont [Result (List U8) EmitRes] {
+                          | AE_Lam param body =>
+                            let dest = append [U8] "%__ll" (binToDigits counter) in
+                            let counter1 = incBin counter in
+                            let line = concat [U8] {List U8 | "  " dest " = call i8 @trip_read_one()\n"} in
+                            let nextEnv = cons [((List U8), (List U8))] {List U8, List U8 | param, dest} env in
+                            emitFn
+                              nextEnv
+                              counter1
+                              (cons [List U8] line instrs)
+                              body
+                          | AE_Var _ =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne continuation must be a lambda"
+                          | AE_Native _ =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne continuation must be a lambda"
+                          | AE_Call _ _ =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne continuation must be a lambda"
+                          | AE_Con _ _ _ _ =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne continuation must be a lambda"
+                          | AE_Case _ _ =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne continuation must be a lambda"
+                          | AE_Let _ _ _ =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne continuation must be a lambda"
+                        }
+                      )
+                      (
+                        \x : AnfExpr =>
+                          \y : List AnfExpr =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "readOne expects exactly one argument"
+                      )
+              )
+
 poly rec emitExpr =
   \env : List ((List U8), (List U8)) =>
     \counter : Bin =>
@@ -434,63 +600,78 @@ poly rec emitExpr =
             | AE_Lam n b =>
               Err [List U8] [EmitRes] "Unsupported expression: lambda"
             | AE_Call f args =>
-              if [Result (List U8) EmitRes] (eqListU8 f "addU8")
-                (\u : U8 => emitArithBin "add" "addU8" env counter instrs args)
+              if [Result (List U8) EmitRes] (or (eqListU8 f "writeOne") (eqListU8 f "Prelude.writeOne"))
+                (\u : U8 => emitWriteOne emitExpr env counter instrs args)
                 (
                   \u : U8 =>
-                    if [Result (List U8) EmitRes] (eqListU8 f "subU8")
-                      (
-                        \u2 : U8 => emitArithBin "sub" "subU8" env counter instrs args
-                      )
+                    if [Result (List U8) EmitRes] (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))
+                      (\u2 : U8 => emitReadOne emitExpr env counter instrs args)
                       (
                         \u2 : U8 =>
-                          if [Result (List U8) EmitRes] (eqListU8 f "divU8")
+                          if [Result (List U8) EmitRes] (eqListU8 f "addU8")
                             (
-                              \u3 : U8 => emitDivMod "udiv" "divU8" env counter instrs args
+                              \u3 : U8 => emitArithBin "add" "addU8" env counter instrs args
                             )
                             (
                               \u3 : U8 =>
-                                if [Result (List U8) EmitRes] (eqListU8 f "modU8")
+                                if [Result (List U8) EmitRes] (eqListU8 f "subU8")
                                   (
-                                    \u4 : U8 => emitDivMod "urem" "modU8" env counter instrs args
+                                    \u4 : U8 => emitArithBin "sub" "subU8" env counter instrs args
                                   )
                                   (
                                     \u4 : U8 =>
-                                      if [Result (List U8) EmitRes] (eqListU8 f "eqU8")
+                                      if [Result (List U8) EmitRes] (eqListU8 f "divU8")
                                         (
-                                          \u5 : U8 => emitCmpBin "eq" "eqU8" env counter instrs args
+                                          \u5 : U8 => emitDivMod "udiv" "divU8" env counter instrs args
                                         )
                                         (
                                           \u5 : U8 =>
-                                            if [Result (List U8) EmitRes] (eqListU8 f "ltU8")
+                                            if [Result (List U8) EmitRes] (eqListU8 f "modU8")
                                               (
-                                                \u6 : U8 => emitCmpBin "ult" "ltU8" env counter instrs args
+                                                \u6 : U8 => emitDivMod "urem" "modU8" env counter instrs args
                                               )
                                               (
                                                 \u6 : U8 =>
-                                                  do [Result (List U8) EmitRes] {
-                                                    argStr <- (emitArgsString env args true)
-                                                    dest = append [U8]
-                                                    "%__ll"
-                                                      (binToDigits counter)
-                                                    counter1 = incBin counter
-                                                    line = concat [U8] {List U8 | "  " dest " = call i8 @" f "(" argStr ")\n"}
-                                                    return
-                                                      Ok
-                                                      [List U8]
-                                                      [EmitRes]
-                                                      (
-                                                        MkEmitRes
-                                                          counter1
+                                                  if [Result (List U8) EmitRes] (eqListU8 f "eqU8")
+                                                    (
+                                                      \u7 : U8 => emitCmpBin "eq" "eqU8" env counter instrs args
+                                                    )
+                                                    (
+                                                      \u7 : U8 =>
+                                                        if [Result (List U8) EmitRes] (eqListU8 f "ltU8")
                                                           (
-                                                            cons
-                                                              [List U8]
-                                                              line
-                                                              instrs
+                                                            \u8 : U8 => emitCmpBin "ult" "ltU8" env counter instrs args
                                                           )
-                                                          dest
-                                                      )
-                                                  }
+                                                          (
+                                                            \u8 : U8 =>
+                                                              do [Result (List U8) EmitRes] {
+                                                                argStr <- (emitArgsString env args true)
+                                                                dest = append [U8]
+                                                                "%__ll"
+                                                                  (
+                                                                    binToDigits
+                                                                      counter
+                                                                  )
+                                                                counter1 = incBin counter
+                                                                line = concat [U8] {List U8 | "  " dest " = call i8 @" f "(" argStr ")\n"}
+                                                                return
+                                                                  Ok
+                                                                  [List U8]
+                                                                  [EmitRes]
+                                                                  (
+                                                                    MkEmitRes
+                                                                      counter1
+                                                                      (
+                                                                        cons
+                                                                          [List U8]
+                                                                          line
+                                                                          instrs
+                                                                      )
+                                                                      dest
+                                                                  )
+                                                              }
+                                                          )
+                                                    )
                                               )
                                         )
                                   )
@@ -613,6 +794,50 @@ poly emitProgram =
       | MkAnfProgram funcs entry => emitFuncs funcs
     }
 
+poly rec exprUsesReadWrite =
+  \e : AnfExpr =>
+    match e [Bool] {
+      | AE_Var n => false
+      | AE_Native t => false
+      | AE_Lam n b => exprUsesReadWrite b
+      | AE_Call f args =>
+        if [Bool] (or (eqListU8 f "writeOne") (or (eqListU8 f "Prelude.writeOne") (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))))
+          (\u : U8 => true)
+          (\u : U8 => listAnyUsesReadWrite args)
+      | AE_Con tag total arity args => listAnyUsesReadWrite args
+      | AE_Case scrut arms =>
+        or (exprUsesReadWrite scrut) (listAnyUsesReadWrite arms)
+      | AE_Let name val body =>
+        or (exprUsesReadWrite val) (exprUsesReadWrite body)
+    }
+
+poly rec listAnyUsesReadWrite =
+  \es : List AnfExpr =>
+    matchList
+      [AnfExpr]
+      [Bool]
+      es
+      false
+      (
+        \h : AnfExpr =>
+          \t : List AnfExpr => or (exprUsesReadWrite h) (listAnyUsesReadWrite t)
+      )
+
+poly rec funcsUseReadWrite =
+  \fns : List AnfFunc =>
+    matchList
+      [AnfFunc]
+      [Bool]
+      fns
+      false
+      (
+        \h : AnfFunc =>
+          \t : List AnfFunc =>
+            match h [Bool] {
+              | MkAnfFunc name params body => or (exprUsesReadWrite body) (funcsUseReadWrite t)
+            }
+      )
+
 poly compileSourceToLlvmText =
   \source : List U8 =>
     match (tokenize source) [List U8] {
@@ -627,9 +852,22 @@ poly compileSourceToLlvmText =
                 match (buildMiniProgram coreDefs "main") [List U8] {
                   | Err e => append [U8] "ERR:" e
                   | Ok prog =>
-                    match (emitProgram (normalizeProgram prog)) [List U8] {
+                    let normalized = normalizeProgram prog in
+                    match (emitProgram normalized) [List U8] {
                       | Err e => append [U8] "ERR:" e
-                      | Ok llvm => llvm
+                      | Ok llvm =>
+                        match normalized [List U8] {
+                          | MkAnfProgram funcs entry =>
+                            if [List U8] (funcsUseReadWrite funcs)
+                              (
+                                \u : U8 =>
+                                  append
+                                    [U8]
+                                    "declare void @trip_write_one(i8)\ndeclare i8 @trip_read_one()\n\n"
+                                    llvm
+                              )
+                              (\u : U8 => llvm)
+                        }
                     }
                 }
             }

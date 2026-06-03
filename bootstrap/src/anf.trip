@@ -20,6 +20,8 @@ import Prelude U8
 
 import Prelude append
 
+import Prelude eqListU8
+
 import Prelude Bin
 
 import Prelude BZ
@@ -225,6 +227,88 @@ poly rec normArms =
                   }
             )
 
+poly normWriteOneCall =
+  \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
+    \state : Bin =>
+      \args : List MiniExpr =>
+        \pos : Pos =>
+          matchList
+            [MiniExpr]
+            [NormResult]
+            args
+            (MkNormResult state {Binding |} (AE_Call "writeOne" ({AnfExpr |})))
+            (
+              \byte : MiniExpr =>
+                \r1 : List MiniExpr =>
+                  matchList
+                    [MiniExpr]
+                    [NormResult]
+                    r1
+                    (
+                      MkNormResult
+                        state
+                        {Binding |}
+                        (AE_Call "writeOne" ({AnfExpr |}))
+                    )
+                    (
+                      \cont : MiniExpr =>
+                        \r2 : List MiniExpr =>
+                          match (normFn state byte PAtom) [NormResult] {
+                            | MkNormResult s1 byteBinds byteAtom =>
+                              match (normFn s1 cont PVal) [NormResult] {
+                                | MkNormResult s2 contBinds contExpr =>
+                                  let combined = append [Binding] contBinds byteBinds in
+                                  wrapValue
+                                    s2
+                                    combined
+                                    (
+                                      AE_Call
+                                        "writeOne"
+                                        (
+                                          cons
+                                            [AnfExpr]
+                                            byteAtom
+                                            (
+                                              cons
+                                                [AnfExpr]
+                                                contExpr
+                                                (nil [AnfExpr])
+                                            )
+                                        )
+                                    )
+                                    pos
+                              }
+                          }
+                    )
+            )
+
+poly normReadOneCall =
+  \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
+    \state : Bin =>
+      \args : List MiniExpr =>
+        \pos : Pos =>
+          matchList
+            [MiniExpr]
+            [NormResult]
+            args
+            (MkNormResult state {Binding |} (AE_Call "readOne" ({AnfExpr |})))
+            (
+              \cont : MiniExpr =>
+                \r1 : List MiniExpr =>
+                  match (normFn state cont PVal) [NormResult] {
+                    | MkNormResult s1 contBinds contExpr =>
+                      wrapValue
+                        s1
+                        contBinds
+                        (
+                          AE_Call
+                            "readOne"
+                            (cons [AnfExpr] contExpr (nil [AnfExpr]))
+                        )
+                        pos
+                  }
+            )
+
 poly rec norm =
   \state : Bin =>
     \expr : MiniExpr =>
@@ -237,9 +321,19 @@ poly rec norm =
               | MkNormResult s1 _ bExpr => wrapValue s1 ({Binding |}) (AE_Lam n bExpr) pos
             }
           | ME_Call f args =>
-            match (atomizeArgs norm state args ({Binding |})) [NormResult] {
-              | MkAtomList s1 binds atoms => wrapValue s1 binds (AE_Call f atoms) pos
-            }
+            if [NormResult] (or (eqListU8 f "writeOne") (eqListU8 f "Prelude.writeOne"))
+              (\u : U8 => normWriteOneCall norm state args pos)
+              (
+                \u : U8 =>
+                  if [NormResult] (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))
+                    (\u2 : U8 => normReadOneCall norm state args pos)
+                    (
+                      \u2 : U8 =>
+                        match (atomizeArgs norm state args ({Binding |})) [NormResult] {
+                          | MkAtomList s1 binds atoms => wrapValue s1 binds (AE_Call f atoms) pos
+                        }
+                    )
+              )
           | ME_Con tag total arity fields =>
             match (atomizeArgs norm state fields ({Binding |})) [NormResult] {
               | MkAtomList s1 binds atoms =>

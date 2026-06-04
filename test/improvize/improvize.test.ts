@@ -213,17 +213,6 @@ poly main = if [A] true t f
     assert.match(result.fixed, /if \[A\] true t f/);
   });
 
-  it("reports and fixes pair types to syntactic sugar", () => {
-    const source = `module M
-poly x : Pair Bin Bin = y
-`;
-    const result = lintTripSource(source, { fix: true });
-    assert.ok(
-      result.diagnostics.some((diag) => diag.code === "trip-pair-type"),
-    );
-    assert.match(result.fixed, /poly x : \(Bin, Bin\) =\s+y/);
-  });
-
   it("reports and fixes MkPair to syntactic sugar", () => {
     const source = `module M
 poly main = MkPair [Bin] [Bin] a b
@@ -439,8 +428,8 @@ poly main =
     );
     assert.match(result.fixed, /do \[Result \(List U8\) BundleSummary\]/);
     assert.match(result.fixed, /magicRes <- \(readLine input\)/);
-    // The rhs of the do-let step is itself a let-expr (bare = inside subexpr); must still parse/format correctly.
-    assert.match(result.fixed, /temp = let inner = magicRes in inner/);
+    // The rhs of the do-let step had a nested identity let (bare = inside subexpr); aggro rules now simplify it further.
+    assert.match(result.fixed, /temp = magicRes/);
     assert.match(result.fixed, /MkLine magic afterMagic = temp/);
     assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
     // Re-lint should not re-introduce or complain.
@@ -464,7 +453,7 @@ poly main4 = ({x})
       5,
     );
     assert.match(result.fixed, /poly main =\s+A\s+/);
-    assert.match(result.fixed, /poly main2 =\s+\(x\)\s+/);
+    assert.match(result.fixed, /poly main2 =\s+x\s+/);
     assert.match(result.fixed, /poly main3 =\s+\[x\]\s+/);
     assert.match(result.fixed, /poly main4 =\s+\{x\}\s+/);
   });

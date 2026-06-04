@@ -1920,28 +1920,6 @@ function matchMkPair(
   };
 }
 
-function matchPairType(
-  tokens: readonly Token[],
-  index: number,
-):
-  | { type1Tokens: Token[]; type2Tokens: Token[]; endIndex: number }
-  | undefined {
-  const token = tokens[index];
-  if (token?.text !== "Pair") return undefined;
-
-  const type1 = parseArgExpression(tokens, index + 1);
-  if (!type1) return undefined;
-
-  const type2 = parseArgExpression(tokens, type1.endIndex + 1);
-  if (!type2) return undefined;
-
-  return {
-    type1Tokens: type1.tokens,
-    type2Tokens: type2.tokens,
-    endIndex: type2.endIndex,
-  };
-}
-
 function parseDelayLambda(
   tokens: readonly Token[],
   index: number,
@@ -2406,9 +2384,15 @@ function collectDoSteps(
 
   if (stripped.filter((t) => !isComment(t)).length === 0) return undefined;
 
+  // Always emit a "return ..." for the terminal bare expression step. This ensures
+  // the last step is always a "return" (recognized by isStartOfDoStep and the real
+  // parser's final-step check), so splitters and formatters correctly separate it
+  // from preceding bind/let/match steps (bare lower-ident exprs or "if" etc. would
+  // otherwise be swallowed, producing jammed steps that the Trip parser rejects
+  // with "do block final step must be an expression or a return statement").
   return {
-    steps: [text],
-    isReturn: false,
+    steps: [`return ${text}`],
+    isReturn: true,
   };
 }
 
@@ -2703,30 +2687,7 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       continue;
     }
 
-    // 5. Pair type simplification
-    const prevText = previousSyntax(tokens, i)?.text;
-    if (prevText !== "data" && prevText !== "type") {
-      const pairTypeMatch = matchPairType(tokens, i);
-      if (pairTypeMatch) {
-        const replacement = `(${formatInline(pairTypeMatch.type1Tokens)}, ${formatInline(pairTypeMatch.type2Tokens)})`;
-        diagnostics.push(
-          diagnostic(
-            "trip-pair-type",
-            `Use syntactic sugar (Type1, Type2) for pair type`,
-            tokens[i]!,
-            {
-              start: tokens[i]!.start,
-              end: tokens[pairTypeMatch.endIndex]!.end,
-              replacement,
-            },
-          ),
-        );
-        i = pairTypeMatch.endIndex;
-        continue;
-      }
-    }
-
-    // 6a. Degenerate match chain simplification to do
+    // 5. Degenerate match chain simplification to do
     const doChainMatch = parseDoChain(tokens, i);
     if (doChainMatch) {
       const baseIndent = lineIndentAt(source, tokens[i]!.start);
@@ -3137,7 +3098,6 @@ function fixesOverlap(a: TripLintFix, b: TripLintFix): boolean {
 const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
   "trip-list-literal",
   "trip-pair-literal",
-  "trip-pair-type",
   "trip-string-literal",
   "trip-redundant-parens",
   "trip-u8-literal",
@@ -3248,8 +3208,12 @@ export function lintTripSource(
     const toks = lexTrip(current);
     const passDiags = lintTokens(current, toks);
     if (passDiags.every((d) => !d.fix)) break;
-    const applyRes = applyVerifiedFixes(current, passDiags, { force: options.force });
-    const { formatted: passFormatted } = formatTripSource(applyRes.fixed, { force: options.force });
+    const applyRes = applyVerifiedFixes(current, passDiags, {
+      force: options.force,
+    });
+    const { formatted: passFormatted } = formatTripSource(applyRes.fixed, {
+      force: options.force,
+    });
     if (passFormatted === current) break;
     current = passFormatted;
     allApplied = allApplied.concat(applyRes.applied);

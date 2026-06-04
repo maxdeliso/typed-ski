@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -229,11 +229,11 @@ poly main = #u8(7)
     ];
 
     for (const [name, moduleNames, goldenFile] of goldenCases) {
-      const actual = summarizeTripBundleV1ParsedModules(
-        realBootstrapBundle(moduleNames),
+      assert.equal(
+        summarizeTripBundleV1ParsedModules(realBootstrapBundle(moduleNames)),
+        readFileSync(join(fixtureDir, goldenFile), "utf8"),
+        name,
       );
-      writeFileSync(join(fixtureDir, goldenFile), actual, "utf8");
-      assert.equal(actual, actual, name);
     }
 
     const closureCases = [
@@ -492,16 +492,7 @@ opaque Handle
       const result = runExecutable(exePath, bundleBytes);
       assert.equal(result.status, 0);
       assert.equal(result.stderr, "");
-      const { writeFileSync } = await import("node:fs");
-      writeFileSync(
-        join(
-          fixtureDir,
-          "bootstrap-parse-summary-prelude-bin-lexer-parser.txt",
-        ),
-        result.stdout,
-        "utf8",
-      );
-      assert.equal(result.stdout, result.stdout);
+      assert.equal(result.stdout, expectedSummary);
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }

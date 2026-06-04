@@ -188,18 +188,18 @@ poly rec collectImports =
   \decls : List Decl =>
     matchList
       [Decl]
-      [List (((List U8), (List U8)))]
+      [List ((List U8), (List U8))]
       decls
-      {(Pair (List U8) (List U8)) |}
+      {(((List U8), (List U8))) |}
       (
         \h : Decl =>
           \t : List Decl =>
-            match h [List (((List U8), (List U8)))] {
+            match h [List ((List U8), (List U8))] {
               | D_Import fromName symbolName =>
                 let qName = append [U8] fromName (append [U8] "." symbolName) in
                 cons
-                  [(((List U8), (List U8)))]
-                  ({List U8, List U8 | symbolName, qName})
+                  [((List U8), (List U8))]
+                  {List U8, List U8 | symbolName, qName}
                   (collectImports t)
               | D_Def kind isRec name body => collectImports t
               | D_Data name ctors => collectImports t
@@ -229,15 +229,15 @@ poly rec memberOfList =
 
 poly rec lookupImportList =
   \name : List U8 =>
-    \list : List (((List U8), (List U8))) =>
+    \list : List ((List U8), (List U8)) =>
       matchList
-        [(((List U8), (List U8)))]
+        [((List U8), (List U8))]
         [Maybe (List U8)]
         list
         (None [List U8])
         (
           \h : ((List U8), (List U8)) =>
-            \t : List (((List U8), (List U8))) =>
+            \t : List ((List U8), (List U8)) =>
               if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
                 (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
                 (\u : U8 => lookupImportList name t)
@@ -245,7 +245,7 @@ poly rec lookupImportList =
 
 poly rec qualifyExpr =
   \bound : List (List U8) =>
-    \imports : List (((List U8), (List U8))) =>
+    \imports : List ((List U8), (List U8)) =>
       \localDefs : List (List U8) =>
         \moduleName : List U8 =>
           \expr : Expr =>
@@ -301,7 +301,7 @@ poly rec qualifyExpr =
 
 poly rec qualifyArms =
   \bound : List (List U8) =>
-    \imports : List (((List U8), (List U8))) =>
+    \imports : List ((List U8), (List U8)) =>
       \localDefs : List (List U8) =>
         \moduleName : List U8 =>
           \arms : List (Pattern, Expr) =>
@@ -342,12 +342,12 @@ poly rec qualifyDataCtors =
               let qName = append [U8] moduleName (append [U8] "." ctorName) in
               cons
                 [((List U8), U8)]
-                ({List U8, U8 | qName, arity})
+                {List U8, U8 | qName, arity}
                 (qualifyDataCtors moduleName t)
         )
 
 poly rec qualifyDeclsRec =
-  \imports : List (((List U8), (List U8))) =>
+  \imports : List ((List U8), (List U8)) =>
     \localDefs : List (List U8) =>
       \moduleName : List U8 =>
         \decls : List Decl =>
@@ -548,18 +548,18 @@ poly rec buildDepMap =
     \decls : List Decl =>
       matchList
         [Decl]
-        [List (((List U8), (List (List U8))))]
+        [List ((List U8), (List (List U8)))]
         decls
-        {(Pair (List U8) (List (List U8))) |}
+        {(((List U8), (List (List U8)))) |}
         (
           \h : Decl =>
             \t : List Decl =>
-              match h [List (((List U8), (List (List U8))))] {
+              match h [List ((List U8), (List (List U8)))] {
                 | D_Def kind isRec name body =>
                   let deps = collectRefsExpr defNames body in
                   cons
-                    [(((List U8), (List (List U8))))]
-                    ({List U8, List (List U8) | name, deps})
+                    [((List U8), (List (List U8)))]
+                    {List U8, List (List U8) | name, deps}
                     (buildDepMap defNames t)
                 | D_Data name ctors => buildDepMap defNames t
                 | D_Module name => buildDepMap defNames t
@@ -573,15 +573,15 @@ poly rec buildDepMap =
 
 poly rec lookupDeps =
   \name : List U8 =>
-    \depMap : List (((List U8), (List (List U8)))) =>
+    \depMap : List ((List U8), (List (List U8))) =>
       matchList
-        [(((List U8), (List (List U8))))]
+        [((List U8), (List (List U8)))]
         [List (List U8)]
         depMap
         {List U8 |}
         (
           \h : ((List U8), (List (List U8))) =>
-            \t : List (((List U8), (List (List U8)))) =>
+            \t : List ((List U8), (List (List U8))) =>
               if [List (List U8)] (eqListU8 (fst [List U8] [List (List U8)] h) name)
                 (\u : U8 => snd [List U8] [List (List U8)] h)
                 (\u : U8 => lookupDeps name t)
@@ -590,7 +590,7 @@ poly rec lookupDeps =
 poly rec findReachableRec =
   \queue : List (List U8) =>
     \visited : List (List U8) =>
-      \depMap : List (((List U8), (List (List U8)))) =>
+      \depMap : List ((List U8), (List (List U8))) =>
         matchList
           [List U8]
           [List (List U8)]

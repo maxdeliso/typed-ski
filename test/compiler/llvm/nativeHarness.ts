@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
+import { findLocalClangPath } from "../../../lib/shared/clangPath.ts";
 import {
   compilerTripModuleSourcePath,
   isKnownCompilerTripModule,
@@ -27,7 +28,7 @@ export interface HarnessOptions extends CompileTripSourceToLlvmOptions {
   stdin?: string | Uint8Array;
 }
 
-const CLANG = process.env["TYPED_SKI_CLANG"];
+const CLANG = process.env["TYPED_SKI_CLANG"] ?? findLocalClangPath();
 
 function macosSdkArgs(): string[] {
   if (process.platform !== "darwin") {

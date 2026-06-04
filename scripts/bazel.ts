@@ -8,6 +8,7 @@ import * as fsp from "node:fs/promises";
 import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
 import { availableParallelism } from "node:os";
+import { findLocalClangPath } from "../lib/shared/clangPath.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // JS_ROOT: directory containing compiled .js outputs (one level up from scripts/)
@@ -650,6 +651,11 @@ async function prepareTestExecution(
     // count directory levels relative to their own compiled location.
     TYPED_SKI_PROJECT_ROOT: PROJECT_ROOT,
   };
+
+  const clangPath = findLocalClangPath();
+  if (clangPath) {
+    env.TYPED_SKI_CLANG = clangPath;
+  }
 
   if (process.env["TEST_SRCDIR"] && process.env["TEST_WORKSPACE"]) {
     const nodeOptions = [

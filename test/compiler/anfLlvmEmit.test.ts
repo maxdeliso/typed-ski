@@ -16,11 +16,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
+import { findLocalClangPath } from "../../lib/shared/clangPath.ts";
 import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { evaluateMiniCore } from "../../lib/minicore/evaluator.ts";
 import type { Value } from "../../lib/minicore/ast.ts";
 
-const CLANG = process.env["TYPED_SKI_CLANG"];
+const CLANG = process.env["TYPED_SKI_CLANG"] ?? findLocalClangPath();
 
 /**
  * Assembles `llvm` with clang (`-x ir -c`) and asserts it is structurally

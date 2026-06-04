@@ -606,19 +606,22 @@ poly rec elaborateToCoreRec =
             \t : List Decl =>
               match h [Result (List U8) (List ((List U8), Core))] {
                 | D_Def kind isRec name body =>
-                  do [Result (List U8) (List ((List U8), Core))] {
-                    core <- (elaborateExpr dEnv body)
-                    rest <- (elaborateToCoreRec dEnv t)
-                    return
-                      Ok
-                      [List U8]
-                      [List ((List U8), Core)]
-                      (
-                        cons
-                          [((List U8), Core)]
-                          {List U8, Core | name, core}
-                          rest
-                      )
+                  match (elaborateExpr dEnv body) [Result (List U8) (List (((List U8), Core)))] {
+                    | Err e => Err [List U8] [List (((List U8), Core))] e
+                    | Ok core =>
+                      match (elaborateToCoreRec dEnv t) [Result (List U8) (List (((List U8), Core)))] {
+                        | Err e2 => Err [List U8] [List (((List U8), Core))] e2
+                        | Ok rest =>
+                          Ok
+                            [List U8]
+                            [List (((List U8), Core))]
+                            (
+                              cons
+                                [((List U8), Core)]
+                                ({List U8, Core | name, core})
+                                rest
+                            )
+                      }
                   }
                 | D_Data name ctors =>
                   match (checkedLengthU8 [((List U8), U8)] ctors #u8(0)) [Result (List U8) (List ((List U8), Core))] {

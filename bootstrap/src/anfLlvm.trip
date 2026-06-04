@@ -246,9 +246,9 @@ poly rec emitCaseFieldBinds =
           \fieldIdx : U8 =>
             matchList
               [List U8]
-              [(List ((List U8), (List U8)), List (List U8))]
+              [(List (((List U8), (List U8))), List (List U8))]
               params
-              {List ((List U8), (List U8)), List (List U8) | env, instrs}
+              {List (((List U8), (List U8))), List (List U8) | env, instrs}
               (
                 \p : List U8 =>
                   \t : List (List U8) =>

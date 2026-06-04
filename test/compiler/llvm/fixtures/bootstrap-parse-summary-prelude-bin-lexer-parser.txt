@@ -67,7 +67,7 @@ poly binToDigits
 combinator 0
 module Lexer
 declared Lexer
-imports 35
+imports 27
 import Prelude Bool
 import Prelude List
 import Prelude nil
@@ -89,21 +89,13 @@ import Prelude Pair
 import Prelude MkPair
 import Prelude fst
 import Prelude snd
-import Prelude foldl
-import Prelude append
 import Prelude reverse
 import Prelude U8
 import Prelude eqU8
 import Prelude ltU8
-import Prelude addU8
-import Prelude divU8
-import Prelude modU8
 import Prelude eqListU8
-import Prelude ltListU8
-import Prelude digitToAscii
-import Prelude singletonU8
 import Prelude u8ToDigits
-exports 70
+exports 51
 export ParseError
 export MkParseError
 export Token
@@ -146,31 +138,12 @@ export tokenTag
 export tokenText
 export tokenNatValue
 export tokenize
-export kwPoly
-export isKeywordPoly
-export keywordWords
-export anyEqWord
-export isKeywordWord
 export keywordTokenFromWordData
-export keywordTokenFromWordType
-export keywordTokenFromWordCombinator
-export keywordTokenFromWordExport
-export keywordTokenFromWordNative
-export keywordTokenFromWordOpaque
-export keywordTokenFromWordImport
-export keywordTokenFromWordModule
-export keywordTokenFromWordMatch
-export keywordTokenFromWordIn
-export keywordTokenFromWordLet
-export keywordTokenFromWordRec
 export keywordTokenFromWord
-export mapResult
 export isSpaceU8
 export isDigitU8
 export isAlphaU8
 export isIdentCharU8
-export simpleTokensU8
-export lookupTokenU8
 export consumeIdent
 export consumeDigits
 export consumeString
@@ -184,7 +157,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 119
+poly 100
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -255,11 +228,6 @@ poly isSpaceU8
 poly isDigitU8
 poly isAlphaU8
 poly isIdentCharU8
-poly kwPoly
-poly isKeywordPoly
-poly keywordWords
-poly anyEqWord
-poly isKeywordWord
 poly keywordTokenFromWordP
 poly keywordTokenFromWordR
 poly keywordTokenFromWordL
@@ -272,17 +240,6 @@ poly keywordTokenFromWordT
 poly keywordTokenFromWordC
 poly keywordTokenFromWordDo
 poly keywordTokenFromWordData
-poly keywordTokenFromWordType
-poly keywordTokenFromWordCombinator
-poly keywordTokenFromWordOpaque
-poly keywordTokenFromWordNative
-poly keywordTokenFromWordExport
-poly keywordTokenFromWordImport
-poly keywordTokenFromWordModule
-poly keywordTokenFromWordMatch
-poly keywordTokenFromWordIn
-poly keywordTokenFromWordLet
-poly keywordTokenFromWordRec
 poly keywordTokenFromWord
 poly simpleTokenFromU8Hash
 poly simpleTokenFromU8Colon
@@ -290,9 +247,6 @@ poly simpleTokenFromU8Backslash
 poly simpleTokenFromU8Bracket
 poly simpleTokenFromU8Brace
 poly simpleTokenFromU8
-poly mapResult
-poly simpleTokensU8
-poly lookupTokenU8
 poly consumeIdent
 poly consumeDigits
 poly consumeString
@@ -375,7 +329,7 @@ import Lexer T_Tagged
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_EOF
-exports 106
+exports 98
 export Pattern
 export P_Ctor
 export Expr
@@ -400,7 +354,6 @@ export D_Def
 export checkedIncrementU8
 export expect
 export expectIdent
-export skipUntil
 export skipToTopLevelDecl
 export parseError
 export identTag
@@ -448,11 +401,7 @@ export fstArmsToken
 export sndArmsToken
 export fstDeclToken
 export sndDeclToken
-export isTopLevelStartToken
 export parsePatternArgs
-export parseMatchArm
-export parseMatchArms
-export isAtomStart
 export parseLiteralAtomWith
 export buildListExpr
 export parseListElements
@@ -466,8 +415,6 @@ export parseAppLoopNoBraceWith
 export parseAppNoBraceWith
 export parseMatchArmWith
 export parseMatchArmsWith
-export parseAtom
-export parseApp
 export parseExpr
 export parseNamedDef
 export parseDecl
@@ -479,7 +426,6 @@ export Ty_App
 export Ty_Arrow
 export Ty_Forall
 export parseSimpleType
-export parseTypeApplication
 export parseType
 export arrowTag
 data 6
@@ -519,7 +465,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 125
+poly 117
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -571,17 +517,14 @@ poly sndArmsToken
 poly fstDeclToken
 poly sndDeclToken
 poly isTopLevelStartTag
-poly isTopLevelStartToken
 poly expect
 poly expectIdent
 poly skipAfter
-poly skipUntil
 poly skipToTopLevelDecl
 poly parsePatternArgs
 poly parseMatchArmWith
 poly parseMatchArmsWith
 poly isAtomStartTag
-poly isAtomStart
 poly buildListExpr
 poly parseLiteralAtomWith
 poly parseListElements
@@ -604,15 +547,10 @@ poly parseTypeAppLoopWith
 poly parseTypeApplicationWith
 poly parseType
 poly parseSimpleType
-poly parseTypeApplication
 poly parseAppLoopWith
 poly parseAppLoopNoBraceWith
 poly parseAppNoBraceWith
 poly parseAppWith
-poly parseAtom
-poly parseApp
-poly parseMatchArm
-poly parseMatchArms
 poly parseExpr
 poly parseNamedDef
 poly parseCtorArity

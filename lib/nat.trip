@@ -8,7 +8,7 @@ import Prelude false
 
 import Prelude Pair
 
-import Prelude pair
+import Prelude MkPair
 
 import Prelude fst
 
@@ -83,12 +83,12 @@ poly pred =
       [Nat]
       (
         n
-          [#Y -> (Nat -> Nat -> Y) -> Y]
+          [Pair Nat Nat]
           (
-            \p : #Y -> (Nat -> Nat -> Y) -> Y =>
-              pair [Nat] [Nat] (snd [Nat] [Nat] p) (succ (snd [Nat] [Nat] p))
+            \p : Pair Nat Nat =>
+              MkPair [Nat] [Nat] (snd [Nat] [Nat] p) (succ (snd [Nat] [Nat] p))
           )
-          (pair [Nat] [Nat] zero zero)
+          (MkPair [Nat] [Nat] zero zero)
       )
 
 poly sub =

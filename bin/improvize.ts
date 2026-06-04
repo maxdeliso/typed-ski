@@ -12,11 +12,12 @@ import {
   discoverTripFiles,
   formatTripSource,
   lintTripSource,
+  pruneUnreachableTripCode,
   type TripLintDiagnostic,
 } from "../lib/improvize/index.ts";
 import { VERSION } from "../lib/shared/version.ts";
 
-type Command = "format" | "lint";
+type Command = "format" | "lint" | "prune";
 
 interface ParsedArgs {
   command?: Command;
@@ -65,7 +66,7 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.fix = true;
       continue;
     }
-    if (arg === "format" || arg === "lint") {
+    if (arg === "format" || arg === "lint" || arg === "prune") {
       if (parsed.command !== undefined) {
         throw new Error(`unexpected extra command: ${arg}`);
       }
@@ -87,6 +88,12 @@ function parseArgs(args: string[]): ParsedArgs {
   if (parsed.command === "lint" && (parsed.check || parsed.write)) {
     throw new Error("--check and --write are only valid with format");
   }
+  if (
+    parsed.command === "prune" &&
+    (parsed.fix || parsed.check || parsed.write)
+  ) {
+    throw new Error("prune does not accept --fix, --check, or --write");
+  }
 
   return parsed;
 }
@@ -98,6 +105,7 @@ TripLang formatter and linter (improvize) v${VERSION}
 USAGE:
     improvize format [--check|--write] <files-or-dirs...>
     improvize lint [--fix] <files-or-dirs...>
+    improvize prune <path> <entry-points>
 
 OPTIONS:
     -h, --help       Show this help message
@@ -106,6 +114,9 @@ OPTIONS:
     --check          Check formatting without writing files
     --write          Rewrite files with formatted output
     --fix            Apply safe lint rewrites, then format
+
+    <entry-points>   A comma-separated list of entry points (e.g. Compiler.main,MiniVerify.verifyToAnfText)
+
 `);
 }
 
@@ -282,6 +293,17 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
   return hadDiagnostics ? 1 : 0;
 }
 
+async function runPrune(paths: string[], verbose: boolean): Promise<number> {
+  if (paths.length !== 2) {
+    throw new Error(
+      "prune requires exactly two arguments: <path> <entry-point>",
+    );
+  }
+  const [prunePath, entryPoint] = paths;
+  await pruneUnreachableTripCode(prunePath!, entryPoint!, { verbose });
+  return 0;
+}
+
 async function main(): Promise<void> {
   let parsed: ParsedArgs;
   try {
@@ -301,15 +323,19 @@ async function main(): Promise<void> {
   }
 
   try {
-    const status =
-      parsed.command === "format"
-        ? await runFormat(
-            parsed.paths,
-            parsed.check,
-            parsed.write,
-            parsed.verbose,
-          )
-        : await runLint(parsed.paths, parsed.fix, parsed.verbose);
+    let status = 0;
+    if (parsed.command === "format") {
+      status = await runFormat(
+        parsed.paths,
+        parsed.check,
+        parsed.write,
+        parsed.verbose,
+      );
+    } else if (parsed.command === "lint") {
+      status = await runLint(parsed.paths, parsed.fix, parsed.verbose);
+    } else if (parsed.command === "prune") {
+      status = await runPrune(parsed.paths, parsed.verbose);
+    }
     process.exit(status);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

@@ -29,9 +29,7 @@ const ANF_LLVM_MODULE_NAMES: readonly CompilerTripModuleName[] = [
   "Parser",
   "Core",
   "DataEnv",
-  "CoreToLower",
   "Unparse",
-  "Lowering",
   "Bridge",
   "CoreToMini",
   "MiniCore",
@@ -45,65 +43,85 @@ export main
 poly main = \a : U8 => writeOne (addU8 a #u8(1)) [U8] (\u : U8 => u)
 `;
 
-const EXPECTED_LLVM = `declare void @trip_write_one(i8)
+const EXPECTED_LLVM = String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i8 @main(i8 %a) {
+define i64 @main(i64 %a) {
 entry:
-  %__ll0 = add i8 %a, 1
-  call void @trip_write_one(i8 %__ll0)
-  ret i8 %__ll0
+  %__ll0_t1 = trunc i64 %a to i8
+  %__ll0_t2 = trunc i64 1 to i8
+  %__ll0_res = add i8 %__ll0_t1, %__ll0_t2
+  %__ll0 = zext i8 %__ll0_res to i64
+  %__ll1_t_write = trunc i64 %__ll0 to i8
+  call void @trip_write_one(i8 %__ll1_t_write)
+  ret i64 0
 }
 
 `;
 
-// Exercises the nullary-constructor path (AE_Con with no fields -> its i8
-// tag, added in #186). `Green` is the second constructor of `Color`, so its
-// declaration-order tag is 1. No `declare` prelude: the program uses no IO.
+// Exercises the nullary-constructor path (AE_Con with no fields). `Green` is
+// the second constructor of `Color`, so its declaration-order tag is 1. The
+// value is a heap object allocated via `trip_alloc_obj`, so the boxed-object
+// runtime is declared in the prelude.
 const NULLARY_CON_SOURCE = String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = Green
 `;
 
-const NULLARY_CON_EXPECTED = `define i8 @main() {
+const NULLARY_CON_EXPECTED = String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main() {
 entry:
-  ret i8 1
+  %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
+  %__ll0 = ptrtoint ptr %__ll0_p to i64
+  ret i64 %__ll0
 }
 
 `;
 
 // Exercises the AE_Case path: a match on a nullary enum lowers to a `switch`
-// on the scrutinee's i8 tag, with each arm storing to an alloca slot that a
-// shared `end` block loads (alloca/store/load rather than phi).
+// on the scrutinee object's tag (read via `trip_obj_tag`), with each arm
+// storing to an alloca slot that a shared `merge` block loads. The switch
+// table is closed before the arm blocks so the IR is well-formed.
 const MATCH_SOURCE = String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
 `;
 
-const MATCH_EXPECTED = `define i8 @main(i8 %c) {
+const MATCH_EXPECTED = String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main(i64 %c) {
 entry:
-  %__case0.slot = alloca i8
-  switch i8 %c, label %__case0.default [
-    i8 0, label %__case0.arm0
-    i8 1, label %__case0.arm1
-    i8 2, label %__case0.arm2
+  %__case_res_0 = alloca i64
+  %__scrut_ptr_0 = inttoptr i64 %c to ptr
+  %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)
+  switch i64 %__tag_0, label %case_0_unreachable [
+    i64 0, label %case_0_arm_0
+    i64 1, label %case_0_arm_1
+    i64 2, label %case_0_arm_2
   ]
-__case0.arm0:
-  store i8 10, ptr %__case0.slot
-  br label %__case0.end
-__case0.arm1:
-  store i8 20, ptr %__case0.slot
-  br label %__case0.end
-__case0.arm2:
-  store i8 30, ptr %__case0.slot
-  br label %__case0.end
-__case0.default:
+case_0_arm_0:
+  store i64 10, ptr %__case_res_0
+  br label %case_0_merge
+case_0_arm_1:
+  store i64 20, ptr %__case_res_0
+  br label %case_0_merge
+case_0_arm_2:
+  store i64 30, ptr %__case_res_0
+  br label %case_0_merge
+case_0_unreachable:
   unreachable
-__case0.end:
-  %__case0.result = load i8, ptr %__case0.slot
-  ret i8 %__case0.result
+case_0_merge:
+  %__case_res_0_val = load i64, ptr %__case_res_0
+  ret i64 %__case_res_0_val
 }
 
 `;
@@ -158,15 +176,15 @@ describe("AnfLlvm native self-host", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.equal(result.stdout, EXPECTED_LLVM);
+    assert.equal(result.stdout.replace(/\r\n/g, "\n"), EXPECTED_LLVM);
   });
 
-  it("stage-0 emits nullary constructors as their i8 tag through the native path", async () => {
+  it("stage-0 emits nullary constructors as tagged objects through the native path", async () => {
     const result = await emitNatively(NULLARY_CON_SOURCE);
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.equal(result.stdout, NULLARY_CON_EXPECTED);
+    assert.equal(result.stdout.replace(/\r\n/g, "\n"), NULLARY_CON_EXPECTED);
   });
 
   it("stage-0 lowers a match on a nullary enum to a switch through the native path", async () => {
@@ -174,6 +192,6 @@ describe("AnfLlvm native self-host", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.equal(result.stdout, MATCH_EXPECTED);
+    assert.equal(result.stdout.replace(/\r\n/g, "\n"), MATCH_EXPECTED);
   });
 });

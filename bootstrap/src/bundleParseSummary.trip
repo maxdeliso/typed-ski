@@ -38,23 +38,9 @@ import Prelude if
 
 import Prelude U8
 
-import Prelude eqU8
-
-import Prelude ltU8
-
 import Prelude addU8
 
-import Prelude divU8
-
-import Prelude modU8
-
 import Prelude eqListU8
-
-import Prelude ltListU8
-
-import Prelude digitToAscii
-
-import Prelude singletonU8
 
 import Prelude u8ToDigits
 
@@ -71,8 +57,6 @@ import BundleSummary ModuleRecord
 import BundleSummary MkModuleRecord
 
 import Lexer tokenize
-
-import Lexer ParseError
 
 import Lexer MkParseError
 

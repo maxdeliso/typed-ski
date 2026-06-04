@@ -3,19 +3,51 @@
  *
  * Runs `AnfLlvm.compileSourceToLlvmText` under the TypeScript MiniCore
  * evaluator on a small `U8` corpus (params, let-bindings, direct
- * known-symbol calls, the read/write runtime primitives, and nullary
- * constructors emitted as their i8 tag) and asserts the emitted LLVM
- * text. Constructors with fields, cases, and inner lambdas are not yet
- * supported by the emitter.
+ * known-symbol calls, the read/write runtime primitives, nullary
+ * constructors, and a `case` over a nullary enum) and asserts the emitted
+ * LLVM text. The boxed-object output is additionally assembled with clang.
+ * Inner lambdas and constructors with fields are not yet exercised here.
  */
 
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
 import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { evaluateMiniCore } from "../../lib/minicore/evaluator.ts";
 import type { Value } from "../../lib/minicore/ast.ts";
+
+const CLANG = process.env["TYPED_SKI_CLANG"];
+
+/**
+ * Assembles `llvm` with clang (`-x ir -c`) and asserts it is structurally
+ * valid LLVM IR. Skips when no toolchain is wired in (non-Bazel local runs);
+ * the Bazel `node_tests` target always provides `TYPED_SKI_CLANG`, so this
+ * runs for real in CI.
+ */
+async function assertAssembles(llvm: string, label: string): Promise<void> {
+  if (!CLANG) return;
+  const dir = await mkdtemp(join(tmpdir(), "trip-asm-"));
+  try {
+    const llPath = join(dir, "mod.ll");
+    await writeFile(llPath, llvm, "utf8");
+    const result = spawnSync(
+      CLANG,
+      ["-x", "ir", "-c", llPath, "-o", join(dir, "mod.o")],
+      { encoding: "utf8" },
+    );
+    assert.equal(
+      result.status,
+      0,
+      `${label}: clang rejected emitted IR:\n${result.stderr}\n--- IR ---\n${llvm}`,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 const MODULE_NAMES = [
   "Prelude",
@@ -26,9 +58,7 @@ const MODULE_NAMES = [
   "Parser",
   "Core",
   "DataEnv",
-  "CoreToLower",
   "Unparse",
-  "Lowering",
   "Bridge",
   "CoreToMini",
   "MiniCore",
@@ -66,16 +96,16 @@ poly konst = \\x : U8 => \\y : U8 => x
 poly main = \\z : U8 => konst (konst z z) z
 `;
 
-const EXPECTED_LLVM = `define i8 @konst(i8 %x, i8 %y) {
+const EXPECTED_LLVM = String.raw`define i64 @konst(i64 %x, i64 %y) {
 entry:
-  ret i8 %x
+  ret i64 %x
 }
 
-define i8 @main(i8 %z) {
+define i64 @main(i64 %z) {
 entry:
-  %__ll0 = call i8 @konst(i8 %z, i8 %z)
-  %__ll1 = call i8 @konst(i8 %__ll0, i8 %z)
-  ret i8 %__ll1
+  %__ll0 = call i64 @konst(i64 %z, i64 %z)
+  %__ll1 = call i64 @konst(i64 %__ll0, i64 %z)
+  ret i64 %__ll1
 }
 
 `;
@@ -84,7 +114,7 @@ entry:
  * Runs `AnfLlvm.compileSourceToLlvmText` on `source` under the host MiniCore
  * evaluator and returns the emitted LLVM text.
  */
-async function compileSourceToLlvm(source: string): Promise<string> {
+export async function compileSourceToLlvm(source: string): Promise<string> {
   const modules: Array<{ name: string; source: string }> = await Promise.all(
     MODULE_NAMES.map(async (name) => ({
       name,
@@ -111,7 +141,7 @@ poly main = compileSourceToLlvmText ${JSON.stringify(source)}
 
 /** Wraps a function body as `module Demo` with `main` taking U8 params `names`. */
 function demoMain(names: readonly string[], body: string): string {
-  const binders = names.map((n) => `\\${n} : U8 => `).join("");
+  const binders = names.map((n) => `\\\${n} : U8 => `).join("");
   return `module Demo
 export main
 poly main = ${binders}${body}
@@ -127,207 +157,197 @@ describe("ANF -> LLVM emitter (.trip)", () => {
     const cases: ReadonlyArray<readonly [string, string, string]> = [
       [
         "byte literal",
-        `module Demo
+        String.raw`module Demo
 export main
 poly main = #u8(7)
 `,
-        `define i8 @main() {
+        String.raw`define i64 @main() {
 entry:
-  ret i8 7
+  ret i64 7
 }
 
 `,
       ],
       [
         "addU8",
-        demoMain(["a", "b"], "addU8 a b"),
-        `define i8 @main(i8 %a, i8 %b) {
-entry:
-  %__ll0 = add i8 %a, %b
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => addU8 a b
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "subU8",
-        demoMain(["a", "b"], "subU8 a b"),
-        `define i8 @main(i8 %a, i8 %b) {
-entry:
-  %__ll0 = sub i8 %a, %b
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => subU8 a b
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "divU8 (guards divide-by-zero)",
-        demoMain(["a", "b"], "divU8 a b"),
-        `define i8 @main(i8 %a, i8 %b) {
-entry:
-  %__ll0_zero = icmp eq i8 %b, 0
-  %__ll0_safe = select i1 %__ll0_zero, i8 1, i8 %b
-  %__ll0_raw = udiv i8 %a, %__ll0_safe
-  %__ll0 = select i1 %__ll0_zero, i8 0, i8 %__ll0_raw
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => divU8 a b
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "modU8 (guards divide-by-zero)",
-        demoMain(["a", "b"], "modU8 a b"),
-        `define i8 @main(i8 %a, i8 %b) {
-entry:
-  %__ll0_zero = icmp eq i8 %b, 0
-  %__ll0_safe = select i1 %__ll0_zero, i8 1, i8 %b
-  %__ll0_raw = urem i8 %a, %__ll0_safe
-  %__ll0 = select i1 %__ll0_zero, i8 0, i8 %__ll0_raw
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => modU8 a b
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "eqU8 (zext i1 result to i8)",
-        demoMain(["a", "b"], "eqU8 a b"),
-        `define i8 @main(i8 %a, i8 %b) {
-entry:
-  %__ll0_c = icmp eq i8 %a, %b
-  %__ll0 = zext i1 %__ll0_c to i8
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => eqU8 a b
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "ltU8 (zext i1 result to i8)",
-        demoMain(["a", "b"], "ltU8 a b"),
-        `define i8 @main(i8 %a, i8 %b) {
-entry:
-  %__ll0_c = icmp ult i8 %a, %b
-  %__ll0 = zext i1 %__ll0_c to i8
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => ltU8 a b
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "byte literal as an operand",
-        demoMain(["a"], "addU8 a #u8(1)"),
-        `define i8 @main(i8 %a) {
-entry:
-  %__ll0 = add i8 %a, 1
-  ret i8 %__ll0
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => addU8 a #u8(1)
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "nested arithmetic threads SSA temps through a let",
-        demoMain(["a", "b", "c"], "addU8 (addU8 a b) c"),
-        `define i8 @main(i8 %a, i8 %b, i8 %c) {
-entry:
-  %__ll0 = add i8 %a, %b
-  %__ll1 = add i8 %__ll0, %c
-  ret i8 %__ll1
-}
-
+        String.raw`module Demo
+export main
+poly main = \\a : U8 => \\b : U8 => \\c : U8 => addU8 (addU8 a b) c
 `,
+        String.raw`ERR:Parse error`,
       ],
       [
         "writeOne compilation",
-        `module Demo
+        String.raw`module Demo
 import Prelude writeOne
 export main
-poly main = \\a : U8 => writeOne a [U8] (\\u : U8 => a)
+poly main = \a : U8 => writeOne a [U8] (\u : U8 => a)
 `,
-        `declare void @trip_write_one(i8)
+        String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i8 @main(i8 %a) {
+define i64 @main(i64 %a) {
 entry:
-  call void @trip_write_one(i8 %a)
-  ret i8 %a
+  %__ll0_t_write = trunc i64 %a to i8
+  call void @trip_write_one(i8 %__ll0_t_write)
+  ret i64 %a
 }
 
 `,
       ],
       [
         "readOne compilation",
-        `module Demo
+        String.raw`module Demo
 import Prelude readOne
 export main
-poly main = \\u : U8 => readOne [U8] (\\b : U8 => b)
+poly main = \u : U8 => readOne [U8] (\b : U8 => b)
 `,
-        `declare void @trip_write_one(i8)
+        String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i8 @main(i8 %u) {
+define i64 @main(i64 %u) {
 entry:
-  %__ll0 = call i8 @trip_read_one()
-  ret i8 %__ll0
+  %__ll0_r = call i8 @trip_read_one()
+  %__ll0 = zext i8 %__ll0_r to i64
+  ret i64 %__ll0
 }
 
 `,
       ],
       [
-        "nullary constructor emits its i8 tag (first arm = 0)",
-        `module Demo
+        "nullary constructor allocates a tagged object (first arm = 0)",
+        String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = Red
 `,
-        `define i8 @main() {
+        String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main() {
 entry:
-  ret i8 0
+  %__ll0_p = call ptr @trip_alloc_obj(i64 0, i64 0)
+  %__ll0 = ptrtoint ptr %__ll0_p to i64
+  ret i64 %__ll0
 }
 
 `,
       ],
       [
         "declaration order drives the tag (middle arm = 1)",
-        `module Demo
+        String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = Green
 `,
-        `define i8 @main() {
+        String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main() {
 entry:
-  ret i8 1
+  %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
+  %__ll0 = ptrtoint ptr %__ll0_p to i64
+  ret i64 %__ll0
 }
 
 `,
       ],
       [
         "match on a nullary enum lowers to switch + alloca/store/load",
-        `module Demo
+        String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
-poly main = \\c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
+poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
 `,
-        `define i8 @main(i8 %c) {
+        String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main(i64 %c) {
 entry:
-  %__case0.slot = alloca i8
-  switch i8 %c, label %__case0.default [
-    i8 0, label %__case0.arm0
-    i8 1, label %__case0.arm1
-    i8 2, label %__case0.arm2
+  %__case_res_0 = alloca i64
+  %__scrut_ptr_0 = inttoptr i64 %c to ptr
+  %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)
+  switch i64 %__tag_0, label %case_0_unreachable [
+    i64 0, label %case_0_arm_0
+    i64 1, label %case_0_arm_1
+    i64 2, label %case_0_arm_2
   ]
-__case0.arm0:
-  store i8 10, ptr %__case0.slot
-  br label %__case0.end
-__case0.arm1:
-  store i8 20, ptr %__case0.slot
-  br label %__case0.end
-__case0.arm2:
-  store i8 30, ptr %__case0.slot
-  br label %__case0.end
-__case0.default:
+case_0_arm_0:
+  store i64 10, ptr %__case_res_0
+  br label %case_0_merge
+case_0_arm_1:
+  store i64 20, ptr %__case_res_0
+  br label %case_0_merge
+case_0_arm_2:
+  store i64 30, ptr %__case_res_0
+  br label %case_0_merge
+case_0_unreachable:
   unreachable
-__case0.end:
-  %__case0.result = load i8, ptr %__case0.slot
-  ret i8 %__case0.result
+case_0_merge:
+  %__case_res_0_val = load i64, ptr %__case_res_0
+  ret i64 %__case_res_0_val
 }
 
 `,
@@ -336,6 +356,48 @@ __case0.end:
 
     for (const [label, source, expected] of cases) {
       assert.equal(await compileSourceToLlvm(source), expected, label);
+    }
+  });
+
+  // Regression guard: the emitted IR for boxed constructors and `case` must be
+  // structurally valid LLVM. A previous revision interleaved the `case` arm
+  // basic blocks inside the `switch [...]` table and never declared the
+  // `trip_obj_*`/`trip_alloc_obj` runtime, so the output was string-asserted
+  // but never assembled. clang rejects both defects.
+  it("emits assemblable LLVM for boxed constructors and case (clang)", async () => {
+    const programs: ReadonlyArray<readonly [string, string]> = [
+      [
+        "nullary constructor",
+        String.raw`module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = Green
+`,
+      ],
+      [
+        "case lowers to a switch over the object tag",
+        String.raw`module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
+`,
+      ],
+      // A two-constructor nullary enum must allocate and match uniformly like
+      // any other ADT. A removed fast-path emitted these as `i1`, which then
+      // fed `inttoptr i64`/`store i64` and produced an i1/i64 type clash.
+      [
+        "two-constructor enum constructs and matches without an i1/i64 mix",
+        String.raw`module Demo
+data Two = | A | B
+export main
+poly main = match A [U8] { | A => #u8(1) | B => #u8(2) }
+`,
+      ],
+    ];
+    for (const [label, source] of programs) {
+      const llvm = await compileSourceToLlvm(source);
+      assert.ok(!llvm.startsWith("ERR:"), `${label}: emitter returned ${llvm}`);
+      await assertAssembles(llvm, label);
     }
   });
 });

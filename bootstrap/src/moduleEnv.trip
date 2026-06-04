@@ -46,27 +46,15 @@ import Prelude not
 
 import Prelude U8
 
-import Prelude eqU8
-
 import Prelude ltU8
 
 import Prelude addU8
 
 import Prelude eqListU8
 
-import Prelude lteListU8
-
-import Prelude digitToAscii
-
-import Prelude singletonU8
-
 import Prelude u8ToDigits
 
 import Prelude writeOne
-
-import Avl empty
-
-import Avl insert
 
 import BundleSummary parseBundleSummary
 
@@ -79,8 +67,6 @@ import BundleSummary ModuleRecord
 import BundleSummary MkModuleRecord
 
 import Lexer tokenize
-
-import Lexer ParseError
 
 import Lexer MkParseError
 
@@ -109,18 +95,6 @@ import Parser K_Poly
 import Parser K_Combinator
 
 import Parser parseProgram
-
-import DataEnv DataEnv
-
-import DataEnv MkDataEnv
-
-import DataEnv CtorInfo
-
-import DataEnv MkCtorInfo
-
-import DataEnv ADTInfo
-
-import DataEnv MkADTInfo
 
 export ModuleInfo
 
@@ -170,25 +144,9 @@ export buildModuleEnv
 
 export lookupModule
 
-export lookupImport
-
 export lookupExport
 
 export lookupDefinition
-
-export lookupADT
-
-export lookupConstructor
-
-export lookupConstructorAlias
-
-export lookupPrimitive
-
-export lookupOpaque
-
-export lookupNative
-
-export dataEnvFromModuleEnv
 
 export emitModuleEnvSummary
 
@@ -315,32 +273,6 @@ poly defKindName =
     match kind [List U8] {
       | K_Poly => "poly"
       | K_Combinator => "combinator"
-    }
-
-poly definitionKind =
-  \decl : Decl =>
-    match decl [List U8] {
-      | D_Def kind isRec name body => defKindName kind
-      | D_Data name ctors => "data"
-      | D_Type name => "type"
-      | D_Opaque name => "opaque"
-      | D_Native name => "native"
-      | D_Module name => "module"
-      | D_Import fromName symbolName => "import"
-      | D_Export name => "export"
-    }
-
-poly definitionName =
-  \decl : Decl =>
-    match decl [List U8] {
-      | D_Def kind isRec name body => name
-      | D_Data name ctors => name
-      | D_Type name => name
-      | D_Opaque name => name
-      | D_Native name => name
-      | D_Module name => name
-      | D_Import fromName symbolName => symbolName
-      | D_Export name => name
     }
 
 poly rec declaredModuleAcc =
@@ -991,26 +923,6 @@ poly rec lookupModule =
               }
         )
 
-poly rec lookupImport =
-  \moduleName : List U8 =>
-    \symbolName : List U8 =>
-      \imports : List ImportInfo =>
-        matchList
-          [ImportInfo]
-          [Maybe ImportInfo]
-          imports
-          (None [ImportInfo])
-          (
-            \h : ImportInfo =>
-              \t : List ImportInfo =>
-                match h [Maybe ImportInfo] {
-                  | MkImportInfo hModule hFrom hSymbol =>
-                    if [Maybe ImportInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
-                      (\u : U8 => lookupImport moduleName symbolName t)
-                      (\u : U8 => Some [ImportInfo] h)
-                }
-          )
-
 poly rec lookupExport =
   \moduleName : List U8 =>
     \symbolName : List U8 =>
@@ -1048,122 +960,6 @@ poly rec lookupDefinition =
                     if [Maybe DefinitionInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
                       (\u : U8 => lookupDefinition moduleName symbolName t)
                       (\u : U8 => Some [DefinitionInfo] h)
-                }
-          )
-
-poly rec lookupADT =
-  \qName : List U8 =>
-    \dataTypes : List DataTypeInfo =>
-      matchList
-        [DataTypeInfo]
-        [Maybe DataTypeInfo]
-        dataTypes
-        (None [DataTypeInfo])
-        (
-          \h : DataTypeInfo =>
-            \t : List DataTypeInfo =>
-              match h [Maybe DataTypeInfo] {
-                | MkDataTypeInfo hQName hLocal hId =>
-                  if [Maybe DataTypeInfo] (eqListU8 hQName qName)
-                    (\u : U8 => Some [DataTypeInfo] h)
-                    (\u : U8 => lookupADT qName t)
-              }
-        )
-
-poly rec lookupConstructor =
-  \qName : List U8 =>
-    \ctors : List ConstructorMeta =>
-      matchList
-        [ConstructorMeta]
-        [Maybe ConstructorMeta]
-        ctors
-        (None [ConstructorMeta])
-        (
-          \h : ConstructorMeta =>
-            \t : List ConstructorMeta =>
-              match h [Maybe ConstructorMeta] {
-                | MkConstructorMeta hQName local alias dataName dataId symbolId tag total arity =>
-                  if [Maybe ConstructorMeta] (eqListU8 hQName qName)
-                    (\u : U8 => Some [ConstructorMeta] h)
-                    (\u : U8 => lookupConstructor qName t)
-              }
-        )
-
-poly rec lookupConstructorAlias =
-  \alias : List U8 =>
-    \aliases : List ConstructorAliasInfo =>
-      matchList
-        [ConstructorAliasInfo]
-        [Maybe ConstructorAliasInfo]
-        aliases
-        (None [ConstructorAliasInfo])
-        (
-          \h : ConstructorAliasInfo =>
-            \t : List ConstructorAliasInfo =>
-              match h [Maybe ConstructorAliasInfo] {
-                | MkConstructorAliasInfo hAlias hTarget =>
-                  if [Maybe ConstructorAliasInfo] (eqListU8 hAlias alias)
-                    (\u : U8 => Some [ConstructorAliasInfo] h)
-                    (\u : U8 => lookupConstructorAlias alias t)
-              }
-        )
-
-poly rec lookupPrimitive =
-  \qName : List U8 =>
-    \prims : List PrimitiveInfo =>
-      matchList
-        [PrimitiveInfo]
-        [Maybe PrimitiveInfo]
-        prims
-        (None [PrimitiveInfo])
-        (
-          \h : PrimitiveInfo =>
-            \t : List PrimitiveInfo =>
-              match h [Maybe PrimitiveInfo] {
-                | MkPrimitiveInfo hQName hSymbol hArity =>
-                  if [Maybe PrimitiveInfo] (eqListU8 hQName qName)
-                    (\u : U8 => Some [PrimitiveInfo] h)
-                    (\u : U8 => lookupPrimitive qName t)
-              }
-        )
-
-poly rec lookupOpaque =
-  \moduleName : List U8 =>
-    \name : List U8 =>
-      \opaques : List OpaqueInfo =>
-        matchList
-          [OpaqueInfo]
-          [Maybe OpaqueInfo]
-          opaques
-          (None [OpaqueInfo])
-          (
-            \h : OpaqueInfo =>
-              \t : List OpaqueInfo =>
-                match h [Maybe OpaqueInfo] {
-                  | MkOpaqueInfo hModule hName =>
-                    if [Maybe OpaqueInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hName name)))
-                      (\u : U8 => lookupOpaque moduleName name t)
-                      (\u : U8 => Some [OpaqueInfo] h)
-                }
-          )
-
-poly rec lookupNative =
-  \moduleName : List U8 =>
-    \name : List U8 =>
-      \natives : List NativeInfo =>
-        matchList
-          [NativeInfo]
-          [Maybe NativeInfo]
-          natives
-          (None [NativeInfo])
-          (
-            \h : NativeInfo =>
-              \t : List NativeInfo =>
-                match h [Maybe NativeInfo] {
-                  | MkNativeInfo hModule hName =>
-                    if [Maybe NativeInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hName name)))
-                      (\u : U8 => lookupNative moduleName name t)
-                      (\u : U8 => Some [NativeInfo] h)
                 }
           )
 
@@ -1804,107 +1600,6 @@ poly rec emitPrimitivesAcc =
 
 poly emitPrimitives =
   \prims : List PrimitiveInfo => emitPrimitivesAcc (reverse [PrimitiveInfo] prims) ""
-
-poly rec insertDataEnvCtors =
-  \ctors : List ConstructorMeta =>
-    \env : DataEnv =>
-      matchList
-        [ConstructorMeta]
-        [DataEnv]
-        ctors
-        env
-        (
-          \h : ConstructorMeta =>
-            \t : List ConstructorMeta =>
-              match h [DataEnv] {
-                | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
-                  match env [DataEnv] {
-                    | MkDataEnv cEnv aEnv =>
-                      let info = MkCtorInfo tag total arity dataName in
-                      insertDataEnvCtors
-                        t
-                        (
-                          MkDataEnv
-                            (
-                              insert
-                                [List U8]
-                                [CtorInfo]
-                                lteListU8
-                                local
-                                info
-                                cEnv
-                            )
-                            aEnv
-                        )
-                  }
-              }
-        )
-
-poly rec ctorNamesForData =
-  \dataId : U8 =>
-    \ctors : List ConstructorMeta =>
-      matchList
-        [ConstructorMeta]
-        [List (List U8)]
-        ctors
-        {List U8 |}
-        (
-          \h : ConstructorMeta =>
-            \t : List ConstructorMeta =>
-              match h [List (List U8)] {
-                | MkConstructorMeta qName local alias dataName hDataId symbolId tag total arity =>
-                  if [List (List U8)] (eqU8 hDataId dataId)
-                    (
-                      \u : U8 => cons [List U8] local (ctorNamesForData dataId t)
-                    )
-                    (\u : U8 => ctorNamesForData dataId t)
-              }
-        )
-
-poly rec insertDataEnvAdts =
-  \dataTypes : List DataTypeInfo =>
-    \ctors : List ConstructorMeta =>
-      \env : DataEnv =>
-        matchList
-          [DataTypeInfo]
-          [DataEnv]
-          dataTypes
-          env
-          (
-            \h : DataTypeInfo =>
-              \t : List DataTypeInfo =>
-                match h [DataEnv] {
-                  | MkDataTypeInfo qName local dataId =>
-                    match env [DataEnv] {
-                      | MkDataEnv cEnv aEnv =>
-                        let names = ctorNamesForData dataId ctors in
-                        insertDataEnvAdts
-                          t
-                          ctors
-                          (
-                            MkDataEnv
-                              cEnv
-                              (
-                                insert
-                                  [List U8]
-                                  [ADTInfo]
-                                  lteListU8
-                                  local
-                                  (MkADTInfo names)
-                                  aEnv
-                              )
-                          )
-                    }
-                }
-          )
-
-poly dataEnvFromModuleEnv =
-  \env : ModuleEnv =>
-    match env [DataEnv] {
-      | MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims =>
-        let emptyEnv = MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo]) in
-        insertDataEnvAdts dataTypes ctors (insertDataEnvCtors ctors emptyEnv)
-    }
 
 poly emitModuleEnvSummary =
   \env : ModuleEnv =>

@@ -1543,7 +1543,7 @@ class MiniCoreBuilder {
     }
 
     throw new MiniCoreCompileError(
-      `Unsupported MiniCore application with head ${strippedHead.term.kind}`,
+      `Unsupported MiniCore application with head ${strippedHead.term.kind}${strippedHead.term.kind === "systemF-var" ? " (name: " + strippedHead.term.name + ")" : ""}`,
     );
   }
 
@@ -2078,6 +2078,18 @@ class MiniCoreBuilder {
       throw new MiniCoreCompileError(`Symbol ${symbol} is not callable`);
     }
     if (args.length !== def.arity) {
+      console.log(
+        "ARITY ERROR: compiling function =",
+        this.symbols[ctx.fnSymbol]?.name,
+        "calling =",
+        def.name,
+        "with args =",
+        args.length,
+        "expected =",
+        def.arity,
+        "args AST =",
+        JSON.stringify(args, null, 2),
+      );
       throw new MiniCoreCompileError(
         `${def.name} expects ${def.arity} argument(s), got ${args.length}`,
       );

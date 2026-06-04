@@ -24,14 +24,6 @@ import Prelude Some
 
 import Prelude None
 
-import Prelude Pair
-
-import Prelude MkPair
-
-import Prelude fst
-
-import Prelude snd
-
 import Prelude Bool
 
 import Prelude true
@@ -57,12 +49,6 @@ import Prelude lteU8
 import Prelude eqListU8
 
 import Prelude ltListU8
-
-import Prelude digitToAscii
-
-import Prelude singletonU8
-
-import Prelude u8ToDigits
 
 import Prelude writeOne
 

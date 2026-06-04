@@ -574,7 +574,10 @@ poly main6 =
     assert.match(result.fixed, /poly main2 =\s+or\s+cond\s+elseExpr/);
     assert.match(result.fixed, /poly main3 =\s+not\s+cond/);
     assert.match(result.fixed, /poly main4 =\s+cond/);
-    assert.match(result.fixed, /poly main5 =\s+and\s+\(not\s+cond\)\s+elseExpr/);
+    assert.match(
+      result.fixed,
+      /poly main5 =\s+and\s+\(not\s+cond\)\s+elseExpr/,
+    );
     assert.match(result.fixed, /poly main6 =\s+or\s+\(not\s+cond\)\s+thenExpr/);
   });
 });

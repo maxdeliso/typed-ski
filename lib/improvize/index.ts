@@ -1920,7 +1920,10 @@ function matchMkPair(
   };
 }
 
-function isInsideDataDefinition(tokens: readonly Token[], index: number): boolean {
+function isInsideDataDefinition(
+  tokens: readonly Token[],
+  index: number,
+): boolean {
   for (let i = index - 1; i >= 0; i--) {
     const text = tokens[i]!.text;
     if (
@@ -2175,7 +2178,9 @@ function parseMatchHeader(
   };
 }
 
-function extractErrTypeStrings(armClean: readonly Token[]): { errType: string; okType: string } | undefined {
+function extractErrTypeStrings(
+  armClean: readonly Token[],
+): { errType: string; okType: string } | undefined {
   const arrowIdx = armClean.findIndex((t) => t.text === "=>");
   if (arrowIdx === -1) return undefined;
 
@@ -2278,7 +2283,9 @@ function matchMonadicBind(
   if (!armTypes) return undefined;
 
   const expectedTypeStr = `Result ${armTypes.errType} ${armTypes.okType}`;
-  if (normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)) {
+  if (
+    normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)
+  ) {
     return undefined;
   }
 
@@ -2806,7 +2813,11 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
 
     // 4b. Pair type simplification
     const prevText = previousSyntax(tokens, i)?.text;
-    if (prevText !== "data" && prevText !== "type" && !isInsideDataDefinition(tokens, i)) {
+    if (
+      prevText !== "data" &&
+      prevText !== "type" &&
+      !isInsideDataDefinition(tokens, i)
+    ) {
       const pairTypeMatch = matchPairType(tokens, i);
       if (pairTypeMatch) {
         const replacement = `(${formatInline(pairTypeMatch.type1Tokens)}, ${formatInline(pairTypeMatch.type2Tokens)})`;
@@ -2879,10 +2890,7 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
 
     // 6b. Simplify boolean if expressions
     const ifSimplifyMatch = matchIfExpression(tokens, i);
-    if (
-      ifSimplifyMatch &&
-      ifSimplifyMatch.typeText === "Bool"
-    ) {
+    if (ifSimplifyMatch && ifSimplifyMatch.typeText === "Bool") {
       const thenText = formatInline(ifSimplifyMatch.thenBody).trim();
       const elseText = formatInline(ifSimplifyMatch.elseBody).trim();
 
@@ -2940,7 +2948,11 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
         continue;
       }
 
-      if (thenText === "false" && elseText === "true" && canUsePrelude(topLevel, "not")) {
+      if (
+        thenText === "false" &&
+        elseText === "true" &&
+        canUsePrelude(topLevel, "not")
+      ) {
         const replacement = `not (${ifSimplifyMatch.condText})`;
         diagnostics.push(
           diagnostic(

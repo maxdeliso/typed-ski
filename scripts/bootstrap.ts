@@ -89,6 +89,16 @@ function verifyClean(): void {
   // Note: we ignore the exit code here.
 
   console.log("\n✅ Success! Prune → lint → fmt completed. Corpus is formatted and lint fixes applied (some suggestions may remain for future passes).");
+
+  // Show the evidence left in the working tree. The script's job is to let
+  // improvize perform every fixing action it's capable of; the resulting
+  // modifications (or lack thereof) under bootstrap/src/ are the evidence.
+  console.log("\nEvidence left in the working tree by improvize (review with `git diff -- bootstrap/src/`):");
+  const evidence = spawnSync("git", ["status", "--short", "--", BOOTSTRAP_SRC], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+  });
+  console.log(evidence.stdout?.trim() || "(no further changes — the corpus has had everything improvize can currently auto-apply)");
 }
 
 function main(): void {

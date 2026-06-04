@@ -382,6 +382,17 @@ export main
 poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
 `,
       ],
+      // A two-constructor nullary enum must allocate and match uniformly like
+      // any other ADT. A removed fast-path emitted these as `i1`, which then
+      // fed `inttoptr i64`/`store i64` and produced an i1/i64 type clash.
+      [
+        "two-constructor enum constructs and matches without an i1/i64 mix",
+        String.raw`module Demo
+data Two = | A | B
+export main
+poly main = match A [U8] { | A => #u8(1) | B => #u8(2) }
+`,
+      ],
     ];
     for (const [label, source] of programs) {
       const llvm = await compileSourceToLlvm(source);

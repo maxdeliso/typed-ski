@@ -48,8 +48,6 @@ import Prelude BZ
 
 import Prelude u8ToDigits
 
-import Prelude and
-
 import Prelude eqU8
 
 import Prelude or
@@ -1323,28 +1321,12 @@ poly rec emitExpr =
                       )
                 )
             | AE_Con tag total arity args =>
-              let isBool = and (eqU8 total #u8(2)) (eqU8 arity #u8(0)) in
-              if [Result (List U8) EmitRes] isBool
-                (
-                  \u : U8 =>
-                    let dest = append [U8] "%__ll" (binToDigits counter) in
-                    let counter1 = incBin counter in
-                    let cmpStr = if [List U8] (eqU8 tag #u8(1)) "0, 0" "0, 1" in
-                    let line = append [U8] "  " (append [U8] dest (append [U8] " = icmp eq i8 " (append [U8] cmpStr "\n"))) in
-                    Ok
-                      [List U8]
-                      [EmitRes]
-                      (MkEmitRes counter1 (cons [List U8] line instrs) dest)
-                )
-                (
-                  \u : U8 =>
-                    let dest = append [U8] "%__ll" (binToDigits counter) in
-                    let counter1 = incBin counter in
-                    let allocLine = append [U8] "  " (append [U8] dest (append [U8] "_p = call ptr @trip_alloc_obj(i64 " (append [U8] (u8ToDigits tag) (append [U8] ", i64 " (append [U8] (u8ToDigits arity) ")\n"))))) in
-                    let castLine = append [U8] "  " (append [U8] dest (append [U8] " = ptrtoint ptr " (append [U8] dest "_p to i64\n"))) in
-                    let initialInstrs = append [List U8] {List U8 | castLine allocLine} instrs in
-                    emitCtorFields env counter1 initialInstrs dest arity args #u8(0)
-                )
+              let dest = append [U8] "%__ll" (binToDigits counter) in
+              let counter1 = incBin counter in
+              let allocLine = append [U8] "  " (append [U8] dest (append [U8] "_p = call ptr @trip_alloc_obj(i64 " (append [U8] (u8ToDigits tag) (append [U8] ", i64 " (append [U8] (u8ToDigits arity) ")\n"))))) in
+              let castLine = append [U8] "  " (append [U8] dest (append [U8] " = ptrtoint ptr " (append [U8] dest "_p to i64\n"))) in
+              let initialInstrs = append [List U8] {List U8 | castLine allocLine} instrs in
+              emitCtorFields env counter1 initialInstrs dest arity args #u8(0)
             | AE_Case scrut arms =>
               match (atomOperand env scrut) [Result (List U8) EmitRes] {
                 | Err e => Err [List U8] [EmitRes] e

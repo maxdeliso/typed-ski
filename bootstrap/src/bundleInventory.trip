@@ -38,39 +38,21 @@ import Prelude false
 
 import Prelude if
 
-import Prelude and
-
 import Prelude or
 
 import Prelude U8
 
 import Prelude eqU8
 
-import Prelude ltU8
-
 import Prelude addU8
 
-import Prelude divU8
-
-import Prelude modU8
-
 import Prelude eqListU8
-
-import Prelude ltListU8
-
-import Prelude lteListU8
-
-import Prelude digitToAscii
-
-import Prelude singletonU8
 
 import Prelude u8ToDigits
 
 import Prelude writeOne
 
 import BundleSummary parseBundleSummary
-
-import BundleSummary BundleSummary
 
 import BundleSummary MkBundleSummary
 
@@ -97,8 +79,6 @@ import Parser D_Type
 import Parser D_Data
 
 import Parser D_Def
-
-import Parser DefKind
 
 import Parser K_Poly
 

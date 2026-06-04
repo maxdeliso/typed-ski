@@ -148,7 +148,7 @@ poly rec eqBin =
         | BZ => isZeroBin b
         | B0 pa =>
           match b [Bool] {
-            | BZ => false
+            | BZ => isZeroBin pa
             | B0 pb => eqBin pa pb
             | B1 _ => false
           }
@@ -161,13 +161,29 @@ poly rec eqBin =
       }
 
 poly rec ltBin =
-  \a : Bin => \b : Bin => not (isZeroBin (subBin b a))
+  \a : Bin =>
+    \b : Bin =>
+      match a [Bool] {
+        | BZ => not (isZeroBin b)
+        | B0 pa =>
+          match b [Bool] {
+            | BZ => false
+            | B0 pb => ltBin pa pb
+            | B1 pb => not (ltBin pb pa)
+          }
+        | B1 pa =>
+          match b [Bool] {
+            | BZ => false
+            | B0 pb => ltBin pa pb
+            | B1 pb => ltBin pa pb
+          }
+      }
 
 poly lteBin =
-  \a : Bin => \b : Bin => isZeroBin (subBin a b)
+  \a : Bin => \b : Bin => not (ltBin b a)
 
 poly gteBin =
-  \a : Bin => \b : Bin => lteBin b a
+  \a : Bin => \b : Bin => not (ltBin a b)
 
 poly rec u8ToBinAcc =
   \count : U8 =>

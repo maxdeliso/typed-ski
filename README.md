@@ -254,6 +254,12 @@ linking. Parser bootstrap progress is measured through the `bundle-v1`
 contract above; legacy SKI parser bootstrap tests are not acceptance criteria
 for this milestone.
 
+To lint, format, or prune the bootstrap corpus files under `bootstrap/src/`, the following npm scripts are provided:
+
+- `pnpm run bootstrap:format` — Format all `.trip` files in `bootstrap/src/`
+- `pnpm run bootstrap:lint` — Lint all `.trip` files in `bootstrap/src/` and apply safe automatic fixes
+- `pnpm run bootstrap:prune` — Prune unreachable definitions and imports in `bootstrap/src/`, keeping only the transitively referenced code starting from the entry points of the test suite (e.g., `Compiler.main`, `MiniVerify.verifyToAnfText`, etc.)
+
 ---
 
 # Build system

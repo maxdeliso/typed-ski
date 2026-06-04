@@ -165,17 +165,23 @@ poly false =
   #B => \t : B => \f : B => f
 
 poly pair =
-  #A => #B => \a : A => \b : B => #Y => \k : A -> B -> Y => k a b
+  #A => #B => \a : A => \b : B => MkPair [A] [B] a b
 
 poly fst =
   #A =>
     #B =>
-      \p : #Y -> (A -> B -> Y) -> Y => p [A] (\x : A => \y : B => x)
+      \p : Pair A B =>
+        match p [A] {
+          | MkPair a b => a
+        }
 
 poly snd =
   #A =>
     #B =>
-      \p : #Y -> (A -> B -> Y) -> Y => p [B] (\x : A => \y : B => y)
+      \p : Pair A B =>
+        match p [B] {
+          | MkPair a b => b
+        }
 
 poly not =
   \b : Bool => b [Bool] false true

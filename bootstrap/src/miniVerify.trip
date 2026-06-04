@@ -8,13 +8,9 @@ import Prelude cons
 
 import Prelude matchList
 
-import Prelude Result
-
 import Prelude Ok
 
 import Prelude Err
-
-import Prelude Pair
 
 import Prelude U8
 
@@ -30,19 +26,13 @@ import Prelude ltU8
 
 import Prelude if
 
-import Core Core
-
 import Lexer tokenize
 
 import Parser parseProgram
 
-import Parser Decl
-
 import Bridge elaborateProgramToCore
 
 import MiniCore buildMiniProgram
-
-import MiniCore MiniProgram
 
 import Anf normalizeProgram
 
@@ -69,8 +59,6 @@ import Anf AE_Con
 import Anf AE_Case
 
 import Anf AE_Let
-
-import Unparse Terminal
 
 import Unparse terminalBytes
 

@@ -8,14 +8,6 @@ import Prelude cons
 
 import Prelude matchList
 
-import Prelude Pair
-
-import Prelude MkPair
-
-import Prelude fst
-
-import Prelude snd
-
 import Prelude U8
 
 import Prelude append
@@ -25,10 +17,6 @@ import Prelude eqListU8
 import Prelude Bin
 
 import Prelude BZ
-
-import Prelude B0
-
-import Prelude B1
 
 import Bin incBin
 
@@ -236,7 +224,7 @@ poly normWriteOneCall =
             [MiniExpr]
             [NormResult]
             args
-            (MkNormResult state {Binding |} (AE_Call "writeOne" ({AnfExpr |})))
+            (MkNormResult state {Binding |} (AE_Call "writeOne" {AnfExpr |}))
             (
               \byte : MiniExpr =>
                 \r1 : List MiniExpr =>
@@ -248,7 +236,7 @@ poly normWriteOneCall =
                       MkNormResult
                         state
                         {Binding |}
-                        (AE_Call "writeOne" ({AnfExpr |}))
+                        (AE_Call "writeOne" {AnfExpr |})
                     )
                     (
                       \cont : MiniExpr =>
@@ -291,7 +279,7 @@ poly normReadOneCall =
             [MiniExpr]
             [NormResult]
             args
-            (MkNormResult state {Binding |} (AE_Call "readOne" ({AnfExpr |})))
+            (MkNormResult state {Binding |} (AE_Call "readOne" {AnfExpr |}))
             (
               \cont : MiniExpr =>
                 \r1 : List MiniExpr =>

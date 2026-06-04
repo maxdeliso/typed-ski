@@ -42,10 +42,6 @@ import Prelude fst
 
 import Prelude snd
 
-import Prelude foldl
-
-import Prelude append
-
 import Prelude reverse
 
 import Prelude U8
@@ -54,19 +50,7 @@ import Prelude eqU8
 
 import Prelude ltU8
 
-import Prelude addU8
-
-import Prelude divU8
-
-import Prelude modU8
-
 import Prelude eqListU8
-
-import Prelude ltListU8
-
-import Prelude digitToAscii
-
-import Prelude singletonU8
 
 import Prelude u8ToDigits
 
@@ -154,43 +138,9 @@ export tokenNatValue
 
 export tokenize
 
-export kwPoly
-
-export isKeywordPoly
-
-export keywordWords
-
-export anyEqWord
-
-export isKeywordWord
-
 export keywordTokenFromWordData
 
-export keywordTokenFromWordType
-
-export keywordTokenFromWordCombinator
-
-export keywordTokenFromWordExport
-
-export keywordTokenFromWordNative
-
-export keywordTokenFromWordOpaque
-
-export keywordTokenFromWordImport
-
-export keywordTokenFromWordModule
-
-export keywordTokenFromWordMatch
-
-export keywordTokenFromWordIn
-
-export keywordTokenFromWordLet
-
-export keywordTokenFromWordRec
-
 export keywordTokenFromWord
-
-export mapResult
 
 export isSpaceU8
 
@@ -199,10 +149,6 @@ export isDigitU8
 export isAlphaU8
 
 export isIdentCharU8
-
-export simpleTokensU8
-
-export lookupTokenU8
 
 export consumeIdent
 
@@ -509,50 +455,6 @@ poly isAlphaU8 =
 poly isIdentCharU8 =
   \c : U8 => or (isAlphaU8 c) (or (isDigitU8 c) (eqU8 c u8_underscore))
 
-poly kwPoly : List U8 =
-  "poly"
-
-poly isKeywordPoly =
-  \word : List U8 => eqListU8 word kwPoly
-
-poly keywordWords =
-  {List U8 |
-    "poly"
-    "rec"
-    "let"
-    "in"
-    "match"
-    "module"
-    "import"
-    "export"
-    "native"
-    "opaque"
-    "combinator"
-    "type"
-    "data"
-    "cond"
-    "do"
-  }
-
-poly rec anyEqWord =
-  \word : List U8 =>
-    \words : List (List U8) =>
-      matchList
-        [List U8]
-        [Bool]
-        words
-        false
-        (
-          \h : List U8 =>
-            \t : List (List U8) =>
-              if [Bool] (eqListU8 word h)
-                (\u : U8 => true)
-                (\u : U8 => anyEqWord word t)
-        )
-
-poly isKeywordWord =
-  \word : List U8 => anyEqWord word keywordWords
-
 poly keywordTokenFromWordP =
   \word : List U8 =>
     if [Token] (eqListU8 word "poly")
@@ -631,72 +533,6 @@ poly keywordTokenFromWordData =
       (\u : U8 => T_KwData)
       (\u : U8 => keywordTokenFromWordDo word)
 
-poly keywordTokenFromWordType =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "type")
-      (\u : U8 => T_KwType)
-      (\u : U8 => keywordTokenFromWordData word)
-
-poly keywordTokenFromWordCombinator =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "combinator")
-      (\u : U8 => T_KwCombinator)
-      (\u : U8 => keywordTokenFromWordType word)
-
-poly keywordTokenFromWordOpaque =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "opaque")
-      (\u : U8 => T_KwOpaque)
-      (\u : U8 => keywordTokenFromWordCombinator word)
-
-poly keywordTokenFromWordNative =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "native")
-      (\u : U8 => T_KwNative)
-      (\u : U8 => keywordTokenFromWordOpaque word)
-
-poly keywordTokenFromWordExport =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "export")
-      (\u : U8 => T_KwExport)
-      (\u : U8 => keywordTokenFromWordNative word)
-
-poly keywordTokenFromWordImport =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "import")
-      (\u : U8 => T_KwImport)
-      (\u : U8 => keywordTokenFromWordExport word)
-
-poly keywordTokenFromWordModule =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "module")
-      (\u : U8 => T_KwModule)
-      (\u : U8 => keywordTokenFromWordImport word)
-
-poly keywordTokenFromWordMatch =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "match")
-      (\u : U8 => T_KwMatch)
-      (\u : U8 => keywordTokenFromWordModule word)
-
-poly keywordTokenFromWordIn =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "in")
-      (\u : U8 => T_KwIn)
-      (\u : U8 => keywordTokenFromWordMatch word)
-
-poly keywordTokenFromWordLet =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "let")
-      (\u : U8 => T_KwLet)
-      (\u : U8 => keywordTokenFromWordIn word)
-
-poly keywordTokenFromWordRec =
-  \word : List U8 =>
-    if [Token] (eqListU8 word "rec")
-      (\u : U8 => T_KwRec)
-      (\u : U8 => keywordTokenFromWordLet word)
-
 poly keywordTokenFromWord =
   \word : List U8 =>
     matchList
@@ -768,48 +604,6 @@ poly simpleTokenFromU8 =
       | (eqU8 c ')') => Some [Token] T_RParen
       | otherwise => simpleTokenFromU8Brace c
     }
-
-poly mapResult =
-  #A =>
-    #B =>
-      \f : A -> B =>
-        \res : Result ParseError A =>
-          do [Result ParseError B] {
-            val <- res
-            return Ok [ParseError] [B] (f val)
-          }
-
-poly simpleTokensU8 =
-  {(U8, Token) |
-    {U8, Token | '(', T_LParen}
-    {U8, Token | ')', T_RParen}
-    {U8, Token | '{', T_LBrace}
-    {U8, Token | '}', T_RBrace}
-    {U8, Token | '[', T_LBracket}
-    {U8, Token | ']', T_RBracket}
-    {U8, Token | '\\', T_Backslash}
-    {U8, Token | ':', T_Colon}
-    {U8, Token | '#', T_Hash}
-    {U8, Token | '|', T_Pipe}
-    {U8, Token | '.', T_Dot}
-    {U8, Token | ',', T_Comma}
-  }
-
-poly rec lookupTokenU8 =
-  \c : U8 =>
-    \list : List (U8, Token) =>
-      matchList
-        [(U8, Token)]
-        [Maybe Token]
-        list
-        (None [Token])
-        (
-          \h : (U8, Token) =>
-            \t : List (U8, Token) =>
-              if [Maybe Token] (eqU8 c (fst [U8] [Token] h))
-                (\u : U8 => Some [Token] (snd [U8] [Token] h))
-                (\u : U8 => lookupTokenU8 c t)
-        )
 
 poly rec consumeIdent =
   \acc : List U8 =>

@@ -45,14 +45,18 @@ export main
 poly main = \a : U8 => writeOne (addU8 a #u8(1)) [U8] (\u : U8 => u)
 `;
 
-const EXPECTED_LLVM = `declare void @trip_write_one(i8)
+const EXPECTED_LLVM = String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i8 @main(i8 %a) {
+define i64 @main(i64 %a) {
 entry:
-  %__ll0 = add i8 %a, 1
-  call void @trip_write_one(i8 %__ll0)
-  ret i8 %__ll0
+  %__ll0_t1 = trunc i64 %a to i8
+  %__ll0_t2 = trunc i64 1 to i8
+  %__ll0_res = add i8 %__ll0_t1, %__ll0_t2
+  %__ll0 = zext i8 %__ll0_res to i64
+  %__ll1_t_write = trunc i64 %__ll0 to i8
+  call void @trip_write_one(i8 %__ll1_t_write)
+  ret i64 0
 }
 
 `;
@@ -66,9 +70,11 @@ export main
 poly main = Green
 `;
 
-const NULLARY_CON_EXPECTED = `define i8 @main() {
+const NULLARY_CON_EXPECTED = String.raw`define i64 @main() {
 entry:
-  ret i8 1
+  %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
+  %__ll0 = ptrtoint ptr %__ll0_p to i64
+  ret i64 %__ll0
 }
 
 `;
@@ -82,28 +88,30 @@ export main
 poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
 `;
 
-const MATCH_EXPECTED = `define i8 @main(i8 %c) {
+const MATCH_EXPECTED = String.raw`define i64 @main(i64 %c) {
 entry:
-  %__case0.slot = alloca i8
-  switch i8 %c, label %__case0.default [
-    i8 0, label %__case0.arm0
-    i8 1, label %__case0.arm1
-    i8 2, label %__case0.arm2
+  %__case_res_0 = alloca i64
+  %__scrut_ptr_0 = inttoptr i64 %c to ptr
+  %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)
+  switch i64 %__tag_0, label %case_0_unreachable [
+case_0_arm_0:
+  store i64 10, ptr %__case_res_0
+  br label %case_0_merge
+case_0_arm_1:
+  store i64 20, ptr %__case_res_0
+  br label %case_0_merge
+case_0_arm_2:
+  store i64 30, ptr %__case_res_0
+  br label %case_0_merge
+    i64 0, label %case_0_arm_0
+    i64 1, label %case_0_arm_1
+    i64 2, label %case_0_arm_2
   ]
-__case0.arm0:
-  store i8 10, ptr %__case0.slot
-  br label %__case0.end
-__case0.arm1:
-  store i8 20, ptr %__case0.slot
-  br label %__case0.end
-__case0.arm2:
-  store i8 30, ptr %__case0.slot
-  br label %__case0.end
-__case0.default:
+case_0_unreachable:
   unreachable
-__case0.end:
-  %__case0.result = load i8, ptr %__case0.slot
-  ret i8 %__case0.result
+case_0_merge:
+  %__case_res_0_val = load i64, ptr %__case_res_0
+  ret i64 %__case_res_0_val
 }
 
 `;

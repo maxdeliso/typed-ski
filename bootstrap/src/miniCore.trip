@@ -175,42 +175,76 @@ poly rec exprHasLam =
       | ME_Match s arms => or (exprHasLam s) (listAnyLam exprHasLam arms)
     }
 
-poly rec buildFuncs =
+poly rec getZeroArityNames =
   \defs : List ((List U8), Core) =>
     matchList
       [((List U8), Core)]
-      [Result (List U8) (List MiniFunc)]
+      [List (List U8)]
       defs
-      (Ok [List U8] [List MiniFunc] {MiniFunc |})
+      {List U8 |}
       (
         \h : ((List U8), Core) =>
           \t : List ((List U8), Core) =>
             let name = fst [List U8] [Core] h in
             let core = snd [List U8] [Core] h in
-            match (peelLams core) [Result (List U8) (List MiniFunc)] {
+            match (peelLams core) [((List (List U8)), Core)] {
               | MkPair params inner =>
-                let body = coreToMini inner in
-                if [Result (List U8) (List MiniFunc)] (exprHasLam body)
-                  (
-                    \u : U8 =>
-                      Err
-                        [List U8]
-                        [List MiniFunc]
-                        (append [U8] "escaping lambda in function " name)
-                  )
-                  (
-                    \u : U8 =>
-                      match (buildFuncs t) [Result (List U8) (List MiniFunc)] {
-                        | Err e => Err [List U8] [List MiniFunc] e
-                        | Ok rest =>
-                          Ok
-                            [List U8]
-                            [List MiniFunc]
-                            (cons [MiniFunc] (MkMiniFunc name params body) rest)
-                      }
-                  )
+                matchList
+                  [List U8]
+                  [List (List U8)]
+                  params
+                  (cons [List U8] name (getZeroArityNames t))
+                  (\ph : List U8 => \pt : List (List U8) => getZeroArityNames t)
             }
       )
+
+poly rec buildFuncsRec =
+  \zeroArityNames : List (List U8) =>
+    \defs : List ((List U8), Core) =>
+      matchList
+        [((List U8), Core)]
+        [Result (List U8) (List MiniFunc)]
+        defs
+        (Ok [List U8] [List MiniFunc] {MiniFunc |})
+        (
+          \h : ((List U8), Core) =>
+            \t : List ((List U8), Core) =>
+              let name = fst [List U8] [Core] h in
+              let core = snd [List U8] [Core] h in
+              match (peelLams core) [((List (List U8)), Core)] {
+                | MkPair params inner =>
+                  let body = coreToMini zeroArityNames inner in
+                  if [Result (List U8) (List MiniFunc)] (exprHasLam body)
+                    (
+                      \u : U8 =>
+                        Err
+                          [List U8]
+                          [List MiniFunc]
+                          (append [U8] "escaping lambda in function " name)
+                    )
+                    (
+                      \u : U8 =>
+                        match (buildFuncsRec zeroArityNames t) [Result (List U8) (List MiniFunc)] {
+                          | Err e => Err [List U8] [List MiniFunc] e
+                          | Ok rest =>
+                            Ok
+                              [List U8]
+                              [List MiniFunc]
+                              (
+                                cons
+                                  [MiniFunc]
+                                  (MkMiniFunc name params body)
+                                  rest
+                              )
+                        }
+                    )
+              }
+        )
+
+poly buildFuncs =
+  \defs : List ((List U8), Core) =>
+    let zeroArityNames = getZeroArityNames defs in
+    buildFuncsRec zeroArityNames defs
 
 poly buildMiniProgram =
   \defs : List ((List U8), Core) =>

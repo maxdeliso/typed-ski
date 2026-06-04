@@ -182,8 +182,6 @@ export expect
 
 export expectIdent
 
-export skipUntil
-
 export skipToTopLevelDecl
 
 export parseError
@@ -278,15 +276,7 @@ export fstDeclToken
 
 export sndDeclToken
 
-export isTopLevelStartToken
-
 export parsePatternArgs
-
-export parseMatchArm
-
-export parseMatchArms
-
-export isAtomStart
 
 export parseLiteralAtomWith
 
@@ -314,10 +304,6 @@ export parseMatchArmWith
 
 export parseMatchArmsWith
 
-export parseAtom
-
-export parseApp
-
 export parseExpr
 
 export parseNamedDef
@@ -339,8 +325,6 @@ export Ty_Arrow
 export Ty_Forall
 
 export parseSimpleType
-
-export parseTypeApplication
 
 export parseType
 
@@ -550,9 +534,6 @@ poly isTopLevelStartTag =
         }
       )
 
-poly isTopLevelStartToken =
-  \tok : Token => isTopLevelStartTag (tokenTag tok)
-
 poly expect =
   \toks : List Token =>
     \expectedTag : U8 =>
@@ -606,22 +587,6 @@ poly rec skipAfter =
               if [Result ParseError (List Token)] (eqU8 (tokenTag h) targetTag)
                 (\u : U8 => Ok [ParseError] [List Token] t)
                 (\u : U8 => skipAfter t targetTag)
-        )
-
-poly rec skipUntil =
-  \toks : List Token =>
-    \targetTag : U8 =>
-      matchList
-        [Token]
-        [Result ParseError (List Token)]
-        toks
-        (Err [ParseError] [List Token] parseError)
-        (
-          \h : Token =>
-            \t : List Token =>
-              if [Result ParseError (List Token)] (eqU8 (tokenTag h) targetTag)
-                (\u : U8 => Ok [ParseError] [List Token] toks)
-                (\u : U8 => skipUntil t targetTag)
         )
 
 poly rec skipToTopLevelDecl =
@@ -748,9 +713,6 @@ poly isAtomStartTag =
       | (eqU8 tag hashTag) => true
       | otherwise => eqU8 tag lBraceTag
     }
-
-poly isAtomStart =
-  \tok : Token => isAtomStartTag (tokenTag tok)
 
 poly rec buildListExpr =
   \elements : List Expr =>
@@ -1556,9 +1518,6 @@ poly rec parseType =
 poly parseSimpleType =
   \toks : List Token => parseSimpleTypeWith parseType toks
 
-poly parseTypeApplication =
-  \toks : List Token => parseTypeApplicationWith parseType toks
-
 poly rec parseAppLoopWith =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
     \lhs : Expr =>
@@ -1665,18 +1624,6 @@ poly parseAppWith =
           let rest = sndExprToken headRes in
           parseAppLoopWith recurse head rest
       }
-
-poly parseAtom =
-  \toks : List Token => parseAtomWith parseExpr toks
-
-poly parseApp =
-  \toks : List Token => parseAppWith parseExpr toks
-
-poly parseMatchArm =
-  \toks : List Token => parseMatchArmWith parseExpr toks
-
-poly parseMatchArms =
-  \toks : List Token => parseMatchArmsWith parseExpr toks {(Pattern, Expr) |}
 
 poly rec parseExpr =
   \toks : List Token =>

@@ -59,7 +59,7 @@ describe("LLVM self-host bootstrap", () => {
         bundleBytes,
       );
       assert.ok(!stage1Ll.startsWith("ERR:"), stage1Ll);
-      assert.match(stage1Ll, /define i8 @trip_fn_Main_main\(\)/);
+      assert.match(stage1Ll, /define i64 @trip_fn_Main_main\(\)/);
       await writeFile(stage1LlPath, stage1Ll, "utf8");
 
       // Compile Stage-1 LLVM to a native executable
@@ -99,10 +99,10 @@ poly main = seven
         multiModuleBundle,
       );
       assert.ok(!multiModuleLl.startsWith("ERR:"), multiModuleLl);
-      assert.match(multiModuleLl, /define i8 @trip_fn_Lib_seven\(\)/);
-      assert.match(multiModuleLl, /define i8 @trip_fn_App_main\(\)/);
-      assert.match(multiModuleLl, /call i8 @trip_fn_Lib_seven\(\)/);
-      assert.match(multiModuleLl, /call i8 @trip_fn_App_main\(\)/);
+      assert.match(multiModuleLl, /define i64 @trip_fn_Lib_seven\(\)/);
+      assert.match(multiModuleLl, /define i64 @trip_fn_App_main\(\)/);
+      assert.match(multiModuleLl, /call i64 @trip_fn_Lib_seven\(\)/);
+      assert.match(multiModuleLl, /call i64 @trip_fn_App_main\(\)/);
       await writeFile(multiModuleLlPath, multiModuleLl, "utf8");
 
       const multiModuleExe = await compileLlvmToExecutable(multiModuleLlPath);

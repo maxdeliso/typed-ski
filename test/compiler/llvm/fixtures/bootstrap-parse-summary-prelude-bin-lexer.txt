@@ -67,7 +67,7 @@ poly binToDigits
 combinator 0
 module Lexer
 declared Lexer
-imports 35
+imports 27
 import Prelude Bool
 import Prelude List
 import Prelude nil
@@ -89,21 +89,13 @@ import Prelude Pair
 import Prelude MkPair
 import Prelude fst
 import Prelude snd
-import Prelude foldl
-import Prelude append
 import Prelude reverse
 import Prelude U8
 import Prelude eqU8
 import Prelude ltU8
-import Prelude addU8
-import Prelude divU8
-import Prelude modU8
 import Prelude eqListU8
-import Prelude ltListU8
-import Prelude digitToAscii
-import Prelude singletonU8
 import Prelude u8ToDigits
-exports 70
+exports 51
 export ParseError
 export MkParseError
 export Token
@@ -146,31 +138,12 @@ export tokenTag
 export tokenText
 export tokenNatValue
 export tokenize
-export kwPoly
-export isKeywordPoly
-export keywordWords
-export anyEqWord
-export isKeywordWord
 export keywordTokenFromWordData
-export keywordTokenFromWordType
-export keywordTokenFromWordCombinator
-export keywordTokenFromWordExport
-export keywordTokenFromWordNative
-export keywordTokenFromWordOpaque
-export keywordTokenFromWordImport
-export keywordTokenFromWordModule
-export keywordTokenFromWordMatch
-export keywordTokenFromWordIn
-export keywordTokenFromWordLet
-export keywordTokenFromWordRec
 export keywordTokenFromWord
-export mapResult
 export isSpaceU8
 export isDigitU8
 export isAlphaU8
 export isIdentCharU8
-export simpleTokensU8
-export lookupTokenU8
 export consumeIdent
 export consumeDigits
 export consumeString
@@ -184,7 +157,7 @@ ctor T_Nat 1
 type 0
 opaque 0
 native 0
-poly 119
+poly 100
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -255,11 +228,6 @@ poly isSpaceU8
 poly isDigitU8
 poly isAlphaU8
 poly isIdentCharU8
-poly kwPoly
-poly isKeywordPoly
-poly keywordWords
-poly anyEqWord
-poly isKeywordWord
 poly keywordTokenFromWordP
 poly keywordTokenFromWordR
 poly keywordTokenFromWordL
@@ -272,17 +240,6 @@ poly keywordTokenFromWordT
 poly keywordTokenFromWordC
 poly keywordTokenFromWordDo
 poly keywordTokenFromWordData
-poly keywordTokenFromWordType
-poly keywordTokenFromWordCombinator
-poly keywordTokenFromWordOpaque
-poly keywordTokenFromWordNative
-poly keywordTokenFromWordExport
-poly keywordTokenFromWordImport
-poly keywordTokenFromWordModule
-poly keywordTokenFromWordMatch
-poly keywordTokenFromWordIn
-poly keywordTokenFromWordLet
-poly keywordTokenFromWordRec
 poly keywordTokenFromWord
 poly simpleTokenFromU8Hash
 poly simpleTokenFromU8Colon
@@ -290,9 +247,6 @@ poly simpleTokenFromU8Backslash
 poly simpleTokenFromU8Bracket
 poly simpleTokenFromU8Brace
 poly simpleTokenFromU8
-poly mapResult
-poly simpleTokensU8
-poly lookupTokenU8
 poly consumeIdent
 poly consumeDigits
 poly consumeString

@@ -124,7 +124,7 @@ export const AVL_CASES: AvlCase[] = [
     moduleName: "AvlBinBoolProbe",
     loadSource: () =>
       Promise.resolve(buildAvlBinBoolProbeSource("size [Bin] [Bool] t4")),
-    expected: 4n,
+    expected: 3n,
   },
   {
     name: "AvlInsertTraversalTest",

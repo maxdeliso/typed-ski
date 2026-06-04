@@ -2,35 +2,9 @@ module DataEnv
 
 import Prelude List
 
-import Prelude nil
-
-import Prelude cons
-
-import Prelude matchList
-
-import Prelude Pair
-
-import Prelude MkPair
-
-import Prelude Result
-
-import Prelude Ok
-
-import Prelude Err
-
-import Prelude if
-
 import Prelude U8
 
-import Prelude and
-
 import Avl Avl
-
-import Avl empty
-
-import Avl lookup
-
-import Avl insert
 
 export CtorInfo
 

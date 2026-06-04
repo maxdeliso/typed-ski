@@ -261,8 +261,6 @@ describe("parseTripLang", () => {
       { name: "Prelude", ref: "MkPair" },
       { name: "Prelude", ref: "fst" },
       { name: "Prelude", ref: "snd" },
-      { name: "Prelude", ref: "foldl" },
-      { name: "Prelude", ref: "append" },
       { name: "Prelude", ref: "reverse" },
       { name: "Prelude", ref: "U8" },
       { name: "Prelude", ref: "eqU8" },
@@ -302,10 +300,7 @@ describe("parseTripLang", () => {
       "T_Nat",
       "T_EOF",
       "tokenize",
-      "kwPoly",
-      "isKeywordPoly",
       "keywordTokenFromWord",
-      "mapResult",
     ] as const;
 
     const expectedData = ["Token"] as const;

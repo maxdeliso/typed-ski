@@ -4,9 +4,9 @@ import { basename, extname, join, resolve } from "node:path";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { scanTrip, type ScanKind, type ScanToken } from "./lexer.ts";
 
-type TokenKind = Exclude<ScanKind, "space" | "newline">;
+export type TokenKind = Exclude<ScanKind, "space" | "newline">;
 
-interface Token extends Omit<ScanToken, "kind"> {
+export interface Token extends Omit<ScanToken, "kind"> {
   kind: TokenKind;
 }
 
@@ -64,6 +64,7 @@ const GENERATED_DIRS = new Set([
   "node_modules",
   "dist",
   "ts_out",
+  "scratch",
 ]);
 
 function normalizeSource(source: string): string {
@@ -81,7 +82,7 @@ function isSyntaxToken(token: ScanToken): token is Token {
   return token.kind !== "space" && token.kind !== "newline";
 }
 
-function lexTrip(sourceText: string): Token[] {
+export function lexTrip(sourceText: string): Token[] {
   const source = normalizeSource(sourceText);
   if (!isAscii(source)) {
     throw new Error("improvize only accepts ASCII Trip source");
@@ -90,7 +91,7 @@ function lexTrip(sourceText: string): Token[] {
   return scanTrip(source, true).filter(isSyntaxToken);
 }
 
-function isComment(token: Token): boolean {
+export function isComment(token: Token): boolean {
   return token.kind === "lineComment" || token.kind === "blockComment";
 }
 
@@ -1045,7 +1046,7 @@ function formatDecl(tokens: readonly Token[]): string[] {
   return lines;
 }
 
-function partitionDecls(tokens: readonly Token[]): Token[][] {
+export function partitionDecls(tokens: readonly Token[]): Token[][] {
   const groups: Token[][] = [];
   let current: Token[] = [];
   let depth = 0;
@@ -3098,3 +3099,5 @@ export function lintTripSource(
     changed: formatted !== source,
   };
 }
+
+export { pruneUnreachableTripCode } from "./reachability.ts";

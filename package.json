@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.27.7",
+  "version": "0.27.8",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -34,12 +34,12 @@
   },
   "packageManager": "pnpm@11.5.0",
   "scripts": {
-    "build:ts": "tsc --project tsconfig.emit.json",
+    "build:ts": "node scripts/tsgo.mjs --project tsconfig.emit.json",
     "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
     "improvize": "node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js",
     "bench:avl": "node --disable-warning=ExperimentalWarning ts_out/test/avlBenchmark.js",
     "dist": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/tsgo.mjs --noEmit",
     "test": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js test",
     "bootstrap:format": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js format --write bootstrap/src",
     "bootstrap:lint": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js lint --fix bootstrap/src",
@@ -52,10 +52,10 @@
   "devDependencies": {
     "@types/node": "^25.7.0",
     "@types/random-seed": "^0.3.5",
+    "@typescript/native-preview": "7.0.0-dev.20260421.2",
     "esbuild": "^0.28.0",
     "json-stringify-safe": "5.0.1",
     "pnpm": "11.5.0",
-    "prettier": "^3.8.3",
-    "typescript": "^6.0.3"
+    "prettier": "^3.8.3"
   }
 }

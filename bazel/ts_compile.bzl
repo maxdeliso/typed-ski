@@ -1,22 +1,23 @@
-"""Bazel rule for compiling TypeScript with tsc."""
+"""Bazel rule for compiling TypeScript with tsgo (TypeScript 7 native)."""
 
 def _ts_compile_impl(ctx):
     node_toolchain = ctx.toolchains["@rules_nodejs//nodejs:toolchain_type"]
     out_dir = ctx.actions.declare_directory(ctx.attr.out_dir)
 
-    tsc_path = None
-    tsc_file = None
+    tsgo_path = None
+    tsgo_file = None
     for f in ctx.files.node_modules:
-        if f.path.endswith("/typescript") or f.path.endswith("\\typescript") or f.path.endswith("/typescript/lib/tsc.js") or f.path.endswith("\\typescript\\lib\\tsc.js"):
-            if f.is_directory:
-                tsc_path = f.path + "/lib/tsc.js"
-            else:
-                tsc_path = f.path
-            tsc_file = f
+        if f.path.endswith("/@typescript/native-preview") or f.path.endswith("\\@typescript\\native-preview"):
+            tsgo_path = f.path + "/bin/tsgo.js"
+            tsgo_file = f
+            break
+        if f.path.endswith("/@typescript/native-preview/bin/tsgo.js") or f.path.endswith("\\@typescript\\native-preview\\bin\\tsgo.js"):
+            tsgo_path = f.path
+            tsgo_file = f
             break
     
-    if tsc_path == None:
-        fail("Cannot find typescript/lib/tsc.js in node_modules")
+    if tsgo_path == None:
+        fail("Cannot find @typescript/native-preview/bin/tsgo.js in node_modules")
 
     ts_config_generated = ctx.actions.declare_file(ctx.label.name + "_tsconfig.json")
 
@@ -27,9 +28,7 @@ def _ts_compile_impl(ctx):
   "compilerOptions": {
     "outDir": "./%s",
     "noEmit": false,
-    "ignoreDeprecations": "6.0",
     "skipLibCheck": true,
-    "baseUrl": ".",
     "typeRoots": ["./node_modules/@types"],
     "types": ["node", "random-seed"],
     "rootDirs": ["./", "%s"],
@@ -57,18 +56,21 @@ def _ts_compile_impl(ctx):
     script_content = """
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-const [node, tsc, ...args] = process.argv.slice(2);
-const outDir = args[args.indexOf('--project') + 1]; // This is actually the tsconfig path, but we need outDir
+const [node, tsgo, ...args] = process.argv.slice(2);
 
-// Run tsc
-console.log('Running tsc...');
-const tscResult = spawnSync(node, [tsc, ...args], { stdio: 'inherit' });
-if (tscResult.status !== 0) {
-    console.error('tsc failed with status', tscResult.status);
-    process.exit(tscResult.status || 1);
+// tsgo caps type-checking workers at 4 by default and has no auto/all value,
+// so pass the sandbox's full core count to use every core.
+// os.availableParallelism() is always >= 1, the minimum --checkers takes.
+const checkers = os.availableParallelism();
+console.log(`Running tsgo with ${checkers} checkers...`);
+const tsgoResult = spawnSync(node, [tsgo, '--checkers', String(checkers), ...args], { stdio: 'inherit' });
+if (tsgoResult.status !== 0) {
+    console.error('tsgo failed with status', tsgoResult.status);
+    process.exit(tsgoResult.status || 1);
 }
 
 // Copy data files
@@ -89,12 +91,12 @@ console.log('Copying complete.');
     args = ctx.actions.args()
     args.add(wrapper_script.path)
     args.add(node_toolchain.nodeinfo.node.path)
-    args.add(tsc_path)
+    args.add(tsgo_path)
     args.add("--project")
     args.add(ts_config_generated.path)
 
     all_inputs = depset(
-        ctx.files.srcs + [ctx.file.tsconfig, ts_config_generated, tsc_file, wrapper_script],
+        ctx.files.srcs + [ctx.file.tsconfig, ts_config_generated, tsgo_file, wrapper_script],
         transitive = [depset(ctx.files.node_modules)],
     )
 

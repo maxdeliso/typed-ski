@@ -254,10 +254,7 @@ poly rec symbolInList =
         false
         (
           \h : List U8 =>
-            \t : List (List U8) =>
-              if [Bool] (eqListU8 h symbolName)
-                (\u : U8 => true)
-                (\u : U8 => symbolInList symbolName t)
+            \t : List (List U8) => or (eqListU8 h symbolName) (symbolInList symbolName t)
         )
 
 poly isExported =
@@ -282,9 +279,7 @@ poly rec ctorNameInList =
         (
           \h : ((List U8), U8) =>
             \t : List ((List U8), U8) =>
-              if [Bool] (eqListU8 (fst [List U8] [U8] h) name)
-                (\u : U8 => true)
-                (\u : U8 => ctorNameInList name t)
+              or (eqListU8 (fst [List U8] [U8] h) name) (ctorNameInList name t)
         )
 
 poly rec isDefined =
@@ -299,9 +294,7 @@ poly rec isDefined =
           \h : Decl =>
             \t : List Decl =>
               let isMatch = match h [Bool] {| D_Def k r n e => eqListU8 n symbolName | D_Data n cs => or (eqListU8 n symbolName) (ctorNameInList symbolName cs) | D_Type n => eqListU8 n symbolName | D_Opaque n => eqListU8 n symbolName | D_Native n => eqListU8 n symbolName | D_Module n => false | D_Import f s => false | D_Export n => false} in
-              if [Bool] isMatch
-                (\u : U8 => true)
-                (\u : U8 => isDefined symbolName t)
+              or isMatch (isDefined symbolName t)
         )
 
 poly emitImportStatus =

@@ -927,25 +927,20 @@ poly rec exprListMentionsName =
             \rest : List Expr =>
               match expr [Bool] {
                 | E_Var varName =>
-                  if [Bool] (eqListU8 name varName)
-                    (\u : U8 => true)
-                    (\u : U8 => exprListMentionsName name rest)
+                  or (eqListU8 name varName) (exprListMentionsName name rest)
                 | E_App l r =>
                   exprListMentionsName name (append [Expr] {Expr | l r} rest)
                 | E_Lam varName body =>
-                  if [Bool] (eqListU8 name varName)
-                    (\u : U8 => true)
-                    (
-                      \u : U8 => exprListMentionsName name (cons [Expr] body rest)
-                    )
+                  or
+                    (eqListU8 name varName)
+                    (exprListMentionsName name (cons [Expr] body rest))
                 | E_Let varName value body =>
-                  if [Bool] (eqListU8 name varName)
-                    (\u : U8 => true)
+                  or
+                    (eqListU8 name varName)
                     (
-                      \u : U8 =>
-                        exprListMentionsName
-                          name
-                          (append [Expr] {Expr | value body} rest)
+                      exprListMentionsName
+                        name
+                        (append [Expr] {Expr | value body} rest)
                     )
                 | E_Nat n => exprListMentionsName name rest
                 | E_Match scrutinee arms =>
@@ -1256,10 +1251,7 @@ poly parseSimpleTypeWith =
         )
 
 poly isTypeAtomStartTag =
-  \tag : U8 =>
-    if [Bool] (eqU8 tag identTag)
-      (\u : U8 => true)
-      (\u : U8 => eqU8 tag lParenTag)
+  \tag : U8 => or (eqU8 tag identTag) (eqU8 tag lParenTag)
 
 poly rec parseTypeAppLoopWith =
   \recurse : (List Token -> Result ParseError (Type, (List Token))) =>
@@ -1937,20 +1929,19 @@ poly isPatternStart =
       (
         \h : Token =>
           \t : List Token =>
-            if [Bool] (eqU8 (tokenTag h) identTag)
+            and
+              (eqU8 (tokenTag h) identTag)
               (
-                \u : U8 =>
-                  let count = patternIdentCount t in
-                  if [Bool] (ltU8 count #u8(255))
-                    (
-                      \u2 : U8 =>
-                        if [Bool] (eqU8 count #u8(0))
-                          (\u3 : U8 => true)
-                          (\u3 : U8 => isCtorToken h)
-                    )
-                    (\u2 : U8 => false)
+                let count = patternIdentCount t in
+                if [Bool] (ltU8 count #u8(255))
+                  (
+                    \u2 : U8 =>
+                      if [Bool] (eqU8 count #u8(0))
+                        (\u3 : U8 => true)
+                        (\u3 : U8 => isCtorToken h)
+                  )
+                  (\u2 : U8 => false)
               )
-              (\u : U8 => false)
       )
 
 poly rec splitCondErrorAcc =

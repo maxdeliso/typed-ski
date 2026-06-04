@@ -958,9 +958,9 @@ poly rec isConstructorDefined =
                 do [Bool] {
                   MkConstructorMeta qName local alias dataName dataId symbolId tag total arity = h
                   return
-                  if [Bool] (eqListU8 alias (qualify moduleName symbolName))
-                    (\u : U8 => true)
-                    (\u : U8 => isConstructorDefined moduleName symbolName t)
+                    or
+                    (eqListU8 alias (qualify moduleName symbolName))
+                    (isConstructorDefined moduleName symbolName t)
                 }
           )
 

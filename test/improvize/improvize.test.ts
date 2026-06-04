@@ -533,6 +533,35 @@ poly main4 = ({x})
     assert.match(result.fixed, /poly main3 =\s+\[x\]\s+/);
     assert.match(result.fixed, /poly main4 =\s+\{x\}\s+/);
   });
+
+  it("simplifies boolean if expressions to and, or, or not", () => {
+    const source = `module M
+import Prelude and
+import Prelude or
+import Prelude not
+poly main =
+  if [Bool] cond
+    (\\u : U8 => thenExpr)
+    (\\u : U8 => false)
+poly main2 =
+  if [Bool] cond
+    (\\u : U8 => true)
+    (\\u : U8 => elseExpr)
+poly main3 =
+  if [Bool] cond
+    (\\u : U8 => false)
+    (\\u : U8 => true)
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.deepEqual(
+      result.diagnostics.filter((diag) => diag.code === "trip-bool-if-simplify")
+        .length,
+      3,
+    );
+    assert.match(result.fixed, /poly main =\s+and\s+cond\s+thenExpr/);
+    assert.match(result.fixed, /poly main2 =\s+or\s+cond\s+elseExpr/);
+    assert.match(result.fixed, /poly main3 =\s+not\s+cond/);
+  });
 });
 
 describe("improvize file discovery", () => {

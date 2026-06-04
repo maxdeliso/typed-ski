@@ -963,13 +963,7 @@ poly rec hasDot =
       [Bool]
       name
       false
-      (
-        \h : U8 =>
-          \t : List U8 =>
-            if [Bool] (eqU8 h #u8(46))
-              (\u : U8 => true)
-              (\u : U8 => hasDot t)
-      )
+      (\h : U8 => \t : List U8 => or (eqU8 h #u8(46)) (hasDot t))
 
 poly rec replaceDot =
   \name : List U8 =>
@@ -1639,9 +1633,17 @@ poly rec exprUsesReadWrite =
       | AE_Native t => false
       | AE_Lam n b => exprUsesReadWrite b
       | AE_Call f args =>
-        if [Bool] (or (eqListU8 f "writeOne") (or (eqListU8 f "Prelude.writeOne") (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))))
-          (\u : U8 => true)
-          (\u : U8 => listAnyUsesReadWrite args)
+        or
+          (
+            or
+              (eqListU8 f "writeOne")
+              (
+                or
+                  (eqListU8 f "Prelude.writeOne")
+                  (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))
+              )
+          )
+          (listAnyUsesReadWrite args)
       | AE_Con tag total arity args => listAnyUsesReadWrite args
       | AE_Case scrut arms =>
         or (exprUsesReadWrite scrut) (listAnyUsesReadWrite arms)

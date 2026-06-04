@@ -2877,6 +2877,70 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       continue;
     }
 
+    // 6b. Simplify boolean if expressions
+    const ifSimplifyMatch = matchIfExpression(tokens, i);
+    if (
+      ifSimplifyMatch &&
+      ifSimplifyMatch.typeText === "Bool"
+    ) {
+      const thenText = formatInline(ifSimplifyMatch.thenBody).trim();
+      const elseText = formatInline(ifSimplifyMatch.elseBody).trim();
+
+      if (elseText === "false" && canUsePrelude(topLevel, "and")) {
+        const replacement = `and (${ifSimplifyMatch.condText}) (${thenText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to and`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (thenText === "true" && canUsePrelude(topLevel, "or")) {
+        const replacement = `or (${ifSimplifyMatch.condText}) (${elseText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to or`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (thenText === "false" && elseText === "true" && canUsePrelude(topLevel, "not")) {
+        const replacement = `not (${ifSimplifyMatch.condText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to not`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+    }
+
     if (token.kind === "number") {
       const value = Number(token.text);
       if (

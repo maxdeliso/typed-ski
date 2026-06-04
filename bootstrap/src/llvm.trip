@@ -399,9 +399,9 @@ poly rec hasEmitted =
           (
             \h : QualifiedName =>
               \t : List QualifiedName =>
-                if [Bool] (sameQualified moduleName name h)
-                  (\u : U8 => true)
-                  (\u : U8 => hasEmitted moduleName name t)
+                or
+                  (sameQualified moduleName name h)
+                  (hasEmitted moduleName name t)
           )
 
 poly markEmitted =

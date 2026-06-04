@@ -420,6 +420,36 @@ poly main =
     assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
   });
 
+  it("introduces do for chains whose let values or scrutinees contain nested lets (bare = in subexprs)", () => {
+    const source = `module M
+poly main =
+  match (readLine input) [Result (List U8) BundleSummary] {
+    | Err e => Err [List U8] [BundleSummary] e
+    | Ok magicRes =>
+      let temp = let inner = magicRes in inner in
+      match temp [Result (List U8) BundleSummary] {
+        | MkLine magic afterMagic =>
+          Ok [List U8] [BundleSummary] val
+      }
+  }
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+    assert.match(result.fixed, /do \[Result \(List U8\) BundleSummary\]/);
+    assert.match(result.fixed, /magicRes <- \(readLine input\)/);
+    // The rhs of the do-let step is itself a let-expr (bare = inside subexpr); must still parse/format correctly.
+    assert.match(result.fixed, /temp = let inner = magicRes in inner/);
+    assert.match(result.fixed, /MkLine magic afterMagic = temp/);
+    assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
+    // Re-lint should not re-introduce or complain.
+    const result2 = lintTripSource(result.fixed, { fix: true });
+    assert.ok(
+      !result2.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+  });
+
   it("reports and fixes redundant parentheses around atomic, parenthesized, bracketed, or braced expressions", () => {
     const source = `module M
 poly main = (A)

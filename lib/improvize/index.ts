@@ -479,6 +479,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         while (i < tokens.length) {
           const t = tokens[i]!;
           if (!isComment(t)) {
+            if (errDepth === 0 && t.text === "let") {
+              i = advancePastLet(tokens, i);
+              continue;
+            }
             if (errDepth === 0 && isStartOfDoStep(tokens, i)) {
               break;
             }
@@ -493,6 +497,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
       while (i < tokens.length) {
         const t = tokens[i]!;
         if (!isComment(t)) {
+          if (depth === 0 && t.text === "let") {
+            i = advancePastLet(tokens, i);
+            continue;
+          }
           if (depth === 0 && isStartOfDoStep(tokens, i)) {
             break;
           }
@@ -517,6 +525,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         while (i < tokens.length) {
           const t = tokens[i]!;
           if (!isComment(t)) {
+            if (depth === 0 && t.text === "let") {
+              i = advancePastLet(tokens, i);
+              continue;
+            }
             if (depth === 0 && isStartOfDoStep(tokens, i)) {
               break;
             }
@@ -535,6 +547,11 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         for (let j = i; j < tokens.length; j++) {
           const t = tokens[j]!;
           if (!isComment(t)) {
+            if (depth === 0 && t.text === "let") {
+              const after = advancePastLet(tokens, j);
+              j = after - 1;
+              continue;
+            }
             if (depth === 0 && t.text === "=") {
               eqIdx = j;
               break;
@@ -556,6 +573,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
           while (i < tokens.length) {
             const t = tokens[i]!;
             if (!isComment(t)) {
+              if (exprDepth === 0 && t.text === "let") {
+                i = advancePastLet(tokens, i);
+                continue;
+              }
               if (exprDepth === 0 && isStartOfDoStep(tokens, i)) {
                 break;
               }
@@ -568,6 +589,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
           while (i < tokens.length) {
             const t = tokens[i]!;
             if (!isComment(t)) {
+              if (exprDepth === 0 && t.text === "let") {
+                i = advancePastLet(tokens, i);
+                continue;
+              }
               if (
                 i > startIdx &&
                 exprDepth === 0 &&
@@ -586,6 +611,66 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
     steps.push([...tokens.slice(startIdx, i)]);
   }
   return steps;
+}
+
+/**
+ * Advance past a full "let ... = ... in <body-expr>" subexpression (and any
+ * nested lets inside its value), returning the index at which the let (and its
+ * body) ends. Used by do-step splitter so that bare "let" sub-expressions
+ * inside rhs of do steps (which contain "=") do not cause premature step
+ * termination.
+ */
+function advancePastLet(tokens: readonly Token[], start: number): number {
+  let i = start;
+  if (i >= tokens.length || tokens[i]!.text !== "let") return i;
+  let pending = 1;
+  let dP = 0,
+    dB = 0,
+    dBr = 0;
+  i++; // past "let"
+  while (i < tokens.length) {
+    const t = tokens[i]!;
+    if (isComment(t)) {
+      i++;
+      continue;
+    }
+    if (t.text === "(") dP++;
+    else if (t.text === ")") dP--;
+    else if (t.text === "[") dB++;
+    else if (t.text === "]") dB--;
+    else if (t.text === "{") dBr++;
+    else if (t.text === "}") dBr--;
+    const bd0 = dP === 0 && dB === 0 && dBr === 0;
+    if (bd0) {
+      if (t.text === "let") {
+        pending++;
+      } else if (t.text === "in") {
+        pending--;
+        if (pending === 0) {
+          i++; // consume this "in"
+          // now skip the body expr of this let; stop if we hit a do-step start
+          // (which would also terminate any outer expr containing this let)
+          let bD = 0;
+          while (i < tokens.length) {
+            const tt = tokens[i]!;
+            if (isComment(tt)) {
+              i++;
+              continue;
+            }
+            if (bD === 0 && isStartOfDoStep(tokens, i)) {
+              return i;
+            }
+            bD += bracketDepthDelta(tt);
+            i++;
+            if (bD < 0) break;
+          }
+          return i;
+        }
+      }
+    }
+    i++;
+  }
+  return i;
 }
 
 function formatExpressionRecursiveRaw(
@@ -620,23 +705,29 @@ function formatExpressionRecursiveRaw(
   const letIdx = findTopLevel(tokens, (t) => t.text === "let");
 
   if (letIdx !== -1) {
-    const inIdx = findTopLevel(tokens, (t) => t.text === "in", letIdx + 1);
+    // Only special-format lets when the let is at the root of these tokens
+    // (i.e. this expr *is* a let). If "foo = let ..." or "f (let..)", just inline
+    // so we do not split do-step groups or misindent prefixes.
+    const nonCommentBefore = tokens.slice(0, letIdx).some((t) => !isComment(t));
+    if (!nonCommentBefore) {
+      const inIdx = findTopLevel(tokens, (t) => t.text === "in", letIdx + 1);
 
-    if (inIdx !== -1) {
-      const beforeLet = tokens.slice(0, letIdx);
-      const letBinding = tokens.slice(letIdx, inIdx + 1);
-      const letBody = tokens.slice(inIdx + 1);
+      if (inIdx !== -1) {
+        const beforeLet = tokens.slice(0, letIdx);
+        const letBinding = tokens.slice(letIdx, inIdx + 1);
+        const letBody = tokens.slice(inIdx + 1);
 
-      const letBindingStr = formatInline(letBinding);
-      const bodyLines = formatExpressionRecursive(letBody, indent);
+        const letBindingStr = formatInline(letBinding);
+        const bodyLines = formatExpressionRecursive(letBody, indent);
 
-      const lines: string[] = [];
-      if (beforeLet.length > 0) {
-        lines.push(`${" ".repeat(indent)}${formatInline(beforeLet)}`);
+        const lines: string[] = [];
+        if (beforeLet.length > 0) {
+          lines.push(`${" ".repeat(indent)}${formatInline(beforeLet)}`);
+        }
+        lines.push(`${" ".repeat(indent)}${letBindingStr}`);
+        lines.push(...bodyLines);
+        return lines;
       }
-      lines.push(`${" ".repeat(indent)}${letBindingStr}`);
-      lines.push(...bodyLines);
-      return lines;
     }
   }
 
@@ -1976,10 +2067,34 @@ function parseMatchHeader(
 
   let cursor = index + 1;
   let lbracketIdx = -1;
+  let scrutDepth = 0;
   while (cursor < tokens.length) {
-    if (tokens[cursor]!.text === "[") {
-      lbracketIdx = cursor;
-      break;
+    const t = tokens[cursor]!;
+    if (!isComment(t)) {
+      if (scrutDepth === 0 && t.text === "[") {
+        // Check if this [ is the match result type: its ] must be followed by {
+        let d = 1;
+        let c2 = cursor + 1;
+        while (c2 < tokens.length) {
+          const tt = tokens[c2]!;
+          if (!isComment(tt)) {
+            if (tt.text === "[") d++;
+            else if (tt.text === "]") {
+              d--;
+              if (d === 0) break;
+            }
+          }
+          c2++;
+        }
+        if (d === 0) {
+          const after = nextSyntaxWithIndex(tokens, c2);
+          if (after?.token.text === "{") {
+            lbracketIdx = cursor;
+            break;
+          }
+        }
+      }
+      scrutDepth += bracketDepthDelta(t);
     }
     cursor++;
   }
@@ -2175,6 +2290,7 @@ function matchLetExpression(
   let depthP = 0,
     depthB = 0,
     depthBr = 0;
+  let pending = 1;
   while (cursor < tokens.length) {
     const t = tokens[cursor]!;
     if (t.text === "(") depthP++;
@@ -2184,8 +2300,16 @@ function matchLetExpression(
     else if (t.text === "{") depthBr++;
     else if (t.text === "}") depthBr--;
 
-    if (depthP === 0 && depthB === 0 && depthBr === 0 && t.text === "in") {
-      break;
+    const bd0 = depthP === 0 && depthB === 0 && depthBr === 0;
+    if (bd0) {
+      if (t.text === "let") {
+        pending++;
+      } else if (t.text === "in") {
+        pending--;
+        if (pending === 0) {
+          break;
+        }
+      }
     }
     valueTokens.push(t);
     cursor++;

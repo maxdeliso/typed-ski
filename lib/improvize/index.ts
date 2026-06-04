@@ -3146,6 +3146,7 @@ const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
 function applyVerifiedFixes(
   source: string,
   diagnostics: readonly TripLintDiagnostic[],
+  options: { force?: boolean } = {},
 ): string {
   const selected: TripLintDiagnostic[] = [];
   for (const diag of diagnostics) {
@@ -3170,8 +3171,10 @@ function applyVerifiedFixes(
     if (currentAst !== undefined && candidateAst === undefined) {
       continue;
     }
-    // Sugar / canonical-spelling rewrites must be exact AST round-trips.
+    // Sugar / canonical-spelling rewrites must be exact AST round-trips,
+    // unless --force is used (for testing / aggressive application).
     if (
+      !options.force &&
       AST_PRESERVING_FIX_CODES.has(diag.code) &&
       currentAst !== undefined &&
       candidateAst !== currentAst
@@ -3188,7 +3191,7 @@ function applyVerifiedFixes(
 
 export function lintTripSource(
   sourceText: string,
-  options: { fix?: boolean; verbose?: boolean } = {},
+  options: { fix?: boolean; verbose?: boolean; force?: boolean } = {},
 ): TripLintResult {
   const source = normalizeSource(sourceText);
 
@@ -3212,10 +3215,11 @@ export function lintTripSource(
     return { diagnostics, fixed: source, changed: false };
   }
 
-  // Apply only the fixes that pass per-fix verification, then format. The
-  // formatter is itself AST-preserving (see formatTripSource), so the final
-  // output differs from `source` only by verified, meaning-preserving edits.
-  const fixed = applyVerifiedFixes(source, diagnostics);
+  // Apply only the fixes that pass per-fix verification (unless --force),
+  // then format. The formatter is itself AST-preserving (see formatTripSource),
+  // so the final output differs from `source` only by verified (or forced)
+  // edits.
+  const fixed = applyVerifiedFixes(source, diagnostics, { force: options.force });
   const { formatted } = formatTripSource(fixed);
   return {
     diagnostics,

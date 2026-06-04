@@ -26,6 +26,7 @@ interface ParsedArgs {
   check: boolean;
   write: boolean;
   fix: boolean;
+  force: boolean;
   verbose: boolean;
   paths: string[];
 }
@@ -37,6 +38,7 @@ function parseArgs(args: string[]): ParsedArgs {
     check: false,
     write: false,
     fix: false,
+    force: false,
     verbose: false,
     paths: [],
   };
@@ -66,6 +68,10 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.fix = true;
       continue;
     }
+    if (arg === "--force") {
+      parsed.force = true;
+      continue;
+    }
     if (arg === "format" || arg === "lint" || arg === "prune") {
       if (parsed.command !== undefined) {
         throw new Error(`unexpected extra command: ${arg}`);
@@ -88,11 +94,18 @@ function parseArgs(args: string[]): ParsedArgs {
   if (parsed.command === "lint" && (parsed.check || parsed.write)) {
     throw new Error("--check and --write are only valid with format");
   }
+  if (parsed.force && parsed.command !== "lint") {
+    throw new Error("--force is only valid with lint");
+  }
   if (
     parsed.command === "prune" &&
-    (parsed.fix || parsed.check || parsed.write)
+    (parsed.fix || parsed.check || parsed.write || parsed.force)
   ) {
-    throw new Error("prune does not accept --fix, --check, or --write");
+    throw new Error("prune does not accept --fix, --check, --write, or --force");
+  }
+
+  if (parsed.force) {
+    parsed.fix = true;
   }
 
   return parsed;
@@ -104,7 +117,7 @@ TripLang formatter and linter (improvize) v${VERSION}
 
 USAGE:
     improvize format [--check|--write] <files-or-dirs...>
-    improvize lint [--fix] <files-or-dirs...>
+    improvize lint [--fix] [--force] <files-or-dirs...>
     improvize prune <path> <entry-points>
 
 OPTIONS:
@@ -114,6 +127,8 @@ OPTIONS:
     --check          Check formatting without writing files
     --write          Rewrite files with formatted output
     --fix            Apply safe lint rewrites, then format
+    --force          With --fix: apply fixes even if they would not round-trip
+                     the AST exactly (for aggressive application / testing)
 
     <entry-points>   A comma-separated list of entry points (e.g. Compiler.main,MiniVerify.verifyToAnfText)
 
@@ -213,10 +228,10 @@ function formatDiagnostic(file: string, diag: TripLintDiagnostic): string {
   return `${file}:${diag.line}:${diag.column}: ${diag.code}: ${diag.message}`;
 }
 
-async function runLint(paths: string[], fix: boolean, verbose: boolean) {
+async function runLint(paths: string[], fix: boolean, verbose: boolean, force: boolean = false) {
   if (paths.length === 0) {
     const input = await readStdin();
-    const result = lintTripSource(input, { fix, verbose });
+    const result = lintTripSource(input, { fix, verbose, force });
     for (const diag of result.diagnostics) {
       console.log(formatDiagnostic("<stdin>", diag));
     }
@@ -225,6 +240,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
       const afterFix = lintTripSource(result.fixed, {
         fix: false,
         verbose,
+        force,
       });
       return afterFix.diagnostics.length > 0 ? 1 : 0;
     }
@@ -242,7 +258,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
       const timeRead = Date.now() - startFile;
 
       const startLint = Date.now();
-      const result = lintTripSource(input, { fix, verbose });
+      const result = lintTripSource(input, { fix, verbose, force });
       const timeLint = Date.now() - startLint;
 
       if (verbose) {
@@ -258,6 +274,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
         afterFixResult = lintTripSource(result.changed ? result.fixed : input, {
           fix: false,
           verbose,
+          force,
         });
         timeVerify = Date.now() - startSecond;
       }
@@ -332,7 +349,7 @@ async function main(): Promise<void> {
         parsed.verbose,
       );
     } else if (parsed.command === "lint") {
-      status = await runLint(parsed.paths, parsed.fix, parsed.verbose);
+      status = await runLint(parsed.paths, parsed.fix, parsed.verbose, parsed.force);
     } else if (parsed.command === "prune") {
       status = await runPrune(parsed.paths, parsed.verbose);
     }

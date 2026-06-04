@@ -128,7 +128,7 @@ function main(): void {
   );
 
   runImprovize(["prune", BOOTSTRAP_SRC, PRUNE_ENTRY_POINTS]);
-  runImprovize(["lint", "--fix", BOOTSTRAP_SRC]);
+  runImprovize(["lint", "--fix", "--force", BOOTSTRAP_SRC]);  // --force to apply even non-AST-roundtripping suggestions
   runImprovize(["format", "--write", BOOTSTRAP_SRC]);
 
   verifyClean();

@@ -2439,10 +2439,13 @@ poly parseSingleStep =
                       }
                   }
                 | (and (eqU8 tag identTag) (eqListU8 (tokenText h) "return")) =>
-                  match (recurse t) [Result ParseError (Pair Expr (List Token))] {
-                    | Err e => Err [ParseError] [DoStep] e
-                    | Ok res =>
-                      Ok [ParseError] [DoStep] (S_Return (fstExprToken res))
+                  do [Result ParseError (Expr, (List Token))] {
+                    res <- (recurse t)
+                    return
+                      Ok
+                      [ParseError]
+                      [DoStep]
+                      (S_Return (fstExprToken res))
                   }
                 | otherwise =>
                   matchList
@@ -2458,13 +2461,13 @@ poly parseSingleStep =
                         [Result ParseError DoStep]
                         exprToks
                         (
-                          match (recurse toks) [Result ParseError (Pair Expr (List Token))] {
-                            | Err e => Err [ParseError] [DoStep] e
-                            | Ok res =>
+                          do [Result ParseError (Expr, (List Token))] {
+                            res <- (recurse toks)
+                            return
                               Ok
-                                [ParseError]
-                                [DoStep]
-                                (S_Expr (fstExprToken res))
+                              [ParseError]
+                              [DoStep]
+                              (S_Expr (fstExprToken res))
                           }
                         )
                         (
@@ -2528,13 +2531,13 @@ poly parseSingleStep =
                           if [Result ParseError DoStep] (and (eqU8 tag identTag) (eqU8 (tokenTag h2) lArrowTag))
                             (
                               \u : U8 =>
-                                match (recurse t2) [Result ParseError (Pair Expr (List Token))] {
-                                  | Err e => Err [ParseError] [DoStep] e
-                                  | Ok res =>
+                                do [Result ParseError (Expr, (List Token))] {
+                                  res <- (recurse t2)
+                                  return
                                     Ok
-                                      [ParseError]
-                                      [DoStep]
-                                      (S_Bind (tokenText h) (fstExprToken res))
+                                    [ParseError]
+                                    [DoStep]
+                                    (S_Bind (tokenText h) (fstExprToken res))
                                 }
                             )
                             (
@@ -2547,13 +2550,13 @@ poly parseSingleStep =
                                   [Result ParseError DoStep]
                                   exprToks
                                   (
-                                    match (recurse toks) [Result ParseError (Pair Expr (List Token))] {
-                                      | Err e => Err [ParseError] [DoStep] e
-                                      | Ok res =>
+                                    do [Result ParseError (Expr, (List Token))] {
+                                      res <- (recurse toks)
+                                      return
                                         Ok
-                                          [ParseError]
-                                          [DoStep]
-                                          (S_Expr (fstExprToken res))
+                                        [ParseError]
+                                        [DoStep]
+                                        (S_Expr (fstExprToken res))
                                     }
                                   )
                                   (

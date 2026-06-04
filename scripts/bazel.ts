@@ -7,6 +7,7 @@ import * as fsp from "node:fs/promises";
 
 import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
+import { availableParallelism } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // JS_ROOT: directory containing compiled .js outputs (one level up from scripts/)
@@ -79,12 +80,13 @@ const LOCAL_PNPM_ENTRY = join(
   "bin",
   "pnpm.cjs",
 );
-const LOCAL_TSC_ENTRY = join(
+const LOCAL_TSGO_ENTRY = join(
   PROJECT_ROOT,
   "node_modules",
-  "typescript",
-  "lib",
-  "tsc.js",
+  "@typescript",
+  "native-preview",
+  "bin",
+  "tsgo.js",
 );
 const NODE_TEST_GLOBAL_SETUP_PATH = join(JS_ROOT, "test", "globalSetup.js");
 const TEMP_ROOT =
@@ -501,12 +503,21 @@ function parseTestArgs(args: string[]): {
 
 async function typecheckTests(files: string[]): Promise<void> {
   console.log(`Type checking project...`);
-  if (!fs.existsSync(LOCAL_TSC_ENTRY)) {
+  if (!fs.existsSync(LOCAL_TSGO_ENTRY)) {
     throw new Error(
-      `Local TypeScript compiler not found at ${LOCAL_TSC_ENTRY}. Run pnpm install first.`,
+      `Local TypeScript compiler (tsgo) not found at ${LOCAL_TSGO_ENTRY}. Run pnpm install first.`,
     );
   }
-  await run([NODE, LOCAL_TSC_ENTRY, "--noEmit"]);
+  // tsgo caps type-checking workers at 4 by default with no auto/all value, so
+  // pass full parallelism explicitly (clamped to tsgo's >1 minimum).
+  const checkers = Math.max(2, availableParallelism());
+  await run([
+    NODE,
+    LOCAL_TSGO_ENTRY,
+    "--noEmit",
+    "--checkers",
+    String(checkers),
+  ]);
 }
 
 function readShardConfig(): ShardConfig {

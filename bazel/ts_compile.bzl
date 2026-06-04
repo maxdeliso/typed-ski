@@ -63,9 +63,9 @@ import process from 'node:process';
 const [node, tsgo, ...args] = process.argv.slice(2);
 
 // tsgo caps type-checking workers at 4 by default and has no auto/all value,
-// so pass the sandbox's full parallelism explicitly (clamped to tsgo's >1
-// minimum) to use every available core.
-const checkers = Math.max(2, os.availableParallelism());
+// so pass the sandbox's full core count to use every core.
+// os.availableParallelism() is always >= 1, the minimum --checkers takes.
+const checkers = os.availableParallelism();
 console.log(`Running tsgo with ${checkers} checkers...`);
 const tsgoResult = spawnSync(node, [tsgo, '--checkers', String(checkers), ...args], { stdio: 'inherit' });
 if (tsgoResult.status !== 0) {

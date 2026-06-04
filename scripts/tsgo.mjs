@@ -7,8 +7,8 @@ import process from "node:process";
 // Thin launcher for the native TypeScript 7 compiler (tsgo, shipped as
 // @typescript/native-preview). Its `--checkers` flag caps type-checking
 // workers at 4 by default and has no "auto"/"all" value, so we pass the
-// machine's full parallelism explicitly (clamped to the >1 minimum tsgo
-// requires) to use every available core. All other args pass through.
+// machine's full core count explicitly to use every core. All other args pass
+// through. availableParallelism() is always >= 1, the minimum --checkers takes.
 //
 // The package's `exports` map only exposes ./package.json, so we resolve that
 // (which is permitted) and derive the bin entry from its directory rather than
@@ -20,7 +20,7 @@ const packageRoot = dirname(
 );
 const launcher = join(packageRoot, "bin", "tsgo.js");
 
-const checkers = Math.max(2, availableParallelism());
+const checkers = availableParallelism();
 const args = ["--checkers", String(checkers), ...process.argv.slice(2)];
 
 const result = spawnSync(process.execPath, [launcher, ...args], {

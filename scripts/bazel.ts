@@ -509,8 +509,8 @@ async function typecheckTests(files: string[]): Promise<void> {
     );
   }
   // tsgo caps type-checking workers at 4 by default with no auto/all value, so
-  // pass full parallelism explicitly (clamped to tsgo's >1 minimum).
-  const checkers = Math.max(2, availableParallelism());
+  // pass the full core count to uncap it. availableParallelism() is always >= 1.
+  const checkers = availableParallelism();
   await run([
     NODE,
     LOCAL_TSGO_ENTRY,

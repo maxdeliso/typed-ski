@@ -706,8 +706,9 @@ poly parseModuleSource =
         | Ok toks =>
           match (parseProgram toks) [Result (List U8) (List Decl)] {
             | Err e =>
-              match e [Result (List U8) (List Decl)] {
-                | MkParseError msg => Err [List U8] [List Decl] msg
+              do [Result (List U8) (List Decl)] {
+                MkParseError msg = e
+                return Err [List U8] [List Decl] msg
               }
             | Ok decls =>
               do [Result (List U8) (List Decl)] {

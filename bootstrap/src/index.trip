@@ -188,18 +188,18 @@ poly rec collectImports =
   \decls : List Decl =>
     matchList
       [Decl]
-      [List (((List U8), (List U8)))]
+      [List ((List U8), (List U8))]
       decls
       {(Pair (List U8) (List U8)) |}
       (
         \h : Decl =>
           \t : List Decl =>
-            match h [List (((List U8), (List U8)))] {
+            match h [List ((List U8), (List U8))] {
               | D_Import fromName symbolName =>
                 let qName = append [U8] fromName (append [U8] "." symbolName) in
                 cons
-                  [(((List U8), (List U8)))]
-                  ({List U8, List U8 | symbolName, qName})
+                  [((List U8), (List U8))]
+                  {List U8, List U8 | symbolName, qName}
                   (collectImports t)
               | D_Def kind isRec name body => collectImports t
               | D_Data name ctors => collectImports t
@@ -229,15 +229,15 @@ poly rec memberOfList =
 
 poly rec lookupImportList =
   \name : List U8 =>
-    \list : List (((List U8), (List U8))) =>
+    \list : List ((List U8), (List U8)) =>
       matchList
-        [(((List U8), (List U8)))]
+        [((List U8), (List U8))]
         [Maybe (List U8)]
         list
         (None [List U8])
         (
           \h : ((List U8), (List U8)) =>
-            \t : List (((List U8), (List U8))) =>
+            \t : List ((List U8), (List U8)) =>
               if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
                 (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
                 (\u : U8 => lookupImportList name t)
@@ -245,7 +245,7 @@ poly rec lookupImportList =
 
 poly rec qualifyExpr =
   \bound : List (List U8) =>
-    \imports : List (((List U8), (List U8))) =>
+    \imports : List ((List U8), (List U8)) =>
       \localDefs : List (List U8) =>
         \moduleName : List U8 =>
           \expr : Expr =>
@@ -301,7 +301,7 @@ poly rec qualifyExpr =
 
 poly rec qualifyArms =
   \bound : List (List U8) =>
-    \imports : List (((List U8), (List U8))) =>
+    \imports : List ((List U8), (List U8)) =>
       \localDefs : List (List U8) =>
         \moduleName : List U8 =>
           \arms : List (Pattern, Expr) =>
@@ -315,14 +315,15 @@ poly rec qualifyArms =
                   \t : List (Pattern, Expr) =>
                     let pat = fst [Pattern] [Expr] h in
                     let body = snd [Pattern] [Expr] h in
-                    match pat [List (Pattern, Expr)] {
-                      | P_Ctor ctorName args =>
-                        let nextBound = append [List U8] args bound in
-                        let qualifiedBody = qualifyExpr nextBound imports localDefs moduleName body in
+                    do [List (Pattern, Expr)] {
+                      P_Ctor ctorName args = pat
+                      nextBound = append [List U8] args bound
+                      qualifiedBody = qualifyExpr nextBound imports localDefs moduleName body
+                      return
                         cons
-                          [(Pattern, Expr)]
-                          (MkPair [Pattern] [Expr] pat qualifiedBody)
-                          (qualifyArms bound imports localDefs moduleName t)
+                        [(Pattern, Expr)]
+                        {Pattern, Expr | pat, qualifiedBody}
+                        (qualifyArms bound imports localDefs moduleName t)
                     }
               )
 
@@ -342,12 +343,12 @@ poly rec qualifyDataCtors =
               let qName = append [U8] moduleName (append [U8] "." ctorName) in
               cons
                 [((List U8), U8)]
-                ({List U8, U8 | qName, arity})
+                {List U8, U8 | qName, arity}
                 (qualifyDataCtors moduleName t)
         )
 
 poly rec qualifyDeclsRec =
-  \imports : List (((List U8), (List U8))) =>
+  \imports : List ((List U8), (List U8)) =>
     \localDefs : List (List U8) =>
       \moduleName : List U8 =>
         \decls : List Decl =>
@@ -424,24 +425,25 @@ poly rec collectAllDecls =
       (
         \h : ModuleRecord =>
           \t : List ModuleRecord =>
-            match h [Result (List U8) (List Decl)] {
-              | MkModuleRecord name lengthDigits source =>
-                match (tokenize source) [Result (List U8) (List Decl)] {
-                  | Err e => Err [List U8] [List Decl] "Lex error"
-                  | Ok toks =>
-                    match (parseProgram toks) [Result (List U8) (List Decl)] {
-                      | Err e => Err [List U8] [List Decl] "Parse error"
-                      | Ok decls =>
-                        match (collectAllDecls t) [Result (List U8) (List Decl)] {
-                          | Err e2 => Err [List U8] [List Decl] e2
-                          | Ok rest =>
-                            Ok
-                              [List U8]
-                              [List Decl]
-                              (append [Decl] (qualifyDecls name decls) rest)
-                        }
-                    }
-                }
+            do [Result (List U8) (List Decl)] {
+              MkModuleRecord name lengthDigits source = h
+              return
+              match (tokenize source) [Result (List U8) (List Decl)] {
+                | Err e => Err [List U8] [List Decl] "Lex error"
+                | Ok toks =>
+                  match (parseProgram toks) [Result (List U8) (List Decl)] {
+                    | Err e => Err [List U8] [List Decl] "Parse error"
+                    | Ok decls =>
+                      do [Result (List U8) (List Decl)] {
+                        rest <- (collectAllDecls t)
+                        return
+                          Ok
+                          [List U8]
+                          [List Decl]
+                          (append [Decl] (qualifyDecls name decls) rest)
+                      }
+                  }
+              }
             }
       )
 
@@ -456,19 +458,20 @@ poly rec entryHasParam =
         (
           \h : AnfFunc =>
             \t : List AnfFunc =>
-              match h [Bool] {
-                | MkAnfFunc fnName params body =>
-                  if [Bool] (eqListU8 fnName name)
-                    (
-                      \u : U8 =>
-                        matchList
-                          [List U8]
-                          [Bool]
-                          params
-                          false
-                          (\p : List U8 => \pt : List (List U8) => true)
-                    )
-                    (\u : U8 => entryHasParam t name)
+              do [Bool] {
+                MkAnfFunc fnName params body = h
+                return
+                if [Bool] (eqListU8 fnName name)
+                  (
+                    \u : U8 =>
+                      matchList
+                        [List U8]
+                        [Bool]
+                        params
+                        false
+                        (\p : List U8 => \pt : List (List U8) => true)
+                  )
+                  (\u : U8 => entryHasParam t name)
               }
         )
 
@@ -534,12 +537,19 @@ poly rec collectRefsArms =
             \t : List (Pattern, Expr) =>
               let pat = fst [Pattern] [Expr] h in
               let body = snd [Pattern] [Expr] h in
-              match pat [List (List U8)] {
-                | P_Ctor ctorName args =>
-                  let bodyRefs = collectRefsExpr defNames body in
-                  let restRefs = collectRefsArms defNames t in
-                  let ctorRefs = if [List (List U8)] (memberOfList ctorName defNames) (\u : U8 => cons [List U8] ctorName ({List U8 |})) (\u : U8 => ({List U8 |})) in
-                  append [List U8] ctorRefs (append [List U8] bodyRefs restRefs)
+              do [List (List U8)] {
+                P_Ctor ctorName args = pat
+                bodyRefs = collectRefsExpr defNames body
+                restRefs = collectRefsArms defNames t
+                ctorRefs =
+                if [List (List U8)] (memberOfList ctorName defNames)
+                  (\u : U8 => cons [List U8] ctorName {List U8 |})
+                  (\u : U8 => {List U8 |})
+                return
+                  append
+                  [List U8]
+                  ctorRefs
+                  (append [List U8] bodyRefs restRefs)
               }
         )
 
@@ -548,18 +558,18 @@ poly rec buildDepMap =
     \decls : List Decl =>
       matchList
         [Decl]
-        [List (((List U8), (List (List U8))))]
+        [List ((List U8), (List (List U8)))]
         decls
         {(Pair (List U8) (List (List U8))) |}
         (
           \h : Decl =>
             \t : List Decl =>
-              match h [List (((List U8), (List (List U8))))] {
+              match h [List ((List U8), (List (List U8)))] {
                 | D_Def kind isRec name body =>
                   let deps = collectRefsExpr defNames body in
                   cons
-                    [(((List U8), (List (List U8))))]
-                    ({List U8, List (List U8) | name, deps})
+                    [((List U8), (List (List U8)))]
+                    {List U8, List (List U8) | name, deps}
                     (buildDepMap defNames t)
                 | D_Data name ctors => buildDepMap defNames t
                 | D_Module name => buildDepMap defNames t
@@ -573,15 +583,15 @@ poly rec buildDepMap =
 
 poly rec lookupDeps =
   \name : List U8 =>
-    \depMap : List (((List U8), (List (List U8)))) =>
+    \depMap : List ((List U8), (List (List U8))) =>
       matchList
-        [(((List U8), (List (List U8))))]
+        [((List U8), (List (List U8)))]
         [List (List U8)]
         depMap
         {List U8 |}
         (
           \h : ((List U8), (List (List U8))) =>
-            \t : List (((List U8), (List (List U8)))) =>
+            \t : List ((List U8), (List (List U8))) =>
               if [List (List U8)] (eqListU8 (fst [List U8] [List (List U8)] h) name)
                 (\u : U8 => snd [List U8] [List (List U8)] h)
                 (\u : U8 => lookupDeps name t)
@@ -590,7 +600,7 @@ poly rec lookupDeps =
 poly rec findReachableRec =
   \queue : List (List U8) =>
     \visited : List (List U8) =>
-      \depMap : List (((List U8), (List (List U8)))) =>
+      \depMap : List ((List U8), (List (List U8))) =>
         matchList
           [List U8]
           [List (List U8)]
@@ -649,64 +659,43 @@ poly pruneDecls =
 
 poly compileBundleToLlvm =
   \source : List U8 =>
-    match (parseBundleSummary source) [Result (List U8) (List U8)] {
-      | Err e => Err [List U8] [List U8] e
-      | Ok bundle =>
-        match bundle [Result (List U8) (List U8)] {
-          | MkBundleSummary entry target wrapper modsCountDigits mods =>
-            match (collectAllDecls mods) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] e
-              | Ok allDecls =>
-                let prunedDecls = pruneDecls entry allDecls in
-                let orderedDecls = append [Decl] (filterDataDecls prunedDecls) (filterDefDecls prunedDecls) in
-                match (elaborateProgramToCore orderedDecls) [Result (List U8) (List U8)] {
-                  | Err e => Err [List U8] [List U8] e
-                  | Ok coreDefs =>
-                    match (buildMiniProgram coreDefs entry) [Result (List U8) (List U8)] {
-                      | Err e => Err [List U8] [List U8] e
-                      | Ok prog =>
-                        let normalized = normalizeProgram prog in
-                        match normalized [Result (List U8) (List U8)] {
-                          | MkAnfProgram funcs entryName =>
-                            match (emitProgram normalized) [Result (List U8) (List U8)] {
-                              | Err e => Err [List U8] [List U8] e
-                              | Ok llvm =>
-                                let decls = "declare void @trip_write_one(i8)\ndeclare i8 @trip_read_one()\ndeclare ptr @trip_alloc_obj(i64, i64)\ndeclare void @trip_obj_set_field(ptr, i64, i64)\ndeclare i64 @trip_obj_tag(ptr)\ndeclare i64 @trip_obj_field(ptr, i64)\n\n" in
-                                let withDecls = append [U8] decls llvm in
-                                Ok
-                                  [List U8]
-                                  [List U8]
-                                  (
-                                    if [List U8] (eqListU8 wrapper "enabled")
-                                      (
-                                        \u : U8 =>
-                                          let fullName = append [U8] "trip_fn_" (append [U8] entryName "_main") in
-                                          if [List U8] (entryHasParam funcs fullName)
-                                            (
-                                              \u2 : U8 =>
-                                                let mainWrapper = append [U8] "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @" (append [U8] fullName "(i64 %trip_source_cast)\n  ret i32 0\n}\n") in
-                                                append
-                                                  [U8]
-                                                  withDecls
-                                                  mainWrapper
-                                            )
-                                            (
-                                              \u2 : U8 =>
-                                                let mainWrapper = append [U8] "define i32 @main() {\nentry:\n  %trip_result = call i64 @" (append [U8] fullName "()\n  ret i32 0\n}\n") in
-                                                append
-                                                  [U8]
-                                                  withDecls
-                                                  mainWrapper
-                                            )
-                                      )
-                                      (\u : U8 => withDecls)
-                                  )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    do [Result (List U8) (List U8)] {
+      bundle <- (parseBundleSummary source)
+      MkBundleSummary entry target wrapper modsCountDigits mods = bundle
+      allDecls <- (collectAllDecls mods)
+      prunedDecls = pruneDecls entry allDecls
+      orderedDecls = append [Decl] (filterDataDecls prunedDecls) (filterDefDecls prunedDecls)
+      coreDefs <- (elaborateProgramToCore orderedDecls)
+      prog <- (buildMiniProgram coreDefs entry)
+      normalized = normalizeProgram prog
+      MkAnfProgram funcs entryName = normalized
+      llvm <- (emitProgram normalized)
+      decls =
+      "declare void @trip_write_one(i8)\ndeclare i8 @trip_read_one()\ndeclare ptr @trip_alloc_obj(i64, i64)\ndeclare void @trip_obj_set_field(ptr, i64, i64)\ndeclare i64 @trip_obj_tag(ptr)\ndeclare i64 @trip_obj_field(ptr, i64)\n\n"
+      withDecls = append [U8] decls llvm
+      return
+        Ok
+        [List U8]
+        [List U8]
+        (
+          if [List U8] (eqListU8 wrapper "enabled")
+            (
+              \u : U8 =>
+                let fullName = append [U8] "trip_fn_" (append [U8] entryName "_main") in
+                if [List U8] (entryHasParam funcs fullName)
+                  (
+                    \u2 : U8 =>
+                      let mainWrapper = append [U8] "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @" (append [U8] fullName "(i64 %trip_source_cast)\n  ret i32 0\n}\n") in
+                      append [U8] withDecls mainWrapper
+                  )
+                  (
+                    \u2 : U8 =>
+                      let mainWrapper = append [U8] "define i32 @main() {\nentry:\n  %trip_result = call i64 @" (append [U8] fullName "()\n  ret i32 0\n}\n") in
+                      append [U8] withDecls mainWrapper
+                  )
+            )
+            (\u : U8 => withDecls)
+        )
     }
 
 poly rec writeAll =

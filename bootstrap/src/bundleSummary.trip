@@ -233,12 +233,12 @@ poly rec stripPrefix =
 poly requireDirective =
   \name : List U8 =>
     \line : List U8 =>
-      match (stripPrefix (append [U8] name " ") line) [Result (List U8) (List U8)] {
-        | Err e => Err [List U8] [List U8] e
-        | Ok value =>
-          if [Result (List U8) (List U8)] (listIsEmpty [U8] value)
-            (\u : U8 => Err [List U8] [List U8] "empty directive")
-            (\u : U8 => Ok [List U8] [List U8] value)
+      do [Result (List U8) (List U8)] {
+        value <- (stripPrefix (append [U8] name " ") line)
+        return
+        if [Result (List U8) (List U8)] (listIsEmpty [U8] value)
+          (\u : U8 => Err [List U8] [List U8] "empty directive")
+          (\u : U8 => Ok [List U8] [List U8] value)
       }
 
 poly requireEntry =
@@ -382,19 +382,17 @@ poly consumeSource =
 
 poly declaredModuleName =
   \source : List U8 =>
-    match (readLine source) [Result (List U8) (List U8)] {
-      | Err e => Err [List U8] [List U8] e
-      | Ok lineRes =>
-        match lineRes [Result (List U8) (List U8)] {
-          | MkLine line rest =>
-            match (stripPrefix "module " line) [Result (List U8) (List U8)] {
-              | Err e => Err [List U8] [List U8] "bad source module"
-              | Ok name =>
-                if [Result (List U8) (List U8)] (validateName name)
-                  (\u : U8 => Ok [List U8] [List U8] name)
-                  (\u : U8 => Err [List U8] [List U8] "bad source module")
-            }
-        }
+    do [Result (List U8) (List U8)] {
+      lineRes <- (readLine source)
+      MkLine line rest = lineRes
+      return
+      match (stripPrefix "module " line) [Result (List U8) (List U8)] {
+        | Err e => Err [List U8] [List U8] "bad source module"
+        | Ok name =>
+          if [Result (List U8) (List U8)] (validateName name)
+            (\u : U8 => Ok [List U8] [List U8] name)
+            (\u : U8 => Err [List U8] [List U8] "bad source module")
+      }
     }
 
 poly parseTarget =
@@ -451,109 +449,88 @@ poly rec parseModules =
                 )
                 (
                   \u : U8 =>
-                    match (readLine remaining) [Result (List U8) ParsedModules] {
-                      | Err e => Err [List U8] [ParsedModules] e
-                      | Ok lineRes =>
-                        match lineRes [Result (List U8) ParsedModules] {
-                          | MkLine line afterHeader =>
-                            match (parseModuleHeader line) [Result (List U8) ParsedModules] {
-                              | Err e => Err [List U8] [ParsedModules] e
-                              | Ok header =>
-                                match header [Result (List U8) ParsedModules] {
-                                  | MkModuleHeader name lengthDigits length =>
-                                    let orderOk = match previous [Bool] {| None => true | Some prev => ltListU8 prev name} in
-                                    if [Result (List U8) ParsedModules] orderOk
+                    do [Result (List U8) ParsedModules] {
+                      lineRes <- (readLine remaining)
+                      MkLine line afterHeader = lineRes
+                      header <- (parseModuleHeader line)
+                      MkModuleHeader name lengthDigits length = header
+                      orderOk =
+                      match previous [Bool] {
+                        | None => true
+                        | Some prev => ltListU8 prev name
+                      }
+                      return
+                      if [Result (List U8) ParsedModules] orderOk
+                        (
+                          \u : U8 =>
+                            do [Result (List U8) ParsedModules] {
+                              payload <- (consumeSource length afterHeader)
+                              MkSourcePayload source afterSource = payload
+                              declared <- (declaredModuleName source)
+                              assert (eqListU8 declared name) else
+                              "source module mismatch"
+                              nextCount = predBin count
+                              nextEntryFound = or entryFound (eqListU8 name entry)
+                              nextAcc = cons [ModuleRecord] (MkModuleRecord name lengthDigits source) accRev
+                              return
+                              if [Result (List U8) ParsedModules] (isZeroBin nextCount)
+                                (
+                                  \u : U8 =>
+                                    parseModules
+                                      afterSource
+                                      nextCount
+                                      entry
+                                      (Some [List U8] name)
+                                      nextEntryFound
+                                      nextAcc
+                                )
+                                (
+                                  \u : U8 =>
+                                    matchList
+                                      [U8]
+                                      [Result (List U8) ParsedModules]
+                                      afterSource
                                       (
-                                        \u : U8 =>
-                                          match (consumeSource length afterHeader) [Result (List U8) ParsedModules] {
-                                            | Err e => Err [List U8] [ParsedModules] e
-                                            | Ok payload =>
-                                              match payload [Result (List U8) ParsedModules] {
-                                                | MkSourcePayload source afterSource =>
-                                                  match (declaredModuleName source) [Result (List U8) ParsedModules] {
-                                                    | Err e => Err [List U8] [ParsedModules] e
-                                                    | Ok declared =>
-                                                      if [Result (List U8) ParsedModules] (eqListU8 declared name)
-                                                        (
-                                                          \u : U8 =>
-                                                            let nextCount = predBin count in
-                                                            let nextEntryFound = or entryFound (eqListU8 name entry) in
-                                                            let nextAcc = cons [ModuleRecord] (MkModuleRecord name lengthDigits source) accRev in
-                                                            if [Result (List U8) ParsedModules] (isZeroBin nextCount)
-                                                              (
-                                                                \u : U8 =>
-                                                                  parseModules
-                                                                    afterSource
-                                                                    nextCount
-                                                                    entry
-                                                                    (
-                                                                      Some
-                                                                        [List U8]
-                                                                        name
-                                                                    )
-                                                                    nextEntryFound
-                                                                    nextAcc
-                                                              )
-                                                              (
-                                                                \u : U8 =>
-                                                                  matchList
-                                                                    [U8]
-                                                                    [Result (List U8) ParsedModules]
-                                                                    afterSource
-                                                                    (
-                                                                      Err
-                                                                        [List U8]
-                                                                        [ParsedModules]
-                                                                        "missing module separator"
-                                                                    )
-                                                                    (
-                                                                      \sep : U8 =>
-                                                                        \afterSep : List U8 =>
-                                                                          if [Result (List U8) ParsedModules] (eqU8 sep '\n')
-                                                                            (
-                                                                              \u : U8 =>
-                                                                                parseModules
-                                                                                  afterSep
-                                                                                  nextCount
-                                                                                  entry
-                                                                                  (
-                                                                                    Some
-                                                                                      [List U8]
-                                                                                      name
-                                                                                  )
-                                                                                  nextEntryFound
-                                                                                  nextAcc
-                                                                            )
-                                                                            (
-                                                                              \u : U8 => Err [List U8] [ParsedModules] "missing module separator"
-                                                                            )
-                                                                    )
-                                                              )
-                                                        )
-                                                        (
-                                                          \u : U8 => Err [List U8] [ParsedModules] "source module mismatch"
-                                                        )
-                                                  }
-                                              }
-                                          }
+                                        Err
+                                          [List U8]
+                                          [ParsedModules]
+                                          "missing module separator"
                                       )
                                       (
-                                        \u : U8 =>
-                                          match previous [Result (List U8) ParsedModules] {
-                                            | None => Err [List U8] [ParsedModules] "module order"
-                                            | Some prev =>
-                                              if [Result (List U8) ParsedModules] (eqListU8 prev name)
-                                                (
-                                                  \u : U8 => Err [List U8] [ParsedModules] "duplicate module"
-                                                )
-                                                (
-                                                  \u : U8 => Err [List U8] [ParsedModules] "module order"
-                                                )
-                                          }
+                                        \sep : U8 =>
+                                          \afterSep : List U8 =>
+                                            if [Result (List U8) ParsedModules] (eqU8 sep '\n')
+                                              (
+                                                \u : U8 =>
+                                                  parseModules
+                                                    afterSep
+                                                    nextCount
+                                                    entry
+                                                    (Some [List U8] name)
+                                                    nextEntryFound
+                                                    nextAcc
+                                              )
+                                              (
+                                                \u : U8 => Err [List U8] [ParsedModules] "missing module separator"
+                                              )
                                       )
-                                }
+                                )
                             }
-                        }
+                        )
+                        (
+                          \u : U8 =>
+                            match previous [Result (List U8) ParsedModules] {
+                              | None => Err [List U8] [ParsedModules] "module order"
+                              | Some prev =>
+                                if [Result (List U8) ParsedModules] (eqListU8 prev name)
+                                  (
+                                    \u : U8 => Err [List U8] [ParsedModules] "duplicate module"
+                                  )
+                                  (
+                                    \u : U8 => Err [List U8] [ParsedModules] "module order"
+                                  )
+                            }
+                        )
                     }
                 )
 
@@ -591,12 +568,13 @@ poly parseBundleSummary =
 
 poly emitModuleSummary =
   \modRec : ModuleRecord =>
-    match modRec [List U8] {
-      | MkModuleRecord name lengthDigits source =>
+    do [List U8] {
+      MkModuleRecord name lengthDigits source = modRec
+      return
         append
-          [U8]
-          "module "
-          (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
+        [U8]
+        "module "
+        (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
     }
 
 poly rec emitModuleSummaries =
@@ -613,62 +591,63 @@ poly rec emitModuleSummaries =
 
 poly emitBundleSummary =
   \bundle : BundleSummary =>
-    match bundle [List U8] {
-      | MkBundleSummary entry target wrapper modsCountDigits mods =>
+    do [List U8] {
+      MkBundleSummary entry target wrapper modsCountDigits mods = bundle
+      return
         append
-          [U8]
-          "OK\n"
-          (
-            append
-              [U8]
-              "version bundle-v1\n"
-              (
-                append
-                  [U8]
-                  "entry "
-                  (
-                    append
-                      [U8]
-                      entry
-                      (
-                        append
-                          [U8]
-                          "\ntarget "
-                          (
-                            append
-                              [U8]
-                              target
-                              (
-                                append
-                                  [U8]
-                                  "\nwrapper "
-                                  (
-                                    append
-                                      [U8]
-                                      wrapper
-                                      (
-                                        append
-                                          [U8]
-                                          "\nmodules "
-                                          (
-                                            append
-                                              [U8]
-                                              modsCountDigits
-                                              (
-                                                append
-                                                  [U8]
-                                                  "\n"
-                                                  (emitModuleSummaries mods)
-                                              )
-                                          )
-                                      )
-                                  )
-                              )
-                          )
-                      )
-                  )
-              )
-          )
+        [U8]
+        "OK\n"
+        (
+          append
+            [U8]
+            "version bundle-v1\n"
+            (
+              append
+                [U8]
+                "entry "
+                (
+                  append
+                    [U8]
+                    entry
+                    (
+                      append
+                        [U8]
+                        "\ntarget "
+                        (
+                          append
+                            [U8]
+                            target
+                            (
+                              append
+                                [U8]
+                                "\nwrapper "
+                                (
+                                  append
+                                    [U8]
+                                    wrapper
+                                    (
+                                      append
+                                        [U8]
+                                        "\nmodules "
+                                        (
+                                          append
+                                            [U8]
+                                            modsCountDigits
+                                            (
+                                              append
+                                                [U8]
+                                                "\n"
+                                                (emitModuleSummaries mods)
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
     }
 
 poly rec writeAll =

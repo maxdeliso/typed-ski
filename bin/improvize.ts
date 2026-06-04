@@ -94,14 +94,20 @@ function parseArgs(args: string[]): ParsedArgs {
   if (parsed.command === "lint" && (parsed.check || parsed.write)) {
     throw new Error("--check and --write are only valid with format");
   }
-  if (parsed.force && parsed.command !== "lint" && parsed.command !== "format") {
+  if (
+    parsed.force &&
+    parsed.command !== "lint" &&
+    parsed.command !== "format"
+  ) {
     throw new Error("--force is only valid with lint or format");
   }
   if (
     parsed.command === "prune" &&
     (parsed.fix || parsed.check || parsed.write || parsed.force)
   ) {
-    throw new Error("prune does not accept --fix, --check, --write, or --force");
+    throw new Error(
+      "prune does not accept --fix, --check, --write, or --force",
+    );
   }
 
   if (parsed.force) {
@@ -231,7 +237,12 @@ function formatDiagnostic(file: string, diag: TripLintDiagnostic): string {
   return `${file}:${diag.line}:${diag.column}: ${diag.code}: ${diag.message}`;
 }
 
-async function runLint(paths: string[], fix: boolean, verbose: boolean, force: boolean = false) {
+async function runLint(
+  paths: string[],
+  fix: boolean,
+  verbose: boolean,
+  force: boolean = false,
+) {
   if (paths.length === 0) {
     const input = await readStdin();
     const result = lintTripSource(input, { fix, verbose, force });
@@ -353,7 +364,12 @@ async function main(): Promise<void> {
         parsed.force,
       );
     } else if (parsed.command === "lint") {
-      status = await runLint(parsed.paths, parsed.fix, parsed.verbose, parsed.force);
+      status = await runLint(
+        parsed.paths,
+        parsed.fix,
+        parsed.verbose,
+        parsed.force,
+      );
     } else if (parsed.command === "prune") {
       status = await runPrune(parsed.paths, parsed.verbose);
     }

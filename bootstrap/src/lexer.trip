@@ -758,8 +758,10 @@ poly rec skipBlockComment =
                 \t2 : List U8 =>
                   eqU8
                     u8_dash
-                    h2))) => match (skipBlockComment (tail [
-                    U8] t)) [Result ParseError (List U8)] {| Err e => Err [ParseError] [List U8] e | Ok afterInner => skipBlockComment afterInner}
+                    h2))) => do [Result ParseError (List U8)] {afterInner <- (skipBlockComment (
+                    tail
+                    [U8]
+                    t)) return skipBlockComment afterInner}
               | (and (eqU8 h u8_dash) (matchList [U8] [Bool] t false (\h2 : U8 =>
                 \t2 : List U8 =>
                   eqU8
@@ -788,8 +790,10 @@ poly rec tokenizeAcc =
                   \t : List U8 =>
                     eqU8
                       u8_dash
-                      h))) => match (skipBlockComment (tail [
-                      U8] cs)) [Result ParseError (List Token)] {| Err e => Err [ParseError] [List Token] e | Ok rest => tokenizeAcc rest accRev}
+                      h))) => do [Result ParseError (List Token)] {rest <- (skipBlockComment (
+                      tail
+                      [U8]
+                      cs)) return tokenizeAcc rest accRev}
                 | (and (eqU8 c u8_dash) (matchList [U8] [Bool] cs false (\h : U8 =>
                   \t : List U8 =>
                     eqU8
@@ -810,37 +814,41 @@ poly rec tokenizeAcc =
                     | None =>
                       cond [Result ParseError (List Token)] {
                         | (or (isAlphaU8 c) (eqU8 c u8_underscore)) =>
-                          match (consumeIdent ({U8 | c}) cs) [Result ParseError (List Token)] {
-                            | MkPair taken remaining =>
-                              let tok = keywordTokenFromWord taken in
-                              tokenizeAcc remaining (cons [Token] tok accRev)
+                          do [Result ParseError (List Token)] {
+                            MkPair taken remaining = (consumeIdent {U8 | c} cs)
+                            tok = keywordTokenFromWord taken
+                            return
+                              tokenizeAcc
+                              remaining
+                              (cons [Token] tok accRev)
                           }
                         | (isDigitU8 c) =>
-                          match (consumeDigits ({U8 | c}) cs) [Result ParseError (List Token)] {
-                            | MkPair taken remaining =>
+                          do [Result ParseError (List Token)] {
+                            MkPair taken remaining = (consumeDigits {U8 | c} cs)
+                            return
                               tokenizeAcc
-                                remaining
-                                (cons [Token] (T_Nat taken) accRev)
+                              remaining
+                              (cons [Token] (T_Nat taken) accRev)
                           }
                         | (eqU8 c u8_quote) =>
-                          match (consumeString ("") cs) [Result ParseError (List Token)] {
-                            | Err e => Err [ParseError] [List Token] e
-                            | Ok strRes =>
-                              let str = fst [List U8] [List U8] strRes in
-                              let remaining = snd [List U8] [List U8] strRes in
+                          do [Result ParseError (List Token)] {
+                            strRes <- (consumeString "" cs)
+                            str = fst [List U8] [List U8] strRes
+                            remaining = snd [List U8] [List U8] strRes
+                            return
                               tokenizeAcc
-                                remaining
-                                (cons [Token] (T_Ident str) accRev)
+                              remaining
+                              (cons [Token] (T_Ident str) accRev)
                           }
                         | (eqU8 c u8_squote) =>
-                          match (consumeCharLiteral cs) [Result ParseError (List Token)] {
-                            | Err e => Err [ParseError] [List Token] e
-                            | Ok charRes =>
-                              let value = fst [U8] [List U8] charRes in
-                              let remaining = snd [U8] [List U8] charRes in
+                          do [Result ParseError (List Token)] {
+                            charRes <- (consumeCharLiteral cs)
+                            value = fst [U8] [List U8] charRes
+                            remaining = snd [U8] [List U8] charRes
+                            return
                               tokenizeAcc
-                                remaining
-                                (cons [Token] (T_Nat (u8ToDigits value)) accRev)
+                              remaining
+                              (cons [Token] (T_Nat (u8ToDigits value)) accRev)
                           }
                         | (eqU8 c u8_eq) => tokenizeAcc cs (cons [Token] T_Eq accRev)
                         | otherwise => Err [ParseError] [List Token] (MkParseError "")

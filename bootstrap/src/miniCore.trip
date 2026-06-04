@@ -92,9 +92,9 @@ poly rec peelLams =
       | Cr_Var n => {List (List U8), Core | {List U8 |}, expr}
       | Cr_App a b => {List (List U8), Core | {List U8 |}, expr}
       | Cr_Lam name body =>
-        match (peelLams body) [((List (List U8)), Core)] {
-          | MkPair ps inner =>
-            {List (List U8), Core | (cons [List U8] name ps), inner}
+        do [((List (List U8)), Core)] {
+          MkPair ps inner = (peelLams body)
+          return {List (List U8), Core | (cons [List U8] name ps), inner}
         }
       | Cr_Native t => {List (List U8), Core | {List U8 |}, expr}
       | Cr_Ctor t n a => {List (List U8), Core | {List U8 |}, expr}
@@ -187,14 +187,15 @@ poly rec getZeroArityNames =
           \t : List ((List U8), Core) =>
             let name = fst [List U8] [Core] h in
             let core = snd [List U8] [Core] h in
-            match (peelLams core) [((List (List U8)), Core)] {
-              | MkPair params inner =>
+            do [((List (List U8)), Core)] {
+              MkPair params inner = (peelLams core)
+              return
                 matchList
-                  [List U8]
-                  [List (List U8)]
-                  params
-                  (cons [List U8] name (getZeroArityNames t))
-                  (\ph : List U8 => \pt : List (List U8) => getZeroArityNames t)
+                [List U8]
+                [List (List U8)]
+                params
+                (cons [List U8] name (getZeroArityNames t))
+                (\ph : List U8 => \pt : List (List U8) => getZeroArityNames t)
             }
       )
 
@@ -211,33 +212,29 @@ poly rec buildFuncsRec =
             \t : List ((List U8), Core) =>
               let name = fst [List U8] [Core] h in
               let core = snd [List U8] [Core] h in
-              match (peelLams core) [((List (List U8)), Core)] {
-                | MkPair params inner =>
-                  let body = coreToMini zeroArityNames inner in
-                  if [Result (List U8) (List MiniFunc)] (exprHasLam body)
-                    (
-                      \u : U8 =>
-                        Err
+              do [((List (List U8)), Core)] {
+                MkPair params inner = (peelLams core)
+                body = coreToMini zeroArityNames inner
+                return
+                if [Result (List U8) (List MiniFunc)] (exprHasLam body)
+                  (
+                    \u : U8 =>
+                      Err
+                        [List U8]
+                        [List MiniFunc]
+                        (append [U8] "escaping lambda in function " name)
+                  )
+                  (
+                    \u : U8 =>
+                      do [Result (List U8) (List MiniFunc)] {
+                        rest <- (buildFuncsRec zeroArityNames t)
+                        return
+                          Ok
                           [List U8]
                           [List MiniFunc]
-                          (append [U8] "escaping lambda in function " name)
-                    )
-                    (
-                      \u : U8 =>
-                        match (buildFuncsRec zeroArityNames t) [Result (List U8) (List MiniFunc)] {
-                          | Err e => Err [List U8] [List MiniFunc] e
-                          | Ok rest =>
-                            Ok
-                              [List U8]
-                              [List MiniFunc]
-                              (
-                                cons
-                                  [MiniFunc]
-                                  (MkMiniFunc name params body)
-                                  rest
-                              )
-                        }
-                    )
+                          (cons [MiniFunc] (MkMiniFunc name params body) rest)
+                      }
+                  )
               }
         )
 

@@ -354,11 +354,12 @@ poly rec findParsedModule =
         (
           \h : ParsedModule =>
             \t : List ParsedModule =>
-              match h [Maybe ParsedModule] {
-                | MkParsedModule name decls =>
-                  if [Maybe ParsedModule] (eqListU8 name wanted)
-                    (\u : U8 => Some [ParsedModule] h)
-                    (\u : U8 => findParsedModule wanted t)
+              do [Maybe ParsedModule] {
+                MkParsedModule name decls = h
+                return
+                if [Maybe ParsedModule] (eqListU8 name wanted)
+                  (\u : U8 => Some [ParsedModule] h)
+                  (\u : U8 => findParsedModule wanted t)
               }
         )
 
@@ -381,9 +382,9 @@ poly sameQualified =
   \moduleName : List U8 =>
     \name : List U8 =>
       \qualified : QualifiedName =>
-        match qualified [Bool] {
-          | MkQualifiedName qModule qName =>
-            and (eqListU8 moduleName qModule) (eqListU8 name qName)
+        do [Bool] {
+          MkQualifiedName qModule qName = qualified
+          return and (eqListU8 moduleName qModule) (eqListU8 name qName)
         }
 
 poly rec hasEmitted =
@@ -407,18 +408,20 @@ poly markEmitted =
   \moduleName : List U8 =>
     \name : List U8 =>
       \state : EmitState =>
-        match state [EmitState] {
-          | MkEmitState seen text =>
+        do [EmitState] {
+          MkEmitState seen text = state
+          return
             MkEmitState
-              (cons [QualifiedName] (MkQualifiedName moduleName name) seen)
-              text
+            (cons [QualifiedName] (MkQualifiedName moduleName name) seen)
+            text
         }
 
 poly appendStateText =
   \state : EmitState =>
     \text : List U8 =>
-      match state [EmitState] {
-        | MkEmitState seen current => MkEmitState seen (append [U8] current text)
+      do [EmitState] {
+        MkEmitState seen current = state
+        return MkEmitState seen (append [U8] current text)
       }
 
 poly functionSymbol =
@@ -540,31 +543,33 @@ poly rec emitRequiredFunction =
     \moduleName : List U8 =>
       \name : List U8 =>
         \state : EmitState =>
-          match state [Result (List U8) EmitState] {
-            | MkEmitState seen text =>
-              if [Result (List U8) EmitState] (hasEmitted moduleName name seen)
-                (\u : U8 => Ok [List U8] [EmitState] state)
-                (
-                  \u : U8 =>
-                    match (findParsedModule moduleName mods) [Result (List U8) EmitState] {
-                      | None => Err [List U8] [EmitState] "Module not found"
-                      | Some parsed =>
-                        match parsed [Result (List U8) EmitState] {
-                          | MkParsedModule parsedName decls =>
-                            match (findDefBody name decls) [Result (List U8) EmitState] {
-                              | None => Err [List U8] [EmitState] "Definition not found"
-                              | Some body =>
-                                emitFunctionBody
-                                  mods
-                                  moduleName
-                                  decls
-                                  name
-                                  body
-                                  (markEmitted moduleName name state)
-                            }
+          do [Result (List U8) EmitState] {
+            MkEmitState seen text = state
+            return
+            if [Result (List U8) EmitState] (hasEmitted moduleName name seen)
+              (\u : U8 => Ok [List U8] [EmitState] state)
+              (
+                \u : U8 =>
+                  match (findParsedModule moduleName mods) [Result (List U8) EmitState] {
+                    | None => Err [List U8] [EmitState] "Module not found"
+                    | Some parsed =>
+                      do [Result (List U8) EmitState] {
+                        MkParsedModule parsedName decls = parsed
+                        return
+                        match (findDefBody name decls) [Result (List U8) EmitState] {
+                          | None => Err [List U8] [EmitState] "Definition not found"
+                          | Some body =>
+                            emitFunctionBody
+                              mods
+                              moduleName
+                              decls
+                              name
+                              body
+                              (markEmitted moduleName name state)
                         }
-                    }
-                )
+                      }
+                  }
+              )
           }
 
 poly emitWriteBody =
@@ -632,33 +637,28 @@ poly compileParsedModulesToLlvm =
   \entry : List U8 =>
     \wrapper : List U8 =>
       \mods : List ParsedModule =>
-        match (emitRequiredFunction mods entry "main" (MkEmitState ({QualifiedName |}) "")) [Result (List U8) (List U8)] {
-          | Err e => Err [List U8] [List U8] e
-          | Ok state =>
-            match state [Result (List U8) (List U8)] {
-              | MkEmitState seen body =>
-                let withDecl = append [U8] "declare void @trip_write_one(i8)\n\n" body in
-                if [Result (List U8) (List U8)] (eqListU8 wrapper "enabled")
-                  (
-                    \u : U8 =>
-                      Ok
-                        [List U8]
-                        [List U8]
-                        (append [U8] withDecl (emitMainWrapper entry))
-                  )
-                  (\u : U8 => Ok [List U8] [List U8] withDecl)
-            }
+        do [Result (List U8) (List U8)] {
+          state <- (emitRequiredFunction mods entry "main" (MkEmitState {QualifiedName |} ""))
+          MkEmitState seen body = state
+          withDecl = append [U8] "declare void @trip_write_one(i8)\n\n" body
+          return
+          if [Result (List U8) (List U8)] (eqListU8 wrapper "enabled")
+            (
+              \u : U8 =>
+                Ok
+                  [List U8]
+                  [List U8]
+                  (append [U8] withDecl (emitMainWrapper entry))
+            )
+            (\u : U8 => Ok [List U8] [List U8] withDecl)
         }
 
 poly compileBundleSummaryToLlvm =
   \bundle : BundleSummary =>
-    match bundle [Result (List U8) (List U8)] {
-      | MkBundleSummary entry target wrapper modsCountDigits mods =>
-        match (parseModuleRecords mods) [Result (List U8) (List U8)] {
-          | Err e => Err [List U8] [List U8] e
-          | Ok parsedMods =>
-            compileParsedModulesToLlvm entry wrapper parsedMods
-        }
+    do [Result (List U8) (List U8)] {
+      MkBundleSummary entry target wrapper modsCountDigits mods = bundle
+      parsedMods <- (parseModuleRecords mods)
+      return compileParsedModulesToLlvm entry wrapper parsedMods
     }
 
 poly compileSourceToLlvm =

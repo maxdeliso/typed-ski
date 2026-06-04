@@ -140,55 +140,56 @@ poly rec coreToMini =
         | Cr_Native t => ME_Native t
         | Cr_Ctor tag total arity => ME_Con tag total arity {MiniExpr |}
         | Cr_App lf rg =>
-          match (collectSpine (Cr_App lf rg) ({Core |})) [MiniExpr] {
-            | MkPair head args =>
-              let miniArgs = mapCoreToMini zeroArityNames args in
-              match head [MiniExpr] {
-                | Cr_Var name => ME_Call name miniArgs
-                | Cr_Ctor tag total arity => ME_Con tag total arity miniArgs
-                | Cr_Lam name body =>
-                  matchList
-                    [MiniExpr]
-                    [MiniExpr]
-                    miniArgs
-                    (ME_Lam name (coreToMini zeroArityNames body))
-                    (
-                      \firstArg : MiniExpr =>
-                        \rest : List MiniExpr =>
-                          matchList
-                            [MiniExpr]
-                            [MiniExpr]
-                            rest
-                            (
-                              ME_Let
-                                name
-                                firstArg
-                                (coreToMini zeroArityNames body)
-                            )
-                            (
-                              \rh : MiniExpr =>
-                                \rt : List MiniExpr =>
-                                  ME_Let
-                                    name
-                                    firstArg
-                                    (
-                                      applyAnon
-                                        (coreToMini zeroArityNames body)
-                                        rest
-                                    )
-                            )
-                    )
-                | Cr_Native t => applyAnon (ME_Native t) miniArgs
-                | Cr_App _ _ => ME_Call anonName miniArgs
-                | Cr_Match s arms =>
-                  applyAnon
-                    (
-                      ME_Match
-                        (coreToMini zeroArityNames s)
-                        (mapCoreToMini zeroArityNames arms)
-                    )
-                    miniArgs
-              }
+          do [MiniExpr] {
+            MkPair head args = (collectSpine (Cr_App lf rg) {Core |})
+            miniArgs = mapCoreToMini zeroArityNames args
+            return
+            match head [MiniExpr] {
+              | Cr_Var name => ME_Call name miniArgs
+              | Cr_Ctor tag total arity => ME_Con tag total arity miniArgs
+              | Cr_Lam name body =>
+                matchList
+                  [MiniExpr]
+                  [MiniExpr]
+                  miniArgs
+                  (ME_Lam name (coreToMini zeroArityNames body))
+                  (
+                    \firstArg : MiniExpr =>
+                      \rest : List MiniExpr =>
+                        matchList
+                          [MiniExpr]
+                          [MiniExpr]
+                          rest
+                          (
+                            ME_Let
+                              name
+                              firstArg
+                              (coreToMini zeroArityNames body)
+                          )
+                          (
+                            \rh : MiniExpr =>
+                              \rt : List MiniExpr =>
+                                ME_Let
+                                  name
+                                  firstArg
+                                  (
+                                    applyAnon
+                                      (coreToMini zeroArityNames body)
+                                      rest
+                                  )
+                          )
+                  )
+              | Cr_Native t => applyAnon (ME_Native t) miniArgs
+              | Cr_App _ _ => ME_Call anonName miniArgs
+              | Cr_Match s arms =>
+                applyAnon
+                  (
+                    ME_Match
+                      (coreToMini zeroArityNames s)
+                      (mapCoreToMini zeroArityNames arms)
+                  )
+                  miniArgs
+            }
           }
         | Cr_Match scrut arms =>
           ME_Match

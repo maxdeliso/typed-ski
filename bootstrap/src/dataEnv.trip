@@ -36,49 +36,28 @@ data CtorInfo =
   | MkCtorInfo U8 U8 U8 (List U8)
 
 poly ctorTag =
-  \i : CtorInfo =>
-    match i [U8] {
-      | MkCtorInfo t n a adt => t
-    }
+  \i : CtorInfo => do [U8] {MkCtorInfo t n a adt = i return t}
 
 poly ctorTotal =
-  \i : CtorInfo =>
-    match i [U8] {
-      | MkCtorInfo t n a adt => n
-    }
+  \i : CtorInfo => do [U8] {MkCtorInfo t n a adt = i return n}
 
 poly ctorArity =
-  \i : CtorInfo =>
-    match i [U8] {
-      | MkCtorInfo t n a adt => a
-    }
+  \i : CtorInfo => do [U8] {MkCtorInfo t n a adt = i return a}
 
 poly ctorAdtName =
-  \i : CtorInfo =>
-    match i [List U8] {
-      | MkCtorInfo t n a adt => adt
-    }
+  \i : CtorInfo => do [List U8] {MkCtorInfo t n a adt = i return adt}
 
 data ADTInfo =
   | MkADTInfo (List (List U8))
 
 poly adtCtors =
-  \i : ADTInfo =>
-    match i [List (List U8)] {
-      | MkADTInfo cs => cs
-    }
+  \i : ADTInfo => do [List (List U8)] {MkADTInfo cs = i return cs}
 
 data DataEnv =
   | MkDataEnv (Avl (List U8) CtorInfo) (Avl (List U8) ADTInfo)
 
 poly datEnvCtors =
-  \e : DataEnv =>
-    match e [Avl (List U8) CtorInfo] {
-      | MkDataEnv c a => c
-    }
+  \e : DataEnv => do [Avl (List U8) CtorInfo] {MkDataEnv c a = e return c}
 
 poly datEnvAdts =
-  \e : DataEnv =>
-    match e [Avl (List U8) ADTInfo] {
-      | MkDataEnv c a => a
-    }
+  \e : DataEnv => do [Avl (List U8) ADTInfo] {MkDataEnv c a = e return a}

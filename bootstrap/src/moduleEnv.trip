@@ -320,8 +320,9 @@ poly parseModuleSource =
         | Ok toks =>
           match (parseProgram toks) [Result (List U8) ModuleInfo] {
             | Err e =>
-              match e [Result (List U8) ModuleInfo] {
-                | MkParseError msg => Err [List U8] [ModuleInfo] msg
+              do [Result (List U8) ModuleInfo] {
+                MkParseError msg = e
+                return Err [List U8] [ModuleInfo] msg
               }
             | Ok decls =>
               do [Result (List U8) ModuleInfo] {
@@ -347,227 +348,187 @@ poly rec collectDecls =
           (
             \h : Decl =>
               \t : List Decl =>
-                match state [BuildState] {
-                  | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
-                    match h [BuildState] {
-                      | D_Import fromName symbolName =>
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              (
-                                append
-                                  [ImportInfo]
-                                  imps
+                do [BuildState] {
+                  MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId = state
+                  return
+                  match h [BuildState] {
+                    | D_Import fromName symbolName =>
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            (
+                              append
+                                [ImportInfo]
+                                imps
+                                {ImportInfo |
+                                  (MkImportInfo moduleName fromName symbolName)
+                                }
+                            )
+                            exps
+                            defs
+                            dataTypes
+                            opaques
+                            natives
+                            nextTypeId
+                        )
+                    | D_Export name =>
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            imps
+                            (
+                              append
+                                [ExportInfo]
+                                exps
+                                {ExportInfo | (MkExportInfo moduleName name)}
+                            )
+                            defs
+                            dataTypes
+                            opaques
+                            natives
+                            nextTypeId
+                        )
+                    | D_Data name ctors =>
+                      let qName = qualify moduleName name in
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            imps
+                            exps
+                            (
+                              append
+                                [DefinitionInfo]
+                                defs
+                                {DefinitionInfo |
+                                  (MkDefinitionInfo moduleName name "data")
+                                }
+                            )
+                            (
+                              append
+                                [DataTypeInfo]
+                                dataTypes
+                                {DataTypeInfo |
+                                  (MkDataTypeInfo qName name nextTypeId)
+                                }
+                            )
+                            opaques
+                            natives
+                            (inc nextTypeId)
+                        )
+                    | D_Type name =>
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            imps
+                            exps
+                            (
+                              append
+                                [DefinitionInfo]
+                                defs
+                                {DefinitionInfo |
+                                  (MkDefinitionInfo moduleName name "type")
+                                }
+                            )
+                            dataTypes
+                            opaques
+                            natives
+                            nextTypeId
+                        )
+                    | D_Opaque name =>
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            imps
+                            exps
+                            (
+                              append
+                                [DefinitionInfo]
+                                defs
+                                {DefinitionInfo |
+                                  (MkDefinitionInfo moduleName name "opaque")
+                                }
+                            )
+                            dataTypes
+                            (
+                              append
+                                [OpaqueInfo]
+                                opaques
+                                {OpaqueInfo | (MkOpaqueInfo moduleName name)}
+                            )
+                            natives
+                            nextTypeId
+                        )
+                    | D_Native name =>
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            imps
+                            exps
+                            (
+                              append
+                                [DefinitionInfo]
+                                defs
+                                {DefinitionInfo |
+                                  (MkDefinitionInfo moduleName name "native")
+                                }
+                            )
+                            dataTypes
+                            opaques
+                            (
+                              append
+                                [NativeInfo]
+                                natives
+                                {NativeInfo | (MkNativeInfo moduleName name)}
+                            )
+                            nextTypeId
+                        )
+                    | D_Def kind isRec name body =>
+                      collectDecls
+                        moduleName
+                        t
+                        (
+                          MkBuildState
+                            mods
+                            imps
+                            exps
+                            (
+                              append
+                                [DefinitionInfo]
+                                defs
+                                {DefinitionInfo |
                                   (
-                                    {ImportInfo |
-                                      (
-                                        MkImportInfo
-                                          moduleName
-                                          fromName
-                                          symbolName
-                                      )
-                                    }
+                                    MkDefinitionInfo
+                                      moduleName
+                                      name
+                                      (defKindName kind)
                                   )
-                              )
-                              exps
-                              defs
-                              dataTypes
-                              opaques
-                              natives
-                              nextTypeId
-                          )
-                      | D_Export name =>
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              imps
-                              (
-                                append
-                                  [ExportInfo]
-                                  exps
-                                  (
-                                    {ExportInfo |
-                                      (MkExportInfo moduleName name)
-                                    }
-                                  )
-                              )
-                              defs
-                              dataTypes
-                              opaques
-                              natives
-                              nextTypeId
-                          )
-                      | D_Data name ctors =>
-                        let qName = qualify moduleName name in
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              imps
-                              exps
-                              (
-                                append
-                                  [DefinitionInfo]
-                                  defs
-                                  (
-                                    {DefinitionInfo |
-                                      (MkDefinitionInfo moduleName name "data")
-                                    }
-                                  )
-                              )
-                              (
-                                append
-                                  [DataTypeInfo]
-                                  dataTypes
-                                  (
-                                    {DataTypeInfo |
-                                      (MkDataTypeInfo qName name nextTypeId)
-                                    }
-                                  )
-                              )
-                              opaques
-                              natives
-                              (inc nextTypeId)
-                          )
-                      | D_Type name =>
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              imps
-                              exps
-                              (
-                                append
-                                  [DefinitionInfo]
-                                  defs
-                                  (
-                                    {DefinitionInfo |
-                                      (MkDefinitionInfo moduleName name "type")
-                                    }
-                                  )
-                              )
-                              dataTypes
-                              opaques
-                              natives
-                              nextTypeId
-                          )
-                      | D_Opaque name =>
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              imps
-                              exps
-                              (
-                                append
-                                  [DefinitionInfo]
-                                  defs
-                                  (
-                                    {DefinitionInfo |
-                                      (
-                                        MkDefinitionInfo
-                                          moduleName
-                                          name
-                                          "opaque"
-                                      )
-                                    }
-                                  )
-                              )
-                              dataTypes
-                              (
-                                append
-                                  [OpaqueInfo]
-                                  opaques
-                                  (
-                                    {OpaqueInfo |
-                                      (MkOpaqueInfo moduleName name)
-                                    }
-                                  )
-                              )
-                              natives
-                              nextTypeId
-                          )
-                      | D_Native name =>
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              imps
-                              exps
-                              (
-                                append
-                                  [DefinitionInfo]
-                                  defs
-                                  (
-                                    {DefinitionInfo |
-                                      (
-                                        MkDefinitionInfo
-                                          moduleName
-                                          name
-                                          "native"
-                                      )
-                                    }
-                                  )
-                              )
-                              dataTypes
-                              opaques
-                              (
-                                append
-                                  [NativeInfo]
-                                  natives
-                                  (
-                                    {NativeInfo |
-                                      (MkNativeInfo moduleName name)
-                                    }
-                                  )
-                              )
-                              nextTypeId
-                          )
-                      | D_Def kind isRec name body =>
-                        collectDecls
-                          moduleName
-                          t
-                          (
-                            MkBuildState
-                              mods
-                              imps
-                              exps
-                              (
-                                append
-                                  [DefinitionInfo]
-                                  defs
-                                  (
-                                    {DefinitionInfo |
-                                      (
-                                        MkDefinitionInfo
-                                          moduleName
-                                          name
-                                          (defKindName kind)
-                                      )
-                                    }
-                                  )
-                              )
-                              dataTypes
-                              opaques
-                              natives
-                              nextTypeId
-                          )
-                      | D_Module name => collectDecls moduleName t state
-                    }
+                                }
+                            )
+                            dataTypes
+                            opaques
+                            natives
+                            nextTypeId
+                        )
+                    | D_Module name => collectDecls moduleName t state
+                  }
                 }
           )
 
@@ -582,22 +543,13 @@ poly rec parseModulesAcc =
         (
           \h : ModuleRecord =>
             \t : List ModuleRecord =>
-              match h [Result (List U8) BuildState] {
-                | MkModuleRecord name lengthDigits source =>
-                  match (parseModuleSource name source) [Result (List U8) BuildState] {
-                    | Err e => Err [List U8] [BuildState] e
-                    | Ok modInfo =>
-                      match modInfo [Result (List U8) BuildState] {
-                        | MkModuleInfo modName decls =>
-                          match state [Result (List U8) BuildState] {
-                            | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
-                              let withMod = MkBuildState (append [ModuleInfo] mods ({ModuleInfo | modInfo})) imps exps defs dataTypes opaques natives nextTypeId in
-                              parseModulesAcc
-                                t
-                                (collectDecls modName decls withMod)
-                          }
-                      }
-                  }
+              do [Result (List U8) BuildState] {
+                MkModuleRecord name lengthDigits source = h
+                modInfo <- (parseModuleSource name source)
+                MkModuleInfo modName decls = modInfo
+                MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId = state
+                withMod = MkBuildState (append [ModuleInfo] mods {ModuleInfo | modInfo}) imps exps defs dataTypes opaques natives nextTypeId
+                return parseModulesAcc t (collectDecls modName decls withMod)
               }
         )
 
@@ -615,11 +567,12 @@ poly rec findDataTypeId =
         (
           \h : DataTypeInfo =>
             \t : List DataTypeInfo =>
-              match h [Maybe U8] {
-                | MkDataTypeInfo hQName hLocal hId =>
-                  if [Maybe U8] (eqListU8 hQName qName)
-                    (\u : U8 => Some [U8] hId)
-                    (\u : U8 => findDataTypeId qName t)
+              do [Maybe U8] {
+                MkDataTypeInfo hQName hLocal hId = h
+                return
+                if [Maybe U8] (eqListU8 hQName qName)
+                  (\u : U8 => Some [U8] hId)
+                  (\u : U8 => findDataTypeId qName t)
               }
         )
 
@@ -700,14 +653,15 @@ poly rec collectConstructorsFromDecls =
                               acc
                           | Some dataId =>
                             let total = countCtors ctors #u8(0) in
-                            match (addCtorMetas moduleName typeName dataId ctors total #u8(0) symbolId acc) [((List ConstructorMeta), U8)] {
-                              | MkPair nextAcc nextSymbolId =>
+                            do [((List ConstructorMeta), U8)] {
+                              MkPair nextAcc nextSymbolId = (addCtorMetas moduleName typeName dataId ctors total #u8(0) symbolId acc)
+                              return
                                 collectConstructorsFromDecls
-                                  moduleName
-                                  t
-                                  dataTypes
-                                  nextSymbolId
-                                  nextAcc
+                                moduleName
+                                t
+                                dataTypes
+                                nextSymbolId
+                                nextAcc
                             }
                         }
                       | D_Module name =>
@@ -775,12 +729,10 @@ poly rec collectConstructors =
             (
               \h : ModuleInfo =>
                 \t : List ModuleInfo =>
-                  match h [((List ConstructorMeta), U8)] {
-                    | MkModuleInfo moduleName decls =>
-                      match (collectConstructorsFromDecls moduleName decls dataTypes symbolId acc) [((List ConstructorMeta), U8)] {
-                        | MkPair nextAcc nextSymbolId =>
-                          collectConstructors t dataTypes nextSymbolId nextAcc
-                      }
+                  do [((List ConstructorMeta), U8)] {
+                    MkModuleInfo moduleName decls = h
+                    MkPair nextAcc nextSymbolId = (collectConstructorsFromDecls moduleName decls dataTypes symbolId acc)
+                    return collectConstructors t dataTypes nextSymbolId nextAcc
                   }
             )
 
@@ -814,32 +766,33 @@ poly rec addAlias =
           (
             \h : ConstructorAliasInfo =>
               \t : List ConstructorAliasInfo =>
-                match h [List ConstructorAliasInfo] {
-                  | MkConstructorAliasInfo hAlias hTarget =>
-                    if [List ConstructorAliasInfo] (eqListU8 hAlias alias)
-                      (
-                        \u : U8 =>
-                          match hTarget [List ConstructorAliasInfo] {
-                            | None => aliases
-                            | Some existing =>
-                              if [List ConstructorAliasInfo] (eqListU8 existing qName)
-                                (\u : U8 => aliases)
-                                (
-                                  \u : U8 =>
-                                    cons
-                                      [ConstructorAliasInfo]
-                                      (
-                                        MkConstructorAliasInfo
-                                          alias
-                                          (None [List U8])
-                                      )
-                                      t
-                                )
-                          }
-                      )
-                      (
-                        \u : U8 => cons [ConstructorAliasInfo] h (addAlias alias qName t)
-                      )
+                do [List ConstructorAliasInfo] {
+                  MkConstructorAliasInfo hAlias hTarget = h
+                  return
+                  if [List ConstructorAliasInfo] (eqListU8 hAlias alias)
+                    (
+                      \u : U8 =>
+                        match hTarget [List ConstructorAliasInfo] {
+                          | None => aliases
+                          | Some existing =>
+                            if [List ConstructorAliasInfo] (eqListU8 existing qName)
+                              (\u : U8 => aliases)
+                              (
+                                \u : U8 =>
+                                  cons
+                                    [ConstructorAliasInfo]
+                                    (
+                                      MkConstructorAliasInfo
+                                        alias
+                                        (None [List U8])
+                                    )
+                                    t
+                              )
+                        }
+                    )
+                    (
+                      \u : U8 => cons [ConstructorAliasInfo] h (addAlias alias qName t)
+                    )
                 }
           )
 
@@ -854,8 +807,9 @@ poly rec buildAliases =
         (
           \h : ConstructorMeta =>
             \t : List ConstructorMeta =>
-              match h [List ConstructorAliasInfo] {
-                | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity => buildAliases t (addAlias alias qName aliases)
+              do [List ConstructorAliasInfo] {
+                MkConstructorMeta qName local alias dataName dataId symbolId tag total arity = h
+                return buildAliases t (addAlias alias qName aliases)
               }
         )
 
@@ -915,11 +869,12 @@ poly rec lookupModule =
         (
           \h : ModuleInfo =>
             \t : List ModuleInfo =>
-              match h [Maybe ModuleInfo] {
-                | MkModuleInfo hName decls =>
-                  if [Maybe ModuleInfo] (eqListU8 hName name)
-                    (\u : U8 => Some [ModuleInfo] h)
-                    (\u : U8 => lookupModule name t)
+              do [Maybe ModuleInfo] {
+                MkModuleInfo hName decls = h
+                return
+                if [Maybe ModuleInfo] (eqListU8 hName name)
+                  (\u : U8 => Some [ModuleInfo] h)
+                  (\u : U8 => lookupModule name t)
               }
         )
 
@@ -935,11 +890,12 @@ poly rec lookupExport =
           (
             \h : ExportInfo =>
               \t : List ExportInfo =>
-                match h [Maybe ExportInfo] {
-                  | MkExportInfo hModule hSymbol =>
-                    if [Maybe ExportInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
-                      (\u : U8 => lookupExport moduleName symbolName t)
-                      (\u : U8 => Some [ExportInfo] h)
+                do [Maybe ExportInfo] {
+                  MkExportInfo hModule hSymbol = h
+                  return
+                  if [Maybe ExportInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
+                    (\u : U8 => lookupExport moduleName symbolName t)
+                    (\u : U8 => Some [ExportInfo] h)
                 }
           )
 
@@ -955,11 +911,12 @@ poly rec lookupDefinition =
           (
             \h : DefinitionInfo =>
               \t : List DefinitionInfo =>
-                match h [Maybe DefinitionInfo] {
-                  | MkDefinitionInfo hModule hSymbol hKind =>
-                    if [Maybe DefinitionInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
-                      (\u : U8 => lookupDefinition moduleName symbolName t)
-                      (\u : U8 => Some [DefinitionInfo] h)
+                do [Maybe DefinitionInfo] {
+                  MkDefinitionInfo hModule hSymbol hKind = h
+                  return
+                  if [Maybe DefinitionInfo] (or (not (eqListU8 hModule moduleName)) (not (eqListU8 hSymbol symbolName)))
+                    (\u : U8 => lookupDefinition moduleName symbolName t)
+                    (\u : U8 => Some [DefinitionInfo] h)
                 }
           )
 
@@ -998,11 +955,12 @@ poly rec isConstructorDefined =
           (
             \h : ConstructorMeta =>
               \t : List ConstructorMeta =>
-                match h [Bool] {
-                  | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
-                    if [Bool] (eqListU8 alias (qualify moduleName symbolName))
-                      (\u : U8 => true)
-                      (\u : U8 => isConstructorDefined moduleName symbolName t)
+                do [Bool] {
+                  MkConstructorMeta qName local alias dataName dataId symbolId tag total arity = h
+                  return
+                  if [Bool] (eqListU8 alias (qualify moduleName symbolName))
+                    (\u : U8 => true)
+                    (\u : U8 => isConstructorDefined moduleName symbolName t)
                 }
           )
 
@@ -1018,11 +976,12 @@ poly rec countExportOrigins =
           (
             \h : ExportInfo =>
               \t : List ExportInfo =>
-                match h [U8] {
-                  | MkExportInfo hModule hSymbol =>
-                    if [U8] (eqListU8 hSymbol symbolName)
-                      (\u : U8 => countExportOrigins symbolName t (inc acc))
-                      (\u : U8 => countExportOrigins symbolName t acc)
+                do [U8] {
+                  MkExportInfo hModule hSymbol = h
+                  return
+                  if [U8] (eqListU8 hSymbol symbolName)
+                    (\u : U8 => countExportOrigins symbolName t (inc acc))
+                    (\u : U8 => countExportOrigins symbolName t acc)
                 }
           )
 
@@ -1053,38 +1012,33 @@ poly rec emitModuleImportsAcc =
               (
                 \h : ImportInfo =>
                   \t : List ImportInfo =>
-                    match h [List U8] {
-                      | MkImportInfo hModule hFrom hSymbol =>
-                        if [List U8] (eqListU8 hModule moduleName)
-                          (
-                            \u : U8 =>
-                              emitModuleImportsAcc
-                                moduleName
-                                t
-                                mods
-                                exports
-                                (
-                                  append
-                                    [U8]
-                                    (
-                                      emitLine3
-                                        "import "
-                                        hFrom
-                                        hSymbol
-                                        (
-                                          importStatus
-                                            hFrom
-                                            hSymbol
-                                            mods
-                                            exports
-                                        )
-                                    )
-                                    acc
-                                )
-                          )
-                          (
-                            \u : U8 => emitModuleImportsAcc moduleName t mods exports acc
-                          )
+                    do [List U8] {
+                      MkImportInfo hModule hFrom hSymbol = h
+                      return
+                      if [List U8] (eqListU8 hModule moduleName)
+                        (
+                          \u : U8 =>
+                            emitModuleImportsAcc
+                              moduleName
+                              t
+                              mods
+                              exports
+                              (
+                                append
+                                  [U8]
+                                  (
+                                    emitLine3
+                                      "import "
+                                      hFrom
+                                      hSymbol
+                                      (importStatus hFrom hSymbol mods exports)
+                                  )
+                                  acc
+                              )
+                        )
+                        (
+                          \u : U8 => emitModuleImportsAcc moduleName t mods exports acc
+                        )
                     }
               )
 
@@ -1114,38 +1068,39 @@ poly rec emitModuleExportsAcc =
               (
                 \h : ExportInfo =>
                   \t : List ExportInfo =>
-                    match h [List U8] {
-                      | MkExportInfo hModule hSymbol =>
-                        if [List U8] (eqListU8 hModule moduleName)
-                          (
-                            \u : U8 =>
-                              emitModuleExportsAcc
-                                moduleName
-                                t
-                                defs
-                                ctors
-                                (
-                                  append
-                                    [U8]
-                                    (
-                                      emitLine2
-                                        "export "
-                                        hSymbol
-                                        (
-                                          exportStatus
-                                            moduleName
-                                            hSymbol
-                                            exports
-                                            defs
-                                            ctors
-                                        )
-                                    )
-                                    acc
-                                )
-                          )
-                          (
-                            \u : U8 => emitModuleExportsAcc moduleName t defs ctors acc
-                          )
+                    do [List U8] {
+                      MkExportInfo hModule hSymbol = h
+                      return
+                      if [List U8] (eqListU8 hModule moduleName)
+                        (
+                          \u : U8 =>
+                            emitModuleExportsAcc
+                              moduleName
+                              t
+                              defs
+                              ctors
+                              (
+                                append
+                                  [U8]
+                                  (
+                                    emitLine2
+                                      "export "
+                                      hSymbol
+                                      (
+                                        exportStatus
+                                          moduleName
+                                          hSymbol
+                                          exports
+                                          defs
+                                          ctors
+                                      )
+                                  )
+                                  acc
+                              )
+                        )
+                        (
+                          \u : U8 => emitModuleExportsAcc moduleName t defs ctors acc
+                        )
                     }
               )
 
@@ -1173,22 +1128,23 @@ poly rec emitModuleDefsAcc =
           (
             \h : DefinitionInfo =>
               \t : List DefinitionInfo =>
-                match h [List U8] {
-                  | MkDefinitionInfo hModule hName hKind =>
-                    if [List U8] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 =>
-                          emitModuleDefsAcc
-                            moduleName
-                            t
-                            (
-                              append
-                                [U8]
-                                (emitLine2 "definition " hKind hName)
-                                acc
-                            )
-                      )
-                      (\u : U8 => emitModuleDefsAcc moduleName t acc)
+                do [List U8] {
+                  MkDefinitionInfo hModule hName hKind = h
+                  return
+                  if [List U8] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 =>
+                        emitModuleDefsAcc
+                          moduleName
+                          t
+                          (
+                            append
+                              [U8]
+                              (emitLine2 "definition " hKind hName)
+                              acc
+                          )
+                    )
+                    (\u : U8 => emitModuleDefsAcc moduleName t acc)
                 }
           )
 
@@ -1209,17 +1165,18 @@ poly rec emitModuleOpaquesAcc =
           (
             \h : OpaqueInfo =>
               \t : List OpaqueInfo =>
-                match h [List U8] {
-                  | MkOpaqueInfo hModule hName =>
-                    if [List U8] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 =>
-                          emitModuleOpaquesAcc
-                            moduleName
-                            t
-                            (append [U8] (emitLine1 "opaque " hName) acc)
-                      )
-                      (\u : U8 => emitModuleOpaquesAcc moduleName t acc)
+                do [List U8] {
+                  MkOpaqueInfo hModule hName = h
+                  return
+                  if [List U8] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 =>
+                        emitModuleOpaquesAcc
+                          moduleName
+                          t
+                          (append [U8] (emitLine1 "opaque " hName) acc)
+                    )
+                    (\u : U8 => emitModuleOpaquesAcc moduleName t acc)
                 }
           )
 
@@ -1240,17 +1197,18 @@ poly rec emitModuleNativesAcc =
           (
             \h : NativeInfo =>
               \t : List NativeInfo =>
-                match h [List NativeInfo] {
-                  | MkNativeInfo hModule hName =>
-                    if [List U8] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 =>
-                          emitModuleNativesAcc
-                            moduleName
-                            t
-                            (append [U8] (emitLine1 "native " hName) acc)
-                      )
-                      (\u : U8 => emitModuleNativesAcc moduleName t acc)
+                do [List NativeInfo] {
+                  MkNativeInfo hModule hName = h
+                  return
+                  if [List U8] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 =>
+                        emitModuleNativesAcc
+                          moduleName
+                          t
+                          (append [U8] (emitLine1 "native " hName) acc)
+                    )
+                    (\u : U8 => emitModuleNativesAcc moduleName t acc)
                 }
           )
 
@@ -1277,25 +1235,27 @@ poly rec emitModulesAcc =
                       (
                         \h : ModuleInfo =>
                           \t : List ModuleInfo =>
-                            match h [List U8] {
-                              | MkModuleInfo moduleName decls =>
-                                let head = emitLine1 "module " moduleName in
-                                let impBlock = append [U8] (emitU8Line "imports " (count [ImportInfo] (moduleImports moduleName imports))) (emitModuleImports moduleName imports fullMods exports) in
-                                let expBlock = append [U8] (emitU8Line "exports " (count [ExportInfo] (moduleExports moduleName exports))) (emitModuleExports moduleName exports defs ctors) in
-                                let defBlock = append [U8] (emitU8Line "definitions " (count [DefinitionInfo] (moduleDefs moduleName defs))) (emitModuleDefs moduleName defs) in
-                                let opaqueBlock = append [U8] (emitU8Line "opaque " (count [OpaqueInfo] (moduleOpaques moduleName opaques))) (emitModuleOpaques moduleName opaques) in
-                                let nativeBlock = append [U8] (emitU8Line "native " (count [NativeInfo] (moduleNatives moduleName natives))) (emitModuleNatives moduleName natives) in
-                                let modSummary = append [U8] head (append [U8] impBlock (append [U8] expBlock (append [U8] defBlock (append [U8] opaqueBlock nativeBlock)))) in
+                            do [List U8] {
+                              MkModuleInfo moduleName decls = h
+                              head = emitLine1
+                              "module " moduleName
+                              impBlock = append [U8] (emitU8Line "imports " (count [ImportInfo] (moduleImports moduleName imports))) (emitModuleImports moduleName imports fullMods exports)
+                              expBlock = append [U8] (emitU8Line "exports " (count [ExportInfo] (moduleExports moduleName exports))) (emitModuleExports moduleName exports defs ctors)
+                              defBlock = append [U8] (emitU8Line "definitions " (count [DefinitionInfo] (moduleDefs moduleName defs))) (emitModuleDefs moduleName defs)
+                              opaqueBlock = append [U8] (emitU8Line "opaque " (count [OpaqueInfo] (moduleOpaques moduleName opaques))) (emitModuleOpaques moduleName opaques)
+                              nativeBlock = append [U8] (emitU8Line "native " (count [NativeInfo] (moduleNatives moduleName natives))) (emitModuleNatives moduleName natives)
+                              modSummary = append [U8] head (append [U8] impBlock (append [U8] expBlock (append [U8] defBlock (append [U8] opaqueBlock nativeBlock))))
+                              return
                                 emitModulesAcc
-                                  t
-                                  fullMods
-                                  imports
-                                  exports
-                                  defs
-                                  ctors
-                                  opaques
-                                  natives
-                                  (append [U8] modSummary acc)
+                                t
+                                fullMods
+                                imports
+                                exports
+                                defs
+                                ctors
+                                opaques
+                                natives
+                                (append [U8] modSummary acc)
                             }
                       )
 
@@ -1330,13 +1290,14 @@ poly rec moduleImportsAcc =
           (
             \h : ImportInfo =>
               \t : List ImportInfo =>
-                match h [List ImportInfo] {
-                  | MkImportInfo hModule hFrom hSymbol =>
-                    if [List ImportInfo] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 => moduleImportsAcc moduleName t (cons [ImportInfo] h acc)
-                      )
-                      (\u : U8 => moduleImportsAcc moduleName t acc)
+                do [List ImportInfo] {
+                  MkImportInfo hModule hFrom hSymbol = h
+                  return
+                  if [List ImportInfo] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 => moduleImportsAcc moduleName t (cons [ImportInfo] h acc)
+                    )
+                    (\u : U8 => moduleImportsAcc moduleName t acc)
                 }
           )
 
@@ -1357,13 +1318,14 @@ poly rec moduleExportsAcc =
           (
             \h : ExportInfo =>
               \t : List ExportInfo =>
-                match h [List ExportInfo] {
-                  | MkExportInfo hModule hSymbol =>
-                    if [List ExportInfo] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 => moduleExportsAcc moduleName t (cons [ExportInfo] h acc)
-                      )
-                      (\u : U8 => moduleExportsAcc moduleName t acc)
+                do [List ExportInfo] {
+                  MkExportInfo hModule hSymbol = h
+                  return
+                  if [List ExportInfo] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 => moduleExportsAcc moduleName t (cons [ExportInfo] h acc)
+                    )
+                    (\u : U8 => moduleExportsAcc moduleName t acc)
                 }
           )
 
@@ -1384,13 +1346,14 @@ poly rec moduleDefsAcc =
           (
             \h : DefinitionInfo =>
               \t : List DefinitionInfo =>
-                match h [List DefinitionInfo] {
-                  | MkDefinitionInfo hModule hName hKind =>
-                    if [List DefinitionInfo] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 => moduleDefsAcc moduleName t (cons [DefinitionInfo] h acc)
-                      )
-                      (\u : U8 => moduleDefsAcc moduleName t acc)
+                do [List DefinitionInfo] {
+                  MkDefinitionInfo hModule hName hKind = h
+                  return
+                  if [List DefinitionInfo] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 => moduleDefsAcc moduleName t (cons [DefinitionInfo] h acc)
+                    )
+                    (\u : U8 => moduleDefsAcc moduleName t acc)
                 }
           )
 
@@ -1413,13 +1376,14 @@ poly rec moduleOpaquesAcc =
           (
             \h : OpaqueInfo =>
               \t : List OpaqueInfo =>
-                match h [List OpaqueInfo] {
-                  | MkOpaqueInfo hModule hName =>
-                    if [List OpaqueInfo] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 => moduleOpaquesAcc moduleName t (cons [OpaqueInfo] h acc)
-                      )
-                      (\u : U8 => moduleOpaquesAcc moduleName t acc)
+                do [List OpaqueInfo] {
+                  MkOpaqueInfo hModule hName = h
+                  return
+                  if [List OpaqueInfo] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 => moduleOpaquesAcc moduleName t (cons [OpaqueInfo] h acc)
+                    )
+                    (\u : U8 => moduleOpaquesAcc moduleName t acc)
                 }
           )
 
@@ -1440,13 +1404,14 @@ poly rec moduleNativesAcc =
           (
             \h : NativeInfo =>
               \t : List NativeInfo =>
-                match h [List NativeInfo] {
-                  | MkNativeInfo hModule hName =>
-                    if [List NativeInfo] (eqListU8 hModule moduleName)
-                      (
-                        \u : U8 => moduleNativesAcc moduleName t (cons [NativeInfo] h acc)
-                      )
-                      (\u : U8 => moduleNativesAcc moduleName t acc)
+                do [List NativeInfo] {
+                  MkNativeInfo hModule hName = h
+                  return
+                  if [List NativeInfo] (eqListU8 hModule moduleName)
+                    (
+                      \u : U8 => moduleNativesAcc moduleName t (cons [NativeInfo] h acc)
+                    )
+                    (\u : U8 => moduleNativesAcc moduleName t acc)
                 }
           )
 
@@ -1457,27 +1422,28 @@ poly moduleNatives =
 
 poly emitDataType =
   \info : DataTypeInfo =>
-    match info [List U8] {
-      | MkDataTypeInfo qName local id =>
+    do [List U8] {
+      MkDataTypeInfo qName local id = info
+      return
         append
-          [U8]
-          "datatype "
-          (
-            append
-              [U8]
-              (u8ToDigits id)
-              (
-                append
-                  [U8]
-                  space
-                  (
-                    append
-                      [U8]
-                      qName
-                      (append [U8] space (append [U8] local newline))
-                  )
-              )
-          )
+        [U8]
+        "datatype "
+        (
+          append
+            [U8]
+            (u8ToDigits id)
+            (
+              append
+                [U8]
+                space
+                (
+                  append
+                    [U8]
+                    qName
+                    (append [U8] space (append [U8] local newline))
+                )
+            )
+        )
     }
 
 poly rec emitDataTypesAcc =
@@ -1498,19 +1464,21 @@ poly emitDataTypes =
 
 poly emitConstructor =
   \info : ConstructorMeta =>
-    match info [List U8] {
-      | MkConstructorMeta qName local alias dataName dataId symbolId tag total arity =>
-        let s0 = append [U8] "constructor " (u8ToDigits symbolId) in
-        let s1 = append [U8] s0 (append [U8] space qName) in
-        let s2 = append [U8] s1 (append [U8] space local) in
-        let s3 = append [U8] s2 (append [U8] space alias) in
-        let s4 = append [U8] s3 (append [U8] " data#" (u8ToDigits dataId)) in
-        let s5 = append [U8] s4 (append [U8] " tag " (u8ToDigits tag)) in
-        let s6 = append [U8] s5 (append [U8] " total " (u8ToDigits total)) in
+    do [List U8] {
+      MkConstructorMeta qName local alias dataName dataId symbolId tag total arity = info
+      s0 = append [U8]
+      "constructor " (u8ToDigits symbolId)
+      s1 = append [U8] s0 (append [U8] space qName)
+      s2 = append [U8] s1 (append [U8] space local)
+      s3 = append [U8] s2 (append [U8] space alias)
+      s4 = append [U8] s3 (append [U8] " data#" (u8ToDigits dataId))
+      s5 = append [U8] s4 (append [U8] " tag " (u8ToDigits tag))
+      s6 = append [U8] s5 (append [U8] " total " (u8ToDigits total))
+      return
         append
-          [U8]
-          s6
-          (append [U8] " arity " (append [U8] (u8ToDigits arity) newline))
+        [U8]
+        s6
+        (append [U8] " arity " (append [U8] (u8ToDigits arity) newline))
     }
 
 poly rec emitConstructorsAcc =
@@ -1531,12 +1499,13 @@ poly emitConstructors =
 
 poly emitAlias =
   \info : ConstructorAliasInfo =>
-    match info [List U8] {
-      | MkConstructorAliasInfo alias target =>
-        match target [List U8] {
-          | None => emitLine2 "alias " alias ambiguousText
-          | Some qName => emitLine2 "alias " alias qName
-        }
+    do [List U8] {
+      MkConstructorAliasInfo alias target = info
+      return
+      match target [List U8] {
+        | None => emitLine2 "alias " alias ambiguousText
+        | Some qName => emitLine2 "alias " alias qName
+      }
     }
 
 poly rec emitAliasesAcc =
@@ -1557,32 +1526,33 @@ poly emitAliases =
 
 poly emitPrimitive =
   \info : PrimitiveInfo =>
-    match info [List U8] {
-      | MkPrimitiveInfo qName symbolId arity =>
+    do [List U8] {
+      MkPrimitiveInfo qName symbolId arity = info
+      return
         append
-          [U8]
-          "primitive "
-          (
-            append
-              [U8]
-              (u8ToDigits symbolId)
-              (
-                append
-                  [U8]
-                  space
-                  (
-                    append
-                      [U8]
-                      qName
-                      (
-                        append
-                          [U8]
-                          " arity "
-                          (append [U8] (u8ToDigits arity) newline)
-                      )
-                  )
-              )
-          )
+        [U8]
+        "primitive "
+        (
+          append
+            [U8]
+            (u8ToDigits symbolId)
+            (
+              append
+                [U8]
+                space
+                (
+                  append
+                    [U8]
+                    qName
+                    (
+                      append
+                        [U8]
+                        " arity "
+                        (append [U8] (u8ToDigits arity) newline)
+                    )
+                )
+            )
+        )
     }
 
 poly rec emitPrimitivesAcc =
@@ -1603,21 +1573,27 @@ poly emitPrimitives =
 
 poly emitModuleEnvSummary =
   \env : ModuleEnv =>
-    match env [List U8] {
-      | MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims =>
-        let header = append [U8] "OK\nversion module-env-v1\nmodules " (append [U8] (u8ToDigits (count [ModuleInfo] mods)) newline) in
-        let dataHeader = emitU8Line "data-types " (count [DataTypeInfo] dataTypes) in
-        let ctorHeader = emitU8Line "constructors " (count [ConstructorMeta] ctors) in
-        let aliasHeader = emitU8Line "aliases " (count [ConstructorAliasInfo] aliases) in
-        let primHeader = emitU8Line "primitives " (count [PrimitiveInfo] prims) in
-        let s0 = append [U8] header (emitModules mods imps exps defs ctors opaques natives) in
-        let s1 = append [U8] s0 dataHeader in
-        let s2 = append [U8] s1 (emitDataTypes dataTypes) in
-        let s3 = append [U8] s2 ctorHeader in
-        let s4 = append [U8] s3 (emitConstructors ctors) in
-        let s5 = append [U8] s4 aliasHeader in
-        let s6 = append [U8] s5 (emitAliases aliases) in
-        append [U8] s6 (append [U8] primHeader (emitPrimitives prims))
+    do [List U8] {
+      MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims = env
+      header = append [U8]
+      "OK\nversion module-env-v1\nmodules "
+        (append [U8] (u8ToDigits (count [ModuleInfo] mods)) newline)
+      dataHeader = emitU8Line
+      "data-types " (count [DataTypeInfo] dataTypes)
+      ctorHeader = emitU8Line
+      "constructors " (count [ConstructorMeta] ctors)
+      aliasHeader = emitU8Line
+      "aliases " (count [ConstructorAliasInfo] aliases)
+      primHeader = emitU8Line
+      "primitives " (count [PrimitiveInfo] prims)
+      s0 = append [U8] header (emitModules mods imps exps defs ctors opaques natives)
+      s1 = append [U8] s0 dataHeader
+      s2 = append [U8] s1 (emitDataTypes dataTypes)
+      s3 = append [U8] s2 ctorHeader
+      s4 = append [U8] s3 (emitConstructors ctors)
+      s5 = append [U8] s4 aliasHeader
+      s6 = append [U8] s5 (emitAliases aliases)
+      return append [U8] s6 (append [U8] primHeader (emitPrimitives prims))
     }
 
 poly emitBundleModuleEnvSummary =

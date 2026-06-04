@@ -195,22 +195,23 @@ poly rec unparseAnfExpr =
 
 poly unparseAnfFunc =
   \fn : AnfFunc =>
-    match fn [List U8] {
-      | MkAnfFunc name params body =>
+    do [List U8] {
+      MkAnfFunc name params body = fn
+      return
         append
-          [U8]
-          name
-          (
-            append
-              [U8]
-              (renderParams params)
-              (
-                append
-                  [U8]
-                  " = "
-                  (append [U8] (unparseAnfExpr body) (singletonU8 #u8(10)))
-              )
-          )
+        [U8]
+        name
+        (
+          append
+            [U8]
+            (renderParams params)
+            (
+              append
+                [U8]
+                " = "
+                (append [U8] (unparseAnfExpr body) (singletonU8 #u8(10)))
+            )
+        )
     }
 
 poly rec unparseAnfFuncs =
@@ -227,8 +228,9 @@ poly rec unparseAnfFuncs =
 
 poly unparseAnfProgram =
   \prog : AnfProgram =>
-    match prog [List U8] {
-      | MkAnfProgram funcs entry => unparseAnfFuncs funcs
+    do [List U8] {
+      MkAnfProgram funcs entry = prog
+      return unparseAnfFuncs funcs
     }
 
 poly verifyToAnfText =

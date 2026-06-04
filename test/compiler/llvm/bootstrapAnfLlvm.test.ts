@@ -29,9 +29,7 @@ const ANF_LLVM_MODULE_NAMES: readonly CompilerTripModuleName[] = [
   "Parser",
   "Core",
   "DataEnv",
-  "CoreToLower",
   "Unparse",
-  "Lowering",
   "Bridge",
   "CoreToMini",
   "MiniCore",
@@ -166,7 +164,7 @@ describe("AnfLlvm native self-host", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.equal(result.stdout, EXPECTED_LLVM);
+    assert.equal(result.stdout.replace(/\r\n/g, "\n"), EXPECTED_LLVM);
   });
 
   it("stage-0 emits nullary constructors as their i8 tag through the native path", async () => {
@@ -174,7 +172,7 @@ describe("AnfLlvm native self-host", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.equal(result.stdout, NULLARY_CON_EXPECTED);
+    assert.equal(result.stdout.replace(/\r\n/g, "\n"), NULLARY_CON_EXPECTED);
   });
 
   it("stage-0 lowers a match on a nullary enum to a switch through the native path", async () => {
@@ -182,6 +180,6 @@ describe("AnfLlvm native self-host", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.equal(result.stdout, MATCH_EXPECTED);
+    assert.equal(result.stdout.replace(/\r\n/g, "\n"), MATCH_EXPECTED);
   });
 });

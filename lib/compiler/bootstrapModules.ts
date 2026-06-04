@@ -19,9 +19,7 @@ export type BootstrapTripModuleName =
   | "Parser"
   | "Core"
   | "DataEnv"
-  | "CoreToLower"
   | "Unparse"
-  | "Lowering"
   | "Bridge"
   | "Llvm"
   | "BundleSummary"
@@ -33,8 +31,7 @@ export type BootstrapTripModuleName =
   | "MiniVerify"
   | "Anf"
   | "AnfLlvm"
-  | "Compiler"
-  | "Telemetry";
+  | "Compiler";
 
 export type CompilerTripModuleName =
   | PublicTripModuleName
@@ -45,9 +42,7 @@ const BOOTSTRAP_MODULE_FILES: Record<BootstrapTripModuleName, string> = {
   Parser: "parser.trip",
   Core: "core.trip",
   DataEnv: "dataEnv.trip",
-  CoreToLower: "coreToLower.trip",
   Unparse: "unparse.trip",
-  Lowering: "lowering.trip",
   Bridge: "bridge.trip",
   Llvm: "llvm.trip",
   BundleSummary: "bundleSummary.trip",
@@ -60,7 +55,6 @@ const BOOTSTRAP_MODULE_FILES: Record<BootstrapTripModuleName, string> = {
   Anf: "anf.trip",
   AnfLlvm: "anfLlvm.trip",
   Compiler: "index.trip",
-  Telemetry: "telemetry.trip",
 };
 
 export const ALL_COMPILER_TRIP_MODULE_NAMES: readonly CompilerTripModuleName[] =

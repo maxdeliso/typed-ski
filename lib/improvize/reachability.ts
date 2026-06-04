@@ -1,8 +1,8 @@
 import { stat, readFile, writeFile } from "node:fs/promises";
-import { resolve, extname, basename, dirname } from "node:path";
+import { resolve, extname } from "node:path";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { externalReferences } from "../meta/frontend/externalReferences.ts";
-import type { TripLangProgram, TripLangTerm } from "../meta/trip.ts";
+import type { TripLangTerm } from "../meta/trip.ts";
 import type { BaseType } from "../types/types.ts";
 import type { SystemFTerm } from "../terms/systemF.ts";
 import {
@@ -213,15 +213,8 @@ export async function pruneUnreachableTripCode(
   // Collect all exported symbols across all modules to support global/implicit name resolution
   const globalExports = new Map<string, string[]>();
   for (const [moduleName, termGroups] of moduleTermsMap.entries()) {
-    if (moduleName === "DataEnv") {
-      console.log(
-        "DataEnv terms kinds in reachability.ts:",
-        termGroups.map((x) => x.term.kind),
-      );
-    }
     for (const { term } of termGroups) {
       if (term.kind === "export") {
-        console.log(`FOUND EXPORT in ${moduleName}: ${term.name}`);
         const list = globalExports.get(term.name) || [];
         list.push(moduleName);
         globalExports.set(term.name, list);
@@ -284,9 +277,6 @@ export async function pruneUnreachableTripCode(
 
     // Resolve refs to global symbols using local name resolution map,
     // falling back to global/implicit resolution if exported by exactly one module.
-    if (def.name === "elaborateMatchWith") {
-      console.log("DEBUG elaborateMatchWith collected refs:", Array.from(refs));
-    }
     for (const ref of refs) {
       let resolvedSym = resMap.get(ref);
       if (!resolvedSym) {
@@ -294,9 +284,6 @@ export async function pruneUnreachableTripCode(
         if (exportingModules && exportingModules.length === 1) {
           resolvedSym = `${exportingModules[0]}.${ref}`;
         }
-      }
-      if (def.name === "elaborateMatchWith" && ref === "ctorAdtName") {
-        console.log("DEBUG: resolved ctorAdtName to:", resolvedSym);
       }
 
       if (resolvedSym) {

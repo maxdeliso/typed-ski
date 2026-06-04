@@ -69,6 +69,18 @@ Bazel setup does not expose a runfiles tree by default.
 
 ### Running a singular test
 
+Prefer [Bun](https://bun.sh) for local iteration when it is installed — it runs
+the TypeScript source directly with no build step, so the feedback loop is much
+faster:
+
+```bash
+bun test test/path/to/test.ts
+```
+
+Bun does not typecheck, and the native LLVM and dist/CLI tests still require
+Bazel, so tsgo and Bazel remain the authoritative path. `pnpm test:bun` runs the
+whole in-process suite this way.
+
 With Node directly:
 
 ```powershell

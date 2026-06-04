@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { describe, it } from "node:test";
+import { describe, it } from "../../util/test_shim.ts";
 import { compileTripAndRun } from "./nativeHarness.ts";
 
 describe("LLVM Tail Call Optimization", () => {

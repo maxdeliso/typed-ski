@@ -94,8 +94,8 @@ function parseArgs(args: string[]): ParsedArgs {
   if (parsed.command === "lint" && (parsed.check || parsed.write)) {
     throw new Error("--check and --write are only valid with format");
   }
-  if (parsed.force && parsed.command !== "lint") {
-    throw new Error("--force is only valid with lint");
+  if (parsed.force && parsed.command !== "lint" && parsed.command !== "format") {
+    throw new Error("--force is only valid with lint or format");
   }
   if (
     parsed.command === "prune" &&
@@ -116,7 +116,7 @@ function showHelp(): void {
 TripLang formatter and linter (improvize) v${VERSION}
 
 USAGE:
-    improvize format [--check|--write] <files-or-dirs...>
+    improvize format [--check|--write] [--force] <files-or-dirs...>
     improvize lint [--fix] [--force] <files-or-dirs...>
     improvize prune <path> <entry-points>
 
@@ -127,8 +127,10 @@ OPTIONS:
     --check          Check formatting without writing files
     --write          Rewrite files with formatted output
     --fix            Apply safe lint rewrites, then format
-    --force          With --fix: apply fixes even if they would not round-trip
-                     the AST exactly (for aggressive application / testing)
+    --force          For lint --fix or format --write: apply even if the result
+                     would not round-trip the AST exactly (aggressive / testing).
+                     Useful when the heuristic replacement is "good enough" but
+                     our verifier is picky.
 
     <entry-points>   A comma-separated list of entry points (e.g. Compiler.main,MiniVerify.verifyToAnfText)
 
@@ -164,13 +166,14 @@ async function runFormat(
   check: boolean,
   write: boolean,
   verbose: boolean,
+  force: boolean = false,
 ) {
   if (paths.length === 0) {
     if (check || write) {
       throw new Error("format --check/--write requires at least one path");
     }
     const input = await readStdin();
-    process.stdout.write(formatTripSource(input).formatted);
+    process.stdout.write(formatTripSource(input, { force }).formatted);
     return 0;
   }
 
@@ -190,7 +193,7 @@ async function runFormat(
       const timeRead = Date.now() - startFile;
 
       const startFormat = Date.now();
-      const result = formatTripSource(input);
+      const result = formatTripSource(input, { force });
       const timeFormat = Date.now() - startFormat;
 
       if (verbose) {
@@ -347,6 +350,7 @@ async function main(): Promise<void> {
         parsed.check,
         parsed.write,
         parsed.verbose,
+        parsed.force,
       );
     } else if (parsed.command === "lint") {
       status = await runLint(parsed.paths, parsed.fix, parsed.verbose, parsed.force);

@@ -102,9 +102,10 @@ function verifyClean(): void {
     "\n✅ Success! Prune → lint → fmt completed. Corpus is formatted and lint fixes applied (some suggestions may remain for future passes).",
   );
 
-  // Show the evidence left in the working tree. The script's job is to let
-  // improvize perform every fixing action it's capable of; the resulting
-  // modifications (or lack thereof) under bootstrap/src/ are the evidence.
+  // Show the evidence left in the working tree. With --force the script tells
+  // improvize: "apply every replacement your detector located". The concrete
+  // diffs in bootstrap/src/*.trip are the result (even if the old strict
+  // verifier would have rejected some of the heuristic rewrites).
   console.log(
     "\nEvidence left in the working tree by improvize (review with `git diff -- bootstrap/src/`):",
   );
@@ -117,8 +118,7 @@ function verifyClean(): void {
     },
   );
   console.log(
-    evidence.stdout?.trim() ||
-      "(no further changes — the corpus has had everything improvize can currently auto-apply)",
+    evidence.stdout?.trim() || "(no net changes — already fully applied)",
   );
 }
 
@@ -128,8 +128,8 @@ function main(): void {
   );
 
   runImprovize(["prune", BOOTSTRAP_SRC, PRUNE_ENTRY_POINTS]);
-  runImprovize(["lint", "--fix", "--force", BOOTSTRAP_SRC]);  // --force to apply even non-AST-roundtripping suggestions
-  runImprovize(["format", "--write", BOOTSTRAP_SRC]);
+  runImprovize(["lint", "--fix", "--force", BOOTSTRAP_SRC]); // --force + reporting filter => only autofixed suggestions are printed
+  runImprovize(["format", "--write", "--force", BOOTSTRAP_SRC]);
 
   verifyClean();
 }

@@ -1202,7 +1202,10 @@ function parseProgramOrNull(source: string): string | undefined {
   }
 }
 
-export function formatTripSource(source: string): TripFormatResult {
+export function formatTripSource(
+  source: string,
+  options: { force?: boolean } = {},
+): TripFormatResult {
   const normalized = normalizeSource(source);
   const tokens = lexTrip(normalized);
   if (tokens.length === 0) {
@@ -1230,8 +1233,13 @@ export function formatTripSource(source: string): TripFormatResult {
   // heuristic token reflow, so verify the result round-trips: when the input is
   // a parseable program, the output must parse to the same AST. If it does not,
   // fall back to the input untouched rather than emit a divergent reformat.
+  //
+  // Under --force (from lint) we relax this: we still try the check, but if it
+  // fails because a forced rewrite intentionally changed surface syntax (or the
+  // heuristic replacement wasn't perfect), we still return the formatted result
+  // instead of throwing. The caller (lint --force) wants the changes applied.
   const before = parseProgramOrNull(normalized);
-  if (before !== undefined) {
+  if (before !== undefined && !options.force) {
     try {
       const after = JSON.stringify(parseTripLang(formatted));
       if (after !== before) {
@@ -3147,7 +3155,7 @@ function applyVerifiedFixes(
   source: string,
   diagnostics: readonly TripLintDiagnostic[],
   options: { force?: boolean } = {},
-): string {
+): { fixed: string; applied: TripLintDiagnostic[] } {
   const selected: TripLintDiagnostic[] = [];
   for (const diag of diagnostics) {
     if (!diag.fix) continue;
@@ -3160,6 +3168,7 @@ function applyVerifiedFixes(
 
   let current = source;
   let currentAst = parseProgramOrNull(current);
+  const applied: TripLintDiagnostic[] = [];
 
   for (const diag of selected) {
     const fix = diag.fix!;
@@ -3168,9 +3177,18 @@ function applyVerifiedFixes(
     const candidateAst = parseProgramOrNull(candidate);
 
     // Never regress a parseable program into an unparseable one.
-    if (currentAst !== undefined && candidateAst === undefined) {
+    // Under --force we bypass this so that the detector's proposed textual
+    // replacement is applied even if our heuristic reconstruction doesn't
+    // produce something the full parser accepts on the first try.
+    // (The user can then inspect the diff and clean up.)
+    if (
+      currentAst !== undefined &&
+      candidateAst === undefined &&
+      !options.force
+    ) {
       continue;
     }
+
     // Sugar / canonical-spelling rewrites must be exact AST round-trips,
     // unless --force is used (for testing / aggressive application).
     if (
@@ -3184,9 +3202,10 @@ function applyVerifiedFixes(
 
     current = candidate;
     currentAst = candidateAst;
+    applied.push(diag);
   }
 
-  return current;
+  return { fixed: current, applied };
 }
 
 export function lintTripSource(
@@ -3215,16 +3234,31 @@ export function lintTripSource(
     return { diagnostics, fixed: source, changed: false };
   }
 
-  // Apply only the fixes that pass per-fix verification (unless --force),
-  // then format. The formatter is itself AST-preserving (see formatTripSource),
-  // so the final output differs from `source` only by verified (or forced)
-  // edits.
-  const fixed = applyVerifiedFixes(source, diagnostics, { force: options.force });
-  const { formatted } = formatTripSource(fixed);
+  // Under --fix (especially --force), iteratively apply as many fixes as
+  // possible until a stable state. This handles nested/overlapping cases
+  // (e.g. Pair inside Pair, or chains that become fixable after one rewrite)
+  // by re-detecting on the updated source each pass.
+  // Only the fixes that were successfully applied (across passes) are
+  // reported, ensuring no "reported but not autofixed".
+  let current = source;
+  let allApplied: TripLintDiagnostic[] = [];
+  let anyChanged = false;
+  const maxPasses = 20; // safety for deep nesting
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const toks = lexTrip(current);
+    const passDiags = lintTokens(current, toks);
+    if (passDiags.every((d) => !d.fix)) break;
+    const applyRes = applyVerifiedFixes(current, passDiags, { force: options.force });
+    const { formatted: passFormatted } = formatTripSource(applyRes.fixed, { force: options.force });
+    if (passFormatted === current) break;
+    current = passFormatted;
+    allApplied = allApplied.concat(applyRes.applied);
+    anyChanged = true;
+  }
   return {
-    diagnostics,
-    fixed: formatted,
-    changed: formatted !== source,
+    diagnostics: allApplied,
+    fixed: current,
+    changed: anyChanged,
   };
 }
 

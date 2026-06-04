@@ -1,22 +1,31 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
 /**
- * Orchestrates the full set of improvize maintenance commands against the
- * bootstrap corpus, in the recommended order:
+ * Orchestrates running *all* of improvize's capabilities with their fixing
+ * modes against the bootstrap corpus.
  *
- *   1. prune  — remove unreachable definitions/imports (from known entry points)
- *   2. lint   — apply safe automatic fixes (including do-introduction etc.)
- *   3. format — canonical pretty-print
+ * It runs (in order):
+ *   1. prune  (with the standard entry points) — removes unreachable code
+ *   2. lint --fix  — applies safe automatic fixes (do-intros, pair sugar, etc.)
+ *   3. format --write — canonical pretty-print / layout fixes
  *
- * After the three steps it "tests it out" by verifying the corpus is now clean
- * (format --check + lint with no diagnostics and exit code 0).
+ * The goal is that the script makes improvize do everything it's capable of,
+ * and *leaves the evidence* in the working tree (the modified .trip files
+ * under bootstrap/src/ are the result of the improvements and can be
+ * reviewed/committed).
  *
- * This script is intended to be run via:
+ * After the fixing steps it does a light "test it out" verification
+ * (format --check to confirm things are canonical, and a plain lint run
+ * to surface any remaining suggestions — these are informational only
+ * and do not cause the script to fail or modify anything further).
+ *
+ * Run via:
  *   pnpm run bootstrap
  *
- * (The pnpm wrapper ensures a fresh build:ts first.)
+ * (The pnpm wrapper does a fresh build:ts first.)
  *
- * The prune entry points match the ones used by `bootstrap:prune` in package.json.
+ * Prune entry points are kept in sync with the `bootstrap:prune` script
+ * in package.json.
  */
 
 import { spawnSync } from "node:child_process";

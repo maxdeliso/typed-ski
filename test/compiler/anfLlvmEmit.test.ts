@@ -3,19 +3,51 @@
  *
  * Runs `AnfLlvm.compileSourceToLlvmText` under the TypeScript MiniCore
  * evaluator on a small `U8` corpus (params, let-bindings, direct
- * known-symbol calls, the read/write runtime primitives, and nullary
- * constructors emitted as their i8 tag) and asserts the emitted LLVM
- * text. Constructors with fields, cases, and inner lambdas are not yet
- * supported by the emitter.
+ * known-symbol calls, the read/write runtime primitives, nullary
+ * constructors, and a `case` over a nullary enum) and asserts the emitted
+ * LLVM text. The boxed-object output is additionally assembled with clang.
+ * Inner lambdas and constructors with fields are not yet exercised here.
  */
 
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
 import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { evaluateMiniCore } from "../../lib/minicore/evaluator.ts";
 import type { Value } from "../../lib/minicore/ast.ts";
+
+const CLANG = process.env["TYPED_SKI_CLANG"];
+
+/**
+ * Assembles `llvm` with clang (`-x ir -c`) and asserts it is structurally
+ * valid LLVM IR. Skips when no toolchain is wired in (non-Bazel local runs);
+ * the Bazel `node_tests` target always provides `TYPED_SKI_CLANG`, so this
+ * runs for real in CI.
+ */
+async function assertAssembles(llvm: string, label: string): Promise<void> {
+  if (!CLANG) return;
+  const dir = await mkdtemp(join(tmpdir(), "trip-asm-"));
+  try {
+    const llPath = join(dir, "mod.ll");
+    await writeFile(llPath, llvm, "utf8");
+    const result = spawnSync(
+      CLANG,
+      ["-x", "ir", "-c", llPath, "-o", join(dir, "mod.o")],
+      { encoding: "utf8" },
+    );
+    assert.equal(
+      result.status,
+      0,
+      `${label}: clang rejected emitted IR:\n${result.stderr}\n--- IR ---\n${llvm}`,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 const MODULE_NAMES = [
   "Prelude",
@@ -239,13 +271,18 @@ entry:
 `,
       ],
       [
-        "nullary constructor emits its i8 tag (first arm = 0)",
+        "nullary constructor allocates a tagged object (first arm = 0)",
         String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = Red
 `,
-        String.raw`define i64 @main() {
+        String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main() {
 entry:
   %__ll0_p = call ptr @trip_alloc_obj(i64 0, i64 0)
   %__ll0 = ptrtoint ptr %__ll0_p to i64
@@ -261,7 +298,12 @@ data Color = | Red | Green | Blue
 export main
 poly main = Green
 `,
-        String.raw`define i64 @main() {
+        String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main() {
 entry:
   %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
   %__ll0 = ptrtoint ptr %__ll0_p to i64
@@ -277,12 +319,21 @@ data Color = | Red | Green | Blue
 export main
 poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
 `,
-        String.raw`define i64 @main(i64 %c) {
+        String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main(i64 %c) {
 entry:
   %__case_res_0 = alloca i64
   %__scrut_ptr_0 = inttoptr i64 %c to ptr
   %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)
   switch i64 %__tag_0, label %case_0_unreachable [
+    i64 0, label %case_0_arm_0
+    i64 1, label %case_0_arm_1
+    i64 2, label %case_0_arm_2
+  ]
 case_0_arm_0:
   store i64 10, ptr %__case_res_0
   br label %case_0_merge
@@ -292,10 +343,6 @@ case_0_arm_1:
 case_0_arm_2:
   store i64 30, ptr %__case_res_0
   br label %case_0_merge
-    i64 0, label %case_0_arm_0
-    i64 1, label %case_0_arm_1
-    i64 2, label %case_0_arm_2
-  ]
 case_0_unreachable:
   unreachable
 case_0_merge:
@@ -309,6 +356,37 @@ case_0_merge:
 
     for (const [label, source, expected] of cases) {
       assert.equal(await compileSourceToLlvm(source), expected, label);
+    }
+  });
+
+  // Regression guard: the emitted IR for boxed constructors and `case` must be
+  // structurally valid LLVM. A previous revision interleaved the `case` arm
+  // basic blocks inside the `switch [...]` table and never declared the
+  // `trip_obj_*`/`trip_alloc_obj` runtime, so the output was string-asserted
+  // but never assembled. clang rejects both defects.
+  it("emits assemblable LLVM for boxed constructors and case (clang)", async () => {
+    const programs: ReadonlyArray<readonly [string, string]> = [
+      [
+        "nullary constructor",
+        String.raw`module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = Green
+`,
+      ],
+      [
+        "case lowers to a switch over the object tag",
+        String.raw`module Demo
+data Color = | Red | Green | Blue
+export main
+poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
+`,
+      ],
+    ];
+    for (const [label, source] of programs) {
+      const llvm = await compileSourceToLlvm(source);
+      assert.ok(!llvm.startsWith("ERR:"), `${label}: emitter returned ${llvm}`);
+      await assertAssembles(llvm, label);
     }
   });
 });

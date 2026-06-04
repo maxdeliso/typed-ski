@@ -59,16 +59,22 @@ entry:
 
 `;
 
-// Exercises the nullary-constructor path (AE_Con with no fields -> its i8
-// tag, added in #186). `Green` is the second constructor of `Color`, so its
-// declaration-order tag is 1. No `declare` prelude: the program uses no IO.
+// Exercises the nullary-constructor path (AE_Con with no fields). `Green` is
+// the second constructor of `Color`, so its declaration-order tag is 1. The
+// value is a heap object allocated via `trip_alloc_obj`, so the boxed-object
+// runtime is declared in the prelude.
 const NULLARY_CON_SOURCE = String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = Green
 `;
 
-const NULLARY_CON_EXPECTED = String.raw`define i64 @main() {
+const NULLARY_CON_EXPECTED = String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main() {
 entry:
   %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
   %__ll0 = ptrtoint ptr %__ll0_p to i64
@@ -78,20 +84,30 @@ entry:
 `;
 
 // Exercises the AE_Case path: a match on a nullary enum lowers to a `switch`
-// on the scrutinee's i8 tag, with each arm storing to an alloca slot that a
-// shared `end` block loads (alloca/store/load rather than phi).
+// on the scrutinee object's tag (read via `trip_obj_tag`), with each arm
+// storing to an alloca slot that a shared `merge` block loads. The switch
+// table is closed before the arm blocks so the IR is well-formed.
 const MATCH_SOURCE = String.raw`module Demo
 data Color = | Red | Green | Blue
 export main
 poly main = \c : Color => match c [U8] { | Red => #u8(10) | Green => #u8(20) | Blue => #u8(30) }
 `;
 
-const MATCH_EXPECTED = String.raw`define i64 @main(i64 %c) {
+const MATCH_EXPECTED = String.raw`declare ptr @trip_alloc_obj(i64, i64)
+declare void @trip_obj_set_field(ptr, i64, i64)
+declare i64 @trip_obj_tag(ptr)
+declare i64 @trip_obj_field(ptr, i64)
+
+define i64 @main(i64 %c) {
 entry:
   %__case_res_0 = alloca i64
   %__scrut_ptr_0 = inttoptr i64 %c to ptr
   %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)
   switch i64 %__tag_0, label %case_0_unreachable [
+    i64 0, label %case_0_arm_0
+    i64 1, label %case_0_arm_1
+    i64 2, label %case_0_arm_2
+  ]
 case_0_arm_0:
   store i64 10, ptr %__case_res_0
   br label %case_0_merge
@@ -101,10 +117,6 @@ case_0_arm_1:
 case_0_arm_2:
   store i64 30, ptr %__case_res_0
   br label %case_0_merge
-    i64 0, label %case_0_arm_0
-    i64 1, label %case_0_arm_1
-    i64 2, label %case_0_arm_2
-  ]
 case_0_unreachable:
   unreachable
 case_0_merge:
@@ -167,7 +179,7 @@ describe("AnfLlvm native self-host", () => {
     assert.equal(result.stdout.replace(/\r\n/g, "\n"), EXPECTED_LLVM);
   });
 
-  it("stage-0 emits nullary constructors as their i8 tag through the native path", async () => {
+  it("stage-0 emits nullary constructors as tagged objects through the native path", async () => {
     const result = await emitNatively(NULLARY_CON_SOURCE);
 
     assert.equal(result.status, 0);

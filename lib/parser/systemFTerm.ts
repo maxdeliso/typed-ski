@@ -90,23 +90,29 @@ function isStartOfDoStep(state: ParserState): boolean {
     // Check if followed by =
     let pCursor = stateAfterWord.idx;
     let depth = 0;
+    let inString = false;
     while (pCursor < stateAfterWord.buf.length) {
       const char = stateAfterWord.buf[pCursor];
-      if (
-        char === "\n" ||
-        char === "\r" ||
-        char === ";" ||
-        char === "|" ||
-        char === "}"
-      ) {
-        break;
+      if (char === '"') {
+        inString = !inString;
       }
-      if (char === "(" || char === "[" || char === "{") depth++;
-      else if (char === ")" || char === "]" || char === "}") depth--;
+      if (!inString) {
+        if (
+          char === "\n" ||
+          char === "\r" ||
+          char === ";" ||
+          char === "|" ||
+          char === "}"
+        ) {
+          break;
+        }
+        if (char === "(" || char === "[" || char === "{") depth++;
+        else if (char === ")" || char === "]" || char === "}") depth--;
 
-      if (depth === 0 && char === "=") {
-        if (stateAfterWord.buf[pCursor + 1] !== ">") {
-          return true;
+        if (depth === 0 && char === "=") {
+          if (stateAfterWord.buf[pCursor + 1] !== ">") {
+            return true;
+          }
         }
       }
       pCursor++;

@@ -463,25 +463,25 @@ poly elaborateMatchWith =
     \dEnv : DataEnv =>
       \scrut : Expr =>
         \arms : List (Pattern, Expr) =>
-          match (elaborate dEnv scrut) [Result (List U8) Core] {
-            | Err e => Err [List U8] [Core] e
-            | Ok coreScrut =>
-              match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
-                | None =>
-                  Err [List U8] [Core] "Could not identify ADT for match"
-                | Some info =>
-                  let adtName = ctorAdtName info in
-                  match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
-                    | None => Err [List U8] [Core] "ADT metadata not found"
-                    | Some adtInfo =>
-                      let expectedNames = adtCtors adtInfo in
-                      let sortedArms = sortArms expectedNames arms in
-                      match (elaborateArms elaborate dEnv sortedArms) [Result (List U8) Core] {
-                        | Err e => Err [List U8] [Core] e
-                        | Ok coreArms => Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
-                      }
-                  }
-              }
+          do [Result (List U8) Core] {
+            coreScrut <- (elaborate dEnv scrut)
+            return
+            match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
+              | None =>
+                Err [List U8] [Core] "Could not identify ADT for match"
+              | Some info =>
+                let adtName = ctorAdtName info in
+                match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
+                  | None => Err [List U8] [Core] "ADT metadata not found"
+                  | Some adtInfo =>
+                    let expectedNames = adtCtors adtInfo in
+                    let sortedArms = sortArms expectedNames arms in
+                    do [Result (List U8) Core] {
+                      coreArms <- (elaborateArms elaborate dEnv sortedArms)
+                      return Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
+                    }
+                }
+            }
           }
 
 poly rec elaborateExpr =
@@ -606,33 +606,31 @@ poly rec elaborateToCoreRec =
             \t : List Decl =>
               match h [Result (List U8) (List ((List U8), Core))] {
                 | D_Def kind isRec name body =>
-                  match (elaborateExpr dEnv body) [Result (List U8) (List (((List U8), Core)))] {
-                    | Err e => Err [List U8] [List (((List U8), Core))] e
-                    | Ok core =>
-                      match (elaborateToCoreRec dEnv t) [Result (List U8) (List (((List U8), Core)))] {
-                        | Err e2 => Err [List U8] [List (((List U8), Core))] e2
-                        | Ok rest =>
-                          Ok
-                            [List U8]
-                            [List (((List U8), Core))]
-                            (
-                              cons
-                                [((List U8), Core)]
-                                ({List U8, Core | name, core})
-                                rest
-                            )
-                      }
+                  do [Result (List U8) (List ((List U8), Core))] {
+                    core <- (elaborateExpr dEnv body)
+                    rest <- (elaborateToCoreRec dEnv t)
+                    return
+                      Ok
+                      [List U8]
+                      [List ((List U8), Core)]
+                      (
+                        cons
+                          [((List U8), Core)]
+                          {List U8, Core | name, core}
+                          rest
+                      )
                   }
                 | D_Data name ctors =>
-                  match (checkedLengthU8 [((List U8), U8)] ctors #u8(0)) [Result (List U8) (List ((List U8), Core))] {
-                    | Err e => Err [List U8] [List ((List U8), Core)] e
-                    | Ok total =>
-                      match (populateDataEnv name ctors total #u8(0) dEnv) [Result (List U8) (List (((List U8), Core)))] {
-                        | MkDataEnv cEnv aEnv =>
-                          let adtInfo = MkADTInfo (getCtorNames ctors) in
-                          let nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv) in
-                          elaborateToCoreRec nextDEnv t
-                      }
+                  do [Result (List U8) (List ((List U8), Core))] {
+                    total <- (checkedLengthU8 [((List U8), U8)] ctors #u8(0))
+                    return
+                    do [Result (List U8) (List ((List U8), Core))] {
+                      MkDataEnv cEnv aEnv = (populateDataEnv name ctors total #u8(0) dEnv)
+                      adtInfo =
+                      MkADTInfo (getCtorNames ctors)
+                      nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv)
+                      return elaborateToCoreRec nextDEnv t
+                    }
                   }
                 | D_Module name => elaborateToCoreRec dEnv t
                 | D_Import mod sym => elaborateToCoreRec dEnv t

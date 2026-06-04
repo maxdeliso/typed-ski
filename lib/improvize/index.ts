@@ -1920,6 +1920,55 @@ function matchMkPair(
   };
 }
 
+function isInsideDataDefinition(tokens: readonly Token[], index: number): boolean {
+  for (let i = index - 1; i >= 0; i--) {
+    const text = tokens[i]!.text;
+    if (
+      text === "data" ||
+      text === "type" ||
+      text === "poly" ||
+      text === "combinator" ||
+      text === "native" ||
+      text === "opaque" ||
+      text === "module" ||
+      text === "import" ||
+      text === "export"
+    ) {
+      return text === "data";
+    }
+  }
+  return false;
+}
+
+function matchPairType(
+  tokens: readonly Token[],
+  index: number,
+):
+  | { type1Tokens: Token[]; type2Tokens: Token[]; endIndex: number }
+  | undefined {
+  const token = tokens[index];
+  if (token?.text !== "Pair") return undefined;
+
+  const type1 = parseArgExpression(tokens, index + 1);
+  if (!type1) return undefined;
+
+  const type2 = parseArgExpression(tokens, type1.endIndex + 1);
+  if (!type2) return undefined;
+
+  if (
+    type1.tokens.some((t) => TOP_LEVEL_KEYWORDS.has(t.text)) ||
+    type2.tokens.some((t) => TOP_LEVEL_KEYWORDS.has(t.text))
+  ) {
+    return undefined;
+  }
+
+  return {
+    type1Tokens: type1.tokens,
+    type2Tokens: type2.tokens,
+    endIndex: type2.endIndex,
+  };
+}
+
 function parseDelayLambda(
   tokens: readonly Token[],
   index: number,
@@ -2126,6 +2175,61 @@ function parseMatchHeader(
   };
 }
 
+function extractErrTypeStrings(armClean: readonly Token[]): { errType: string; okType: string } | undefined {
+  const arrowIdx = armClean.findIndex((t) => t.text === "=>");
+  if (arrowIdx === -1) return undefined;
+
+  const rhs = armClean.slice(arrowIdx + 1);
+  if (rhs[0]?.text !== "Err") return undefined;
+
+  let i = 1;
+  while (i < rhs.length && rhs[i]!.text !== "[") i++;
+  if (i >= rhs.length) return undefined;
+
+  const firstOpen = i;
+  let depth = 1;
+  i++;
+  while (i < rhs.length) {
+    if (rhs[i]!.text === "[") depth++;
+    else if (rhs[i]!.text === "]") {
+      depth--;
+      if (depth === 0) break;
+    }
+    i++;
+  }
+  if (i >= rhs.length) return undefined;
+  const firstClose = i;
+
+  i++;
+  if (i >= rhs.length || rhs[i]!.text !== "[") return undefined;
+  const secondOpen = i;
+
+  depth = 1;
+  i++;
+  while (i < rhs.length) {
+    if (rhs[i]!.text === "[") depth++;
+    else if (rhs[i]!.text === "]") {
+      depth--;
+      if (depth === 0) break;
+    }
+    i++;
+  }
+  if (i >= rhs.length) return undefined;
+  const secondClose = i;
+
+  const errTypeTokens = rhs.slice(firstOpen + 1, firstClose);
+  const okTypeTokens = rhs.slice(secondOpen + 1, secondClose);
+
+  return {
+    errType: formatInline(errTypeTokens),
+    okType: formatInline(okTypeTokens),
+  };
+}
+
+function normalizeTypeText(text: string): string {
+  return text.replace(/[\s()]/g, "");
+}
+
 function matchMonadicBind(
   tokens: readonly Token[],
   index: number,
@@ -2168,6 +2272,15 @@ function matchMonadicBind(
     return undefined;
   const eVar = errClean[1]!.text;
   if (errClean[errClean.length - 1]!.text !== eVar) return undefined;
+
+  // Type unifiability check: Ensure the declared match type matches the actual arm return type.
+  const armTypes = extractErrTypeStrings(errClean);
+  if (!armTypes) return undefined;
+
+  const expectedTypeStr = `Result ${armTypes.errType} ${armTypes.okType}`;
+  if (normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)) {
+    return undefined;
+  }
 
   const okClean = okArm.filter((t) => !isComment(t));
   if (okClean.length < 4) return undefined;
@@ -2408,6 +2521,10 @@ function parseDoChain(
   | undefined {
   const header = parseMatchHeader(tokens, index);
   if (!header) return undefined;
+
+  if (!header.typeText.trim().startsWith("Result")) {
+    return undefined;
+  }
 
   const collected = collectDoSteps(tokens.slice(index), header.typeText);
   if (!collected) return undefined;
@@ -2685,6 +2802,29 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       );
       i = pairLiteralMatch.endIndex;
       continue;
+    }
+
+    // 4b. Pair type simplification
+    const prevText = previousSyntax(tokens, i)?.text;
+    if (prevText !== "data" && prevText !== "type" && !isInsideDataDefinition(tokens, i)) {
+      const pairTypeMatch = matchPairType(tokens, i);
+      if (pairTypeMatch) {
+        const replacement = `(${formatInline(pairTypeMatch.type1Tokens)}, ${formatInline(pairTypeMatch.type2Tokens)})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-pair-type",
+            `Use syntactic sugar (Type1, Type2) for pair type`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[pairTypeMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = pairTypeMatch.endIndex;
+        continue;
+      }
     }
 
     // 5. Degenerate match chain simplification to do
@@ -3098,6 +3238,7 @@ function fixesOverlap(a: TripLintFix, b: TripLintFix): boolean {
 const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
   "trip-list-literal",
   "trip-pair-literal",
+  "trip-pair-type",
   "trip-string-literal",
   "trip-redundant-parens",
   "trip-u8-literal",

@@ -1736,19 +1736,19 @@ poly rec parseExpr =
                     {Expr, List Token | (E_Let name valExpr bodyExpr), rest}
                 }
               | (eqU8 tag kwMatchTag) =>
-                do [Result ParseError (Pair Expr (List Token))] {
+                do [Result ParseError (Expr, (List Token))] {
                   scrutRes <- (parseAppNoBraceWith parseExpr t)
                   scrutinee = fstExprToken scrutRes
                   afterScrut = sndExprToken scrutRes
                   inside <- (skipAfter afterScrut lBraceTag)
-                  armsRes <- (parseMatchArmsWith parseExpr inside (nil [Pair Pattern Expr]))
+                  armsRes <- (parseMatchArmsWith parseExpr inside {(Pattern, Expr) |})
                   arms = fstArmsToken armsRes
                   rest = sndArmsToken armsRes
                   return
                     Ok
                     [ParseError]
-                    [Pair Expr (List Token)]
-                    (MkPair [Expr] [List Token] (E_Match scrutinee arms) rest)
+                    [(Expr, (List Token))]
+                    {Expr, List Token | (E_Match scrutinee arms), rest}
                 }
               | otherwise => parseAppWith parseExpr toks
             }

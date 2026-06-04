@@ -190,7 +190,7 @@ poly rec collectImports =
       [Decl]
       [List ((List U8), (List U8))]
       decls
-      {(((List U8), (List U8))) |}
+      {((List U8), (List U8)) |}
       (
         \h : Decl =>
           \t : List Decl =>
@@ -550,7 +550,7 @@ poly rec buildDepMap =
         [Decl]
         [List ((List U8), (List (List U8)))]
         decls
-        {(((List U8), (List (List U8)))) |}
+        {((List U8), (List (List U8))) |}
         (
           \h : Decl =>
             \t : List Decl =>

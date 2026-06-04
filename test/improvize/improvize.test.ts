@@ -551,16 +551,31 @@ poly main3 =
   if [Bool] cond
     (\\u : U8 => false)
     (\\u : U8 => true)
+poly main4 =
+  if [Bool] cond
+    (\\u : U8 => true)
+    (\\u : U8 => false)
+poly main5 =
+  if [Bool] cond
+    (\\u : U8 => false)
+    (\\u : U8 => elseExpr)
+poly main6 =
+  if [Bool] cond
+    (\\u : U8 => thenExpr)
+    (\\u : U8 => true)
 `;
     const result = lintTripSource(source, { fix: true });
     assert.deepEqual(
       result.diagnostics.filter((diag) => diag.code === "trip-bool-if-simplify")
         .length,
-      3,
+      6,
     );
     assert.match(result.fixed, /poly main =\s+and\s+cond\s+thenExpr/);
     assert.match(result.fixed, /poly main2 =\s+or\s+cond\s+elseExpr/);
     assert.match(result.fixed, /poly main3 =\s+not\s+cond/);
+    assert.match(result.fixed, /poly main4 =\s+cond/);
+    assert.match(result.fixed, /poly main5 =\s+and\s+\(not\s+cond\)\s+elseExpr/);
+    assert.match(result.fixed, /poly main6 =\s+or\s+\(not\s+cond\)\s+thenExpr/);
   });
 });
 

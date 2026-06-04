@@ -2886,6 +2886,24 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       const thenText = formatInline(ifSimplifyMatch.thenBody).trim();
       const elseText = formatInline(ifSimplifyMatch.elseBody).trim();
 
+      if (thenText === "true" && elseText === "false") {
+        const replacement = ifSimplifyMatch.condText;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to condition`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
       if (elseText === "false" && canUsePrelude(topLevel, "and")) {
         const replacement = `and (${ifSimplifyMatch.condText}) (${thenText})`;
         diagnostics.push(
@@ -2928,6 +2946,54 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
           diagnostic(
             "trip-bool-if-simplify",
             `Simplify boolean if-expression to not`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (
+        thenText === "false" &&
+        elseText !== "true" &&
+        elseText !== "false" &&
+        canUsePrelude(topLevel, "and") &&
+        canUsePrelude(topLevel, "not")
+      ) {
+        const replacement = `and (not (${ifSimplifyMatch.condText})) (${elseText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to and/not`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (
+        elseText === "true" &&
+        thenText !== "true" &&
+        thenText !== "false" &&
+        canUsePrelude(topLevel, "or") &&
+        canUsePrelude(topLevel, "not")
+      ) {
+        const replacement = `or (not (${ifSimplifyMatch.condText})) (${thenText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to or/not`,
             tokens[i]!,
             {
               start: tokens[i]!.start,

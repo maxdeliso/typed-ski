@@ -36,7 +36,9 @@ export function findLocalClangPath(): string | null {
   }
 
   if (!outputBase) {
-    console.warn("findLocalClangPath: failed to run bazelisk/bazel info output_base");
+    console.warn(
+      "findLocalClangPath: failed to run bazelisk/bazel info output_base",
+    );
     return null;
   }
 

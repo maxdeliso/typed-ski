@@ -1,0 +1,13 @@
+# Bun configuration.
+#
+# `bun test` is the fast local feedback loop: it runs the in-process test suite
+# directly from TypeScript source with no separate build step. The canonical /
+# full suite (including the native LLVM and dist-bundle tests that require clang
+# and built artifacts) still runs via Node + Bazel — see package.json `test`
+# and the BUILD.bazel test targets.
+
+[test]
+# Discover tests only under the source tree. Without an explicit root, a
+# positional filter such as `bun test parser` also matches the compiled
+# ts_out/test/** mirror by path substring, double-running stale .js output.
+root = "test"

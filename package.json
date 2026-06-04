@@ -41,6 +41,7 @@
     "dist": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js dist",
     "typecheck": "node scripts/tsgo.mjs --noEmit",
     "test": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bazel.js test",
+    "test:bun": "bun test test/parser test/types test/ski test/consts test/shared test/meta test/improvize test/minicore test/avlMiniCore.test.ts test/tripSourceLoader.test.ts",
     "bootstrap:format": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js format --write bootstrap/src",
     "bootstrap:lint": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js lint --fix bootstrap/src",
     "bootstrap:prune": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js prune bootstrap/src Compiler.main,MiniVerify.verifyToAnfText,BundleSummary.main,BundleParseSummary.main,BundleInventory.main,ModuleEnv.main,Llvm.compileSourceToLlvm,AnfLlvm.compileSourceToLlvmText,Llvm.compileBundleSummaryToLlvm"

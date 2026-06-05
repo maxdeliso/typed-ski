@@ -44,6 +44,8 @@ import Prelude if
 
 import Prelude or
 
+import Prelude and
+
 import Prelude not
 
 import Prelude U8
@@ -980,6 +982,45 @@ poly exportStatus =
               | otherwise => "EXPORT_UNDEFINED"
             }
 
+poly rec countModuleExportOrigins =
+  \moduleName : List U8 =>
+    \symbolName : List U8 =>
+      \exports : List ExportInfo =>
+        \acc : U8 =>
+          matchList
+            [ExportInfo]
+            [U8]
+            exports
+            acc
+            (
+              \h : ExportInfo =>
+                \t : List ExportInfo =>
+                  do [U8] {
+                    MkExportInfo hModule hSymbol = h
+                    return
+                    if [U8] (and (eqListU8 hModule moduleName) (eqListU8 hSymbol symbolName))
+                      (
+                        \u : U8 => countModuleExportOrigins moduleName symbolName t (inc acc)
+                      )
+                      (
+                        \u : U8 => countModuleExportOrigins moduleName symbolName t acc
+                      )
+                  }
+            )
+
+poly compileExportStatus =
+  \moduleName : List U8 =>
+    \symbolName : List U8 =>
+      \exports : List ExportInfo =>
+        \defs : List DefinitionInfo =>
+          \ctors : List ConstructorMeta =>
+            let origins = countModuleExportOrigins moduleName symbolName exports #u8(0) in
+            cond [List U8] {
+              | (ltU8 #u8(1) origins) => "AMBIGUOUS"
+              | (or (isDefined moduleName symbolName defs) (isConstructorDefined moduleName symbolName ctors)) => "OK"
+              | otherwise => "EXPORT_UNDEFINED"
+            }
+
 poly rec emitModuleImportsAcc =
   \moduleName : List U8 =>
     \imports : List ImportInfo =>
@@ -1600,7 +1641,7 @@ poly rec validateExports =
               \t : List ExportInfo =>
                 do [Result (List U8) Bool] {
                   MkExportInfo hModule hSymbol = h
-                  status = exportStatus hModule hSymbol exps defs ctors
+                  status = compileExportStatus hModule hSymbol exps defs ctors
                   return
                   if [Result (List U8) Bool] (eqListU8 status "OK")
                     (\u : U8 => validateExports t defs ctors)

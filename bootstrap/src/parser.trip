@@ -2197,33 +2197,35 @@ poly parsePatternToks =
       )
 
 poly rec desugarDoLoop =
-  \steps : List DoStep =>
-    \currentTerm : Expr =>
+  \isMaybe : Bool =>
+    \steps : List DoStep =>
+      \currentTerm : Expr =>
+        matchList
+          [DoStep]
+          [Expr]
+          steps
+          currentTerm
+          (
+            \h : DoStep =>
+              \t : List DoStep =>
+                let nextTerm = match h [Expr] {| S_Bind name expr => if [Expr] isMaybe (E_Match expr {(Pattern, Expr) | {Pattern, Expr | (P_Ctor "None" {List U8 |}), (E_Var "None")} {Pattern, Expr | (P_Ctor "Some" {List U8 | name}), currentTerm}}) (E_Match expr {(Pattern, Expr) | {Pattern, Expr | (P_Ctor "Err" {List U8 | "e"}), (E_App (E_Var "Err") (E_Var "e"))} {Pattern, Expr | (P_Ctor "Ok" {List U8 | name}), currentTerm}}) | S_Match ctor params expr => E_Match expr {(Pattern, Expr) | {Pattern, Expr | (P_Ctor ctor params), currentTerm}} | S_Let name expr => E_Let name expr currentTerm | S_Assert condVal err => if [Expr] isMaybe (E_App (E_App (E_App (E_Var "if") condVal) (E_Lam "u" currentTerm)) (E_Lam "u" (E_Var "None"))) (E_App (E_App (E_App (E_Var "if") condVal) (E_Lam "u" currentTerm)) (E_Lam "u" (E_App (E_Var "Err") err))) | S_Return expr => E_Let "_" expr currentTerm | S_Expr expr => E_Let "_" expr currentTerm} in
+                desugarDoLoop isMaybe t nextTerm
+          )
+
+poly desugarDo =
+  \isMaybe : Bool =>
+    \steps : List DoStep =>
       matchList
         [DoStep]
         [Expr]
         steps
-        currentTerm
+        (E_Var "error")
         (
           \h : DoStep =>
             \t : List DoStep =>
-              let nextTerm = match h [Expr] {| S_Bind name expr => E_Match expr {(Pattern, Expr) | {Pattern, Expr | (P_Ctor "Err" {List U8 | "e"}), (E_App (E_Var "Err") (E_Var "e"))} {Pattern, Expr | (P_Ctor "Ok" {List U8 | name}), currentTerm}} | S_Match ctor params expr => E_Match expr {(Pattern, Expr) | {Pattern, Expr | (P_Ctor ctor params), currentTerm}} | S_Let name expr => E_Let name expr currentTerm | S_Assert condVal err => E_App (E_App (E_App (E_Var "if") condVal) (E_Lam "u" currentTerm)) (E_Lam "u" (E_App (E_Var "Err") err)) | S_Return expr => E_Let "_" expr currentTerm | S_Expr expr => E_Let "_" expr currentTerm} in
-              desugarDoLoop t nextTerm
+              let initTerm = match h [Expr] {| S_Return expr => expr | S_Expr expr => expr | S_Bind name expr => expr | S_Match ctor params expr => expr | S_Let name expr => expr | S_Assert condVal err => condVal} in
+              desugarDoLoop isMaybe t initTerm
         )
-
-poly desugarDo =
-  \steps : List DoStep =>
-    matchList
-      [DoStep]
-      [Expr]
-      steps
-      (E_Var "error")
-      (
-        \h : DoStep =>
-          \t : List DoStep =>
-            let initTerm = match h [Expr] {| S_Return expr => expr | S_Expr expr => expr | S_Bind name expr => expr | S_Match ctor params expr => expr | S_Let name expr => expr | S_Assert condVal err => condVal} in
-            desugarDoLoop t initTerm
-      )
 
 poly parseSingleStep =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
@@ -2485,21 +2487,26 @@ poly rec parseDoStepsRec =
 poly parseDoWith =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
     \toks : List Token =>
-      match (skipTypeArg toks) [Result ParseError (List Token)] {
+      match (expect toks lBracketTag) [Result ParseError (List Token)] {
         | Err e => Err [ParseError] [(Expr, (List Token))] e
-        | Ok afterType =>
-          do [Result ParseError (Expr, (List Token))] {
-            inside <- (expect afterType lBraceTag)
-            return
-            match (parseDoStepsRec recurse inside {DoStep |}) [Result ParseError ((List DoStep), (List Token))] {
-              | Err e => Err [ParseError] [(Expr, (List Token))] e
-              | Ok res =>
-                let steps = fst [List DoStep] [List Token] res in
-                let remaining = snd [List DoStep] [List Token] res in
-                Ok
-                  [ParseError]
-                  [(Expr, (List Token))]
-                  {Expr, List Token | (desugarDo steps), remaining}
-            }
+        | Ok afterOpen =>
+          let isMaybe = matchList [Token] [Bool] afterOpen false (\h : Token => \t : List Token => eqListU8 (tokenText h) "Maybe") in
+          match (skipAfter afterOpen rBracketTag) [Result ParseError (List Token)] {
+            | Err e => Err [ParseError] [(Expr, (List Token))] e
+            | Ok afterType =>
+              do [Result ParseError (Expr, (List Token))] {
+                inside <- (expect afterType lBraceTag)
+                return
+                match (parseDoStepsRec recurse inside {DoStep |}) [Result ParseError ((List DoStep), (List Token))] {
+                  | Err e => Err [ParseError] [(Expr, (List Token))] e
+                  | Ok res =>
+                    let steps = fst [List DoStep] [List Token] res in
+                    let remaining = snd [List DoStep] [List Token] res in
+                    Ok
+                      [ParseError]
+                      [(Expr, (List Token))]
+                      {Expr, List Token | (desugarDo isMaybe steps), remaining}
+                }
+              }
           }
       }

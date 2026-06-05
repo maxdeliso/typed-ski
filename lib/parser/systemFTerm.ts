@@ -743,7 +743,17 @@ function parseDoExpressionInternal(
 
   let errorType: BaseType | undefined;
   let okType: BaseType | undefined;
-  if (returnType.kind === "type-app" && returnType.fn.kind === "type-app") {
+  const isMaybe =
+    returnType.kind === "type-app" &&
+    returnType.fn.kind === "type-var" &&
+    returnType.fn.typeName === "Maybe";
+
+  if (isMaybe) {
+    okType = returnType.arg;
+  } else if (
+    returnType.kind === "type-app" &&
+    returnType.fn.kind === "type-app"
+  ) {
     errorType = returnType.fn.arg;
     okType = returnType.arg;
   } else {
@@ -761,6 +771,10 @@ function parseDoExpressionInternal(
       ),
       err,
     );
+  };
+
+  const makeNoneTerm = (): SystemFTerm => {
+    return mkSystemFTypeApp(mkSystemFVar("None"), okType!);
   };
 
   const makeOkTerm = (val: SystemFTerm): SystemFTerm => {
@@ -792,23 +806,43 @@ function parseDoExpressionInternal(
   for (let i = steps.length - 2; i >= 0; i--) {
     const step = steps[i]!;
     if (step.kind === "bind") {
-      currentTerm = {
-        kind: "systemF-match",
-        scrutinee: step.expr,
-        returnType,
-        arms: [
-          {
-            constructorName: "Err",
-            params: ["e"],
-            body: makeErrTerm(mkSystemFVar("e")),
-          },
-          {
-            constructorName: "Ok",
-            params: [step.name],
-            body: currentTerm,
-          },
-        ],
-      };
+      if (isMaybe) {
+        currentTerm = {
+          kind: "systemF-match",
+          scrutinee: step.expr,
+          returnType,
+          arms: [
+            {
+              constructorName: "None",
+              params: [],
+              body: makeNoneTerm(),
+            },
+            {
+              constructorName: "Some",
+              params: [step.name],
+              body: currentTerm,
+            },
+          ],
+        };
+      } else {
+        currentTerm = {
+          kind: "systemF-match",
+          scrutinee: step.expr,
+          returnType,
+          arms: [
+            {
+              constructorName: "Err",
+              params: ["e"],
+              body: makeErrTerm(mkSystemFVar("e")),
+            },
+            {
+              constructorName: "Ok",
+              params: [step.name],
+              body: currentTerm,
+            },
+          ],
+        };
+      }
     } else if (step.kind === "match") {
       currentTerm = {
         kind: "systemF-match",
@@ -833,7 +867,11 @@ function parseDoExpressionInternal(
       const ifVar = mkSystemFVar("if");
       const ifTyped = mkSystemFTypeApp(ifVar, returnType);
       const thenBranch = mkSystemFAbs("u", u8Type, currentTerm);
-      const elseBranch = mkSystemFAbs("u", u8Type, makeErrTerm(step.error));
+      const elseBranch = mkSystemFAbs(
+        "u",
+        u8Type,
+        isMaybe ? makeNoneTerm() : makeErrTerm(step.error),
+      );
 
       currentTerm = createSystemFApplication(
         createSystemFApplication(

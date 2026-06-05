@@ -12,13 +12,23 @@ import Prelude U8
 
 import Prelude append
 
-import Prelude concat
-
 import Prelude eqListU8
 
 import Prelude Bin
 
 import Prelude BZ
+
+import Prelude Bool
+
+import Prelude true
+
+import Prelude false
+
+import Prelude if
+
+import Prelude Pair
+
+import Prelude MkPair
 
 import Bin incBin
 
@@ -125,6 +135,12 @@ data AnfFunc =
 
 data AnfProgram =
   | MkAnfProgram (List AnfFunc) (List U8)
+
+data LiftRes =
+  | MkLiftRes Bin (List AnfFunc) AnfExpr
+
+data LiftListRes =
+  | MkLiftListRes Bin (List AnfFunc) (List AnfExpr)
 
 poly tempPrefix =
   "__t"
@@ -339,6 +355,455 @@ poly rec norm =
             }
         }
 
+poly rec memberOfList =
+  \name : List U8 =>
+    \list : List (List U8) =>
+      matchList
+        [List U8]
+        [Bool]
+        list
+        false
+        (
+          \h : List U8 =>
+            \t : List (List U8) =>
+              if [Bool] (eqListU8 h name)
+                (\u : U8 => true)
+                (\u : U8 => memberOfList name t)
+        )
+
+poly rec filterOut =
+  \name : List U8 =>
+    \list : List (List U8) =>
+      matchList
+        [List U8]
+        [List (List U8)]
+        list
+        {List U8 |}
+        (
+          \h : List U8 =>
+            \t : List (List U8) =>
+              if [List (List U8)] (eqListU8 h name)
+                (\u : U8 => filterOut name t)
+                (\u : U8 => cons [List U8] h (filterOut name t))
+        )
+
+poly rec dedup =
+  \list : List (List U8) =>
+    matchList
+      [List U8]
+      [List (List U8)]
+      list
+      {List U8 |}
+      (
+        \h : List U8 =>
+          \t : List (List U8) =>
+            let rest = dedup t in
+            if [List (List U8)] (memberOfList h rest)
+              (\u : U8 => rest)
+              (\u : U8 => cons [List U8] h rest)
+      )
+
+poly rec collectFreeVars =
+  \localsInScope : List (List U8) =>
+    \e : AnfExpr =>
+      match e [List (List U8)] {
+        | AE_Var name =>
+          if [List (List U8)] (memberOfList name localsInScope)
+            (\u : U8 => cons [List U8] name {List U8 |})
+            (\u : U8 => {List U8 |})
+        | AE_Native t => {List U8 |}
+        | AE_Lam param body =>
+          collectFreeVars (filterOut param localsInScope) body
+        | AE_Call f args =>
+          let fVars = if [List (List U8)] (memberOfList f localsInScope) (\u : U8 => cons [List U8] f {List U8 |}) (\u : U8 => {List U8 |}) in
+          append [List U8] fVars (collectFreeVarsList localsInScope args)
+        | AE_Con tag total arity args => collectFreeVarsList localsInScope args
+        | AE_Case scrut arms =>
+          append
+            [List U8]
+            (collectFreeVars localsInScope scrut)
+            (collectFreeVarsList localsInScope arms)
+        | AE_Let name val body =>
+          append
+            [List U8]
+            (collectFreeVars localsInScope val)
+            (collectFreeVars (filterOut name localsInScope) body)
+      }
+
+poly rec collectFreeVarsList =
+  \localsInScope : List (List U8) =>
+    \es : List AnfExpr =>
+      matchList
+        [AnfExpr]
+        [List (List U8)]
+        es
+        {List U8 |}
+        (
+          \h : AnfExpr =>
+            \t : List AnfExpr =>
+              append
+                [List U8]
+                (collectFreeVars localsInScope h)
+                (collectFreeVarsList localsInScope t)
+        )
+
+poly rec listLength =
+  \list : List (List U8) =>
+    matchList [List U8] [U8] list #u8(0) (\h : List U8 => \t : List (List U8) => addU8 #u8(1) (listLength t))
+
+poly rec mapVarExprs =
+  \names : List (List U8) =>
+    matchList
+      [List U8]
+      [List AnfExpr]
+      names
+      {AnfExpr |}
+      (
+        \h : List U8 =>
+          \t : List (List U8) => cons [AnfExpr] (AE_Var h) (mapVarExprs t)
+      )
+
+poly rec buildEnvUnpacking =
+  \names : List (List U8) =>
+    \idx : U8 =>
+      \body : AnfExpr =>
+        matchList
+          [List U8]
+          [AnfExpr]
+          names
+          body
+          (
+            \h : List U8 =>
+              \t : List (List U8) =>
+                let loadExpr = AE_Call "trip_obj_field" {AnfExpr | (AE_Var "env") (AE_Native (T_Byte idx))} in
+                AE_Let h loadExpr (buildEnvUnpacking t (addU8 idx #u8(1)) body)
+          )
+
+poly rec liftExpr =
+  \localsInScope : List (List U8) =>
+    \counter : Bin =>
+      \e : AnfExpr =>
+        match e [LiftRes] {
+          | AE_Var name => MkLiftRes counter {AnfFunc |} e
+          | AE_Native t => MkLiftRes counter {AnfFunc |} e
+          | AE_Lam param body =>
+            do [LiftRes] {
+              MkLiftRes c1 funcs1 liftedBody = (liftExpr (cons [List U8] param localsInScope) counter body)
+              fvars = dedup (filterOut param (collectFreeVars localsInScope liftedBody))
+              arity =
+              #u8(1)
+              k = listLength fvars
+              totalArity = addU8 arity k
+              lambdaId = binToDigits c1
+              lambdaName = append [U8]
+              "__lambda_" lambdaId
+              c2 = incBin c1
+              lambdaBody = buildEnvUnpacking fvars
+              #u8(1) liftedBody
+              lambdaFunc = (MkAnfFunc lambdaName {List U8 | "env" param} lambdaBody)
+              fnPtrName = append [U8]
+              "__fn_ptr_" lambdaId
+              closureArgs = cons [AnfExpr] (AE_Var fnPtrName) (mapVarExprs fvars)
+              closureExpr = AE_Let fnPtrName (AE_Var lambdaName) (AE_Con #u8(0) #u8(0) totalArity closureArgs)
+              return MkLiftRes c2 (cons [AnfFunc] lambdaFunc funcs1) closureExpr
+            }
+          | AE_Call f args =>
+            if [LiftRes] (or (eqListU8 f "writeOne") (eqListU8 f "Prelude.writeOne"))
+              (
+                \u : U8 =>
+                  match args [LiftRes] {
+                    | nil =>
+                      do [LiftRes] {
+                        MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                        return MkLiftRes c1 funcs1 (AE_Call f liftedArgs)
+                      }
+                    | cons arg1 rest1 =>
+                      match rest1 [LiftRes] {
+                        | nil =>
+                          do [LiftRes] {
+                            MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                            return MkLiftRes c1 funcs1 (AE_Call f liftedArgs)
+                          }
+                        | cons arg2 rest2 =>
+                          match rest2 [LiftRes] {
+                            | nil =>
+                              match arg2 [LiftRes] {
+                                | AE_Lam param body =>
+                                  do [LiftRes] {
+                                    MkLiftRes c1 funcs1 liftedBody = (liftExpr (cons [List U8] param localsInScope) counter body)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (
+                                        AE_Call
+                                          f
+                                          {AnfExpr |
+                                            arg1
+                                            (AE_Lam param liftedBody)
+                                          }
+                                      )
+                                  }
+                                | AE_Var n =>
+                                  do [LiftRes] {
+                                    MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (AE_Call f liftedArgs)
+                                  }
+                                | AE_Native t =>
+                                  do [LiftRes] {
+                                    MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (AE_Call f liftedArgs)
+                                  }
+                                | AE_Call f2 args2 =>
+                                  do [LiftRes] {
+                                    MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (AE_Call f liftedArgs)
+                                  }
+                                | AE_Con tag total arity args2 =>
+                                  do [LiftRes] {
+                                    MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (AE_Call f liftedArgs)
+                                  }
+                                | AE_Case scrut arms =>
+                                  do [LiftRes] {
+                                    MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (AE_Call f liftedArgs)
+                                  }
+                                | AE_Let name val body =>
+                                  do [LiftRes] {
+                                    MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                    return
+                                      MkLiftRes
+                                      c1
+                                      funcs1
+                                      (AE_Call f liftedArgs)
+                                  }
+                              }
+                            | cons h1 t1 =>
+                              do [LiftRes] {
+                                MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                return
+                                  MkLiftRes
+                                  c1
+                                  funcs1
+                                  (AE_Call f liftedArgs)
+                              }
+                          }
+                      }
+                  }
+              )
+              (
+                \u : U8 =>
+                  if [LiftRes] (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))
+                    (
+                      \u2 : U8 =>
+                        match args [LiftRes] {
+                          | nil =>
+                            do [LiftRes] {
+                              MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                              return MkLiftRes c1 funcs1 (AE_Call f liftedArgs)
+                            }
+                          | cons arg1 rest1 =>
+                            match rest1 [LiftRes] {
+                              | nil =>
+                                match arg1 [LiftRes] {
+                                  | AE_Lam param body =>
+                                    do [LiftRes] {
+                                      MkLiftRes c1 funcs1 liftedBody = (liftExpr (cons [List U8] param localsInScope) counter body)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (
+                                          AE_Call
+                                            f
+                                            {AnfExpr |
+                                              (AE_Lam param liftedBody)
+                                            }
+                                        )
+                                    }
+                                  | AE_Var n =>
+                                    do [LiftRes] {
+                                      MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (AE_Call f liftedArgs)
+                                    }
+                                  | AE_Native t =>
+                                    do [LiftRes] {
+                                      MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (AE_Call f liftedArgs)
+                                    }
+                                  | AE_Call f2 args2 =>
+                                    do [LiftRes] {
+                                      MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (AE_Call f liftedArgs)
+                                    }
+                                  | AE_Con tag total arity args2 =>
+                                    do [LiftRes] {
+                                      MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (AE_Call f liftedArgs)
+                                    }
+                                  | AE_Case scrut arms =>
+                                    do [LiftRes] {
+                                      MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (AE_Call f liftedArgs)
+                                    }
+                                  | AE_Let name val body =>
+                                    do [LiftRes] {
+                                      MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                      return
+                                        MkLiftRes
+                                        c1
+                                        funcs1
+                                        (AE_Call f liftedArgs)
+                                    }
+                                }
+                              | cons h1 t1 =>
+                                do [LiftRes] {
+                                  MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                                  return
+                                    MkLiftRes
+                                    c1
+                                    funcs1
+                                    (AE_Call f liftedArgs)
+                                }
+                            }
+                        }
+                    )
+                    (
+                      \u2 : U8 =>
+                        do [LiftRes] {
+                          MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+                          return MkLiftRes c1 funcs1 (AE_Call f liftedArgs)
+                        }
+                    )
+              )
+          | AE_Con tag total arity args =>
+            do [LiftRes] {
+              MkLiftListRes c1 funcs1 liftedArgs = (liftExprList localsInScope counter args)
+              return MkLiftRes c1 funcs1 (AE_Con tag total arity liftedArgs)
+            }
+          | AE_Case scrut arms =>
+            do [LiftRes] {
+              MkLiftRes c1 funcs1 liftedScrut = (liftExpr localsInScope counter scrut)
+              MkLiftListRes c2 funcs2 liftedArms = (liftExprList localsInScope c1 arms)
+              return
+                MkLiftRes
+                c2
+                (append [AnfFunc] funcs1 funcs2)
+                (AE_Case liftedScrut liftedArms)
+            }
+          | AE_Let name val body =>
+            do [LiftRes] {
+              MkLiftRes c1 funcs1 liftedVal = (liftExpr localsInScope counter val)
+              MkLiftRes c2 funcs2 liftedBody = (liftExpr (cons [List U8] name localsInScope) c1 body)
+              return
+                MkLiftRes
+                c2
+                (append [AnfFunc] funcs1 funcs2)
+                (AE_Let name liftedVal liftedBody)
+            }
+        }
+
+poly rec liftExprList =
+  \localsInScope : List (List U8) =>
+    \counter : Bin =>
+      \es : List AnfExpr =>
+        matchList
+          [AnfExpr]
+          [LiftListRes]
+          es
+          (MkLiftListRes counter {AnfFunc |} {AnfExpr |})
+          (
+            \h : AnfExpr =>
+              \t : List AnfExpr =>
+                do [LiftListRes] {
+                  MkLiftRes c1 funcs1 liftedHead = (liftExpr localsInScope counter h)
+                  MkLiftListRes c2 funcs2 liftedTail = (liftExprList localsInScope c1 t)
+                  return
+                    MkLiftListRes
+                    c2
+                    (append [AnfFunc] funcs1 funcs2)
+                    (cons [AnfExpr] liftedHead liftedTail)
+                }
+          )
+
+poly rec liftFuncs =
+  \counter : Bin =>
+    \funcs : List AnfFunc =>
+      matchList
+        [AnfFunc]
+        [(Bin, (List AnfFunc))]
+        funcs
+        {Bin, List AnfFunc | counter, {AnfFunc |}}
+        (
+          \h : AnfFunc =>
+            \t : List AnfFunc =>
+              do [(Bin, (List AnfFunc))] {
+                MkAnfFunc name params body = h
+                MkLiftRes c1 liftedFuncs liftedBody = (liftExpr params counter body)
+                MkPair c2 restFuncs = (liftFuncs c1 t)
+                hLifted = MkAnfFunc name params liftedBody
+                return
+                  {Bin, List AnfFunc |
+                    c2,
+                    (
+                      cons
+                        [AnfFunc]
+                        hLifted
+                        (append [AnfFunc] liftedFuncs restFuncs)
+                    )
+                  }
+              }
+        )
+
+poly liftProgram =
+  \prog : AnfProgram =>
+    do [AnfProgram] {
+      MkAnfProgram funcs entry = prog
+      MkPair finalCounter liftedFuncs = (liftFuncs BZ funcs)
+      return MkAnfProgram liftedFuncs entry
+    }
+
 poly normalize =
   \expr : MiniExpr =>
     do [AnfExpr] {
@@ -370,5 +835,6 @@ poly normalizeProgram =
   \prog : MiniProgram =>
     do [AnfProgram] {
       MkMiniProgram funcs entry = prog
-      return MkAnfProgram (normalizeFuncs funcs) entry
+      normalized = MkAnfProgram (normalizeFuncs funcs) entry
+      return liftProgram normalized
     }

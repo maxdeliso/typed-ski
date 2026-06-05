@@ -40,10 +40,6 @@ import Prelude if
 
 import Prelude eqU8
 
-import Lexer tokenize
-
-import Parser parseProgram
-
 import Parser Decl
 
 import Parser D_Def
@@ -98,10 +94,6 @@ import AnfLlvm emitProgram
 
 import BundleSummary MkBundleSummary
 
-import BundleSummary ModuleRecord
-
-import BundleSummary MkModuleRecord
-
 import BundleSummary parseBundleSummary
 
 import ModuleEnv ModuleEnv
@@ -118,37 +110,9 @@ import ModuleEnv ImportInfo
 
 import ModuleEnv MkImportInfo
 
-import ModuleEnv ExportInfo
-
-import ModuleEnv MkExportInfo
-
 import ModuleEnv DefinitionInfo
 
 import ModuleEnv MkDefinitionInfo
-
-import ModuleEnv DataTypeInfo
-
-import ModuleEnv MkDataTypeInfo
-
-import ModuleEnv ConstructorMeta
-
-import ModuleEnv MkConstructorMeta
-
-import ModuleEnv ConstructorAliasInfo
-
-import ModuleEnv MkConstructorAliasInfo
-
-import ModuleEnv OpaqueInfo
-
-import ModuleEnv MkOpaqueInfo
-
-import ModuleEnv NativeInfo
-
-import ModuleEnv MkNativeInfo
-
-import ModuleEnv PrimitiveInfo
-
-import ModuleEnv MkPrimitiveInfo
 
 import ModuleEnv validateImports
 
@@ -201,69 +165,6 @@ poly rec filterDefDecls =
               | D_Native name => filterDefDecls t
               | D_Type name => filterDefDecls t
               | D_Data name ctors => filterDefDecls t
-            }
-      )
-
-poly rec mapCtorNames =
-  \ctors : List ((List U8), U8) =>
-    matchList
-      [((List U8), U8)]
-      [List (List U8)]
-      ctors
-      {List U8 |}
-      (
-        \h : ((List U8), U8) =>
-          \t : List ((List U8), U8) => cons [List U8] (fst [List U8] [U8] h) (mapCtorNames t)
-      )
-
-poly rec collectLocalDefs =
-  \decls : List Decl =>
-    matchList
-      [Decl]
-      [List (List U8)]
-      decls
-      {List U8 |}
-      (
-        \h : Decl =>
-          \t : List Decl =>
-            match h [List (List U8)] {
-              | D_Def kind isRec name body => cons [List U8] name (collectLocalDefs t)
-              | D_Data name ctors =>
-                let rest = collectLocalDefs t in
-                cons [List U8] name (append [List U8] (mapCtorNames ctors) rest)
-              | D_Module name => collectLocalDefs t
-              | D_Import fromName symbolName => collectLocalDefs t
-              | D_Export name => collectLocalDefs t
-              | D_Opaque name => collectLocalDefs t
-              | D_Native name => collectLocalDefs t
-              | D_Type name => collectLocalDefs t
-            }
-      )
-
-poly rec collectImports =
-  \decls : List Decl =>
-    matchList
-      [Decl]
-      [List ((List U8), (List U8))]
-      decls
-      {((List U8), (List U8)) |}
-      (
-        \h : Decl =>
-          \t : List Decl =>
-            match h [List ((List U8), (List U8))] {
-              | D_Import fromName symbolName =>
-                let qName = concat [U8] {List U8 | fromName "." symbolName} in
-                cons
-                  [((List U8), (List U8))]
-                  {List U8, List U8 | symbolName, qName}
-                  (collectImports t)
-              | D_Def kind isRec name body => collectImports t
-              | D_Data name ctors => collectImports t
-              | D_Module name => collectImports t
-              | D_Export name => collectImports t
-              | D_Opaque name => collectImports t
-              | D_Native name => collectImports t
-              | D_Type name => collectImports t
             }
       )
 

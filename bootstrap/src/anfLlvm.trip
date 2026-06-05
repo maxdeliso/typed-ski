@@ -226,6 +226,66 @@ poly rec emitArgsString =
                 }
           )
 
+poly rec emitIndirectCallChain =
+  \env : List ((List U8), (List U8)) =>
+    \counter : Bin =>
+      \instrs : List (List U8) =>
+        \closureOp : List U8 =>
+          \args : List AnfExpr =>
+            matchList
+              [AnfExpr]
+              [Result (List U8) EmitRes]
+              args
+              (Ok [List U8] [EmitRes] (MkEmitRes counter instrs closureOp))
+              (
+                \h : AnfExpr =>
+                  \t : List AnfExpr =>
+                    do [Result (List U8) EmitRes] {
+                      op <- (atomOperand env h)
+                      dest = append [U8]
+                      "%__ll" (binToDigits counter)
+                      castObjLine = concat [U8]
+                      {List U8 |
+                        "  "
+                        dest
+                        "_p = inttoptr i64 "
+                        closureOp
+                        " to ptr\n"
+                      }
+                      loadFnValLine = concat [U8]
+                      {List U8 |
+                        "  "
+                        dest
+                        "_fn_val = call i64 @trip_obj_field(ptr "
+                        dest
+                        "_p, i64 0)\n"
+                      }
+                      castFnLine = concat [U8]
+                      {List U8 |
+                        "  "
+                        dest
+                        "_fn = inttoptr i64 "
+                        dest
+                        "_fn_val to ptr\n"
+                      }
+                      callLine = concat [U8]
+                      {List U8 |
+                        "  "
+                        dest
+                        " = call i64 "
+                        dest
+                        "_fn(i64 "
+                        closureOp
+                        ", i64 "
+                        op
+                        ")\n"
+                      }
+                      counter1 = incBin counter
+                      newInstrs = append [List U8] {List U8 | callLine castFnLine loadFnValLine castObjLine} instrs
+                      return emitIndirectCallChain env counter1 newInstrs dest t
+                    }
+              )
+
 poly rec peelBinders =
   \e : AnfExpr =>
     \acc : List (List U8) =>
@@ -1001,32 +1061,124 @@ poly rec emitExpr =
                                                           )
                                                           (
                                                             \u8 : U8 =>
-                                                              do [Result (List U8) EmitRes] {
-                                                                argStr <- (emitArgsString env args true)
-                                                                dest = append [U8]
-                                                                "%__ll"
-                                                                  (
-                                                                    binToDigits
-                                                                      counter
-                                                                  )
-                                                                counter1 = incBin counter
-                                                                line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
-                                                                return
-                                                                  Ok
-                                                                  [List U8]
-                                                                  [EmitRes]
-                                                                  (
-                                                                    MkEmitRes
-                                                                      counter1
-                                                                      (
-                                                                        cons
+                                                              if [Result (List U8) EmitRes] (eqListU8 f "trip_obj_field")
+                                                                (
+                                                                  \u9 : U8 =>
+                                                                    match args [Result (List U8) EmitRes] {
+                                                                      | nil =>
+                                                                        Err
                                                                           [List U8]
-                                                                          line
+                                                                          [EmitRes]
+                                                                          "trip_obj_field expects two arguments"
+                                                                      | cons arg1 rest1 =>
+                                                                        match rest1 [Result (List U8) EmitRes] {
+                                                                          | nil =>
+                                                                            Err
+                                                                              [List U8]
+                                                                              [EmitRes]
+                                                                              "trip_obj_field expects two arguments"
+                                                                          | cons arg2 rest2 =>
+                                                                            match rest2 [Result (List U8) EmitRes] {
+                                                                              | nil =>
+                                                                                do [Result (List U8) EmitRes] {
+                                                                                  op1 <- (atomOperand env arg1)
+                                                                                  op2 <- (atomOperand env arg2)
+                                                                                  dest = append [U8]
+                                                                                  "%__ll"
+                                                                                    (
+                                                                                      binToDigits
+                                                                                        counter
+                                                                                    )
+                                                                                  counter1 = incBin counter
+                                                                                  castLine = concat [U8]
+                                                                                  {List U8 |
+                                                                                    "  "
+                                                                                    dest
+                                                                                    "_p = inttoptr i64 "
+                                                                                    op1
+                                                                                    " to ptr\n"
+                                                                                  }
+                                                                                  callLine = concat [U8]
+                                                                                  {List U8 |
+                                                                                    "  "
+                                                                                    dest
+                                                                                    " = call i64 @trip_obj_field(ptr "
+                                                                                    dest
+                                                                                    "_p, i64 "
+                                                                                    op2
+                                                                                    ")\n"
+                                                                                  }
+                                                                                  newInstrs = append [List U8] {List U8 | callLine castLine} instrs
+                                                                                  return
+                                                                                    Ok
+                                                                                    [List U8]
+                                                                                    [EmitRes]
+                                                                                    (
+                                                                                      MkEmitRes
+                                                                                        counter1
+                                                                                        newInstrs
+                                                                                        dest
+                                                                                    )
+                                                                                }
+                                                                              | cons h2 t2 =>
+                                                                                Err
+                                                                                  [List U8]
+                                                                                  [EmitRes]
+                                                                                  "trip_obj_field expects two arguments"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                )
+                                                                (
+                                                                  \u9 : U8 =>
+                                                                    match (lookupEnv env f) [Result (List U8) EmitRes] {
+                                                                      | Some closureOp =>
+                                                                        emitIndirectCallChain
+                                                                          env
+                                                                          counter
                                                                           instrs
-                                                                      )
-                                                                      dest
-                                                                  )
-                                                              }
+                                                                          closureOp
+                                                                          args
+                                                                      | None =>
+                                                                        if [Result (List U8) EmitRes] (eqListU8 f "_")
+                                                                          (
+                                                                            \u10 : U8 =>
+                                                                              Err
+                                                                                [List U8]
+                                                                                [EmitRes]
+                                                                                "Indirect call to _ not supported without closure variable"
+                                                                          )
+                                                                          (
+                                                                            \u10 : U8 =>
+                                                                              do [Result (List U8) EmitRes] {
+                                                                                argStr <- (emitArgsString env args true)
+                                                                                dest = append [U8]
+                                                                                "%__ll"
+                                                                                  (
+                                                                                    binToDigits
+                                                                                      counter
+                                                                                  )
+                                                                                counter1 = incBin counter
+                                                                                line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
+                                                                                return
+                                                                                  Ok
+                                                                                  [List U8]
+                                                                                  [EmitRes]
+                                                                                  (
+                                                                                    MkEmitRes
+                                                                                      counter1
+                                                                                      (
+                                                                                        cons
+                                                                                          [List U8]
+                                                                                          line
+                                                                                          instrs
+                                                                                      )
+                                                                                      dest
+                                                                                  )
+                                                                              }
+                                                                          )
+                                                                    }
+                                                                )
                                                           )
                                                     )
                                               )

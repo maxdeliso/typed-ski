@@ -394,6 +394,16 @@ export main
 poly main = match A [U8] { | A => #u8(1) | B => #u8(2) }
 `,
       ],
+      [
+        "higher-order function / closure compilation",
+        String.raw`module Demo
+export main
+poly main =
+  \x : U8 =>
+    let f = (\y : U8 => addU8 x y) in
+    f #u8(10)
+`,
+      ],
     ];
     for (const [label, source] of programs) {
       const llvm = await compileSourceToLlvm(source);

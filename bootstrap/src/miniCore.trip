@@ -218,25 +218,14 @@ poly rec buildFuncsRec =
                 MkPair params inner = (peelLams core)
                 body = coreToMini zeroArityNames inner
                 return
-                if [Result (List U8) (List MiniFunc)] (exprHasLam body)
-                  (
-                    \u : U8 =>
-                      Err
-                        [List U8]
-                        [List MiniFunc]
-                        (append [U8] "escaping lambda in function " name)
-                  )
-                  (
-                    \u : U8 =>
-                      do [Result (List U8) (List MiniFunc)] {
-                        rest <- (buildFuncsRec zeroArityNames t)
-                        return
-                          Ok
-                          [List U8]
-                          [List MiniFunc]
-                          (cons [MiniFunc] (MkMiniFunc name params body) rest)
-                      }
-                  )
+                do [Result (List U8) (List MiniFunc)] {
+                  rest <- (buildFuncsRec zeroArityNames t)
+                  return
+                    Ok
+                    [List U8]
+                    [List MiniFunc]
+                    (cons [MiniFunc] (MkMiniFunc name params body) rest)
+                }
               }
         )
 

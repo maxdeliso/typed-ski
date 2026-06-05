@@ -305,6 +305,13 @@ the test suite exposed through Bazel commands.
   compiling with continuations," in _Proceedings of the ACM SIGPLAN 1993
   Conference on Programming Language Design and Implementation_ (PLDI '93),
   ACM, New York, NY, USA, pp. 237–247, 1993. DOI: 10.1145/155090.155113
+- R. J. M. Hughes, "Super-combinators: a new implementation method for
+  applicative languages," in _Proceedings of the 1982 ACM Symposium on LISP and
+  Functional Programming_ (LFP '82), ACM, New York, NY, USA, pp. 1–10, 1982.
+  DOI: 10.1145/800068.802129
+- T. Johnsson, "Lambda lifting: transforming programs to recursive equations,"
+  in _Functional Programming Languages and Computer Architecture_ (FPCA '85),
+  Springer-Verlag, LNCS vol. 201, pp. 190–203, 1985. DOI: 10.1007/3-540-15975-4_37
 
 # CI/CD
 

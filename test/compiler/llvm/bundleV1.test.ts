@@ -25,6 +25,7 @@ import {
 } from "../../../lib/compiler/index.ts";
 import { NativeV1SubsetError } from "../../../lib/minicore/index.ts";
 import {
+  bootstrap,
   compileLlvmToExecutable,
   compileTripToLlvm,
   loadCommonModules,
@@ -1549,6 +1550,132 @@ poly main =
       }
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("matching a local ADT constructor after qualification", async () => {
+    const source = `module Main
+import Prelude U8
+data MyBool = | MyFalse | MyTrue
+export main
+poly main = \\b : MyBool => match b [U8] { | MyFalse => #u8(0) | MyTrue => #u8(1) }
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Main",
+      target: { kind: "generic" },
+      emitMainWrapper: true,
+      modules: [
+        { name: "Main", source },
+        { name: "Prelude", source: realBootstrapModuleSource("Prelude") },
+      ],
+    });
+    const compiler = await bootstrap.compileCompilerToNative();
+    try {
+      const res = runExecutable(compiler.exePath, bundleBytes);
+      assert.equal(res.status, 0);
+      assert.ok(!res.stdout.startsWith("ERR:"), res.stdout);
+      assert.match(res.stdout, /define i64 @trip_fn_Main_main/);
+    } finally {
+      await compiler.cleanup();
+    }
+  });
+
+  it("matching an imported ADT constructor", async () => {
+    const sourceLib = `module Lib
+export MyBool
+export MyFalse
+export MyTrue
+data MyBool = | MyFalse | MyTrue
+`;
+    const sourceMain = `module Main
+import Prelude U8
+import Lib MyBool
+import Lib MyFalse
+import Lib MyTrue
+export main
+poly main = \\b : MyBool => match b [U8] { | MyFalse => #u8(0) | MyTrue => #u8(1) }
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Main",
+      target: { kind: "generic" },
+      emitMainWrapper: true,
+      modules: [
+        { name: "Lib", source: sourceLib },
+        { name: "Main", source: sourceMain },
+        { name: "Prelude", source: realBootstrapModuleSource("Prelude") },
+      ],
+    });
+    const compiler = await bootstrap.compileCompilerToNative();
+    try {
+      const res = runExecutable(compiler.exePath, bundleBytes);
+      assert.equal(res.status, 0);
+      assert.ok(!res.stdout.startsWith("ERR:"), res.stdout);
+      assert.match(res.stdout, /define i64 @trip_fn_Main_main/);
+    } finally {
+      await compiler.cleanup();
+    }
+  });
+
+  it("rejects ambiguous constructor aliases", async () => {
+    const source = `module Main
+export main
+data A = Dup
+data B = Dup
+poly main = Dup
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Main",
+      target: { kind: "generic" },
+      emitMainWrapper: true,
+      modules: [
+        { name: "Main", source },
+      ],
+    });
+    const compiler = await bootstrap.compileCompilerToNative();
+    try {
+      const res = runExecutable(compiler.exePath, bundleBytes);
+      assert.equal(res.status, 0);
+      assert.ok(res.stdout.startsWith("ERR:"), res.stdout);
+      assert.match(res.stdout, /Ambiguous constructor alias: Dup/);
+    } finally {
+      await compiler.cleanup();
+    }
+  });
+
+  it("rejects wrong-ADT match arms", async () => {
+    const source = `module Main
+import Prelude U8
+data MyBool = | MyFalse | MyTrue
+data Other = | OtherVal
+export main
+poly main = \\b : MyBool => match b [U8] { | MyFalse => #u8(0) | OtherVal => #u8(1) }
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Main",
+      target: { kind: "generic" },
+      emitMainWrapper: true,
+      modules: [
+        { name: "Main", source },
+        { name: "Prelude", source: realBootstrapModuleSource("Prelude") },
+      ],
+    });
+    const compiler = await bootstrap.compileCompilerToNative();
+    try {
+      const res = runExecutable(compiler.exePath, bundleBytes);
+      assert.equal(res.status, 0);
+      assert.ok(res.stdout.startsWith("ERR:"), res.stdout);
+      assert.match(res.stdout, /Match arm constructor does not belong to the ADT/);
+    } finally {
+      await compiler.cleanup();
+    }
+  });
+
+  it("stage-1 native compiler compiling the full compiler bundle past elaboration", async () => {
+    const { exePath, cleanup } = await bootstrap.compileCompilerToNative();
+    try {
+      assert.ok(exePath);
+    } finally {
+      await cleanup();
     }
   });
 });

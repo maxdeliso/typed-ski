@@ -261,7 +261,7 @@ poly tokenize
 combinator 0
 module Parser
 declared Parser
-imports 67
+imports 68
 import Prelude eqListU8
 import Prelude List
 import Prelude nil
@@ -280,6 +280,7 @@ import Prelude eqU8
 import Prelude ltU8
 import Prelude addU8
 import Prelude append
+import Prelude concat
 import Prelude subU8
 import Prelude u8ToDigits
 import Prelude U8

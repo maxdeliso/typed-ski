@@ -45,7 +45,8 @@
     "bootstrap:format": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js format --write bootstrap/src",
     "bootstrap:lint": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js lint --fix bootstrap/src",
     "bootstrap:prune": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js prune bootstrap/src Compiler.main,MiniVerify.verifyToAnfText,BundleSummary.main,BundleParseSummary.main,BundleInventory.main,ModuleEnv.main,Llvm.compileSourceToLlvm,AnfLlvm.compileSourceToLlvmText,Llvm.compileBundleSummaryToLlvm",
-    "bootstrap": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bootstrap.js"
+    "bootstrap": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bootstrap.js",
+    "update:goldens": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/update_goldens.js"
   },
   "dependencies": {
     "random-seed": "0.3.0",

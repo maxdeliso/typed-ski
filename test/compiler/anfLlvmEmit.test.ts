@@ -427,6 +427,16 @@ poly main =
 `,
       ],
       [
+        "multi-argument application of curried closure",
+        String.raw`module Demo
+export main
+poly main =
+  \x : U8 =>
+    let f = (\y : U8 => \z : U8 => addU8 (addU8 x y) z) in
+    f #u8(5) #u8(10)
+`,
+      ],
+      [
         "passing closure to a higher-order function",
         String.raw`module Demo
 export main

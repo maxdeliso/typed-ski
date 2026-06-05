@@ -36,8 +36,6 @@ import Prelude addU8
 
 import Prelude append
 
-import Prelude concat
-
 import Prelude subU8
 
 import Prelude u8ToDigits

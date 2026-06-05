@@ -12,8 +12,6 @@ import Prelude U8
 
 import Prelude append
 
-import Prelude concat
-
 import Prelude eqListU8
 
 import Prelude Bin
@@ -502,9 +500,7 @@ poly rec liftExpr =
               c2 = incBin c1
               lambdaBody = buildEnvUnpacking fvars
               #u8(1) liftedBody
-              lambdaFunc =
-              MkAnfFunc lambdaName
-              {List U8 | "env" param} lambdaBody
+              lambdaFunc = (MkAnfFunc lambdaName {List U8 | "env" param} lambdaBody)
               fnPtrName = append [U8]
               "__fn_ptr_" lambdaId
               closureArgs = cons [AnfExpr] (AE_Var fnPtrName) (mapVarExprs fvars)
@@ -776,28 +772,27 @@ poly rec liftFuncs =
     \funcs : List AnfFunc =>
       matchList
         [AnfFunc]
-        [Pair Bin (List AnfFunc)]
+        [(Bin, (List AnfFunc))]
         funcs
-        (MkPair [Bin] [List AnfFunc] counter {AnfFunc |})
+        {Bin, List AnfFunc | counter, {AnfFunc |}}
         (
           \h : AnfFunc =>
             \t : List AnfFunc =>
-              do [Pair Bin (List AnfFunc)] {
+              do [(Bin, (List AnfFunc))] {
                 MkAnfFunc name params body = h
                 MkLiftRes c1 liftedFuncs liftedBody = (liftExpr params counter body)
                 MkPair c2 restFuncs = (liftFuncs c1 t)
                 hLifted = MkAnfFunc name params liftedBody
                 return
-                  MkPair
-                  [Bin]
-                  [List AnfFunc]
-                  c2
-                  (
-                    cons
-                      [AnfFunc]
-                      hLifted
-                      (append [AnfFunc] liftedFuncs restFuncs)
-                  )
+                  {Bin, List AnfFunc |
+                    c2,
+                    (
+                      cons
+                        [AnfFunc]
+                        hLifted
+                        (append [AnfFunc] liftedFuncs restFuncs)
+                    )
+                  }
               }
         )
 

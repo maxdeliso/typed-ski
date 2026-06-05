@@ -26,8 +26,6 @@ import Prelude None
 
 import Prelude Bool
 
-import Prelude true
-
 import Prelude false
 
 import Prelude if

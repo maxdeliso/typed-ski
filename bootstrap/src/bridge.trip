@@ -722,8 +722,7 @@ poly rec elaborateToCoreRec =
                     do [Result (List U8) (List ((List U8), Core))] {
                       MkDataEnv cEnv aEnv = (populateDataEnv name ctors total #u8(0) dEnv)
                       adtInfo =
-                      MkADTInfo (getCtorNames ctors)
-                      nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv)
+                      MkADTInfo (getCtorNames ctors) nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv)
                       return elaborateToCoreRec nextDEnv t
                     }
                   }

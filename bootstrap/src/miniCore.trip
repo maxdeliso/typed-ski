@@ -24,22 +24,6 @@ import Prelude Ok
 
 import Prelude Err
 
-import Prelude Bool
-
-import Prelude true
-
-import Prelude false
-
-import Prelude or
-
-import Prelude if
-
-import Prelude append
-
-import Prelude concat
-
-import Prelude eqListU8
-
 import Core Core
 
 import Core Cr_Var
@@ -55,20 +39,6 @@ import Core Cr_Ctor
 import Core Cr_Match
 
 import CoreToMini MiniExpr
-
-import CoreToMini ME_Var
-
-import CoreToMini ME_Lam
-
-import CoreToMini ME_Call
-
-import CoreToMini ME_Con
-
-import CoreToMini ME_Let
-
-import CoreToMini ME_Native
-
-import CoreToMini ME_Match
 
 import CoreToMini coreToMini
 
@@ -101,80 +71,6 @@ poly rec peelLams =
       | Cr_Native t => {List (List U8), Core | {List U8 |}, expr}
       | Cr_Ctor t n a => {List (List U8), Core | {List U8 |}, expr}
       | Cr_Match s arms => {List (List U8), Core | {List U8 |}, expr}
-    }
-
-poly rec listAnyLam =
-  \f : MiniExpr -> Bool =>
-    \es : List MiniExpr =>
-      matchList
-        [MiniExpr]
-        [Bool]
-        es
-        false
-        (\h : MiniExpr => \t : List MiniExpr => or (f h) (listAnyLam f t))
-
-poly checkContLam =
-  \f : MiniExpr -> Bool =>
-    \cont : MiniExpr =>
-      match cont [Bool] {
-        | ME_Var n => false
-        | ME_Lam n b => f b
-        | ME_Call f1 args => f cont
-        | ME_Con tag total arity fields => f cont
-        | ME_Let n v b => f cont
-        | ME_Native t => false
-        | ME_Match s arms => f cont
-      }
-
-poly checkWriteOneLams =
-  \f : MiniExpr -> Bool =>
-    \args : List MiniExpr =>
-      matchList
-        [MiniExpr]
-        [Bool]
-        args
-        false
-        (
-          \byte : MiniExpr =>
-            \r1 : List MiniExpr =>
-              matchList
-                [MiniExpr]
-                [Bool]
-                r1
-                false
-                (
-                  \cont : MiniExpr => \r2 : List MiniExpr => or (f byte) (checkContLam f cont)
-                )
-        )
-
-poly checkReadOneLams =
-  \f : MiniExpr -> Bool =>
-    \args : List MiniExpr =>
-      matchList
-        [MiniExpr]
-        [Bool]
-        args
-        false
-        (\cont : MiniExpr => \r1 : List MiniExpr => checkContLam f cont)
-
-poly rec exprHasLam =
-  \e : MiniExpr =>
-    match e [Bool] {
-      | ME_Var n => false
-      | ME_Lam n b => true
-      | ME_Call fn args =>
-        if [Bool] (or (eqListU8 fn "writeOne") (eqListU8 fn "Prelude.writeOne"))
-          (\u : U8 => checkWriteOneLams exprHasLam args)
-          (
-            \u : U8 =>
-              if [Bool] (or (eqListU8 fn "readOne") (eqListU8 fn "Prelude.readOne"))
-                (\u2 : U8 => checkReadOneLams exprHasLam args)
-                (\u2 : U8 => listAnyLam exprHasLam args)
-          )
-      | ME_Con tag total arity fields => listAnyLam exprHasLam fields
-      | ME_Let n v b => or (exprHasLam v) (exprHasLam b)
-      | ME_Native t => false
-      | ME_Match s arms => or (exprHasLam s) (listAnyLam exprHasLam arms)
     }
 
 poly rec getZeroArityNames =

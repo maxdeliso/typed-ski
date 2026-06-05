@@ -35,15 +35,21 @@ const wrapItNode = (itFn: any) => {
 const wrapItBun = (itFn: any) => {
   return (name: string, arg2: any, arg3?: any) => {
     const { fn, options } = parseArgs(arg2, arg3);
-    return itFn(name, fn, options);
+    if (options.skip) {
+      // @ts-ignore
+      return testRunnerSkip.it.skip(name, fn);
+    }
+    return itFn(name, fn, options.timeout);
   };
 };
+
+let testRunnerSkip: any;
 
 // @ts-ignore
 if (typeof Bun !== "undefined") {
   // @ts-ignore
   const bunTest = await import("bun:test");
-
+  testRunnerSkip = bunTest;
   testRunner = {
     describe: bunTest.describe,
     it: wrapItBun(bunTest.it),

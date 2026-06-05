@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEST_TEMP_ROOT = process.env["TEST_TMPDIR"] ?? tmpdir();
 
-export const jsRoot = resolve(__dirname, "../..");
-export const projectRoot = resolve(__dirname, "../../..");
+export const jsRoot = join(workspaceRoot, "ts_out");
+export const projectRoot = workspaceRoot;
 export const srcRoot = projectRoot;
 export const tripcScriptPath = join(jsRoot, "bin", "tripc.js");
 

@@ -1629,7 +1629,7 @@ poly rec parseCtorArity =
           \h : Token =>
             \t : List Token =>
               let tag = tokenTag h in
-              if [Result ParseError (U8, (List Token))] (or (eqU8 tag pipeTag) (isTopLevelStartTag tag))
+              if [Result ParseError (U8, (List Token))] (or (eqU8 tag pipeTag) (or (isTopLevelStartTag tag) (eqU8 tag eofTag)))
                 (
                   \u : U8 =>
                     Ok
@@ -1672,7 +1672,7 @@ poly rec parseDataCtors =
             \t : List Token =>
               let tag = tokenTag h in
               cond [Result ParseError ((List ((List U8), U8)), (List Token))] {
-                | (isTopLevelStartTag tag) =>
+                | (or (isTopLevelStartTag tag) (eqU8 tag eofTag)) =>
                   Ok
                     [ParseError]
                     [((List ((List U8), U8)), (List Token))]
@@ -2115,7 +2115,15 @@ poly rec splitNextStepAcc =
                         \u : U8 =>
                           if [((List Token), (List Token))] (eqU8 tag kwDoTag)
                             (
-                              \u2 : U8 => {List Token, List Token | (reverse [Token] acc), toks}
+                              \u2 : U8 =>
+                                let isRet = matchList [Token] [Bool] acc false (\h1 : Token => \t1 : List Token => matchList [Token] [Bool] t1 (and (eqU8 (tokenTag h1) identTag) (eqListU8 (tokenText h1) "return")) (\h2 : Token => \t2 : List Token => false)) in
+                                if [((List Token), (List Token))] isRet
+                                  (
+                                    \u3 : U8 => splitNextStepAcc t depth (cons [Token] h acc)
+                                  )
+                                  (
+                                    \u3 : U8 => {List Token, List Token | (reverse [Token] acc), toks}
+                                  )
                             )
                             (
                               \u2 : U8 =>

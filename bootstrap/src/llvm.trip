@@ -10,6 +10,8 @@ import Prelude matchList
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude Result
 
 import Prelude Ok
@@ -426,52 +428,51 @@ poly appendStateText =
 
 poly functionSymbol =
   \moduleName : List U8 =>
-    \name : List U8 =>
-      append [U8] "trip_fn_" (append [U8] moduleName (append [U8] "_" name))
+    \name : List U8 => concat [U8] {List U8 | "trip_fn_" moduleName "_" name}
 
 poly emitFunctionHeader =
   \moduleName : List U8 =>
     \name : List U8 =>
-      append
+      concat
         [U8]
-        "define i8 @"
-        (append [U8] (functionSymbol moduleName name) "() {\nentry:\n")
+        {List U8 |
+          "define i8 @"
+          (functionSymbol moduleName name)
+          "() {\nentry:\n"
+        }
 
 poly emitLiteralFunction =
   \moduleName : List U8 =>
     \name : List U8 =>
       \digits : List U8 =>
-        append
+        concat
           [U8]
-          (emitFunctionHeader moduleName name)
-          (append [U8] "  ret i8 " (append [U8] digits "\n}\n\n"))
+          {List U8 |
+            (emitFunctionHeader moduleName name)
+            "  ret i8 "
+            digits
+            "\n}\n\n"
+          }
 
 poly emitCallFunction =
   \moduleName : List U8 =>
     \name : List U8 =>
       \calleeModule : List U8 =>
         \calleeName : List U8 =>
-          append
+          concat
             [U8]
-            (emitFunctionHeader moduleName name)
-            (
-              append
-                [U8]
-                "  %call = call i8 @"
-                (
-                  append
-                    [U8]
-                    (functionSymbol calleeModule calleeName)
-                    "()\n  ret i8 %call\n}\n\n"
-                )
-            )
+            {List U8 |
+              (emitFunctionHeader moduleName name)
+              "  %call = call i8 @"
+              (functionSymbol calleeModule calleeName)
+              "()\n  ret i8 %call\n}\n\n"
+            }
 
 poly emitWriteCall =
   \byte : U8 =>
-    append
+    concat
       [U8]
-      "  call void @trip_write_one(i8 "
-      (append [U8] (u8ToDigits byte) ")\n")
+      {List U8 | "  call void @trip_write_one(i8 " (u8ToDigits byte) ")\n"}
 
 poly rec emitWriteCalls =
   \bytes : List U8 =>
@@ -499,44 +500,35 @@ poly emitWriteFunction =
   \moduleName : List U8 =>
     \name : List U8 =>
       \bytes : List U8 =>
-        append
+        concat
           [U8]
-          (emitFunctionHeader moduleName name)
-          (
-            append
-              [U8]
-              (emitWriteCalls bytes)
-              (
-                append
-                  [U8]
-                  "  ret i8 "
-                  (
-                    append
-                      [U8]
-                      (u8ToDigits (lastByteOrZero bytes #u8(0)))
-                      "\n}\n\n"
-                  )
-              )
-          )
+          {List U8 |
+            (emitFunctionHeader moduleName name)
+            (emitWriteCalls bytes)
+            "  ret i8 "
+            (u8ToDigits (lastByteOrZero bytes #u8(0)))
+            "\n}\n\n"
+          }
 
 poly emitMainWrapper =
   \moduleName : List U8 =>
-    append
+    concat
       [U8]
-      "define i32 @main() {\nentry:\n  %trip_result = call i8 @"
-      (append [U8] (functionSymbol moduleName "main") "()\n  ret i32 0\n}\n")
+      {List U8 |
+        "define i32 @main() {\nentry:\n  %trip_result = call i8 @"
+        (functionSymbol moduleName "main")
+        "()\n  ret i32 0\n}\n"
+      }
 
 poly emitLlvmForWriteBytes =
   \bytes : List U8 =>
-    append
+    concat
       [U8]
-      "declare void @trip_write_one(i8)\n\n"
-      (
-        append
-          [U8]
-          (emitWriteFunction "Main" "main" bytes)
-          (emitMainWrapper "Main")
-      )
+      {List U8 |
+        "declare void @trip_write_one(i8)\n\n"
+        (emitWriteFunction "Main" "main" bytes)
+        (emitMainWrapper "Main")
+      }
 
 poly rec emitRequiredFunction =
   \mods : List ParsedModule =>

@@ -10,6 +10,8 @@ import Prelude matchList
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude reverse
 
 import Prelude Result
@@ -207,52 +209,30 @@ poly inc =
 
 poly qualify =
   \moduleName : List U8 =>
-    \name : List U8 => append [U8] moduleName (append [U8] dot name)
+    \name : List U8 => concat [U8] {List U8 | moduleName dot name}
 
 poly qualifyCtor =
   \moduleName : List U8 =>
     \typeName : List U8 =>
-      \ctorName : List U8 =>
-        append
-          [U8]
-          moduleName
-          (append [U8] dot (append [U8] typeName (append [U8] dot ctorName)))
+      \ctorName : List U8 => concat [U8] {List U8 | moduleName dot typeName dot ctorName}
 
 poly emitLine1 =
-  \prefix : List U8 => \a : List U8 => append [U8] prefix (append [U8] a newline)
+  \prefix : List U8 => \a : List U8 => concat [U8] {List U8 | prefix a newline}
 
 poly emitLine2 =
   \prefix : List U8 =>
     \a : List U8 =>
-      \b : List U8 =>
-        append
-          [U8]
-          prefix
-          (append [U8] a (append [U8] space (append [U8] b newline)))
+      \b : List U8 => concat [U8] {List U8 | prefix a space b newline}
 
 poly emitLine3 =
   \prefix : List U8 =>
     \a : List U8 =>
       \b : List U8 =>
-        \c : List U8 =>
-          append
-            [U8]
-            prefix
-            (
-              append
-                [U8]
-                a
-                (
-                  append
-                    [U8]
-                    space
-                    (append [U8] b (append [U8] space (append [U8] c newline)))
-                )
-            )
+        \c : List U8 => concat [U8] {List U8 | prefix a space b space c newline}
 
 poly emitU8Line =
   \prefix : List U8 =>
-    \n : U8 => append [U8] prefix (append [U8] (u8ToDigits n) newline)
+    \n : U8 => concat [U8] {List U8 | prefix (u8ToDigits n) newline}
 
 poly rec countList =
   #A =>
@@ -1244,7 +1224,7 @@ poly rec emitModulesAcc =
                               defBlock = append [U8] (emitU8Line "definitions " (count [DefinitionInfo] (moduleDefs moduleName defs))) (emitModuleDefs moduleName defs)
                               opaqueBlock = append [U8] (emitU8Line "opaque " (count [OpaqueInfo] (moduleOpaques moduleName opaques))) (emitModuleOpaques moduleName opaques)
                               nativeBlock = append [U8] (emitU8Line "native " (count [NativeInfo] (moduleNatives moduleName natives))) (emitModuleNatives moduleName natives)
-                              modSummary = append [U8] head (append [U8] impBlock (append [U8] expBlock (append [U8] defBlock (append [U8] opaqueBlock nativeBlock))))
+                              modSummary = concat [U8] {List U8 | head impBlock expBlock defBlock opaqueBlock nativeBlock}
                               return
                                 emitModulesAcc
                                 t
@@ -1425,25 +1405,9 @@ poly emitDataType =
     do [List U8] {
       MkDataTypeInfo qName local id = info
       return
-        append
+        concat
         [U8]
-        "datatype "
-        (
-          append
-            [U8]
-            (u8ToDigits id)
-            (
-              append
-                [U8]
-                space
-                (
-                  append
-                    [U8]
-                    qName
-                    (append [U8] space (append [U8] local newline))
-                )
-            )
-        )
+        {List U8 | "datatype " (u8ToDigits id) space qName space local newline}
     }
 
 poly rec emitDataTypesAcc =
@@ -1468,17 +1432,18 @@ poly emitConstructor =
       MkConstructorMeta qName local alias dataName dataId symbolId tag total arity = info
       s0 = append [U8]
       "constructor " (u8ToDigits symbolId)
-      s1 = append [U8] s0 (append [U8] space qName)
-      s2 = append [U8] s1 (append [U8] space local)
-      s3 = append [U8] s2 (append [U8] space alias)
-      s4 = append [U8] s3 (append [U8] " data#" (u8ToDigits dataId))
-      s5 = append [U8] s4 (append [U8] " tag " (u8ToDigits tag))
-      s6 = append [U8] s5 (append [U8] " total " (u8ToDigits total))
-      return
-        append
-        [U8]
-        s6
-        (append [U8] " arity " (append [U8] (u8ToDigits arity) newline))
+      s1 = concat [U8]
+      {List U8 | s0 space qName}
+      s2 = concat [U8]
+      {List U8 | s1 space local}
+      s3 = concat [U8]
+      {List U8 | s2 space alias}
+      s4 = concat [U8]
+      {List U8 | s3 " data#" (u8ToDigits dataId)}
+      s5 = concat [U8]
+      {List U8 | s4 " tag " (u8ToDigits tag)}
+      s6 = concat [U8] {List U8 | s5 " total " (u8ToDigits total)}
+      return concat [U8] {List U8 | s6 " arity " (u8ToDigits arity) newline}
     }
 
 poly rec emitConstructorsAcc =
@@ -1529,30 +1494,17 @@ poly emitPrimitive =
     do [List U8] {
       MkPrimitiveInfo qName symbolId arity = info
       return
-        append
+        concat
         [U8]
-        "primitive "
-        (
-          append
-            [U8]
-            (u8ToDigits symbolId)
-            (
-              append
-                [U8]
-                space
-                (
-                  append
-                    [U8]
-                    qName
-                    (
-                      append
-                        [U8]
-                        " arity "
-                        (append [U8] (u8ToDigits arity) newline)
-                    )
-                )
-            )
-        )
+        {List U8 |
+          "primitive "
+          (u8ToDigits symbolId)
+          space
+          qName
+          " arity "
+          (u8ToDigits arity)
+          newline
+        }
     }
 
 poly rec emitPrimitivesAcc =
@@ -1575,9 +1527,12 @@ poly emitModuleEnvSummary =
   \env : ModuleEnv =>
     do [List U8] {
       MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives prims = env
-      header = append [U8]
-      "OK\nversion module-env-v1\nmodules "
-        (append [U8] (u8ToDigits (count [ModuleInfo] mods)) newline)
+      header = concat [U8]
+      {List U8 |
+        "OK\nversion module-env-v1\nmodules "
+        (u8ToDigits (count [ModuleInfo] mods))
+        newline
+      }
       dataHeader = emitU8Line
       "data-types " (count [DataTypeInfo] dataTypes)
       ctorHeader = emitU8Line
@@ -1593,7 +1548,7 @@ poly emitModuleEnvSummary =
       s4 = append [U8] s3 (emitConstructors ctors)
       s5 = append [U8] s4 aliasHeader
       s6 = append [U8] s5 (emitAliases aliases)
-      return append [U8] s6 (append [U8] primHeader (emitPrimitives prims))
+      return concat [U8] {List U8 | s6 primHeader (emitPrimitives prims)}
     }
 
 poly emitBundleModuleEnvSummary =
@@ -1611,10 +1566,10 @@ poly rec writeAll =
 poly main =
   \source : List U8 =>
     match (parseBundleSummary source) [U8] {
-      | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+      | Err e => writeAll (concat [U8] {List U8 | "ERR:" e "\n"})
       | Ok bundle =>
         match (emitBundleModuleEnvSummary bundle) [U8] {
-          | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+          | Err e => writeAll (concat [U8] {List U8 | "ERR:" e "\n"})
           | Ok summary => writeAll summary
         }
     }

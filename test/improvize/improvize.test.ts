@@ -366,6 +366,17 @@ poly main = append [U8] a (append [U8] b c)
     assert.doesNotMatch(result.fixed, /concat \[U8\]/);
   });
 
+  it("reports and simplifies static string append chains to string literals", () => {
+    const source = `module M
+poly main = append [U8] "a" (append [U8] "b" "c")
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-string-append"),
+    );
+    assert.match(result.fixed, /"abc"/);
+  });
+
   it("reports and fixes degenerate if chains to cond blocks", () => {
     const source = `module M
 poly main =

@@ -24,8 +24,7 @@ import {
   createTempWorkspace,
 } from "../util/tripcHarness.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const jsRoot = join(__dirname, "../..");
+const jsRoot = join(workspaceRoot, "ts_out");
 const srcRoot = workspaceRoot;
 
 function jsrJsonPath(): string {

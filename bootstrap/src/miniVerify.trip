@@ -16,6 +16,8 @@ import Prelude U8
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude addU8
 
 import Prelude divU8
@@ -122,75 +124,43 @@ poly rec unparseAnfExpr =
       | AE_Var n => n
       | AE_Native t => terminalBytes t
       | AE_Lam n b =>
-        append
-          [U8]
-          "(lam "
-          (append [U8] n (append [U8] " " (append [U8] (unparseAnfExpr b) ")")))
+        concat [U8] {List U8 | "(lam " n " " (unparseAnfExpr b) ")"}
       | AE_Call f args =>
-        append
-          [U8]
-          "(call "
-          (append [U8] f (append [U8] (renderList unparseAnfExpr args) ")"))
+        concat [U8] {List U8 | "(call " f (renderList unparseAnfExpr args) ")"}
       | AE_Con tag total arity args =>
-        append
+        concat
           [U8]
-          "(con "
-          (
-            append
-              [U8]
-              (u8ToDigits tag)
-              (
-                append
-                  [U8]
-                  "/"
-                  (
-                    append
-                      [U8]
-                      (u8ToDigits total)
-                      (
-                        append
-                          [U8]
-                          "/"
-                          (
-                            append
-                              [U8]
-                              (u8ToDigits arity)
-                              (append [U8] (renderList unparseAnfExpr args) ")")
-                          )
-                      )
-                  )
-              )
-          )
+          {List U8 |
+            "(con "
+            (u8ToDigits tag)
+            "/"
+            (u8ToDigits total)
+            "/"
+            (u8ToDigits arity)
+            (renderList unparseAnfExpr args)
+            ")"
+          }
       | AE_Case scrut arms =>
-        append
+        concat
           [U8]
-          "(case "
-          (
-            append
-              [U8]
-              (unparseAnfExpr scrut)
-              (append [U8] (renderList unparseAnfExpr arms) ")")
-          )
+          {List U8 |
+            "(case "
+            (unparseAnfExpr scrut)
+            (renderList unparseAnfExpr arms)
+            ")"
+          }
       | AE_Let n v b =>
-        append
+        concat
           [U8]
-          "(let "
-          (
-            append
-              [U8]
-              n
-              (
-                append
-                  [U8]
-                  " "
-                  (
-                    append
-                      [U8]
-                      (unparseAnfExpr v)
-                      (append [U8] " " (append [U8] (unparseAnfExpr b) ")"))
-                  )
-              )
-          )
+          {List U8 |
+            "(let "
+            n
+            " "
+            (unparseAnfExpr v)
+            " "
+            (unparseAnfExpr b)
+            ")"
+          }
     }
 
 poly unparseAnfFunc =
@@ -198,20 +168,15 @@ poly unparseAnfFunc =
     do [List U8] {
       MkAnfFunc name params body = fn
       return
-        append
+        concat
         [U8]
-        name
-        (
-          append
-            [U8]
-            (renderParams params)
-            (
-              append
-                [U8]
-                " = "
-                (append [U8] (unparseAnfExpr body) (singletonU8 #u8(10)))
-            )
-        )
+        {List U8 |
+          name
+          (renderParams params)
+          " = "
+          (unparseAnfExpr body)
+          (singletonU8 #u8(10))
+        }
     }
 
 poly rec unparseAnfFuncs =
@@ -236,10 +201,10 @@ poly unparseAnfProgram =
 poly verifyToAnfText =
   \source : List U8 =>
     match (tokenize source) [List U8] {
-      | Err e => append [U8] "ERR:" "Lex error"
+      | Err e => "ERR:Lex error"
       | Ok toks =>
         match (parseProgram toks) [List U8] {
-          | Err e => append [U8] "ERR:" "Parse error"
+          | Err e => "ERR:Parse error"
           | Ok decls =>
             match (elaborateProgramToCore decls) [List U8] {
               | Err e => append [U8] "ERR:" e

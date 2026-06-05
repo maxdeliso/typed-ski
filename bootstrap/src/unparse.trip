@@ -8,6 +8,8 @@ import Prelude cons
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude addU8
 
 import Prelude divU8
@@ -94,8 +96,7 @@ poly terminalBytes =
       | T_ModU8 => "M"
       | T_AddU8 => "A"
       | T_SubU8 => "O"
-      | T_Byte b =>
-        append [U8] "#u8(" (append [U8] (u8ToDigits b) ")")
+      | T_Byte b => concat [U8] {List U8 | "#u8(" (u8ToDigits b) ")"}
     }
 
 poly digitToAscii =

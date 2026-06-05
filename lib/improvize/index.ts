@@ -1814,11 +1814,59 @@ function typeTextForListElementType(typeText: string): string {
   return `List (${trimmed})`;
 }
 
+function parseStringLiteralToCharTexts(strText: string): string[] | undefined {
+  if (!strText.startsWith('"') || !strText.endsWith('"')) {
+    return undefined;
+  }
+  const inner = strText.slice(1, -1);
+  const chars: string[] = [];
+  let i = 0;
+  while (i < inner.length) {
+    const ch = inner[i]!;
+    if (ch === "\\") {
+      if (i + 1 >= inner.length) return undefined;
+      const esc = inner[i + 1]!;
+      if (esc === '"') {
+        chars.push("'\"'");
+      } else {
+        chars.push(`'\\${esc}'`);
+      }
+      i += 2;
+    } else {
+      if (ch === "'") {
+        chars.push("'\\''");
+      } else {
+        chars.push(`'${ch}'`);
+      }
+      i++;
+    }
+  }
+  return chars;
+}
+
 function resolveAsStaticList(
   tokens: readonly Token[],
 ): { typeText: string; elements: Token[][] } | undefined {
   const stripped = stripOuterParens(tokens);
   if (stripped.length === 0) return undefined;
+
+  if (stripped.length === 1 && stripped[0]!.kind === "string") {
+    const token = stripped[0]!;
+    const charTexts = parseStringLiteralToCharTexts(token.text);
+    if (charTexts !== undefined) {
+      const elements = charTexts.map((text) => [
+        {
+          kind: "char" as TokenKind,
+          text,
+          start: token.start,
+          end: token.end,
+          line: token.line,
+          column: token.column,
+        },
+      ]);
+      return { typeText: "U8", elements };
+    }
+  }
 
   const chain = parseListChain(stripped, 0);
   if (chain) return { typeText: chain.typeText, elements: chain.elements };

@@ -14,8 +14,7 @@ import process from "node:process";
 import { resolveDistPath } from "../util/tripcHarness.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const jsRoot = join(__dirname, "../..");
+const jsRoot = join(workspaceRoot, "ts_out");
 const srcRoot = workspaceRoot;
 const compiledTripcName = process.platform === "win32" ? "tripc.cmd" : "tripc";
 const bundledTripcPath = resolveDistPath(

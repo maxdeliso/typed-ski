@@ -10,6 +10,8 @@ import Prelude matchList
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude Result
 
 import Prelude Ok
@@ -252,8 +254,8 @@ poly rec emitCaseFieldBinds =
               (
                 \p : List U8 =>
                   \t : List (List U8) =>
-                    let fldVar = append [U8] scrutPtr (append [U8] "_fld_" (u8ToDigits fieldIdx)) in
-                    let line = append [U8] "  " (append [U8] fldVar (append [U8] " = call i64 @trip_obj_field(ptr " (append [U8] scrutPtr (append [U8] ", i64 " (append [U8] (u8ToDigits fieldIdx) ")\n"))))) in
+                    let fldVar = concat [U8] {List U8 | scrutPtr "_fld_" (u8ToDigits fieldIdx)} in
+                    let line = concat [U8] {List U8 | "  " fldVar " = call i64 @trip_obj_field(ptr " scrutPtr ", i64 " (u8ToDigits fieldIdx) ")\n"} in
                     emitCaseFieldBinds
                       (
                         cons
@@ -287,7 +289,7 @@ poly rec emitCtorFields =
                           op <- (atomOperand env arg)
                           obj_ptr = append [U8] objDest
                           "_p"
-                          line = append [U8] "  call void @trip_obj_set_field(ptr " (append [U8] obj_ptr (append [U8] ", i64 " (append [U8] (u8ToDigits idx) (append [U8] ", i64 " (append [U8] op ")\n")))))
+                          line = concat [U8] {List U8 | "  call void @trip_obj_set_field(ptr " obj_ptr ", i64 " (u8ToDigits idx) ", i64 " op ")\n"}
                           return
                             emitCtorFields
                             env
@@ -312,51 +314,13 @@ poly emitAddU8 =
               dest = append [U8]
               "%__ll" (binToDigits counter)
               counter1 = incBin counter
-              t1 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t1 = trunc i64 "
-                        (append [U8] op1 " to i8\n")
-                    )
-                )
-              t2 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t2 = trunc i64 "
-                        (append [U8] op2 " to i8\n")
-                    )
-                )
-              res = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_res = add i8 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (append [U8] "_t1, " (append [U8] dest "_t2\n"))
-                        )
-                    )
-                )
-              ext = append [U8] "  " (append [U8] dest (append [U8] " = zext i8 " (append [U8] dest "_res to i64\n")))
+              t1 = concat [U8]
+              {List U8 | "  " dest "_t1 = trunc i64 " op1 " to i8\n"}
+              t2 = concat [U8]
+              {List U8 | "  " dest "_t2 = trunc i64 " op2 " to i8\n"}
+              res = concat [U8]
+              {List U8 | "  " dest "_res = add i8 " dest "_t1, " dest "_t2\n"}
+              ext = concat [U8] {List U8 | "  " dest " = zext i8 " dest "_res to i64\n"}
               return
                 Ok
                 [List U8]
@@ -381,51 +345,13 @@ poly emitSubU8 =
               dest = append [U8]
               "%__ll" (binToDigits counter)
               counter1 = incBin counter
-              t1 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t1 = trunc i64 "
-                        (append [U8] op1 " to i8\n")
-                    )
-                )
-              t2 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t2 = trunc i64 "
-                        (append [U8] op2 " to i8\n")
-                    )
-                )
-              res = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_res = sub i8 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (append [U8] "_t1, " (append [U8] dest "_t2\n"))
-                        )
-                    )
-                )
-              ext = append [U8] "  " (append [U8] dest (append [U8] " = zext i8 " (append [U8] dest "_res to i64\n")))
+              t1 = concat [U8]
+              {List U8 | "  " dest "_t1 = trunc i64 " op1 " to i8\n"}
+              t2 = concat [U8]
+              {List U8 | "  " dest "_t2 = trunc i64 " op2 " to i8\n"}
+              res = concat [U8]
+              {List U8 | "  " dest "_res = sub i8 " dest "_t1, " dest "_t2\n"}
+              ext = concat [U8] {List U8 | "  " dest " = zext i8 " dest "_res to i64\n"}
               return
                 Ok
                 [List U8]
@@ -450,110 +376,43 @@ poly emitDivU8 =
               dest = append [U8]
               "%__ll" (binToDigits counter)
               counter1 = incBin counter
-              t1 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t1 = trunc i64 "
-                        (append [U8] op1 " to i8\n")
-                    )
-                )
-              t2 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t2 = trunc i64 "
-                        (append [U8] op2 " to i8\n")
-                    )
-                )
-              zero = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_zero = icmp eq i8 "
-                        (append [U8] dest "_t2, 0\n")
-                    )
-                )
-              safe = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_safe = select i1 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (
-                              append
-                                [U8]
-                                "_zero, i8 1, i8 "
-                                (append [U8] dest "_t2\n")
-                            )
-                        )
-                    )
-                )
-              raw = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_raw = udiv i8 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (append [U8] "_t1, " (append [U8] dest "_safe\n"))
-                        )
-                    )
-                )
-              res = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_res = select i1 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (
-                              append
-                                [U8]
-                                "_zero, i8 0, i8 "
-                                (append [U8] dest "_raw\n")
-                            )
-                        )
-                    )
-                )
-              ext = append [U8] "  " (append [U8] dest (append [U8] " = zext i8 " (append [U8] dest "_res to i64\n")))
+              t1 = concat [U8]
+              {List U8 | "  " dest "_t1 = trunc i64 " op1 " to i8\n"}
+              t2 = concat [U8]
+              {List U8 | "  " dest "_t2 = trunc i64 " op2 " to i8\n"}
+              zero = concat [U8]
+              {List U8 | "  " dest "_zero = icmp eq i8 " dest "_t2, 0\n"}
+              safe = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_safe = select i1 "
+                dest
+                "_zero, i8 1, i8 "
+                dest
+                "_t2\n"
+              }
+              raw = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_raw = udiv i8 "
+                dest
+                "_t1, "
+                dest
+                "_safe\n"
+              }
+              res = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_res = select i1 "
+                dest
+                "_zero, i8 0, i8 "
+                dest
+                "_raw\n"
+              }
+              ext = concat [U8] {List U8 | "  " dest " = zext i8 " dest "_res to i64\n"}
               return
                 Ok
                 [List U8]
@@ -583,110 +442,43 @@ poly emitModU8 =
               dest = append [U8]
               "%__ll" (binToDigits counter)
               counter1 = incBin counter
-              t1 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t1 = trunc i64 "
-                        (append [U8] op1 " to i8\n")
-                    )
-                )
-              t2 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t2 = trunc i64 "
-                        (append [U8] op2 " to i8\n")
-                    )
-                )
-              zero = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_zero = icmp eq i8 "
-                        (append [U8] dest "_t2, 0\n")
-                    )
-                )
-              safe = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_safe = select i1 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (
-                              append
-                                [U8]
-                                "_zero, i8 1, i8 "
-                                (append [U8] dest "_t2\n")
-                            )
-                        )
-                    )
-                )
-              raw = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_raw = urem i8 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (append [U8] "_t1, " (append [U8] dest "_safe\n"))
-                        )
-                    )
-                )
-              res = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_res = select i1 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (
-                              append
-                                [U8]
-                                "_zero, i8 0, i8 "
-                                (append [U8] dest "_raw\n")
-                            )
-                        )
-                    )
-                )
-              ext = append [U8] "  " (append [U8] dest (append [U8] " = zext i8 " (append [U8] dest "_res to i64\n")))
+              t1 = concat [U8]
+              {List U8 | "  " dest "_t1 = trunc i64 " op1 " to i8\n"}
+              t2 = concat [U8]
+              {List U8 | "  " dest "_t2 = trunc i64 " op2 " to i8\n"}
+              zero = concat [U8]
+              {List U8 | "  " dest "_zero = icmp eq i8 " dest "_t2, 0\n"}
+              safe = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_safe = select i1 "
+                dest
+                "_zero, i8 1, i8 "
+                dest
+                "_t2\n"
+              }
+              raw = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_raw = urem i8 "
+                dest
+                "_t1, "
+                dest
+                "_safe\n"
+              }
+              res = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_res = select i1 "
+                dest
+                "_zero, i8 0, i8 "
+                dest
+                "_raw\n"
+              }
+              ext = concat [U8] {List U8 | "  " dest " = zext i8 " dest "_res to i64\n"}
               return
                 Ok
                 [List U8]
@@ -716,51 +508,21 @@ poly emitEqU8 =
               dest = append [U8]
               "%__ll" (binToDigits counter)
               counter1 = incBin counter
-              t1 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t1 = trunc i64 "
-                        (append [U8] op1 " to i8\n")
-                    )
-                )
-              t2 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t2 = trunc i64 "
-                        (append [U8] op2 " to i8\n")
-                    )
-                )
-              cmp = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_cmp = icmp eq i8 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (append [U8] "_t1, " (append [U8] dest "_t2\n"))
-                        )
-                    )
-                )
-              ext = append [U8] "  " (append [U8] dest (append [U8] " = zext i1 " (append [U8] dest "_cmp to i64\n")))
+              t1 = concat [U8]
+              {List U8 | "  " dest "_t1 = trunc i64 " op1 " to i8\n"}
+              t2 = concat [U8]
+              {List U8 | "  " dest "_t2 = trunc i64 " op2 " to i8\n"}
+              cmp = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_cmp = icmp eq i8 "
+                dest
+                "_t1, "
+                dest
+                "_t2\n"
+              }
+              ext = concat [U8] {List U8 | "  " dest " = zext i1 " dest "_cmp to i64\n"}
               return
                 Ok
                 [List U8]
@@ -785,51 +547,21 @@ poly emitLtU8 =
               dest = append [U8]
               "%__ll" (binToDigits counter)
               counter1 = incBin counter
-              t1 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t1 = trunc i64 "
-                        (append [U8] op1 " to i8\n")
-                    )
-                )
-              t2 = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_t2 = trunc i64 "
-                        (append [U8] op2 " to i8\n")
-                    )
-                )
-              cmp = append [U8]
-              "  "
-                (
-                  append
-                    [U8]
-                    dest
-                    (
-                      append
-                        [U8]
-                        "_cmp = icmp ult i8 "
-                        (
-                          append
-                            [U8]
-                            dest
-                            (append [U8] "_t1, " (append [U8] dest "_t2\n"))
-                        )
-                    )
-                )
-              ext = append [U8] "  " (append [U8] dest (append [U8] " = zext i1 " (append [U8] dest "_cmp to i64\n")))
+              t1 = concat [U8]
+              {List U8 | "  " dest "_t1 = trunc i64 " op1 " to i8\n"}
+              t2 = concat [U8]
+              {List U8 | "  " dest "_t2 = trunc i64 " op2 " to i8\n"}
+              cmp = concat [U8]
+              {List U8 |
+                "  "
+                dest
+                "_cmp = icmp ult i8 "
+                dest
+                "_t1, "
+                dest
+                "_t2\n"
+              }
+              ext = concat [U8] {List U8 | "  " dest " = zext i1 " dest "_cmp to i64\n"}
               return
                 Ok
                 [List U8]
@@ -855,24 +587,12 @@ poly emitWriteOne =
                 | AE_Lam contVar contBody =>
                   do [Result (List U8) EmitRes] {
                     suffix = binToDigits counter
-                    varName = append [U8]
-                    "%__ll" (append [U8] suffix "_t_write")
-                    t1 = append [U8]
-                    "  "
-                      (
-                        append
-                          [U8]
-                          varName
-                          (
-                            append
-                              [U8]
-                              " = trunc i64 "
-                              (append [U8] op_byte " to i8\n")
-                          )
-                      )
-                    line = append [U8]
-                    "  call void @trip_write_one(i8 "
-                      (append [U8] varName ")\n")
+                    varName = concat [U8]
+                    {List U8 | "%__ll" suffix "_t_write"}
+                    t1 = concat [U8]
+                    {List U8 | "  " varName " = trunc i64 " op_byte " to i8\n"}
+                    line = concat [U8]
+                    {List U8 | "  call void @trip_write_one(i8 " varName ")\n"}
                     counter1 = incBin counter
                     lines = append [List U8] {List U8 | line t1} instrs
                     return
@@ -929,8 +649,8 @@ poly emitReadOne =
             | AE_Lam contVar contBody =>
               let dest = append [U8] "%__ll" (binToDigits counter) in
               let counter1 = incBin counter in
-              let line1 = append [U8] "  " (append [U8] dest "_r = call i8 @trip_read_one()\n") in
-              let line2 = append [U8] "  " (append [U8] dest (append [U8] " = zext i8 " (append [U8] dest "_r to i64\n"))) in
+              let line1 = concat [U8] {List U8 | "  " dest "_r = call i8 @trip_read_one()\n"} in
+              let line2 = concat [U8] {List U8 | "  " dest " = zext i8 " dest "_r to i64\n"} in
               let lines = append [List U8] {List U8 | line2 line1} instrs in
               emitExpr
                 (
@@ -999,7 +719,7 @@ poly rec emitExpr =
                     dest = append [U8]
                     "%__ll" (binToDigits counter)
                     counter1 = incBin counter
-                    line = append [U8] "  " (append [U8] dest (append [U8] " = ptrtoint ptr @" (append [U8] (llvmSymbolName n) " to i64\n")))
+                    line = concat [U8] {List U8 | "  " dest " = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"}
                     return
                       Ok
                       [List U8]
@@ -1290,7 +1010,7 @@ poly rec emitExpr =
                                                                       counter
                                                                   )
                                                                 counter1 = incBin counter
-                                                                line = append [U8] "  " (append [U8] dest (append [U8] " = call i64 @" (append [U8] (llvmSymbolName f) (append [U8] "(" (append [U8] argStr ")\n")))))
+                                                                line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
                                                                 return
                                                                   Ok
                                                                   [List U8]
@@ -1318,8 +1038,8 @@ poly rec emitExpr =
             | AE_Con tag total arity args =>
               let dest = append [U8] "%__ll" (binToDigits counter) in
               let counter1 = incBin counter in
-              let allocLine = append [U8] "  " (append [U8] dest (append [U8] "_p = call ptr @trip_alloc_obj(i64 " (append [U8] (u8ToDigits tag) (append [U8] ", i64 " (append [U8] (u8ToDigits arity) ")\n"))))) in
-              let castLine = append [U8] "  " (append [U8] dest (append [U8] " = ptrtoint ptr " (append [U8] dest "_p to i64\n"))) in
+              let allocLine = concat [U8] {List U8 | "  " dest "_p = call ptr @trip_alloc_obj(i64 " (u8ToDigits tag) ", i64 " (u8ToDigits arity) ")\n"} in
+              let castLine = concat [U8] {List U8 | "  " dest " = ptrtoint ptr " dest "_p to i64\n"} in
               let initialInstrs = append [List U8] {List U8 | castLine allocLine} instrs in
               emitCtorFields env counter1 initialInstrs dest arity args #u8(0)
             | AE_Case scrut arms =>
@@ -1332,48 +1052,38 @@ poly rec emitExpr =
                 "%__scrut_ptr_" caseId
                 tagVar = append [U8]
                 "%__tag_" caseId
-                allocLine = append [U8]
-                "  " (append [U8] caseVar " = alloca i64\n")
-                castLine = append [U8]
-                "  "
-                  (
-                    append
-                      [U8]
-                      scrutPtr
-                      (
-                        append
-                          [U8]
-                          " = inttoptr i64 "
-                          (append [U8] op_scrut " to ptr\n")
-                      )
-                  )
-                tagLine = append [U8]
-                "  "
-                  (
-                    append
-                      [U8]
-                      tagVar
-                      (
-                        append
-                          [U8]
-                          " = call i64 @trip_obj_tag(ptr "
-                          (append [U8] scrutPtr ")\n")
-                      )
-                  )
-                switchHead = append [U8]
-                "  switch i64 "
-                  (
-                    append
-                      [U8]
-                      tagVar
-                      (
-                        append
-                          [U8]
-                          ", label %case_"
-                          (append [U8] caseId "_unreachable [\n")
-                      )
-                  )
-                switchInstr = append [U8] switchHead (append [U8] (buildCaseTable caseId arms #u8(0)) "  ]\n")
+                allocLine = concat [U8]
+                {List U8 | "  " caseVar " = alloca i64\n"}
+                castLine = concat [U8]
+                {List U8 |
+                  "  "
+                  scrutPtr
+                  " = inttoptr i64 "
+                  op_scrut
+                  " to ptr\n"
+                }
+                tagLine = concat [U8]
+                {List U8 |
+                  "  "
+                  tagVar
+                  " = call i64 @trip_obj_tag(ptr "
+                  scrutPtr
+                  ")\n"
+                }
+                switchHead = concat [U8]
+                {List U8 |
+                  "  switch i64 "
+                  tagVar
+                  ", label %case_"
+                  caseId
+                  "_unreachable [\n"
+                }
+                switchInstr = concat [U8]
+                {List U8 |
+                  switchHead
+                  (buildCaseTable caseId arms #u8(0))
+                  "  ]\n"
+                }
                 initialInstrs = append [List U8] {List U8 | switchInstr tagLine castLine allocLine} instrs
                 return emitCaseArms env counter initialInstrs caseVar scrutPtr caseId arms #u8(0)
               }
@@ -1407,35 +1117,18 @@ poly rec buildCaseTable =
           (
             \arm : AnfExpr =>
               \t : List AnfExpr =>
-                append
+                concat
                   [U8]
-                  (
-                    append
-                      [U8]
-                      "    i64 "
-                      (
-                        append
-                          [U8]
-                          (u8ToDigits idx)
-                          (
-                            append
-                              [U8]
-                              ", label %case_"
-                              (
-                                append
-                                  [U8]
-                                  caseId
-                                  (
-                                    append
-                                      [U8]
-                                      "_arm_"
-                                      (append [U8] (u8ToDigits idx) "\n")
-                                  )
-                              )
-                          )
-                      )
-                  )
-                  (buildCaseTable caseId t (addU8 idx #u8(1)))
+                  {List U8 |
+                    "    i64 "
+                    (u8ToDigits idx)
+                    ", label %case_"
+                    caseId
+                    "_arm_"
+                    (u8ToDigits idx)
+                    "\n"
+                    (buildCaseTable caseId t (addU8 idx #u8(1)))
+                  }
           )
 
 poly rec emitCaseArms =
@@ -1452,10 +1145,10 @@ poly rec emitCaseArms =
                     [Result (List U8) EmitRes]
                     arms
                     (
-                      let unreachableLabel = append [U8] "case_" (append [U8] caseId "_unreachable:\n") in
+                      let unreachableLabel = concat [U8] {List U8 | "case_" caseId "_unreachable:\n"} in
                       let unreachableBody = "  unreachable\n" in
-                      let mergeLabel = append [U8] "case_" (append [U8] caseId "_merge:\n") in
-                      let mergeLoad = append [U8] "  " (append [U8] caseVar (append [U8] "_val = load i64, ptr " (append [U8] caseVar "\n"))) in
+                      let mergeLabel = concat [U8] {List U8 | "case_" caseId "_merge:\n"} in
+                      let mergeLoad = concat [U8] {List U8 | "  " caseVar "_val = load i64, ptr " caseVar "\n"} in
                       let combinedBinds = append [List U8] {List U8 | mergeLoad mergeLabel unreachableBody unreachableLabel} instrs in
                       Ok
                         [List U8]
@@ -1472,7 +1165,7 @@ poly rec emitCaseArms =
                         \t : List AnfExpr =>
                           match (peelBinders arm {List U8 |}) [(List (List U8), AnfExpr)] {
                             | MkPair params body =>
-                              let armLabel = append [U8] "case_" (append [U8] caseId (append [U8] "_arm_" (u8ToDigits idx))) in
+                              let armLabel = concat [U8] {List U8 | "case_" caseId "_arm_" (u8ToDigits idx)} in
                               match (emitCaseFieldBinds env {List U8 |} scrutPtr params #u8(0)) [(List ((List U8), (List U8)), List (List U8))] {
                                 | MkPair armEnv armInstrs =>
                                   let labelLine = append [U8] armLabel ":\n" in
@@ -1480,22 +1173,20 @@ poly rec emitCaseArms =
                                   do [Result (List U8) EmitRes] {
                                     armRes <- (emitExpr armEnv counter combinedInstrs body)
                                     MkEmitRes c1 i1 vop = armRes
-                                    storeLine = append [U8]
-                                    "  store i64 "
-                                      (
-                                        append
-                                          [U8]
-                                          vop
-                                          (
-                                            append
-                                              [U8]
-                                              ", ptr "
-                                              (append [U8] caseVar "\n")
-                                          )
-                                      )
-                                    jumpLine = append [U8]
-                                    "  br label %case_"
-                                      (append [U8] caseId "_merge\n")
+                                    storeLine = concat [U8]
+                                    {List U8 |
+                                      "  store i64 "
+                                      vop
+                                      ", ptr "
+                                      caseVar
+                                      "\n"
+                                    }
+                                    jumpLine = concat [U8]
+                                    {List U8 |
+                                      "  br label %case_"
+                                      caseId
+                                      "_merge\n"
+                                    }
                                     nextInstrs = append [List U8] {List U8 | jumpLine storeLine} i1
                                     return
                                       emitCaseArms
@@ -1565,40 +1256,19 @@ poly emitFunc =
         [List U8]
         [List U8]
         (
-          append
+          concat
             [U8]
-            "define i64 @"
-            (
-              append
-                [U8]
-                (llvmSymbolName name)
-                (
-                  append
-                    [U8]
-                    "("
-                    (
-                      append
-                        [U8]
-                        (paramDeclsString params true)
-                        (
-                          append
-                            [U8]
-                            ") {\nentry:\n"
-                            (
-                              append
-                                [U8]
-                                instrText
-                                (
-                                  append
-                                    [U8]
-                                    "  ret i64 "
-                                    (append [U8] op "\n}\n\n")
-                                )
-                            )
-                        )
-                    )
-                )
-            )
+            {List U8 |
+              "define i64 @"
+              (llvmSymbolName name)
+              "("
+              (paramDeclsString params true)
+              ") {\nentry:\n"
+              instrText
+              "  ret i64 "
+              op
+              "\n}\n\n"
+            }
         )
     }
 
@@ -1720,10 +1390,10 @@ poly rec funcsUseBoxed =
 poly compileSourceToLlvmText =
   \source : List U8 =>
     match (tokenize source) [List U8] {
-      | Err e => append [U8] "ERR:" "Lex error"
+      | Err e => "ERR:Lex error"
       | Ok toks =>
         match (parseProgram toks) [List U8] {
-          | Err e => append [U8] "ERR:" "Parse error"
+          | Err e => "ERR:Parse error"
           | Ok decls =>
             match (elaborateProgramToCore decls) [List U8] {
               | Err e => append [U8] "ERR:" e

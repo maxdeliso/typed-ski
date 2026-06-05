@@ -271,6 +271,7 @@ To lint, format, or prune the bootstrap corpus files under `bootstrap/src/`, the
 - `pnpm run bootstrap:format` — Format all `.trip` files in `bootstrap/src/`
 - `pnpm run bootstrap:lint` — Lint all `.trip` files in `bootstrap/src/` and apply safe automatic fixes
 - `pnpm run bootstrap:prune` — Prune unreachable definitions and imports in `bootstrap/src/`, keeping only the transitively referenced code starting from the entry points of the test suite (e.g., `Compiler.main`, `MiniVerify.verifyToAnfText`, etc.)
+- `pnpm run bootstrap` — Run prune → lint → format (in that order) followed by verification that the corpus is clean (equivalent to the three commands above plus `format --check` + `lint`)
 
 ---
 

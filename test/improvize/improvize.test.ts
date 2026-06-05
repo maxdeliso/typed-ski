@@ -131,6 +131,20 @@ poly main =
     );
   });
 
+  it("formats monadic do blocks with nested lets correctly", () => {
+    const input = `module M
+
+poly main =
+  do [Result U8 U8] {
+    x <- foo
+    y = let inner = bar in inner
+    return x
+  }
+`;
+    const result = formatTripSource(input).formatted;
+    assert.equal(result, input);
+  });
+
   it("formats monadic do blocks correctly with multi-line layout and proper indentation", () => {
     const input = `module M
 poly main = do [Result U8 U8] { x <- foo  y = bar  assert c else e  return x }
@@ -222,6 +236,41 @@ poly x : Pair Bin Bin = y
       result.diagnostics.some((diag) => diag.code === "trip-pair-type"),
     );
     assert.match(result.fixed, /poly x : \(Bin, Bin\) =\s+y/);
+  });
+
+  it("does not rewrite Pair inside data definitions to avoid breaking data field parsing", () => {
+    const source = `module M
+data Tree A =
+  | Leaf A
+  | Node (Pair (Tree A) (Tree A))
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      !result.diagnostics.some((diag) => diag.code === "trip-pair-type"),
+    );
+    assert.equal(result.fixed, source);
+  });
+
+  it("reports and fixes Pair inside type aliases", () => {
+    const source = `module M
+type Alias A B = Pair A B
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-pair-type"),
+    );
+    assert.match(result.fixed, /type Alias A B =\s+\(A, B\)/);
+  });
+
+  it("reports and fixes nested Pair types to nested syntactic sugar", () => {
+    const source = `module M
+poly x : Pair (Pair A B) C = y
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-pair-type"),
+    );
+    assert.match(result.fixed, /poly x : \(\(A, B\), C\) =\s+y/);
   });
 
   it("reports and fixes MkPair to syntactic sugar", () => {
@@ -420,6 +469,52 @@ poly main =
     assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
   });
 
+  it("introduces do for chains whose let values or scrutinees contain nested lets (bare = in subexprs)", () => {
+    const source = `module M
+poly main =
+  match (readLine input) [Result (List U8) BundleSummary] {
+    | Err e => Err [List U8] [BundleSummary] e
+    | Ok magicRes =>
+      let temp = let inner = magicRes in inner in
+      match temp [Result (List U8) BundleSummary] {
+        | MkLine magic afterMagic =>
+          Ok [List U8] [BundleSummary] val
+      }
+  }
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+    assert.match(result.fixed, /do \[Result \(List U8\) BundleSummary\]/);
+    assert.match(result.fixed, /magicRes <- \(readLine input\)/);
+    // The rhs of the do-let step had a nested identity let (bare = inside subexpr); aggro rules now simplify it further.
+    assert.match(result.fixed, /temp = magicRes/);
+    assert.match(result.fixed, /MkLine magic afterMagic = temp/);
+    assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
+    // Re-lint should not re-introduce or complain.
+    const result2 = lintTripSource(result.fixed, { fix: true });
+    assert.ok(
+      !result2.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+  });
+
+  it("does not rewrite monadic match to do block if declared return type does not match actual branch return types", () => {
+    const source = `module M
+
+poly main =
+  match (parseSimpleType toks) [Result ParseError (Type, (List Token))] {
+    | Err e => Err [ParseError] [(U8, (List Token))] e
+    | Ok res => Ok [ParseError] [(U8, (List Token))] next
+  }
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      !result.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+    assert.equal(result.fixed, source);
+  });
+
   it("reports and fixes redundant parentheses around atomic, parenthesized, bracketed, or braced expressions", () => {
     const source = `module M
 poly main = (A)
@@ -434,9 +529,56 @@ poly main4 = ({x})
       5,
     );
     assert.match(result.fixed, /poly main =\s+A\s+/);
-    assert.match(result.fixed, /poly main2 =\s+\(x\)\s+/);
+    assert.match(result.fixed, /poly main2 =\s+x\s+/);
     assert.match(result.fixed, /poly main3 =\s+\[x\]\s+/);
     assert.match(result.fixed, /poly main4 =\s+\{x\}\s+/);
+  });
+
+  it("simplifies boolean if expressions to and, or, or not", () => {
+    const source = `module M
+import Prelude and
+import Prelude or
+import Prelude not
+poly main =
+  if [Bool] cond
+    (\\u : U8 => thenExpr)
+    (\\u : U8 => false)
+poly main2 =
+  if [Bool] cond
+    (\\u : U8 => true)
+    (\\u : U8 => elseExpr)
+poly main3 =
+  if [Bool] cond
+    (\\u : U8 => false)
+    (\\u : U8 => true)
+poly main4 =
+  if [Bool] cond
+    (\\u : U8 => true)
+    (\\u : U8 => false)
+poly main5 =
+  if [Bool] cond
+    (\\u : U8 => false)
+    (\\u : U8 => elseExpr)
+poly main6 =
+  if [Bool] cond
+    (\\u : U8 => thenExpr)
+    (\\u : U8 => true)
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.deepEqual(
+      result.diagnostics.filter((diag) => diag.code === "trip-bool-if-simplify")
+        .length,
+      6,
+    );
+    assert.match(result.fixed, /poly main =\s+and\s+cond\s+thenExpr/);
+    assert.match(result.fixed, /poly main2 =\s+or\s+cond\s+elseExpr/);
+    assert.match(result.fixed, /poly main3 =\s+not\s+cond/);
+    assert.match(result.fixed, /poly main4 =\s+cond/);
+    assert.match(
+      result.fixed,
+      /poly main5 =\s+and\s+\(not\s+cond\)\s+elseExpr/,
+    );
+    assert.match(result.fixed, /poly main6 =\s+or\s+\(not\s+cond\)\s+thenExpr/);
   });
 });
 

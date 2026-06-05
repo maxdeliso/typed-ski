@@ -26,6 +26,7 @@ interface ParsedArgs {
   check: boolean;
   write: boolean;
   fix: boolean;
+  force: boolean;
   verbose: boolean;
   paths: string[];
 }
@@ -37,6 +38,7 @@ function parseArgs(args: string[]): ParsedArgs {
     check: false,
     write: false,
     fix: false,
+    force: false,
     verbose: false,
     paths: [],
   };
@@ -66,6 +68,10 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.fix = true;
       continue;
     }
+    if (arg === "--force") {
+      parsed.force = true;
+      continue;
+    }
     if (arg === "format" || arg === "lint" || arg === "prune") {
       if (parsed.command !== undefined) {
         throw new Error(`unexpected extra command: ${arg}`);
@@ -89,10 +95,23 @@ function parseArgs(args: string[]): ParsedArgs {
     throw new Error("--check and --write are only valid with format");
   }
   if (
-    parsed.command === "prune" &&
-    (parsed.fix || parsed.check || parsed.write)
+    parsed.force &&
+    parsed.command !== "lint" &&
+    parsed.command !== "format"
   ) {
-    throw new Error("prune does not accept --fix, --check, or --write");
+    throw new Error("--force is only valid with lint or format");
+  }
+  if (
+    parsed.command === "prune" &&
+    (parsed.fix || parsed.check || parsed.write || parsed.force)
+  ) {
+    throw new Error(
+      "prune does not accept --fix, --check, --write, or --force",
+    );
+  }
+
+  if (parsed.force) {
+    parsed.fix = true;
   }
 
   return parsed;
@@ -103,8 +122,8 @@ function showHelp(): void {
 TripLang formatter and linter (improvize) v${VERSION}
 
 USAGE:
-    improvize format [--check|--write] <files-or-dirs...>
-    improvize lint [--fix] <files-or-dirs...>
+    improvize format [--check|--write] [--force] <files-or-dirs...>
+    improvize lint [--fix] [--force] <files-or-dirs...>
     improvize prune <path> <entry-points>
 
 OPTIONS:
@@ -114,6 +133,10 @@ OPTIONS:
     --check          Check formatting without writing files
     --write          Rewrite files with formatted output
     --fix            Apply safe lint rewrites, then format
+    --force          For lint --fix or format --write: apply even if the result
+                     would not round-trip the AST exactly (aggressive / testing).
+                     Useful when the heuristic replacement is "good enough" but
+                     our verifier is picky.
 
     <entry-points>   A comma-separated list of entry points (e.g. Compiler.main,MiniVerify.verifyToAnfText)
 
@@ -149,13 +172,14 @@ async function runFormat(
   check: boolean,
   write: boolean,
   verbose: boolean,
+  force: boolean = false,
 ) {
   if (paths.length === 0) {
     if (check || write) {
       throw new Error("format --check/--write requires at least one path");
     }
     const input = await readStdin();
-    process.stdout.write(formatTripSource(input).formatted);
+    process.stdout.write(formatTripSource(input, { force }).formatted);
     return 0;
   }
 
@@ -175,7 +199,7 @@ async function runFormat(
       const timeRead = Date.now() - startFile;
 
       const startFormat = Date.now();
-      const result = formatTripSource(input);
+      const result = formatTripSource(input, { force });
       const timeFormat = Date.now() - startFormat;
 
       if (verbose) {
@@ -213,10 +237,15 @@ function formatDiagnostic(file: string, diag: TripLintDiagnostic): string {
   return `${file}:${diag.line}:${diag.column}: ${diag.code}: ${diag.message}`;
 }
 
-async function runLint(paths: string[], fix: boolean, verbose: boolean) {
+async function runLint(
+  paths: string[],
+  fix: boolean,
+  verbose: boolean,
+  force: boolean = false,
+) {
   if (paths.length === 0) {
     const input = await readStdin();
-    const result = lintTripSource(input, { fix, verbose });
+    const result = lintTripSource(input, { fix, verbose, force });
     for (const diag of result.diagnostics) {
       console.log(formatDiagnostic("<stdin>", diag));
     }
@@ -225,6 +254,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
       const afterFix = lintTripSource(result.fixed, {
         fix: false,
         verbose,
+        force,
       });
       return afterFix.diagnostics.length > 0 ? 1 : 0;
     }
@@ -242,7 +272,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
       const timeRead = Date.now() - startFile;
 
       const startLint = Date.now();
-      const result = lintTripSource(input, { fix, verbose });
+      const result = lintTripSource(input, { fix, verbose, force });
       const timeLint = Date.now() - startLint;
 
       if (verbose) {
@@ -258,6 +288,7 @@ async function runLint(paths: string[], fix: boolean, verbose: boolean) {
         afterFixResult = lintTripSource(result.changed ? result.fixed : input, {
           fix: false,
           verbose,
+          force,
         });
         timeVerify = Date.now() - startSecond;
       }
@@ -330,9 +361,15 @@ async function main(): Promise<void> {
         parsed.check,
         parsed.write,
         parsed.verbose,
+        parsed.force,
       );
     } else if (parsed.command === "lint") {
-      status = await runLint(parsed.paths, parsed.fix, parsed.verbose);
+      status = await runLint(
+        parsed.paths,
+        parsed.fix,
+        parsed.verbose,
+        parsed.force,
+      );
     } else if (parsed.command === "prune") {
       status = await runPrune(parsed.paths, parsed.verbose);
     }

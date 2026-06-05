@@ -246,9 +246,9 @@ poly rec emitCaseFieldBinds =
           \fieldIdx : U8 =>
             matchList
               [List U8]
-              [(List (((List U8), (List U8))), List (List U8))]
+              [(List ((List U8), (List U8)), List (List U8))]
               params
-              {List (((List U8), (List U8))), List (List U8) | env, instrs}
+              {List ((List U8), (List U8)), List (List U8) | env, instrs}
               (
                 \p : List U8 =>
                   \t : List (List U8) =>
@@ -283,19 +283,20 @@ poly rec emitCtorFields =
                   (
                     \arg : AnfExpr =>
                       \t : List AnfExpr =>
-                        match (atomOperand env arg) [Result (List U8) EmitRes] {
-                          | Err e => Err [List U8] [EmitRes] e
-                          | Ok op =>
-                            let obj_ptr = append [U8] objDest "_p" in
-                            let line = append [U8] "  call void @trip_obj_set_field(ptr " (append [U8] obj_ptr (append [U8] ", i64 " (append [U8] (u8ToDigits idx) (append [U8] ", i64 " (append [U8] op ")\n"))))) in
+                        do [Result (List U8) EmitRes] {
+                          op <- (atomOperand env arg)
+                          obj_ptr = append [U8] objDest
+                          "_p"
+                          line = append [U8] "  call void @trip_obj_set_field(ptr " (append [U8] obj_ptr (append [U8] ", i64 " (append [U8] (u8ToDigits idx) (append [U8] ", i64 " (append [U8] op ")\n")))))
+                          return
                             emitCtorFields
-                              env
-                              counter
-                              (cons [List U8] line instrs)
-                              objDest
-                              arity
-                              t
-                              (addU8 idx #u8(1))
+                            env
+                            counter
+                            (cons [List U8] line instrs)
+                            objDest
+                            arity
+                            t
+                            (addU8 idx #u8(1))
                         }
                   )
 
@@ -847,76 +848,76 @@ poly emitWriteOne =
       \instrs : List (List U8) =>
         \byte : AnfExpr =>
           \cont : AnfExpr =>
-            match (atomOperand env byte) [Result (List U8) EmitRes] {
-              | Err e => Err [List U8] [EmitRes] e
-              | Ok op_byte =>
-                match cont [Result (List U8) EmitRes] {
-                  | AE_Lam contVar contBody =>
-                    do [Result (List U8) EmitRes] {
-                      suffix = binToDigits counter
-                      varName = append [U8]
-                      "%__ll" (append [U8] suffix "_t_write")
-                      t1 = append [U8]
-                      "  "
-                        (
-                          append
-                            [U8]
-                            varName
-                            (
-                              append
-                                [U8]
-                                " = trunc i64 "
-                                (append [U8] op_byte " to i8\n")
-                            )
-                        )
-                      line = append [U8]
-                      "  call void @trip_write_one(i8 "
-                        (append [U8] varName ")\n")
-                      counter1 = incBin counter
-                      lines = cons [List U8] line (cons [List U8] t1 instrs)
-                      return
-                        emitExpr
-                        (
-                          cons
-                            [((List U8), (List U8))]
-                            ({List U8, List U8 | contVar, "0"})
-                            env
-                        )
-                        counter1
-                        lines
-                        contBody
-                    }
-                  | AE_Var name =>
-                    Err
-                      [List U8]
-                      [EmitRes]
-                      "writeOne expects a lambda continuation"
-                  | AE_Native term =>
-                    Err
-                      [List U8]
-                      [EmitRes]
-                      "writeOne expects a lambda continuation"
-                  | AE_Call name args =>
-                    Err
-                      [List U8]
-                      [EmitRes]
-                      "writeOne expects a lambda continuation"
-                  | AE_Con tag total arity args =>
-                    Err
-                      [List U8]
-                      [EmitRes]
-                      "writeOne expects a lambda continuation"
-                  | AE_Case scrut arms =>
-                    Err
-                      [List U8]
-                      [EmitRes]
-                      "writeOne expects a lambda continuation"
-                  | AE_Let name val body =>
-                    Err
-                      [List U8]
-                      [EmitRes]
-                      "writeOne expects a lambda continuation"
-                }
+            do [Result (List U8) EmitRes] {
+              op_byte <- (atomOperand env byte)
+              return
+              match cont [Result (List U8) EmitRes] {
+                | AE_Lam contVar contBody =>
+                  do [Result (List U8) EmitRes] {
+                    suffix = binToDigits counter
+                    varName = append [U8]
+                    "%__ll" (append [U8] suffix "_t_write")
+                    t1 = append [U8]
+                    "  "
+                      (
+                        append
+                          [U8]
+                          varName
+                          (
+                            append
+                              [U8]
+                              " = trunc i64 "
+                              (append [U8] op_byte " to i8\n")
+                          )
+                      )
+                    line = append [U8]
+                    "  call void @trip_write_one(i8 "
+                      (append [U8] varName ")\n")
+                    counter1 = incBin counter
+                    lines = append [List U8] {List U8 | line t1} instrs
+                    return
+                      emitExpr
+                      (
+                        cons
+                          [((List U8), (List U8))]
+                          {List U8, List U8 | contVar, "0"}
+                          env
+                      )
+                      counter1
+                      lines
+                      contBody
+                  }
+                | AE_Var name =>
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    "writeOne expects a lambda continuation"
+                | AE_Native term =>
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    "writeOne expects a lambda continuation"
+                | AE_Call name args =>
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    "writeOne expects a lambda continuation"
+                | AE_Con tag total arity args =>
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    "writeOne expects a lambda continuation"
+                | AE_Case scrut arms =>
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    "writeOne expects a lambda continuation"
+                | AE_Let name val body =>
+                  Err
+                    [List U8]
+                    [EmitRes]
+                    "writeOne expects a lambda continuation"
+              }
             }
 
 poly emitReadOne =
@@ -962,13 +963,7 @@ poly rec hasDot =
       [Bool]
       name
       false
-      (
-        \h : U8 =>
-          \t : List U8 =>
-            if [Bool] (eqU8 h #u8(46))
-              (\u : U8 => true)
-              (\u : U8 => hasDot t)
-      )
+      (\h : U8 => \t : List U8 => or (eqU8 h #u8(46)) (hasDot t))
 
 poly rec replaceDot =
   \name : List U8 =>
@@ -1328,38 +1323,75 @@ poly rec emitExpr =
               let initialInstrs = append [List U8] {List U8 | castLine allocLine} instrs in
               emitCtorFields env counter1 initialInstrs dest arity args #u8(0)
             | AE_Case scrut arms =>
-              match (atomOperand env scrut) [Result (List U8) EmitRes] {
-                | Err e => Err [List U8] [EmitRes] e
-                | Ok op_scrut =>
-                  let caseId = binToDigits counter in
-                  let caseVar = append [U8] "%__case_res_" caseId in
-                  let scrutPtr = append [U8] "%__scrut_ptr_" caseId in
-                  let tagVar = append [U8] "%__tag_" caseId in
-                  let allocLine = append [U8] "  " (append [U8] caseVar " = alloca i64\n") in
-                  let castLine = append [U8] "  " (append [U8] scrutPtr (append [U8] " = inttoptr i64 " (append [U8] op_scrut " to ptr\n"))) in
-                  let tagLine = append [U8] "  " (append [U8] tagVar (append [U8] " = call i64 @trip_obj_tag(ptr " (append [U8] scrutPtr ")\n"))) in
-                  let switchHead = append [U8] "  switch i64 " (append [U8] tagVar (append [U8] ", label %case_" (append [U8] caseId "_unreachable [\n"))) in
-                  let switchInstr = append [U8] switchHead (append [U8] (buildCaseTable caseId arms #u8(0)) "  ]\n") in
-                  let initialInstrs = cons [List U8] switchInstr (cons [List U8] tagLine (cons [List U8] castLine (cons [List U8] allocLine instrs))) in
-                  emitCaseArms env counter initialInstrs caseVar scrutPtr caseId arms #u8(0)
+              do [Result (List U8) EmitRes] {
+                op_scrut <- (atomOperand env scrut)
+                caseId = binToDigits counter
+                caseVar = append [U8]
+                "%__case_res_" caseId
+                scrutPtr = append [U8]
+                "%__scrut_ptr_" caseId
+                tagVar = append [U8]
+                "%__tag_" caseId
+                allocLine = append [U8]
+                "  " (append [U8] caseVar " = alloca i64\n")
+                castLine = append [U8]
+                "  "
+                  (
+                    append
+                      [U8]
+                      scrutPtr
+                      (
+                        append
+                          [U8]
+                          " = inttoptr i64 "
+                          (append [U8] op_scrut " to ptr\n")
+                      )
+                  )
+                tagLine = append [U8]
+                "  "
+                  (
+                    append
+                      [U8]
+                      tagVar
+                      (
+                        append
+                          [U8]
+                          " = call i64 @trip_obj_tag(ptr "
+                          (append [U8] scrutPtr ")\n")
+                      )
+                  )
+                switchHead = append [U8]
+                "  switch i64 "
+                  (
+                    append
+                      [U8]
+                      tagVar
+                      (
+                        append
+                          [U8]
+                          ", label %case_"
+                          (append [U8] caseId "_unreachable [\n")
+                      )
+                  )
+                switchInstr = append [U8] switchHead (append [U8] (buildCaseTable caseId arms #u8(0)) "  ]\n")
+                initialInstrs = append [List U8] {List U8 | switchInstr tagLine castLine allocLine} instrs
+                return emitCaseArms env counter initialInstrs caseVar scrutPtr caseId arms #u8(0)
               }
             | AE_Let name val body =>
-              match (emitExpr env counter instrs val) [Result (List U8) EmitRes] {
-                | Err e => Err [List U8] [EmitRes] e
-                | Ok midRes =>
-                  match midRes [Result (List U8) EmitRes] {
-                    | MkEmitRes c1 i1 vop =>
-                      emitExpr
-                        (
-                          cons
-                            [((List U8), (List U8))]
-                            ({List U8, List U8 | name, vop})
-                            env
-                        )
-                        c1
-                        i1
-                        body
-                  }
+              do [Result (List U8) EmitRes] {
+                midRes <- (emitExpr env counter instrs val)
+                MkEmitRes c1 i1 vop = midRes
+                return
+                  emitExpr
+                  (
+                    cons
+                      [((List U8), (List U8))]
+                      {List U8, List U8 | name, vop}
+                      env
+                  )
+                  c1
+                  i1
+                  body
               }
           }
 
@@ -1438,31 +1470,43 @@ poly rec emitCaseArms =
                     (
                       \arm : AnfExpr =>
                         \t : List AnfExpr =>
-                          match (peelBinders arm ({List U8 |})) [(List (List U8), AnfExpr)] {
+                          match (peelBinders arm {List U8 |}) [(List (List U8), AnfExpr)] {
                             | MkPair params body =>
                               let armLabel = append [U8] "case_" (append [U8] caseId (append [U8] "_arm_" (u8ToDigits idx))) in
-                              match (emitCaseFieldBinds env ({List U8 |}) scrutPtr params #u8(0)) [(List (((List U8), (List U8))), List (List U8))] {
+                              match (emitCaseFieldBinds env {List U8 |} scrutPtr params #u8(0)) [(List ((List U8), (List U8)), List (List U8))] {
                                 | MkPair armEnv armInstrs =>
                                   let labelLine = append [U8] armLabel ":\n" in
                                   let combinedInstrs = append [List U8] (reverse [List U8] armInstrs) (cons [List U8] labelLine instrs) in
-                                  match (emitExpr armEnv counter combinedInstrs body) [Result (List U8) EmitRes] {
-                                    | Err e => Err [List U8] [EmitRes] e
-                                    | Ok armRes =>
-                                      match armRes [Result (List U8) EmitRes] {
-                                        | MkEmitRes c1 i1 vop =>
-                                          let storeLine = append [U8] "  store i64 " (append [U8] vop (append [U8] ", ptr " (append [U8] caseVar "\n"))) in
-                                          let jumpLine = append [U8] "  br label %case_" (append [U8] caseId "_merge\n") in
-                                          let nextInstrs = cons [List U8] jumpLine (cons [List U8] storeLine i1) in
-                                          emitCaseArms
-                                            env
-                                            c1
-                                            nextInstrs
-                                            caseVar
-                                            scrutPtr
-                                            caseId
-                                            t
-                                            (addU8 idx #u8(1))
-                                      }
+                                  do [Result (List U8) EmitRes] {
+                                    armRes <- (emitExpr armEnv counter combinedInstrs body)
+                                    MkEmitRes c1 i1 vop = armRes
+                                    storeLine = append [U8]
+                                    "  store i64 "
+                                      (
+                                        append
+                                          [U8]
+                                          vop
+                                          (
+                                            append
+                                              [U8]
+                                              ", ptr "
+                                              (append [U8] caseVar "\n")
+                                          )
+                                      )
+                                    jumpLine = append [U8]
+                                    "  br label %case_"
+                                      (append [U8] caseId "_merge\n")
+                                    nextInstrs = append [List U8] {List U8 | jumpLine storeLine} i1
+                                    return
+                                      emitCaseArms
+                                      env
+                                      c1
+                                      nextInstrs
+                                      caseVar
+                                      scrutPtr
+                                      caseId
+                                      t
+                                      (addU8 idx #u8(1))
                                   }
                               }
                           }
@@ -1577,8 +1621,9 @@ poly rec emitFuncs =
 
 poly emitProgram =
   \prog : AnfProgram =>
-    match prog [Result (List U8) (List U8)] {
-      | MkAnfProgram funcs entry => emitFuncs funcs
+    do [Result (List U8) (List U8)] {
+      MkAnfProgram funcs entry = prog
+      return emitFuncs funcs
     }
 
 poly rec exprUsesReadWrite =
@@ -1588,9 +1633,17 @@ poly rec exprUsesReadWrite =
       | AE_Native t => false
       | AE_Lam n b => exprUsesReadWrite b
       | AE_Call f args =>
-        if [Bool] (or (eqListU8 f "writeOne") (or (eqListU8 f "Prelude.writeOne") (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))))
-          (\u : U8 => true)
-          (\u : U8 => listAnyUsesReadWrite args)
+        or
+          (
+            or
+              (eqListU8 f "writeOne")
+              (
+                or
+                  (eqListU8 f "Prelude.writeOne")
+                  (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))
+              )
+          )
+          (listAnyUsesReadWrite args)
       | AE_Con tag total arity args => listAnyUsesReadWrite args
       | AE_Case scrut arms =>
         or (exprUsesReadWrite scrut) (listAnyUsesReadWrite arms)

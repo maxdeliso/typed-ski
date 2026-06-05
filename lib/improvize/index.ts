@@ -479,6 +479,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         while (i < tokens.length) {
           const t = tokens[i]!;
           if (!isComment(t)) {
+            if (errDepth === 0 && t.text === "let") {
+              i = advancePastLet(tokens, i);
+              continue;
+            }
             if (errDepth === 0 && isStartOfDoStep(tokens, i)) {
               break;
             }
@@ -493,6 +497,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
       while (i < tokens.length) {
         const t = tokens[i]!;
         if (!isComment(t)) {
+          if (depth === 0 && t.text === "let") {
+            i = advancePastLet(tokens, i);
+            continue;
+          }
           if (depth === 0 && isStartOfDoStep(tokens, i)) {
             break;
           }
@@ -517,6 +525,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         while (i < tokens.length) {
           const t = tokens[i]!;
           if (!isComment(t)) {
+            if (depth === 0 && t.text === "let") {
+              i = advancePastLet(tokens, i);
+              continue;
+            }
             if (depth === 0 && isStartOfDoStep(tokens, i)) {
               break;
             }
@@ -535,6 +547,11 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
         for (let j = i; j < tokens.length; j++) {
           const t = tokens[j]!;
           if (!isComment(t)) {
+            if (depth === 0 && t.text === "let") {
+              const after = advancePastLet(tokens, j);
+              j = after - 1;
+              continue;
+            }
             if (depth === 0 && t.text === "=") {
               eqIdx = j;
               break;
@@ -556,6 +573,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
           while (i < tokens.length) {
             const t = tokens[i]!;
             if (!isComment(t)) {
+              if (exprDepth === 0 && t.text === "let") {
+                i = advancePastLet(tokens, i);
+                continue;
+              }
               if (exprDepth === 0 && isStartOfDoStep(tokens, i)) {
                 break;
               }
@@ -568,6 +589,10 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
           while (i < tokens.length) {
             const t = tokens[i]!;
             if (!isComment(t)) {
+              if (exprDepth === 0 && t.text === "let") {
+                i = advancePastLet(tokens, i);
+                continue;
+              }
               if (
                 i > startIdx &&
                 exprDepth === 0 &&
@@ -586,6 +611,66 @@ function splitDoSteps(tokens: readonly Token[]): Token[][] {
     steps.push([...tokens.slice(startIdx, i)]);
   }
   return steps;
+}
+
+/**
+ * Advance past a full "let ... = ... in <body-expr>" subexpression (and any
+ * nested lets inside its value), returning the index at which the let (and its
+ * body) ends. Used by do-step splitter so that bare "let" sub-expressions
+ * inside rhs of do steps (which contain "=") do not cause premature step
+ * termination.
+ */
+function advancePastLet(tokens: readonly Token[], start: number): number {
+  let i = start;
+  if (i >= tokens.length || tokens[i]!.text !== "let") return i;
+  let pending = 1;
+  let dP = 0,
+    dB = 0,
+    dBr = 0;
+  i++; // past "let"
+  while (i < tokens.length) {
+    const t = tokens[i]!;
+    if (isComment(t)) {
+      i++;
+      continue;
+    }
+    if (t.text === "(") dP++;
+    else if (t.text === ")") dP--;
+    else if (t.text === "[") dB++;
+    else if (t.text === "]") dB--;
+    else if (t.text === "{") dBr++;
+    else if (t.text === "}") dBr--;
+    const bd0 = dP === 0 && dB === 0 && dBr === 0;
+    if (bd0) {
+      if (t.text === "let") {
+        pending++;
+      } else if (t.text === "in") {
+        pending--;
+        if (pending === 0) {
+          i++; // consume this "in"
+          // now skip the body expr of this let; stop if we hit a do-step start
+          // (which would also terminate any outer expr containing this let)
+          let bD = 0;
+          while (i < tokens.length) {
+            const tt = tokens[i]!;
+            if (isComment(tt)) {
+              i++;
+              continue;
+            }
+            if (bD === 0 && isStartOfDoStep(tokens, i)) {
+              return i;
+            }
+            bD += bracketDepthDelta(tt);
+            i++;
+            if (bD < 0) break;
+          }
+          return i;
+        }
+      }
+    }
+    i++;
+  }
+  return i;
 }
 
 function formatExpressionRecursiveRaw(
@@ -620,23 +705,29 @@ function formatExpressionRecursiveRaw(
   const letIdx = findTopLevel(tokens, (t) => t.text === "let");
 
   if (letIdx !== -1) {
-    const inIdx = findTopLevel(tokens, (t) => t.text === "in", letIdx + 1);
+    // Only special-format lets when the let is at the root of these tokens
+    // (i.e. this expr *is* a let). If "foo = let ..." or "f (let..)", just inline
+    // so we do not split do-step groups or misindent prefixes.
+    const nonCommentBefore = tokens.slice(0, letIdx).some((t) => !isComment(t));
+    if (!nonCommentBefore) {
+      const inIdx = findTopLevel(tokens, (t) => t.text === "in", letIdx + 1);
 
-    if (inIdx !== -1) {
-      const beforeLet = tokens.slice(0, letIdx);
-      const letBinding = tokens.slice(letIdx, inIdx + 1);
-      const letBody = tokens.slice(inIdx + 1);
+      if (inIdx !== -1) {
+        const beforeLet = tokens.slice(0, letIdx);
+        const letBinding = tokens.slice(letIdx, inIdx + 1);
+        const letBody = tokens.slice(inIdx + 1);
 
-      const letBindingStr = formatInline(letBinding);
-      const bodyLines = formatExpressionRecursive(letBody, indent);
+        const letBindingStr = formatInline(letBinding);
+        const bodyLines = formatExpressionRecursive(letBody, indent);
 
-      const lines: string[] = [];
-      if (beforeLet.length > 0) {
-        lines.push(`${" ".repeat(indent)}${formatInline(beforeLet)}`);
+        const lines: string[] = [];
+        if (beforeLet.length > 0) {
+          lines.push(`${" ".repeat(indent)}${formatInline(beforeLet)}`);
+        }
+        lines.push(`${" ".repeat(indent)}${letBindingStr}`);
+        lines.push(...bodyLines);
+        return lines;
       }
-      lines.push(`${" ".repeat(indent)}${letBindingStr}`);
-      lines.push(...bodyLines);
-      return lines;
     }
   }
 
@@ -1111,7 +1202,10 @@ function parseProgramOrNull(source: string): string | undefined {
   }
 }
 
-export function formatTripSource(source: string): TripFormatResult {
+export function formatTripSource(
+  source: string,
+  options: { force?: boolean } = {},
+): TripFormatResult {
   const normalized = normalizeSource(source);
   const tokens = lexTrip(normalized);
   if (tokens.length === 0) {
@@ -1139,8 +1233,13 @@ export function formatTripSource(source: string): TripFormatResult {
   // heuristic token reflow, so verify the result round-trips: when the input is
   // a parseable program, the output must parse to the same AST. If it does not,
   // fall back to the input untouched rather than emit a divergent reformat.
+  //
+  // Under --force (from lint) we relax this: we still try the check, but if it
+  // fails because a forced rewrite intentionally changed surface syntax (or the
+  // heuristic replacement wasn't perfect), we still return the formatted result
+  // instead of throwing. The caller (lint --force) wants the changes applied.
   const before = parseProgramOrNull(normalized);
-  if (before !== undefined) {
+  if (before !== undefined && !options.force) {
     try {
       const after = JSON.stringify(parseTripLang(formatted));
       if (after !== before) {
@@ -1821,6 +1920,29 @@ function matchMkPair(
   };
 }
 
+function isInsideDataDefinition(
+  tokens: readonly Token[],
+  index: number,
+): boolean {
+  for (let i = index - 1; i >= 0; i--) {
+    const text = tokens[i]!.text;
+    if (
+      text === "data" ||
+      text === "type" ||
+      text === "poly" ||
+      text === "combinator" ||
+      text === "native" ||
+      text === "opaque" ||
+      text === "module" ||
+      text === "import" ||
+      text === "export"
+    ) {
+      return text === "data";
+    }
+  }
+  return false;
+}
+
 function matchPairType(
   tokens: readonly Token[],
   index: number,
@@ -1835,6 +1957,13 @@ function matchPairType(
 
   const type2 = parseArgExpression(tokens, type1.endIndex + 1);
   if (!type2) return undefined;
+
+  if (
+    type1.tokens.some((t) => TOP_LEVEL_KEYWORDS.has(t.text)) ||
+    type2.tokens.some((t) => TOP_LEVEL_KEYWORDS.has(t.text))
+  ) {
+    return undefined;
+  }
 
   return {
     type1Tokens: type1.tokens,
@@ -1976,10 +2105,34 @@ function parseMatchHeader(
 
   let cursor = index + 1;
   let lbracketIdx = -1;
+  let scrutDepth = 0;
   while (cursor < tokens.length) {
-    if (tokens[cursor]!.text === "[") {
-      lbracketIdx = cursor;
-      break;
+    const t = tokens[cursor]!;
+    if (!isComment(t)) {
+      if (scrutDepth === 0 && t.text === "[") {
+        // Check if this [ is the match result type: its ] must be followed by {
+        let d = 1;
+        let c2 = cursor + 1;
+        while (c2 < tokens.length) {
+          const tt = tokens[c2]!;
+          if (!isComment(tt)) {
+            if (tt.text === "[") d++;
+            else if (tt.text === "]") {
+              d--;
+              if (d === 0) break;
+            }
+          }
+          c2++;
+        }
+        if (d === 0) {
+          const after = nextSyntaxWithIndex(tokens, c2);
+          if (after?.token.text === "{") {
+            lbracketIdx = cursor;
+            break;
+          }
+        }
+      }
+      scrutDepth += bracketDepthDelta(t);
     }
     cursor++;
   }
@@ -2025,6 +2178,63 @@ function parseMatchHeader(
   };
 }
 
+function extractErrTypeStrings(
+  armClean: readonly Token[],
+): { errType: string; okType: string } | undefined {
+  const arrowIdx = armClean.findIndex((t) => t.text === "=>");
+  if (arrowIdx === -1) return undefined;
+
+  const rhs = armClean.slice(arrowIdx + 1);
+  if (rhs[0]?.text !== "Err") return undefined;
+
+  let i = 1;
+  while (i < rhs.length && rhs[i]!.text !== "[") i++;
+  if (i >= rhs.length) return undefined;
+
+  const firstOpen = i;
+  let depth = 1;
+  i++;
+  while (i < rhs.length) {
+    if (rhs[i]!.text === "[") depth++;
+    else if (rhs[i]!.text === "]") {
+      depth--;
+      if (depth === 0) break;
+    }
+    i++;
+  }
+  if (i >= rhs.length) return undefined;
+  const firstClose = i;
+
+  i++;
+  if (i >= rhs.length || rhs[i]!.text !== "[") return undefined;
+  const secondOpen = i;
+
+  depth = 1;
+  i++;
+  while (i < rhs.length) {
+    if (rhs[i]!.text === "[") depth++;
+    else if (rhs[i]!.text === "]") {
+      depth--;
+      if (depth === 0) break;
+    }
+    i++;
+  }
+  if (i >= rhs.length) return undefined;
+  const secondClose = i;
+
+  const errTypeTokens = rhs.slice(firstOpen + 1, firstClose);
+  const okTypeTokens = rhs.slice(secondOpen + 1, secondClose);
+
+  return {
+    errType: formatInline(errTypeTokens),
+    okType: formatInline(okTypeTokens),
+  };
+}
+
+function normalizeTypeText(text: string): string {
+  return text.replace(/[\s()]/g, "");
+}
+
 function matchMonadicBind(
   tokens: readonly Token[],
   index: number,
@@ -2067,6 +2277,17 @@ function matchMonadicBind(
     return undefined;
   const eVar = errClean[1]!.text;
   if (errClean[errClean.length - 1]!.text !== eVar) return undefined;
+
+  // Type unifiability check: Ensure the declared match type matches the actual arm return type.
+  const armTypes = extractErrTypeStrings(errClean);
+  if (!armTypes) return undefined;
+
+  const expectedTypeStr = `Result ${armTypes.errType} ${armTypes.okType}`;
+  if (
+    normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)
+  ) {
+    return undefined;
+  }
 
   const okClean = okArm.filter((t) => !isComment(t));
   if (okClean.length < 4) return undefined;
@@ -2175,6 +2396,7 @@ function matchLetExpression(
   let depthP = 0,
     depthB = 0,
     depthBr = 0;
+  let pending = 1;
   while (cursor < tokens.length) {
     const t = tokens[cursor]!;
     if (t.text === "(") depthP++;
@@ -2184,8 +2406,16 @@ function matchLetExpression(
     else if (t.text === "{") depthBr++;
     else if (t.text === "}") depthBr--;
 
-    if (depthP === 0 && depthB === 0 && depthBr === 0 && t.text === "in") {
-      break;
+    const bd0 = depthP === 0 && depthB === 0 && depthBr === 0;
+    if (bd0) {
+      if (t.text === "let") {
+        pending++;
+      } else if (t.text === "in") {
+        pending--;
+        if (pending === 0) {
+          break;
+        }
+      }
     }
     valueTokens.push(t);
     cursor++;
@@ -2274,9 +2504,15 @@ function collectDoSteps(
 
   if (stripped.filter((t) => !isComment(t)).length === 0) return undefined;
 
+  // Always emit a "return ..." for the terminal bare expression step. This ensures
+  // the last step is always a "return" (recognized by isStartOfDoStep and the real
+  // parser's final-step check), so splitters and formatters correctly separate it
+  // from preceding bind/let/match steps (bare lower-ident exprs or "if" etc. would
+  // otherwise be swallowed, producing jammed steps that the Trip parser rejects
+  // with "do block final step must be an expression or a return statement").
   return {
-    steps: [text],
-    isReturn: false,
+    steps: [`return ${text}`],
+    isReturn: true,
   };
 }
 
@@ -2292,6 +2528,10 @@ function parseDoChain(
   | undefined {
   const header = parseMatchHeader(tokens, index);
   if (!header) return undefined;
+
+  if (!header.typeText.trim().startsWith("Result")) {
+    return undefined;
+  }
 
   const collected = collectDoSteps(tokens.slice(index), header.typeText);
   if (!collected) return undefined;
@@ -2571,9 +2811,13 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       continue;
     }
 
-    // 5. Pair type simplification
+    // 4b. Pair type simplification
     const prevText = previousSyntax(tokens, i)?.text;
-    if (prevText !== "data" && prevText !== "type") {
+    if (
+      prevText !== "data" &&
+      prevText !== "type" &&
+      !isInsideDataDefinition(tokens, i)
+    ) {
       const pairTypeMatch = matchPairType(tokens, i);
       if (pairTypeMatch) {
         const replacement = `(${formatInline(pairTypeMatch.type1Tokens)}, ${formatInline(pairTypeMatch.type2Tokens)})`;
@@ -2594,7 +2838,7 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       }
     }
 
-    // 6a. Degenerate match chain simplification to do
+    // 5. Degenerate match chain simplification to do
     const doChainMatch = parseDoChain(tokens, i);
     if (doChainMatch) {
       const baseIndent = lineIndentAt(source, tokens[i]!.start);
@@ -2642,6 +2886,137 @@ function lintTokens(source: string, tokens: Token[]): TripLintDiagnostic[] {
       );
       i = condChainMatch.endIndex;
       continue;
+    }
+
+    // 6b. Simplify boolean if expressions
+    const ifSimplifyMatch = matchIfExpression(tokens, i);
+    if (ifSimplifyMatch && ifSimplifyMatch.typeText === "Bool") {
+      const thenText = formatInline(ifSimplifyMatch.thenBody).trim();
+      const elseText = formatInline(ifSimplifyMatch.elseBody).trim();
+
+      if (thenText === "true" && elseText === "false") {
+        const replacement = ifSimplifyMatch.condText;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to condition`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (elseText === "false" && canUsePrelude(topLevel, "and")) {
+        const replacement = `and (${ifSimplifyMatch.condText}) (${thenText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to and`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (thenText === "true" && canUsePrelude(topLevel, "or")) {
+        const replacement = `or (${ifSimplifyMatch.condText}) (${elseText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to or`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (
+        thenText === "false" &&
+        elseText === "true" &&
+        canUsePrelude(topLevel, "not")
+      ) {
+        const replacement = `not (${ifSimplifyMatch.condText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to not`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (
+        thenText === "false" &&
+        elseText !== "true" &&
+        elseText !== "false" &&
+        canUsePrelude(topLevel, "and") &&
+        canUsePrelude(topLevel, "not")
+      ) {
+        const replacement = `and (not (${ifSimplifyMatch.condText})) (${elseText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to and/not`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
+
+      if (
+        elseText === "true" &&
+        thenText !== "true" &&
+        thenText !== "false" &&
+        canUsePrelude(topLevel, "or") &&
+        canUsePrelude(topLevel, "not")
+      ) {
+        const replacement = `or (not (${ifSimplifyMatch.condText})) (${thenText})`;
+        diagnostics.push(
+          diagnostic(
+            "trip-bool-if-simplify",
+            `Simplify boolean if-expression to or/not`,
+            tokens[i]!,
+            {
+              start: tokens[i]!.start,
+              end: tokens[ifSimplifyMatch.endIndex]!.end,
+              replacement,
+            },
+          ),
+        );
+        i = ifSimplifyMatch.endIndex;
+        continue;
+      }
     }
 
     if (token.kind === "number") {
@@ -3022,7 +3397,8 @@ const AST_PRESERVING_FIX_CODES: ReadonlySet<string> = new Set([
 function applyVerifiedFixes(
   source: string,
   diagnostics: readonly TripLintDiagnostic[],
-): string {
+  options: { force?: boolean } = {},
+): { fixed: string; applied: TripLintDiagnostic[] } {
   const selected: TripLintDiagnostic[] = [];
   for (const diag of diagnostics) {
     if (!diag.fix) continue;
@@ -3035,6 +3411,7 @@ function applyVerifiedFixes(
 
   let current = source;
   let currentAst = parseProgramOrNull(current);
+  const applied: TripLintDiagnostic[] = [];
 
   for (const diag of selected) {
     const fix = diag.fix!;
@@ -3043,11 +3420,22 @@ function applyVerifiedFixes(
     const candidateAst = parseProgramOrNull(candidate);
 
     // Never regress a parseable program into an unparseable one.
-    if (currentAst !== undefined && candidateAst === undefined) {
+    // Under --force we bypass this so that the detector's proposed textual
+    // replacement is applied even if our heuristic reconstruction doesn't
+    // produce something the full parser accepts on the first try.
+    // (The user can then inspect the diff and clean up.)
+    if (
+      currentAst !== undefined &&
+      candidateAst === undefined &&
+      !options.force
+    ) {
       continue;
     }
-    // Sugar / canonical-spelling rewrites must be exact AST round-trips.
+
+    // Sugar / canonical-spelling rewrites must be exact AST round-trips,
+    // unless --force is used (for testing / aggressive application).
     if (
+      !options.force &&
       AST_PRESERVING_FIX_CODES.has(diag.code) &&
       currentAst !== undefined &&
       candidateAst !== currentAst
@@ -3057,14 +3445,15 @@ function applyVerifiedFixes(
 
     current = candidate;
     currentAst = candidateAst;
+    applied.push(diag);
   }
 
-  return current;
+  return { fixed: current, applied };
 }
 
 export function lintTripSource(
   sourceText: string,
-  options: { fix?: boolean; verbose?: boolean } = {},
+  options: { fix?: boolean; verbose?: boolean; force?: boolean } = {},
 ): TripLintResult {
   const source = normalizeSource(sourceText);
 
@@ -3088,15 +3477,35 @@ export function lintTripSource(
     return { diagnostics, fixed: source, changed: false };
   }
 
-  // Apply only the fixes that pass per-fix verification, then format. The
-  // formatter is itself AST-preserving (see formatTripSource), so the final
-  // output differs from `source` only by verified, meaning-preserving edits.
-  const fixed = applyVerifiedFixes(source, diagnostics);
-  const { formatted } = formatTripSource(fixed);
+  // Under --fix (especially --force), iteratively apply as many fixes as
+  // possible until a stable state. This handles nested/overlapping cases
+  // (e.g. Pair inside Pair, or chains that become fixable after one rewrite)
+  // by re-detecting on the updated source each pass.
+  // Only the fixes that were successfully applied (across passes) are
+  // reported, ensuring no "reported but not autofixed".
+  let current = source;
+  let allApplied: TripLintDiagnostic[] = [];
+  let anyChanged = false;
+  const maxPasses = 20; // safety for deep nesting
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const toks = lexTrip(current);
+    const passDiags = lintTokens(current, toks);
+    if (passDiags.every((d) => !d.fix)) break;
+    const applyRes = applyVerifiedFixes(current, passDiags, {
+      force: options.force,
+    });
+    const { formatted: passFormatted } = formatTripSource(applyRes.fixed, {
+      force: options.force,
+    });
+    if (passFormatted === current) break;
+    current = passFormatted;
+    allApplied = allApplied.concat(applyRes.applied);
+    anyChanged = true;
+  }
   return {
-    diagnostics,
-    fixed: formatted,
-    changed: formatted !== source,
+    diagnostics: allApplied,
+    fixed: current,
+    changed: anyChanged,
   };
 }
 

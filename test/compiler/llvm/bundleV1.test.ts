@@ -8,6 +8,7 @@ import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import {
   compilerTripModuleSourcePath,
   isKnownCompilerTripModule,
+  ALL_COMPILER_TRIP_MODULE_NAMES,
 } from "../../../lib/compiler/bootstrapModules.ts";
 import {
   compileTripBundleV1ToLlvm,
@@ -1435,6 +1436,120 @@ poly main = a_val
         message: /Dependency cycle detected: A -> B -> A/,
       },
     );
+  });
+
+  it("Stage-1 parser accepts a module ending with a fielded ADT", async () => {
+    const source = `module Demo
+import Prelude List
+import Prelude U8
+data Core =
+  | Cr_Var (List U8)
+  | Cr_App Core Core
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Demo",
+      target: { kind: "x86_64-unknown-linux-gnu" },
+      modules: [{ name: "Demo", source }],
+    });
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-gap-fielded-adt-"));
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      const expected = summarizeTripBundleV1ParsedModules(bundleBytes);
+      const result = runExecutable(exePath, bundleBytes);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expected);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("Stage-1 parser accepts a final nullary ADT", async () => {
+    const source = `module Demo
+data Bit =
+  | O
+  | I
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Demo",
+      target: { kind: "x86_64-unknown-linux-gnu" },
+      modules: [{ name: "Demo", source }],
+    });
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-gap-nullary-adt-"));
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      const expected = summarizeTripBundleV1ParsedModules(bundleBytes);
+      const result = runExecutable(exePath, bundleBytes);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expected);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("Stage-1 parser accepts a nested return-do expression", async () => {
+    const source = `module Demo
+export main
+poly main =
+  do [U8] {
+    return do [U8] { return #u8(1) }
+  }
+`;
+    const bundleBytes = serializeTripBundleV1({
+      entryModule: "Demo",
+      target: { kind: "x86_64-unknown-linux-gnu" },
+      modules: [{ name: "Demo", source }],
+    });
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-gap-return-do-"));
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      const expected = summarizeTripBundleV1ParsedModules(bundleBytes);
+      const result = runExecutable(exePath, bundleBytes);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, expected);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("native parser summary executable accepts individual real bootstrap modules Core and Bridge", async () => {
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-parse-summary-individual-"),
+    );
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      for (const moduleName of ["Core", "Bridge"]) {
+        const bundleBytes = realBootstrapBundle([moduleName]);
+        const expected = summarizeTripBundleV1ParsedModules(bundleBytes);
+        const result = runExecutable(exePath, bundleBytes);
+        assert.equal(result.status, 0, moduleName);
+        assert.equal(result.stderr, "", moduleName);
+        assert.equal(result.stdout, expected, moduleName);
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("native parser summary executable accepts every module in ALL_COMPILER_TRIP_MODULE_NAMES", async () => {
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "typed-ski-bundle-parse-summary-all-"),
+    );
+    try {
+      const exePath = await compileBundleParseSummaryExecutable(tempDir);
+      for (const moduleName of ALL_COMPILER_TRIP_MODULE_NAMES) {
+        const bundleBytes = realBootstrapBundle([moduleName]);
+        const expected = summarizeTripBundleV1ParsedModules(bundleBytes);
+        const result = runExecutable(exePath, bundleBytes);
+        assert.equal(result.status, 0, moduleName);
+        assert.equal(result.stderr, "", moduleName);
+        assert.equal(result.stdout, expected, moduleName);
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   });
 });
 

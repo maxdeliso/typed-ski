@@ -459,6 +459,98 @@ poly rec elaborateArms =
                 }
           )
 
+poly rec lengthList =
+  #A =>
+    \l : List A =>
+      matchList [A] [U8] l #u8(0) (\h : A => \t : List A => addU8 #u8(1) (lengthList [A] t))
+
+poly rec isNameInList =
+  \name : List U8 =>
+    \list : List (List U8) =>
+      matchList
+        [List U8]
+        [Bool]
+        list
+        false
+        (
+          \h : List U8 =>
+            \t : List (List U8) =>
+              if [Bool] (eqListU8 h name)
+                (\u : U8 => true)
+                (\u : U8 => isNameInList name t)
+        )
+
+poly rec countNameInArms =
+  \name : List U8 =>
+    \arms : List (Pattern, Expr) =>
+      matchList [(Pattern, Expr)] [U8] arms #u8(0) (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => let pat = fst [Pattern] [Expr] h in let cName = match pat [List U8] {| P_Ctor cn args => cn} in let restCount = countNameInArms name t in if [U8] (eqListU8 cName name) (\u : U8 => addU8 #u8(1) restCount) (\u : U8 => restCount))
+
+poly rec validateEachArm =
+  \dEnv : DataEnv =>
+    \expectedNames : List (List U8) =>
+      \arms : List (Pattern, Expr) =>
+        matchList
+          [(Pattern, Expr)]
+          [Result (List U8) Bool]
+          arms
+          (Ok [List U8] [Bool] true)
+          (
+            \h : (Pattern, Expr) =>
+              \t : List (Pattern, Expr) =>
+                let pat = fst [Pattern] [Expr] h in
+                let cName = match pat [List U8] {| P_Ctor cn args => cn} in
+                let args = match pat [List (List U8)] {| P_Ctor cn args => args} in
+                if [Result (List U8) Bool] (not (isNameInList cName expectedNames))
+                  (
+                    \u : U8 =>
+                      Err
+                        [List U8]
+                        [Bool]
+                        "Match arm constructor does not belong to the ADT"
+                  )
+                  (
+                    \u : U8 =>
+                      match (lookup [List U8] [CtorInfo] lteListU8 cName (datEnvCtors dEnv)) [Result (List U8) Bool] {
+                        | None =>
+                          Err [List U8] [Bool] "Constructor metadata not found"
+                        | Some info =>
+                          let expectedArity = ctorArity info in
+                          let actualArity = lengthList [List U8] args in
+                          if [Result (List U8) Bool] (not (eqU8 expectedArity actualArity))
+                            (
+                              \u2 : U8 => Err [List U8] [Bool] "Match arm constructor arity mismatch"
+                            )
+                            (\u2 : U8 => validateEachArm dEnv expectedNames t)
+                      }
+                  )
+          )
+
+poly rec validateExhaustiveness =
+  \expectedNames : List (List U8) =>
+    \arms : List (Pattern, Expr) =>
+      matchList
+        [List U8]
+        [Result (List U8) Bool]
+        expectedNames
+        (Ok [List U8] [Bool] true)
+        (
+          \h : List U8 =>
+            \t : List (List U8) =>
+              let count = countNameInArms h arms in
+              if [Result (List U8) Bool] (eqU8 count #u8(0))
+                (
+                  \u : U8 => Err [List U8] [Bool] "Missing match arm for constructor"
+                )
+                (
+                  \u : U8 =>
+                    if [Result (List U8) Bool] (ltU8 #u8(1) count)
+                      (
+                        \u2 : U8 => Err [List U8] [Bool] "Duplicate match arm for constructor"
+                      )
+                      (\u2 : U8 => validateExhaustiveness t arms)
+                )
+        )
+
 poly elaborateMatchWith =
   \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
     \dEnv : DataEnv =>
@@ -476,8 +568,10 @@ poly elaborateMatchWith =
                   | None => Err [List U8] [Core] "ADT metadata not found"
                   | Some adtInfo =>
                     let expectedNames = adtCtors adtInfo in
-                    let sortedArms = sortArms expectedNames arms in
                     do [Result (List U8) Core] {
+                      valEach <- (validateEachArm dEnv expectedNames arms)
+                      valExhaustive <- (validateExhaustiveness expectedNames arms)
+                      sortedArms = sortArms expectedNames arms
                       coreArms <- (elaborateArms elaborate dEnv sortedArms)
                       return Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
                     }

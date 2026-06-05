@@ -150,9 +150,11 @@ export lookupExport
 
 export lookupDefinition
 
-export emitModuleEnvSummary
+export lookupConstructorAlias
 
-export emitBundleModuleEnvSummary
+export validateImports
+
+export validateExports
 
 export main
 
@@ -1522,6 +1524,106 @@ poly rec emitPrimitivesAcc =
 
 poly emitPrimitives =
   \prims : List PrimitiveInfo => emitPrimitivesAcc (reverse [PrimitiveInfo] prims) ""
+
+poly rec lookupConstructorAlias =
+  \name : List U8 =>
+    \aliases : List ConstructorAliasInfo =>
+      matchList
+        [ConstructorAliasInfo]
+        [Maybe (Maybe (List U8))]
+        aliases
+        (None [Maybe (List U8)])
+        (
+          \h : ConstructorAliasInfo =>
+            \t : List ConstructorAliasInfo =>
+              do [Maybe (Maybe (List U8))] {
+                MkConstructorAliasInfo hAlias hTarget = h
+                return
+                if [Maybe (Maybe (List U8))] (eqListU8 hAlias name)
+                  (\u : U8 => Some [Maybe (List U8)] hTarget)
+                  (\u : U8 => lookupConstructorAlias name t)
+              }
+        )
+
+poly rec validateImports =
+  \imps : List ImportInfo =>
+    \mods : List ModuleInfo =>
+      \exports : List ExportInfo =>
+        matchList
+          [ImportInfo]
+          [Result (List U8) Bool]
+          imps
+          (Ok [List U8] [Bool] true)
+          (
+            \h : ImportInfo =>
+              \t : List ImportInfo =>
+                do [Result (List U8) Bool] {
+                  MkImportInfo hModule hFrom hSymbol = h
+                  status = importStatus hFrom hSymbol mods exports
+                  return
+                  if [Result (List U8) Bool] (eqListU8 status "RESOLVED")
+                    (\u : U8 => validateImports t mods exports)
+                    (
+                      \u : U8 =>
+                        Err
+                          [List U8]
+                          [Bool]
+                          (
+                            concat
+                              [U8]
+                              {List U8 |
+                                "Import error: in module "
+                                hModule
+                                ", import "
+                                hFrom
+                                "."
+                                hSymbol
+                                " is "
+                                status
+                              }
+                          )
+                    )
+                }
+          )
+
+poly rec validateExports =
+  \exps : List ExportInfo =>
+    \defs : List DefinitionInfo =>
+      \ctors : List ConstructorMeta =>
+        matchList
+          [ExportInfo]
+          [Result (List U8) Bool]
+          exps
+          (Ok [List U8] [Bool] true)
+          (
+            \h : ExportInfo =>
+              \t : List ExportInfo =>
+                do [Result (List U8) Bool] {
+                  MkExportInfo hModule hSymbol = h
+                  status = exportStatus hModule hSymbol exps defs ctors
+                  return
+                  if [Result (List U8) Bool] (eqListU8 status "OK")
+                    (\u : U8 => validateExports t defs ctors)
+                    (
+                      \u : U8 =>
+                        Err
+                          [List U8]
+                          [Bool]
+                          (
+                            concat
+                              [U8]
+                              {List U8 |
+                                "Export error: in module "
+                                hModule
+                                ", export "
+                                hSymbol
+                                " is "
+                                status
+                              }
+                          )
+                    )
+                }
+          )
 
 poly emitModuleEnvSummary =
   \env : ModuleEnv =>

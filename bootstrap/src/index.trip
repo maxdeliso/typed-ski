@@ -38,6 +38,8 @@ import Prelude true
 
 import Prelude if
 
+import Prelude eqU8
+
 import Lexer tokenize
 
 import Parser parseProgram
@@ -101,6 +103,58 @@ import BundleSummary ModuleRecord
 import BundleSummary MkModuleRecord
 
 import BundleSummary parseBundleSummary
+
+import ModuleEnv ModuleEnv
+
+import ModuleEnv MkModuleEnv
+
+import ModuleEnv buildModuleEnv
+
+import ModuleEnv ModuleInfo
+
+import ModuleEnv MkModuleInfo
+
+import ModuleEnv ImportInfo
+
+import ModuleEnv MkImportInfo
+
+import ModuleEnv ExportInfo
+
+import ModuleEnv MkExportInfo
+
+import ModuleEnv DefinitionInfo
+
+import ModuleEnv MkDefinitionInfo
+
+import ModuleEnv DataTypeInfo
+
+import ModuleEnv MkDataTypeInfo
+
+import ModuleEnv ConstructorMeta
+
+import ModuleEnv MkConstructorMeta
+
+import ModuleEnv ConstructorAliasInfo
+
+import ModuleEnv MkConstructorAliasInfo
+
+import ModuleEnv OpaqueInfo
+
+import ModuleEnv MkOpaqueInfo
+
+import ModuleEnv NativeInfo
+
+import ModuleEnv MkNativeInfo
+
+import ModuleEnv PrimitiveInfo
+
+import ModuleEnv MkPrimitiveInfo
+
+import ModuleEnv validateImports
+
+import ModuleEnv validateExports
+
+import ModuleEnv lookupConstructorAlias
 
 export compileBundleToLlvm
 
@@ -229,224 +283,345 @@ poly rec memberOfList =
                 (\u : U8 => memberOfList name t)
         )
 
-poly rec lookupImportList =
+poly rec containsDot =
   \name : List U8 =>
-    \list : List ((List U8), (List U8)) =>
-      matchList
-        [((List U8), (List U8))]
-        [Maybe (List U8)]
-        list
-        (None [List U8])
-        (
-          \h : ((List U8), (List U8)) =>
-            \t : List ((List U8), (List U8)) =>
-              if [Maybe (List U8)] (eqListU8 (fst [List U8] [List U8] h) name)
-                (\u : U8 => Some [List U8] (snd [List U8] [List U8] h))
-                (\u : U8 => lookupImportList name t)
-        )
+    matchList
+      [U8]
+      [Bool]
+      name
+      false
+      (
+        \h : U8 =>
+          \t : List U8 =>
+            if [Bool] (eqU8 h #u8(46))
+              (\u : U8 => true)
+              (\u : U8 => containsDot t)
+      )
+
+poly qualify =
+  \moduleName : List U8 =>
+    \name : List U8 => concat [U8] {List U8 | moduleName "." name}
+
+poly rec isLocalDef =
+  \moduleName : List U8 =>
+    \name : List U8 =>
+      \defs : List DefinitionInfo =>
+        matchList
+          [DefinitionInfo]
+          [Bool]
+          defs
+          false
+          (
+            \h : DefinitionInfo =>
+              \t : List DefinitionInfo =>
+                do [Bool] {
+                  MkDefinitionInfo hModule hSymbol hKind = h
+                  return
+                  if [Bool] (and (eqListU8 hModule moduleName) (eqListU8 hSymbol name))
+                    (\u : U8 => true)
+                    (\u : U8 => isLocalDef moduleName name t)
+                }
+          )
+
+poly rec lookupImport =
+  \moduleName : List U8 =>
+    \name : List U8 =>
+      \imps : List ImportInfo =>
+        matchList
+          [ImportInfo]
+          [Maybe (List U8)]
+          imps
+          (None [List U8])
+          (
+            \h : ImportInfo =>
+              \t : List ImportInfo =>
+                do [Maybe (List U8)] {
+                  MkImportInfo hModule hFrom hSymbol = h
+                  return
+                  if [Maybe (List U8)] (and (eqListU8 hModule moduleName) (eqListU8 hSymbol name))
+                    (\u : U8 => Some [List U8] (qualify hFrom hSymbol))
+                    (\u : U8 => lookupImport moduleName name t)
+                }
+          )
 
 poly rec qualifyExpr =
   \bound : List (List U8) =>
-    \imports : List ((List U8), (List U8)) =>
-      \localDefs : List (List U8) =>
-        \moduleName : List U8 =>
-          \expr : Expr =>
-            match expr [Expr] {
+    \mEnv : ModuleEnv =>
+      \moduleName : List U8 =>
+        \expr : Expr =>
+          do [Result (List U8) Expr] {
+            MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives primitives = mEnv
+            return
+            match expr [Result (List U8) Expr] {
               | E_Var name =>
-                if [Expr] (memberOfList name bound)
-                  (\u : U8 => E_Var name)
+                if [Result (List U8) Expr] (memberOfList name bound)
+                  (\u : U8 => Ok [List U8] [Expr] (E_Var name))
                   (
                     \u : U8 =>
-                      match (lookupImportList name imports) [Expr] {
-                        | Some qName => E_Var qName
+                      match (lookupImport moduleName name imps) [Result (List U8) Expr] {
+                        | Some qName =>
+                          match (lookupConstructorAlias qName aliases) [Result (List U8) Expr] {
+                            | Some res =>
+                              match res [Result (List U8) Expr] {
+                                | Some resolvedCtor => Ok [List U8] [Expr] (E_Var resolvedCtor)
+                                | None =>
+                                  Err
+                                    [List U8]
+                                    [Expr]
+                                    (
+                                      concat
+                                        [U8]
+                                        {List U8 |
+                                          "Ambiguous constructor alias: "
+                                          qName
+                                        }
+                                    )
+                              }
+                            | None => Ok [List U8] [Expr] (E_Var qName)
+                          }
                         | None =>
-                          if [Expr] (memberOfList name localDefs)
+                          if [Result (List U8) Expr] (isLocalDef moduleName name defs)
                             (
-                              \u2 : U8 => E_Var (concat [U8] {List U8 | moduleName "." name})
+                              \u2 : U8 => Ok [List U8] [Expr] (E_Var (qualify moduleName name))
                             )
-                            (\u2 : U8 => E_Var name)
+                            (
+                              \u2 : U8 =>
+                                let lookupName = if [List U8] (containsDot name) (\u : U8 => name) (\u : U8 => qualify moduleName name) in
+                                match (lookupConstructorAlias lookupName aliases) [Result (List U8) Expr] {
+                                  | Some res =>
+                                    match res [Result (List U8) Expr] {
+                                      | Some qName => Ok [List U8] [Expr] (E_Var qName)
+                                      | None =>
+                                        Err
+                                          [List U8]
+                                          [Expr]
+                                          (
+                                            concat
+                                              [U8]
+                                              {List U8 |
+                                                "Ambiguous constructor alias: "
+                                                name
+                                              }
+                                          )
+                                    }
+                                  | None => Ok [List U8] [Expr] (E_Var name)
+                                }
+                            )
                       }
                   )
               | E_App l r =>
-                E_App
-                  (qualifyExpr bound imports localDefs moduleName l)
-                  (qualifyExpr bound imports localDefs moduleName r)
+                do [Result (List U8) Expr] {
+                  qL <- (qualifyExpr bound mEnv moduleName l)
+                  qR <- (qualifyExpr bound mEnv moduleName r)
+                  return Ok [List U8] [Expr] (E_App qL qR)
+                }
               | E_Lam param body =>
-                E_Lam
-                  param
-                  (
-                    qualifyExpr
-                      (cons [List U8] param bound)
-                      imports
-                      localDefs
-                      moduleName
-                      body
-                  )
+                do [Result (List U8) Expr] {
+                  qBody <- (qualifyExpr (cons [List U8] param bound) mEnv moduleName body)
+                  return Ok [List U8] [Expr] (E_Lam param qBody)
+                }
               | E_Let name val body =>
-                E_Let
-                  name
-                  (qualifyExpr bound imports localDefs moduleName val)
-                  (
-                    qualifyExpr
-                      (cons [List U8] name bound)
-                      imports
-                      localDefs
-                      moduleName
-                      body
-                  )
-              | E_Nat digits => E_Nat digits
+                do [Result (List U8) Expr] {
+                  qVal <- (qualifyExpr bound mEnv moduleName val)
+                  qBody <- (qualifyExpr (cons [List U8] name bound) mEnv moduleName body)
+                  return Ok [List U8] [Expr] (E_Let name qVal qBody)
+                }
+              | E_Nat digits => Ok [List U8] [Expr] (E_Nat digits)
               | E_Match scrut arms =>
-                E_Match
-                  (qualifyExpr bound imports localDefs moduleName scrut)
-                  (qualifyArms bound imports localDefs moduleName arms)
+                do [Result (List U8) Expr] {
+                  qScrut <- (qualifyExpr bound mEnv moduleName scrut)
+                  qArms <- (qualifyArms bound mEnv moduleName arms)
+                  return Ok [List U8] [Expr] (E_Match qScrut qArms)
+                }
             }
+          }
 
 poly rec qualifyArms =
   \bound : List (List U8) =>
-    \imports : List ((List U8), (List U8)) =>
-      \localDefs : List (List U8) =>
-        \moduleName : List U8 =>
-          \arms : List (Pattern, Expr) =>
-            matchList
+    \mEnv : ModuleEnv =>
+      \moduleName : List U8 =>
+        \arms : List (Pattern, Expr) =>
+          do [Result (List U8) (List (Pattern, Expr))] {
+            MkModuleEnv mods imps exps defs dataTypes ctors aliases opaques natives primitives = mEnv
+            return
+              matchList
               [(Pattern, Expr)]
-              [List (Pattern, Expr)]
+              [Result (List U8) (List (Pattern, Expr))]
               arms
-              {(Pattern, Expr) |}
+              (Ok [List U8] [List (Pattern, Expr)] {(Pattern, Expr) |})
               (
                 \h : (Pattern, Expr) =>
                   \t : List (Pattern, Expr) =>
-                    let pat = fst [Pattern] [Expr] h in
-                    let body = snd [Pattern] [Expr] h in
-                    match pat [List (Pattern, Expr)] {
-                      | P_Ctor ctorName args =>
-                        let nextBound = append [List U8] args bound in
-                        let qualifiedBody = qualifyExpr nextBound imports localDefs moduleName body in
-                        cons
-                          [(Pattern, Expr)]
-                          {Pattern, Expr | pat, qualifiedBody}
-                          (qualifyArms bound imports localDefs moduleName t)
+                    do [Result (List U8) (List (Pattern, Expr))] {
+                      MkPair pat body = h
+                      P_Ctor ctorName args = pat
+                      qCtorName <- match (lookupImport moduleName ctorName imps) [Result (List U8) (List U8)]
+                      {|
+                        Some
+                        qName =>
+                        match
+                        (lookupConstructorAlias qName aliases)
+                        [Result (List U8) (List U8)]
+                        {| Some res => match res [Result (List U8) (List U8)] {| Some resolvedCtor => Ok [List U8] [List U8] resolvedCtor | None => Err [List U8] [List U8] (concat [U8] {List U8 | "Ambiguous constructor alias in pattern: " qName})} | None => Ok [List U8] [List U8] qName} |
+                        None =>
+                        if
+                        [Result (List U8) (List U8)]
+                        (isLocalDef moduleName ctorName defs)
+                        (
+                          \u2 : U8 => Ok [List U8] [List U8] (qualify moduleName ctorName)
+                        )
+                        (
+                          \u2 : U8 =>
+                            let lookupName = if [List U8] (containsDot ctorName) (\u : U8 => ctorName) (\u : U8 => qualify moduleName ctorName) in
+                            match (lookupConstructorAlias lookupName aliases) [Result (List U8) (List U8)] {
+                              | Some res =>
+                                match res [Result (List U8) (List U8)] {
+                                  | Some qName => Ok [List U8] [List U8] qName
+                                  | None =>
+                                    Err
+                                      [List U8]
+                                      [List U8]
+                                      (
+                                        concat
+                                          [U8]
+                                          {List U8 |
+                                            "Ambiguous constructor alias in pattern: "
+                                            ctorName
+                                          }
+                                      )
+                                }
+                              | None => Ok [List U8] [List U8] ctorName
+                            }
+                        )
+                      }
+                      nextBound = append [List U8] args bound
+                      qBody <- (qualifyExpr nextBound mEnv moduleName body)
+                      rest <- (qualifyArms bound mEnv moduleName t)
+                      return
+                        Ok
+                        [List U8]
+                        [List (Pattern, Expr)]
+                        (
+                          cons
+                            [(Pattern, Expr)]
+                            {Pattern, Expr | (P_Ctor qCtorName args), qBody}
+                            rest
+                        )
                     }
               )
+          }
 
 poly rec qualifyDataCtors =
   \moduleName : List U8 =>
-    \ctors : List ((List U8), U8) =>
-      matchList
-        [((List U8), U8)]
-        [List ((List U8), U8)]
-        ctors
-        {((List U8), U8) |}
-        (
-          \h : ((List U8), U8) =>
-            \t : List ((List U8), U8) =>
-              let ctorName = fst [List U8] [U8] h in
-              let arity = snd [List U8] [U8] h in
-              let qName = concat [U8] {List U8 | moduleName "." ctorName} in
-              cons
-                [((List U8), U8)]
-                {List U8, U8 | qName, arity}
-                (qualifyDataCtors moduleName t)
-        )
+    \typeName : List U8 =>
+      \ctors : List ((List U8), U8) =>
+        matchList
+          [((List U8), U8)]
+          [List ((List U8), U8)]
+          ctors
+          {((List U8), U8) |}
+          (
+            \h : ((List U8), U8) =>
+              \t : List ((List U8), U8) =>
+                let ctorName = fst [List U8] [U8] h in
+                let arity = snd [List U8] [U8] h in
+                let qName = concat [U8] {List U8 | moduleName "." typeName "." ctorName} in
+                cons
+                  [((List U8), U8)]
+                  {List U8, U8 | qName, arity}
+                  (qualifyDataCtors moduleName typeName t)
+          )
 
 poly rec qualifyDeclsRec =
-  \imports : List ((List U8), (List U8)) =>
-    \localDefs : List (List U8) =>
-      \moduleName : List U8 =>
-        \decls : List Decl =>
-          matchList
-            [Decl]
-            [List Decl]
-            decls
-            {Decl |}
-            (
-              \h : Decl =>
-                \t : List Decl =>
-                  match h [List Decl] {
-                    | D_Def kind isRec name body =>
-                      let qName = concat [U8] {List U8 | moduleName "." name} in
-                      let qBody = qualifyExpr {List U8 |} imports localDefs moduleName body in
-                      cons
-                        [Decl]
-                        (D_Def kind isRec qName qBody)
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Data name ctors =>
-                      let qName = concat [U8] {List U8 | moduleName "." name} in
-                      let qCtors = qualifyDataCtors moduleName ctors in
-                      cons
-                        [Decl]
-                        (D_Data qName qCtors)
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Module name =>
-                      cons
-                        [Decl]
-                        h
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Import fromName symbolName =>
-                      cons
-                        [Decl]
-                        h
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Export name =>
-                      cons
-                        [Decl]
-                        h
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Opaque name =>
-                      cons
-                        [Decl]
-                        h
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Native name =>
-                      cons
-                        [Decl]
-                        h
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                    | D_Type name =>
-                      cons
-                        [Decl]
-                        h
-                        (qualifyDeclsRec imports localDefs moduleName t)
-                  }
-            )
+  \mEnv : ModuleEnv =>
+    \moduleName : List U8 =>
+      \decls : List Decl =>
+        matchList
+          [Decl]
+          [Result (List U8) (List Decl)]
+          decls
+          (Ok [List U8] [List Decl] {Decl |})
+          (
+            \h : Decl =>
+              \t : List Decl =>
+                match h [Result (List U8) (List Decl)] {
+                  | D_Def kind isRec name body =>
+                    do [Result (List U8) (List Decl)] {
+                      qName = qualify moduleName name
+                      qBody <- (qualifyExpr {List U8 |} mEnv moduleName body)
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return
+                        Ok
+                        [List U8]
+                        [List Decl]
+                        (cons [Decl] (D_Def kind isRec qName qBody) rest)
+                    }
+                  | D_Data name ctors =>
+                    do [Result (List U8) (List Decl)] {
+                      qName = qualify moduleName name
+                      qCtors = qualifyDataCtors moduleName name ctors
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return
+                        Ok
+                        [List U8]
+                        [List Decl]
+                        (cons [Decl] (D_Data qName qCtors) rest)
+                    }
+                  | D_Module name =>
+                    do [Result (List U8) (List Decl)] {
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return Ok [List U8] [List Decl] (cons [Decl] h rest)
+                    }
+                  | D_Import fromName symbolName =>
+                    do [Result (List U8) (List Decl)] {
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return Ok [List U8] [List Decl] (cons [Decl] h rest)
+                    }
+                  | D_Export name =>
+                    do [Result (List U8) (List Decl)] {
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return Ok [List U8] [List Decl] (cons [Decl] h rest)
+                    }
+                  | D_Opaque name =>
+                    do [Result (List U8) (List Decl)] {
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return Ok [List U8] [List Decl] (cons [Decl] h rest)
+                    }
+                  | D_Native name =>
+                    do [Result (List U8) (List Decl)] {
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return Ok [List U8] [List Decl] (cons [Decl] h rest)
+                    }
+                  | D_Type name =>
+                    do [Result (List U8) (List Decl)] {
+                      rest <- (qualifyDeclsRec mEnv moduleName t)
+                      return Ok [List U8] [List Decl] (cons [Decl] h rest)
+                    }
+                }
+          )
 
 poly qualifyDecls =
-  \moduleName : List U8 =>
-    \decls : List Decl =>
-      let localDefs = collectLocalDefs decls in
-      let imports = collectImports decls in
-      qualifyDeclsRec imports localDefs moduleName decls
+  \mEnv : ModuleEnv =>
+    \moduleName : List U8 => \decls : List Decl => qualifyDeclsRec mEnv moduleName decls
 
-poly rec collectAllDecls =
-  \records : List ModuleRecord =>
-    matchList
-      [ModuleRecord]
-      [Result (List U8) (List Decl)]
-      records
-      (Ok [List U8] [List Decl] {Decl |})
-      (
-        \h : ModuleRecord =>
-          \t : List ModuleRecord =>
-            do [Result (List U8) (List Decl)] {
-              MkModuleRecord name lengthDigits source = h
-              return
-              match (tokenize source) [Result (List U8) (List Decl)] {
-                | Err e => Err [List U8] [List Decl] "Lex error"
-                | Ok toks =>
-                  match (parseProgram toks) [Result (List U8) (List Decl)] {
-                    | Err e => Err [List U8] [List Decl] "Parse error"
-                    | Ok decls =>
-                      do [Result (List U8) (List Decl)] {
-                        rest <- (collectAllDecls t)
-                        return
-                          Ok
-                          [List U8]
-                          [List Decl]
-                          (append [Decl] (qualifyDecls name decls) rest)
-                      }
-                  }
+poly rec collectAllDeclsFromModuleEnv =
+  \mEnv : ModuleEnv =>
+    \mods : List ModuleInfo =>
+      matchList
+        [ModuleInfo]
+        [Result (List U8) (List Decl)]
+        mods
+        (Ok [List U8] [List Decl] {Decl |})
+        (
+          \h : ModuleInfo =>
+            \t : List ModuleInfo =>
+              do [Result (List U8) (List Decl)] {
+                MkModuleInfo name decls = h
+                qDecls <- (qualifyDecls mEnv name decls)
+                rest <- (collectAllDeclsFromModuleEnv mEnv t)
+                return Ok [List U8] [List Decl] (append [Decl] qDecls rest)
               }
-            }
-      )
+        )
 
 poly rec entryHasParam =
   \funcs : List AnfFunc =>
@@ -655,7 +830,11 @@ poly compileBundleToLlvm =
     do [Result (List U8) (List U8)] {
       bundle <- (parseBundleSummary source)
       MkBundleSummary entry target wrapper modsCountDigits mods = bundle
-      allDecls <- (collectAllDecls mods)
+      mEnv <- (buildModuleEnv mods)
+      MkModuleEnv modsList imps exps defs dataTypes ctors aliases opaques natives primitives = mEnv
+      valImps <- (validateImports imps modsList exps)
+      valExps <- (validateExports exps defs ctors)
+      allDecls <- (collectAllDeclsFromModuleEnv mEnv modsList)
       prunedDecls = pruneDecls entry allDecls
       orderedDecls = append [Decl] (filterDataDecls prunedDecls) (filterDefDecls prunedDecls)
       coreDefs <- (elaborateProgramToCore orderedDecls)

@@ -2,6 +2,8 @@ module Anf
 
 import Prelude List
 
+import Prelude reverse
+
 import Prelude nil
 
 import Prelude cons
@@ -725,7 +727,7 @@ poly rec liftExpr =
           | AE_Case scrut arms =>
             do [LiftRes] {
               MkLiftRes c1 funcs1 liftedScrut = (liftExpr localsInScope counter scrut)
-              MkLiftListRes c2 funcs2 liftedArms = (liftExprList localsInScope c1 arms)
+              MkLiftListRes c2 funcs2 liftedArms = (liftArmList localsInScope c1 arms)
               return
                 MkLiftRes
                 c2
@@ -767,34 +769,81 @@ poly rec liftExprList =
                 }
           )
 
-poly rec liftFuncs =
+-- Case arms are field-consuming lambdas (`AE_Lam f0 (AE_Lam f1 body)`) that the
+-- emitter peels and binds to the scrutinee's fields (anfLlvm.trip peelBinders).
+-- They must NOT be closure-converted like ordinary lambda values. Peel the arm
+-- binders into scope and lift only the body, keeping the arm a field-lambda so
+-- closures *inside* the arm still capture the binders correctly.
+poly rec liftArm =
+  \localsInScope : List (List U8) =>
+    \counter : Bin =>
+      \arm : AnfExpr =>
+        match arm [LiftRes] {
+          | AE_Lam param body =>
+            do [LiftRes] {
+              MkLiftRes c1 funcs1 liftedBody = (liftArm (cons [List U8] param localsInScope) counter body)
+              return MkLiftRes c1 funcs1 (AE_Lam param liftedBody)
+            }
+          | AE_Var n => liftExpr localsInScope counter arm
+          | AE_Native t => liftExpr localsInScope counter arm
+          | AE_Call f args => liftExpr localsInScope counter arm
+          | AE_Con tag total arity args => liftExpr localsInScope counter arm
+          | AE_Case scrut arms => liftExpr localsInScope counter arm
+          | AE_Let name val body => liftExpr localsInScope counter arm
+        }
+
+poly rec liftArmList =
+  \localsInScope : List (List U8) =>
+    \counter : Bin =>
+      \arms : List AnfExpr =>
+        matchList
+          [AnfExpr]
+          [LiftListRes]
+          arms
+          (MkLiftListRes counter {AnfFunc |} {AnfExpr |})
+          (
+            \h : AnfExpr =>
+              \t : List AnfExpr =>
+                do [LiftListRes] {
+                  MkLiftRes c1 funcs1 liftedHead = (liftArm localsInScope counter h)
+                  MkLiftListRes c2 funcs2 liftedTail = (liftArmList localsInScope c1 t)
+                  return
+                    MkLiftListRes
+                    c2
+                    (append [AnfFunc] funcs1 funcs2)
+                    (cons [AnfExpr] liftedHead liftedTail)
+                }
+          )
+
+poly rec liftFuncsAcc =
+  \counter : Bin =>
+    \acc : List AnfFunc =>
+      \funcs : List AnfFunc =>
+        matchList
+          [AnfFunc]
+          [(Bin, (List AnfFunc))]
+          funcs
+          {Bin, List AnfFunc | counter, acc}
+          (
+            \h : AnfFunc =>
+              \t : List AnfFunc =>
+                do [(Bin, (List AnfFunc))] {
+                  MkAnfFunc name params body = h
+                  MkLiftRes c1 liftedFuncs liftedBody = (liftExpr params counter body)
+                  hLifted = (MkAnfFunc name params liftedBody)
+                  block = cons [AnfFunc] hLifted liftedFuncs
+                  newAcc = append [AnfFunc] (reverse [AnfFunc] block) acc
+                  return (liftFuncsAcc c1 newAcc t)
+                }
+          )
+
+poly liftFuncs =
   \counter : Bin =>
     \funcs : List AnfFunc =>
-      matchList
-        [AnfFunc]
-        [(Bin, (List AnfFunc))]
-        funcs
-        {Bin, List AnfFunc | counter, {AnfFunc |}}
-        (
-          \h : AnfFunc =>
-            \t : List AnfFunc =>
-              do [(Bin, (List AnfFunc))] {
-                MkAnfFunc name params body = h
-                MkLiftRes c1 liftedFuncs liftedBody = (liftExpr params counter body)
-                MkPair c2 restFuncs = (liftFuncs c1 t)
-                hLifted = MkAnfFunc name params liftedBody
-                return
-                  {Bin, List AnfFunc |
-                    c2,
-                    (
-                      cons
-                        [AnfFunc]
-                        hLifted
-                        (append [AnfFunc] liftedFuncs restFuncs)
-                    )
-                  }
-              }
-        )
+      do [(Bin, (List AnfFunc))] {
+        MkPair finalCounter finalFuncs = (liftFuncsAcc counter {AnfFunc |} funcs)
+        return {Bin, List AnfFunc | finalCounter, (reverse [AnfFunc] finalFuncs)}
+      }
 
 poly liftProgram =
   \prog : AnfProgram =>
@@ -811,30 +860,31 @@ poly normalize =
       return e
     }
 
-poly rec normalizeFuncs =
+poly rec normalizeFuncsAcc =
+  \acc : List AnfFunc =>
+    \funcs : List MiniFunc =>
+      matchList
+        [MiniFunc]
+        [List AnfFunc]
+        funcs
+        acc
+        (
+          \h : MiniFunc =>
+            \t : List MiniFunc =>
+              do [List AnfFunc] {
+                MkMiniFunc name params body = h
+                return (normalizeFuncsAcc (cons [AnfFunc] (MkAnfFunc name params (normalize body)) acc) t)
+              }
+        )
+
+poly normalizeFuncs =
   \funcs : List MiniFunc =>
-    matchList
-      [MiniFunc]
-      [List AnfFunc]
-      funcs
-      {AnfFunc |}
-      (
-        \h : MiniFunc =>
-          \t : List MiniFunc =>
-            do [List AnfFunc] {
-              MkMiniFunc name params body = h
-              return
-                cons
-                [AnfFunc]
-                (MkAnfFunc name params (normalize body))
-                (normalizeFuncs t)
-            }
-      )
+    (reverse [AnfFunc] (normalizeFuncsAcc {AnfFunc |} funcs))
 
 poly normalizeProgram =
   \prog : MiniProgram =>
     do [AnfProgram] {
       MkMiniProgram funcs entry = prog
-      normalized = MkAnfProgram (normalizeFuncs funcs) entry
+      normalized = (MkAnfProgram (normalizeFuncs funcs) entry)
       return liftProgram normalized
     }

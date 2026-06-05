@@ -128,6 +128,52 @@ poly rec applyAnon =
             \t : List MiniExpr => applyAnon (ME_Call anonName {MiniExpr | head h}) t
         )
 
+poly nameIsMatchList =
+  \n : List U8 =>
+    if [Bool] (eqListU8 n "Prelude.matchList") (\u : U8 => true) (\u : U8 => eqListU8 n "matchList")
+
+-- matchList is a Prelude function over the Scott encoding, but the back end
+-- boxes List. Lower a saturated `matchList l onNil onCons` to a boxed case:
+-- arms are positional by tag (nil = 0 -> onNil, cons = 1 -> onCons). onCons is
+-- already a two-argument field-lambda, which is exactly the ME_Match arm shape.
+-- Mirrors lowerSpecialApplication("Prelude.matchList") in lib/minicore/fromTrip.ts.
+poly matchListIntrinsicOr =
+  \miniArgs : List MiniExpr =>
+    \fallback : MiniExpr =>
+      matchList
+        [MiniExpr]
+        [MiniExpr]
+        miniArgs
+        fallback
+        (
+          \l : MiniExpr =>
+            \r0 : List MiniExpr =>
+              matchList
+                [MiniExpr]
+                [MiniExpr]
+                r0
+                fallback
+                (
+                  \onNil : MiniExpr =>
+                    \r1 : List MiniExpr =>
+                      matchList
+                        [MiniExpr]
+                        [MiniExpr]
+                        r1
+                        fallback
+                        (
+                          \onCons : MiniExpr =>
+                            \r2 : List MiniExpr =>
+                              matchList
+                                [MiniExpr]
+                                [MiniExpr]
+                                r2
+                                (ME_Match l {MiniExpr | onNil onCons})
+                                (\x : MiniExpr => \xs : List MiniExpr => fallback)
+                        )
+                )
+        )
+
 poly rec coreToMini =
   \zeroArityNames : List (List U8) =>
     \expr : Core =>
@@ -145,7 +191,10 @@ poly rec coreToMini =
             miniArgs = mapCoreToMini zeroArityNames args
             return
             match head [MiniExpr] {
-              | Cr_Var name => ME_Call name miniArgs
+              | Cr_Var name =>
+                if [MiniExpr] (nameIsMatchList name)
+                  (\u : U8 => matchListIntrinsicOr miniArgs (ME_Call name miniArgs))
+                  (\u : U8 => ME_Call name miniArgs)
               | Cr_Ctor tag total arity => ME_Con tag total arity miniArgs
               | Cr_Lam name body =>
                 matchList

@@ -1350,7 +1350,7 @@ class MiniCoreBuilder {
             );
             if (constructor === undefined) {
               throw new MiniCoreCompileError(
-                `Unknown constructor ${arm.constructorName}`,
+                `Unknown constructor ${arm.constructorName} in module ${ctx.moduleName}`,
               );
             }
             const ctorInfo = this.metadata.constructors.get(constructor);

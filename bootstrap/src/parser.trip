@@ -132,6 +132,8 @@ import Lexer T_Ident
 
 import Lexer T_Nat
 
+import Lexer T_Str
+
 import Lexer T_EOF
 
 export Pattern
@@ -189,6 +191,8 @@ export parseError
 export identTag
 
 export natTag
+
+export strTag
 
 export lParenTag
 
@@ -279,6 +283,8 @@ export sndDeclToken
 export parsePatternArgs
 
 export parseLiteralAtomWith
+
+export stringToExprList
 
 export buildListExpr
 
@@ -383,6 +389,15 @@ poly identTag =
 
 poly natTag =
   tokenTag (T_Nat "")
+
+poly strTag =
+  tokenTag (T_Str "")
+
+
+
+
+
+
 
 poly lParenTag =
   tokenTag T_LParen
@@ -703,12 +718,25 @@ poly isAtomStartTag =
     cond [Bool] {
       | (eqU8 tag identTag) => true
       | (eqU8 tag natTag) => true
+      | (eqU8 tag strTag) => true
       | (eqU8 tag lParenTag) => true
       | (eqU8 tag commaTag) => true
       | (eqU8 tag dotTag) => true
       | (eqU8 tag hashTag) => true
       | otherwise => eqU8 tag lBraceTag
     }
+
+poly rec stringToExprList =
+  \s : List U8 =>
+    matchList
+      [U8]
+      [List Expr]
+      s
+      {Expr |}
+      (
+        \h : U8 =>
+          \t : List U8 => cons [Expr] (E_Nat (u8ToDigits h)) (stringToExprList t)
+      )
 
 poly rec buildListExpr =
   \elements : List Expr =>
@@ -745,6 +773,14 @@ poly parseLiteralAtomWith =
                     [ParseError]
                     [(Expr, (List Token))]
                     {Expr, List Token | (E_Nat (tokenNatValue h)), t}
+                | (eqU8 tag strTag) =>
+                  Ok
+                    [ParseError]
+                    [(Expr, (List Token))]
+                    {Expr, List Token |
+                      (buildListExpr (stringToExprList (tokenText h))),
+                      t
+                    }
                 | (eqU8 tag lParenTag) =>
                   do [Result ParseError (Expr, (List Token))] {
                     res <- (recurse t)
@@ -1114,6 +1150,14 @@ poly parseAtomWith =
                     [ParseError]
                     [(Expr, (List Token))]
                     {Expr, List Token | (E_Nat (tokenNatValue h)), t}
+                | (eqU8 tag strTag) =>
+                  Ok
+                    [ParseError]
+                    [(Expr, (List Token))]
+                    {Expr, List Token |
+                      (buildListExpr (stringToExprList (tokenText h))),
+                      t
+                    }
                 | (eqU8 tag lParenTag) =>
                   do [Result ParseError (Expr, (List Token))] {
                     res <- (recurse t)
@@ -1866,6 +1910,7 @@ poly parseDecl =
             }
       )
 
+
 poly rec parseProgramAcc =
   \toks : List Token =>
     \acc : List Decl =>
@@ -1913,6 +1958,7 @@ poly isCtorToken =
           false
           (\h : U8 => \t : List U8 => isUppercaseU8 h)
       | T_Nat n => false
+      | T_Str s => false
     }
 
 poly rec patternIdentCount =
@@ -2237,12 +2283,12 @@ poly parseSingleStep =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
     \toks : List Token =>
       matchList
-        [Token]
-        [Result ParseError DoStep]
-        toks
-        (Err [ParseError] [DoStep] parseError)
-        (
-          \h : Token =>
+            [Token]
+            [Result ParseError DoStep]
+            toks
+            (Err [ParseError] [DoStep] parseError)
+            (
+              \h : Token =>
             \t : List Token =>
               let tag = tokenTag h in
               cond [Result ParseError DoStep] {
@@ -2449,9 +2495,10 @@ poly parseSingleStep =
                                         }
                                   )
                             )
-                    )
+                      )
               }
         )
+
 
 poly rec parseDoStepsRec =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
@@ -2516,3 +2563,11 @@ poly parseDoWith =
               }
           }
       }
+
+
+
+
+
+
+
+

@@ -9,12 +9,8 @@ import {
   buildMiniVerifyHarnessSource,
   MINI_VERIFY_MODULE_NAMES,
 } from "../test/compiler/minicoreAnfHarness.ts";
-import {
-  realBootstrapBundle,
-} from "../test/compiler/llvm/bundleV1.test.ts";
-import {
-  summarizeTripBundleV1ParsedModules,
-} from "../lib/compiler/index.ts";
+import { realBootstrapBundle } from "../test/compiler/llvm/bundleV1.test.ts";
+import { summarizeTripBundleV1ParsedModules } from "../lib/compiler/index.ts";
 
 function valueToBytes(value: Value): number[] {
   const bytes: number[] = [];
@@ -62,12 +58,20 @@ async function main() {
   });
   const program = compileMiniCoreModules(modules, "Verify");
   const result = evaluateMiniCore(program);
-  const minicoreAnfGoldenContent = Buffer.from(valueToBytes(result.value)).toString("utf8");
+  const minicoreAnfGoldenContent = Buffer.from(
+    valueToBytes(result.value),
+  ).toString("utf8");
   await writeFile(minicoreAnfGoldenPath, minicoreAnfGoldenContent, "utf8");
   console.log("Successfully wrote minicoreAnf.golden.txt.");
 
   // 2. Update llvm/fixtures parsed module summaries
-  const fixtureDir = join(workspaceRoot, "test", "compiler", "llvm", "fixtures");
+  const fixtureDir = join(
+    workspaceRoot,
+    "test",
+    "compiler",
+    "llvm",
+    "fixtures",
+  );
 
   const parseSummaryCases = [
     {
@@ -86,7 +90,9 @@ async function main() {
 
   for (const { modules, fileName } of parseSummaryCases) {
     const filePath = join(fixtureDir, fileName);
-    console.log(`Generating parsed module summary golden for [${modules.join(", ")}] at ${filePath}...`);
+    console.log(
+      `Generating parsed module summary golden for [${modules.join(", ")}] at ${filePath}...`,
+    );
     const bundle = realBootstrapBundle(modules);
     const summary = summarizeTripBundleV1ParsedModules(bundle);
     await writeFile(filePath, summary, "utf8");

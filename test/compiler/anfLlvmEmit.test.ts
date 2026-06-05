@@ -404,6 +404,39 @@ poly main =
     f #u8(10)
 `,
       ],
+      [
+        "multiple captured variables in closure environment",
+        String.raw`module Demo
+export main
+poly main =
+  \x : U8 =>
+    \y : U8 =>
+      let f = (\z : U8 => addU8 (addU8 x y) z) in
+      f #u8(10)
+`,
+      ],
+      [
+        "nested curried closures",
+        String.raw`module Demo
+export main
+poly main =
+  \x : U8 =>
+    let f = (\y : U8 => \z : U8 => addU8 (addU8 x y) z) in
+    let g = f #u8(5) in
+    g #u8(10)
+`,
+      ],
+      [
+        "passing closure to a higher-order function",
+        String.raw`module Demo
+export main
+poly apply = \f : U8 -> U8 => \x : U8 => f x
+poly main =
+  \x : U8 =>
+    let f = (\y : U8 => addU8 x y) in
+    apply f #u8(10)
+`,
+      ],
     ];
     for (const [label, source] of programs) {
       const llvm = await compileSourceToLlvm(source);

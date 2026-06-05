@@ -429,7 +429,7 @@ poly rec collectFreeVars =
           append
             [List U8]
             (collectFreeVars localsInScope val)
-            (collectFreeVars (cons [List U8] name localsInScope) body)
+            (collectFreeVars (filterOut name localsInScope) body)
       }
 
 poly rec collectFreeVarsList =

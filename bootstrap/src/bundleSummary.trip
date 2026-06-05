@@ -10,6 +10,8 @@ import Prelude matchList
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude reverse
 
 import Prelude Result
@@ -570,11 +572,7 @@ poly emitModuleSummary =
   \modRec : ModuleRecord =>
     do [List U8] {
       MkModuleRecord name lengthDigits source = modRec
-      return
-        append
-        [U8]
-        "module "
-        (append [U8] name (append [U8] " " (append [U8] lengthDigits "\n")))
+      return concat [U8] {List U8 | "module " name " " lengthDigits "\n"}
     }
 
 poly rec emitModuleSummaries =
@@ -594,60 +592,22 @@ poly emitBundleSummary =
     do [List U8] {
       MkBundleSummary entry target wrapper modsCountDigits mods = bundle
       return
-        append
+        concat
         [U8]
-        "OK\n"
-        (
-          append
-            [U8]
-            "version bundle-v1\n"
-            (
-              append
-                [U8]
-                "entry "
-                (
-                  append
-                    [U8]
-                    entry
-                    (
-                      append
-                        [U8]
-                        "\ntarget "
-                        (
-                          append
-                            [U8]
-                            target
-                            (
-                              append
-                                [U8]
-                                "\nwrapper "
-                                (
-                                  append
-                                    [U8]
-                                    wrapper
-                                    (
-                                      append
-                                        [U8]
-                                        "\nmodules "
-                                        (
-                                          append
-                                            [U8]
-                                            modsCountDigits
-                                            (
-                                              append
-                                                [U8]
-                                                "\n"
-                                                (emitModuleSummaries mods)
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
+        {List U8 |
+          "OK\n"
+          "version bundle-v1\n"
+          "entry "
+          entry
+          "\ntarget "
+          target
+          "\nwrapper "
+          wrapper
+          "\nmodules "
+          modsCountDigits
+          "\n"
+          (emitModuleSummaries mods)
+        }
     }
 
 poly rec writeAll =
@@ -657,6 +617,6 @@ poly rec writeAll =
 poly main =
   \source : List U8 =>
     match (parseBundleSummary source) [U8] {
-      | Err e => writeAll (append [U8] "ERR:" (append [U8] e "\n"))
+      | Err e => writeAll (concat [U8] {List U8 | "ERR:" e "\n"})
       | Ok bundle => writeAll (emitBundleSummary bundle)
     }

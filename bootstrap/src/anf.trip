@@ -12,6 +12,8 @@ import Prelude U8
 
 import Prelude append
 
+import Prelude concat
+
 import Prelude eqListU8
 
 import Prelude Bin

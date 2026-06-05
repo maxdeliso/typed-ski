@@ -2361,7 +2361,8 @@ function matchMonadicBind(
 
     const okClean = okArm.filter((t) => !isComment(t));
     if (okClean.length < 4) return undefined;
-    if (okClean[0]!.text !== "Some" || okClean[2]!.text !== "=>") return undefined;
+    if (okClean[0]!.text !== "Some" || okClean[2]!.text !== "=>")
+      return undefined;
     const varName = okClean[1]!.text;
 
     const arrowIdx = okArm.findIndex((t) => t.text === "=>");
@@ -2397,7 +2398,8 @@ function matchMonadicBind(
 
     const okClean = okArm.filter((t) => !isComment(t));
     if (okClean.length < 4) return undefined;
-    if (okClean[0]!.text !== "Ok" || okClean[2]!.text !== "=>") return undefined;
+    if (okClean[0]!.text !== "Ok" || okClean[2]!.text !== "=>")
+      return undefined;
     const varName = okClean[1]!.text;
 
     const arrowIdx = okArm.findIndex((t) => t.text === "=>");

@@ -480,6 +480,29 @@ poly main =
     assert.match(result.fixed, /return Ok \[List U8\] \[BundleSummary\] val/);
   });
 
+  it("reports and fixes nested Maybe monadic matches to do blocks", () => {
+    const source = `module M
+poly main =
+  match (lookupX input) [Maybe U8] {
+    | None => None [U8]
+    | Some x =>
+      match (lookupY x) [Maybe U8] {
+        | None => None [U8]
+        | Some y =>
+          Some [U8] y
+      }
+  }
+`;
+    const result = lintTripSource(source, { fix: true });
+    assert.ok(
+      result.diagnostics.some((diag) => diag.code === "trip-degenerate-do"),
+    );
+    assert.match(result.fixed, /do \[Maybe U8\]/);
+    assert.match(result.fixed, /x <- \(lookupX input\)/);
+    assert.match(result.fixed, /y <- \(lookupY x\)/);
+    assert.match(result.fixed, /return Some \[U8\] y/);
+  });
+
   it("introduces do for chains whose let values or scrutinees contain nested lets (bare = in subexprs)", () => {
     const source = `module M
 poly main =

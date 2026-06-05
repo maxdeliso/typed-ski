@@ -2303,6 +2303,7 @@ function matchMonadicBind(
 
   let errArm: Token[] | undefined;
   let okArm: Token[] | undefined;
+  let isMaybe = false;
 
   for (const arm of arms) {
     const first = arm.find((t) => !isComment(t));
@@ -2310,48 +2311,106 @@ function matchMonadicBind(
       errArm = arm;
     } else if (first?.text === "Ok") {
       okArm = arm;
+    } else if (first?.text === "None") {
+      errArm = arm;
+      isMaybe = true;
+    } else if (first?.text === "Some") {
+      okArm = arm;
+      isMaybe = true;
     }
   }
 
   if (!errArm || !okArm) return undefined;
 
   const errClean = errArm.filter((t) => !isComment(t));
-  if (errClean.length < 8) return undefined;
-  if (
-    errClean[0]!.text !== "Err" ||
-    errClean[2]!.text !== "=>" ||
-    errClean[3]!.text !== "Err"
-  )
-    return undefined;
-  const eVar = errClean[1]!.text;
-  if (errClean[errClean.length - 1]!.text !== eVar) return undefined;
 
-  // Type unifiability check: Ensure the declared match type matches the actual arm return type.
-  const armTypes = extractErrTypeStrings(errClean);
-  if (!armTypes) return undefined;
+  if (isMaybe) {
+    if (errClean.length < 6) return undefined;
+    if (
+      errClean[0]!.text !== "None" ||
+      errClean[1]!.text !== "=>" ||
+      errClean[2]!.text !== "None"
+    )
+      return undefined;
 
-  const expectedTypeStr = `Result ${armTypes.errType} ${armTypes.okType}`;
-  if (
-    normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)
-  ) {
-    return undefined;
+    if (errClean[3]!.text !== "[") return undefined;
+    const okTypeTokens: Token[] = [];
+    let bDepth = 0;
+    let okTypeEndIdx = -1;
+    for (let i = 3; i < errClean.length; i++) {
+      const t = errClean[i]!;
+      if (t.text === "[") bDepth++;
+      else if (t.text === "]") {
+        bDepth--;
+        if (bDepth === 0) {
+          okTypeEndIdx = i;
+          break;
+        }
+      }
+      if (i > 3) okTypeTokens.push(t);
+    }
+    if (okTypeEndIdx === -1) return undefined;
+    const okTypeStr = formatInline(okTypeTokens);
+
+    const expectedTypeStr = `Maybe ${okTypeStr}`;
+    if (
+      normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)
+    ) {
+      return undefined;
+    }
+
+    const okClean = okArm.filter((t) => !isComment(t));
+    if (okClean.length < 4) return undefined;
+    if (okClean[0]!.text !== "Some" || okClean[2]!.text !== "=>") return undefined;
+    const varName = okClean[1]!.text;
+
+    const arrowIdx = okArm.findIndex((t) => t.text === "=>");
+    const body = okArm.slice(arrowIdx + 1);
+
+    return {
+      scrutinee: header.scrutineeText,
+      typeText: header.typeText,
+      varName,
+      body,
+      endIndex: header.endIndex,
+    };
+  } else {
+    if (errClean.length < 8) return undefined;
+    if (
+      errClean[0]!.text !== "Err" ||
+      errClean[2]!.text !== "=>" ||
+      errClean[3]!.text !== "Err"
+    )
+      return undefined;
+    const eVar = errClean[1]!.text;
+    if (errClean[errClean.length - 1]!.text !== eVar) return undefined;
+
+    const armTypes = extractErrTypeStrings(errClean);
+    if (!armTypes) return undefined;
+
+    const expectedTypeStr = `Result ${armTypes.errType} ${armTypes.okType}`;
+    if (
+      normalizeTypeText(header.typeText) !== normalizeTypeText(expectedTypeStr)
+    ) {
+      return undefined;
+    }
+
+    const okClean = okArm.filter((t) => !isComment(t));
+    if (okClean.length < 4) return undefined;
+    if (okClean[0]!.text !== "Ok" || okClean[2]!.text !== "=>") return undefined;
+    const varName = okClean[1]!.text;
+
+    const arrowIdx = okArm.findIndex((t) => t.text === "=>");
+    const body = okArm.slice(arrowIdx + 1);
+
+    return {
+      scrutinee: header.scrutineeText,
+      typeText: header.typeText,
+      varName,
+      body,
+      endIndex: header.endIndex,
+    };
   }
-
-  const okClean = okArm.filter((t) => !isComment(t));
-  if (okClean.length < 4) return undefined;
-  if (okClean[0]!.text !== "Ok" || okClean[2]!.text !== "=>") return undefined;
-  const varName = okClean[1]!.text;
-
-  const arrowIdx = okArm.findIndex((t) => t.text === "=>");
-  const body = okArm.slice(arrowIdx + 1);
-
-  return {
-    scrutinee: header.scrutineeText,
-    typeText: header.typeText,
-    varName,
-    body,
-    endIndex: header.endIndex,
-  };
 }
 
 function matchDestructuringMatch(
@@ -2398,24 +2457,46 @@ function matchErrTermTokens(
   tokens: readonly Token[],
 ): { errText: string } | undefined {
   const clean = tokens.filter((t) => !isComment(t));
-  if (clean.length < 6) return undefined;
-  if (clean[0]!.text !== "Err") return undefined;
-  let rbracketCount = 0;
-  let idx = 0;
-  for (let i = 0; i < clean.length; i++) {
-    if (clean[i]!.text === "]") {
-      rbracketCount++;
-      if (rbracketCount === 2) {
-        idx = i + 1;
-        break;
+  if (clean.length === 0) return undefined;
+  if (clean[0]!.text === "Err") {
+    let rbracketCount = 0;
+    let idx = 0;
+    for (let i = 0; i < clean.length; i++) {
+      if (clean[i]!.text === "]") {
+        rbracketCount++;
+        if (rbracketCount === 2) {
+          idx = i + 1;
+          break;
+        }
+      }
+    }
+    if (idx === 0 || idx >= clean.length) return undefined;
+    const errTokens = clean.slice(idx);
+    return {
+      errText: formatInline(errTokens),
+    };
+  } else if (clean[0]!.text === "None") {
+    if (clean.length >= 4 && clean[1]!.text === "[") {
+      let depth = 0;
+      let ok = false;
+      for (let i = 1; i < clean.length; i++) {
+        if (clean[i]!.text === "[") depth++;
+        else if (clean[i]!.text === "]") {
+          depth--;
+          if (depth === 0) {
+            ok = i === clean.length - 1;
+            break;
+          }
+        }
+      }
+      if (ok) {
+        return {
+          errText: "()",
+        };
       }
     }
   }
-  if (idx === 0 || idx >= clean.length) return undefined;
-  const errTokens = clean.slice(idx);
-  return {
-    errText: formatInline(errTokens),
-  };
+  return undefined;
 }
 
 function matchLetExpression(
@@ -2543,7 +2624,7 @@ function collectDoSteps(
   }
 
   const text = formatInline(stripped);
-  if (text.startsWith("Ok ")) {
+  if (text.startsWith("Ok ") || text.startsWith("Some ")) {
     return {
       steps: [`return ${text}`],
       isReturn: true,
@@ -2577,7 +2658,8 @@ function parseDoChain(
   const header = parseMatchHeader(tokens, index);
   if (!header) return undefined;
 
-  if (!header.typeText.trim().startsWith("Result")) {
+  const typeTrimmed = header.typeText.trim();
+  if (!typeTrimmed.startsWith("Result") && !typeTrimmed.startsWith("Maybe")) {
     return undefined;
   }
 

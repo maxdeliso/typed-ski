@@ -383,12 +383,13 @@ poly rec findCtorInfoInArms =
         (
           \h : (Pattern, Expr) =>
             \t : List (Pattern, Expr) =>
-              match (fst [Pattern] [Expr] h) [Maybe CtorInfo] {
-                | P_Ctor name args =>
-                  match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Maybe CtorInfo] {
-                    | Some info => Some [CtorInfo] info
-                    | None => findCtorInfoInArms dEnv t
-                  }
+              do [Maybe CtorInfo] {
+                P_Ctor name args = (fst [Pattern] [Expr] h)
+                return
+                match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Maybe CtorInfo] {
+                  | Some info => Some [CtorInfo] info
+                  | None => findCtorInfoInArms dEnv t
+                }
               }
         )
 

@@ -687,6 +687,38 @@ describe("parse do expression", () => {
     const assertApp = mkLineArm.body;
     assert.strictEqual(assertApp.kind, "non-terminal"); // application is non-terminal in binary representation
   });
+
+  it("parses do expression with Maybe monad", () => {
+    const input = `module Test
+poly main = do [Maybe U8] {
+  x <- lookupX
+  assert myCond else err
+  return x
+}`;
+    const result = parseTripLang(input);
+    const term = result.terms[1]!;
+    assert.strictEqual(term.kind, "poly");
+    assert.strictEqual(term.name, "main");
+
+    // The desugared term structure should be a match on lookupX against None and Some:
+    assert.strictEqual(term.term.kind, "systemF-match");
+    const firstMatch = term.term;
+    assert.strictEqual(firstMatch.scrutinee.kind, "systemF-var");
+    assert.strictEqual(firstMatch.scrutinee.name, "lookupX");
+    assert.strictEqual(firstMatch.arms.length, 2);
+
+    const noneArm = firstMatch.arms[0]!;
+    assert.strictEqual(noneArm.constructorName, "None");
+    assert.deepStrictEqual(noneArm.params, []);
+    // None body should return None [U8]
+    assert.strictEqual(noneArm.body.kind, "systemF-type-app");
+    assert.strictEqual(noneArm.body.term.kind, "systemF-var");
+    assert.strictEqual(noneArm.body.term.name, "None");
+
+    const someArm = firstMatch.arms[1]!;
+    assert.strictEqual(someArm.constructorName, "Some");
+    assert.deepStrictEqual(someArm.params, ["x"]);
+  });
 });
 
 describe("parse list literal", () => {

@@ -1627,9 +1627,7 @@ poly main = Dup
       entryModule: "Main",
       target: { kind: "generic" },
       emitMainWrapper: true,
-      modules: [
-        { name: "Main", source },
-      ],
+      modules: [{ name: "Main", source }],
     });
     const compiler = await bootstrap.compileCompilerToNative();
     try {
@@ -1664,7 +1662,10 @@ poly main = \\b : MyBool => match b [U8] { | MyFalse => #u8(0) | OtherVal => #u8
       const res = runExecutable(compiler.exePath, bundleBytes);
       assert.equal(res.status, 0);
       assert.ok(res.stdout.startsWith("ERR:"), res.stdout);
-      assert.match(res.stdout, /Match arm constructor does not belong to the ADT/);
+      assert.match(
+        res.stdout,
+        /Match arm constructor does not belong to the ADT/,
+      );
     } finally {
       await compiler.cleanup();
     }

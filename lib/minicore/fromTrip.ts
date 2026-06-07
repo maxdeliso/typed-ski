@@ -1386,6 +1386,14 @@ class MiniCoreBuilder {
         throw new MiniCoreCompileError(
           "MiniCore does not support lambda values in expression position",
         );
+      case "systemF-thunk":
+        throw new MiniCoreCompileError(
+          "MiniCore does not support thunk values in expression position",
+        );
+      case "systemF-force":
+        throw new MiniCoreCompileError(
+          "MiniCore does not support force expressions in expression position",
+        );
     }
   }
 

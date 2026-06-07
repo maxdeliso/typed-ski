@@ -78,6 +78,10 @@ import Parser E_Nat
 
 import Parser E_Match
 
+import Parser E_Thunk
+
+import Parser E_Force
+
 import Parser Pattern
 
 import Parser P_Ctor
@@ -339,6 +343,16 @@ poly rec qualifyExpr =
                   qScrut <- (qualifyExpr bound mEnv moduleName scrut)
                   qArms <- (qualifyArms bound mEnv moduleName arms)
                   return Ok [List U8] [Expr] (E_Match qScrut qArms)
+                }
+              | E_Thunk body =>
+                do [Result (List U8) Expr] {
+                  qBody <- (qualifyExpr bound mEnv moduleName body)
+                  return Ok [List U8] [Expr] (E_Thunk qBody)
+                }
+              | E_Force body =>
+                do [Result (List U8) Expr] {
+                  qBody <- (qualifyExpr bound mEnv moduleName body)
+                  return Ok [List U8] [Expr] (E_Force qBody)
                 }
             }
           }
@@ -604,6 +618,8 @@ poly rec collectRefsExpr =
             [List U8]
             (collectRefsExpr defNames scrut)
             (collectRefsArms defNames arms)
+        | E_Thunk body => collectRefsExpr defNames body
+        | E_Force body => collectRefsExpr defNames body
       }
 
 poly rec collectRefsArms =

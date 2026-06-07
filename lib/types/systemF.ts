@@ -7,7 +7,13 @@
  *
  * @module
  */
-import { arrow, type BaseType, type ForallType, typesLitEq } from "./types.ts";
+import {
+  arrow,
+  type BaseType,
+  type ForallType,
+  typesLitEq,
+  getTypePolarity,
+} from "./types.ts";
 import { unparseType } from "../parser/type.ts";
 import {
   makeNatType,
@@ -44,6 +50,11 @@ const substituteSystemFType = (
         kind: "type-app",
         fn: substituteSystemFType(original.fn, targetVarName, replacement),
         arg: substituteSystemFType(original.arg, targetVarName, replacement),
+      };
+    case "thunk":
+      return {
+        kind: "thunk",
+        body: substituteSystemFType(original.body, targetVarName, replacement),
       };
     case "non-terminal":
       return arrow(
@@ -167,6 +178,16 @@ export function reduceLets(
           ...arm,
           body: reduceLets(ctx, arm.body),
         })),
+      };
+    case "systemF-thunk":
+      return {
+        kind: "systemF-thunk",
+        body: reduceLets(ctx, term.body),
+      };
+    case "systemF-force":
+      return {
+        kind: "systemF-force",
+        body: reduceLets(ctx, term.body),
       };
   }
 }
@@ -318,6 +339,25 @@ export const typecheckSystemF = (
       );
       return [bodyTy, ctx];
     }
+    case "systemF-thunk": {
+      const [bodyTy, updatedCtx] = typecheckSystemF(ctx, term.body);
+      if (getTypePolarity(bodyTy) !== "negative") {
+        throw new TypeError(
+          `expected negative computation type inside thunk, got: ${unparseType(bodyTy)}`,
+        );
+      }
+      return [{ kind: "thunk", body: bodyTy }, updatedCtx];
+    }
+    case "systemF-force": {
+      const [bodyTy, updatedCtx] = typecheckSystemF(ctx, term.body);
+      const resolvedBodyTy = resolveTypeAlias(bodyTy, updatedCtx.typeAliases);
+      if (resolvedBodyTy.kind !== "thunk") {
+        throw new TypeError(
+          `expected thunk type to force, got: ${unparseType(bodyTy)}`,
+        );
+      }
+      return [resolvedBodyTy.body, updatedCtx];
+    }
   }
 };
 
@@ -359,6 +399,10 @@ export const eraseSystemF = (term: SystemFTerm): UntypedLambda => {
         untypedAbs(term.name, eraseSystemF(term.body)),
         eraseSystemF(term.value),
       );
+    case "systemF-thunk":
+      return eraseSystemF(term.body);
+    case "systemF-force":
+      return eraseSystemF(term.body);
     default:
       return untypedApp(eraseSystemF(term.lft), eraseSystemF(term.rgt));
   }

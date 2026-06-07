@@ -126,6 +126,12 @@ import Lexer T_KwDo
 
 import Lexer T_LArrow
 
+import Lexer T_ThunkOpen
+
+import Lexer T_ThunkClose
+
+import Lexer T_Force
+
 import Lexer T_Tagged
 
 import Lexer T_Ident
@@ -153,6 +159,10 @@ export E_Let
 export E_Nat
 
 export E_Match
+
+export E_Thunk
+
+export E_Force
 
 export DefKind
 
@@ -256,6 +266,12 @@ export kwDoTag
 
 export lArrowTag
 
+export thunkOpenTag
+
+export thunkCloseTag
+
+export forceTag
+
 export fstNameToken
 
 export sndNameToken
@@ -330,6 +346,8 @@ export Ty_Arrow
 
 export Ty_Forall
 
+export Ty_Thunk
+
 export parseSimpleType
 
 export parseType
@@ -341,6 +359,7 @@ data Type =
   | Ty_App Type Type
   | Ty_Arrow Type Type
   | Ty_Forall (List U8) Type
+  | Ty_Thunk Type
 
 data Pattern =
   | P_Ctor (List U8) (List (List U8))
@@ -360,6 +379,8 @@ data Expr =
   | E_Let (List U8) Expr Expr
   | E_Nat (List U8)
   | E_Match Expr (List (Pair Pattern Expr))
+  | E_Thunk Expr
+  | E_Force Expr
 
 data DefKind =
   | K_Poly
@@ -494,6 +515,15 @@ poly kwDoTag =
 
 poly lArrowTag =
   tokenTag T_LArrow
+
+poly thunkOpenTag =
+  tokenTag T_ThunkOpen
+
+poly thunkCloseTag =
+  tokenTag T_ThunkClose
+
+poly forceTag =
+  tokenTag T_Force
 
 poly fstTypeToken =
   \p : (Type, (List Token)) => fst [Type] [List Token] p
@@ -723,6 +753,8 @@ poly isAtomStartTag =
       | (eqU8 tag commaTag) => true
       | (eqU8 tag dotTag) => true
       | (eqU8 tag hashTag) => true
+      | (eqU8 tag thunkOpenTag) => true
+      | (eqU8 tag forceTag) => true
       | otherwise => eqU8 tag lBraceTag
     }
 
@@ -979,6 +1011,8 @@ poly rec exprListMentionsName =
                         (append [Expr] {Expr | value body} rest)
                     )
                 | E_Nat n => exprListMentionsName name rest
+                | E_Thunk body => exprListMentionsName name (cons [Expr] body rest)
+                | E_Force body => exprListMentionsName name (cons [Expr] body rest)
                 | E_Match scrutinee arms =>
                   exprListMentionsName
                     name
@@ -1021,6 +1055,8 @@ poly isOtherwiseExpr =
       | E_Lam name body => false
       | E_Let name value body => false
       | E_Nat n => false
+      | E_Thunk body => false
+      | E_Force body => false
       | E_Match scrutinee arms => false
     }
 
@@ -1139,6 +1175,29 @@ poly parseAtomWith =
               let tag = tokenTag h in
               cond [Result ParseError (Expr, (List Token))] {
                 | (eqU8 tag kwCondTag) => parseCondWith recurse t
+                | (eqU8 tag thunkOpenTag) =>
+                  do [Result ParseError (Expr, (List Token))] {
+                    res <- (recurse t)
+                    inner = fstExprToken res
+                    rest = sndExprToken res
+                    final <- (expect rest thunkCloseTag)
+                    return
+                      Ok
+                      [ParseError]
+                      [(Expr, (List Token))]
+                      {Expr, List Token | (E_Thunk inner), final}
+                  }
+                | (eqU8 tag forceTag) =>
+                  do [Result ParseError (Expr, (List Token))] {
+                    res <- (parseAtomWith recurse t)
+                    inner = fstExprToken res
+                    rest = sndExprToken res
+                    return
+                      Ok
+                      [ParseError]
+                      [(Expr, (List Token))]
+                      {Expr, List Token | (E_Force inner), rest}
+                  }
                 | (eqU8 tag identTag) =>
                   Ok
                     [ParseError]
@@ -1240,6 +1299,18 @@ poly parseSimpleTypeWith =
             \t : List Token =>
               let tag = tokenTag h in
               cond [Result ParseError (Type, (List Token))] {
+                | (eqU8 tag thunkOpenTag) =>
+                  do [Result ParseError (Type, (List Token))] {
+                    res <- (recurse t)
+                    inner = fstTypeToken res
+                    afterInner = sndTypeToken res
+                    final <- (expect afterInner thunkCloseTag)
+                    return
+                      Ok
+                      [ParseError]
+                      [(Type, (List Token))]
+                      {Type, List Token | (Ty_Thunk inner), final}
+                  }
                 | (eqU8 tag lParenTag) =>
                   do [Result ParseError (Type, (List Token))] {
                     res <- (recurse t)
@@ -1295,7 +1366,8 @@ poly parseSimpleTypeWith =
         )
 
 poly isTypeAtomStartTag =
-  \tag : U8 => or (eqU8 tag identTag) (eqU8 tag lParenTag)
+  \tag : U8 =>
+    or (eqU8 tag identTag) (or (eqU8 tag lParenTag) (eqU8 tag thunkOpenTag))
 
 poly rec parseTypeAppLoopWith =
   \recurse : (List Token -> Result ParseError (Type, (List Token))) =>

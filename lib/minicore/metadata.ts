@@ -1,4 +1,4 @@
-import type { BaseType } from "../types/types.ts";
+import type { BaseType, Polarity } from "../types/types.ts";
 import type { Literal, LocalId, SymbolId } from "./ast.ts";
 
 export type TypeId = number;
@@ -103,6 +103,22 @@ export function cloneMiniCoreMetadata(
   };
 }
 
+export function getMiniTypePolarity(type: MiniType): Polarity {
+  switch (type.kind) {
+    case "nat":
+    case "u8":
+    case "bool":
+    case "unit":
+    case "data":
+    case "var":
+    case "unknown":
+      return "positive";
+    case "fn":
+    case "forall":
+      return "negative";
+  }
+}
+
 export function typeOfLiteral(literal: Literal): MiniType {
   return literal.kind === "u8" ? { kind: "u8" } : { kind: "nat" };
 }
@@ -112,6 +128,8 @@ export function miniTypeFromBaseType(
   resolveDataType?: (name: string) => MiniType | TypeId | undefined,
 ): MiniType {
   switch (type.kind) {
+    case "thunk":
+      return { kind: "unknown" };
     case "type-var": {
       switch (type.typeName) {
         case "Nat":

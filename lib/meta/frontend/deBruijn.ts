@@ -152,6 +152,21 @@ interface DeBruijnU8Literal {
 /**
  * A De Bruijn term represents a TripLang value in name-independent form.
  */
+interface DeBruijnThunkType {
+  kind: "DbThunkType";
+  body: DeBruijnTerm;
+}
+
+interface DeBruijnThunk {
+  kind: "DbThunk";
+  body: DeBruijnTerm;
+}
+
+interface DeBruijnForce {
+  kind: "DbForce";
+  body: DeBruijnTerm;
+}
+
 export type DeBruijnTerm =
   | DeBruijnVar
   | DeBruijnFreeVar
@@ -167,7 +182,10 @@ export type DeBruijnTerm =
   | DeBruijnMatch
   | DeBruijnLet
   | DeBruijnTerminal
-  | DeBruijnU8Literal;
+  | DeBruijnU8Literal
+  | DeBruijnThunkType
+  | DeBruijnThunk
+  | DeBruijnForce;
 
 /**
  * Recursively converts a TripLangValueType AST into a De Bruijn representation.
@@ -296,6 +314,21 @@ function toDeBruijnInternal(
       return { kind: "DbTerminal", sym: term.sym };
     case "u8":
       return { kind: "DbU8Literal", value: term.value };
+    case "thunk":
+      return {
+        kind: "DbThunkType",
+        body: toDeBruijnInternal(term.body, termCtx, typeCtx),
+      };
+    case "systemF-thunk":
+      return {
+        kind: "DbThunk",
+        body: toDeBruijnInternal(term.body, termCtx, typeCtx),
+      };
+    case "systemF-force":
+      return {
+        kind: "DbForce",
+        body: toDeBruijnInternal(term.body, termCtx, typeCtx),
+      };
   }
 }
 

@@ -122,6 +122,12 @@ export T_KwDo
 
 export T_LArrow
 
+export T_ThunkOpen
+
+export T_ThunkClose
+
+export T_Force
+
 export T_Tagged
 
 export T_Ident
@@ -260,6 +266,15 @@ poly T_KwDo : Token =
 poly T_LArrow : Token =
   T_Tagged #u8(34)
 
+poly T_ThunkOpen : Token =
+  T_Tagged #u8(38)
+
+poly T_ThunkClose : Token =
+  T_Tagged #u8(39)
+
+poly T_Force : Token =
+  T_Tagged #u8(40)
+
 poly T_EOF : Token =
   T_Tagged #u8(31)
 
@@ -278,11 +293,29 @@ poly tokenTaggedTextDo =
       (\u : U8 => "do")
       (\u : U8 => "")
 
+poly tokenTaggedTextForce =
+  \tag : U8 =>
+    if [List U8] (eqU8 tag #u8(40))
+      (\u : U8 => "*!")
+      (\u : U8 => tokenTaggedTextDo tag)
+
+poly tokenTaggedTextThunkClose =
+  \tag : U8 =>
+    if [List U8] (eqU8 tag #u8(39))
+      (\u : U8 => "*]")
+      (\u : U8 => tokenTaggedTextForce tag)
+
+poly tokenTaggedTextThunkOpen =
+  \tag : U8 =>
+    if [List U8] (eqU8 tag #u8(38))
+      (\u : U8 => "[*")
+      (\u : U8 => tokenTaggedTextThunkClose tag)
+
 poly tokenTaggedTextLArrow =
   \tag : U8 =>
     if [List U8] (eqU8 tag #u8(34))
       (\u : U8 => "<-")
-      (\u : U8 => tokenTaggedTextDo tag)
+      (\u : U8 => tokenTaggedTextThunkOpen tag)
 
 poly tokenTaggedTextData =
   \tag : U8 =>
@@ -815,6 +848,21 @@ poly rec tokenizeAcc =
                     eqU8
                       u8_gt
                       h))) => let rest = tail [U8] cs in tokenizeAcc rest (cons [Token] T_FatArrow accRev)
+                | (and (eqU8 c '[') (matchList [U8] [Bool] cs false (\h : U8 =>
+                  \t : List U8 =>
+                    eqU8
+                      '*'
+                      h))) => let rest = tail [U8] cs in tokenizeAcc rest (cons [Token] T_ThunkOpen accRev)
+                | (and (eqU8 c '*') (matchList [U8] [Bool] cs false (\h : U8 =>
+                  \t : List U8 =>
+                    eqU8
+                      ']'
+                      h))) => let rest = tail [U8] cs in tokenizeAcc rest (cons [Token] T_ThunkClose accRev)
+                | (and (eqU8 c '*') (matchList [U8] [Bool] cs false (\h : U8 =>
+                  \t : List U8 =>
+                    eqU8
+                      '!'
+                      h))) => let rest = tail [U8] cs in tokenizeAcc rest (cons [Token] T_Force accRev)
                 | otherwise =>
                   match (simpleTokenFromU8 c) [Result ParseError (List Token)] {
                     | None =>

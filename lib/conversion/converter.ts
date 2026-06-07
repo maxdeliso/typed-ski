@@ -125,6 +125,7 @@ const toCore = (term: DeBruijnTerm): CoreTerm => {
       throw new ConversionError(`free variable detected: ${term.name}`);
     case "DbFreeTypeVar":
       throw new ConversionError(`free type variable detected: ${term.name}`);
+    case "DbThunkType":
     case "DbTyAbs":
     case "DbForall":
     case "DbTyApp":
@@ -135,6 +136,14 @@ const toCore = (term: DeBruijnTerm): CoreTerm => {
     case "DbMatch":
       throw new ConversionError(
         "match expressions are not supported in SKI conversion",
+      );
+    case "DbThunk":
+      throw new ConversionError(
+        "thunk expressions are not supported in SKI conversion",
+      );
+    case "DbForce":
+      throw new ConversionError(
+        "force expressions are not supported in SKI conversion",
       );
   }
 };

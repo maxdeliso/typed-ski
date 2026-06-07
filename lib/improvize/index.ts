@@ -180,6 +180,9 @@ function isOperatorLike(token: Token): boolean {
 
 function needsInlineSpace(prev: Token | undefined, current: Token): boolean {
   if (!prev) return false;
+  if (prev.text === "[" && current.text === "*") return false;
+  if (prev.text === "*" && current.text === "]") return false;
+  if (prev.text === "*" && current.text === "!") return false;
   if (prev.text === "<" && current.text === "-") return false;
   if (prev.text === "#") return false;
   if (current.text === "(" && prev.text === "u8") return false;

@@ -29,6 +29,12 @@ import {
   matchBindArrow,
   skipWhitespace,
   withParserState,
+  peekThunkOpen,
+  matchThunkOpen,
+  peekThunkClose,
+  matchThunkClose,
+  peekForce,
+  matchForce,
 } from "./parserState.ts";
 import type { ParserState } from "./parserState.ts";
 import type { BaseType } from "../types/types.ts";
@@ -42,6 +48,8 @@ import {
   mkSystemFVar,
   type SystemFMatchArm,
   type SystemFTerm,
+  mkSystemFThunk,
+  mkSystemFForce,
 } from "../terms/systemF.ts";
 import {
   createSystemFApplication,
@@ -124,6 +132,9 @@ function isStartOfDoStep(state: ParserState): boolean {
 }
 
 function isTerminator(state: ParserState): boolean {
+  const [isClose] = peekThunkClose(state);
+  if (isClose) return true;
+
   const [isFatArrow] = peekFatArrow(state);
   if (isFatArrow) return true;
 
@@ -1127,6 +1138,22 @@ const parseStringLiteralTerm = (
 function parseAtomicSystemFTerm(
   state: ParserState,
 ): [string, SystemFTerm, ParserState] {
+  const [isThunk, stateThunkOpen] = peekThunkOpen(state);
+  if (isThunk) {
+    const stateOpen = matchThunkOpen(state);
+    const [bodyLit, bodyTerm, stateAfterBody] = parseSystemFTerm(stateOpen);
+    const stateClose = matchThunkClose(stateAfterBody);
+    return [`[* ${bodyLit} *]`, mkSystemFThunk(bodyTerm), stateClose];
+  }
+
+  const [isForce, stateForceCheck] = peekForce(state);
+  if (isForce) {
+    const stateForce = matchForce(state);
+    const [bodyLit, bodyTerm, stateAfterBody] =
+      parseAtomicSystemFTerm(stateForce);
+    return [`*! ${bodyLit}`, mkSystemFForce(bodyTerm), stateAfterBody];
+  }
+
   const [ch, currentState] = peek(state);
 
   // 1. Term Abstraction: \x:T => body
@@ -1363,17 +1390,20 @@ export function parseSystemFTerm(
 
     // Case A: Type Application [T]
     if (ch === "[") {
-      const stateAfterLBracket = matchCh(peekState, "[");
-      const stateBeforeType = skipWhitespace(stateAfterLBracket);
-      const [typeLit, typeArg, stateAfterType] =
-        parseSystemFType(stateBeforeType);
-      const stateBeforeRBracket = skipWhitespace(stateAfterType);
-      const stateAfterRBracket = matchCh(stateBeforeRBracket, "]");
+      const [isThunk] = peekThunkOpen(currentState);
+      if (!isThunk) {
+        const stateAfterLBracket = matchCh(peekState, "[");
+        const stateBeforeType = skipWhitespace(stateAfterLBracket);
+        const [typeLit, typeArg, stateAfterType] =
+          parseSystemFType(stateBeforeType);
+        const stateBeforeRBracket = skipWhitespace(stateAfterType);
+        const stateAfterRBracket = matchCh(stateBeforeRBracket, "]");
 
-      literals.push(`[${typeLit}]`);
-      resultTerm = mkSystemFTypeApp(resultTerm, typeArg);
-      currentState = stateAfterRBracket;
-      continue;
+        literals.push(`[${typeLit}]`);
+        resultTerm = mkSystemFTypeApp(resultTerm, typeArg);
+        currentState = stateAfterRBracket;
+        continue;
+      }
     }
 
     // Case B: Term Application (Next Atom)
@@ -1451,5 +1481,9 @@ export function unparseSystemF(term: SystemFTerm): string {
         term.body,
       )}`;
     }
+    case "systemF-thunk":
+      return `[* ${unparseSystemF(term.body)} *]`;
+    case "systemF-force":
+      return `*! ${unparseSystemF(term.body)}`;
   }
 }

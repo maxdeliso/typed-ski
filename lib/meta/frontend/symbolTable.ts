@@ -52,6 +52,11 @@ function cloneType(type: BaseType): BaseType {
         lft: cloneType(type.lft),
         rgt: cloneType(type.rgt),
       };
+    case "thunk":
+      return {
+        kind: "thunk",
+        body: cloneType(type.body),
+      };
   }
 }
 

@@ -12,6 +12,7 @@ import {
   type BaseType,
   mkTypeVariable,
   typeApp,
+  mkThunkType,
 } from "../types/types.ts";
 import { ParseError } from "./parseError.ts";
 import {
@@ -25,6 +26,9 @@ import {
   peekArrow,
   skipWhitespace,
   withParserState,
+  peekThunkOpen,
+  matchThunkOpen,
+  matchThunkClose,
 } from "./parserState.ts";
 import {
   ARROW,
@@ -82,7 +86,11 @@ export function parseSystemFType(
   }
 }
 
-function isTypeAtomStart(ch: string | null): boolean {
+function isTypeAtomStart(ch: string | null, state: ParserState): boolean {
+  if (ch === "[") {
+    const [isThunk] = peekThunkOpen(state);
+    return isThunk;
+  }
   return ch === LEFT_PAREN || (ch !== null && IDENTIFIER_CHAR_REGEX.test(ch));
 }
 
@@ -98,7 +106,7 @@ function parseTypeApplication(
     const [nextCh, peekState] = peek(currentState);
     const skipped = currentState.buf.slice(currentState.idx, peekState.idx);
     if (skipped.includes("\n") || skipped.includes("\r")) break;
-    if (!isTypeAtomStart(nextCh)) break;
+    if (!isTypeAtomStart(nextCh, currentState)) break;
     const [argLit, argType, stateAfterArg] = parseSimpleSystemFType(peekState);
     literal = `${literal} ${argLit}`;
     resultType = typeApp(resultType, argType);
@@ -118,6 +126,14 @@ function parseTypeApplication(
 function parseSimpleSystemFType(
   state: ParserState,
 ): [string, BaseType, ParserState] {
+  const [isThunk, stateThunkOpen] = peekThunkOpen(state);
+  if (isThunk) {
+    const stateOpen = matchThunkOpen(state);
+    const [innerLit, innerType, stateAfterInner] = parseSystemFType(stateOpen);
+    const stateClose = matchThunkClose(stateAfterInner);
+    return [`[* ${innerLit} *]`, mkThunkType(innerType), stateClose];
+  }
+
   const [ch, s] = peek(state);
   if (ch === "(") {
     const stateAfterLP = matchLP(s);
@@ -170,6 +186,9 @@ function parseSimpleSystemFType(
 export function unparseSystemFType(ty: BaseType): string {
   if (ty.kind === "type-var") {
     return ty.typeName;
+  }
+  if (ty.kind === "thunk") {
+    return `[* ${unparseSystemFType(ty.body)} *]`;
   }
   if (ty.kind === "type-app") {
     const fn =

@@ -12,6 +12,12 @@ import Prelude Ok
 
 import Prelude Err
 
+import Prelude Maybe
+
+import Prelude Some
+
+import Prelude None
+
 import Prelude U8
 
 import Prelude append

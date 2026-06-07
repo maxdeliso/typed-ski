@@ -529,11 +529,19 @@ poly rec parseModulesAcc =
             \t : List ModuleRecord =>
               do [Result (List U8) BuildState] {
                 MkModuleRecord name lengthDigits source = h
-                modInfo <- (parseModuleSource name source)
-                MkModuleInfo modName decls = modInfo
-                MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId = state
-                withMod = MkBuildState (append [ModuleInfo] mods {ModuleInfo | modInfo}) imps exps defs dataTypes opaques natives nextTypeId
-                return parseModulesAcc t (collectDecls modName decls withMod)
+                res <- match (parseModuleSource name source) [Result (List U8) BuildState] {
+                  | Err e => Err [List U8] [BuildState] (concat [U8] {List U8 | "Parse error in module " name ": " e})
+                  | Ok modInfo =>
+                    match modInfo [Result (List U8) BuildState] {
+                      | MkModuleInfo modName decls =>
+                        match state [Result (List U8) BuildState] {
+                          | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
+                            let withMod = MkBuildState (append [ModuleInfo] mods {ModuleInfo | modInfo}) imps exps defs dataTypes opaques natives nextTypeId in
+                            parseModulesAcc t (collectDecls modName decls withMod)
+                        }
+                    }
+                }
+                return (Ok [List U8] [BuildState] res)
               }
         )
 

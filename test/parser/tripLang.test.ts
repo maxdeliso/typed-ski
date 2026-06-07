@@ -356,6 +356,10 @@ describe("parseTripLang", () => {
         name: "T_Nat",
         fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("U8"))],
       },
+      {
+        name: "T_Str",
+        fields: [typeApp(mkTypeVariable("List"), mkTypeVariable("U8"))],
+      },
     ]);
   });
 

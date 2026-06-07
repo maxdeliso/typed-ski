@@ -130,6 +130,8 @@ export T_Nat
 
 export T_EOF
 
+export T_Str
+
 export tokenTag
 
 export tokenText
@@ -163,6 +165,7 @@ data Token =
   | T_Tagged U8
   | T_Ident (List U8)
   | T_Nat (List U8)
+  | T_Str (List U8)
 
 poly T_LParen : Token =
   T_Tagged #u8(1)
@@ -266,6 +269,7 @@ poly tokenTag =
       | T_Tagged tag => tag
       | T_Ident str => #u8(29)
       | T_Nat n => #u8(30)
+      | T_Str s => #u8(35)
     }
 
 poly tokenTaggedTextDo =
@@ -366,6 +370,7 @@ poly tokenText =
       | T_Tagged tag => tokenTaggedText tag
       | T_Ident str => str
       | T_Nat n => ""
+      | T_Str s => s
     }
 
 poly tokenNatValue =
@@ -374,6 +379,7 @@ poly tokenNatValue =
       | T_Tagged tag => ""
       | T_Ident str => ""
       | T_Nat digits => digits
+      | T_Str s => ""
     }
 
 poly u8_space : U8 =
@@ -838,7 +844,7 @@ poly rec tokenizeAcc =
                             return
                               tokenizeAcc
                               remaining
-                              (cons [Token] (T_Ident str) accRev)
+                              (cons [Token] (T_Str str) accRev)
                           }
                         | (eqU8 c u8_squote) =>
                           do [Result ParseError (List Token)] {

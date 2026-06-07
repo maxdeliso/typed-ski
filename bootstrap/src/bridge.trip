@@ -483,7 +483,7 @@ poly rec isNameInList =
 poly rec countNameInArms =
   \name : List U8 =>
     \arms : List (Pattern, Expr) =>
-      matchList [(Pattern, Expr)] [U8] arms #u8(0) (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => let pat = fst [Pattern] [Expr] h in let cName = match pat [List U8] {| P_Ctor cn args => cn} in let restCount = countNameInArms name t in if [U8] (eqListU8 cName name) (\u : U8 => addU8 #u8(1) restCount) (\u : U8 => restCount))
+      matchList [(Pattern, Expr)] [U8] arms #u8(0) (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => let pat = fst [Pattern] [Expr] h in let cName = match pat [List U8] { | P_Ctor cn args => cn} in let restCount = countNameInArms name t in if [U8] (eqListU8 cName name) (\u : U8 => addU8 #u8(1) restCount) (\u : U8 => restCount))
 
 poly rec validateEachArm =
   \dEnv : DataEnv =>
@@ -498,8 +498,8 @@ poly rec validateEachArm =
             \h : (Pattern, Expr) =>
               \t : List (Pattern, Expr) =>
                 let pat = fst [Pattern] [Expr] h in
-                let cName = match pat [List U8] {| P_Ctor cn args => cn} in
-                let args = match pat [List (List U8)] {| P_Ctor cn args => args} in
+                let cName = match pat [List U8] { | P_Ctor cn args => cn} in
+                let args = match pat [List (List U8)] { | P_Ctor cn args => args} in
                 if [Result (List U8) Bool] (not (isNameInList cName expectedNames))
                   (
                     \u : U8 =>
@@ -561,7 +561,18 @@ poly elaborateMatchWith =
             return
             match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
               | None =>
-                Err [List U8] [Core] "Could not identify ADT for match"
+                let firstCtorName = match (fst [Pattern] [Expr] (matchList [(Pattern, Expr)] [(Pattern, Expr)] arms {Pattern, Expr | (P_Ctor "NO_ARMS" {List U8 |}), (E_Var "dummy")} (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => h))) [List U8] { | P_Ctor cn args => cn} in
+                Err
+                  [List U8]
+                  [Core]
+                  (
+                    concat
+                      [U8]
+                      {List U8 |
+                        "Could not identify ADT for match: "
+                        firstCtorName
+                      }
+                  )
               | Some info =>
                 let adtName = ctorAdtName info in
                 match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
@@ -735,8 +746,19 @@ poly rec elaborateToCoreRec =
               }
         )
 
+poly seededDataEnv =
+  let c0 = empty [List U8] [CtorInfo] in
+  let c1 = insert [List U8] [CtorInfo] lteListU8 "Prelude.false" (MkCtorInfo #u8(0) #u8(2) #u8(0) "Prelude.Bool") c0 in
+  let c2 = insert [List U8] [CtorInfo] lteListU8 "Prelude.true" (MkCtorInfo #u8(1) #u8(2) #u8(0) "Prelude.Bool") c1 in
+  let c3 = insert [List U8] [CtorInfo] lteListU8 "Prelude.nil" (MkCtorInfo #u8(0) #u8(2) #u8(0) "Prelude.List") c2 in
+  let c4 = insert [List U8] [CtorInfo] lteListU8 "Prelude.cons" (MkCtorInfo #u8(1) #u8(2) #u8(2) "Prelude.List") c3 in
+  let a0 = empty [List U8] [ADTInfo] in
+  let a1 = insert [List U8] [ADTInfo] lteListU8 "Prelude.Bool" (MkADTInfo {List U8 | "Prelude.false" "Prelude.true"}) a0 in
+  let a2 = insert [List U8] [ADTInfo] lteListU8 "Prelude.List" (MkADTInfo {List U8 | "Prelude.nil" "Prelude.cons"}) a1 in
+  MkDataEnv c4 a2
+
 poly elaborateProgramToCore =
   \decls : List Decl =>
     elaborateToCoreRec
-      (MkDataEnv (empty [List U8] [CtorInfo]) (empty [List U8] [ADTInfo]))
+      seededDataEnv
       (filterElaboratableDecls decls)

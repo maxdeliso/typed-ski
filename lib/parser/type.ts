@@ -8,6 +8,7 @@
  */
 import {
   matchArrow,
+  matchCh,
   matchLP,
   matchRP,
   parseIdentifier,
@@ -46,14 +47,40 @@ function parseSimpleType(state: ParserState): [string, BaseType, ParserState] {
     const stateAfterLP = matchLP(s);
     // Recursively parse a full type inside the parentheses.
     const [innerLit, innerType, stateAfterInner] = parseArrowType(stateAfterLP);
-    const [next, sAfterInner] = peek(stateAfterInner);
-    if (next !== ")") {
-      throw new ParseError(
-        withParserState(sAfterInner, "expected ')' after type expression"),
+    let currentState = skipWhitespace(stateAfterInner);
+    const [nextCh] = peek(currentState);
+    if (nextCh === ",") {
+      currentState = matchCh(currentState, ",");
+      currentState = skipWhitespace(currentState);
+      const [secondLit, secondType, stateAfterSecond] =
+        parseArrowType(currentState);
+      currentState = skipWhitespace(stateAfterSecond);
+      const [closing, sAfterInner] = peek(currentState);
+      if (closing !== ")") {
+        throw new ParseError(
+          withParserState(
+            sAfterInner,
+            "expected ')' after pair type expression",
+          ),
+        );
+      }
+      const stateAfterRP = matchRP(sAfterInner);
+      const literal = `(${innerLit}, ${secondLit})`;
+      const pairType = typeApp(
+        typeApp(mkTypeVariable("Pair"), innerType),
+        secondType,
       );
+      return [literal, pairType, stateAfterRP];
+    } else {
+      const [closing, sAfterInner] = peek(currentState);
+      if (closing !== ")") {
+        throw new ParseError(
+          withParserState(sAfterInner, "expected ')' after type expression"),
+        );
+      }
+      const stateAfterRP = matchRP(sAfterInner);
+      return [`(${innerLit})`, innerType, stateAfterRP];
     }
-    const stateAfterRP = matchRP(sAfterInner);
-    return [`(${innerLit})`, innerType, stateAfterRP];
   } else {
     const [varLit, stateAfterVar] = parseIdentifier(s);
     return [varLit, mkTypeVariable(varLit), stateAfterVar];

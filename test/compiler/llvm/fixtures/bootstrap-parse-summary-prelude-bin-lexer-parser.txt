@@ -95,7 +95,7 @@ import Prelude eqU8
 import Prelude ltU8
 import Prelude eqListU8
 import Prelude u8ToDigits
-exports 51
+exports 52
 export ParseError
 export MkParseError
 export Token
@@ -134,6 +134,7 @@ export T_Tagged
 export T_Ident
 export T_Nat
 export T_EOF
+export T_Str
 export tokenTag
 export tokenText
 export tokenNatValue
@@ -154,6 +155,7 @@ data Token
 ctor T_Tagged 1
 ctor T_Ident 1
 ctor T_Nat 1
+ctor T_Str 1
 type 0
 opaque 0
 native 0
@@ -261,7 +263,7 @@ poly tokenize
 combinator 0
 module Parser
 declared Parser
-imports 67
+imports 68
 import Prelude eqListU8
 import Prelude List
 import Prelude nil
@@ -328,8 +330,9 @@ import Lexer T_LArrow
 import Lexer T_Tagged
 import Lexer T_Ident
 import Lexer T_Nat
+import Lexer T_Str
 import Lexer T_EOF
-exports 98
+exports 100
 export Pattern
 export P_Ctor
 export Expr
@@ -358,6 +361,7 @@ export skipToTopLevelDecl
 export parseError
 export identTag
 export natTag
+export strTag
 export lParenTag
 export rParenTag
 export lBraceTag
@@ -403,6 +407,7 @@ export fstDeclToken
 export sndDeclToken
 export parsePatternArgs
 export parseLiteralAtomWith
+export stringToExprList
 export buildListExpr
 export parseListElements
 export parseBraceBodyWith
@@ -465,11 +470,12 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 117
+poly 119
 poly parseError
 poly checkedIncrementU8
 poly identTag
 poly natTag
+poly strTag
 poly lParenTag
 poly rParenTag
 poly lBraceTag
@@ -525,6 +531,7 @@ poly parsePatternArgs
 poly parseMatchArmWith
 poly parseMatchArmsWith
 poly isAtomStartTag
+poly stringToExprList
 poly buildListExpr
 poly parseLiteralAtomWith
 poly parseListElements

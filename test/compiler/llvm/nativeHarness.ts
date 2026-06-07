@@ -85,6 +85,7 @@ export async function compileLlvmToExecutable(
   const args = [
     llPath,
     ...allRuntimeSources,
+    "-O3",
     "-I",
     join(PROJECT_ROOT, "runtime/trip"),
     ...macosSdkArgs(),

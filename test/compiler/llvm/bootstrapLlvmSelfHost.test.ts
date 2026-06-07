@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import { serializeTripBundleV1 } from "../../../lib/compiler/index.ts";
+import {
+  compilerTripModuleSourcePath,
+  type CompilerTripModuleName,
+} from "../../../lib/compiler/bootstrapModules.ts";
 import { describe, it } from "../../util/test_shim.ts";
 import {
   bootstrap,
@@ -109,6 +113,66 @@ poly main = seven
       const multiModuleResult = runExecutable(multiModuleExe);
       assert.equal(multiModuleResult.status, 0);
       assert.equal(multiModuleResult.stdout, "");
+    } finally {
+      await Promise.all([
+        cleanupBootstrap(),
+        rm(tempDir, { recursive: true, force: true }).catch(() => {}),
+      ]);
+    }
+  });
+
+  it("stage-1 native compiler compiling the full compiler bundle", async () => {
+    const { exePath: compilerExe, cleanup: cleanupBootstrap } =
+      await bootstrap.compileCompilerToNative();
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-selfcomp-"));
+
+    try {
+      const moduleNames: readonly CompilerTripModuleName[] = [
+        "Prelude",
+        "Nat",
+        "Bin",
+        "BundleSummary",
+        "Avl",
+        "Lexer",
+        "Parser",
+        "Core",
+        "DataEnv",
+        "Unparse",
+        "Bridge",
+        "Llvm",
+        "BundleParseSummary",
+        "BundleInventory",
+        "ModuleEnv",
+        "CoreToMini",
+        "MiniCore",
+        "MiniVerify",
+        "Anf",
+        "AnfLlvm",
+        "Compiler",
+      ];
+
+      const modules = await Promise.all(
+        moduleNames.map(async (name) => ({
+          name,
+          source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
+        })),
+      );
+
+      const compilerBundleBytes = serializeTripBundleV1({
+        entryModule: "Compiler",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules,
+      });
+
+      // Stage-1: native compiler reads compilerBundleBytes and emits LLVM IR.
+      console.log("Running stage-1 compiler on the full compiler bundle...");
+      const stage2Ll = await bootstrap.runNativeCompiler(
+        compilerExe,
+        compilerBundleBytes,
+      );
+      assert.ok(stage2Ll);
+      assert.ok(!stage2Ll.startsWith("ERR:"), stage2Ll);
     } finally {
       await Promise.all([
         cleanupBootstrap(),

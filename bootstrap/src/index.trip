@@ -124,6 +124,8 @@ import ModuleEnv validateImports
 
 import ModuleEnv validateExports
 
+import ModuleEnv lookupExportModule
+
 import ModuleEnv lookupConstructorAlias
 
 export compileBundleToLlvm
@@ -311,7 +313,20 @@ poly rec qualifyExpr =
                                               }
                                           )
                                     }
-                                  | None => Ok [List U8] [Expr] (E_Var name)
+                                  | None =>
+                                    match (lookupExportModule name exps) [Result (List U8) Expr] {
+                                      | None => Ok [List U8] [Expr] (E_Var name)
+                                      | Some m =>
+                                        let gName = qualify m name in
+                                        match (lookupConstructorAlias gName aliases) [Result (List U8) Expr] {
+                                          | Some res2 =>
+                                            match res2 [Result (List U8) Expr] {
+                                              | Some rc => Ok [List U8] [Expr] (E_Var rc)
+                                              | None => Err [List U8] [Expr] (concat [U8] {List U8 | "Ambiguous constructor alias: " name})
+                                            }
+                                          | None => Ok [List U8] [Expr] (E_Var gName)
+                                        }
+                                    }
                                 }
                             )
                       }

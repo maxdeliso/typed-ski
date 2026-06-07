@@ -158,6 +158,8 @@ export validateImports
 
 export validateExports
 
+export lookupExportModule
+
 export main
 
 data ModuleInfo =
@@ -890,6 +892,26 @@ poly rec lookupExport =
                     (\u : U8 => Some [ExportInfo] h)
                 }
           )
+
+poly rec lookupExportModule =
+  \symbolName : List U8 =>
+    \exports : List ExportInfo =>
+      matchList
+        [ExportInfo]
+        [Maybe (List U8)]
+        exports
+        (None [List U8])
+        (
+          \h : ExportInfo =>
+            \t : List ExportInfo =>
+              do [Maybe (List U8)] {
+                MkExportInfo hModule hSymbol = h
+                return
+                if [Maybe (List U8)] (eqListU8 hSymbol symbolName)
+                  (\u : U8 => Some [List U8] hModule)
+                  (\u : U8 => lookupExportModule symbolName t)
+              }
+        )
 
 poly rec lookupDefinition =
   \moduleName : List U8 =>

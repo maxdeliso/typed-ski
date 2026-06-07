@@ -307,9 +307,10 @@ poly rec emitCaseFieldBinds =
   \env : List ((List U8), (List U8)) =>
     \instrs : List (List U8) =>
       \scrutPtr : List U8 =>
-        \params : List (List U8) =>
-          \fieldIdx : U8 =>
-            matchList
+        \armIdx : U8 =>
+          \params : List (List U8) =>
+            \fieldIdx : U8 =>
+              matchList
               [List U8]
               [(List ((List U8), (List U8)), List (List U8))]
               params
@@ -317,7 +318,7 @@ poly rec emitCaseFieldBinds =
               (
                 \p : List U8 =>
                   \t : List (List U8) =>
-                    let fldVar = concat [U8] {List U8 | scrutPtr "_fld_" (u8ToDigits fieldIdx)} in
+                    let fldVar = concat [U8] {List U8 | scrutPtr "_arm_" (u8ToDigits armIdx) "_fld_" (u8ToDigits fieldIdx)} in
                     let line = concat [U8] {List U8 | "  " fldVar " = call i64 @trip_obj_field(ptr " scrutPtr ", i64 " (u8ToDigits fieldIdx) ")\n"} in
                     emitCaseFieldBinds
                       (
@@ -328,6 +329,7 @@ poly rec emitCaseFieldBinds =
                       )
                       (cons [List U8] line instrs)
                       scrutPtr
+                      armIdx
                       t
                       (addU8 fieldIdx #u8(1))
               )
@@ -1277,6 +1279,7 @@ poly rec emitExpr =
               do [Result (List U8) EmitRes] {
                 op_scrut <- (atomOperand env scrut)
                 caseId = binToDigits counter
+                counter1 = incBin counter
                 caseVar = append [U8]
                 "%__case_res_" caseId
                 scrutPtr = append [U8]
@@ -1316,7 +1319,7 @@ poly rec emitExpr =
                   "  ]\n"
                 }
                 initialInstrs = append [List U8] {List U8 | switchInstr tagLine castLine allocLine} instrs
-                return emitCaseArms env counter initialInstrs caseVar scrutPtr caseId arms #u8(0)
+                return emitCaseArms env counter1 initialInstrs caseVar scrutPtr caseId arms #u8(0)
               }
             | AE_Let name val body =>
               do [Result (List U8) EmitRes] {
@@ -1397,7 +1400,7 @@ poly rec emitCaseArms =
                           match (peelBinders arm {List U8 |}) [(List (List U8), AnfExpr)] {
                             | MkPair params body =>
                               let armLabel = concat [U8] {List U8 | "case_" caseId "_arm_" (u8ToDigits idx)} in
-                              match (emitCaseFieldBinds env {List U8 |} scrutPtr params #u8(0)) [(List ((List U8), (List U8)), List (List U8))] {
+                              match (emitCaseFieldBinds env {List U8 |} scrutPtr idx params #u8(0)) [(List ((List U8), (List U8)), List (List U8))] {
                                 | MkPair armEnv armInstrs =>
                                   let labelLine = append [U8] armLabel ":\n" in
                                   let combinedInstrs = append [List U8] (reverse [List U8] armInstrs) (cons [List U8] labelLine instrs) in
@@ -1498,7 +1501,7 @@ poly emitFunc =
                     (llvmSymbolName name)
                     "("
                     (paramDeclsString params true)
-                    ") {\nentry:\n"
+                    ") {\n__entry:\n"
                     instrText
                     "  ret i64 "
                     op

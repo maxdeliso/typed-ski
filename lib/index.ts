@@ -94,6 +94,12 @@ export {
 // ─── Type utilities ─────────────────────────────────────────────────────
 export { unparseType } from "./parser/type.ts";
 export { inferType } from "./types/inference.ts";
+export {
+  getTypePolarity,
+  mkThunkType,
+  type Polarity,
+  type BaseType,
+} from "./types/types.ts";
 
 // ─── Constants ──────────────────────────────────────────────────────────
 export { TEST_TIMEOUT_MS } from "./constants.ts";

@@ -168,6 +168,12 @@ export function freeTermVars(t: TripLangValueType): Set<string> {
         case "type-var":
         case "terminal":
           break;
+        case "thunk":
+        case "systemF-thunk":
+        case "systemF-force": {
+          term = term.body;
+          continue;
+        }
       }
       // If we didn't 'continue', we are done with this node.
       break;
@@ -233,6 +239,11 @@ function usesSystemFNatLiteral(term: TripLangValueType): boolean {
       case "lambda-var":
       case "type-var":
       case "terminal":
+        break;
+      case "thunk":
+      case "systemF-thunk":
+      case "systemF-force":
+        stack.push(current.body);
         break;
     }
   }
@@ -322,6 +333,11 @@ export function freeTypeVars(t: TripLangValueType): Set<string> {
         }
         break;
       case "terminal":
+        break;
+      case "thunk":
+      case "systemF-thunk":
+      case "systemF-force":
+        collectFree(t.body, bound);
         break;
     }
   }
@@ -471,6 +487,21 @@ export function alphaRenameTermBinder<T extends TripLangValueType>(
     case "systemF-var":
       return term.name === oldName ? ({ ...term, name: newName } as T) : term;
     // Type binders/vars are separate namespace — don't touch here.
+    case "thunk":
+      return {
+        ...term,
+        body: alphaRenameTermBinder(term.body, oldName, newName),
+      } as T;
+    case "systemF-thunk":
+      return {
+        ...term,
+        body: alphaRenameTermBinder(term.body, oldName, newName),
+      } as T;
+    case "systemF-force":
+      return {
+        ...term,
+        body: alphaRenameTermBinder(term.body, oldName, newName),
+      } as T;
     default:
       return term;
   }
@@ -572,6 +603,21 @@ export function alphaRenameTypeBinder<T extends TripLangValueType>(
       return term.typeName === oldName
         ? ({ ...term, typeName: newName } as T)
         : term;
+    case "thunk":
+      return {
+        ...term,
+        body: alphaRenameTypeBinder(term.body, oldName, newName),
+      } as T;
+    case "systemF-thunk":
+      return {
+        ...term,
+        body: alphaRenameTypeBinder(term.body, oldName, newName),
+      } as T;
+    case "systemF-force":
+      return {
+        ...term,
+        body: alphaRenameTypeBinder(term.body, oldName, newName),
+      } as T;
     default:
       return term;
   }
@@ -1004,6 +1050,36 @@ export function substituteTermHygienicBatch(
     case "terminal":
     case "u8":
       return term;
+    case "thunk": {
+      const body = substituteTermHygienicBatch(
+        term.body,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (body === term.body) return term;
+      return { ...term, body: body as BaseType } as TripLangValueType;
+    }
+    case "systemF-thunk": {
+      const body = substituteTermHygienicBatch(
+        term.body,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (body === term.body) return term;
+      return { ...term, body: body as SystemFTerm } as TripLangValueType;
+    }
+    case "systemF-force": {
+      const body = substituteTermHygienicBatch(
+        term.body,
+        substitutions,
+        replacementFVs,
+        bound,
+      );
+      if (body === term.body) return term;
+      return { ...term, body: body as SystemFTerm } as TripLangValueType;
+    }
   }
 }
 
@@ -1196,6 +1272,36 @@ export function substituteHygienic<T extends TripLangValueType>(
     case "terminal":
     case "u8":
       return term;
+    case "thunk":
+      return {
+        ...term,
+        body: substituteHygienic(
+          (term as any).body,
+          termName,
+          replacement,
+          bound,
+        ),
+      } as T;
+    case "systemF-thunk":
+      return {
+        ...term,
+        body: substituteHygienic(
+          (term as any).body,
+          termName,
+          replacement,
+          bound,
+        ),
+      } as T;
+    case "systemF-force":
+      return {
+        ...term,
+        body: substituteHygienic(
+          (term as any).body,
+          termName,
+          replacement,
+          bound,
+        ),
+      } as T;
   }
 }
 
@@ -1320,6 +1426,36 @@ export function substituteTypeHygienic<T extends TripLangValueType>(
       return term.typeName === typeName && !bound.has(typeName)
         ? (replacement as T)
         : term;
+    case "thunk":
+      return {
+        ...term,
+        body: substituteTypeHygienic(
+          (term as any).body,
+          typeName,
+          replacement,
+          bound,
+        ),
+      } as T;
+    case "systemF-thunk":
+      return {
+        ...term,
+        body: substituteTypeHygienic(
+          (term as any).body,
+          typeName,
+          replacement,
+          bound,
+        ),
+      } as T;
+    case "systemF-force":
+      return {
+        ...term,
+        body: substituteTypeHygienic(
+          (term as any).body,
+          typeName,
+          replacement,
+          bound,
+        ),
+      } as T;
     default:
       return term;
   }

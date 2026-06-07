@@ -336,3 +336,51 @@ export function isAtDefinitionKeywordLine(state: ParserState): boolean {
     return firstLine.startsWith(keyword) && /\s/.test(nextChar ?? "");
   });
 }
+
+export function peekThunkOpen(state: ParserState): [boolean, ParserState] {
+  const newState = skipWhitespace(state);
+  return [
+    newState.buf.slice(newState.idx, newState.idx + 2) === "[*",
+    newState,
+  ];
+}
+
+export function matchThunkOpen(state: ParserState): ParserState {
+  const [isOpen, newState] = peekThunkOpen(state);
+  if (!isOpen) {
+    throw new ParseError(withParserState(newState, "expected '[*'"));
+  }
+  return { buf: newState.buf, idx: newState.idx + 2 };
+}
+
+export function peekThunkClose(state: ParserState): [boolean, ParserState] {
+  const newState = skipWhitespace(state);
+  return [
+    newState.buf.slice(newState.idx, newState.idx + 2) === "*]",
+    newState,
+  ];
+}
+
+export function matchThunkClose(state: ParserState): ParserState {
+  const [isClose, newState] = peekThunkClose(state);
+  if (!isClose) {
+    throw new ParseError(withParserState(newState, "expected '*]'"));
+  }
+  return { buf: newState.buf, idx: newState.idx + 2 };
+}
+
+export function peekForce(state: ParserState): [boolean, ParserState] {
+  const newState = skipWhitespace(state);
+  return [
+    newState.buf.slice(newState.idx, newState.idx + 2) === "*!",
+    newState,
+  ];
+}
+
+export function matchForce(state: ParserState): ParserState {
+  const [isForce, newState] = peekForce(state);
+  if (!isForce) {
+    throw new ParseError(withParserState(newState, "expected '*!'"));
+  }
+  return { buf: newState.buf, idx: newState.idx + 2 };
+}

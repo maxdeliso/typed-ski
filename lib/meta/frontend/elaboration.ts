@@ -95,6 +95,16 @@ export function elaborateSystemF(
         value: elaborateSystemF(systemF.value, syms),
         body: elaborateSystemF(systemF.body, syms),
       };
+    case "systemF-thunk":
+      return {
+        kind: "systemF-thunk",
+        body: elaborateSystemF(systemF.body, syms),
+      };
+    case "systemF-force":
+      return {
+        kind: "systemF-force",
+        body: elaborateSystemF(systemF.body, syms),
+      };
     case "non-terminal": {
       const elaboratedLft = elaborateSystemF(systemF.lft, syms);
       const elaboratedRgt = elaborateSystemF(systemF.rgt, syms);

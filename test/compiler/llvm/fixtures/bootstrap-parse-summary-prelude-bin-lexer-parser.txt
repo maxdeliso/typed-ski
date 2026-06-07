@@ -95,7 +95,7 @@ import Prelude eqU8
 import Prelude ltU8
 import Prelude eqListU8
 import Prelude u8ToDigits
-exports 52
+exports 55
 export ParseError
 export MkParseError
 export Token
@@ -130,6 +130,9 @@ export T_KwData
 export T_KwCond
 export T_KwDo
 export T_LArrow
+export T_ThunkOpen
+export T_ThunkClose
+export T_Force
 export T_Tagged
 export T_Ident
 export T_Nat
@@ -159,7 +162,7 @@ ctor T_Str 1
 type 0
 opaque 0
 native 0
-poly 100
+poly 106
 poly T_LParen
 poly T_RParen
 poly T_LBrace
@@ -191,9 +194,15 @@ poly T_KwData
 poly T_KwCond
 poly T_KwDo
 poly T_LArrow
+poly T_ThunkOpen
+poly T_ThunkClose
+poly T_Force
 poly T_EOF
 poly tokenTag
 poly tokenTaggedTextDo
+poly tokenTaggedTextForce
+poly tokenTaggedTextThunkClose
+poly tokenTaggedTextThunkOpen
 poly tokenTaggedTextLArrow
 poly tokenTaggedTextData
 poly tokenTaggedTextType
@@ -263,7 +272,7 @@ poly tokenize
 combinator 0
 module Parser
 declared Parser
-imports 68
+imports 71
 import Prelude eqListU8
 import Prelude List
 import Prelude nil
@@ -327,12 +336,15 @@ import Lexer T_KwData
 import Lexer T_KwCond
 import Lexer T_KwDo
 import Lexer T_LArrow
+import Lexer T_ThunkOpen
+import Lexer T_ThunkClose
+import Lexer T_Force
 import Lexer T_Tagged
 import Lexer T_Ident
 import Lexer T_Nat
 import Lexer T_Str
 import Lexer T_EOF
-exports 100
+exports 106
 export Pattern
 export P_Ctor
 export Expr
@@ -342,6 +354,8 @@ export E_Lam
 export E_Let
 export E_Nat
 export E_Match
+export E_Thunk
+export E_Force
 export DefKind
 export K_Poly
 export K_Combinator
@@ -393,6 +407,9 @@ export kwDataTag
 export kwCondTag
 export kwDoTag
 export lArrowTag
+export thunkOpenTag
+export thunkCloseTag
+export forceTag
 export fstNameToken
 export sndNameToken
 export fstExprToken
@@ -430,6 +447,7 @@ export Ty_Var
 export Ty_App
 export Ty_Arrow
 export Ty_Forall
+export Ty_Thunk
 export parseSimpleType
 export parseType
 export arrowTag
@@ -439,6 +457,7 @@ ctor Ty_Var 1
 ctor Ty_App 2
 ctor Ty_Arrow 2
 ctor Ty_Forall 2
+ctor Ty_Thunk 1
 data Pattern
 ctor P_Ctor 2
 data DoStep
@@ -455,6 +474,8 @@ ctor E_Lam 2
 ctor E_Let 3
 ctor E_Nat 1
 ctor E_Match 2
+ctor E_Thunk 1
+ctor E_Force 1
 data DefKind
 ctor K_Poly 0
 ctor K_Combinator 0
@@ -470,7 +491,7 @@ ctor D_Def 4
 type 0
 opaque 0
 native 0
-poly 119
+poly 122
 poly parseError
 poly checkedIncrementU8
 poly identTag
@@ -508,6 +529,9 @@ poly kwDataTag
 poly kwCondTag
 poly kwDoTag
 poly lArrowTag
+poly thunkOpenTag
+poly thunkCloseTag
+poly forceTag
 poly fstTypeToken
 poly sndTypeToken
 poly fstNameToken
@@ -594,7 +618,7 @@ combinator 0
 module Prelude
 declared Prelude
 imports 0
-exports 55
+exports 60
 export Bool
 export id
 export true
@@ -644,6 +668,11 @@ export subU8
 export divU8
 export modU8
 export U8
+export LazyVal
+export Stream
+export enumFrom
+export streamHead
+export streamTail
 export eqListU8
 export ltListU8
 export lteListU8
@@ -665,9 +694,11 @@ ctor MkParseError 1
 data Maybe
 ctor None 0
 ctor Some 1
-type 3
+type 5
 type Bool
 type List
+type LazyVal
+type Stream
 type Parser
 opaque 1
 opaque U8
@@ -680,7 +711,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 34
+poly 37
 poly id
 poly true
 poly false
@@ -715,4 +746,7 @@ poly lteListU8
 poly digitToAscii
 poly singletonU8
 poly u8ToDigits
+poly enumFrom
+poly streamHead
+poly streamTail
 combinator 0

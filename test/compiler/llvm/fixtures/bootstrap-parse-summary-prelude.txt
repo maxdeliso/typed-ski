@@ -7,7 +7,7 @@ modules 1
 module Prelude
 declared Prelude
 imports 0
-exports 55
+exports 60
 export Bool
 export id
 export true
@@ -57,6 +57,11 @@ export subU8
 export divU8
 export modU8
 export U8
+export LazyVal
+export Stream
+export enumFrom
+export streamHead
+export streamTail
 export eqListU8
 export ltListU8
 export lteListU8
@@ -78,9 +83,11 @@ ctor MkParseError 1
 data Maybe
 ctor None 0
 ctor Some 1
-type 3
+type 5
 type Bool
 type List
+type LazyVal
+type Stream
 type Parser
 opaque 1
 opaque U8
@@ -93,7 +100,7 @@ native divU8
 native modU8
 native readOne
 native writeOne
-poly 34
+poly 37
 poly id
 poly true
 poly false
@@ -128,4 +135,7 @@ poly lteListU8
 poly digitToAscii
 poly singletonU8
 poly u8ToDigits
+poly enumFrom
+poly streamHead
+poly streamTail
 combinator 0

@@ -31,11 +31,51 @@ interface TypeApplication {
   arg: BaseType;
 }
 
-export type BaseType = TypeVariable | ArrowType | ForallType | TypeApplication;
+interface ThunkType {
+  kind: "thunk";
+  body: BaseType;
+}
+
+export type BaseType =
+  | TypeVariable
+  | ArrowType
+  | ForallType
+  | TypeApplication
+  | ThunkType;
+
+export type Polarity = "positive" | "negative";
+
+export const getTypePolarity = (type: BaseType): Polarity => {
+  switch (type.kind) {
+    case "non-terminal":
+      return "negative";
+    case "forall":
+      return "negative";
+    case "thunk":
+      return "positive";
+    case "type-var":
+      return "positive";
+    case "type-app": {
+      let current = type.fn;
+      while (current.kind === "type-app") {
+        current = current.fn;
+      }
+      if (current.kind === "type-var") {
+        return "positive";
+      }
+      return getTypePolarity(current);
+    }
+  }
+};
 
 export const mkTypeVariable = (name: string): TypeVariable => ({
   kind: "type-var",
   typeName: name,
+});
+
+export const mkThunkType = (body: BaseType): ThunkType => ({
+  kind: "thunk",
+  body,
 });
 
 export const arrow = (a: BaseType, b: BaseType): ArrowType => ({
@@ -60,6 +100,8 @@ export const typesLitEq = (a: BaseType, b: BaseType): boolean => {
     return typesLitEq(a.fn, b.fn) && typesLitEq(a.arg, b.arg);
   } else if (a.kind === "forall" && b.kind === "forall") {
     return a.typeVar === b.typeVar && typesLitEq(a.body, b.body);
+  } else if (a.kind === "thunk" && b.kind === "thunk") {
+    return typesLitEq(a.body, b.body);
   } else if ("lft" in a && "rgt" in a && "lft" in b && "rgt" in b) {
     return typesLitEq(a.lft, b.lft) && typesLitEq(a.rgt, b.rgt);
   } else {

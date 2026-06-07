@@ -19,6 +19,10 @@ export const normalizeTy = (
   vars: () => ReturnType<typeof mkTypeVariable>,
 ): [BaseType, Map<string, string>] => {
   switch (ty.kind) {
+    case "thunk": {
+      const [bodyType, bodyMapping] = normalizeTy(ty.body, mapping, vars);
+      return [{ kind: "thunk", body: bodyType }, bodyMapping];
+    }
     case "type-var": {
       const mapped = mapping.get(ty.typeName);
       if (mapped === undefined) {

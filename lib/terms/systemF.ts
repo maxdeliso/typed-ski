@@ -156,6 +156,16 @@ interface SystemFApplication {
  * - a term application t u (SystemFApplication),
  * - a let binding let x = v in b (SystemFLet)
  */
+interface SystemFThunk {
+  kind: "systemF-thunk";
+  body: SystemFTerm;
+}
+
+interface SystemFForce {
+  kind: "systemF-force";
+  body: SystemFTerm;
+}
+
 export type SystemFTerm =
   | SystemFVar
   | SystemFAbs
@@ -163,7 +173,19 @@ export type SystemFTerm =
   | SystemFTypeApp
   | SystemFApplication
   | SystemFMatch
-  | SystemFLet;
+  | SystemFLet
+  | SystemFThunk
+  | SystemFForce;
+
+export const mkSystemFThunk = (body: SystemFTerm): SystemFThunk => ({
+  kind: "systemF-thunk",
+  body,
+});
+
+export const mkSystemFForce = (body: SystemFTerm): SystemFForce => ({
+  kind: "systemF-force",
+  body,
+});
 
 /**
  * Creates an application of one System F term to another.

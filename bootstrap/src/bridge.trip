@@ -66,6 +66,10 @@ import Parser E_Nat
 
 import Parser E_Match
 
+import Parser E_Thunk
+
+import Parser E_Force
+
 import Parser Pattern
 
 import Parser P_Ctor
@@ -614,6 +618,16 @@ poly rec elaborateExpr =
           }
         | E_Nat digits => natToCore digits
         | E_Match scrut arms => elaborateMatchWith elaborateExpr dEnv scrut arms
+        | E_Thunk body =>
+          Err
+            [List U8]
+            [Core]
+            "Thunk expressions are not supported in the bootstrap compiler"
+        | E_Force body =>
+          Err
+            [List U8]
+            [Core]
+            "Force expressions are not supported in the bootstrap compiler"
       }
 
 poly ctorCountOverflowError =

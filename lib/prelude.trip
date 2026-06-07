@@ -98,6 +98,16 @@ export modU8
 
 export U8
 
+export LazyVal
+
+export Stream
+
+export enumFrom
+
+export streamHead
+
+export streamTail
+
 export eqListU8
 
 export ltListU8
@@ -133,6 +143,10 @@ native writeOne : U8 -> #R -> (U8 -> R) -> R
 type Bool = #B -> B -> B -> B
 
 type List = #A -> #R -> R -> (A -> R -> R) -> R
+
+type LazyVal A = [* U8 -> A *]
+
+type Stream A = Pair A [* U8 -> Stream A *]
 
 type Parser = #A -> List Bin -> Result ParseError ((A, (List Bin)))
 
@@ -442,3 +456,25 @@ poly u8ToDigits =
           (digitToAscii hundreds)
           (cons [U8] (digitToAscii tens) (singletonU8 (digitToAscii ones)))
     }
+
+poly rec enumFrom =
+  \n : U8 =>
+    MkPair
+      [U8]
+      [[* U8 -> Stream U8 *]]
+      n
+      [* \u : U8 => enumFrom (addU8 n #u8(1)) *]
+
+poly streamHead =
+  #A =>
+    \s : Stream A =>
+      match s [A] {
+        | MkPair h t => h
+      }
+
+poly streamTail =
+  #A =>
+    \s : Stream A =>
+      match s [Stream A] {
+        | MkPair h t => (*! t) #u8(0)
+      }

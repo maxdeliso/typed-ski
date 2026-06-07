@@ -44,6 +44,8 @@ const occursIn = (tv: TypeVariable, ty: BaseType): boolean => {
     return ty.typeName === tv.typeName;
   } else if (ty.kind === "type-app") {
     return occursIn(tv, ty.fn) || occursIn(tv, ty.arg);
+  } else if (ty.kind === "thunk") {
+    return occursIn(tv, ty.body);
   } else if (ty.kind === "non-terminal") {
     return occursIn(tv, ty.lft) || occursIn(tv, ty.rgt);
   } else {
@@ -80,6 +82,11 @@ export const substituteType = (
         kind: "type-app",
         fn: substituteType(original.fn, lft, rgt),
         arg: substituteType(original.arg, lft, rgt),
+      };
+    case "thunk":
+      return {
+        kind: "thunk",
+        body: substituteType(original.body, lft, rgt),
       };
     case "non-terminal":
       return arrow(
@@ -223,6 +230,11 @@ export const unify = (
     }
     newContext.set(t2.typeName, t1);
     return newContext;
+  }
+
+  // Thunk type unification.
+  if (t1.kind === "thunk" && t2.kind === "thunk") {
+    return unify(t1.body, t2.body, context);
   }
 
   // Type application unification.

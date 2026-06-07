@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.28.0",
+  "version": "0.28.1",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -45,7 +45,7 @@
     "bootstrap:format": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js format --write bootstrap/src",
     "bootstrap:lint": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js lint --fix bootstrap/src",
     "bootstrap:prune": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/bin/improvize.js prune bootstrap/src Compiler.main,MiniVerify.verifyToAnfText,BundleSummary.main,BundleParseSummary.main,BundleInventory.main,ModuleEnv.main,Llvm.compileSourceToLlvm,AnfLlvm.compileSourceToLlvmText,Llvm.compileBundleSummaryToLlvm",
-    "bootstrap": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bootstrap.js",
+    "bootstrap:normalize": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/bootstrapNormalize.js",
     "update:goldens": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/update_goldens.js"
   },
   "dependencies": {

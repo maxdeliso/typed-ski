@@ -20,7 +20,7 @@
  * and do not cause the script to fail or modify anything further).
  *
  * Run via:
- *   pnpm run bootstrap
+ *   pnpm run bootstrap:normalize
  *
  * (The pnpm wrapper does a fresh build:ts first.)
  *
@@ -33,7 +33,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// When executed from ts_out/scripts/bootstrap.js, __dirname is .../ts_out/scripts
+// When executed from ts_out/scripts/bootstrapNormalize.js, __dirname is .../ts_out/scripts
 // Project root is two levels up.
 const PROJECT_ROOT = join(__dirname, "..", "..");
 
@@ -124,7 +124,7 @@ function verifyClean(): void {
 
 function main(): void {
   console.log(
-    "Running improvize bootstrap maintenance (prune → lint → fmt) + verification...",
+    "Running bootstrap-corpus normalization (prune → lint → fmt) + verification...",
   );
 
   runImprovize(["prune", BOOTSTRAP_SRC, PRUNE_ENTRY_POINTS]);

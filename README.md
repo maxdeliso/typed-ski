@@ -259,7 +259,8 @@ are an in-progress re-implementation of the compiler in TripLang itself.
 They are not currently part of the main build. The active acceptance path
 is the LLVM self-hosting test: TypeScript compiles the Trip compiler to a
 native executable, then that executable reads `bundle-v1` and emits LLVM IR
-for a stage-1 Trip program.
+for a stage-1 Trip program. The native compiler does not yet recompile its
+own bundle, so there is no stage-2 / IR-fixpoint self-reproduction check.
 
 This is targeting LLVM IR self-hosting, not in-language object emission or
 linking. Parser bootstrap progress is measured through the `bundle-v1`
@@ -271,7 +272,7 @@ To lint, format, or prune the bootstrap corpus files under `bootstrap/src/`, the
 - `pnpm run bootstrap:format` — Format all `.trip` files in `bootstrap/src/`
 - `pnpm run bootstrap:lint` — Lint all `.trip` files in `bootstrap/src/` and apply safe automatic fixes
 - `pnpm run bootstrap:prune` — Prune unreachable definitions and imports in `bootstrap/src/`, keeping only the transitively referenced code starting from the entry points of the test suite (e.g., `Compiler.main`, `MiniVerify.verifyToAnfText`, etc.)
-- `pnpm run bootstrap` — Run prune → lint → format (in that order) followed by verification that the corpus is clean (equivalent to the three commands above plus `format --check` + `lint`)
+- `pnpm run bootstrap:normalize` — Run prune → lint → format (in that order) followed by verification that the corpus is clean (equivalent to the three commands above plus `format --check` + `lint`)
 
 ---
 

@@ -393,12 +393,6 @@ poly natTag =
 poly strTag =
   tokenTag (T_Str "")
 
-
-
-
-
-
-
 poly lParenTag =
   tokenTag T_LParen
 
@@ -1910,7 +1904,6 @@ poly parseDecl =
             }
       )
 
-
 poly rec parseProgramAcc =
   \toks : List Token =>
     \acc : List Decl =>
@@ -2283,12 +2276,12 @@ poly parseSingleStep =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
     \toks : List Token =>
       matchList
-            [Token]
-            [Result ParseError DoStep]
-            toks
-            (Err [ParseError] [DoStep] parseError)
-            (
-              \h : Token =>
+        [Token]
+        [Result ParseError DoStep]
+        toks
+        (Err [ParseError] [DoStep] parseError)
+        (
+          \h : Token =>
             \t : List Token =>
               let tag = tokenTag h in
               cond [Result ParseError DoStep] {
@@ -2495,10 +2488,9 @@ poly parseSingleStep =
                                         }
                                   )
                             )
-                      )
+                    )
               }
         )
-
 
 poly rec parseDoStepsRec =
   \recurse : (List Token -> Result ParseError (Expr, (List Token))) =>
@@ -2563,11 +2555,3 @@ poly parseDoWith =
               }
           }
       }
-
-
-
-
-
-
-
-

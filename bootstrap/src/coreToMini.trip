@@ -130,7 +130,9 @@ poly rec applyAnon =
 
 poly nameIsMatchList =
   \n : List U8 =>
-    if [Bool] (eqListU8 n "Prelude.matchList") (\u : U8 => true) (\u : U8 => eqListU8 n "matchList")
+    if [Bool] (eqListU8 n "Prelude.matchList")
+      (\u : U8 => true)
+      (\u : U8 => eqListU8 n "matchList")
 
 -- matchList is a Prelude function over the Scott encoding, but the back end
 -- boxes List. Lower a saturated `matchList l onNil onCons` to a boxed case:
@@ -169,14 +171,18 @@ poly matchListIntrinsicOr =
                                 [MiniExpr]
                                 r2
                                 (ME_Match l {MiniExpr | onNil onCons})
-                                (\x : MiniExpr => \xs : List MiniExpr => fallback)
+                                (
+                                  \x : MiniExpr => \xs : List MiniExpr => fallback
+                                )
                         )
                 )
         )
 
 poly nameIsIf =
   \n : List U8 =>
-    if [Bool] (eqListU8 n "Prelude.if") (\u : U8 => true) (\u : U8 => eqListU8 n "if")
+    if [Bool] (eqListU8 n "Prelude.if")
+      (\u : U8 => true)
+      (\u : U8 => eqListU8 n "if")
 
 poly peelMiniIfBranch =
   \branch : MiniExpr =>
@@ -221,15 +227,26 @@ poly ifIntrinsicOr =
                                 [MiniExpr]
                                 [MiniExpr]
                                 r2
-                                (ME_Match c {MiniExpr | (peelMiniIfBranch elseBranch) (peelMiniIfBranch thenBranch)})
-                                (\x : MiniExpr => \xs : List MiniExpr => fallback)
+                                (
+                                  ME_Match
+                                    c
+                                    {MiniExpr |
+                                      (peelMiniIfBranch elseBranch)
+                                      (peelMiniIfBranch thenBranch)
+                                    }
+                                )
+                                (
+                                  \x : MiniExpr => \xs : List MiniExpr => fallback
+                                )
                         )
                 )
         )
 
 poly nameIsAnd =
   \n : List U8 =>
-    if [Bool] (eqListU8 n "Prelude.and") (\u : U8 => true) (\u : U8 => eqListU8 n "and")
+    if [Bool] (eqListU8 n "Prelude.and")
+      (\u : U8 => true)
+      (\u : U8 => eqListU8 n "and")
 
 poly andIntrinsicOr =
   \miniArgs : List MiniExpr =>
@@ -254,14 +271,23 @@ poly andIntrinsicOr =
                         [MiniExpr]
                         [MiniExpr]
                         r1
-                        (ME_Match a {MiniExpr | (ME_Con #u8(0) #u8(2) #u8(0) {MiniExpr |}) b})
+                        (
+                          ME_Match
+                            a
+                            {MiniExpr |
+                              (ME_Con #u8(0) #u8(2) #u8(0) {MiniExpr |})
+                              b
+                            }
+                        )
                         (\x : MiniExpr => \xs : List MiniExpr => fallback)
                 )
         )
 
 poly nameIsOr =
   \n : List U8 =>
-    if [Bool] (eqListU8 n "Prelude.or") (\u : U8 => true) (\u : U8 => eqListU8 n "or")
+    if [Bool] (eqListU8 n "Prelude.or")
+      (\u : U8 => true)
+      (\u : U8 => eqListU8 n "or")
 
 poly orIntrinsicOr =
   \miniArgs : List MiniExpr =>
@@ -286,7 +312,14 @@ poly orIntrinsicOr =
                         [MiniExpr]
                         [MiniExpr]
                         r1
-                        (ME_Match a {MiniExpr | b (ME_Con #u8(1) #u8(2) #u8(0) {MiniExpr |})})
+                        (
+                          ME_Match
+                            a
+                            {MiniExpr |
+                              b
+                              (ME_Con #u8(1) #u8(2) #u8(0) {MiniExpr |})
+                            }
+                        )
                         (\x : MiniExpr => \xs : List MiniExpr => fallback)
                 )
         )
@@ -310,19 +343,27 @@ poly rec coreToMini =
             match head [MiniExpr] {
               | Cr_Var name =>
                 if [MiniExpr] (nameIsMatchList name)
-                  (\u : U8 => matchListIntrinsicOr miniArgs (ME_Call name miniArgs))
+                  (
+                    \u : U8 => matchListIntrinsicOr miniArgs (ME_Call name miniArgs)
+                  )
                   (
                     \u : U8 =>
                       if [MiniExpr] (nameIsIf name)
-                        (\u2 : U8 => ifIntrinsicOr miniArgs (ME_Call name miniArgs))
+                        (
+                          \u2 : U8 => ifIntrinsicOr miniArgs (ME_Call name miniArgs)
+                        )
                         (
                           \u2 : U8 =>
                             if [MiniExpr] (nameIsAnd name)
-                              (\u3 : U8 => andIntrinsicOr miniArgs (ME_Call name miniArgs))
+                              (
+                                \u3 : U8 => andIntrinsicOr miniArgs (ME_Call name miniArgs)
+                              )
                               (
                                 \u3 : U8 =>
                                   if [MiniExpr] (nameIsOr name)
-                                    (\u4 : U8 => orIntrinsicOr miniArgs (ME_Call name miniArgs))
+                                    (
+                                      \u4 : U8 => orIntrinsicOr miniArgs (ME_Call name miniArgs)
+                                    )
                                     (\u4 : U8 => ME_Call name miniArgs)
                               )
                         )

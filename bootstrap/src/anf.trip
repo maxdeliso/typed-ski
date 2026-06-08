@@ -838,7 +838,8 @@ poly liftFuncs =
     \funcs : List AnfFunc =>
       do [(Bin, (List AnfFunc))] {
         MkPair finalCounter finalFuncs = (liftFuncsAcc counter {AnfFunc |} funcs)
-        return {Bin, List AnfFunc | finalCounter, (reverse [AnfFunc] finalFuncs)}
+        return
+          {Bin, List AnfFunc | finalCounter, (reverse [AnfFunc] finalFuncs)}
       }
 
 poly liftProgram =
@@ -869,13 +870,22 @@ poly rec normalizeFuncsAcc =
             \t : List MiniFunc =>
               do [List AnfFunc] {
                 MkMiniFunc name params body = h
-                return (normalizeFuncsAcc (cons [AnfFunc] (MkAnfFunc name params (normalize body)) acc) t)
+                return
+                  (
+                    normalizeFuncsAcc
+                      (
+                        cons
+                          [AnfFunc]
+                          (MkAnfFunc name params (normalize body))
+                          acc
+                      )
+                      t
+                  )
               }
         )
 
 poly normalizeFuncs =
-  \funcs : List MiniFunc =>
-    (reverse [AnfFunc] (normalizeFuncsAcc {AnfFunc |} funcs))
+  \funcs : List MiniFunc => (reverse [AnfFunc] (normalizeFuncsAcc {AnfFunc |} funcs))
 
 poly normalizeProgram =
   \prog : MiniProgram =>

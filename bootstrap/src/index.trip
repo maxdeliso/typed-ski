@@ -6,8 +6,6 @@ module Compiler
 -- must always execute in a stable, deterministic order. Any change to iteration order
 -- (e.g. from hash maps or unsorted collections) will break the byte-identical self-host
 -- LLVM IR fixpoint.
-
-
 import Prelude List
 
 import Prelude nil
@@ -330,7 +328,18 @@ poly rec qualifyExpr =
                                           | Some res2 =>
                                             match res2 [Result (List U8) Expr] {
                                               | Some rc => Ok [List U8] [Expr] (E_Var rc)
-                                              | None => Err [List U8] [Expr] (concat [U8] {List U8 | "Ambiguous constructor alias: " name})
+                                              | None =>
+                                                Err
+                                                  [List U8]
+                                                  [Expr]
+                                                  (
+                                                    concat
+                                                      [U8]
+                                                      {List U8 |
+                                                        "Ambiguous constructor alias: "
+                                                        name
+                                                      }
+                                                  )
                                             }
                                           | None => Ok [List U8] [Expr] (E_Var gName)
                                         }

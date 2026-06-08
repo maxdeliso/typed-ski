@@ -374,17 +374,15 @@ poly height =
 poly maxU8 =
   \a : U8 =>
     \b : U8 =>
-      if [U8] (ltU8 a b) (\u : Bin => b) (\u : Bin => a)
+      if [U8] (ltU8 a b)
+        (\u : Bin => b)
+        (\u : Bin => a)
 
 poly gtU8 =
-  \a : U8 =>
-    \b : U8 =>
-      ltU8 b a
+  \a : U8 => \b : U8 => ltU8 b a
 
 poly lteU8 =
-  \a : U8 =>
-    \b : U8 =>
-      or (ltU8 a b) (eqU8 a b)
+  \a : U8 => \b : U8 => or (ltU8 a b) (eqU8 a b)
 
 poly mkNode =
   #V =>
@@ -439,14 +437,9 @@ poly balance =
                   | Empty => mkNode [V] l k v r
                   | Node ll _ _ _ lr =>
                     if [BridgeAvl V] (lteU8 (height [V] lr) (height [V] ll))
+                      (\u : Bin => rotateRight [V] (mkNode [V] l k v r))
                       (
-                        \u : Bin => rotateRight [V] (mkNode [V] l k v r)
-                      )
-                      (
-                        \u : Bin =>
-                          rotateRight
-                            [V]
-                            (mkNode [V] (rotateLeft [V] l) k v r)
+                        \u : Bin => rotateRight [V] (mkNode [V] (rotateLeft [V] l) k v r)
                       )
                 }
             )
@@ -459,21 +452,9 @@ poly balance =
                         | Empty => mkNode [V] l k v r
                         | Node rl _ _ _ rr =>
                           if [BridgeAvl V] (lteU8 (height [V] rl) (height [V] rr))
+                            (\u : Bin => rotateLeft [V] (mkNode [V] l k v r))
                             (
-                              \u : Bin => rotateLeft [V] (mkNode [V] l k v r)
-                            )
-                            (
-                              \u : Bin =>
-                                rotateLeft
-                                  [V]
-                                  (
-                                    mkNode
-                                      [V]
-                                      l
-                                      k
-                                      v
-                                      (rotateRight [V] r)
-                                  )
+                              \u : Bin => rotateLeft [V] (mkNode [V] l k v (rotateRight [V] r))
                             )
                       }
                   )
@@ -506,8 +487,7 @@ poly rec bridgeAvlInsert =
       \value : V =>
         \t : BridgeAvl V =>
           match t [BridgeAvl V] {
-            | Empty =>
-              mkNode [V] (Empty [V]) key value (Empty [V])
+            | Empty => mkNode [V] (Empty [V]) key value (Empty [V])
             | Node l nk nv _ r =>
               let le = lteListU8 key nk in
               let ge = lteListU8 nk key in
@@ -664,7 +644,7 @@ poly rec isNameInList =
 poly rec countNameInArms =
   \name : List U8 =>
     \arms : List (Pattern, Expr) =>
-      matchList [(Pattern, Expr)] [U8] arms #u8(0) (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => let pat = fst [Pattern] [Expr] h in let cName = match pat [List U8] { | P_Ctor cn args => cn} in let restCount = countNameInArms name t in if [U8] (eqListU8 cName name) (\u : U8 => addU8 #u8(1) restCount) (\u : U8 => restCount))
+      matchList [(Pattern, Expr)] [U8] arms #u8(0) (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => let pat = fst [Pattern] [Expr] h in let cName = match pat [List U8] {| P_Ctor cn args => cn} in let restCount = countNameInArms name t in if [U8] (eqListU8 cName name) (\u : U8 => addU8 #u8(1) restCount) (\u : U8 => restCount))
 
 poly rec validateEachArm =
   \dEnv : DataEnv =>
@@ -679,8 +659,8 @@ poly rec validateEachArm =
             \h : (Pattern, Expr) =>
               \t : List (Pattern, Expr) =>
                 let pat = fst [Pattern] [Expr] h in
-                let cName = match pat [List U8] { | P_Ctor cn args => cn} in
-                let args = match pat [List (List U8)] { | P_Ctor cn args => args} in
+                let cName = match pat [List U8] {| P_Ctor cn args => cn} in
+                let args = match pat [List (List U8)] {| P_Ctor cn args => args} in
                 if [Result (List U8) Bool] (not (isNameInList cName expectedNames))
                   (
                     \u : U8 =>
@@ -741,7 +721,7 @@ poly elaborateMatchWith =
           return
           match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
             | None =>
-              let firstCtorName = match (fst [Pattern] [Expr] (matchList [(Pattern, Expr)] [(Pattern, Expr)] arms {Pattern, Expr | (P_Ctor "NO_ARMS" {List U8 |}), (E_Var "dummy")} (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => h))) [List U8] { | P_Ctor cn args => cn} in
+              let firstCtorName = match (fst [Pattern] [Expr] (matchList [(Pattern, Expr)] [(Pattern, Expr)] arms {Pattern, Expr | (P_Ctor "NO_ARMS" {List U8 |}), (E_Var "dummy")} (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => h))) [List U8] {| P_Ctor cn args => cn} in
               Err
                 [List U8]
                 [Core]
@@ -939,6 +919,4 @@ poly seededDataEnv =
 
 poly elaborateProgramToCore =
   \decls : List Decl =>
-    elaborateToCoreRec
-      seededDataEnv
-      (filterElaboratableDecls decls)
+    elaborateToCoreRec seededDataEnv (filterElaboratableDecls decls)

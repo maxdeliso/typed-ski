@@ -667,25 +667,31 @@ poly rec consumeString =
             \t : List U8 =>
               cond [Result ParseError ((List U8), (List U8))] {
                 | (eqU8 h u8_quote) =>
-                    Ok
-                      [ParseError]
-                      [((List U8), (List U8))]
-                      {List U8, List U8 | (reverse [U8] acc), t}
+                  Ok
+                    [ParseError]
+                    [((List U8), (List U8))]
+                    {List U8, List U8 | (reverse [U8] acc), t}
                 | (eqU8 h u8_backslash) =>
-                    matchList
-                      [U8]
-                      [Result ParseError ((List U8), (List U8))]
-                      t
-                      (Err [ParseError] [((List U8), (List U8))] (MkParseError ""))
-                      (
-                        \escaped : U8 =>
-                          \afterEscaped : List U8 =>
-                            consumeString (cons [U8] (escapedCharValue escaped) acc) afterEscaped
-                      )
+                  matchList
+                    [U8]
+                    [Result ParseError ((List U8), (List U8))]
+                    t
+                    (
+                      Err
+                        [ParseError]
+                        [((List U8), (List U8))]
+                        (MkParseError "")
+                    )
+                    (
+                      \escaped : U8 =>
+                        \afterEscaped : List U8 =>
+                          consumeString
+                            (cons [U8] (escapedCharValue escaped) acc)
+                            afterEscaped
+                    )
                 | otherwise => consumeString (cons [U8] h acc) t
               }
         )
-
 
 poly charLiteralError =
   Err [ParseError] [(U8, (List U8))] (MkParseError "")

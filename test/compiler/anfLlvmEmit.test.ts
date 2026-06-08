@@ -97,15 +97,15 @@ poly konst = \\x : U8 => \\y : U8 => x
 poly main = \\z : U8 => konst (konst z z) z
 `;
 
-const EXPECTED_LLVM = String.raw`define i64 @konst(i64 %x, i64 %y) {
-entry:
+const EXPECTED_LLVM = String.raw`define i64 @konst(i64 %dummy_env, i64 %x, i64 %y) {
+__entry:
   ret i64 %x
 }
 
-define i64 @main(i64 %z) {
-entry:
-  %__ll0 = call i64 @konst(i64 %z, i64 %z)
-  %__ll1 = call i64 @konst(i64 %__ll0, i64 %z)
+define i64 @main(i64 %dummy_env, i64 %z) {
+__entry:
+  %__ll0 = call i64 @konst(i64 0, i64 %z, i64 %z)
+  %__ll1 = call i64 @konst(i64 0, i64 %__ll0, i64 %z)
   ret i64 %__ll1
 }
 
@@ -162,8 +162,8 @@ describe("ANF -> LLVM emitter (.trip)", () => {
 export main
 poly main = #u8(7)
 `,
-        String.raw`define i64 @main() {
-entry:
+        String.raw`define i64 @main(i64 %dummy_env) {
+__entry:
   ret i64 7
 }
 
@@ -243,8 +243,8 @@ poly main = \a : U8 => writeOne a [U8] (\u : U8 => a)
         String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i64 @main(i64 %a) {
-entry:
+define i64 @main(i64 %dummy_env, i64 %a) {
+__entry:
   %__ll0_t_write = trunc i64 %a to i8
   call void @trip_write_one(i8 %__ll0_t_write)
   ret i64 %a
@@ -262,8 +262,8 @@ poly main = \u : U8 => readOne [U8] (\b : U8 => b)
         String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i64 @main(i64 %u) {
-entry:
+define i64 @main(i64 %dummy_env, i64 %u) {
+__entry:
   %__ll0_r = call i8 @trip_read_one()
   %__ll0 = zext i8 %__ll0_r to i64
   ret i64 %__ll0
@@ -283,8 +283,8 @@ declare void @trip_obj_set_field(ptr, i64, i64)
 declare i64 @trip_obj_tag(ptr)
 declare i64 @trip_obj_field(ptr, i64)
 
-define i64 @main() {
-entry:
+define i64 @main(i64 %dummy_env) {
+__entry:
   %__ll0_p = call ptr @trip_alloc_obj(i64 0, i64 0)
   %__ll0 = ptrtoint ptr %__ll0_p to i64
   ret i64 %__ll0
@@ -304,8 +304,8 @@ declare void @trip_obj_set_field(ptr, i64, i64)
 declare i64 @trip_obj_tag(ptr)
 declare i64 @trip_obj_field(ptr, i64)
 
-define i64 @main() {
-entry:
+define i64 @main(i64 %dummy_env) {
+__entry:
   %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
   %__ll0 = ptrtoint ptr %__ll0_p to i64
   ret i64 %__ll0
@@ -325,8 +325,8 @@ declare void @trip_obj_set_field(ptr, i64, i64)
 declare i64 @trip_obj_tag(ptr)
 declare i64 @trip_obj_field(ptr, i64)
 
-define i64 @main(i64 %c) {
-entry:
+define i64 @main(i64 %dummy_env, i64 %c) {
+__entry:
   %__case_res_0 = alloca i64
   %__scrut_ptr_0 = inttoptr i64 %c to ptr
   %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)

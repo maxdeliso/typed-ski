@@ -9,8 +9,30 @@ import {
   buildMiniVerifyHarnessSource,
   MINI_VERIFY_MODULE_NAMES,
 } from "../test/compiler/minicoreAnfHarness.ts";
-import { realBootstrapBundle } from "../test/compiler/llvm/bundleV1.test.ts";
-import { summarizeTripBundleV1ParsedModules } from "../lib/compiler/index.ts";
+import { readFileSync } from "node:fs";
+import { isKnownCompilerTripModule } from "../lib/compiler/bootstrapModules.ts";
+import { serializeTripBundleV1, summarizeTripBundleV1ParsedModules } from "../lib/compiler/index.ts";
+
+function realBootstrapModuleSource(name: string): string {
+  if (!isKnownCompilerTripModule(name)) {
+    throw new Error(
+      `realBootstrapModuleSource: unknown built-in module '${name}'`,
+    );
+  }
+  return readFileSync(compilerTripModuleSourcePath(name), "utf8");
+}
+
+function realBootstrapBundle(moduleNames: string[]): Uint8Array {
+  return serializeTripBundleV1({
+    entryModule: moduleNames.at(-1) ?? "Prelude",
+    target: { kind: "x86_64-unknown-linux-gnu" },
+    emitMainWrapper: true,
+    modules: moduleNames.map((name) => ({
+      name,
+      source: realBootstrapModuleSource(name),
+    })),
+  });
+}
 
 function valueToBytes(value: Value): number[] {
   const bytes: number[] = [];

@@ -63,7 +63,7 @@ describe("LLVM self-host bootstrap", () => {
         bundleBytes,
       );
       assert.ok(!stage1Ll.startsWith("ERR:"), stage1Ll);
-      assert.match(stage1Ll, /define i64 @trip_fn_Main_main\(\)/);
+      assert.match(stage1Ll, /define i64 @trip_fn_Main_main\(i64 %/);
       await writeFile(stage1LlPath, stage1Ll, "utf8");
 
       // Compile Stage-1 LLVM to a native executable
@@ -103,10 +103,10 @@ poly main = seven
         multiModuleBundle,
       );
       assert.ok(!multiModuleLl.startsWith("ERR:"), multiModuleLl);
-      assert.match(multiModuleLl, /define i64 @trip_fn_Lib_seven\(\)/);
-      assert.match(multiModuleLl, /define i64 @trip_fn_App_main\(\)/);
-      assert.match(multiModuleLl, /call i64 @trip_fn_Lib_seven\(\)/);
-      assert.match(multiModuleLl, /call i64 @trip_fn_App_main\(\)/);
+      assert.match(multiModuleLl, /define i64 @trip_fn_Lib_seven\(i64 %/);
+      assert.match(multiModuleLl, /define i64 @trip_fn_App_main\(i64 %/);
+      assert.match(multiModuleLl, /call i64 @trip_fn_Lib_seven\(i64 /);
+      assert.match(multiModuleLl, /call i64 @trip_fn_App_main\(i64 /);
       await writeFile(multiModuleLlPath, multiModuleLl, "utf8");
 
       const multiModuleExe = await compileLlvmToExecutable(multiModuleLlPath);
@@ -180,4 +180,71 @@ poly main = seven
       ]);
     }
   });
+
+  it("reaches a byte-identical LLVM IR fixpoint between Stage 2 and Stage 3", async () => {
+    const { exePath: stage1Exe, cleanup: cleanupBootstrap } =
+      await bootstrap.compileCompilerToNative();
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-fixpoint-"));
+
+    try {
+      const moduleNames: readonly CompilerTripModuleName[] = [
+        "Prelude",
+        "Nat",
+        "Bin",
+        "BundleSummary",
+        "Avl",
+        "Lexer",
+        "Parser",
+        "Core",
+        "DataEnv",
+        "Unparse",
+        "Bridge",
+        "Llvm",
+        "BundleParseSummary",
+        "BundleInventory",
+        "ModuleEnv",
+        "CoreToMini",
+        "MiniCore",
+        "MiniVerify",
+        "Anf",
+        "AnfLlvm",
+        "Compiler",
+      ];
+
+      const modules = await Promise.all(
+        moduleNames.map(async (name) => ({
+          name,
+          source: await readFile(compilerTripModuleSourcePath(name), "utf8"),
+        })),
+      );
+
+      const compilerBundleBytes = serializeTripBundleV1({
+        entryModule: "Compiler",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules,
+      });
+
+      // Stage-2 LLVM IR = compile using Stage-1 compiler executable
+      const stage2Ll = await bootstrap.runNativeCompiler(stage1Exe, compilerBundleBytes);
+
+      const stage2LlPath = join(tempDir, "stage2.ll");
+      await writeFile(stage2LlPath, stage2Ll, "utf8");
+
+      // Stage-2 compiler executable = compile Stage-2 LLVM IR to native
+      const stage2Exe = await compileLlvmToExecutable(stage2LlPath);
+
+      // Stage-3 LLVM IR = compile using Stage-2 compiler executable
+      const stage3Ll = await bootstrap.runNativeCompiler(stage2Exe, compilerBundleBytes);
+
+      // Assert that Stage 2 LLVM IR is byte-identical to Stage 3 LLVM IR!
+      assert.equal(stage2Ll, stage3Ll);
+    } finally {
+      await Promise.all([
+        cleanupBootstrap(),
+        rm(tempDir, { recursive: true, force: true }).catch(() => {}),
+      ]);
+    }
+  });
 });
+

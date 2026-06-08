@@ -18,5 +18,4 @@ void trip_obj_set_field(trip_obj_t *obj, uint64_t index, trip_word_t value);
 uint64_t trip_obj_tag(const trip_obj_t *obj);
 trip_word_t trip_obj_field(const trip_obj_t *obj, uint64_t index);
 trip_obj_t *trip_read_stdin_list_u8(void);
-
 #endif

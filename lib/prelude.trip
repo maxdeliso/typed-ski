@@ -184,13 +184,13 @@ poly snd =
         }
 
 poly not =
-  \b : Bool => b [Bool] false true
+  \b : Bool => if [Bool] b (\u : U8 => false) (\u : U8 => true)
 
 poly and =
-  \a : Bool => \b : Bool => a [Bool] b false
+  \a : Bool => \b : Bool => if [Bool] a (\u : U8 => b) (\u : U8 => false)
 
 poly or =
-  \a : Bool => \b : Bool => a [Bool] true b
+  \a : Bool => \b : Bool => if [Bool] a (\u : U8 => true) (\u : U8 => b)
 
 poly lteU8 =
   \a : U8 => \b : U8 => or (eqU8 a b) (ltU8 a b)
@@ -220,11 +220,11 @@ poly listIsEmpty =
 
 poly head =
   #A =>
-    \l : List A => l [A] (error [A]) (\h : A => \t : List A => h)
+    \l : List A => matchList [A] [A] l (error [A]) (\h : A => \t : List A => h)
 
 poly tail =
   #A =>
-    \l : List A => l [List A] ({A |}) (\h : A => \t : List A => t)
+    \l : List A => matchList [A] [List A] l ({A |}) (\h : A => \t : List A => t)
 
 poly rec appendAcc =
   #A =>

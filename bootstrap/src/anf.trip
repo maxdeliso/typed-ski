@@ -190,113 +190,109 @@ poly trivialAt =
     \atom : AnfExpr => \pos : Pos => MkNormResult state {Binding |} atom
 
 poly rec atomizeArgs =
-  \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
-    \state : Bin =>
-      \args : List MiniExpr =>
-        \accBinds : List Binding =>
-          matchList
-            [MiniExpr]
-            [AtomList]
-            args
-            (MkAtomList state accBinds {AnfExpr |})
-            (
-              \h : MiniExpr =>
-                \t : List MiniExpr =>
-                  do [AtomList] {
-                    MkNormResult s1 hBinds hAtom = (normFn state h PAtom)
-                    combined = append [Binding] hBinds accBinds
-                    MkAtomList s2 finalBinds restAtoms = (atomizeArgs normFn s1 t combined)
-                    return
-                      MkAtomList
-                      s2
-                      finalBinds
-                      (cons [AnfExpr] hAtom restAtoms)
-                  }
-            )
+  \state : Bin =>
+    \args : List MiniExpr =>
+      \accBinds : List Binding =>
+        matchList
+          [MiniExpr]
+          [AtomList]
+          args
+          (MkAtomList state accBinds {AnfExpr |})
+          (
+            \h : MiniExpr =>
+              \t : List MiniExpr =>
+                do [AtomList] {
+                  MkNormResult s1 hBinds hAtom = (norm state h PAtom)
+                  combined = append [Binding] hBinds accBinds
+                  MkAtomList s2 finalBinds restAtoms = (atomizeArgs s1 t combined)
+                  return
+                    MkAtomList
+                    s2
+                    finalBinds
+                    (cons [AnfExpr] hAtom restAtoms)
+                }
+          )
 
 poly rec normArms =
-  \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
-    \state : Bin =>
-      \arms : List MiniExpr =>
-        \acc : List AnfExpr =>
-          matchList
-            [MiniExpr]
-            [ArmsRes]
-            arms
-            (MkArmsRes state {AnfExpr |})
-            (
-              \h : MiniExpr =>
-                \t : List MiniExpr =>
-                  do [ArmsRes] {
-                    MkNormResult s1 _ hExpr = (normFn state h PTail)
-                    MkArmsRes s2 restArms = (normArms normFn s1 t acc)
-                    return MkArmsRes s2 (cons [AnfExpr] hExpr restArms)
-                  }
-            )
+  \state : Bin =>
+    \arms : List MiniExpr =>
+      \acc : List AnfExpr =>
+        matchList
+          [MiniExpr]
+          [ArmsRes]
+          arms
+          (MkArmsRes state {AnfExpr |})
+          (
+            \h : MiniExpr =>
+              \t : List MiniExpr =>
+                do [ArmsRes] {
+                  MkNormResult s1 _ hExpr = (norm state h PTail)
+                  MkArmsRes s2 restArms = (normArms s1 t acc)
+                  return MkArmsRes s2 (cons [AnfExpr] hExpr restArms)
+                }
+          )
 
 poly normWriteOneCall =
-  \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
-    \state : Bin =>
-      \args : List MiniExpr =>
-        \pos : Pos =>
-          matchList
-            [MiniExpr]
-            [NormResult]
-            args
-            (MkNormResult state {Binding |} (AE_Call "writeOne" {AnfExpr |}))
-            (
-              \byte : MiniExpr =>
-                \r1 : List MiniExpr =>
-                  matchList
-                    [MiniExpr]
-                    [NormResult]
-                    r1
-                    (
-                      MkNormResult
-                        state
-                        {Binding |}
-                        (AE_Call "writeOne" {AnfExpr |})
-                    )
-                    (
-                      \cont : MiniExpr =>
-                        \r2 : List MiniExpr =>
-                          do [NormResult] {
-                            MkNormResult s1 byteBinds byteAtom = (normFn state byte PAtom)
-                            MkNormResult s2 contBinds contExpr = (normFn s1 cont PVal)
-                            combined = append [Binding] contBinds byteBinds
-                            return
-                              wrapValue
-                              s2
-                              combined
-                              (AE_Call "writeOne" {AnfExpr | byteAtom contExpr})
-                              pos
-                          }
-                    )
-            )
+  \state : Bin =>
+    \args : List MiniExpr =>
+      \pos : Pos =>
+        matchList
+          [MiniExpr]
+          [NormResult]
+          args
+          (MkNormResult state {Binding |} (AE_Call "writeOne" {AnfExpr |}))
+          (
+            \byte : MiniExpr =>
+              \r1 : List MiniExpr =>
+                matchList
+                  [MiniExpr]
+                  [NormResult]
+                  r1
+                  (
+                    MkNormResult
+                      state
+                      {Binding |}
+                      (AE_Call "writeOne" {AnfExpr |})
+                  )
+                  (
+                    \cont : MiniExpr =>
+                      \r2 : List MiniExpr =>
+                        do [NormResult] {
+                          MkNormResult s1 byteBinds byteAtom = (norm state byte PAtom)
+                          MkNormResult s2 contBinds contExpr = (norm s1 cont PVal)
+                          combined = append [Binding] contBinds byteBinds
+                          return
+                            wrapValue
+                            s2
+                            combined
+                            (AE_Call "writeOne" {AnfExpr | byteAtom contExpr})
+                            pos
+                        }
+                  )
+          )
 
 poly normReadOneCall =
-  \normFn : Bin -> MiniExpr -> Pos -> NormResult =>
-    \state : Bin =>
-      \args : List MiniExpr =>
-        \pos : Pos =>
-          matchList
-            [MiniExpr]
-            [NormResult]
-            args
-            (MkNormResult state {Binding |} (AE_Call "readOne" {AnfExpr |}))
-            (
-              \cont : MiniExpr =>
-                \r1 : List MiniExpr =>
-                  do [NormResult] {
-                    MkNormResult s1 contBinds contExpr = (normFn state cont PVal)
-                    return
-                      wrapValue
-                      s1
-                      contBinds
-                      (AE_Call "readOne" {AnfExpr | contExpr})
-                      pos
-                  }
-            )
+  \state : Bin =>
+    \args : List MiniExpr =>
+      \pos : Pos =>
+        matchList
+          [MiniExpr]
+          [NormResult]
+          args
+          (MkNormResult state {Binding |} (AE_Call "readOne" {AnfExpr |}))
+          (
+            \cont : MiniExpr =>
+              \r1 : List MiniExpr =>
+                do [NormResult] {
+                  MkNormResult s1 contBinds contExpr = (norm state cont PVal)
+                  return
+                    wrapValue
+                    s1
+                    contBinds
+                    (AE_Call "readOne" {AnfExpr | contExpr})
+                    pos
+                }
+          )
 
 poly rec norm =
   \state : Bin =>
@@ -312,22 +308,22 @@ poly rec norm =
             }
           | ME_Call f args =>
             if [NormResult] (or (eqListU8 f "writeOne") (eqListU8 f "Prelude.writeOne"))
-              (\u : U8 => normWriteOneCall norm state args pos)
+              (\u : U8 => normWriteOneCall state args pos)
               (
                 \u : U8 =>
                   if [NormResult] (or (eqListU8 f "readOne") (eqListU8 f "Prelude.readOne"))
-                    (\u2 : U8 => normReadOneCall norm state args pos)
+                    (\u2 : U8 => normReadOneCall state args pos)
                     (
                       \u2 : U8 =>
                         do [NormResult] {
-                          MkAtomList s1 binds atoms = (atomizeArgs norm state args {Binding |})
+                          MkAtomList s1 binds atoms = (atomizeArgs state args {Binding |})
                           return wrapValue s1 binds (AE_Call f atoms) pos
                         }
                     )
               )
           | ME_Con tag total arity fields =>
             do [NormResult] {
-              MkAtomList s1 binds atoms = (atomizeArgs norm state fields {Binding |})
+              MkAtomList s1 binds atoms = (atomizeArgs state fields {Binding |})
               return wrapValue s1 binds (AE_Con tag total arity atoms) pos
             }
           | ME_Let name val body =>
@@ -352,7 +348,7 @@ poly rec norm =
           | ME_Match scrut arms =>
             do [NormResult] {
               MkNormResult s1 scrBinds scrAtom = (norm state scrut PAtom)
-              MkArmsRes s2 normedArms = (normArms norm s1 arms {AnfExpr |})
+              MkArmsRes s2 normedArms = (normArms s1 arms {AnfExpr |})
               return wrapValue s2 scrBinds (AE_Case scrAtom normedArms) pos
             }
         }

@@ -541,7 +541,7 @@ poly parseBundleSummary =
     do [Result (List U8) BundleSummary] {
       magicRes <- readLine input
       MkLine magic afterMagic = magicRes
-      assert (eqListU8 magic "TRIP-BUNDLE-V1") else "bad magic"
+      assert (eqListU8 magic "TRIP-BUNDLE-V1") else (append [U8] "bad magic: " magic)
       entryLineRes <- readLine afterMagic
       MkLine entryLine afterEntry = entryLineRes
       entry <- requireEntry entryLine

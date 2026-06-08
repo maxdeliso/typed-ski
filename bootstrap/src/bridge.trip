@@ -46,11 +46,11 @@ import Prelude eqU8
 
 import Prelude ltU8
 
-import Avl empty
+import DataEnv BridgeAvl
 
-import Avl lookup
+import DataEnv Empty
 
-import Avl insert
+import DataEnv Node
 
 import Parser Expr
 
@@ -363,10 +363,192 @@ poly natToCore =
               (\u : U8 => Ok [List U8] [Core] (buildBinLiteralCore trimmed))
       )
 
+poly height =
+  #V =>
+    \t : BridgeAvl V =>
+      match t [U8] {
+        | Empty => #u8(0)
+        | Node _ _ _ h _ => h
+      }
+
+poly maxU8 =
+  \a : U8 =>
+    \b : U8 =>
+      if [U8] (ltU8 a b) (\u : Bin => b) (\u : Bin => a)
+
+poly gtU8 =
+  \a : U8 =>
+    \b : U8 =>
+      ltU8 b a
+
+poly lteU8 =
+  \a : U8 =>
+    \b : U8 =>
+      or (ltU8 a b) (eqU8 a b)
+
+poly mkNode =
+  #V =>
+    \l : BridgeAvl V =>
+      \k : List U8 =>
+        \v : V =>
+          \r : BridgeAvl V =>
+            Node
+              [V]
+              l
+              k
+              v
+              (addU8 (maxU8 (height [V] l) (height [V] r)) #u8(1))
+              r
+
+poly rotateLeft =
+  #V =>
+    \t : BridgeAvl V =>
+      match t [BridgeAvl V] {
+        | Empty => Empty [V]
+        | Node l k v _ r =>
+          match r [BridgeAvl V] {
+            | Empty => mkNode [V] l k v r
+            | Node rl rk rv _ rr => mkNode [V] (mkNode [V] l k v rl) rk rv rr
+          }
+      }
+
+poly rotateRight =
+  #V =>
+    \t : BridgeAvl V =>
+      match t [BridgeAvl V] {
+        | Empty => Empty [V]
+        | Node l k v _ r =>
+          match l [BridgeAvl V] {
+            | Empty => mkNode [V] l k v r
+            | Node ll lk lv _ lr => mkNode [V] ll lk lv (mkNode [V] lr k v r)
+          }
+      }
+
+poly balance =
+  #V =>
+    \t : BridgeAvl V =>
+      match t [BridgeAvl V] {
+        | Empty => Empty [V]
+        | Node l k v _ r =>
+          let hl = height [V] l in
+          let hr = height [V] r in
+          if [BridgeAvl V] (gtU8 hl (addU8 hr #u8(1)))
+            (
+              \u : Bin =>
+                match l [BridgeAvl V] {
+                  | Empty => mkNode [V] l k v r
+                  | Node ll _ _ _ lr =>
+                    if [BridgeAvl V] (lteU8 (height [V] lr) (height [V] ll))
+                      (
+                        \u : Bin => rotateRight [V] (mkNode [V] l k v r)
+                      )
+                      (
+                        \u : Bin =>
+                          rotateRight
+                            [V]
+                            (mkNode [V] (rotateLeft [V] l) k v r)
+                      )
+                }
+            )
+            (
+              \u : Bin =>
+                if [BridgeAvl V] (gtU8 hr (addU8 hl #u8(1)))
+                  (
+                    \u : Bin =>
+                      match r [BridgeAvl V] {
+                        | Empty => mkNode [V] l k v r
+                        | Node rl _ _ _ rr =>
+                          if [BridgeAvl V] (lteU8 (height [V] rl) (height [V] rr))
+                            (
+                              \u : Bin => rotateLeft [V] (mkNode [V] l k v r)
+                            )
+                            (
+                              \u : Bin =>
+                                rotateLeft
+                                  [V]
+                                  (
+                                    mkNode
+                                      [V]
+                                      l
+                                      k
+                                      v
+                                      (rotateRight [V] r)
+                                  )
+                            )
+                      }
+                  )
+                  (\u : Bin => mkNode [V] l k v r)
+            )
+      }
+
+poly rec bridgeAvlLookup =
+  #V =>
+    \key : List U8 =>
+      \t : BridgeAvl V =>
+        match t [Maybe V] {
+          | Empty => None [V]
+          | Node l nk nv _ r =>
+            let le = lteListU8 key nk in
+            let ge = lteListU8 nk key in
+            if [Maybe V] (and le ge)
+              (\u : Bin => Some [V] nv)
+              (
+                \u : Bin =>
+                  if [Maybe V] le
+                    (\u : Bin => bridgeAvlLookup [V] key l)
+                    (\u : Bin => bridgeAvlLookup [V] key r)
+              )
+        }
+
+poly rec bridgeAvlInsert =
+  #V =>
+    \key : List U8 =>
+      \value : V =>
+        \t : BridgeAvl V =>
+          match t [BridgeAvl V] {
+            | Empty =>
+              mkNode [V] (Empty [V]) key value (Empty [V])
+            | Node l nk nv _ r =>
+              let le = lteListU8 key nk in
+              let ge = lteListU8 nk key in
+              if [BridgeAvl V] (and le ge)
+                (\u : Bin => mkNode [V] l nk value r)
+                (
+                  \u : Bin =>
+                    if [BridgeAvl V] le
+                      (
+                        \u : Bin =>
+                          balance
+                            [V]
+                            (
+                              mkNode
+                                [V]
+                                (bridgeAvlInsert [V] key value l)
+                                nk
+                                nv
+                                r
+                            )
+                      )
+                      (
+                        \u : Bin =>
+                          balance
+                            [V]
+                            (
+                              mkNode
+                                [V]
+                                l
+                                nk
+                                nv
+                                (bridgeAvlInsert [V] key value r)
+                            )
+                      )
+                )
+          }
+
 poly resolveCoreName =
   \dEnv : DataEnv =>
     \name : List U8 =>
-      match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Core] {
+      match (bridgeAvlLookup [CtorInfo] name (datEnvCtors dEnv)) [Core] {
         | Some info =>
           Cr_Ctor (ctorTag info) (ctorTotal info) (ctorArity info)
         | None => Cr_Var name
@@ -386,7 +568,7 @@ poly rec findCtorInfoInArms =
               do [Maybe CtorInfo] {
                 P_Ctor name args = (fst [Pattern] [Expr] h)
                 return
-                match (lookup [List U8] [CtorInfo] lteListU8 name (datEnvCtors dEnv)) [Maybe CtorInfo] {
+                match (bridgeAvlLookup [CtorInfo] name (datEnvCtors dEnv)) [Maybe CtorInfo] {
                   | Some info => Some [CtorInfo] info
                   | None => findCtorInfoInArms dEnv t
                 }
@@ -438,26 +620,25 @@ poly rec wrapInLambdas =
         (\h : List U8 => \t : List (List U8) => Cr_Lam h (wrapInLambdas t body))
 
 poly rec elaborateArms =
-  \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
-    \dEnv : DataEnv =>
-      \arms : List (Pattern, Expr) =>
-        matchList
-          [(Pattern, Expr)]
-          [Result (List U8) (List Core)]
-          arms
-          (Ok [List U8] [List Core] {Core |})
-          (
-            \h : (Pattern, Expr) =>
-              \t : List (Pattern, Expr) =>
-                do [Result (List U8) (List Core)] {
-                  MkPair pat body = h
-                  P_Ctor name args = pat
-                  coreBody <- (elaborate dEnv body)
-                  wrapped = wrapInLambdas args coreBody
-                  rest <- (elaborateArms elaborate dEnv t)
-                  return Ok [List U8] [List Core] (cons [Core] wrapped rest)
-                }
-          )
+  \dEnv : DataEnv =>
+    \arms : List (Pattern, Expr) =>
+      matchList
+        [(Pattern, Expr)]
+        [Result (List U8) (List Core)]
+        arms
+        (Ok [List U8] [List Core] {Core |})
+        (
+          \h : (Pattern, Expr) =>
+            \t : List (Pattern, Expr) =>
+              do [Result (List U8) (List Core)] {
+                MkPair pat body = h
+                P_Ctor name args = pat
+                coreBody <- (elaborateExpr dEnv body)
+                wrapped = wrapInLambdas args coreBody
+                rest <- (elaborateArms dEnv t)
+                return Ok [List U8] [List Core] (cons [Core] wrapped rest)
+              }
+        )
 
 poly rec lengthList =
   #A =>
@@ -510,7 +691,7 @@ poly rec validateEachArm =
                   )
                   (
                     \u : U8 =>
-                      match (lookup [List U8] [CtorInfo] lteListU8 cName (datEnvCtors dEnv)) [Result (List U8) Bool] {
+                      match (bridgeAvlLookup [CtorInfo] cName (datEnvCtors dEnv)) [Result (List U8) Bool] {
                         | None =>
                           Err [List U8] [Bool] "Constructor metadata not found"
                         | Some info =>
@@ -552,43 +733,42 @@ poly rec validateExhaustiveness =
         )
 
 poly elaborateMatchWith =
-  \elaborate : DataEnv -> Expr -> Result (List U8) Core =>
-    \dEnv : DataEnv =>
-      \scrut : Expr =>
-        \arms : List (Pattern, Expr) =>
-          do [Result (List U8) Core] {
-            coreScrut <- (elaborate dEnv scrut)
-            return
-            match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
-              | None =>
-                let firstCtorName = match (fst [Pattern] [Expr] (matchList [(Pattern, Expr)] [(Pattern, Expr)] arms {Pattern, Expr | (P_Ctor "NO_ARMS" {List U8 |}), (E_Var "dummy")} (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => h))) [List U8] { | P_Ctor cn args => cn} in
-                Err
-                  [List U8]
-                  [Core]
-                  (
-                    concat
-                      [U8]
-                      {List U8 |
-                        "Could not identify ADT for match: "
-                        firstCtorName
-                      }
-                  )
-              | Some info =>
-                let adtName = ctorAdtName info in
-                match (lookup [List U8] [ADTInfo] lteListU8 adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
-                  | None => Err [List U8] [Core] "ADT metadata not found"
-                  | Some adtInfo =>
-                    let expectedNames = adtCtors adtInfo in
-                    do [Result (List U8) Core] {
-                      valEach <- (validateEachArm dEnv expectedNames arms)
-                      valExhaustive <- (validateExhaustiveness expectedNames arms)
-                      sortedArms = sortArms expectedNames arms
-                      coreArms <- (elaborateArms elaborate dEnv sortedArms)
-                      return Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
+  \dEnv : DataEnv =>
+    \scrut : Expr =>
+      \arms : List (Pattern, Expr) =>
+        do [Result (List U8) Core] {
+          coreScrut <- (elaborateExpr dEnv scrut)
+          return
+          match (findCtorInfoInArms dEnv arms) [Result (List U8) Core] {
+            | None =>
+              let firstCtorName = match (fst [Pattern] [Expr] (matchList [(Pattern, Expr)] [(Pattern, Expr)] arms {Pattern, Expr | (P_Ctor "NO_ARMS" {List U8 |}), (E_Var "dummy")} (\h : (Pattern, Expr) => \t : List (Pattern, Expr) => h))) [List U8] { | P_Ctor cn args => cn} in
+              Err
+                [List U8]
+                [Core]
+                (
+                  concat
+                    [U8]
+                    {List U8 |
+                      "Could not identify ADT for match: "
+                      firstCtorName
                     }
-                }
-            }
+                )
+            | Some info =>
+              let adtName = ctorAdtName info in
+              match (bridgeAvlLookup [ADTInfo] adtName (datEnvAdts dEnv)) [Result (List U8) Core] {
+                | None => Err [List U8] [Core] "ADT metadata not found"
+                | Some adtInfo =>
+                  let expectedNames = adtCtors adtInfo in
+                  do [Result (List U8) Core] {
+                    valEach <- (validateEachArm dEnv expectedNames arms)
+                    valExhaustive <- (validateExhaustiveness expectedNames arms)
+                    sortedArms = sortArms expectedNames arms
+                    coreArms <- (elaborateArms dEnv sortedArms)
+                    return Ok [List U8] [Core] (Cr_Match coreScrut coreArms)
+                  }
+              }
           }
+        }
 
 poly rec elaborateExpr =
   \dEnv : DataEnv =>
@@ -613,7 +793,7 @@ poly rec elaborateExpr =
             return Ok [List U8] [Core] (Cr_App (Cr_Lam name coreBody) coreVal)
           }
         | E_Nat digits => natToCore digits
-        | E_Match scrut arms => elaborateMatchWith elaborateExpr dEnv scrut arms
+        | E_Match scrut arms => elaborateMatchWith dEnv scrut arms
       }
 
 poly ctorCountOverflowError =
@@ -655,7 +835,7 @@ poly rec populateDataEnv =
                     let info = MkCtorInfo idx total arity adtName in
                     match datEnv [DataEnv] {
                       | MkDataEnv cEnv aEnv =>
-                        let nextDatEnv = MkDataEnv (insert [List U8] [CtorInfo] lteListU8 ctorName info cEnv) aEnv in
+                        let nextDatEnv = MkDataEnv (bridgeAvlInsert [CtorInfo] ctorName info cEnv) aEnv in
                         populateDataEnv
                           adtName
                           t
@@ -733,7 +913,7 @@ poly rec elaborateToCoreRec =
                     do [Result (List U8) (List ((List U8), Core))] {
                       MkDataEnv cEnv aEnv = (populateDataEnv name ctors total #u8(0) dEnv)
                       adtInfo =
-                      MkADTInfo (getCtorNames ctors) nextDEnv = MkDataEnv cEnv (insert [List U8] [ADTInfo] lteListU8 name adtInfo aEnv)
+                      MkADTInfo (getCtorNames ctors) nextDEnv = MkDataEnv cEnv (bridgeAvlInsert [ADTInfo] name adtInfo aEnv)
                       return elaborateToCoreRec nextDEnv t
                     }
                   }
@@ -747,14 +927,14 @@ poly rec elaborateToCoreRec =
         )
 
 poly seededDataEnv =
-  let c0 = empty [List U8] [CtorInfo] in
-  let c1 = insert [List U8] [CtorInfo] lteListU8 "Prelude.false" (MkCtorInfo #u8(0) #u8(2) #u8(0) "Prelude.Bool") c0 in
-  let c2 = insert [List U8] [CtorInfo] lteListU8 "Prelude.true" (MkCtorInfo #u8(1) #u8(2) #u8(0) "Prelude.Bool") c1 in
-  let c3 = insert [List U8] [CtorInfo] lteListU8 "Prelude.nil" (MkCtorInfo #u8(0) #u8(2) #u8(0) "Prelude.List") c2 in
-  let c4 = insert [List U8] [CtorInfo] lteListU8 "Prelude.cons" (MkCtorInfo #u8(1) #u8(2) #u8(2) "Prelude.List") c3 in
-  let a0 = empty [List U8] [ADTInfo] in
-  let a1 = insert [List U8] [ADTInfo] lteListU8 "Prelude.Bool" (MkADTInfo {List U8 | "Prelude.false" "Prelude.true"}) a0 in
-  let a2 = insert [List U8] [ADTInfo] lteListU8 "Prelude.List" (MkADTInfo {List U8 | "Prelude.nil" "Prelude.cons"}) a1 in
+  let c0 = Empty [CtorInfo] in
+  let c1 = bridgeAvlInsert [CtorInfo] "Prelude.false" (MkCtorInfo #u8(0) #u8(2) #u8(0) "Prelude.Bool") c0 in
+  let c2 = bridgeAvlInsert [CtorInfo] "Prelude.true" (MkCtorInfo #u8(1) #u8(2) #u8(0) "Prelude.Bool") c1 in
+  let c3 = bridgeAvlInsert [CtorInfo] "Prelude.nil" (MkCtorInfo #u8(0) #u8(2) #u8(0) "Prelude.List") c2 in
+  let c4 = bridgeAvlInsert [CtorInfo] "Prelude.cons" (MkCtorInfo #u8(1) #u8(2) #u8(2) "Prelude.List") c3 in
+  let a0 = Empty [ADTInfo] in
+  let a1 = bridgeAvlInsert [ADTInfo] "Prelude.Bool" (MkADTInfo {List U8 | "Prelude.false" "Prelude.true"}) a0 in
+  let a2 = bridgeAvlInsert [ADTInfo] "Prelude.List" (MkADTInfo {List U8 | "Prelude.nil" "Prelude.cons"}) a1 in
   MkDataEnv c4 a2
 
 poly elaborateProgramToCore =

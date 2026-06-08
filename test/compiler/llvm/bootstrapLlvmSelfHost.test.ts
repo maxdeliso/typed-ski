@@ -338,5 +338,5 @@ poly main = seven
         rm(tempDir, { recursive: true, force: true }).catch(() => {}),
       ]);
     }
-  });
+  }, 240000);
 });

@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "../../util/test_shim.ts";
-import { compileTripAndRun } from "./nativeHarness.ts";
+import { compileTripAndRun, macosSdkArgs } from "./nativeHarness.ts";
 import { findLocalClangPath } from "../../../lib/shared/clangPath.ts";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 
@@ -27,6 +27,7 @@ async function runRuntimeCTest(cSource: string) {
     join(workspaceRoot, "runtime/trip/trip_runtime.c"),
     "-I",
     join(workspaceRoot, "runtime/trip"),
+    ...macosSdkArgs(),
     "-o",
     exePath,
   ];

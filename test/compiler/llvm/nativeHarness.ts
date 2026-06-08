@@ -30,7 +30,7 @@ export interface HarnessOptions extends CompileTripSourceToLlvmOptions {
 
 const CLANG = process.env["TYPED_SKI_CLANG"] ?? findLocalClangPath();
 
-function macosSdkArgs(): string[] {
+export function macosSdkArgs(): string[] {
   if (process.platform !== "darwin") {
     return [];
   }

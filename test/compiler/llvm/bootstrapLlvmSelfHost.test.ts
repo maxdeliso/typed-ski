@@ -226,7 +226,10 @@ poly main = seven
       });
 
       // Stage-2 LLVM IR = compile using Stage-1 compiler executable
-      const stage2Ll = await bootstrap.runNativeCompiler(stage1Exe, compilerBundleBytes);
+      const stage2Ll = await bootstrap.runNativeCompiler(
+        stage1Exe,
+        compilerBundleBytes,
+      );
 
       const stage2LlPath = join(tempDir, "stage2.ll");
       await writeFile(stage2LlPath, stage2Ll, "utf8");
@@ -235,7 +238,10 @@ poly main = seven
       const stage2Exe = await compileLlvmToExecutable(stage2LlPath);
 
       // Stage-3 LLVM IR = compile using Stage-2 compiler executable
-      const stage3Ll = await bootstrap.runNativeCompiler(stage2Exe, compilerBundleBytes);
+      const stage3Ll = await bootstrap.runNativeCompiler(
+        stage2Exe,
+        compilerBundleBytes,
+      );
 
       // Assert that Stage 2 LLVM IR is byte-identical to Stage 3 LLVM IR!
       assert.equal(stage2Ll, stage3Ll);
@@ -247,4 +253,3 @@ poly main = seven
     }
   });
 });
-

@@ -165,7 +165,8 @@ export const bootstrap = {
     cleanup: () => Promise<void>;
   }> {
     const tempDir = await mkdtemp(join(tmpdir(), "trip-compiler-bootstrap-"));
-    const cleanup = () => rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    const cleanup = () =>
+      rm(tempDir, { recursive: true, force: true }).catch(() => {});
 
     try {
       const moduleNames: readonly CompilerTripModuleName[] = [

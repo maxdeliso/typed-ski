@@ -11,7 +11,10 @@ import {
 } from "../test/compiler/minicoreAnfHarness.ts";
 import { readFileSync } from "node:fs";
 import { isKnownCompilerTripModule } from "../lib/compiler/bootstrapModules.ts";
-import { serializeTripBundleV1, summarizeTripBundleV1ParsedModules } from "../lib/compiler/index.ts";
+import {
+  serializeTripBundleV1,
+  summarizeTripBundleV1ParsedModules,
+} from "../lib/compiler/index.ts";
 
 function realBootstrapModuleSource(name: string): string {
   if (!isKnownCompilerTripModule(name)) {

@@ -243,8 +243,95 @@ poly main = seven
         compilerBundleBytes,
       );
 
+      const stage3LlPath = join(tempDir, "stage3.ll");
+      await writeFile(stage3LlPath, stage3Ll, "utf8");
+
+      // Stage-3 compiler executable = compile Stage-3 LLVM IR to native
+      const stage3Exe = await compileLlvmToExecutable(stage3LlPath);
+
+      // Stage-4 LLVM IR = compile using Stage-3 compiler executable
+      const stage4Ll = await bootstrap.runNativeCompiler(
+        stage3Exe,
+        compilerBundleBytes,
+      );
+
       // Assert that Stage 2 LLVM IR is byte-identical to Stage 3 LLVM IR!
       assert.equal(stage2Ll, stage3Ll);
+
+      // Assert that Stage 3 LLVM IR is byte-identical to Stage 4 LLVM IR (no 2-cycle oscillation)!
+      assert.equal(stage3Ll, stage4Ll);
+
+      // --- Correctness Anchors compiled and executed via Stage 3 compiler ---
+      const preludeSource = await readFile(
+        join(workspaceRoot, "lib", "prelude.trip"),
+        "utf8",
+      );
+
+      const helloBundleBytes = serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules: [
+          { name: "Main", source: HELLO_SOURCE },
+          { name: "Prelude", source: preludeSource },
+        ],
+      });
+
+      console.log("Compiling hello correctness anchor via stage-3 compiler...");
+      const helloStage3Ll = await bootstrap.runNativeCompiler(
+        stage3Exe,
+        helloBundleBytes,
+      );
+      assert.ok(!helloStage3Ll.startsWith("ERR:"), helloStage3Ll);
+      const helloStage3LlPath = join(tempDir, "hello.stage3.ll");
+      await writeFile(helloStage3LlPath, helloStage3Ll, "utf8");
+
+      const helloStage3Exe = await compileLlvmToExecutable(helloStage3LlPath);
+      const helloResult = runExecutable(helloStage3Exe);
+      assert.equal(helloResult.status, 0);
+      assert.equal(helloResult.stdout, "Hello, world!\n");
+
+      // Multi-module correctness check using Stage 3 compiler
+      const multiModuleBundle = serializeTripBundleV1({
+        entryModule: "App",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules: [
+          {
+            name: "Lib",
+            source: `module Lib
+export seven
+poly seven = #u8(7)
+`,
+          },
+          {
+            name: "App",
+            source: `module App
+import Lib seven
+export main
+poly main = seven
+`,
+          },
+        ],
+      });
+
+      console.log(
+        "Compiling multi-module correctness anchor via stage-3 compiler...",
+      );
+      const multiModuleStage3Ll = await bootstrap.runNativeCompiler(
+        stage3Exe,
+        multiModuleBundle,
+      );
+      assert.ok(!multiModuleStage3Ll.startsWith("ERR:"), multiModuleStage3Ll);
+      const multiModuleStage3LlPath = join(tempDir, "multi-module.stage3.ll");
+      await writeFile(multiModuleStage3LlPath, multiModuleStage3Ll, "utf8");
+
+      const multiModuleStage3Exe = await compileLlvmToExecutable(
+        multiModuleStage3LlPath,
+      );
+      const multiModuleResult = runExecutable(multiModuleStage3Exe);
+      assert.equal(multiModuleResult.status, 0);
+      assert.equal(multiModuleResult.stdout, "");
     } finally {
       await Promise.all([
         cleanupBootstrap(),

@@ -929,11 +929,20 @@ function wordFromValue(
     case "i64":
       return { lines: [], value: rendered };
     case "i8":
-    case "i1":
       return {
-        lines: [`${word} = zext ${type} ${rendered} to i64`],
+        lines: [`${word} = zext i8 ${rendered} to i64`],
         value: word,
       };
+    case "i1": {
+      const zext = `%${sanitizeLlvmIdentifier(`${prefix}_zext`)}`;
+      return {
+        lines: [
+          `${zext} = zext i1 ${rendered} to i64`,
+          `${word} = add i64 ${zext}, 1`,
+        ],
+        value: word,
+      };
+    }
     case "ptr":
       return {
         lines: [`${word} = ptrtoint ptr ${rendered} to i64`],
@@ -953,8 +962,13 @@ function valueFromWord(
       return [`${valueName} = add i64 ${rawName}, 0`];
     case "i8":
       return [`${valueName} = trunc i64 ${rawName} to i8`];
-    case "i1":
-      return [`${valueName} = trunc i64 ${rawName} to i1`];
+    case "i1": {
+      const sub = `%${sanitizeLlvmIdentifier(`${valueName}_sub`)}`;
+      return [
+        `${sub} = sub i64 ${rawName}, 1`,
+        `${valueName} = trunc i64 ${sub} to i1`,
+      ];
+    }
     case "ptr":
       return [`${valueName} = inttoptr i64 ${rawName} to ptr`];
   }

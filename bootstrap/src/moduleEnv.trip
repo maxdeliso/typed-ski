@@ -1,5 +1,13 @@
 module ModuleEnv
 
+-- DETERMINISM CONTRACT WARNING:
+-- The self-hosted compiler's fixpoint depends strictly on determinism of the output.
+-- Any traversal or iteration over ModuleEnv components (like definitions, modules,
+-- imports, exports, and constructors) must process elements in a stable, deterministic
+-- order (e.g. source file list order, or sorted alphabetically) to prevent compiler
+-- output divergence. Avoid relying on unstable sorting or iteration orders.
+
+
 import Prelude List
 
 import Prelude nil

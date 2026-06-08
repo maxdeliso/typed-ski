@@ -54,8 +54,19 @@ void trip_obj_set_field(trip_obj_t *obj, uint64_t index, trip_word_t value) {
 }
 
 uint64_t trip_obj_tag(const trip_obj_t *obj) {
+  if (obj == NULL) {
+    fprintf(stderr, "CRITICAL: obj is NULL in trip_obj_tag\n");
+    abort();
+  }
+  if ((uintptr_t)obj == 1) {
+    return 0;
+  }
+  if ((uintptr_t)obj == 2) {
+    return 1;
+  }
   if ((uintptr_t)obj < 256) {
-    return (uint64_t)(uintptr_t)obj;
+    fprintf(stderr, "CRITICAL: Unexpected small pointer (%p) in trip_obj_tag\n", (void*)obj);
+    abort();
   }
 #ifdef _WIN32
   if (IsBadReadPtr(obj, sizeof(trip_obj_t))) {
@@ -63,14 +74,14 @@ uint64_t trip_obj_tag(const trip_obj_t *obj) {
     abort();
   }
 #endif
-  if (obj == NULL) {
-    fprintf(stderr, "CRITICAL: obj is NULL in trip_obj_tag\n");
-    abort();
-  }
   return obj->tag;
 }
 
 trip_word_t trip_obj_field(const trip_obj_t *obj, uint64_t index) {
+  if (obj == NULL) {
+    fprintf(stderr, "CRITICAL: obj is NULL in trip_obj_field\n");
+    abort();
+  }
   if ((uintptr_t)obj < 256) {
     fprintf(stderr, "CRITICAL: obj < 256 (%p) in trip_obj_field (index=%llu)\n", (void*)obj, (unsigned long long)index);
     abort();
@@ -81,8 +92,8 @@ trip_word_t trip_obj_field(const trip_obj_t *obj, uint64_t index) {
     abort();
   }
 #endif
-  if (obj == NULL || index >= obj->arity) {
-    fprintf(stderr, "CRITICAL: Null or index %llu >= arity %llu in trip_obj_field (obj=%p, tag=%llu)\n", (unsigned long long)index, obj ? (unsigned long long)obj->arity : 0, (void*)obj, obj ? (unsigned long long)obj->tag : 0);
+  if (index >= obj->arity) {
+    fprintf(stderr, "CRITICAL: Index %llu >= arity %llu in trip_obj_field (obj=%p, tag=%llu)\n", (unsigned long long)index, (unsigned long long)obj->arity, (void*)obj, (unsigned long long)obj->tag);
     abort();
   }
   return obj->fields[index];

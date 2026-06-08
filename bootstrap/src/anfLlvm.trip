@@ -587,7 +587,10 @@ poly emitEqU8 =
                 dest
                 "_t2\n"
               }
-              ext = concat [U8] {List U8 | "  " dest " = zext i1 " dest "_cmp to i64\n"}
+              ext = concat [U8] {List U8 |
+                "  " dest "_zext = zext i1 " dest "_cmp to i64\n"
+                "  " dest " = add i64 " dest "_zext, 1\n"
+              }
               return
                 Ok
                 [List U8]
@@ -626,7 +629,10 @@ poly emitLtU8 =
                 dest
                 "_t2\n"
               }
-              ext = concat [U8] {List U8 | "  " dest " = zext i1 " dest "_cmp to i64\n"}
+              ext = concat [U8] {List U8 |
+                "  " dest "_zext = zext i1 " dest "_cmp to i64\n"
+                "  " dest " = add i64 " dest "_zext, 1\n"
+              }
               return
                 Ok
                 [List U8]

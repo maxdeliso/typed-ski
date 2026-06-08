@@ -1,5 +1,13 @@
 module Compiler
 
+-- DETERMINISM CONTRACT WARNING:
+-- The self-hosted compiler's fixpoint depends strictly on determinism of the output.
+-- The symbol table collection, module environment traversal, and file list iteration
+-- must always execute in a stable, deterministic order. Any change to iteration order
+-- (e.g. from hash maps or unsorted collections) will break the byte-identical self-host
+-- LLVM IR fixpoint.
+
+
 import Prelude List
 
 import Prelude nil

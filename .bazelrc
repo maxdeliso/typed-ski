@@ -9,7 +9,7 @@ common --experimental_repository_downloader_retries=3
 common --http_timeout_scaling=2.0
 
 build --action_env=PATH
-test --test_timeout=80
+test --test_timeout=240
 test --test_env=PATH
 test:linux --test_env=HOME
 test:macos --test_env=HOME

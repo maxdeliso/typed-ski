@@ -1,5 +1,11 @@
 module ModuleEnv
 
+-- DETERMINISM CONTRACT WARNING:
+-- The self-hosted compiler's fixpoint depends strictly on determinism of the output.
+-- Any traversal or iteration over ModuleEnv components (like definitions, modules,
+-- imports, exports, and constructors) must process elements in a stable, deterministic
+-- order (e.g. source file list order, or sorted alphabetically) to prevent compiler
+-- output divergence. Avoid relying on unstable sorting or iteration orders.
 import Prelude List
 
 import Prelude nil
@@ -157,6 +163,8 @@ export lookupConstructorAlias
 export validateImports
 
 export validateExports
+
+export lookupExportModule
 
 export main
 
@@ -529,16 +537,26 @@ poly rec parseModulesAcc =
             \t : List ModuleRecord =>
               do [Result (List U8) BuildState] {
                 MkModuleRecord name lengthDigits source = h
-                res <- match (parseModuleSource name source) [Result (List U8) BuildState] {
-                  | Err e => Err [List U8] [BuildState] (concat [U8] {List U8 | "Parse error in module " name ": " e})
+                res <-
+                match (parseModuleSource name source) [Result (List U8) BuildState] {
+                  | Err e =>
+                    Err
+                      [List U8]
+                      [BuildState]
+                      (
+                        concat
+                          [U8]
+                          {List U8 | "Parse error in module " name ": " e}
+                      )
                   | Ok modInfo =>
-                    match modInfo [Result (List U8) BuildState] {
-                      | MkModuleInfo modName decls =>
-                        match state [Result (List U8) BuildState] {
-                          | MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId =>
-                            let withMod = MkBuildState (append [ModuleInfo] mods {ModuleInfo | modInfo}) imps exps defs dataTypes opaques natives nextTypeId in
-                            parseModulesAcc t (collectDecls modName decls withMod)
-                        }
+                    do [Result (List U8) BuildState] {
+                      MkModuleInfo modName decls = modInfo
+                      MkBuildState mods imps exps defs dataTypes opaques natives nextTypeId = state
+                      withMod = MkBuildState (append [ModuleInfo] mods {ModuleInfo | modInfo}) imps exps defs dataTypes opaques natives nextTypeId
+                      return
+                        parseModulesAcc
+                        t
+                        (collectDecls modName decls withMod)
                     }
                 }
                 return (Ok [List U8] [BuildState] res)
@@ -890,6 +908,26 @@ poly rec lookupExport =
                     (\u : U8 => Some [ExportInfo] h)
                 }
           )
+
+poly rec lookupExportModule =
+  \symbolName : List U8 =>
+    \exports : List ExportInfo =>
+      matchList
+        [ExportInfo]
+        [Maybe (List U8)]
+        exports
+        (None [List U8])
+        (
+          \h : ExportInfo =>
+            \t : List ExportInfo =>
+              do [Maybe (List U8)] {
+                MkExportInfo hModule hSymbol = h
+                return
+                if [Maybe (List U8)] (eqListU8 hSymbol symbolName)
+                  (\u : U8 => Some [List U8] hModule)
+                  (\u : U8 => lookupExportModule symbolName t)
+              }
+        )
 
 poly rec lookupDefinition =
   \moduleName : List U8 =>

@@ -46,8 +46,8 @@ poly main = \a : U8 => writeOne (addU8 a #u8(1)) [U8] (\u : U8 => u)
 const EXPECTED_LLVM = String.raw`declare void @trip_write_one(i8)
 declare i8 @trip_read_one()
 
-define i64 @main(i64 %a) {
-entry:
+define i64 @main(i64 %dummy_env, i64 %a) {
+__entry:
   %__ll0_t1 = trunc i64 %a to i8
   %__ll0_t2 = trunc i64 1 to i8
   %__ll0_res = add i8 %__ll0_t1, %__ll0_t2
@@ -74,8 +74,8 @@ declare void @trip_obj_set_field(ptr, i64, i64)
 declare i64 @trip_obj_tag(ptr)
 declare i64 @trip_obj_field(ptr, i64)
 
-define i64 @main() {
-entry:
+define i64 @main(i64 %dummy_env) {
+__entry:
   %__ll0_p = call ptr @trip_alloc_obj(i64 1, i64 0)
   %__ll0 = ptrtoint ptr %__ll0_p to i64
   ret i64 %__ll0
@@ -98,8 +98,8 @@ declare void @trip_obj_set_field(ptr, i64, i64)
 declare i64 @trip_obj_tag(ptr)
 declare i64 @trip_obj_field(ptr, i64)
 
-define i64 @main(i64 %c) {
-entry:
+define i64 @main(i64 %dummy_env, i64 %c) {
+__entry:
   %__case_res_0 = alloca i64
   %__scrut_ptr_0 = inttoptr i64 %c to ptr
   %__tag_0 = call i64 @trip_obj_tag(ptr %__scrut_ptr_0)

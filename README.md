@@ -255,17 +255,22 @@ transform them as first-order AST data.
 
 `.trip` files under [`bootstrap/src/`](bootstrap/src/) (lexer.trip,
 parser.trip, core.trip, lowering.trip, llvm.trip, moduleEnv.trip, etc.)
-are an in-progress re-implementation of the compiler in TripLang itself.
-They are not currently part of the main build. The active acceptance path
-is the LLVM self-hosting test: TypeScript compiles the Trip compiler to a
-native executable, then that executable reads `bundle-v1` and emits LLVM IR
-for a stage-1 Trip program. The native compiler does not yet recompile its
-own bundle, so there is no stage-2 / IR-fixpoint self-reproduction check.
+are a re-implementation of the compiler in TripLang itself.
 
-This is targeting LLVM IR self-hosting, not in-language object emission or
-linking. Parser bootstrap progress is measured through the `bundle-v1`
-contract above; legacy SKI parser bootstrap tests are not acceptance criteria
-for this milestone.
+The acceptance path is the LLVM self-hosting test (`bootstrapLlvmSelfHost.test.ts`):
+
+1. **Stage 1**: TypeScript compiler compiles the compiler source bundle to a native compiler executable (`stage1.exe`).
+2. **Stage 2**: `stage1.exe` compiles the compiler source bundle to LLVM IR (`stage2.ll`), which is assembled to `stage2.exe`.
+3. **Stage 3**: `stage2.exe` compiles the compiler source bundle to LLVM IR (`stage3.ll`), which is assembled to `stage3.exe`.
+4. **Stage 4**: `stage3.exe` compiles the compiler source bundle to LLVM IR (`stage4.ll`).
+
+The test suite asserts and verifies a byte-identical LLVM IR fixpoint (`stage2.ll === stage3.ll === stage4.ll`), alongside running correctness checks (Hello World and multi-module program compilation) using the generated `stage3.exe` executable to ensure compiler correctness.
+
+### Load-Bearing Design Decisions & Tech Debt
+
+- **Determinism Contract**: The fixpoint check matches generated LLVM IR byte-for-byte. This strictly requires deterministic traversal/iteration orders for all collections, environments, and symbol tables (such as `ModuleEnv`).
+- **Boolean Pointer Representation**: In the LLVM-v0 backend, `false` is represented as the pointer value `1` and `true` as the pointer value `2` in uniform/unboxed positions. This leaves `0` (NULL) and other small pointers free to trigger explicit aborts in `trip_obj_tag`, avoiding the masking of null-dereference bugs.
+- **Church Prelude Closures (Performance Tech Debt)**: The lack of monomorphization/specialization in the bootstrap compiler means all occurrences of prelude helpers (`if`, `and`, `or`, `matchList`) lower to heap-allocated closures and indirect function calls, leading to a performance penalty (Stage 3 compilation takes ~30s). Full specialization/monomorphization remains on the roadmap to improve compiler performance.
 
 To lint, format, or prune the bootstrap corpus files under `bootstrap/src/`, the following npm scripts are provided:
 

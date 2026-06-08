@@ -6,6 +6,7 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#include <windows.h>
 
 static void configure_binary_stdio(void) {
   _setmode(_fileno(stdin), _O_BINARY);
@@ -46,6 +47,7 @@ trip_obj_t *trip_alloc_obj(uint64_t tag, uint64_t arity) {
 
 void trip_obj_set_field(trip_obj_t *obj, uint64_t index, trip_word_t value) {
   if (obj == NULL || index >= obj->arity) {
+    fprintf(stderr, "CRITICAL: trip_obj_set_field with obj=%p index=%llu arity=%llu\n", (void*)obj, (unsigned long long)index, obj ? (unsigned long long)obj->arity : 0);
     abort();
   }
   obj->fields[index] = value;
@@ -53,13 +55,45 @@ void trip_obj_set_field(trip_obj_t *obj, uint64_t index, trip_word_t value) {
 
 uint64_t trip_obj_tag(const trip_obj_t *obj) {
   if (obj == NULL) {
+    fprintf(stderr, "CRITICAL: obj is NULL in trip_obj_tag\n");
     abort();
   }
+  if ((uintptr_t)obj == 1) {
+    return 0;
+  }
+  if ((uintptr_t)obj == 2) {
+    return 1;
+  }
+  if ((uintptr_t)obj < 256) {
+    fprintf(stderr, "CRITICAL: Unexpected small pointer (%p) in trip_obj_tag\n", (void*)obj);
+    abort();
+  }
+#ifdef _WIN32
+  if (IsBadReadPtr(obj, sizeof(trip_obj_t))) {
+    fprintf(stderr, "CRITICAL: IsBadReadPtr(%p) in trip_obj_tag\n", (void*)obj);
+    abort();
+  }
+#endif
   return obj->tag;
 }
 
 trip_word_t trip_obj_field(const trip_obj_t *obj, uint64_t index) {
-  if (obj == NULL || index >= obj->arity) {
+  if (obj == NULL) {
+    fprintf(stderr, "CRITICAL: obj is NULL in trip_obj_field\n");
+    abort();
+  }
+  if ((uintptr_t)obj < 256) {
+    fprintf(stderr, "CRITICAL: obj < 256 (%p) in trip_obj_field (index=%llu)\n", (void*)obj, (unsigned long long)index);
+    abort();
+  }
+#ifdef _WIN32
+  if (IsBadReadPtr(obj, sizeof(trip_obj_t))) {
+    fprintf(stderr, "CRITICAL: IsBadReadPtr(%p) in trip_obj_field (index=%llu)\n", (void*)obj, (unsigned long long)index);
+    abort();
+  }
+#endif
+  if (index >= obj->arity) {
+    fprintf(stderr, "CRITICAL: Index %llu >= arity %llu in trip_obj_field (obj=%p, tag=%llu)\n", (unsigned long long)index, (unsigned long long)obj->arity, (void*)obj, (unsigned long long)obj->tag);
     abort();
   }
   return obj->fields[index];
@@ -97,8 +131,6 @@ trip_obj_t *trip_read_stdin_list_u8(void) {
     bytes[length++] = (uint8_t)byte;
   }
 
-  /* Temporary ABI assumption: List U8 tags are hardcoded as 0 (nil) and 1 (cons). 
-   * This matches the order in which they are defined in Prelude.trip. */
   trip_obj_t *list = trip_alloc_obj(0, 0);
   while (length > 0) {
     trip_obj_t *cons = trip_alloc_obj(1, 2);

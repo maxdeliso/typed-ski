@@ -251,8 +251,8 @@ poly simpleTokenFromU8Brace
 poly simpleTokenFromU8
 poly consumeIdent
 poly consumeDigits
-poly consumeString
 poly escapedCharValue
+poly consumeString
 poly charLiteralError
 poly finishCharLiteral
 poly consumeCharLiteral

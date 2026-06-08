@@ -4,8 +4,6 @@ import Prelude List
 
 import Prelude U8
 
-import Avl Avl
-
 export CtorInfo
 
 export MkCtorInfo
@@ -23,6 +21,12 @@ export ADTInfo
 export MkADTInfo
 
 export adtCtors
+
+export BridgeAvl
+
+export Empty
+
+export Node
 
 export DataEnv
 
@@ -53,11 +57,15 @@ data ADTInfo =
 poly adtCtors =
   \i : ADTInfo => do [List (List U8)] {MkADTInfo cs = i return cs}
 
+data BridgeAvl V =
+  | Empty
+  | Node (BridgeAvl V) (List U8) V U8 (BridgeAvl V)
+
 data DataEnv =
-  | MkDataEnv (Avl (List U8) CtorInfo) (Avl (List U8) ADTInfo)
+  | MkDataEnv (BridgeAvl CtorInfo) (BridgeAvl ADTInfo)
 
 poly datEnvCtors =
-  \e : DataEnv => do [Avl (List U8) CtorInfo] {MkDataEnv c a = e return c}
+  \e : DataEnv => do [BridgeAvl CtorInfo] {MkDataEnv c a = e return c}
 
 poly datEnvAdts =
-  \e : DataEnv => do [Avl (List U8) ADTInfo] {MkDataEnv c a = e return a}
+  \e : DataEnv => do [BridgeAvl ADTInfo] {MkDataEnv c a = e return a}

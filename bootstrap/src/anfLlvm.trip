@@ -307,30 +307,32 @@ poly rec emitCaseFieldBinds =
   \env : List ((List U8), (List U8)) =>
     \instrs : List (List U8) =>
       \scrutPtr : List U8 =>
-        \params : List (List U8) =>
-          \fieldIdx : U8 =>
-            matchList
-              [List U8]
-              [(List ((List U8), (List U8)), List (List U8))]
-              params
-              {List ((List U8), (List U8)), List (List U8) | env, instrs}
-              (
-                \p : List U8 =>
-                  \t : List (List U8) =>
-                    let fldVar = concat [U8] {List U8 | scrutPtr "_fld_" (u8ToDigits fieldIdx)} in
-                    let line = concat [U8] {List U8 | "  " fldVar " = call i64 @trip_obj_field(ptr " scrutPtr ", i64 " (u8ToDigits fieldIdx) ")\n"} in
-                    emitCaseFieldBinds
-                      (
-                        cons
-                          [((List U8), (List U8))]
-                          {List U8, List U8 | p, fldVar}
-                          env
-                      )
-                      (cons [List U8] line instrs)
-                      scrutPtr
-                      t
-                      (addU8 fieldIdx #u8(1))
-              )
+        \armIdx : U8 =>
+          \params : List (List U8) =>
+            \fieldIdx : U8 =>
+              matchList
+                [List U8]
+                [(List ((List U8), (List U8)), List (List U8))]
+                params
+                {List ((List U8), (List U8)), List (List U8) | env, instrs}
+                (
+                  \p : List U8 =>
+                    \t : List (List U8) =>
+                      let fldVar = concat [U8] {List U8 | scrutPtr "_arm_" (u8ToDigits armIdx) "_fld_" (u8ToDigits fieldIdx)} in
+                      let line = concat [U8] {List U8 | "  " fldVar " = call i64 @trip_obj_field(ptr " scrutPtr ", i64 " (u8ToDigits fieldIdx) ")\n"} in
+                      emitCaseFieldBinds
+                        (
+                          cons
+                            [((List U8), (List U8))]
+                            {List U8, List U8 | p, fldVar}
+                            env
+                        )
+                        (cons [List U8] line instrs)
+                        scrutPtr
+                        armIdx
+                        t
+                        (addU8 fieldIdx #u8(1))
+                )
 
 poly rec emitCtorFields =
   \env : List ((List U8), (List U8)) =>
@@ -585,7 +587,7 @@ poly emitEqU8 =
                 dest
                 "_t2\n"
               }
-              ext = concat [U8] {List U8 | "  " dest " = zext i1 " dest "_cmp to i64\n"}
+              ext = concat [U8] {List U8 | "  " dest "_zext = zext i1 " dest "_cmp to i64\n" "  " dest " = add i64 " dest "_zext, 1\n"}
               return
                 Ok
                 [List U8]
@@ -624,7 +626,7 @@ poly emitLtU8 =
                 dest
                 "_t2\n"
               }
-              ext = concat [U8] {List U8 | "  " dest " = zext i1 " dest "_cmp to i64\n"}
+              ext = concat [U8] {List U8 | "  " dest "_zext = zext i1 " dest "_cmp to i64\n" "  " dest " = add i64 " dest "_zext, 1\n"}
               return
                 Ok
                 [List U8]
@@ -769,6 +771,40 @@ poly llvmSymbolName =
       (\u : U8 => append [U8] "trip_fn_" (replaceDot name))
       (\u : U8 => name)
 
+poly startsWithLambda =
+  \name : List U8 =>
+    match name [Bool] {
+      | nil => false
+      | cons h1 t1 =>
+        if [Bool] (eqU8 h1 #u8(95))
+          (
+            \u : U8 =>
+              match t1 [Bool] {
+                | nil => false
+                | cons h2 t2 =>
+                  if [Bool] (eqU8 h2 #u8(95))
+                    (
+                      \u : U8 =>
+                        match t2 [Bool] {
+                          | nil => false
+                          | cons h3 t3 =>
+                            if [Bool] (eqU8 h3 #u8(108))
+                              (
+                                \u : U8 =>
+                                  match t3 [Bool] {
+                                    | nil => false
+                                    | cons h4 t4 => eqU8 h4 #u8(97)
+                                  }
+                              )
+                              (\u : U8 => false)
+                        }
+                    )
+                    (\u : U8 => false)
+              }
+          )
+          (\u : U8 => false)
+    }
+
 poly rec bindGlobalArgs =
   \env : List ((List U8), (List U8)) =>
     \counter : Bin =>
@@ -778,7 +814,12 @@ poly rec bindGlobalArgs =
             [AnfExpr]
             [Result (List U8) BindGlobalArgsRes]
             args
-            (Ok [List U8] [BindGlobalArgsRes] (MkBindGlobalArgsRes env counter instrs {AnfExpr |}))
+            (
+              Ok
+                [List U8]
+                [BindGlobalArgsRes]
+                (MkBindGlobalArgsRes env counter instrs {AnfExpr |})
+            )
             (
               \h : AnfExpr =>
                 \t : List AnfExpr =>
@@ -786,48 +827,115 @@ poly rec bindGlobalArgs =
                     | AE_Var n =>
                       match (lookupEnv env n) [Maybe (List U8)] {
                         | Some op =>
-                          match (bindGlobalArgs env counter instrs t) [Result (List U8) BindGlobalArgsRes] {
-                            | Err e => Err [List U8] [BindGlobalArgsRes] e
-                            | Ok res =>
-                              match res [Result (List U8) BindGlobalArgsRes] {
-                                | MkBindGlobalArgsRes env1 c1 instrs1 restArgs =>
-                                  Ok [List U8] [BindGlobalArgsRes] (MkBindGlobalArgsRes env1 c1 instrs1 (cons [AnfExpr] h restArgs))
-                              }
+                          do [Result (List U8) BindGlobalArgsRes] {
+                            res <- (bindGlobalArgs env counter instrs t)
+                            MkBindGlobalArgsRes env1 c1 instrs1 restArgs = res
+                            return
+                              Ok
+                              [List U8]
+                              [BindGlobalArgsRes]
+                              (
+                                MkBindGlobalArgsRes
+                                  env1
+                                  c1
+                                  instrs1
+                                  (cons [AnfExpr] h restArgs)
+                              )
                           }
                         | None =>
-                          let dest = append [U8] "%__ll" (binToDigits counter) in
-                          let counter1 = incBin counter in
-                          let line = concat [U8] {List U8 | "  " dest " = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"} in
-                          let env1 = cons [((List U8), (List U8))] {List U8, List U8 | n, dest} env in
-                          let instrs1 = cons [List U8] line instrs in
-                          match (bindGlobalArgs env1 counter1 instrs1 t) [Result (List U8) BindGlobalArgsRes] {
-                            | Err e => Err [List U8] [BindGlobalArgsRes] e
-                            | Ok res =>
-                              match res [Result (List U8) BindGlobalArgsRes] {
-                                | MkBindGlobalArgsRes env2 c2 instrs2 restArgs =>
-                                  Ok [List U8] [BindGlobalArgsRes] (MkBindGlobalArgsRes env2 c2 instrs2 (cons [AnfExpr] (AE_Var n) restArgs))
-                              }
-                          }
+                          if [Result (List U8) BindGlobalArgsRes] (startsWithLambda n)
+                            (
+                              \u : U8 =>
+                                let dest = append [U8] "%__ll" (binToDigits counter) in
+                                let counter1 = incBin counter in
+                                let line = concat [U8] {List U8 | "  " dest " = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"} in
+                                let env1 = cons [((List U8), (List U8))] {List U8, List U8 | n, dest} env in
+                                let instrs1 = cons [List U8] line instrs in
+                                do [Result (List U8) BindGlobalArgsRes] {
+                                  res <- (bindGlobalArgs env1 counter1 instrs1 t)
+                                  MkBindGlobalArgsRes env2 c2 instrs2 restArgs = res
+                                  return
+                                    Ok
+                                    [List U8]
+                                    [BindGlobalArgsRes]
+                                    (
+                                      MkBindGlobalArgsRes
+                                        env2
+                                        c2
+                                        instrs2
+                                        (cons [AnfExpr] (AE_Var n) restArgs)
+                                    )
+                                }
+                            )
+                            (
+                              \u : U8 =>
+                                let dest = append [U8] "%__ll" (binToDigits counter) in
+                                let counter1 = incBin counter in
+                                let counter2 = incBin counter1 in
+                                let fnPtrLine = concat [U8] {List U8 | "  " dest "_fn_val = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"} in
+                                let allocLine = concat [U8] {List U8 | "  " dest "_p = call ptr @trip_alloc_obj(i64 0, i64 1)\n"} in
+                                let setLine = concat [U8] {List U8 | "  call void @trip_obj_set_field(ptr " dest "_p, i64 0, i64 " dest "_fn_val)\n"} in
+                                let castLine = concat [U8] {List U8 | "  " dest " = ptrtoint ptr " dest "_p to i64\n"} in
+                                let env1 = cons [((List U8), (List U8))] {List U8, List U8 | n, dest} env in
+                                let instrs1 = append [List U8] {List U8 | castLine setLine allocLine fnPtrLine} instrs in
+                                do [Result (List U8) BindGlobalArgsRes] {
+                                  res <- (bindGlobalArgs env1 counter2 instrs1 t)
+                                  MkBindGlobalArgsRes env2 c2 instrs2 restArgs = res
+                                  return
+                                    Ok
+                                    [List U8]
+                                    [BindGlobalArgsRes]
+                                    (
+                                      MkBindGlobalArgsRes
+                                        env2
+                                        c2
+                                        instrs2
+                                        (cons [AnfExpr] (AE_Var n) restArgs)
+                                    )
+                                }
+                            )
                       }
                     | AE_Native term =>
-                      match (bindGlobalArgs env counter instrs t) [Result (List U8) BindGlobalArgsRes] {
-                        | Err e => Err [List U8] [BindGlobalArgsRes] e
-                        | Ok res =>
-                          match res [Result (List U8) BindGlobalArgsRes] {
-                            | MkBindGlobalArgsRes env1 c1 instrs1 restArgs =>
-                              Ok [List U8] [BindGlobalArgsRes] (MkBindGlobalArgsRes env1 c1 instrs1 (cons [AnfExpr] h restArgs))
-                          }
+                      do [Result (List U8) BindGlobalArgsRes] {
+                        res <- (bindGlobalArgs env counter instrs t)
+                        MkBindGlobalArgsRes env1 c1 instrs1 restArgs = res
+                        return
+                          Ok
+                          [List U8]
+                          [BindGlobalArgsRes]
+                          (
+                            MkBindGlobalArgsRes
+                              env1
+                              c1
+                              instrs1
+                              (cons [AnfExpr] h restArgs)
+                          )
                       }
                     | AE_Lam n b =>
-                      Err [List U8] [BindGlobalArgsRes] "Unsupported argument: lambda"
+                      Err
+                        [List U8]
+                        [BindGlobalArgsRes]
+                        "Unsupported argument: lambda"
                     | AE_Call f args1 =>
-                      Err [List U8] [BindGlobalArgsRes] "Unsupported argument: call"
+                      Err
+                        [List U8]
+                        [BindGlobalArgsRes]
+                        "Unsupported argument: call"
                     | AE_Con tag total arity args1 =>
-                      Err [List U8] [BindGlobalArgsRes] "Unsupported argument: constructor"
+                      Err
+                        [List U8]
+                        [BindGlobalArgsRes]
+                        "Unsupported argument: constructor"
                     | AE_Case scrut arms =>
-                      Err [List U8] [BindGlobalArgsRes] "Unsupported argument: case"
+                      Err
+                        [List U8]
+                        [BindGlobalArgsRes]
+                        "Unsupported argument: case"
                     | AE_Let name val body =>
-                      Err [List U8] [BindGlobalArgsRes] "Unsupported argument: let"
+                      Err
+                        [List U8]
+                        [BindGlobalArgsRes]
+                        "Unsupported argument: let"
                   }
             )
 
@@ -840,17 +948,71 @@ poly rec emitExpr =
             | AE_Var n =>
               match (lookupEnv env n) [Result (List U8) EmitRes] {
                 | None =>
-                  do [Result (List U8) EmitRes] {
-                    dest = append [U8]
-                    "%__ll" (binToDigits counter)
-                    counter1 = incBin counter
-                    line = concat [U8] {List U8 | "  " dest " = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"}
-                    return
-                      Ok
-                      [List U8]
-                      [EmitRes]
-                      (MkEmitRes counter1 (cons [List U8] line instrs) dest)
-                  }
+                  if [Result (List U8) EmitRes] (startsWithLambda n)
+                    (
+                      \u : U8 =>
+                        do [Result (List U8) EmitRes] {
+                          dest = append [U8]
+                          "%__ll" (binToDigits counter)
+                          counter1 = incBin counter
+                          line = concat [U8] {List U8 | "  " dest " = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"}
+                          return
+                            Ok
+                            [List U8]
+                            [EmitRes]
+                            (
+                              MkEmitRes
+                                counter1
+                                (cons [List U8] line instrs)
+                                dest
+                            )
+                        }
+                    )
+                    (
+                      \u : U8 =>
+                        do [Result (List U8) EmitRes] {
+                          dest = append [U8]
+                          "%__ll" (binToDigits counter)
+                          counter1 = incBin counter
+                          counter2 = incBin counter1
+                          fnPtrLine = concat [U8]
+                          {List U8 |
+                            "  "
+                            dest
+                            "_fn_val = ptrtoint ptr @"
+                            (llvmSymbolName n)
+                            " to i64\n"
+                          }
+                          allocLine = concat [U8]
+                          {List U8 |
+                            "  "
+                            dest
+                            "_p = call ptr @trip_alloc_obj(i64 0, i64 1)\n"
+                          }
+                          setLine = concat [U8]
+                          {List U8 |
+                            "  call void @trip_obj_set_field(ptr "
+                            dest
+                            "_p, i64 0, i64 "
+                            dest
+                            "_fn_val)\n"
+                          }
+                          castLine = concat [U8]
+                          {List U8 |
+                            "  "
+                            dest
+                            " = ptrtoint ptr "
+                            dest
+                            "_p to i64\n"
+                          }
+                          lines = append [List U8] {List U8 | castLine setLine allocLine fnPtrLine} instrs
+                          return
+                            Ok
+                            [List U8]
+                            [EmitRes]
+                            (MkEmitRes counter2 lines dest)
+                        }
+                    )
                 | Some op =>
                   Ok [List U8] [EmitRes] (MkEmitRes counter instrs op)
               }
@@ -1196,60 +1358,91 @@ poly rec emitExpr =
                                                                 )
                                                                 (
                                                                   \u9 : U8 =>
-                                                                    match (bindGlobalArgs env counter instrs args) [Result (List U8) EmitRes] {
-                                                                        | Err e => Err [List U8] [EmitRes] e
-                                                                        | Ok res =>
-                                                                          match res [Result (List U8) EmitRes] {
-                                                                            | MkBindGlobalArgsRes env1 counter1 instrs1 args1 =>
-                                                                              match (lookupEnv env1 f) [Result (List U8) EmitRes] {
-                                                                                | Some closureOp =>
-                                                                                  emitIndirectCallChain
-                                                                                    env1
+                                                                    do [Result (List U8) EmitRes] {
+                                                                      res <- (bindGlobalArgs env counter instrs args)
+                                                                      MkBindGlobalArgsRes env1 counter1 instrs1 args1 = res
+                                                                      return
+                                                                      if [Result (List U8) EmitRes] (startsWithLambda f)
+                                                                        (
+                                                                          \u10 : U8 =>
+                                                                            do [Result (List U8) EmitRes] {
+                                                                              argStr <- (emitArgsString env1 args1 true)
+                                                                              dest = append [U8]
+                                                                              "%__ll"
+                                                                                (
+                                                                                  binToDigits
                                                                                     counter1
-                                                                                    instrs1
-                                                                                    closureOp
-                                                                                    args1
-                                                                                | None =>
-                                                                                  if [Result (List U8) EmitRes] (eqListU8 f "_")
+                                                                                )
+                                                                              counter2 = incBin counter1
+                                                                              line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
+                                                                              return
+                                                                                Ok
+                                                                                [List U8]
+                                                                                [EmitRes]
+                                                                                (
+                                                                                  MkEmitRes
+                                                                                    counter2
                                                                                     (
-                                                                                      \u10 : U8 =>
-                                                                                        Err
+                                                                                      cons
+                                                                                        [List U8]
+                                                                                        line
+                                                                                        instrs1
+                                                                                    )
+                                                                                    dest
+                                                                                )
+                                                                            }
+                                                                        )
+                                                                        (
+                                                                          \u10 : U8 =>
+                                                                            match (lookupEnv env1 f) [Result (List U8) EmitRes] {
+                                                                              | Some closureOp =>
+                                                                                emitIndirectCallChain
+                                                                                  env1
+                                                                                  counter1
+                                                                                  instrs1
+                                                                                  closureOp
+                                                                                  args1
+                                                                              | None =>
+                                                                                if [Result (List U8) EmitRes] (eqListU8 f "_")
+                                                                                  (
+                                                                                    \u11 : U8 =>
+                                                                                      Err
+                                                                                        [List U8]
+                                                                                        [EmitRes]
+                                                                                        "Indirect call to _ not supported without closure variable"
+                                                                                  )
+                                                                                  (
+                                                                                    \u11 : U8 =>
+                                                                                      do [Result (List U8) EmitRes] {
+                                                                                        argStr <- (emitArgsString env1 args1 false)
+                                                                                        dest = append [U8]
+                                                                                        "%__ll"
+                                                                                          (
+                                                                                            binToDigits
+                                                                                              counter1
+                                                                                          )
+                                                                                        counter2 = incBin counter1
+                                                                                        line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(i64 0" argStr ")\n"}
+                                                                                        return
+                                                                                          Ok
                                                                                           [List U8]
                                                                                           [EmitRes]
-                                                                                          "Indirect call to _ not supported without closure variable"
-                                                                                    )
-                                                                                    (
-                                                                                      \u10 : U8 =>
-                                                                                        do [Result (List U8) EmitRes] {
-                                                                                          argStr <- (emitArgsString env1 args1 true)
-                                                                                          dest = append [U8]
-                                                                                          "%__ll"
-                                                                                            (
-                                                                                              binToDigits
-                                                                                                counter1
-                                                                                            )
-                                                                                          counter2 = incBin counter1
-                                                                                          line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
-                                                                                          return
-                                                                                            Ok
-                                                                                            [List U8]
-                                                                                            [EmitRes]
-                                                                                            (
-                                                                                              MkEmitRes
-                                                                                                counter2
-                                                                                                (
-                                                                                                  cons
-                                                                                                    [List U8]
-                                                                                                    line
-                                                                                                    instrs1
-                                                                                                )
-                                                                                                dest
-                                                                                            )
-                                                                                        }
-                                                                                    )
-                                                                              }
-                                                                          }
-                                                                      }
+                                                                                          (
+                                                                                            MkEmitRes
+                                                                                              counter2
+                                                                                              (
+                                                                                                cons
+                                                                                                  [List U8]
+                                                                                                  line
+                                                                                                  instrs1
+                                                                                              )
+                                                                                              dest
+                                                                                          )
+                                                                                      }
+                                                                                  )
+                                                                            }
+                                                                        )
+                                                                    }
                                                                 )
                                                           )
                                                     )
@@ -1260,23 +1453,32 @@ poly rec emitExpr =
                       )
                 )
             | AE_Con tag total arity args =>
-              match (bindGlobalArgs env counter instrs args) [Result (List U8) EmitRes] {
-                | Err e => Err [List U8] [EmitRes] e
-                | Ok res =>
-                  match res [Result (List U8) EmitRes] {
-                    | MkBindGlobalArgsRes env1 counter1 instrs1 args1 =>
-                      let dest = append [U8] "%__ll" (binToDigits counter1) in
-                      let counter2 = incBin counter1 in
-                      let allocLine = concat [U8] {List U8 | "  " dest "_p = call ptr @trip_alloc_obj(i64 " (u8ToDigits tag) ", i64 " (u8ToDigits arity) ")\n"} in
-                      let castLine = concat [U8] {List U8 | "  " dest " = ptrtoint ptr " dest "_p to i64\n"} in
-                      let initialInstrs = append [List U8] {List U8 | castLine allocLine} instrs1 in
-                      emitCtorFields env1 counter2 initialInstrs dest arity args1 #u8(0)
-                  }
+              do [Result (List U8) EmitRes] {
+                res <- (bindGlobalArgs env counter instrs args)
+                MkBindGlobalArgsRes env1 counter1 instrs1 args1 = res
+                dest = append [U8]
+                "%__ll" (binToDigits counter1)
+                counter2 = incBin counter1
+                allocLine = concat [U8]
+                {List U8 |
+                  "  "
+                  dest
+                  "_p = call ptr @trip_alloc_obj(i64 "
+                  (u8ToDigits tag)
+                  ", i64 "
+                  (u8ToDigits arity)
+                  ")\n"
+                }
+                castLine = concat [U8]
+                {List U8 | "  " dest " = ptrtoint ptr " dest "_p to i64\n"}
+                initialInstrs = append [List U8] {List U8 | castLine allocLine} instrs1
+                return emitCtorFields env1 counter2 initialInstrs dest arity args1 #u8(0)
               }
             | AE_Case scrut arms =>
               do [Result (List U8) EmitRes] {
                 op_scrut <- (atomOperand env scrut)
                 caseId = binToDigits counter
+                counter1 = incBin counter
                 caseVar = append [U8]
                 "%__case_res_" caseId
                 scrutPtr = append [U8]
@@ -1316,7 +1518,7 @@ poly rec emitExpr =
                   "  ]\n"
                 }
                 initialInstrs = append [List U8] {List U8 | switchInstr tagLine castLine allocLine} instrs
-                return emitCaseArms env counter initialInstrs caseVar scrutPtr caseId arms #u8(0)
+                return emitCaseArms env counter1 initialInstrs caseVar scrutPtr caseId arms #u8(0)
               }
             | AE_Let name val body =>
               do [Result (List U8) EmitRes] {
@@ -1397,7 +1599,7 @@ poly rec emitCaseArms =
                           match (peelBinders arm {List U8 |}) [(List (List U8), AnfExpr)] {
                             | MkPair params body =>
                               let armLabel = concat [U8] {List U8 | "case_" caseId "_arm_" (u8ToDigits idx)} in
-                              match (emitCaseFieldBinds env {List U8 |} scrutPtr params #u8(0)) [(List ((List U8), (List U8)), List (List U8))] {
+                              match (emitCaseFieldBinds env {List U8 |} scrutPtr idx params #u8(0)) [(List ((List U8), (List U8)), List (List U8))] {
                                 | MkPair armEnv armInstrs =>
                                   let labelLine = append [U8] armLabel ":\n" in
                                   let combinedInstrs = append [List U8] (reverse [List U8] armInstrs) (cons [List U8] labelLine instrs) in
@@ -1479,9 +1681,14 @@ poly emitFunc =
   \fn : AnfFunc =>
     do [Result (List U8) (List U8)] {
       MkAnfFunc name params body = fn
+      paramsWithEnv =
+      if [List (List U8)] (startsWithLambda name)
+        (\u : U8 => params)
+        (\u : U8 => cons [List U8] "dummy_env" params)
       return
-      match (emitExpr (paramEnv params) BZ {List U8 |} body) [Result (List U8) (List U8)] {
-        | Err e => Err [List U8] [List U8] (concat [U8] {List U8 | "[fn " name "] " e})
+      match (emitExpr (paramEnv paramsWithEnv) BZ {List U8 |} body) [Result (List U8) (List U8)] {
+        | Err e =>
+          Err [List U8] [List U8] (concat [U8] {List U8 | "[fn " name "] " e})
         | Ok res =>
           do [Result (List U8) (List U8)] {
             MkEmitRes c instrs op = res
@@ -1497,8 +1704,8 @@ poly emitFunc =
                     "define i64 @"
                     (llvmSymbolName name)
                     "("
-                    (paramDeclsString params true)
-                    ") {\nentry:\n"
+                    (paramDeclsString paramsWithEnv true)
+                    ") {\n__entry:\n"
                     instrText
                     "  ret i64 "
                     op
@@ -1520,18 +1727,17 @@ poly rec emitFuncsAcc =
         (
           \h : AnfFunc =>
             \t : List AnfFunc =>
-              match (emitFunc h) [Result (List U8) (List (List U8))] {
-                | Err e => Err [List U8] [List (List U8)] e
-                | Ok block =>
-                  (emitFuncsAcc (cons [List U8] block acc) t)
+              do [Result (List U8) (List (List U8))] {
+                block <- (emitFunc h)
+                return emitFuncsAcc (cons [List U8] block acc) t
               }
         )
 
 poly emitFuncs =
   \fns : List AnfFunc =>
-    match (emitFuncsAcc {List U8 |} fns) [Result (List U8) (List U8)] {
-      | Err e => Err [List U8] [List U8] e
-      | Ok blocks => Ok [List U8] [List U8] (joinLines "" blocks)
+    do [Result (List U8) (List U8)] {
+      blocks <- (emitFuncsAcc {List U8 |} fns)
+      return Ok [List U8] [List U8] (joinLines "" blocks)
     }
 
 poly emitProgram =
@@ -1589,10 +1795,7 @@ poly rec funcsUseReadWrite =
         \h : AnfFunc =>
           \t : List AnfFunc =>
             match h [Bool] {
-              | MkAnfFunc name params body =>
-                if [Bool] (exprUsesReadWrite body)
-                  (\u : U8 => true)
-                  (\u : U8 => funcsUseReadWrite t)
+              | MkAnfFunc name params body => or (exprUsesReadWrite body) (funcsUseReadWrite t)
             }
       )
 
@@ -1631,10 +1834,7 @@ poly rec funcsUseBoxed =
         \h : AnfFunc =>
           \t : List AnfFunc =>
             match h [Bool] {
-              | MkAnfFunc name params body =>
-                if [Bool] (exprUsesBoxed body)
-                  (\u : U8 => true)
-                  (\u : U8 => funcsUseBoxed t)
+              | MkAnfFunc name params body => or (exprUsesBoxed body) (funcsUseBoxed t)
             }
       )
 

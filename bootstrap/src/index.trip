@@ -1,5 +1,11 @@
 module Compiler
 
+-- DETERMINISM CONTRACT WARNING:
+-- The self-hosted compiler's fixpoint depends strictly on determinism of the output.
+-- The symbol table collection, module environment traversal, and file list iteration
+-- must always execute in a stable, deterministic order. Any change to iteration order
+-- (e.g. from hash maps or unsorted collections) will break the byte-identical self-host
+-- LLVM IR fixpoint.
 import Prelude List
 
 import Prelude nil
@@ -123,6 +129,8 @@ import ModuleEnv MkDefinitionInfo
 import ModuleEnv validateImports
 
 import ModuleEnv validateExports
+
+import ModuleEnv lookupExportModule
 
 import ModuleEnv lookupConstructorAlias
 
@@ -311,7 +319,31 @@ poly rec qualifyExpr =
                                               }
                                           )
                                     }
-                                  | None => Ok [List U8] [Expr] (E_Var name)
+                                  | None =>
+                                    match (lookupExportModule name exps) [Result (List U8) Expr] {
+                                      | None => Ok [List U8] [Expr] (E_Var name)
+                                      | Some m =>
+                                        let gName = qualify m name in
+                                        match (lookupConstructorAlias gName aliases) [Result (List U8) Expr] {
+                                          | Some res2 =>
+                                            match res2 [Result (List U8) Expr] {
+                                              | Some rc => Ok [List U8] [Expr] (E_Var rc)
+                                              | None =>
+                                                Err
+                                                  [List U8]
+                                                  [Expr]
+                                                  (
+                                                    concat
+                                                      [U8]
+                                                      {List U8 |
+                                                        "Ambiguous constructor alias: "
+                                                        name
+                                                      }
+                                                  )
+                                            }
+                                          | None => Ok [List U8] [Expr] (E_Var gName)
+                                        }
+                                    }
                                 }
                             )
                       }
@@ -759,17 +791,17 @@ poly compileBundleToLlvm =
         (
           if [List U8] (eqListU8 wrapper "enabled")
             (
-              \u : U8 =>
+              \u2 : U8 =>
                 let fullName = concat [U8] {List U8 | "trip_fn_" entryName "_main"} in
-                if [List U8] (entryHasParam funcs fullName)
+                if [List U8] (entryHasParam funcs (concat [U8] {List U8 | entryName ".main"}))
                   (
                     \u2 : U8 =>
-                      let mainWrapper = concat [U8] {List U8 | "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @" fullName "(i64 %trip_source_cast)\n  ret i32 0\n}\n"} in
+                      let mainWrapper = concat [U8] {List U8 | "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @" fullName "(i64 0, i64 %trip_source_cast)\n  ret i32 0\n}\n"} in
                       append [U8] withDecls mainWrapper
                   )
                   (
                     \u2 : U8 =>
-                      let mainWrapper = concat [U8] {List U8 | "define i32 @main() {\nentry:\n  %trip_result = call i64 @" fullName "()\n  ret i32 0\n}\n"} in
+                      let mainWrapper = concat [U8] {List U8 | "define i32 @main() {\nentry:\n  %trip_result = call i64 @" fullName "(i64 0)\n  ret i32 0\n}\n"} in
                       append [U8] withDecls mainWrapper
                   )
             )

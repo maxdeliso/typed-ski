@@ -30,7 +30,7 @@ export interface HarnessOptions extends CompileTripSourceToLlvmOptions {
 
 const CLANG = process.env["TYPED_SKI_CLANG"] ?? findLocalClangPath();
 
-function macosSdkArgs(): string[] {
+export function macosSdkArgs(): string[] {
   if (process.platform !== "darwin") {
     return [];
   }
@@ -165,7 +165,8 @@ export const bootstrap = {
     cleanup: () => Promise<void>;
   }> {
     const tempDir = await mkdtemp(join(tmpdir(), "trip-compiler-bootstrap-"));
-    const cleanup = () => rm(tempDir, { recursive: true, force: true });
+    const cleanup = () =>
+      rm(tempDir, { recursive: true, force: true }).catch(() => {});
 
     try {
       const moduleNames: readonly CompilerTripModuleName[] = [

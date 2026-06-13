@@ -56,7 +56,7 @@
     "@types/node": "^25.7.0",
     "@types/random-seed": "^0.3.5",
     "@typescript/native-preview": "7.0.0-dev.20260421.2",
-    "esbuild": "^0.28.0",
+    "esbuild": "^0.28.1",
     "json-stringify-safe": "5.0.1",
     "pnpm": "11.5.0",
     "prettier": "^3.8.3"

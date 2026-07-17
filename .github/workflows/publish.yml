@@ -46,4 +46,4 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --package semantic-release --package @semantic-release/exec --package @semantic-release/github semantic-release
+        run: npx --package semantic-release --package @semantic-release/exec --package @semantic-release/github --package jsr@0.14.3 semantic-release

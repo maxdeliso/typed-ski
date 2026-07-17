@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 const packageRoot = dirname(
   require.resolve("@typescript/native-preview/package.json"),
 );
-const launcher = join(packageRoot, "bin", "tsgo.js");
+const launcher = join(packageRoot, "lib", "tsgo.js");
 
 const checkers = availableParallelism();
 const args = ["--checkers", String(checkers), ...process.argv.slice(2)];

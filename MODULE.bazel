@@ -86,23 +86,23 @@ http_archive(
     ],
 )
 
-NODE_26_VERSION = "26.1.0"
+NODE_26_VERSION = "26.5.0"
 
 NODE_26_REPOSITORIES = {
-    "26.1.0-darwin_arm64": [
-        "node-v26.1.0-darwin-arm64.tar.xz",
-        "node-v26.1.0-darwin-arm64",
-        "c4b028b1ab7c01e4a526524d732522f71b0ea08e8859e29514d535ce2e17d443",
+    "26.5.0-darwin_arm64": [
+        "node-v26.5.0-darwin-arm64.tar.xz",
+        "node-v26.5.0-darwin-arm64",
+        "48231d6204eca6be13e6c5184dfdffa1d64ad88880364cc2cfb198f872cb2b13",
     ],
-    "26.1.0-linux_amd64": [
-        "node-v26.1.0-linux-x64.tar.xz",
-        "node-v26.1.0-linux-x64",
-        "9fc6f21b6c4a62439727123e510e9c39febb2f563738f4927cd3e0b288c9b3c9",
+    "26.5.0-linux_amd64": [
+        "node-v26.5.0-linux-x64.tar.xz",
+        "node-v26.5.0-linux-x64",
+        "9f619528f1db5ddc41dccf54211066fb42228d69a156733c69cb9d6cc92e358c",
     ],
-    "26.1.0-windows_amd64": [
-        "node-v26.1.0-win-x64.zip",
-        "node-v26.1.0-win-x64",
-        "089a02c4c687451c9f0b7f1bfd252dae85a7ba27df0295a14096bdcc956fdc92",
+    "26.5.0-windows_amd64": [
+        "node-v26.5.0-win-x64.zip",
+        "node-v26.5.0-win-x64",
+        "d3b2277dbcccfdf24ef6302928f64f484cff1d77a6d3caa3a28f4d20ce9158f6",
     ],
 }
 

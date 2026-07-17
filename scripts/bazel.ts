@@ -86,7 +86,7 @@ const LOCAL_TSGO_ENTRY = join(
   "node_modules",
   "@typescript",
   "native-preview",
-  "bin",
+  "lib",
   "tsgo.js",
 );
 const NODE_TEST_GLOBAL_SETUP_PATH = join(JS_ROOT, "test", "globalSetup.js");

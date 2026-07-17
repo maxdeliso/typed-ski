@@ -32,7 +32,7 @@
   "engines": {
     "node": "26.x"
   },
-  "packageManager": "pnpm@11.5.0",
+  "packageManager": "pnpm@11.13.1",
   "scripts": {
     "build:ts": "node scripts/tsgo.mjs --project tsconfig.emit.json",
     "tripc": "node --disable-warning=ExperimentalWarning ts_out/bin/tripc.js",
@@ -54,13 +54,13 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "@types/node": "^25.7.0",
+    "@types/node": "^26.1.1",
     "@types/random-seed": "^0.3.5",
-    "@typescript/native-preview": "7.0.0-dev.20260421.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "esbuild": "^0.28.1",
     "json-stringify-safe": "5.0.1",
-    "pnpm": "11.5.0",
-    "prettier": "^3.8.3",
+    "pnpm": "11.13.1",
+    "prettier": "^3.9.5",
     "semantic-release": "^25.0.7"
   }
 }

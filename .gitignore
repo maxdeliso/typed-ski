@@ -16,6 +16,7 @@ bazel-*
 .bazel-user-root/
 jsr.json
 .tmp/
+.tmp-llvm-wiring/
 
 # TripLang compiled object files
 *.tripc

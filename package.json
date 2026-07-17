@@ -1,6 +1,6 @@
 {
   "name": "@maxdeliso/typed-ski",
-  "version": "0.29.0",
+  "version": "0.0.0-dev",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -53,12 +53,14 @@
     "ts-morph": "^28.0.0"
   },
   "devDependencies": {
+    "@semantic-release/exec": "^7.1.0",
     "@types/node": "^25.7.0",
     "@types/random-seed": "^0.3.5",
     "@typescript/native-preview": "7.0.0-dev.20260421.2",
     "esbuild": "^0.28.0",
     "json-stringify-safe": "5.0.1",
     "pnpm": "11.5.0",
-    "prettier": "^3.8.3"
+    "prettier": "^3.8.3",
+    "semantic-release": "^25.0.7"
   }
 }

@@ -58,7 +58,7 @@ async function main() {
     : join(root, "package.json");
 
   const pkg = JSON.parse(await readFile(pkgJsonPath, "utf8"));
-  const version = pkg.version;
+  const version = process.env.RELEASE_VERSION || pkg.version;
 
   if (args.verify) {
     let failed = false;

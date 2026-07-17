@@ -133,7 +133,10 @@ describe("CLI Tests", () => {
       ]);
 
       assert.strictEqual(result.success, true);
-      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+      assert.match(
+        result.stdout.trim(),
+        /^tripc v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/,
+      );
     });
 
     it("--help flag", async () => {
@@ -183,7 +186,10 @@ describe("CLI Tests", () => {
       const command = [process.execPath, bundledTripcPath, "--version"];
       const result = await runCommand(command);
       assertCommandSuccess(result, command);
-      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+      assert.match(
+        result.stdout.trim(),
+        /^tripc v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/,
+      );
     });
 
     it("emits LLVM", async () => {
@@ -203,7 +209,10 @@ describe("CLI Tests", () => {
       const command = [process.execPath, minifiedTripcPath, "--version"];
       const result = await runCommand(command);
       assertCommandSuccess(result, command);
-      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+      assert.match(
+        result.stdout.trim(),
+        /^tripc v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/,
+      );
     });
 
     it("emits LLVM", async () => {
@@ -227,7 +236,10 @@ describe("CLI Tests", () => {
       const command = [compiledTripcPath, "--version"];
       const result = await runCommand(command);
       assertCommandSuccess(result, command);
-      assert.match(result.stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+      assert.match(
+        result.stdout.trim(),
+        /^tripc v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/,
+      );
     });
 
     it("--help flag", async () => {

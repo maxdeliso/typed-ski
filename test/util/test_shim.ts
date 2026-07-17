@@ -53,6 +53,8 @@ if (typeof Bun !== "undefined") {
   testRunner = {
     describe: bunTest.describe,
     it: wrapItBun(bunTest.it),
+    before: bunTest.beforeAll,
+    after: bunTest.afterAll,
   };
 } else {
   // @ts-ignore
@@ -60,8 +62,12 @@ if (typeof Bun !== "undefined") {
   testRunner = {
     describe: nodeTest.describe,
     it: wrapItNode(nodeTest.it),
+    before: nodeTest.before,
+    after: nodeTest.after,
   };
 }
 
 export const describe = testRunner.describe;
 export const it = testRunner.it;
+export const before = testRunner.before;
+export const after = testRunner.after;

@@ -57,7 +57,7 @@ describe("JSR Packaging Configuration", () => {
       assert.ok("publish" in config);
 
       assert.strictEqual(config.name, "@maxdeliso/typed-ski");
-      assert.match(config.version, /^\d+\.\d+\.\d+$/);
+      assert.match(config.version, /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/);
       assert.strictEqual(config.license, "MIT");
     });
 
@@ -222,7 +222,7 @@ describe("JSR Packaging Configuration", () => {
       );
 
       assert.strictEqual(status, 0);
-      assert.match(stdout.trim(), /^tripc v\d+\.\d+\.\d+$/);
+      assert.match(stdout.trim(), /^tripc v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/);
     });
 
     it("tripc CLI can show help", async () => {

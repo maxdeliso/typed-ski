@@ -9,7 +9,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -30,15 +30,6 @@ jobs:
       - name: Run native Bazel tests
         run: bazel test //:native_tests
 
-      - name: Build and stage distribution artifacts
-        run: |
-          bazel build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
-          mkdir -p dist
-          install -m644 bazel-bin/dist_artifacts/tripc.js bazel-bin/dist_artifacts/tripc.min.js bazel-bin/dist_artifacts/tripc.node.js dist/
-          install -m755 bazel-bin/dist_artifacts/tripc dist/tripc
-          install -m644 bazel-bin/jsr.json jsr.json
-          install -m644 bazel-bin/lib/shared/version.generated.ts lib/shared/version.generated.ts
-
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors
 
@@ -50,7 +41,7 @@ jobs:
           path: bazel-testlogs/
           if-no-files-found: ignore
 
-      # Published via jsr's Node CLI; OIDC auth uses the id-token
-      # permission above, same as deno publish would.
-      - name: Publish to JSR
-        run: npx --yes jsr@0.14.3 publish
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

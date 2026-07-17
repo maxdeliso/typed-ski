@@ -35,7 +35,10 @@ describe("improvize CLI", () => {
 
     const version = runImprovize(["--version"]);
     assert.equal(version.status, 0);
-    assert.match(version.stdout.trim(), /^improvize v\d+\.\d+\.\d+$/);
+    assert.match(
+      version.stdout.trim(),
+      /^improvize v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/,
+    );
   });
 
   it("checks formatting and writes formatted files", async () => {

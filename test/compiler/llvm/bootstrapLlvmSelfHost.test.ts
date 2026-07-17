@@ -8,7 +8,7 @@ import {
   compilerTripModuleSourcePath,
   type CompilerTripModuleName,
 } from "../../../lib/compiler/bootstrapModules.ts";
-import { describe, it } from "../../util/test_shim.ts";
+import { describe, it, before, after } from "../../util/test_shim.ts";
 import {
   bootstrap,
   compileLlvmToExecutable,
@@ -36,9 +36,22 @@ poly main =
 `;
 
 describe("LLVM self-host bootstrap", () => {
+  let compilerExe: string;
+  let cleanupBootstrap: () => Promise<void>;
+
+  before(async () => {
+    const res = await bootstrap.compileCompilerToNative();
+    compilerExe = res.exePath;
+    cleanupBootstrap = res.cleanup;
+  });
+
+  after(async () => {
+    if (cleanupBootstrap) {
+      await cleanupBootstrap();
+    }
+  });
+
   it("stage-0 emits a native compiler for stage-1 bundles", async () => {
-    const { exePath: compilerExe, cleanup: cleanupBootstrap } =
-      await bootstrap.compileCompilerToNative();
     const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-bootstrap-"));
 
     try {
@@ -114,16 +127,11 @@ poly main = seven
       assert.equal(multiModuleResult.status, 0);
       assert.equal(multiModuleResult.stdout, "");
     } finally {
-      await Promise.all([
-        cleanupBootstrap(),
-        rm(tempDir, { recursive: true, force: true }).catch(() => {}),
-      ]);
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
 
   it("stage-1 native compiler compiling the full compiler bundle", async () => {
-    const { exePath: compilerExe, cleanup: cleanupBootstrap } =
-      await bootstrap.compileCompilerToNative();
     const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-selfcomp-"));
 
     try {
@@ -174,16 +182,11 @@ poly main = seven
       assert.ok(stage2Ll);
       assert.ok(!stage2Ll.startsWith("ERR:"), stage2Ll);
     } finally {
-      await Promise.all([
-        cleanupBootstrap(),
-        rm(tempDir, { recursive: true, force: true }).catch(() => {}),
-      ]);
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
 
   it("reaches a byte-identical LLVM IR fixpoint between Stage 2 and Stage 3", async () => {
-    const { exePath: stage1Exe, cleanup: cleanupBootstrap } =
-      await bootstrap.compileCompilerToNative();
     const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-fixpoint-"));
 
     try {
@@ -227,7 +230,7 @@ poly main = seven
 
       // Stage-2 LLVM IR = compile using Stage-1 compiler executable
       const stage2Ll = await bootstrap.runNativeCompiler(
-        stage1Exe,
+        compilerExe,
         compilerBundleBytes,
       );
 
@@ -333,10 +336,7 @@ poly main = seven
       assert.equal(multiModuleResult.status, 0);
       assert.equal(multiModuleResult.stdout, "");
     } finally {
-      await Promise.all([
-        cleanupBootstrap(),
-        rm(tempDir, { recursive: true, force: true }).catch(() => {}),
-      ]);
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }, 240000);
 });

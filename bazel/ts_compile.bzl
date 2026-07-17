@@ -8,16 +8,16 @@ def _ts_compile_impl(ctx):
     tsgo_file = None
     for f in ctx.files.node_modules:
         if f.path.endswith("/@typescript/native-preview") or f.path.endswith("\\@typescript\\native-preview"):
-            tsgo_path = f.path + "/bin/tsgo.js"
+            tsgo_path = f.path + "/lib/tsgo.js"
             tsgo_file = f
             break
-        if f.path.endswith("/@typescript/native-preview/bin/tsgo.js") or f.path.endswith("\\@typescript\\native-preview\\bin\\tsgo.js"):
+        if f.path.endswith("/@typescript/native-preview/lib/tsgo.js") or f.path.endswith("\\@typescript\\native-preview\\lib\\tsgo.js"):
             tsgo_path = f.path
             tsgo_file = f
             break
     
     if tsgo_path == None:
-        fail("Cannot find @typescript/native-preview/bin/tsgo.js in node_modules")
+        fail("Cannot find @typescript/native-preview/lib/tsgo.js in node_modules")
 
     ts_config_generated = ctx.actions.declare_file(ctx.label.name + "_tsconfig.json")
 

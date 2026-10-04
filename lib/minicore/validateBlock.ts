@@ -692,7 +692,6 @@ function validateCaseTerminator(
   const seenConstructors = new Set<number>();
   const seenTags = new Set<number>();
   let caseDataType: number | undefined;
-  let caseResultType: MiniType | undefined;
 
   for (const alt of terminator.alts) {
     if (seenConstructors.has(alt.constructor)) {
@@ -721,7 +720,6 @@ function validateCaseTerminator(
     if (constructorInfo) {
       if (caseDataType === undefined) {
         caseDataType = constructorInfo.dataType;
-        caseResultType = constructorInfo.resultType;
       } else if (caseDataType !== constructorInfo.dataType) {
         throw new MiniCoreBlockValidationError(
           `Case alternative ${alt.constructorName} in ${location} belongs to datatype ${constructorInfo.dataType}, expected ${caseDataType}`,

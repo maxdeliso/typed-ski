@@ -83,9 +83,7 @@ export const createTypedApplication = (
  * 3. An application (TypedLambdaApplication)
  */
 export type TypedLambda =
-  | TypedLambdaVar
-  | TypedLambdaAbs
-  | TypedLambdaApplication;
+  TypedLambdaVar | TypedLambdaAbs | TypedLambdaApplication;
 
 /**
  * A context is a mapping from variable names to their types.

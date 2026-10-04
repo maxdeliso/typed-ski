@@ -462,12 +462,7 @@ export function summarizeTripBundleV1Inventory(input: Uint8Array): string {
 }
 
 type ModuleEnvDefinitionKind =
-  | "poly"
-  | "combinator"
-  | "data"
-  | "type"
-  | "opaque"
-  | "native";
+  "poly" | "combinator" | "data" | "type" | "opaque" | "native";
 
 interface ModuleEnvModuleInfo {
   name: string;

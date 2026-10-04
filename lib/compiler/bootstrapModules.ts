@@ -34,8 +34,7 @@ export type BootstrapTripModuleName =
   | "Compiler";
 
 export type CompilerTripModuleName =
-  | PublicTripModuleName
-  | BootstrapTripModuleName;
+  PublicTripModuleName | BootstrapTripModuleName;
 
 const BOOTSTRAP_MODULE_FILES: Record<BootstrapTripModuleName, string> = {
   Lexer: "lexer.trip",

@@ -1,5 +1,4 @@
 import { stat, readdir } from "node:fs/promises";
-import { writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { parseTripLang } from "../parser/tripLang.ts";
 import { scanTrip, type ScanKind, type ScanToken } from "./lexer.ts";
@@ -1310,17 +1309,6 @@ function previousSyntax(
   return undefined;
 }
 
-function nextSyntax(
-  tokens: readonly Token[],
-  index: number,
-): Token | undefined {
-  for (let i = index + 1; i < tokens.length; i++) {
-    const token = tokens[i]!;
-    if (!isComment(token)) return token;
-  }
-  return undefined;
-}
-
 function isExistingU8Literal(tokens: readonly Token[], index: number): boolean {
   const number = tokens[index]!;
   const lparenMatch = previousSyntaxWithIndex(tokens, index);
@@ -1995,8 +1983,7 @@ function matchPairType(
   tokens: readonly Token[],
   index: number,
 ):
-  | { type1Tokens: Token[]; type2Tokens: Token[]; endIndex: number }
-  | undefined {
+  { type1Tokens: Token[]; type2Tokens: Token[]; endIndex: number } | undefined {
   const token = tokens[index];
   if (token?.text !== "Pair") return undefined;
 

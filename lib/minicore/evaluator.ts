@@ -4,7 +4,6 @@ import type {
   LocalId,
   PrimitiveDef,
   Program,
-  SymbolId,
   Value,
 } from "./ast.ts";
 

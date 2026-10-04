@@ -32,11 +32,7 @@ import type {
   LlvmValueType,
 } from "./types.ts";
 import { lookupLlvmV0Primitive } from "./types.ts";
-import {
-  analyzeLlvmIncomingEdges,
-  validateLlvmV0,
-  type LlvmIncomingEdges,
-} from "./validateLlvmV0.ts";
+import { analyzeLlvmIncomingEdges, validateLlvmV0 } from "./validateLlvmV0.ts";
 
 export class LlvmEmissionError extends Error {
   constructor(message: string) {
@@ -60,8 +56,7 @@ interface FunctionEmitContext extends ModuleEmitContext {
 }
 
 type IncomingValue =
-  | BlockValueRef
-  | { kind: "llvm"; type: MiniType; rendered: string };
+  BlockValueRef | { kind: "llvm"; type: MiniType; rendered: string };
 
 interface EmitIncomingEdge {
   predecessor: string;

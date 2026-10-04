@@ -102,7 +102,7 @@ import Anf MkAnfFunc
 
 import Anf MkAnfProgram
 
-import AnfLlvm emitProgram
+import AnfLlvm emitProgramWithSuffix
 
 import BundleSummary MkBundleSummary
 
@@ -125,6 +125,10 @@ import ModuleEnv MkImportInfo
 import ModuleEnv DefinitionInfo
 
 import ModuleEnv MkDefinitionInfo
+
+import ModuleEnv PrimitiveInfo
+
+import ModuleEnv MkPrimitiveInfo
 
 import ModuleEnv validateImports
 
@@ -259,6 +263,44 @@ poly rec lookupImport =
                 }
           )
 
+poly rec isQualifiedDef =
+  \name : List U8 =>
+    \defs : List DefinitionInfo =>
+      matchList
+        [DefinitionInfo]
+        [Bool]
+        defs
+        false
+        (
+          \h : DefinitionInfo =>
+            \t : List DefinitionInfo =>
+              match h [Bool] {
+                | MkDefinitionInfo m n kind =>
+                  if [Bool] (eqListU8 name (qualify m n))
+                    (\u : U8 => true)
+                    (\u : U8 => isQualifiedDef name t)
+              }
+        )
+
+poly rec isPrimitiveName =
+  \name : List U8 =>
+    \prims : List PrimitiveInfo =>
+      matchList
+        [PrimitiveInfo]
+        [Bool]
+        prims
+        false
+        (
+          \h : PrimitiveInfo =>
+            \t : List PrimitiveInfo =>
+              match h [Bool] {
+                | MkPrimitiveInfo qName symbolId arity =>
+                  if [Bool] (or (eqListU8 name qName) (or (eqListU8 (qualify "Prelude" name) qName) (eqListU8 (qualify "Nat" name) qName)))
+                    (\u : U8 => true)
+                    (\u : U8 => isPrimitiveName name t)
+              }
+        )
+
 poly rec qualifyExpr =
   \bound : List (List U8) =>
     \mEnv : ModuleEnv =>
@@ -321,7 +363,14 @@ poly rec qualifyExpr =
                                     }
                                   | None =>
                                     match (lookupExportModule name exps) [Result (List U8) Expr] {
-                                      | None => Ok [List U8] [Expr] (E_Var name)
+                                      | None =>
+                                        if [Result (List U8) Expr] (or (isPrimitiveName name primitives) (and (containsDot name) (isQualifiedDef name defs)))
+                                          (
+                                            \u : U8 => Ok [List U8] [Expr] (E_Var name)
+                                          )
+                                          (
+                                            \u : U8 => Err [List U8] [Expr] (append [U8] "Unbound variable: " name)
+                                          )
                                       | Some m =>
                                         let gName = qualify m name in
                                         match (lookupConstructorAlias gName aliases) [Result (List U8) Expr] {
@@ -567,25 +616,42 @@ poly rec entryHasParam =
     \name : List U8 =>
       matchList
         [AnfFunc]
-        [Bool]
+        [Result (List U8) Bool]
         funcs
-        false
+        (Err [List U8] [Bool] "Missing entry main")
         (
           \h : AnfFunc =>
             \t : List AnfFunc =>
-              match h [Bool] {
-                | MkAnfFunc fnName params body =>
-                  if [Bool] (eqListU8 fnName name)
-                    (
-                      \u : U8 =>
-                        matchList
-                          [List U8]
-                          [Bool]
-                          params
-                          false
-                          (\p : List U8 => \pt : List (List U8) => true)
-                    )
-                    (\u : U8 => entryHasParam t name)
+              do [Result (List U8) Bool] {
+                MkAnfFunc fnName params body = h
+                return
+                if [Result (List U8) Bool] (eqListU8 fnName name)
+                  (
+                    \u : U8 =>
+                      matchList
+                        [List U8]
+                        [Result (List U8) Bool]
+                        params
+                        (Ok [List U8] [Bool] false)
+                        (
+                          \p : List U8 =>
+                            \pt : List (List U8) =>
+                              matchList
+                                [List U8]
+                                [Result (List U8) Bool]
+                                pt
+                                (Ok [List U8] [Bool] true)
+                                (
+                                  \p2 : List U8 =>
+                                    \rest : List (List U8) =>
+                                      Err
+                                        [List U8]
+                                        [Bool]
+                                        "Entry main must take zero or one input argument"
+                                )
+                        )
+                  )
+                  (\u : U8 => entryHasParam t name)
               }
         )
 
@@ -774,39 +840,57 @@ poly compileBundleToLlvm =
       valImps <- (validateImports imps modsList exps)
       valExps <- (validateExports exps defs ctors)
       allDecls <- (collectAllDeclsFromModuleEnv mEnv modsList)
+      assert (memberOfList (qualify entry "main") (getDefNames allDecls)) else
+      "Missing entry main"
       prunedDecls = pruneDecls entry allDecls
       orderedDecls = append [Decl] (filterDataDecls prunedDecls) (filterDefDecls prunedDecls)
       coreDefs <- (elaborateProgramToCore orderedDecls)
       prog <- (buildMiniProgram coreDefs entry)
       normalized = normalizeProgram prog
       MkAnfProgram funcs entryName = normalized
-      llvm <- (emitProgram normalized)
+      hasInput <-
+      if [Result (List U8) Bool] (eqListU8 wrapper "enabled")
+        (\u : U8 => entryHasParam funcs (qualify entryName "main"))
+        (\u : U8 => Ok [List U8] [Bool] false)
+      mainWrapper =
+      if [List U8] (eqListU8 wrapper "enabled")
+        (
+          \u2 : U8 =>
+            let fullName = concat [U8] {List U8 | "trip_fn_" entryName "_main"} in
+            if [List U8] hasInput
+              (
+                \u2 : U8 =>
+                  concat
+                    [U8]
+                    {List U8 |
+                      "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @"
+                      fullName
+                      "(i64 0, i64 %trip_source_cast)\n  %exit_code = trunc i64 %trip_result to i32\n  ret i32 %exit_code\n}\n"
+                    }
+              )
+              (
+                \u2 : U8 =>
+                  concat
+                    [U8]
+                    {List U8 |
+                      "define i32 @main() {\nentry:\n  %trip_result = call i64 @"
+                      fullName
+                      "(i64 0)\n  ret i32 0\n}\n"
+                    }
+              )
+        )
+        (\u : U8 => "")
+      llvm <- (emitProgramWithSuffix normalized mainWrapper)
       decls =
       "declare void @trip_write_one(i8)\ndeclare i8 @trip_read_one()\ndeclare ptr @trip_alloc_obj(i64, i64)\ndeclare void @trip_obj_set_field(ptr, i64, i64)\ndeclare i64 @trip_obj_tag(ptr)\ndeclare i64 @trip_obj_field(ptr, i64)\n\n"
-      withDecls = append [U8] decls llvm
-      return
-        Ok
-        [List U8]
-        [List U8]
+      targetHeader =
+      if [List U8] (eqListU8 target "generic")
+        (\u : U8 => "")
         (
-          if [List U8] (eqListU8 wrapper "enabled")
-            (
-              \u2 : U8 =>
-                let fullName = concat [U8] {List U8 | "trip_fn_" entryName "_main"} in
-                if [List U8] (entryHasParam funcs (concat [U8] {List U8 | entryName ".main"}))
-                  (
-                    \u2 : U8 =>
-                      let mainWrapper = concat [U8] {List U8 | "declare ptr @trip_read_stdin_list_u8()\n\ndefine i32 @main() {\nentry:\n  %trip_source = call ptr @trip_read_stdin_list_u8()\n  %trip_source_cast = ptrtoint ptr %trip_source to i64\n  %trip_result = call i64 @" fullName "(i64 0, i64 %trip_source_cast)\n  ret i32 0\n}\n"} in
-                      append [U8] withDecls mainWrapper
-                  )
-                  (
-                    \u2 : U8 =>
-                      let mainWrapper = concat [U8] {List U8 | "define i32 @main() {\nentry:\n  %trip_result = call i64 @" fullName "(i64 0)\n  ret i32 0\n}\n"} in
-                      append [U8] withDecls mainWrapper
-                  )
-            )
-            (\u : U8 => withDecls)
+          \u : U8 => concat [U8] {List U8 | "target triple = \"" target "\"\n\n"}
         )
+      header = append [U8] targetHeader decls
+      return Ok [List U8] [List U8] (append [U8] header llvm)
     }
 
 poly rec writeAll =
@@ -816,6 +900,8 @@ poly rec writeAll =
 poly main =
   \source : List U8 =>
     match (compileBundleToLlvm source) [U8] {
-      | Err e => writeAll (append [U8] "ERR:" e)
+      | Err e =>
+        let written = writeAll (append [U8] "ERR:" e) in
+        #u8(1)
       | Ok llvm => writeAll llvm
     }

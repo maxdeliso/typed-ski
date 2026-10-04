@@ -3,10 +3,10 @@
  *
  * Runs `AnfLlvm.compileSourceToLlvmText` under the TypeScript MiniCore
  * evaluator on a small `U8` corpus (params, let-bindings, direct
- * known-symbol calls, the read/write runtime primitives, nullary
- * constructors, and a `case` over a nullary enum) and asserts the emitted
- * LLVM text. The boxed-object output is additionally assembled with clang.
- * Inner lambdas and constructors with fields are not yet exercised here.
+ * known-symbol calls, the read/write runtime primitives, nullary constructors,
+ * and cases) and asserts the emitted LLVM text. Closure checks compile and run
+ * first-class globals, partial application, and captured lambdas with clang;
+ * allocation counts distinguish shared globals from per-application state.
  */
 
 import { describe, it } from "../util/test_shim.ts";
@@ -17,9 +17,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compilerTripModuleSourcePath } from "../../lib/compiler/bootstrapModules.ts";
 import { findLocalClangPath } from "../../lib/shared/clangPath.ts";
+import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { compileMiniCoreModules } from "../../lib/minicore/fromTrip.ts";
 import { evaluateMiniCore } from "../../lib/minicore/evaluator.ts";
 import type { Value } from "../../lib/minicore/ast.ts";
+import { macosSdkArgs } from "./llvm/nativeHarness.ts";
 
 const CLANG = process.env["TYPED_SKI_CLANG"] ?? findLocalClangPath();
 
@@ -45,6 +47,65 @@ async function assertAssembles(llvm: string, label: string): Promise<void> {
       0,
       `${label}: clang rejected emitted IR:\n${result.stderr}\n--- IR ---\n${llvm}`,
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** Observe both the generated program's result and its closure allocation cost. */
+async function assertClosureExecution(
+  llvm: string,
+  label: string,
+  expected: number,
+  objects: number,
+): Promise<void> {
+  if (!CLANG) return;
+  const dir = await mkdtemp(join(tmpdir(), "trip-closed-global-"));
+  try {
+    const llPath = join(dir, "mod.ll");
+    const driverPath = join(dir, "driver.c");
+    const exePath = join(
+      dir,
+      process.platform === "win32" ? "test.exe" : "test",
+    );
+    await writeFile(
+      llPath,
+      llvm.replace("define i64 @main(", "define i64 @trip_test_entry("),
+      "utf8",
+    );
+    await writeFile(
+      driverPath,
+      `#include "trip_runtime.h"
+#include <stdio.h>
+extern uint64_t trip_test_entry(uint64_t);
+int main(void) {
+  uint64_t result = trip_test_entry(0);
+  trip_allocation_stats_t stats = trip_allocation_stats();
+  printf("%llu %llu\\n", (unsigned long long)result, (unsigned long long)stats.objects);
+  return 0;
+}
+`,
+      "utf8",
+    );
+    const compiled = spawnSync(
+      CLANG,
+      [
+        llPath,
+        driverPath,
+        join(workspaceRoot, "runtime/trip/trip_runtime.c"),
+        "-I",
+        join(workspaceRoot, "runtime/trip"),
+        "-O3",
+        ...macosSdkArgs(),
+        "-o",
+        exePath,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(compiled.status, 0, `${label}: ${compiled.stderr}\n${llvm}`);
+    const executed = spawnSync(exePath, [], { encoding: "utf8" });
+    assert.equal(executed.status, 0, `${label}: ${executed.stderr}`);
+    assert.equal(executed.stdout.trim(), `${expected} ${objects}`, label);
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
@@ -116,6 +177,25 @@ __entry:
  * evaluator and returns the emitted LLVM text.
  */
 export async function compileSourceToLlvm(source: string): Promise<string> {
+  return evaluateEmitterExpression(
+    "import AnfLlvm compileSourceToLlvmText",
+    `compileSourceToLlvmText ${JSON.stringify(source)}`,
+  );
+}
+
+async function evaluateEmitterExpression(
+  imports: string,
+  expression: string,
+): Promise<string> {
+  return Buffer.from(
+    valueToBytes(await evaluateEmitterValue(imports, expression)),
+  ).toString("utf8");
+}
+
+async function evaluateEmitterValue(
+  imports: string,
+  expression: string,
+): Promise<Value> {
   const modules: Array<{ name: string; source: string }> = await Promise.all(
     MODULE_NAMES.map(async (name) => ({
       name,
@@ -127,29 +207,271 @@ export async function compileSourceToLlvm(source: string): Promise<string> {
     source: `module Verify
 import Prelude List
 import Prelude U8
-import AnfLlvm compileSourceToLlvmText
+${imports}
 
 export main
 
-poly main = compileSourceToLlvmText ${JSON.stringify(source)}
+poly main = ${expression}
 `,
   });
 
   const program = compileMiniCoreModules(modules, "Verify");
   const result = evaluateMiniCore(program);
-  return Buffer.from(valueToBytes(result.value)).toString("utf8");
-}
-
-/** Wraps a function body as `module Demo` with `main` taking U8 params `names`. */
-function demoMain(names: readonly string[], body: string): string {
-  const binders = names.map((n) => `\\\${n} : U8 => `).join("");
-  return `module Demo
-export main
-poly main = ${binders}${body}
-`;
+  return result.value;
 }
 
 describe("ANF -> LLVM emitter (.trip)", () => {
+  it("emits a footer with identical bytes while sharing its original list tail", async () => {
+    const imports = `import Prelude Pair
+import Prelude MkPair
+import Prelude Ok
+import Prelude Err
+import Anf AnfExpr
+import Anf AnfFunc
+import Anf MkAnfFunc
+import Anf MkAnfProgram
+import Anf AE_Var
+import Anf AE_Let
+import Anf AE_Call
+import Anf AE_Native
+import Unparse T_Byte
+import AnfLlvm emitProgram
+import AnfLlvm emitProgramWithSuffix`;
+    const program = `MkAnfProgram
+      {AnfFunc |
+        (MkAnfFunc "identity" {List U8 | "x"} (AE_Var "x"))
+        (MkAnfFunc "main" {List U8 |}
+          (AE_Let "f" (AE_Var "identity")
+            (AE_Call "f" {AnfExpr | (AE_Native (T_Byte #u8(65)))})))
+      } "main"`;
+    const base = await evaluateEmitterExpression(
+      imports,
+      `match (emitProgram (${program})) [List U8] {
+        | Err message => message
+        | Ok llvm => llvm
+      }`,
+    );
+    const footer = "; an immutable footer\n";
+    const result = await evaluateEmitterValue(
+      imports,
+      `let suffix = ${JSON.stringify(footer)} in
+      match (emitProgramWithSuffix (${program}) suffix) [Pair (List U8) (List U8)] {
+        | Err message => MkPair [List U8] [List U8] message suffix
+        | Ok llvm => MkPair [List U8] [List U8] llvm suffix
+      }`,
+    );
+    assert.equal(result.kind, "con");
+    if (result.kind !== "con") throw new Error("expected emitted-list pair");
+    const emitted = result.fields[0];
+    const suffix = result.fields[1];
+    assert.ok(emitted && suffix);
+    assert.equal(Buffer.from(valueToBytes(emitted)).toString(), base + footer);
+
+    let tail = emitted;
+    let prefixBytes = 0;
+    while (tail !== suffix) {
+      assert.equal(tail.kind, "con");
+      if (tail.kind !== "con" || tail.fields.length !== 2) {
+        throw new Error(
+          "emission copied or discarded the supplied footer tail",
+        );
+      }
+      const next: Value | undefined = tail.fields[1];
+      assert.ok(next);
+      tail = next;
+      prefixBytes++;
+    }
+    assert.equal(prefixBytes, Buffer.byteLength(base));
+  });
+
+  it("keeps closed-global deduplication in deterministic encounter order", async () => {
+    const llvm = await compileSourceToLlvm(String.raw`module Demo
+export main
+poly inc = \x : U8 => addU8 x #u8(1)
+poly dec = \x : U8 => subU8 x #u8(1)
+poly apply = \f : U8 -> U8 => \x : U8 => f x
+poly main =
+  addU8 (apply inc #u8(31))
+    (addU8 (apply dec #u8(34)) (subU8 (apply inc #u8(0)) #u8(1)))
+`);
+    assert.deepEqual(
+      [...llvm.matchAll(/@__trip_closed\$([^ ]+) = private constant/g)].map(
+        (match) => match[1],
+      ),
+      ["dec", "inc"],
+    );
+    await assertClosureExecution(llvm, "ordered closed globals", 65, 0);
+  });
+
+  it("rejects unknown and unevaluated zero-arity global values in low-level ANF", async () => {
+    const imports = `import Prelude Ok
+import Prelude Err
+import Anf AnfFunc
+import Anf MkAnfFunc
+import Anf MkAnfProgram
+import Anf AE_Var
+import Anf AE_Native
+import Unparse T_Byte
+import AnfLlvm emitProgram`;
+    for (const [name, expected] of [
+      ["missing", "Unknown global function value: missing"],
+      ["value", "Unevaluated zero-arity global function value: value"],
+    ]) {
+      const emitted = await evaluateEmitterExpression(
+        imports,
+        `match (emitProgram (MkAnfProgram
+          {AnfFunc |
+            (MkAnfFunc "value" {List U8 |} (AE_Native (T_Byte #u8(65))))
+            (MkAnfFunc "main" {List U8 |} (AE_Var ${JSON.stringify(name)}))
+          } "main")) [List U8] {
+          | Err message => message
+          | Ok llvm => llvm
+        }`,
+      );
+      assert.equal(emitted, expected);
+    }
+  });
+
+  it("reuses immutable global closures and curries multi-argument function values", async () => {
+    const cases: ReadonlyArray<
+      readonly [string, string, number, number, number]
+    > = [
+      [
+        "a global function value is reused without allocating",
+        String.raw`module Demo
+export main
+poly inc = \x : U8 => addU8 x #u8(1)
+poly apply = \f : U8 -> U8 => \x : U8 => f x
+poly main = addU8 (apply inc #u8(31)) (apply inc #u8(32))
+`,
+        65,
+        0,
+        1,
+      ],
+      [
+        "two-argument globals are applied through independent partial closures",
+        String.raw`module Demo
+export main
+poly plus = \x : U8 => \y : U8 => addU8 x y
+poly main =
+  let f = plus in
+  let a = f #u8(20) in
+  let b = f #u8(30) in
+  addU8 (a #u8(5)) (b #u8(10))
+`,
+        65,
+        2,
+        1,
+      ],
+      [
+        "three-argument globals retain argument order across curried steps",
+        String.raw`module Demo
+export main
+poly weighted = \x : U8 => \y : U8 => \z : U8 => addU8 (addU8 x (addU8 y y)) (addU8 z (addU8 z z))
+poly main =
+  let f = weighted in
+  f #u8(10) #u8(20) #u8(5)
+`,
+        65,
+        2,
+        1,
+      ],
+      [
+        "a direct partial global call uses the curried value ABI",
+        String.raw`module Demo
+export main
+poly plus = \x : U8 => \y : U8 => addU8 x y
+poly main =
+  let f = plus #u8(30) in
+  f #u8(35)
+`,
+        65,
+        1,
+        1,
+      ],
+      [
+        "an overapplied global calls the closure it returns",
+        String.raw`module Demo
+export main
+poly make = \x : U8 => let f = (\y : U8 => \z : U8 => addU8 (addU8 x y) z) in f
+poly main = make #u8(30) #u8(15) #u8(20)
+`,
+        65,
+        2,
+        1,
+      ],
+      [
+        "a zero-arity global is evaluated before applying its returned closure",
+        String.raw`module Demo
+export main
+poly deferred = let f = (\x : U8 => addU8 x #u8(1)) in f
+poly main = deferred #u8(64)
+`,
+        65,
+        1,
+        0,
+      ],
+      [
+        "a zero-arity global value remains a direct thunk call",
+        String.raw`module Demo
+export main
+poly value = #u8(65)
+poly main = value
+`,
+        65,
+        0,
+        0,
+      ],
+      [
+        "a zero-arity closure thunk is evaluated before binding its alias",
+        String.raw`module Demo
+export main
+poly deferred = let f = (\x : U8 => addU8 x #u8(1)) in f
+poly main = let g = deferred in g #u8(64)
+`,
+        65,
+        1,
+        0,
+      ],
+      [
+        "a zero-arity closure thunk is evaluated before being passed as an argument",
+        String.raw`module Demo
+export main
+poly deferred = let f = (\x : U8 => addU8 x #u8(1)) in f
+poly apply = \f : U8 -> U8 => \x : U8 => f x
+poly main = apply deferred #u8(64)
+`,
+        65,
+        1,
+        0,
+      ],
+      [
+        "a local binder shadows the global value without aliasing it",
+        String.raw`module Demo
+export main
+poly inc = \x : U8 => addU8 x #u8(1)
+poly main =
+  let global = inc in
+  let inc = (\x : U8 => addU8 x #u8(2)) in
+  addU8 (global #u8(30)) (inc #u8(32))
+`,
+        65,
+        1,
+        1,
+      ],
+    ];
+    for (const [label, source, expected, objects, closedGlobals] of cases) {
+      const llvm = await compileSourceToLlvm(source);
+      assert.ok(!llvm.startsWith("ERR:"), `${label}: ${llvm}`);
+      assert.equal(
+        (llvm.match(/@__trip_closed\$[^ ]+ = private constant/g) ?? []).length,
+        closedGlobals,
+        `${label}: each closed global must have one immutable object`,
+      );
+      await assertClosureExecution(llvm, label, expected, objects);
+    }
+  });
+
   it("emits LLVM for the straight-line U8 subset (params, lets, calls)", async () => {
     assert.equal(await compileSourceToLlvm(DEMO_SOURCE), EXPECTED_LLVM);
   });

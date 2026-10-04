@@ -1,4 +1,4 @@
-import { describe, it } from "../util/test_shim.ts";
+import { it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 import rsexport, { type RandomSeed } from "random-seed";
 import { randTerminal } from "../../lib/ski/generator.ts";

@@ -46,7 +46,6 @@ export function printRuntimeDeclaration(name: RuntimeSymbol): string {
     attributes.push("readnone", "willreturn");
   }
 
-  const attrStr = attributes.length > 0 ? ` #${name}_attrs` : "";
   const directAttrs = attributes.join(" ");
   return `declare ${signature.result} ${llvmRuntimeName(name)}(${args}) ${directAttrs}`;
 }

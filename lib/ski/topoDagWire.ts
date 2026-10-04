@@ -574,10 +574,6 @@ export class TopoDagWireDecoder {
   }
 }
 
-export function createTopoDagWireDecoder(): TopoDagWireDecoder {
-  return new TopoDagWireDecoder();
-}
-
 export function fromTopoDagWire(topoDagWire: string): SKIExpression {
   const decoder = new TopoDagWireDecoder();
   decoder.write(trimmedTopoDagWireOrThrow(topoDagWire));

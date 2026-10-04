@@ -10,7 +10,6 @@ import {
   extractDefinitionValue,
   indexSymbols,
 } from "../../../lib/meta/frontend/symbolTable.ts";
-import { CompilationError } from "../../../lib/meta/frontend/errors.ts";
 import { SKITerminalSymbol } from "../../../lib/ski/terminal.ts";
 
 describe("Symbol Table", () => {

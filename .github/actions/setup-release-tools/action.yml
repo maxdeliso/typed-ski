@@ -1,0 +1,28 @@
+name: Setup release tools
+description: Use the Bazel-pinned Node version and lockfile-pinned publishing tools.
+
+runs:
+  using: composite
+  steps:
+    - name: Read the repository Node version
+      id: node-version
+      shell: bash
+      run: |
+        version="$(sed -n 's/^NODE_26_VERSION = "\([^"]*\)"/\1/p' MODULE.bazel)"
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Setup the same Node version used by Bazel
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ steps.node-version.outputs.version }}
+        package-manager-cache: false
+
+    - name: Setup the packageManager-pinned pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        cache: true
+
+    - name: Install locked release dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

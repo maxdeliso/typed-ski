@@ -12,9 +12,14 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: publish-jsr-main
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
         with:
@@ -32,6 +37,9 @@ jobs:
       - name: Run native Bazel tests
         run: bazel test //:native_tests
 
+      - name: Check release source formatting and types
+        run: bazel build //:fmt_check //:typecheck
+
       - name: Run test suite
         run: bazel test //:node_tests --test_output=errors
 
@@ -43,7 +51,10 @@ jobs:
           path: bazel-testlogs/
           if-no-files-found: ignore
 
+      - name: Setup pinned release tools
+        uses: ./.github/actions/setup-release-tools
+
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --package semantic-release --package @semantic-release/exec --package @semantic-release/github --package jsr@0.14.3 semantic-release
+        run: pnpm exec semantic-release

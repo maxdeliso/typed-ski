@@ -220,15 +220,29 @@ node_dist(
     ts_out = ":ts_out",
 )
 
+# esbuild's JS API needs its optional native package even with symlinks preserved.
+filegroup(
+    name = "esbuild_native_package",
+    output_group = "package_directory",
+    srcs = select({
+        ":linux_x86_64": [":.aspect_rules_js/node_modules/@esbuild+linux-x64@0.28.1"],
+        ":macos_arm64": [":.aspect_rules_js/node_modules/@esbuild+darwin-arm64@0.28.1"],
+        ":windows_x86_64": [":.aspect_rules_js/node_modules/@esbuild+win32-x64@0.28.1"],
+    }),
+)
+
 node_sharded_test(
     name = "node_tests",
     size = "large",
     timeout = "long",
     clang = LLVM_CLANG_BIN,
     data = NODE_TEST_DATA + [
+        # random-seed needs json-stringify-safe's direct dev link when Node
+        # preserves package symlinks; keep it in the locked dev dependencies.
         ":node_modules",
     ],
     dist = ":dist_artifacts",
+    esbuild_native_package = ":esbuild_native_package",
     generated_jsr = ":jsr.json",
     llvm_dist = LLVM_DIST_DATA,
     shard_count = 8,

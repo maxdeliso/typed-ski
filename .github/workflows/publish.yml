@@ -1,9 +1,13 @@
-name: Publish to JSR
+name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      series:
+        description: "Release series (version will be <series>.<workflow run number>)"
+        type: string
+        required: true
+        default: "0.41"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -17,7 +21,92 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x64
+          - os: macos-15
+            platform: darwin-arm64
+          - os: windows-2022
+            platform: win32-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Reuse binaries from this run on retry
+        if: github.run_attempt != '1'
+        id: reuse
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: release-${{ matrix.platform }}
+          path: release-assets
+
+      - name: Setup Bazel and Node dependencies
+        if: steps.reuse.outcome != 'success'
+        uses: ./.github/actions/setup-bazel-node
+        with:
+          disk-cache: ${{ github.workflow }}
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
+      - name: Build native Bazel targets
+        if: steps.reuse.outcome != 'success'
+        run: bazel build //consumers/thanatos:thanatos
+
+      - name: Run native Bazel tests
+        if: steps.reuse.outcome != 'success'
+        run: bazel test //:native_tests
+
+      - name: Check release source formatting and types
+        if: steps.reuse.outcome != 'success'
+        run: bazel build //:fmt_check //:typecheck
+
+      - name: Run test suite
+        if: steps.reuse.outcome != 'success'
+        run: bazel test //:node_tests --test_output=errors
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: bazel-test-logs-release-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: bazel-testlogs/
+          if-no-files-found: ignore
+
+      - name: Setup pinned release tools
+        if: steps.reuse.outcome != 'success'
+        uses: ./.github/actions/setup-release-tools
+
+      - name: Build standalone release binaries
+        if: steps.reuse.outcome != 'success'
+        env:
+          RELEASE_SERIES: ${{ inputs.series }}
+          RELEASE_PLATFORM: ${{ matrix.platform }}
+        run: node scripts/release_binaries.mjs
+
+      - name: Save immutable binaries for publication and retries
+        if: steps.reuse.outcome != 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.platform }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 90
+
   publish:
+    needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -25,36 +114,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Bazel and Node dependencies
-        uses: ./.github/actions/setup-bazel-node
+      - uses: ./.github/actions/setup-bazel-node
         with:
           disk-cache: ${{ github.workflow }}
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: true
 
-      - name: Build native Bazel targets
-        run: bazel build //consumers/thanatos:thanatos
+      - uses: ./.github/actions/setup-release-tools
 
-      - name: Run native Bazel tests
-        run: bazel test //:native_tests
-
-      - name: Check release source formatting and types
-        run: bazel build //:fmt_check //:typecheck
-
-      - name: Run test suite
-        run: bazel test //:node_tests --test_output=errors
-
-      - name: Upload test logs
-        if: always()
-        uses: actions/upload-artifact@v6
+      - name: Download tested platform binaries
+        uses: actions/download-artifact@v5
         with:
-          name: bazel-test-logs-publish
-          path: bazel-testlogs/
-          if-no-files-found: ignore
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
 
-      - name: Setup pinned release tools
-        uses: ./.github/actions/setup-release-tools
-
-      - name: Run semantic-release
+      - name: Publish version and GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec semantic-release
+          RELEASE_SERIES: ${{ inputs.series }}
+        run: node scripts/release.mjs

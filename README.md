@@ -121,11 +121,47 @@ contract.
 
 ### Releases
 
-Pushes to `main` run the serialized [release workflow](.github/workflows/publish.yml).
+In GitHub, open **Actions → Release → Run workflow**, select **main**, and click
+**Run workflow**. Pushes do not publish. The default version is
+`0.41.<github.run_number>`; the optional release-series field changes the
+`MAJOR.MINOR` prefix without editing files. The patch suffix is GitHub's
+[workflow run number](https://docs.github.com/en/actions/reference/workflows-and-actions/variables),
+which increases for each new run and stays unchanged on retries. Keep the
+workflow name and `publish.yml` path unchanged to preserve its counter. Gaps from
+failed runs are normal.
+The default series starts above the previous `0.40.x` releases. Choose a higher
+series when changing it; retries use the original inputs and source commit.
+
 Formatting, strict TypeScript checks, native tests, and Node tests must pass
-before semantic-release chooses a version from commit history. Release and
-pull-request packaging checks use the Node version pinned in `MODULE.bazel`,
-the `packageManager` pnpm version, and frozen lockfile dependencies.
+before publishing. Release and pull-request packaging checks use the Node
+version pinned in `MODULE.bazel`, the `packageManager` pnpm version, and frozen
+lockfile dependencies. Version files are updated only in the runner checkout;
+there is no version-bump commit or commit-message convention to maintain.
+
+Releases are serialized. After package verification, `v<version>` reserves the
+exact source commit before JSR publication; a draft GitHub release is created after
+publication succeeds and becomes public only after all binary assets are uploaded.
+**Re-run failed jobs** resumes the same version: an existing
+JSR version is skipped, a missing GitHub release is completed, and an already
+completed release is a no-op. A tag pointing at different source fails closed,
+as do registry/API errors other than a missing resource. Do not delete reservation
+tags after a partial failure. Clicking **Run workflow** again intentionally creates
+a new version, even for the same source commit.
+
+Each release includes `.tar.gz` archives for Linux x64, macOS ARM64, and Windows
+x64. Each archive contains standalone `tripc` and `improvize` executables (with
+Node embedded), the native Thanatos executable, licenses, and a version/source
+record. No separate Node installation is needed. macOS binaries are ad-hoc signed;
+Windows binaries are unsigned. The workflow builds and tests on each platform and
+smoke-tests the packaged CLIs outside the source tree. `SHA256SUMS` and `SHA512SUMS`
+cover all three archives; for example, run `sha256sum -c SHA256SUMS` and
+`sha512sum -c SHA512SUMS` after downloading them all.
+
+Retries reuse this run's build artifacts (retained for 90 days), skip identical
+uploaded assets, and upload missing assets without replacing existing bytes.
+Conflicting assets stop the release. Re-run the original run to recover a partial
+publication while its artifacts are retained. After artifact expiry, rebuilt bytes
+may differ and require investigation instead of silently replacing downloads.
 
 The shared [preparation step](scripts/release_prepare.js) requires every built
 artifact, checks generated metadata and all three bundled CLI versions, and

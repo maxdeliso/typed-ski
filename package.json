@@ -52,10 +52,6 @@
     "update:goldens": "pnpm run build:ts && node --disable-warning=ExperimentalWarning ts_out/scripts/update_goldens.js"
   },
   "devDependencies": {
-    "@semantic-release/commit-analyzer": "13.0.1",
-    "@semantic-release/exec": "7.1.0",
-    "@semantic-release/github": "12.0.9",
-    "@semantic-release/release-notes-generator": "14.1.1",
     "@types/node": "^26.1.1",
     "@types/random-seed": "^0.3.5",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
@@ -65,7 +61,6 @@
     "pnpm": "11.13.1",
     "prettier": "^3.9.5",
     "random-seed": "0.3.0",
-    "semantic-release": "25.0.7",
     "ts-morph": "^28.0.0"
   }
 }

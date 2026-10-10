@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export const platforms = ["darwin-arm64", "linux-x64", "win32-x64"];
 
@@ -76,14 +79,17 @@ export async function ensureReleaseAssets(
 }
 
 export async function uploadReleaseAssets(repository, release, files) {
-  const gh = (args, options = {}) =>
-    execFileSync("gh", args, {
+  const gh = async (args, options = {}) => {
+    const { stdout } = await execFileAsync("gh", args, {
       env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN },
       maxBuffer: 256 * 1024 * 1024,
+      encoding: "buffer",
       ...options,
     });
+    return stdout;
+  };
   const existing = JSON.parse(
-    gh(
+    await gh(
       ["api", `repos/${repository}/releases/${release.id}/assets?per_page=100`],
       { encoding: "utf8" },
     ),
@@ -92,17 +98,14 @@ export async function uploadReleaseAssets(repository, release, files) {
     files,
     existing,
     (file) =>
-      gh(
-        [
-          "release",
-          "upload",
-          release.tag_name,
-          file.path,
-          "--repo",
-          repository,
-        ],
-        { stdio: "inherit" },
-      ),
+      gh([
+        "release",
+        "upload",
+        release.tag_name,
+        file.path,
+        "--repo",
+        repository,
+      ]),
     (asset) =>
       gh([
         "api",

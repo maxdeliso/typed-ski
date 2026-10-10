@@ -109,7 +109,11 @@ try {
     join(stage, "VERSION"),
     `${version}\n${process.env.GITHUB_SHA}\n`,
   );
-  run("tar", [
+  const tar =
+    process.platform === "win32"
+      ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+      : "tar";
+  run(tar, [
     "-czf",
     join(output, `${archiveRoot}.tar.gz`),
     "-C",

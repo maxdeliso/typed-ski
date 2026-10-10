@@ -53,6 +53,7 @@ coverage-c.lcov
 *.gcno
 
 # Build artifacts
+release-assets/
 *.o
 obj/
 bin/thanatos

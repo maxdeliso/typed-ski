@@ -1,8 +1,19 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { releaseAssets, uploadReleaseAssets } from "./release_assets.mjs";
+
+export function runReleaseCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: "inherit", ...options });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} failed (${signal ?? code})`));
+    });
+  });
+}
 
 export function releaseIdentity(env) {
   if (
@@ -119,7 +130,7 @@ async function main() {
   if (!/^@[\w-]+\/[\w-]+$/.test(pkg.name))
     throw new Error("Invalid package name");
   const run = (command, args) =>
-    execFileSync(command, args, { cwd: root, stdio: "inherit" });
+    runReleaseCommand(command, args, { cwd: root });
   const files = releaseAssets(join(root, "release-assets"), identity.version);
   const result = await publishRelease(identity, {
     github: (path, options = {}) =>

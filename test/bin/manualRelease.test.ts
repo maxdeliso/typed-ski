@@ -4,9 +4,8 @@ import { pathToFileURL } from "node:url";
 import { describe, it } from "../util/test_shim.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
-const { releaseIdentity, publishRelease, requestJson } = await import(
-  pathToFileURL(join(workspaceRoot, "scripts/release.mjs")).href
-);
+const { releaseIdentity, publishRelease, requestJson, runReleaseCommand } =
+  await import(pathToFileURL(join(workspaceRoot, "scripts/release.mjs")).href);
 const env = {
   GITHUB_EVENT_NAME: "workflow_dispatch",
   GITHUB_REF: "refs/heads/main",
@@ -72,6 +71,32 @@ function fixture() {
 }
 
 describe("Manual releases", () => {
+  it("keeps the event loop responsive while release subprocesses run", async () => {
+    let serviced = false;
+    const timer = setTimeout(() => {
+      serviced = true;
+    }, 20);
+    try {
+      await runReleaseCommand(process.execPath, [
+        "-e",
+        "setTimeout(() => {}, 100)",
+      ]);
+      assert.equal(serviced, true);
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  it("propagates subprocess exit and startup failures", async () => {
+    await assert.rejects(
+      runReleaseCommand(process.execPath, ["-e", "process.exit(7)"]),
+      /failed \(7\)/,
+    );
+    await assert.rejects(
+      runReleaseCommand(join(workspaceRoot, "nonexistent-release-command"), []),
+      /ENOENT/,
+    );
+  });
   it("uses the increasing run number and ignores the attempt number", () => {
     assert.equal(identity.version, "0.41.123");
     assert.deepEqual(

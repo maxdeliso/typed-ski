@@ -13,11 +13,13 @@ build system and one workspace:
    IR → LLVM IR → clang. CLI in [`bin/tripc.ts`](bin/tripc.ts); pipeline
    documented in [`lib/minicore/README.md`](lib/minicore/README.md); native
    runtime in [`runtime/trip/`](runtime/trip/).
-3. **Self-hosting bootstrap** — an in-progress re-implementation of the
-   compiler in TripLang itself. `.trip` modules in
+3. **Self-hosting bootstrap** — a re-implementation of the compiler in
+   TripLang itself with a verified four-stage LLVM self-hosting fixpoint.
+   `.trip` modules in
    [`bootstrap/src/`](bootstrap/src/) (lexer.trip, parser.trip, core.trip,
-   lowering.trip, llvm.trip, etc.). The current native bootstrap consumes
-   `bundle-v1` input and emits LLVM IR for the narrow stage-1 path.
+   lowering.trip, llvm.trip, etc.). The native bootstrap consumes `bundle-v1`
+   input and recompiles the compiler through Stage 4, with byte-identical
+   LLVM IR at Stages 2, 3, and 4 and generated-compiler correctness checks.
 4. **Sealed SKI reducer consumer** — the legacy native SKI reducer lives under
    [`consumers/thanatos/`](consumers/thanatos/) as an isolated binary consumer,
    outside the main public TypeScript API and test runtime.
@@ -100,6 +102,12 @@ bazelisk test //:node_tests --test_arg=test/path/to/test.ts
 - `bazelisk build //:typecheck` — TypeScript type checking
 - `bazelisk run //:verify_version` — check the repo-pinned Node.js version
 
+Run `bun scripts/findUnusedExports.ts` (or its built JavaScript) for a read-only
+export audit. The report lists package/CLI API roots, maintenance/build/benchmark
+tools, Node test lifecycle hooks, and tests separately. Treat unreachable
+exports as review candidates: check dynamic consumers, TripLang entrypoints,
+runtime symbols, and data fixtures before deleting anything.
+
 ## Artifacts
 
 - [JSR](https://jsr.io/@maxdeliso/typed-ski)
@@ -110,6 +118,36 @@ the SKI utilities, System F utilities, and source tools. See
 internal modules (MiniCore IR, Bundle-v1 serialization, TopoDagWire protocol)
 are importable from their specific paths but are not part of the stable
 contract.
+
+### Releases
+
+Pushes to `main` run the serialized [release workflow](.github/workflows/publish.yml).
+Formatting, strict TypeScript checks, native tests, and Node tests must pass
+before semantic-release chooses a version from commit history. Release and
+pull-request packaging checks use the Node version pinned in `MODULE.bazel`,
+the `packageManager` pnpm version, and frozen lockfile dependencies.
+
+The shared [preparation step](scripts/release_prepare.js) requires every built
+artifact, checks generated metadata and all three bundled CLI versions, and
+validates runtime imports from the public source entrypoints. It stages
+`tripc.js`, `tripc.min.js`, `tripc.node.js`, and both Unix/Windows launchers;
+stale generated files are replaced only after validation. A preparation failure
+restores the previous package metadata and distribution. The chosen version
+is used consistently in `package.json`, `jsr.json`, and generated TS/JS constants.
+
+To check packaging locally after installing locked dependencies:
+
+```bash
+bazelisk build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
+node scripts/release_prepare.js --stage-only
+pnpm exec jsr publish --dry-run --allow-dirty
+```
+
+Stage-only mode preserves the development version. The release workflow also
+runs JSR verification on the exact prepared release before creating its tag;
+publication uses GitHub's trusted OIDC identity. The [JSR publishing documentation](https://jsr.io/docs/publishing-packages)
+describes dry-run verification and repository linking. A dry run does not upload
+a package, and preparation does not create tags or GitHub releases.
 
 ---
 
@@ -257,20 +295,50 @@ transform them as first-order AST data.
 parser.trip, core.trip, lowering.trip, llvm.trip, moduleEnv.trip, etc.)
 are a re-implementation of the compiler in TripLang itself.
 
-The acceptance path is the LLVM self-hosting test (`bootstrapLlvmSelfHost.test.ts`):
+The bootstrap has achieved a four-stage LLVM self-hosting fixpoint. The
+acceptance path is the [LLVM self-hosting test](test/compiler/llvm/bootstrapLlvmSelfHost.test.ts):
 
 1. **Stage 1**: TypeScript compiler compiles the compiler source bundle to a native compiler executable (`stage1.exe`).
 2. **Stage 2**: `stage1.exe` compiles the compiler source bundle to LLVM IR (`stage2.ll`), which is assembled to `stage2.exe`.
 3. **Stage 3**: `stage2.exe` compiles the compiler source bundle to LLVM IR (`stage3.ll`), which is assembled to `stage3.exe`.
 4. **Stage 4**: `stage3.exe` compiles the compiler source bundle to LLVM IR (`stage4.ll`).
 
-The test suite asserts and verifies a byte-identical LLVM IR fixpoint (`stage2.ll === stage3.ll === stage4.ll`), alongside running correctness checks (Hello World and multi-module program compilation) using the generated `stage3.exe` executable to ensure compiler correctness.
+The test asserts a byte-identical LLVM IR fixpoint
+(`stage2.ll === stage3.ll === stage4.ll`), ruling out a two-cycle oscillation.
+It also uses the generated `stage3.exe` to compile Hello World and a
+multi-module program, then assembles and runs both to check their exit status
+and output. This milestone retains the native-v1 input and language-subset
+restrictions described above; external LLVM tooling still assembles and links
+the emitted IR. Broader language support and compiler performance improvements
+remain future work.
+
+Acceptance also compares arithmetic, lexical shadowing, ADT matches,
+short-circuiting, and recursion against the MiniCore interpreter and the
+TypeScript LLVM compiler, using observable program output. Both Stage 1 and
+Stage 3 are checked for target-triple emission and nonzero compilation-error
+exit status. These checks cover specific behaviors, not general compiler
+correctness or full source type checking.
+
+Generated-compiler closure checks also verify expected output for shared function
+values, partial applications, returned closures, and independent captures.
+Typed MiniCore does not represent runtime closures, and the host LLVM backend
+currently rejects dynamic higher-order callees.
 
 ### Load-Bearing Design Decisions & Tech Debt
 
 - **Determinism Contract**: The fixpoint check matches generated LLVM IR byte-for-byte. This strictly requires deterministic traversal/iteration orders for all collections, environments, and symbol tables (such as `ModuleEnv`).
 - **Boolean Pointer Representation**: In the LLVM-v0 backend, `false` is represented as the pointer value `1` and `true` as the pointer value `2` in uniform/unboxed positions. This leaves `0` (NULL) and other small pointers free to trigger explicit aborts in `trip_obj_tag`, avoiding the masking of null-dereference bugs.
-- **Church Prelude Closures (Performance Tech Debt)**: The lack of monomorphization/specialization in the bootstrap compiler means all occurrences of prelude helpers (`if`, `and`, `or`, `matchList`) lower to heap-allocated closures and indirect function calls, leading to a performance penalty (Stage 3 compilation takes ~30s). Full specialization/monomorphization remains on the roadmap to improve compiler performance.
+- **Church Prelude Closures (Performance Tech Debt)**: Closed global function values share immutable static closures; captured closures and partial applications still allocate, and higher-order calls remain indirect. Specializing prelude helpers (`if`, `and`, `or`, `matchList`) and monomorphization remain opportunities to reduce that cost.
+- **Emitted Text Ownership**: The bootstrap builds LLVM function blocks onto the main-wrapper suffix and prepends only the small target/runtime header. Immutable list tails are shared; appending a footer to the completed LLVM byte list or concatenating the full output would copy millions of byte-list objects. Other compiler text still uses linked byte lists and remains an allocation cost.
+- **Backend Parity & Type Checking**: The TypeScript compiler uses typed MiniCore, ANF, and Block IR; the bootstrap erases source annotations and emits LLVM directly from its own ANF, including closure calls. Bootstrap name resolution, imports, exports, and match validation are checked, but a full source type checker and shared typed control-flow contract remain future work. The fixpoint does not establish either property.
+- **Object Lifetime**: The C runtime uses a nonmoving, single-threaded process-lifetime arena. Objects are zeroed and aligned to the object ABI in chunks that grow from 64 KiB to 1 MiB; oversized objects use dedicated chunks. All chunks are released at normal process exit. Unreachable objects are retained until exit; long-running programs still need a reclamation strategy. Set `TRIP_RUNTIME_STATS=1` to report cumulative object count, object bytes, reserved bytes, and chunk count to stderr. Windows pointer probes are available for diagnostics with `-DTRIP_RUNTIME_VALIDATE_POINTERS`; normal builds retain null, small-pointer, and field-bound checks without probing the OS on each access. The arena does not change the separate Windows no-CRT runtime.
+
+The C runtime reads compiler input in blocks. Output remains immediately flushed
+by default for interactive programs. Set `TRIP_RUNTIME_BUFFER_OUTPUT=1` for bulk
+compiler output; buffered output is flushed before input, at normal exit, and
+through the C API `trip_flush_stdout`. The [runtime performance trial](docs/runtime-performance-trial.md)
+records reproducible comparisons with predecessor implementations and the
+remaining allocation limits.
 
 To lint, format, or prune the bootstrap corpus files under `bootstrap/src/`, the following npm scripts are provided:
 

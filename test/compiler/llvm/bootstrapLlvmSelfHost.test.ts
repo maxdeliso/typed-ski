@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workspaceRoot } from "../../../lib/shared/workspaceRoot.ts";
 import { serializeTripBundleV1 } from "../../../lib/compiler/index.ts";
+import { compileMiniCoreModules } from "../../../lib/minicore/fromTrip.ts";
+import { evaluateMiniCore } from "../../../lib/minicore/evaluator.ts";
 import {
   compilerTripModuleSourcePath,
   type CompilerTripModuleName,
@@ -13,6 +15,7 @@ import {
   bootstrap,
   compileLlvmToExecutable,
   runExecutable,
+  compileTripToLlvm,
 } from "./nativeHarness.ts";
 
 const HELLO_SOURCE = String.raw`module Main
@@ -35,6 +38,210 @@ poly main =
                             writeOne 10 [U8] (\x13 : U8 => x13))))))))))))))
 `;
 
+// Compare observable semantics rather than expecting the two backends to emit
+// the same IR. First-order cases use the interpreter as an independent reference;
+// runtime closure cases have explicitly specified output bytes.
+const SEMANTIC_CASES = [
+  {
+    name: "arithmetic",
+    definitions: "poly value = modU8 (addU8 #u8(250) #u8(20)) #u8(10)",
+    expected: 4,
+  },
+  {
+    name: "shadowing",
+    definitions:
+      "poly value = let x = #u8(12) in let y = x in let x = #u8(9) in subU8 y x",
+    expected: 3,
+  },
+  {
+    name: "constructors",
+    definitions:
+      "data Box = | Empty | Full U8\npoly value = match (Full #u8(73)) [U8] { | Empty => #u8(0) | Full x => x }",
+    expected: 73,
+  },
+  {
+    name: "short-circuit",
+    definitions:
+      "poly value = if [U8] true (\\u : U8 => #u8(65)) (\\u : U8 => divU8 #u8(1) #u8(0))",
+    expected: 65,
+  },
+  {
+    name: "recursion",
+    definitions:
+      "poly rec sum = \\n : U8 => if [U8] (eqU8 n #u8(0)) (\\u : U8 => #u8(0)) (\\u : U8 => addU8 n (sum (subU8 n #u8(1))))\npoly value = sum #u8(10)",
+    expected: 55,
+  },
+  {
+    name: "shared-global-closure",
+    definitions: String.raw`poly inc = \x : U8 => addU8 x #u8(1)
+poly apply = \f : U8 -> U8 => \x : U8 => f x
+poly value = addU8 (apply inc #u8(31)) (apply inc #u8(32))`,
+    expected: 65,
+    generatedOnly: true,
+  },
+  {
+    name: "captured-partial-application",
+    definitions: String.raw`poly make = \x : U8 => let f = (\y : U8 => \z : U8 => addU8 (addU8 x y) z) in f
+poly value = let f = make #u8(20) in let g = f #u8(5) in g #u8(10)`,
+    expected: 35,
+    generatedOnly: true,
+  },
+  {
+    name: "global-partial-application",
+    definitions: String.raw`poly add = \x : U8 => \y : U8 => addU8 x y
+poly value = let f = add in let g = f #u8(30) in g #u8(35)`,
+    expected: 65,
+    generatedOnly: true,
+  },
+  {
+    name: "direct-global-partial-application",
+    definitions: String.raw`poly add = \x : U8 => \y : U8 => addU8 x y
+poly value = let g = add #u8(30) in g #u8(35)`,
+    expected: 65,
+    generatedOnly: true,
+  },
+  {
+    name: "global-returned-closure-application",
+    definitions: String.raw`poly make = \x : U8 => let f = (\y : U8 => addU8 x y) in f
+poly value = make #u8(30) #u8(35)`,
+    expected: 65,
+    generatedOnly: true,
+  },
+  {
+    name: "global-thunk-closure-value",
+    definitions: String.raw`poly thunk = let x = #u8(30) in (\y : U8 => addU8 x y)
+poly value = let f = thunk in f #u8(35)`,
+    expected: 65,
+    generatedOnly: true,
+  },
+  {
+    name: "independent-captures",
+    definitions: String.raw`poly make = \x : U8 => let f = (\y : U8 => \z : U8 => addU8 (addU8 x y) z) in f
+poly value = let f = make #u8(20) in let g = make #u8(30) in addU8 (f #u8(1) #u8(1)) (g #u8(2) #u8(2))`,
+    expected: 56,
+    generatedOnly: true,
+  },
+  {
+    name: "shadowed-global-function",
+    definitions: String.raw`poly inc = \x : U8 => addU8 x #u8(1)
+poly value = let inc = (\x : U8 => addU8 x #u8(2)) in inc #u8(63)`,
+    expected: 65,
+    generatedOnly: true,
+  },
+];
+
+async function checkSemanticCases(
+  compilerExe: string,
+  tempDir: string,
+): Promise<void> {
+  const prelude = {
+    name: "Prelude",
+    source: await readFile(join(workspaceRoot, "lib", "prelude.trip"), "utf8"),
+  };
+  for (const fixture of SEMANTIC_CASES) {
+    const generatedOnly = "generatedOnly" in fixture && fixture.generatedOnly;
+    const prefix = `module Main\nimport Prelude U8\nimport Prelude if\nimport Prelude true\nimport Prelude writeOne\nexport main\n${fixture.definitions}\n`;
+    if (!generatedOnly) {
+      const reference = evaluateMiniCore(
+        compileMiniCoreModules(
+          [prelude, { name: "Main", source: `${prefix}poly main = value\n` }],
+          "Main",
+        ),
+      ).value;
+      assert.deepEqual(
+        reference,
+        { kind: "lit", value: { kind: "u8", value: fixture.expected } },
+        fixture.name,
+      );
+    }
+    const source = `${prefix}poly main = writeOne value [U8] (\\u : U8 => #u8(0))\n`;
+    const bundle = serializeTripBundleV1({
+      entryModule: "Main",
+      target: { kind: "generic" },
+      emitMainWrapper: true,
+      modules: [prelude, { name: "Main", source }],
+    });
+    const outputs = [];
+    // Typed MiniCore does not represent runtime closure values. These cases
+    // check independently specified output bytes; first-order cases also retain
+    // the MiniCore interpreter and host LLVM comparisons.
+    if (!generatedOnly) {
+      outputs.push(
+        await compileTripToLlvm(source, {
+          moduleSources: [prelude],
+          emitMainWrapper: true,
+        }),
+      );
+    }
+    outputs.push(await bootstrap.runNativeCompiler(compilerExe, bundle));
+    for (const [backend, llvm] of outputs.entries()) {
+      const path = join(tempDir, `${fixture.name}.${backend}.ll`);
+      await writeFile(path, llvm, "utf8");
+      const result = runExecutable(await compileLlvmToExecutable(path));
+      assert.equal(result.status, 0, `${fixture.name}: ${result.stderr}`);
+      assert.equal(
+        result.stdout,
+        String.fromCharCode(fixture.expected),
+        `${fixture.name}, backend ${backend}`,
+      );
+    }
+  }
+}
+
+async function checkCompilerContracts(compilerExe: string): Promise<void> {
+  const invalid = runExecutable(compilerExe, "not a bundle");
+  assert.equal(invalid.status, 1, invalid.stderr);
+  assert.match(invalid.stdout, /^ERR:/);
+  for (const kind of [
+    "generic",
+    "x86_64-unknown-linux-gnu",
+    "arm64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+  ] as const) {
+    const llvm = await bootstrap.runNativeCompiler(
+      compilerExe,
+      serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind },
+        emitMainWrapper: false,
+        modules: [
+          {
+            name: "Main",
+            source: "module Main\nexport main\npoly main = #u8(0)\n",
+          },
+        ],
+      }),
+    );
+    if (kind === "generic") assert.doesNotMatch(llvm, /target triple/);
+    else assert.ok(llvm.startsWith(`target triple = "${kind}"\n\n`));
+    assert.doesNotMatch(llvm, /define i32 @main/);
+  }
+  for (const source of [
+    "module Main\nexport main\npoly main = missing\n",
+    "module Main\nexport main\npoly main = Main.missing\n",
+    "module Main\npoly value = #u8(0)\n",
+    "module Main\nexport main\npoly main = \\x : U8 => \\y : U8 => x\n",
+    "module Main\nimport Missing value\nexport main\npoly main = value\n",
+    "module Main\ndata Color = | Red | Green\nexport main\npoly main = match Red [U8] { | Red => #u8(0) }\n",
+  ]) {
+    const result = runExecutable(
+      compilerExe,
+      serializeTripBundleV1({
+        entryModule: "Main",
+        target: { kind: "generic" },
+        emitMainWrapper: true,
+        modules: [{ name: "Main", source }],
+      }),
+    );
+    assert.equal(
+      result.status,
+      1,
+      `${source}\n${result.stdout}\n${result.stderr}`,
+    );
+    assert.match(result.stdout, /^ERR:/);
+  }
+}
+
 describe("LLVM self-host bootstrap", () => {
   let compilerExe: string;
   let cleanupBootstrap: () => Promise<void>;
@@ -48,6 +255,16 @@ describe("LLVM self-host bootstrap", () => {
   after(async () => {
     if (cleanupBootstrap) {
       await cleanupBootstrap();
+    }
+  });
+
+  it("stage-1 agrees with reference semantics and honors bundle contracts", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-contracts-"));
+    try {
+      await checkCompilerContracts(compilerExe);
+      await checkSemanticCases(compilerExe, tempDir);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -93,6 +310,7 @@ describe("LLVM self-host bootstrap", () => {
         target: { kind: "generic" },
         emitMainWrapper: true,
         modules: [
+          { name: "Prelude", source: preludeSource },
           {
             name: "Lib",
             source: `module Lib
@@ -104,8 +322,9 @@ poly seven = #u8(7)
             name: "App",
             source: `module App
 import Lib seven
+import Prelude writeOne
 export main
-poly main = seven
+poly main = writeOne seven [U8] (\\u : U8 => #u8(0))
 `,
           },
         ],
@@ -125,7 +344,7 @@ poly main = seven
       const multiModuleExe = await compileLlvmToExecutable(multiModuleLlPath);
       const multiModuleResult = runExecutable(multiModuleExe);
       assert.equal(multiModuleResult.status, 0);
-      assert.equal(multiModuleResult.stdout, "");
+      assert.equal(multiModuleResult.stdout, "\u0007");
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
@@ -186,7 +405,7 @@ poly main = seven
     }
   });
 
-  it("reaches a byte-identical LLVM IR fixpoint between Stage 2 and Stage 3", async () => {
+  it("reaches a byte-identical LLVM IR fixpoint through Stage 4", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "typed-ski-llvm-fixpoint-"));
 
     try {
@@ -264,6 +483,9 @@ poly main = seven
       // Assert that Stage 3 LLVM IR is byte-identical to Stage 4 LLVM IR (no 2-cycle oscillation)!
       assert.equal(stage3Ll, stage4Ll);
 
+      await checkCompilerContracts(stage3Exe);
+      await checkSemanticCases(stage3Exe, tempDir);
+
       // --- Correctness Anchors compiled and executed via Stage 3 compiler ---
       const preludeSource = await readFile(
         join(workspaceRoot, "lib", "prelude.trip"),
@@ -300,6 +522,7 @@ poly main = seven
         target: { kind: "generic" },
         emitMainWrapper: true,
         modules: [
+          { name: "Prelude", source: preludeSource },
           {
             name: "Lib",
             source: `module Lib
@@ -311,8 +534,9 @@ poly seven = #u8(7)
             name: "App",
             source: `module App
 import Lib seven
+import Prelude writeOne
 export main
-poly main = seven
+poly main = writeOne seven [U8] (\\u : U8 => #u8(0))
 `,
           },
         ],
@@ -334,7 +558,7 @@ poly main = seven
       );
       const multiModuleResult = runExecutable(multiModuleStage3Exe);
       assert.equal(multiModuleResult.status, 0);
-      assert.equal(multiModuleResult.stdout, "");
+      assert.equal(multiModuleResult.stdout, "\u0007");
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }

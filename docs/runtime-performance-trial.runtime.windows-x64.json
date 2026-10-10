@@ -1,0 +1,1562 @@
+{
+  "schemaVersion": 1,
+  "trial": "GPT-6.1 Sol Ultra performance trial against predecessor code revisions",
+  "recordedAt": "2026-10-03T23:24:59.100Z",
+  "scope": "Code-revision measurements on one machine; no intrinsic model ranking is established.",
+  "environment": {
+    "platform": "win32",
+    "arch": "x64",
+    "osRelease": "10.0.26300",
+    "cpu": "Intel(R) Core(TM) i7-7820X CPU @ 3.60GHz",
+    "logicalCpus": 16,
+    "node": "v26.8.1",
+    "clang": "clang version 20.1.7\nTarget: x86_64-pc-windows-msvc\nThread model: posix\nInstalledDir: C:\\Program Files\\LLVM\\bin"
+  },
+  "measurement": {
+    "timing": "Native monitor measures child process creation through termination, including runtime cleanup; one untimed warmup per version/workload, serial rotating run order.",
+    "peakMemory": "GetProcessMemoryInfo.PeakWorkingSetSize after child termination",
+    "pointerValidation": "Default runtime build; TRIP_RUNTIME_VALIDATE_POINTERS is not defined",
+    "outputModes": "TRIP_RUNTIME_BUFFER_OUTPUT=0 for defaults; =1 for explicitly labeled buffered/full-compiler trials, set identically on all revisions"
+  },
+  "command": [
+    "node",
+    "ts_out/scripts/runtimePerformance.js",
+    "--compiler-only",
+    "--output",
+    ".tmp/runtime-performance-final-compilers.json"
+  ],
+  "compilerFlags": ["-O3", "-std=c11"],
+  "parameters": {
+    "allocationCount": 1000000,
+    "accessCount": 4000000,
+    "ioBytes": 1048576,
+    "repetitions": 5,
+    "compilerRepetitions": 3
+  },
+  "fixtureSha256": "ab20f3ce6fd99a5a9af216c88c58c975c01ed9480d4c831bde230e4af4997abb",
+  "monitorSha256": "c421039b72184de7fe34e4c8ff5d28fadd7c2a58c27de0edcd5e16d4930003ae",
+  "runtimes": [
+    {
+      "label": "main",
+      "revision": "ea97a8286fe88a16f84cd4ec673a103cad0a1791",
+      "sourceSha256": "45bf75227d26bd51c2792e4a0f5e867db0f294a52b592e2c6f0ad21a55e52ad7",
+      "headerSha256": "aa1537be8c7b5c9c46c4648bbbe3b1bb5d2af6b4d2d09a1d3cbddb116b2eb9db"
+    },
+    {
+      "label": "prior-hardening",
+      "revision": "7a447a6d8a738815e6cc9964a4b320d88be5749d",
+      "sourceSha256": "0e9cd2e88b95ee079d93ba4f713773df0390ec8ee03ca7a9ad06d8c14cdcba86",
+      "headerSha256": "568297b28d9dc52a2a794515ee1eee9fea86a85c92b6bf554028ec3870fa7df0"
+    },
+    {
+      "label": "candidate",
+      "revision": "working-tree",
+      "sourceSha256": "cfac92e862d3a6e24fc187ea0be621107533e2c4e0378438c2f258a2503cb3db",
+      "headerSha256": "6640d9c47f9a58c330a0e931d2bd72fd62d10a16bd445172b00e77c14555d4f3"
+    }
+  ],
+  "compilerArtifacts": {
+    "fixedSourceRevision": "ea97a8286fe88a16f84cd4ec673a103cad0a1791",
+    "fixedLlvmSha256": "d0999ee68ff772cb188c7b24059151f1c2c2d43b415f2faf491de095979336f8",
+    "fixedInputBundleSha256": "645bab282acb7cfe39299672d897879045af2354b4404de1bd7c39b6a1b9ed28",
+    "hostCompilerSourceSha256": "9fc6aae7c747d283de63e8f17ecb70c3286e485ed61a520ed10aa519e641802c"
+  },
+  "trials": [
+    {
+      "workload": "small-allocation-footprint",
+      "bufferedOutput": false,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 53.1612,
+          "minMs": 52.8948,
+          "maxMs": 62.2592,
+          "medianPeakRssBytes": 5390336,
+          "samples": [
+            {
+              "elapsedMs": 53.1612,
+              "peakRssBytes": 5390336,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 57.3516,
+              "peakRssBytes": 5390336,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 52.8948,
+              "peakRssBytes": 5390336,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 62.2592,
+              "peakRssBytes": 5386240,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 52.9842,
+              "peakRssBytes": 5386240,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 54.8676,
+          "minMs": 51.4563,
+          "maxMs": 60.741,
+          "medianPeakRssBytes": 5353472,
+          "samples": [
+            {
+              "elapsedMs": 51.4563,
+              "peakRssBytes": 5353472,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 53.539,
+              "peakRssBytes": 5353472,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 55.478,
+              "peakRssBytes": 5353472,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 60.741,
+              "peakRssBytes": 5353472,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 54.8676,
+              "peakRssBytes": 5337088,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 54.0742,
+          "minMs": 52.1288,
+          "maxMs": 58.2229,
+          "medianPeakRssBytes": 5345280,
+          "samples": [
+            {
+              "elapsedMs": 52.1288,
+              "peakRssBytes": 5341184,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 54.0742,
+              "peakRssBytes": 5345280,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 55.7035,
+              "peakRssBytes": 5341184,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 58.2229,
+              "peakRssBytes": 5345280,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 53.1089,
+              "peakRssBytes": 5345280,
+              "outputBytes": 5,
+              "outputSha256": "d2a0c18c3f12b7ce0773f5ed13ebd582515f1ac6eebaadaba7a4c9dbf8f92ce2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 40912,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "allocation",
+      "bufferedOutput": false,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 146.6667,
+          "minMs": 143.0721,
+          "maxMs": 153.833,
+          "medianPeakRssBytes": 59162624,
+          "samples": [
+            {
+              "elapsedMs": 143.0721,
+              "peakRssBytes": 59162624,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 153.833,
+              "peakRssBytes": 59162624,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 146.703,
+              "peakRssBytes": 59162624,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 146.6667,
+              "peakRssBytes": 59166720,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 145.9475,
+              "peakRssBytes": 59166720,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 77.3986,
+          "minMs": 75.9053,
+          "maxMs": 79.5696,
+          "medianPeakRssBytes": 45076480,
+          "samples": [
+            {
+              "elapsedMs": 77.3986,
+              "peakRssBytes": 45076480,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40895400,
+                "chunks": 39
+              }
+            },
+            {
+              "elapsedMs": 75.984,
+              "peakRssBytes": 45109248,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40895400,
+                "chunks": 39
+              }
+            },
+            {
+              "elapsedMs": 77.5979,
+              "peakRssBytes": 45076480,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40895400,
+                "chunks": 39
+              }
+            },
+            {
+              "elapsedMs": 79.5696,
+              "peakRssBytes": 45076480,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40895400,
+                "chunks": 39
+              }
+            },
+            {
+              "elapsedMs": 75.9053,
+              "peakRssBytes": 45068288,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40895400,
+                "chunks": 39
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 76.5405,
+          "minMs": 75.62,
+          "maxMs": 78.4176,
+          "medianPeakRssBytes": 45080576,
+          "samples": [
+            {
+              "elapsedMs": 76.5405,
+              "peakRssBytes": 45080576,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40829936,
+                "chunks": 42
+              }
+            },
+            {
+              "elapsedMs": 77.4628,
+              "peakRssBytes": 45076480,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40829936,
+                "chunks": 42
+              }
+            },
+            {
+              "elapsedMs": 75.62,
+              "peakRssBytes": 45076480,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40829936,
+                "chunks": 42
+              }
+            },
+            {
+              "elapsedMs": 78.4176,
+              "peakRssBytes": 45105152,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40829936,
+                "chunks": 42
+              }
+            },
+            {
+              "elapsedMs": 76.2558,
+              "peakRssBytes": 45096960,
+              "outputBytes": 8,
+              "outputSha256": "0a98d0e1b2fd4e460caf928a061e96bcfe99594923f836fc33d2eb00e9a02181",
+              "allocations": {
+                "objects": 1000000,
+                "objectBytes": 39999952,
+                "reservedBytes": 40829936,
+                "chunks": 42
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "object-access",
+      "bufferedOutput": false,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 86.9343,
+          "minMs": 84.7558,
+          "maxMs": 87.1644,
+          "medianPeakRssBytes": 5402624,
+          "samples": [
+            {
+              "elapsedMs": 87.033,
+              "peakRssBytes": 5402624,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 85.7056,
+              "peakRssBytes": 5402624,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 87.1644,
+              "peakRssBytes": 5398528,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 86.9343,
+              "peakRssBytes": 5386240,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 84.7558,
+              "peakRssBytes": 5402624,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 91.9989,
+          "minMs": 90.2469,
+          "maxMs": 94.2468,
+          "medianPeakRssBytes": 5353472,
+          "samples": [
+            {
+              "elapsedMs": 91.9989,
+              "peakRssBytes": 5353472,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 91.9341,
+              "peakRssBytes": 5349376,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 90.2469,
+              "peakRssBytes": 5353472,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 92.2242,
+              "peakRssBytes": 5349376,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 94.2468,
+              "peakRssBytes": 5353472,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 1048600,
+                "chunks": 1
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 80.1786,
+          "minMs": 70.6821,
+          "maxMs": 84.4705,
+          "medianPeakRssBytes": 5345280,
+          "samples": [
+            {
+              "elapsedMs": 73.0195,
+              "peakRssBytes": 5341184,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 81.3101,
+              "peakRssBytes": 5345280,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 70.6821,
+              "peakRssBytes": 5345280,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 80.1786,
+              "peakRssBytes": 5345280,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            },
+            {
+              "elapsedMs": 84.4705,
+              "peakRssBytes": 5341184,
+              "outputBytes": 10,
+              "outputSha256": "1179c391164774bea5a09ed3dc4e82542b68463f9a82f38e632c27d3f8a5b7f2",
+              "allocations": {
+                "objects": 1024,
+                "objectBytes": 49152,
+                "reservedBytes": 65560,
+                "chunks": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "bulk-input-list",
+      "bufferedOutput": false,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 201.3521,
+          "minMs": 179.5991,
+          "maxMs": 239.4354,
+          "medianPeakRssBytes": 56614912,
+          "samples": [
+            {
+              "elapsedMs": 179.5991,
+              "peakRssBytes": 56610816,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 179.7296,
+              "peakRssBytes": 56614912,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 201.3521,
+              "peakRssBytes": 56610816,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 239.4354,
+              "peakRssBytes": 56614912,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 213.5524,
+              "peakRssBytes": 56614912,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 109.4666,
+          "minMs": 99.0261,
+          "maxMs": 114.8345,
+          "medianPeakRssBytes": 40669184,
+          "samples": [
+            {
+              "elapsedMs": 100.2124,
+              "peakRssBytes": 40673280,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34603800,
+                "chunks": 33
+              }
+            },
+            {
+              "elapsedMs": 114.8345,
+              "peakRssBytes": 40669184,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34603800,
+                "chunks": 33
+              }
+            },
+            {
+              "elapsedMs": 109.4666,
+              "peakRssBytes": 40669184,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34603800,
+                "chunks": 33
+              }
+            },
+            {
+              "elapsedMs": 113.9914,
+              "peakRssBytes": 40656896,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34603800,
+                "chunks": 33
+              }
+            },
+            {
+              "elapsedMs": 99.0261,
+              "peakRssBytes": 40652800,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34603800,
+                "chunks": 33
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 77.7511,
+          "minMs": 72.4139,
+          "maxMs": 91.2559,
+          "medianPeakRssBytes": 40738816,
+          "samples": [
+            {
+              "elapsedMs": 72.4139,
+              "peakRssBytes": 40738816,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34538336,
+                "chunks": 36
+              }
+            },
+            {
+              "elapsedMs": 74.5194,
+              "peakRssBytes": 40800256,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34538336,
+                "chunks": 36
+              }
+            },
+            {
+              "elapsedMs": 91.2559,
+              "peakRssBytes": 40734720,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34538336,
+                "chunks": 36
+              }
+            },
+            {
+              "elapsedMs": 79.3123,
+              "peakRssBytes": 40738816,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34538336,
+                "chunks": 36
+              }
+            },
+            {
+              "elapsedMs": 77.7511,
+              "peakRssBytes": 40738816,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": {
+                "objects": 1048577,
+                "objectBytes": 33554448,
+                "reservedBytes": 34538336,
+                "chunks": 36
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "single-byte-input",
+      "bufferedOutput": false,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 137.1001,
+          "minMs": 129.7626,
+          "maxMs": 148.2839,
+          "medianPeakRssBytes": 5328896,
+          "samples": [
+            {
+              "elapsedMs": 138.5865,
+              "peakRssBytes": 5328896,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 137.1001,
+              "peakRssBytes": 5324800,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 129.7626,
+              "peakRssBytes": 5328896,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 133.1923,
+              "peakRssBytes": 5328896,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 148.2839,
+              "peakRssBytes": 5328896,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 80.2474,
+          "minMs": 77.3558,
+          "maxMs": 85.201,
+          "medianPeakRssBytes": 5337088,
+          "samples": [
+            {
+              "elapsedMs": 85.201,
+              "peakRssBytes": 5332992,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 80.2474,
+              "peakRssBytes": 5337088,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 77.3558,
+              "peakRssBytes": 5332992,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 80.9235,
+              "peakRssBytes": 5337088,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 79.0444,
+              "peakRssBytes": 5337088,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 82.3031,
+          "minMs": 81.1852,
+          "maxMs": 90.7522,
+          "medianPeakRssBytes": 5349376,
+          "samples": [
+            {
+              "elapsedMs": 90.7522,
+              "peakRssBytes": 5349376,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 81.4648,
+              "peakRssBytes": 5345280,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 90.642,
+              "peakRssBytes": 5349376,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 82.3031,
+              "peakRssBytes": 5349376,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 81.1852,
+              "peakRssBytes": 5345280,
+              "outputBytes": 9,
+              "outputSha256": "9c5c89ac86f021e9fcc754e33a987b36cf5940051d9201c00a904b869a4af9a3",
+              "allocations": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "single-byte-output-default",
+      "bufferedOutput": false,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 3600.7249,
+          "minMs": 3519.638,
+          "maxMs": 3869.9044,
+          "medianPeakRssBytes": 5324800,
+          "samples": [
+            {
+              "elapsedMs": 3670.0606,
+              "peakRssBytes": 5324800,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3600.7249,
+              "peakRssBytes": 5324800,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3519.638,
+              "peakRssBytes": 5324800,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3869.9044,
+              "peakRssBytes": 5328896,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3536.5128,
+              "peakRssBytes": 5328896,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 3670.148,
+          "minMs": 3489.1021,
+          "maxMs": 3879.1339,
+          "medianPeakRssBytes": 5337088,
+          "samples": [
+            {
+              "elapsedMs": 3625.3701,
+              "peakRssBytes": 5332992,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3489.1021,
+              "peakRssBytes": 5332992,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3670.148,
+              "peakRssBytes": 5337088,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3879.1339,
+              "peakRssBytes": 5337088,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3796.1846,
+              "peakRssBytes": 5337088,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 3548.6806,
+          "minMs": 3463.8504,
+          "maxMs": 4128.4484,
+          "medianPeakRssBytes": 5345280,
+          "samples": [
+            {
+              "elapsedMs": 3548.6806,
+              "peakRssBytes": 5345280,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3503.9978,
+              "peakRssBytes": 5345280,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3554.9317,
+              "peakRssBytes": 5349376,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 4128.4484,
+              "peakRssBytes": 5345280,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3463.8504,
+              "peakRssBytes": 5349376,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "single-byte-output-buffered-opt-in",
+      "bufferedOutput": true,
+      "repetitions": 5,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 3663.9669,
+          "minMs": 3563.0861,
+          "maxMs": 5207.8443,
+          "medianPeakRssBytes": 5324800,
+          "samples": [
+            {
+              "elapsedMs": 3663.9669,
+              "peakRssBytes": 5328896,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 5128.3708,
+              "peakRssBytes": 5324800,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 5207.8443,
+              "peakRssBytes": 5324800,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3563.0861,
+              "peakRssBytes": 5328896,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3607.161,
+              "peakRssBytes": 5324800,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 3867.6296,
+          "minMs": 3409.3949,
+          "maxMs": 4683.9118,
+          "medianPeakRssBytes": 5337088,
+          "samples": [
+            {
+              "elapsedMs": 3867.6296,
+              "peakRssBytes": 5337088,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 4683.9118,
+              "peakRssBytes": 5332992,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3984.7608,
+              "peakRssBytes": 5337088,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3551.9678,
+              "peakRssBytes": 5337088,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 3409.3949,
+              "peakRssBytes": 5332992,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 66.419,
+          "minMs": 62.7527,
+          "maxMs": 129.4019,
+          "medianPeakRssBytes": 5406720,
+          "samples": [
+            {
+              "elapsedMs": 103.5457,
+              "peakRssBytes": 5402624,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 62.7527,
+              "peakRssBytes": 5406720,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 129.4019,
+              "peakRssBytes": 5386240,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 66.419,
+              "peakRssBytes": 5406720,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 64.0212,
+              "peakRssBytes": 5406720,
+              "outputBytes": 1048576,
+              "outputSha256": "3a814d27145f9540c495715da2f85208f3805c323d7da3e9867df2992be4432d",
+              "allocations": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "fixed-LLVM-full-bootstrap-compile-default-output",
+      "bufferedOutput": false,
+      "repetitions": 3,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 22385.7674,
+          "minMs": 21718.2085,
+          "maxMs": 22605.2403,
+          "medianPeakRssBytes": 2653577216,
+          "samples": [
+            {
+              "elapsedMs": 22605.2403,
+              "peakRssBytes": 2653577216,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 21718.2085,
+              "peakRssBytes": 2653573120,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 22385.7674,
+              "peakRssBytes": 2653577216,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 16438.1662,
+          "minMs": 16346.0309,
+          "maxMs": 16544.442,
+          "medianPeakRssBytes": 1782419456,
+          "samples": [
+            {
+              "elapsedMs": 16544.442,
+              "peakRssBytes": 1782419456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1770036800,
+                "chunks": 1688
+              }
+            },
+            {
+              "elapsedMs": 16346.0309,
+              "peakRssBytes": 1782419456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1770036800,
+                "chunks": 1688
+              }
+            },
+            {
+              "elapsedMs": 16438.1662,
+              "peakRssBytes": 1782419456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1770036800,
+                "chunks": 1688
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 14528.0913,
+          "minMs": 14434.1343,
+          "maxMs": 14796.644,
+          "medianPeakRssBytes": 1782005760,
+          "samples": [
+            {
+              "elapsedMs": 14796.644,
+              "peakRssBytes": 1782026240,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1769971336,
+                "chunks": 1691
+              }
+            },
+            {
+              "elapsedMs": 14434.1343,
+              "peakRssBytes": 1782005760,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1769971336,
+                "chunks": 1691
+              }
+            },
+            {
+              "elapsedMs": 14528.0913,
+              "peakRssBytes": 1781972992,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1769971336,
+                "chunks": 1691
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "fixed-LLVM-full-bootstrap-compile-buffered-opt-in",
+      "bufferedOutput": true,
+      "repetitions": 3,
+      "results": [
+        {
+          "version": "main",
+          "medianMs": 21954.4761,
+          "minMs": 21871.35,
+          "maxMs": 22198.9713,
+          "medianPeakRssBytes": 2653577216,
+          "samples": [
+            {
+              "elapsedMs": 21871.35,
+              "peakRssBytes": 2653577216,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 21954.4761,
+              "peakRssBytes": 2653577216,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": null
+            },
+            {
+              "elapsedMs": 22198.9713,
+              "peakRssBytes": 2653577216,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": null
+            }
+          ]
+        },
+        {
+          "version": "prior-hardening",
+          "medianMs": 16839.8535,
+          "minMs": 16381.2922,
+          "maxMs": 16897.331,
+          "medianPeakRssBytes": 1782419456,
+          "samples": [
+            {
+              "elapsedMs": 16381.2922,
+              "peakRssBytes": 1782419456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1770036800,
+                "chunks": 1688
+              }
+            },
+            {
+              "elapsedMs": 16839.8535,
+              "peakRssBytes": 1782419456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1770036800,
+                "chunks": 1688
+              }
+            },
+            {
+              "elapsedMs": 16897.331,
+              "peakRssBytes": 1782419456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1770036800,
+                "chunks": 1688
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate",
+          "medianMs": 2554.2569,
+          "minMs": 2512.2871,
+          "maxMs": 2598.2275,
+          "medianPeakRssBytes": 1782075392,
+          "samples": [
+            {
+              "elapsedMs": 2554.2569,
+              "peakRssBytes": 1782050816,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1769971336,
+                "chunks": 1691
+              }
+            },
+            {
+              "elapsedMs": 2512.2871,
+              "peakRssBytes": 1782075392,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1769971336,
+                "chunks": 1691
+              }
+            },
+            {
+              "elapsedMs": 2598.2275,
+              "peakRssBytes": 1782075392,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 59641292,
+                "objectBytes": 1769011848,
+                "reservedBytes": 1769971336,
+                "chunks": 1691
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "executionIdentity": {
+    "capture": "Executed bytes preserved during the frozen run before any later edit/build",
+    "executedHarnessPath": "ts_out/scripts/runtimePerformance.js",
+    "executedHarnessSha256": "1a359fdc8aa866f120f180874165e08e4a3f06719fee104752e7bd9601d0e9b1",
+    "sourceHarnessSha256": "927baddc98efda9fbb38e14e5db9b650e577a1ff82a029005f1f2e65b11c2152",
+    "executedHostDirectory": "ts_out/lib",
+    "executedHost": {
+      "files": 87,
+      "sha256": "250696ab689e6e8ec99186c89b984af17e869c3a0c6acd18012ab71d2490805a"
+    },
+    "sourceHost": {
+      "sha256": "9fc6aae7c747d283de63e8f17ecb70c3286e485ed61a520ed10aa519e641802c"
+    },
+    "node": "v26.8.1",
+    "lockfileSha256": "cdf266374b9f53aa07e4054652caccd2035de82e9060706e89186640836492be"
+  },
+  "measurementRuns": [
+    {
+      "recordedAt": "2026-10-03T22:56:53.832Z",
+      "command": [
+        "node",
+        "ts_out/scripts/runtimePerformance.js",
+        "--runtime-only",
+        "--output",
+        "docs/runtime-performance-trial.runtime.windows-x64.json"
+      ],
+      "includedWorkloads": [
+        "small-allocation-footprint",
+        "allocation",
+        "object-access",
+        "bulk-input-list",
+        "single-byte-input",
+        "single-byte-output-default",
+        "single-byte-output-buffered-opt-in"
+      ],
+      "note": "C micro workloads completed before other compiler tests; overlapped full workloads discarded"
+    },
+    {
+      "recordedAt": "2026-10-03T23:24:59.100Z",
+      "command": [
+        "node",
+        "ts_out/scripts/runtimePerformance.js",
+        "--compiler-only",
+        "--output",
+        ".tmp/runtime-performance-final-compilers.json"
+      ],
+      "includedWorkloads": [
+        "fixed-LLVM-full-bootstrap-compile-default-output",
+        "fixed-LLVM-full-bootstrap-compile-buffered-opt-in"
+      ],
+      "note": "Quiet final series after all acceptance/test work ended",
+      "executionIdentity": {
+        "capture": "Executed bytes preserved during the frozen run before any later edit/build",
+        "executedHarnessPath": "ts_out/scripts/runtimePerformance.js",
+        "executedHarnessSha256": "1a359fdc8aa866f120f180874165e08e4a3f06719fee104752e7bd9601d0e9b1",
+        "sourceHarnessSha256": "927baddc98efda9fbb38e14e5db9b650e577a1ff82a029005f1f2e65b11c2152",
+        "executedHostDirectory": "ts_out/lib",
+        "executedHost": {
+          "files": 87,
+          "sha256": "250696ab689e6e8ec99186c89b984af17e869c3a0c6acd18012ab71d2490805a"
+        },
+        "sourceHost": {
+          "sha256": "9fc6aae7c747d283de63e8f17ecb70c3286e485ed61a520ed10aa519e641802c"
+        },
+        "node": "v26.8.1",
+        "lockfileSha256": "cdf266374b9f53aa07e4054652caccd2035de82e9060706e89186640836492be"
+      }
+    }
+  ]
+}

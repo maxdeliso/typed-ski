@@ -12,9 +12,7 @@ export interface BlockModule {
 }
 
 export type BlockSymbolDef =
-  | BlockFunctionDef
-  | BlockConstructorDef
-  | BlockPrimitiveDef;
+  BlockFunctionDef | BlockConstructorDef | BlockPrimitiveDef;
 
 export interface BlockFunctionDef {
   kind: "function";

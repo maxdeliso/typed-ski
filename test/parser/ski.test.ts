@@ -1,7 +1,6 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
 
-import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
 import {
   apply,

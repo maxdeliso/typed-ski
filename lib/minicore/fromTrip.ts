@@ -2199,7 +2199,7 @@ function sortModulesAndValidate(
 
   // Validate imports up-front for reachable modules
   for (const mod of order) {
-    for (const [localName, qName] of mod.imports.entries()) {
+    for (const qName of mod.imports.values()) {
       const [targetModuleName, targetLocalName] = splitQualifiedName(qName);
       if (targetModuleName === "Prelude" && !moduleMap.has("Prelude")) {
         continue;

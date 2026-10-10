@@ -38,11 +38,7 @@ export type TripLangTerm =
  * Union of possible values contained by TripLang definitions.
  */
 export type TripLangValueType =
-  | SystemFTerm
-  | TypedLambda
-  | UntypedLambda
-  | SKIExpression
-  | BaseType;
+  SystemFTerm | TypedLambda | UntypedLambda | SKIExpression | BaseType;
 
 /** A polymorphic (System F) term definition. */
 export interface PolyDefinition {

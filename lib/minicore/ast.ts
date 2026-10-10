@@ -5,8 +5,7 @@ export type SymbolId = number;
 export type LocalId = number;
 
 export type Literal =
-  | { kind: "nat"; value: bigint }
-  | { kind: "u8"; value: number };
+  { kind: "nat"; value: bigint } | { kind: "u8"; value: number };
 
 export interface Program {
   symbols: SymbolDef[];
@@ -35,10 +34,7 @@ export interface ConstructorDef {
 }
 
 export type PrimitiveClass =
-  | "numeric"
-  | "boolean"
-  | "conversion"
-  | "library-accelerator";
+  "numeric" | "boolean" | "conversion" | "library-accelerator";
 
 export interface PrimitiveDef {
   kind: "primitive";

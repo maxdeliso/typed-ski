@@ -777,16 +777,6 @@ function parseDoExpressionInternal(
     return mkSystemFTypeApp(mkSystemFVar("None"), okType!);
   };
 
-  const makeOkTerm = (val: SystemFTerm): SystemFTerm => {
-    return createSystemFApplication(
-      mkSystemFTypeApp(
-        mkSystemFTypeApp(mkSystemFVar("Ok"), errorType!),
-        okType!,
-      ),
-      val,
-    );
-  };
-
   const lastStep = steps[steps.length - 1]!;
   let currentTerm: SystemFTerm;
 

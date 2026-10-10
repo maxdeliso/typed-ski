@@ -5,11 +5,7 @@
  */
 
 type CompilationStage =
-  | "parse"
-  | "index"
-  | "elaborate"
-  | "resolve"
-  | "typecheck";
+  "parse" | "index" | "elaborate" | "resolve" | "typecheck";
 
 function stringifyForError(value: unknown): string {
   return JSON.stringify(value, (_key, currentValue) => {

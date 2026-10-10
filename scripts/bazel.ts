@@ -9,6 +9,7 @@ import * as process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { findLocalClangPath } from "../lib/shared/clangPath.ts";
+import { selectTestFiles } from "./testSelection.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // JS_ROOT: directory containing compiled .js outputs (one level up from scripts/)
@@ -64,14 +65,9 @@ function assertCurrentNodeVersion(): void {
 }
 
 type CommandName =
-  | "verify-version"
-  | "verify-generated"
-  | "dist"
-  | "test"
-  | "bazel-test-shard";
+  "verify-version" | "verify-generated" | "dist" | "test" | "bazel-test-shard";
 
 const NODE = process.execPath;
-const BAZELISK = process.platform === "win32" ? "bazelisk.exe" : "bazelisk";
 const NODE_DISABLE_EXPERIMENTAL_WARNING_ARG =
   "--disable-warning=ExperimentalWarning";
 const LOCAL_PNPM_ENTRY = join(
@@ -90,14 +86,6 @@ const LOCAL_TSGO_ENTRY = join(
   "tsgo.js",
 );
 const NODE_TEST_GLOBAL_SETUP_PATH = join(JS_ROOT, "test", "globalSetup.js");
-const TEMP_ROOT =
-  process.platform === "win32"
-    ? (process.env["LOCALAPPDATA"] ??
-      process.env["TEMP"] ??
-      process.env["TMP"] ??
-      ".")
-    : (process.env["TMPDIR"] ?? "/tmp");
-
 const COMPILED_TRIPC_NAME =
   process.platform === "win32" ? "tripc.cmd" : "tripc";
 
@@ -267,45 +255,6 @@ async function run(args: string[], options: any = {}): Promise<void> {
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
       }
-      reject(err);
-    });
-  });
-}
-
-async function runCapture(args: string[], options: any = {}): Promise<string> {
-  const { env: extraEnv, cwd: cwdOverride, ...rest } = options;
-  const pnpmStore = await ensurePnpmStore();
-  return new Promise((resolve, reject) => {
-    const [command, commandArgs] = splitSpawnArgs(args);
-    const child = spawn(command, commandArgs, {
-      cwd: cwdOverride ?? PROJECT_ROOT,
-      stdio: ["ignore", "piped", "inherit"],
-      env: {
-        ...process.env,
-        pnpm_config_store_dir: pnpmStore,
-        pnpm_config_cache_dir: join(pnpmStore, "cache"),
-        pnpm_config_state_dir: join(pnpmStore, "state"),
-        ...extraEnv,
-      },
-      ...rest,
-    });
-
-    let stdout = "";
-    child.stdout!.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
-        reject(
-          new Error(`Command failed with exit code ${code}: ${args.join(" ")}`),
-        );
-      }
-    });
-
-    child.on("error", (err) => {
       reject(err);
     });
   });
@@ -502,7 +451,7 @@ function parseTestArgs(args: string[]): {
   return { nodeArgs, filters };
 }
 
-async function typecheckTests(files: string[]): Promise<void> {
+async function typecheckTests(): Promise<void> {
   console.log(`Type checking project...`);
   if (!fs.existsSync(LOCAL_TSGO_ENTRY)) {
     throw new Error(
@@ -612,7 +561,7 @@ async function typecheckAndPrepareTestExecution(
   files: string[],
 ): Promise<Record<string, string>> {
   await syncGenerated();
-  await typecheckTests(files);
+  await typecheckTests();
   return await prepareTestExecution(files);
 }
 
@@ -684,10 +633,7 @@ export async function runTests(
   args: string[] = [],
 ): Promise<void> {
   const { nodeArgs, filters } = parseTestArgs(args);
-  let files = await collectTests();
-  if (filters.length > 0) {
-    files = files.filter((f) => filters.some((filter) => f.includes(filter)));
-  }
+  const files = selectTestFiles(await collectTests(), filters);
 
   if (process.env["TYPED_SKI_SHUFFLE_TESTS"] === "1") {
     console.log("Shuffling test files for randomized execution order...");
@@ -712,10 +658,7 @@ export async function runTests(
 
 export async function runBazelShardTests(args: string[] = []): Promise<void> {
   const { nodeArgs, filters } = parseTestArgs(args);
-  let files = await collectTests();
-  if (filters.length > 0) {
-    files = files.filter((f) => filters.some((filter) => f.includes(filter)));
-  }
+  const files = selectTestFiles(await collectTests(), filters);
 
   const shard = readShardConfig();
   acknowledgeShardSupport(shard);

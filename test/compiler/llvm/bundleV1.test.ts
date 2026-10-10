@@ -1645,7 +1645,7 @@ poly main = Dup
       });
       try {
         const res = runExecutable(compilerExe, bundleBytes);
-        assert.equal(res.status, 0);
+        assert.equal(res.status, 1, res.stderr);
         assert.ok(res.stdout.startsWith("ERR:"), res.stdout);
         assert.match(res.stdout, /Ambiguous constructor alias: Dup/);
       } finally {
@@ -1672,7 +1672,7 @@ poly main = \\b : MyBool => match b [U8] { | MyFalse => #u8(0) | OtherVal => #u8
       });
       try {
         const res = runExecutable(compilerExe, bundleBytes);
-        assert.equal(res.status, 0);
+        assert.equal(res.status, 1, res.stderr);
         assert.ok(res.stdout.startsWith("ERR:"), res.stdout);
         assert.match(
           res.stdout,

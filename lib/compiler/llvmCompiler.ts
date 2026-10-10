@@ -12,7 +12,6 @@ import { compareAscii } from "../shared/canonical.ts";
 import { parseTripBundleV1 } from "./bundleV1.ts";
 import {
   emitLlvmModule,
-  type EmitLlvmOptions,
   type LlvmRepresentation,
   type LlvmTargetProfile,
 } from "./llvm/index.ts";

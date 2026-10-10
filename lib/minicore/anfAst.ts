@@ -11,25 +11,13 @@ import type { MiniType } from "./metadata.ts";
 import type { RuntimeSymbol } from "./runtimeSymbols.ts";
 
 export type AnfAtom =
-  | { kind: "var"; id: LocalId }
-  | { kind: "lit"; value: Literal };
+  { kind: "var"; id: LocalId } | { kind: "lit"; value: Literal };
 
 export type AnfExpr =
-  | AnfAtomExpr
-  | AnfLet
-  | AnfCall
-  | AnfCon
-  | AnfPrim
-  | AnfRuntimeCall
-  | AnfCase;
+  AnfAtomExpr | AnfLet | AnfCall | AnfCon | AnfPrim | AnfRuntimeCall | AnfCase;
 
 export type AnfValue =
-  | AnfAtomExpr
-  | AnfCall
-  | AnfCon
-  | AnfPrim
-  | AnfRuntimeCall
-  | AnfCase;
+  AnfAtomExpr | AnfCall | AnfCon | AnfPrim | AnfRuntimeCall | AnfCase;
 
 export interface AnfAtomExpr {
   kind: "atom";

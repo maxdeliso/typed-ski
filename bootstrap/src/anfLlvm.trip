@@ -60,6 +60,14 @@ import Parser parseProgram
 
 import Bridge elaborateProgramToCore
 
+import Bridge bridgeAvlLookup
+
+import Bridge bridgeAvlInsert
+
+import DataEnv BridgeAvl
+
+import DataEnv Empty
+
 import MiniCore buildMiniProgram
 
 import Unparse T_S
@@ -128,6 +136,8 @@ import Anf MkAnfProgram
 
 export emitProgram
 
+export emitProgramWithSuffix
+
 export compileSourceToLlvmText
 
 data EmitRes =
@@ -135,6 +145,9 @@ data EmitRes =
 
 data BindGlobalArgsRes =
   | MkBindGlobalArgsRes (List ((List U8), (List U8))) Bin (List (List U8)) (List AnfExpr)
+
+data ClosedGlobals =
+  | MkClosedGlobals (BridgeAvl U8) (List (List U8))
 
 poly rec lookupEnv =
   \env : List ((List U8), (List U8)) =>
@@ -805,6 +818,18 @@ poly startsWithLambda =
           (\u : U8 => false)
     }
 
+-- Closed globals have no per-reference state. Their immutable closure objects
+-- live in the LLVM module rather than the process arena; captured lambdas keep
+-- using ordinary allocated objects. Both share the runtime's tag/arity/fields ABI.
+poly closedGlobalSymbol =
+  \name : List U8 => append [U8] "__trip_closed$" (llvmSymbolName name)
+
+poly closedGlobalOperand =
+  \name : List U8 =>
+    concat
+      [U8]
+      {List U8 | "ptrtoint (ptr @" (closedGlobalSymbol name) " to i64)"}
+
 poly rec bindGlobalArgs =
   \env : List ((List U8), (List U8)) =>
     \counter : Bin =>
@@ -869,17 +894,9 @@ poly rec bindGlobalArgs =
                             )
                             (
                               \u : U8 =>
-                                let dest = append [U8] "%__ll" (binToDigits counter) in
-                                let counter1 = incBin counter in
-                                let counter2 = incBin counter1 in
-                                let fnPtrLine = concat [U8] {List U8 | "  " dest "_fn_val = ptrtoint ptr @" (llvmSymbolName n) " to i64\n"} in
-                                let allocLine = concat [U8] {List U8 | "  " dest "_p = call ptr @trip_alloc_obj(i64 0, i64 1)\n"} in
-                                let setLine = concat [U8] {List U8 | "  call void @trip_obj_set_field(ptr " dest "_p, i64 0, i64 " dest "_fn_val)\n"} in
-                                let castLine = concat [U8] {List U8 | "  " dest " = ptrtoint ptr " dest "_p to i64\n"} in
-                                let env1 = cons [((List U8), (List U8))] {List U8, List U8 | n, dest} env in
-                                let instrs1 = append [List U8] {List U8 | castLine setLine allocLine fnPtrLine} instrs in
+                                let env1 = cons [((List U8), (List U8))] {List U8, List U8 | n, (closedGlobalOperand n)} env in
                                 do [Result (List U8) BindGlobalArgsRes] {
-                                  res <- (bindGlobalArgs env1 counter2 instrs1 t)
+                                  res <- (bindGlobalArgs env1 counter instrs t)
                                   MkBindGlobalArgsRes env2 c2 instrs2 restArgs = res
                                   return
                                     Ok
@@ -939,6 +956,277 @@ poly rec bindGlobalArgs =
                   }
             )
 
+poly rec emitCallExpr =
+  \env : List ((List U8), (List U8)) =>
+    \counter : Bin =>
+      \instrs : List (List U8) =>
+        \f : List U8 =>
+          \args : List AnfExpr =>
+            cond [Result (List U8) EmitRes] {
+              | or (eqListU8 f "addU8") (eqListU8 f "Prelude.addU8") =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "addU8 expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "addU8 expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitAddU8 env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "addU8 expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "subU8") (eqListU8 f "Prelude.subU8") =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "subU8 expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "subU8 expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitSubU8 env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "subU8 expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "divU8") (eqListU8 f "Prelude.divU8") =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "divU8 expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "divU8 expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitDivU8 env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "divU8 expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "modU8") (eqListU8 f "Prelude.modU8") =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "modU8 expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "modU8 expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitModU8 env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "modU8 expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "eqU8") (eqListU8 f "Prelude.eqU8") =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "eqU8 expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "eqU8 expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitEqU8 env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err [List U8] [EmitRes] "eqU8 expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "ltU8") (eqListU8 f "Prelude.ltU8") =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "ltU8 expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "ltU8 expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitLtU8 env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err [List U8] [EmitRes] "ltU8 expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "writeOne") (or (eqListU8 f "Prelude.writeOne") (eqListU8 f ".")) =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "writeOne expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err [List U8] [EmitRes] "writeOne expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil => emitWriteOne env counter instrs arg1 arg2
+                          | cons h1 t1 =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "writeOne expects two arguments"
+                        }
+                    }
+                }
+              | or (eqListU8 f "readOne") (or (eqListU8 f "Prelude.readOne") (eqListU8 f ",")) =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err [List U8] [EmitRes] "readOne expects one argument"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil => emitReadOne env counter instrs arg1
+                      | cons h1 t1 =>
+                        Err [List U8] [EmitRes] "readOne expects one argument"
+                    }
+                }
+              | eqListU8 f "trip_obj_field" =>
+                match args [Result (List U8) EmitRes] {
+                  | nil =>
+                    Err
+                      [List U8]
+                      [EmitRes]
+                      "trip_obj_field expects two arguments"
+                  | cons arg1 rest1 =>
+                    match rest1 [Result (List U8) EmitRes] {
+                      | nil =>
+                        Err
+                          [List U8]
+                          [EmitRes]
+                          "trip_obj_field expects two arguments"
+                      | cons arg2 rest2 =>
+                        match rest2 [Result (List U8) EmitRes] {
+                          | nil =>
+                            do [Result (List U8) EmitRes] {
+                              op1 <- (atomOperand env arg1)
+                              op2 <- (atomOperand env arg2)
+                              dest = append [U8]
+                              "%__ll" (binToDigits counter)
+                              counter1 = incBin counter
+                              castLine = concat [U8]
+                              {List U8 |
+                                "  "
+                                dest
+                                "_p = inttoptr i64 "
+                                op1
+                                " to ptr\n"
+                              }
+                              callLine = concat [U8]
+                              {List U8 |
+                                "  "
+                                dest
+                                " = call i64 @trip_obj_field(ptr "
+                                dest
+                                "_p, i64 "
+                                op2
+                                ")\n"
+                              }
+                              newInstrs = append [List U8] {List U8 | callLine castLine} instrs
+                              return
+                                Ok
+                                [List U8]
+                                [EmitRes]
+                                (MkEmitRes counter1 newInstrs dest)
+                            }
+                          | cons h2 t2 =>
+                            Err
+                              [List U8]
+                              [EmitRes]
+                              "trip_obj_field expects two arguments"
+                        }
+                    }
+                }
+              | otherwise =>
+                do [Result (List U8) EmitRes] {
+                  res <- (bindGlobalArgs env counter instrs args)
+                  MkBindGlobalArgsRes env1 counter1 instrs1 args1 = res
+                  return
+                  if [Result (List U8) EmitRes] (startsWithLambda f)
+                    (
+                      \u10 : U8 =>
+                        do [Result (List U8) EmitRes] {
+                          argStr <- (emitArgsString env1 args1 true)
+                          dest = append [U8]
+                          "%__ll" (binToDigits counter1)
+                          counter2 = incBin counter1
+                          line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
+                          return
+                            Ok
+                            [List U8]
+                            [EmitRes]
+                            (
+                              MkEmitRes
+                                counter2
+                                (cons [List U8] line instrs1)
+                                dest
+                            )
+                        }
+                    )
+                    (
+                      \u10 : U8 =>
+                        match (lookupEnv env1 f) [Result (List U8) EmitRes] {
+                          | Some closureOp =>
+                            emitIndirectCallChain
+                              env1
+                              counter1
+                              instrs1
+                              closureOp
+                              args1
+                          | None =>
+                            if [Result (List U8) EmitRes] (eqListU8 f "_")
+                              (
+                                \u11 : U8 =>
+                                  Err
+                                    [List U8]
+                                    [EmitRes]
+                                    "Indirect call to _ not supported without closure variable"
+                              )
+                              (
+                                \u11 : U8 =>
+                                  do [Result (List U8) EmitRes] {
+                                    argStr <- (emitArgsString env1 args1 false)
+                                    dest = append [U8]
+                                    "%__ll" (binToDigits counter1)
+                                    counter2 = incBin counter1
+                                    line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(i64 0" argStr ")\n"}
+                                    return
+                                      Ok
+                                      [List U8]
+                                      [EmitRes]
+                                      (
+                                        MkEmitRes
+                                          counter2
+                                          (cons [List U8] line instrs1)
+                                          dest
+                                      )
+                                  }
+                              )
+                        }
+                    )
+                }
+            }
+
 poly rec emitExpr =
   \env : List ((List U8), (List U8)) =>
     \counter : Bin =>
@@ -970,48 +1258,10 @@ poly rec emitExpr =
                     )
                     (
                       \u : U8 =>
-                        do [Result (List U8) EmitRes] {
-                          dest = append [U8]
-                          "%__ll" (binToDigits counter)
-                          counter1 = incBin counter
-                          counter2 = incBin counter1
-                          fnPtrLine = concat [U8]
-                          {List U8 |
-                            "  "
-                            dest
-                            "_fn_val = ptrtoint ptr @"
-                            (llvmSymbolName n)
-                            " to i64\n"
-                          }
-                          allocLine = concat [U8]
-                          {List U8 |
-                            "  "
-                            dest
-                            "_p = call ptr @trip_alloc_obj(i64 0, i64 1)\n"
-                          }
-                          setLine = concat [U8]
-                          {List U8 |
-                            "  call void @trip_obj_set_field(ptr "
-                            dest
-                            "_p, i64 0, i64 "
-                            dest
-                            "_fn_val)\n"
-                          }
-                          castLine = concat [U8]
-                          {List U8 |
-                            "  "
-                            dest
-                            " = ptrtoint ptr "
-                            dest
-                            "_p to i64\n"
-                          }
-                          lines = append [List U8] {List U8 | castLine setLine allocLine fnPtrLine} instrs
-                          return
-                            Ok
-                            [List U8]
-                            [EmitRes]
-                            (MkEmitRes counter2 lines dest)
-                        }
+                        Ok
+                          [List U8]
+                          [EmitRes]
+                          (MkEmitRes counter instrs (closedGlobalOperand n))
                     )
                 | Some op =>
                   Ok [List U8] [EmitRes] (MkEmitRes counter instrs op)
@@ -1058,400 +1308,7 @@ poly rec emitExpr =
               }
             | AE_Lam n b =>
               Err [List U8] [EmitRes] "Unsupported expression: lambda"
-            | AE_Call f args =>
-              if [Result (List U8) EmitRes] (or (eqListU8 f "addU8") (eqListU8 f "Prelude.addU8"))
-                (
-                  \u : U8 =>
-                    match args [Result (List U8) EmitRes] {
-                      | nil =>
-                        Err [List U8] [EmitRes] "addU8 expects two arguments"
-                      | cons arg1 rest1 =>
-                        match rest1 [Result (List U8) EmitRes] {
-                          | nil =>
-                            Err
-                              [List U8]
-                              [EmitRes]
-                              "addU8 expects two arguments"
-                          | cons arg2 rest2 =>
-                            match rest2 [Result (List U8) EmitRes] {
-                              | nil => emitAddU8 env counter instrs arg1 arg2
-                              | cons h1 t1 =>
-                                Err
-                                  [List U8]
-                                  [EmitRes]
-                                  "addU8 expects two arguments"
-                            }
-                        }
-                    }
-                )
-                (
-                  \u : U8 =>
-                    if [Result (List U8) EmitRes] (or (eqListU8 f "subU8") (eqListU8 f "Prelude.subU8"))
-                      (
-                        \u2 : U8 =>
-                          match args [Result (List U8) EmitRes] {
-                            | nil =>
-                              Err
-                                [List U8]
-                                [EmitRes]
-                                "subU8 expects two arguments"
-                            | cons arg1 rest1 =>
-                              match rest1 [Result (List U8) EmitRes] {
-                                | nil =>
-                                  Err
-                                    [List U8]
-                                    [EmitRes]
-                                    "subU8 expects two arguments"
-                                | cons arg2 rest2 =>
-                                  match rest2 [Result (List U8) EmitRes] {
-                                    | nil => emitSubU8 env counter instrs arg1 arg2
-                                    | cons h1 t1 =>
-                                      Err
-                                        [List U8]
-                                        [EmitRes]
-                                        "subU8 expects two arguments"
-                                  }
-                              }
-                          }
-                      )
-                      (
-                        \u2 : U8 =>
-                          if [Result (List U8) EmitRes] (or (eqListU8 f "divU8") (eqListU8 f "Prelude.divU8"))
-                            (
-                              \u3 : U8 =>
-                                match args [Result (List U8) EmitRes] {
-                                  | nil =>
-                                    Err
-                                      [List U8]
-                                      [EmitRes]
-                                      "divU8 expects two arguments"
-                                  | cons arg1 rest1 =>
-                                    match rest1 [Result (List U8) EmitRes] {
-                                      | nil =>
-                                        Err
-                                          [List U8]
-                                          [EmitRes]
-                                          "divU8 expects two arguments"
-                                      | cons arg2 rest2 =>
-                                        match rest2 [Result (List U8) EmitRes] {
-                                          | nil => emitDivU8 env counter instrs arg1 arg2
-                                          | cons h1 t1 =>
-                                            Err
-                                              [List U8]
-                                              [EmitRes]
-                                              "divU8 expects two arguments"
-                                        }
-                                    }
-                                }
-                            )
-                            (
-                              \u3 : U8 =>
-                                if [Result (List U8) EmitRes] (or (eqListU8 f "modU8") (eqListU8 f "Prelude.modU8"))
-                                  (
-                                    \u4 : U8 =>
-                                      match args [Result (List U8) EmitRes] {
-                                        | nil =>
-                                          Err
-                                            [List U8]
-                                            [EmitRes]
-                                            "modU8 expects two arguments"
-                                        | cons arg1 rest1 =>
-                                          match rest1 [Result (List U8) EmitRes] {
-                                            | nil =>
-                                              Err
-                                                [List U8]
-                                                [EmitRes]
-                                                "modU8 expects two arguments"
-                                            | cons arg2 rest2 =>
-                                              match rest2 [Result (List U8) EmitRes] {
-                                                | nil => emitModU8 env counter instrs arg1 arg2
-                                                | cons h1 t1 =>
-                                                  Err
-                                                    [List U8]
-                                                    [EmitRes]
-                                                    "modU8 expects two arguments"
-                                              }
-                                          }
-                                      }
-                                  )
-                                  (
-                                    \u4 : U8 =>
-                                      if [Result (List U8) EmitRes] (or (eqListU8 f "eqU8") (eqListU8 f "Prelude.eqU8"))
-                                        (
-                                          \u5 : U8 =>
-                                            match args [Result (List U8) EmitRes] {
-                                              | nil =>
-                                                Err
-                                                  [List U8]
-                                                  [EmitRes]
-                                                  "eqU8 expects two arguments"
-                                              | cons arg1 rest1 =>
-                                                match rest1 [Result (List U8) EmitRes] {
-                                                  | nil =>
-                                                    Err
-                                                      [List U8]
-                                                      [EmitRes]
-                                                      "eqU8 expects two arguments"
-                                                  | cons arg2 rest2 =>
-                                                    match rest2 [Result (List U8) EmitRes] {
-                                                      | nil => emitEqU8 env counter instrs arg1 arg2
-                                                      | cons h1 t1 =>
-                                                        Err
-                                                          [List U8]
-                                                          [EmitRes]
-                                                          "eqU8 expects two arguments"
-                                                    }
-                                                }
-                                            }
-                                        )
-                                        (
-                                          \u5 : U8 =>
-                                            if [Result (List U8) EmitRes] (or (eqListU8 f "ltU8") (eqListU8 f "Prelude.ltU8"))
-                                              (
-                                                \u6 : U8 =>
-                                                  match args [Result (List U8) EmitRes] {
-                                                    | nil =>
-                                                      Err
-                                                        [List U8]
-                                                        [EmitRes]
-                                                        "ltU8 expects two arguments"
-                                                    | cons arg1 rest1 =>
-                                                      match rest1 [Result (List U8) EmitRes] {
-                                                        | nil =>
-                                                          Err
-                                                            [List U8]
-                                                            [EmitRes]
-                                                            "ltU8 expects two arguments"
-                                                        | cons arg2 rest2 =>
-                                                          match rest2 [Result (List U8) EmitRes] {
-                                                            | nil => emitLtU8 env counter instrs arg1 arg2
-                                                            | cons h1 t1 =>
-                                                              Err
-                                                                [List U8]
-                                                                [EmitRes]
-                                                                "ltU8 expects two arguments"
-                                                          }
-                                                      }
-                                                  }
-                                              )
-                                              (
-                                                \u6 : U8 =>
-                                                  if [Result (List U8) EmitRes] (or (eqListU8 f "writeOne") (or (eqListU8 f "Prelude.writeOne") (eqListU8 f ".")))
-                                                    (
-                                                      \u7 : U8 =>
-                                                        match args [Result (List U8) EmitRes] {
-                                                          | nil =>
-                                                            Err
-                                                              [List U8]
-                                                              [EmitRes]
-                                                              "writeOne expects two arguments"
-                                                          | cons arg1 rest1 =>
-                                                            match rest1 [Result (List U8) EmitRes] {
-                                                              | nil =>
-                                                                Err
-                                                                  [List U8]
-                                                                  [EmitRes]
-                                                                  "writeOne expects two arguments"
-                                                              | cons arg2 rest2 =>
-                                                                match rest2 [Result (List U8) EmitRes] {
-                                                                  | nil => emitWriteOne env counter instrs arg1 arg2
-                                                                  | cons h1 t1 =>
-                                                                    Err
-                                                                      [List U8]
-                                                                      [EmitRes]
-                                                                      "writeOne expects two arguments"
-                                                                }
-                                                            }
-                                                        }
-                                                    )
-                                                    (
-                                                      \u7 : U8 =>
-                                                        if [Result (List U8) EmitRes] (or (eqListU8 f "readOne") (or (eqListU8 f "Prelude.readOne") (eqListU8 f ",")))
-                                                          (
-                                                            \u8 : U8 =>
-                                                              match args [Result (List U8) EmitRes] {
-                                                                | nil =>
-                                                                  Err
-                                                                    [List U8]
-                                                                    [EmitRes]
-                                                                    "readOne expects one argument"
-                                                                | cons arg1 rest1 =>
-                                                                  match rest1 [Result (List U8) EmitRes] {
-                                                                    | nil => emitReadOne env counter instrs arg1
-                                                                    | cons h1 t1 =>
-                                                                      Err
-                                                                        [List U8]
-                                                                        [EmitRes]
-                                                                        "readOne expects one argument"
-                                                                  }
-                                                              }
-                                                          )
-                                                          (
-                                                            \u8 : U8 =>
-                                                              if [Result (List U8) EmitRes] (eqListU8 f "trip_obj_field")
-                                                                (
-                                                                  \u9 : U8 =>
-                                                                    match args [Result (List U8) EmitRes] {
-                                                                      | nil =>
-                                                                        Err
-                                                                          [List U8]
-                                                                          [EmitRes]
-                                                                          "trip_obj_field expects two arguments"
-                                                                      | cons arg1 rest1 =>
-                                                                        match rest1 [Result (List U8) EmitRes] {
-                                                                          | nil =>
-                                                                            Err
-                                                                              [List U8]
-                                                                              [EmitRes]
-                                                                              "trip_obj_field expects two arguments"
-                                                                          | cons arg2 rest2 =>
-                                                                            match rest2 [Result (List U8) EmitRes] {
-                                                                              | nil =>
-                                                                                do [Result (List U8) EmitRes] {
-                                                                                  op1 <- (atomOperand env arg1)
-                                                                                  op2 <- (atomOperand env arg2)
-                                                                                  dest = append [U8]
-                                                                                  "%__ll"
-                                                                                    (
-                                                                                      binToDigits
-                                                                                        counter
-                                                                                    )
-                                                                                  counter1 = incBin counter
-                                                                                  castLine = concat [U8]
-                                                                                  {List U8 |
-                                                                                    "  "
-                                                                                    dest
-                                                                                    "_p = inttoptr i64 "
-                                                                                    op1
-                                                                                    " to ptr\n"
-                                                                                  }
-                                                                                  callLine = concat [U8]
-                                                                                  {List U8 |
-                                                                                    "  "
-                                                                                    dest
-                                                                                    " = call i64 @trip_obj_field(ptr "
-                                                                                    dest
-                                                                                    "_p, i64 "
-                                                                                    op2
-                                                                                    ")\n"
-                                                                                  }
-                                                                                  newInstrs = append [List U8] {List U8 | callLine castLine} instrs
-                                                                                  return
-                                                                                    Ok
-                                                                                    [List U8]
-                                                                                    [EmitRes]
-                                                                                    (
-                                                                                      MkEmitRes
-                                                                                        counter1
-                                                                                        newInstrs
-                                                                                        dest
-                                                                                    )
-                                                                                }
-                                                                              | cons h2 t2 =>
-                                                                                Err
-                                                                                  [List U8]
-                                                                                  [EmitRes]
-                                                                                  "trip_obj_field expects two arguments"
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                )
-                                                                (
-                                                                  \u9 : U8 =>
-                                                                    do [Result (List U8) EmitRes] {
-                                                                      res <- (bindGlobalArgs env counter instrs args)
-                                                                      MkBindGlobalArgsRes env1 counter1 instrs1 args1 = res
-                                                                      return
-                                                                      if [Result (List U8) EmitRes] (startsWithLambda f)
-                                                                        (
-                                                                          \u10 : U8 =>
-                                                                            do [Result (List U8) EmitRes] {
-                                                                              argStr <- (emitArgsString env1 args1 true)
-                                                                              dest = append [U8]
-                                                                              "%__ll"
-                                                                                (
-                                                                                  binToDigits
-                                                                                    counter1
-                                                                                )
-                                                                              counter2 = incBin counter1
-                                                                              line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(" argStr ")\n"}
-                                                                              return
-                                                                                Ok
-                                                                                [List U8]
-                                                                                [EmitRes]
-                                                                                (
-                                                                                  MkEmitRes
-                                                                                    counter2
-                                                                                    (
-                                                                                      cons
-                                                                                        [List U8]
-                                                                                        line
-                                                                                        instrs1
-                                                                                    )
-                                                                                    dest
-                                                                                )
-                                                                            }
-                                                                        )
-                                                                        (
-                                                                          \u10 : U8 =>
-                                                                            match (lookupEnv env1 f) [Result (List U8) EmitRes] {
-                                                                              | Some closureOp =>
-                                                                                emitIndirectCallChain
-                                                                                  env1
-                                                                                  counter1
-                                                                                  instrs1
-                                                                                  closureOp
-                                                                                  args1
-                                                                              | None =>
-                                                                                if [Result (List U8) EmitRes] (eqListU8 f "_")
-                                                                                  (
-                                                                                    \u11 : U8 =>
-                                                                                      Err
-                                                                                        [List U8]
-                                                                                        [EmitRes]
-                                                                                        "Indirect call to _ not supported without closure variable"
-                                                                                  )
-                                                                                  (
-                                                                                    \u11 : U8 =>
-                                                                                      do [Result (List U8) EmitRes] {
-                                                                                        argStr <- (emitArgsString env1 args1 false)
-                                                                                        dest = append [U8]
-                                                                                        "%__ll"
-                                                                                          (
-                                                                                            binToDigits
-                                                                                              counter1
-                                                                                          )
-                                                                                        counter2 = incBin counter1
-                                                                                        line = concat [U8] {List U8 | "  " dest " = call i64 @" (llvmSymbolName f) "(i64 0" argStr ")\n"}
-                                                                                        return
-                                                                                          Ok
-                                                                                          [List U8]
-                                                                                          [EmitRes]
-                                                                                          (
-                                                                                            MkEmitRes
-                                                                                              counter2
-                                                                                              (
-                                                                                                cons
-                                                                                                  [List U8]
-                                                                                                  line
-                                                                                                  instrs1
-                                                                                              )
-                                                                                              dest
-                                                                                          )
-                                                                                      }
-                                                                                  )
-                                                                            }
-                                                                        )
-                                                                    }
-                                                                )
-                                                          )
-                                                    )
-                                              )
-                                        )
-                                  )
-                            )
-                      )
-                )
+            | AE_Call f args => emitCallExpr env counter instrs f args
             | AE_Con tag total arity args =>
               do [Result (List U8) EmitRes] {
                 res <- (bindGlobalArgs env counter instrs args)
@@ -1735,17 +1592,418 @@ poly rec emitFuncsAcc =
 
 poly emitFuncs =
   \fns : List AnfFunc =>
-    do [Result (List U8) (List U8)] {
-      blocks <- (emitFuncsAcc {List U8 |} fns)
-      return Ok [List U8] [List U8] (joinLines "" blocks)
+    \suffix : List U8 =>
+      do [Result (List U8) (List U8)] {
+        blocks <- (emitFuncsAcc {List U8 |} fns)
+        return Ok [List U8] [List U8] (joinLines suffix blocks)
+      }
+
+poly rec nameMember =
+  \name : List U8 =>
+    \names : List (List U8) =>
+      match names [Bool] {
+        | nil => false
+        | cons h t => or (eqListU8 name h) (nameMember name t)
+      }
+
+-- Collect only value references: direct known-symbol calls do not need a
+-- closure. Scope follows the same binders as emission, including case arms.
+-- An AVL set bounds duplicate-name lookup; the ordered cons-list preserves
+-- first-encounter ordering without copying the previously found names.
+poly rec collectClosedExpr =
+  \bound : List (List U8) =>
+    \found : ClosedGlobals =>
+      \e : AnfExpr =>
+        match e [ClosedGlobals] {
+          | AE_Var n =>
+            if [ClosedGlobals] (or (nameMember n bound) (startsWithLambda n))
+              (\u : U8 => found)
+              (
+                \u : U8 =>
+                  match found [ClosedGlobals] {
+                    | MkClosedGlobals seen globals =>
+                      match (bridgeAvlLookup [U8] n seen) [ClosedGlobals] {
+                        | Some value => found
+                        | None =>
+                          MkClosedGlobals
+                            (bridgeAvlInsert [U8] n #u8(0) seen)
+                            (cons [List U8] n globals)
+                      }
+                  }
+              )
+          | AE_Native t => found
+          | AE_Lam n body =>
+            collectClosedExpr (cons [List U8] n bound) found body
+          | AE_Call f args => collectClosedArgs bound found args
+          | AE_Con tag total arity args => collectClosedArgs bound found args
+          | AE_Case scrut arms =>
+            collectClosedArgs bound (collectClosedExpr bound found scrut) arms
+          | AE_Let n val body =>
+            collectClosedExpr
+              (cons [List U8] n bound)
+              (collectClosedExpr bound found val)
+              body
+        }
+
+poly rec collectClosedArgs =
+  \bound : List (List U8) =>
+    \found : ClosedGlobals =>
+      \args : List AnfExpr =>
+        match args [ClosedGlobals] {
+          | nil => found
+          | cons h t =>
+            collectClosedArgs bound (collectClosedExpr bound found h) t
+        }
+
+poly rec collectClosedFuncs =
+  \found : ClosedGlobals =>
+    \funcs : List AnfFunc =>
+      match funcs [ClosedGlobals] {
+        | nil => found
+        | cons h t =>
+          match h [ClosedGlobals] {
+            | MkAnfFunc name params body =>
+              collectClosedFuncs (collectClosedExpr params found body) t
+          }
+      }
+
+poly collectClosedNames =
+  \funcs : List AnfFunc =>
+    match (collectClosedFuncs (MkClosedGlobals (Empty [U8]) {List U8 |}) funcs) [List (List U8)] {
+      | MkClosedGlobals seen names => names
     }
 
-poly emitProgram =
-  \prog : AnfProgram =>
-    do [Result (List U8) (List U8)] {
-      MkAnfProgram funcs entry = prog
-      return emitFuncs funcs
+poly rec buildGlobalIndex =
+  \index : BridgeAvl (List (List U8)) =>
+    \funcs : List AnfFunc =>
+      match funcs [BridgeAvl (List (List U8))] {
+        | nil => index
+        | cons h t =>
+          match h [BridgeAvl (List (List U8))] {
+            | MkAnfFunc n params body =>
+              buildGlobalIndex
+                (bridgeAvlInsert [List (List U8)] n params index)
+                t
+          }
+      }
+
+poly lookupGlobalParams =
+  \name : List U8 =>
+    \index : BridgeAvl (List (List U8)) => bridgeAvlLookup [List (List U8)] name index
+
+poly rec argsMatchParams =
+  \args : List AnfExpr =>
+    \params : List (List U8) =>
+      match args [Bool] {
+        | nil =>
+          match params [Bool] {
+            | nil => true
+            | cons p ps => false
+          }
+        | cons h t =>
+          match params [Bool] {
+            | nil => false
+            | cons p ps => argsMatchParams t ps
+          }
+      }
+
+-- The direct-call ABI is valid only for saturated known globals. Turn partial
+-- and excess application into the unary closure ABI before emitting any LLVM.
+-- '$' cannot appear in source identifiers, so this local never captures a user
+-- binding. Zero-arity globals are thunks: evaluate them before applying extras.
+poly rec prepareCallExpr =
+  \funcs : BridgeAvl (List (List U8)) =>
+    \bound : List (List U8) =>
+      \e : AnfExpr =>
+        match e [AnfExpr] {
+          | AE_Var n => e
+          | AE_Native t => e
+          | AE_Lam n body =>
+            AE_Lam n (prepareCallExpr funcs (cons [List U8] n bound) body)
+          | AE_Call f args =>
+            let args1 = prepareCallArgs funcs bound args in
+            if [AnfExpr] (or (nameMember f bound) (startsWithLambda f))
+              (\u : U8 => AE_Call f args1)
+              (
+                \u : U8 =>
+                  match (lookupGlobalParams f funcs) [AnfExpr] {
+                    | None => AE_Call f args1
+                    | Some params =>
+                      if [AnfExpr] (argsMatchParams args1 params)
+                        (\u1 : U8 => AE_Call f args1)
+                        (
+                          \u1 : U8 =>
+                            let value = match params [AnfExpr] {| nil => AE_Call f {AnfExpr |} | cons p ps => AE_Var f} in
+                            AE_Let
+                              "__trip_callee$"
+                              value
+                              (AE_Call "__trip_callee$" args1)
+                        )
+                  }
+              )
+          | AE_Con tag total arity args =>
+            AE_Con tag total arity (prepareCallArgs funcs bound args)
+          | AE_Case scrut arms =>
+            AE_Case
+              (prepareCallExpr funcs bound scrut)
+              (prepareCallArgs funcs bound arms)
+          | AE_Let n val body =>
+            AE_Let
+              n
+              (prepareCallExpr funcs bound val)
+              (prepareCallExpr funcs (cons [List U8] n bound) body)
+        }
+
+poly rec prepareCallArgs =
+  \funcs : BridgeAvl (List (List U8)) =>
+    \bound : List (List U8) =>
+      \args : List AnfExpr =>
+        match args [List AnfExpr] {
+          | nil => {AnfExpr |}
+          | cons h t =>
+            cons
+              [AnfExpr]
+              (prepareCallExpr funcs bound h)
+              (prepareCallArgs funcs bound t)
+        }
+
+poly rec prepareCallFuncs =
+  \globals : BridgeAvl (List (List U8)) =>
+    \funcs : List AnfFunc =>
+      match funcs [List AnfFunc] {
+        | nil => {AnfFunc |}
+        | cons h t =>
+          match h [List AnfFunc] {
+            | MkAnfFunc name params body =>
+              cons
+                [AnfFunc]
+                (MkAnfFunc name params (prepareCallExpr globals params body))
+                (prepareCallFuncs globals t)
+          }
+      }
+
+poly rec namesLength =
+  \names : List (List U8) =>
+    match names [Bin] {
+      | nil => BZ
+      | cons h t => incBin (namesLength t)
     }
+
+poly currySymbol =
+  \name : List U8 =>
+    \step : Bin =>
+      concat
+        [U8]
+        {List U8 | "__trip_curry$" (llvmSymbolName name) "$" (binToDigits step)}
+
+poly needsCurry =
+  \params : List (List U8) =>
+    match params [Bool] {
+      | nil => false
+      | cons h t =>
+        match t [Bool] {
+          | nil => false
+          | cons h1 t1 => true
+        }
+    }
+
+poly rec curryLoads =
+  \captured : List (List U8) =>
+    \index : Bin =>
+      match captured [List U8] {
+        | nil => ""
+        | cons h t =>
+          append
+            [U8]
+            (
+              concat
+                [U8]
+                {List U8 |
+                  "  %__curry_capture"
+                  (binToDigits index)
+                  " = call i64 @trip_obj_field(ptr %__curry_env_p, i64 "
+                  (binToDigits index)
+                  ")\n"
+                }
+            )
+            (curryLoads t (incBin index))
+      }
+
+poly rec curryStores =
+  \captured : List (List U8) =>
+    \index : Bin =>
+      match captured [List U8] {
+        | nil =>
+          concat
+            [U8]
+            {List U8 |
+              "  call void @trip_obj_set_field(ptr %__curry_next_p, i64 "
+              (binToDigits index)
+              ", i64 %__curry_arg)\n"
+            }
+        | cons h t =>
+          append
+            [U8]
+            (
+              concat
+                [U8]
+                {List U8 |
+                  "  call void @trip_obj_set_field(ptr %__curry_next_p, i64 "
+                  (binToDigits index)
+                  ", i64 %__curry_capture"
+                  (binToDigits index)
+                  ")\n"
+                }
+            )
+            (curryStores t (incBin index))
+      }
+
+poly rec curryCallArgs =
+  \captured : List (List U8) =>
+    \index : Bin =>
+      match captured [List U8] {
+        | nil => "i64 %__curry_arg"
+        | cons h t =>
+          concat
+            [U8]
+            {List U8 |
+              "i64 %__curry_capture"
+              (binToDigits index)
+              ", "
+              (curryCallArgs t (incBin index))
+            }
+      }
+
+-- Direct globals take every source argument in one call. A first-class value
+-- follows the unary closure ABI instead, so multi-argument globals need curry
+-- adapters. Each incomplete application creates a fresh immutable environment;
+-- the shared closed object is never written, and the final step calls directly.
+poly rec emitCurrySteps =
+  \name : List U8 =>
+    \remaining : List (List U8) =>
+      \captured : List (List U8) =>
+        \step : Bin =>
+          match remaining [List U8] {
+            | nil => ""
+            | cons h t =>
+              let nextStep = incBin step in
+              let header = concat [U8] {List U8 | "define private i64 @" (currySymbol name step) "(i64 %__curry_env, i64 %__curry_arg) {\n__entry:\n" "  %__curry_env_p = inttoptr i64 %__curry_env to ptr\n" (curryLoads captured (incBin BZ))} in
+              match t [List U8] {
+                | nil =>
+                  concat
+                    [U8]
+                    {List U8 |
+                      header
+                      "  %__curry_result = call i64 @"
+                      (llvmSymbolName name)
+                      "(i64 0, "
+                      (curryCallArgs captured (incBin BZ))
+                      ")\n  ret i64 %__curry_result\n}\n\n"
+                    }
+                | cons h1 t1 =>
+                  concat
+                    [U8]
+                    {List U8 |
+                      header
+                      "  %__curry_next_p = call ptr @trip_alloc_obj(i64 0, i64 "
+                      (binToDigits (incBin (incBin (namesLength captured))))
+                      ")\n  call void @trip_obj_set_field(ptr %__curry_next_p, i64 0, i64 ptrtoint (ptr @"
+                      (currySymbol name nextStep)
+                      " to i64))\n"
+                      (curryStores captured (incBin BZ))
+                      "  %__curry_result = ptrtoint ptr %__curry_next_p to i64\n"
+                      "  ret i64 %__curry_result\n}\n\n"
+                      (
+                        emitCurrySteps
+                          name
+                          t
+                          (cons [List U8] h captured)
+                          nextStep
+                      )
+                    }
+              }
+          }
+
+poly rec emitClosedGlobals =
+  \funcs : BridgeAvl (List (List U8)) =>
+    \globals : List (List U8) =>
+      match globals [List U8] {
+        | nil => ""
+        | cons h t =>
+          let params = match (lookupGlobalParams h funcs) [List (List U8)] {| None => {List U8 |} | Some ps => ps} in
+          let curried = needsCurry params in
+          let entrySymbol = if [List U8] curried (\u : U8 => currySymbol h BZ) (\u : U8 => llvmSymbolName h) in
+          concat
+            [U8]
+            {List U8 |
+              "@"
+              (closedGlobalSymbol h)
+              " = private constant { i64, i64, [1 x i64] } { i64 0, i64 1, [1 x i64] [i64 ptrtoint (ptr @"
+              entrySymbol
+              " to i64)] }, align 8\n\n"
+              (
+                if [List U8] curried
+                  (\u : U8 => emitCurrySteps h params {List U8 |} BZ)
+                  (\u : U8 => "")
+              )
+              (emitClosedGlobals funcs t)
+            }
+      }
+
+poly rec validateClosedGlobals =
+  \index : BridgeAvl (List (List U8)) =>
+    \globals : List (List U8) =>
+      match globals [Result (List U8) U8] {
+        | nil => Ok [List U8] [U8] #u8(0)
+        | cons h t =>
+          match (lookupGlobalParams h index) [Result (List U8) U8] {
+            | None =>
+              Err
+                [List U8]
+                [U8]
+                (append [U8] "Unknown global function value: " h)
+            | Some params =>
+              match params [Result (List U8) U8] {
+                | nil =>
+                  Err
+                    [List U8]
+                    [U8]
+                    (
+                      append
+                        [U8]
+                        "Unevaluated zero-arity global function value: "
+                        h
+                    )
+                | cons p ps => validateClosedGlobals index t
+              }
+          }
+      }
+
+-- Function blocks are prepended onto the suffix directly. Appending a footer
+-- after emission would copy the entire LLVM byte list through append's reverse
+-- and appendAcc passes, even though only the small footer is new.
+poly emitProgramWithSuffix =
+  \prog : AnfProgram =>
+    \suffix : List U8 =>
+      do [Result (List U8) (List U8)] {
+        MkAnfProgram funcs entry = prog
+        index = buildGlobalIndex (Empty [List (List U8)]) funcs
+        prepared = prepareCallFuncs index funcs
+        llvm <- (emitFuncs prepared suffix)
+        globals = collectClosedNames prepared
+        return
+        do [Result (List U8) (List U8)] {
+          u <- (validateClosedGlobals index globals)
+          return
+            Ok
+            [List U8]
+            [List U8]
+            (append [U8] (emitClosedGlobals index globals) llvm)
+        }
+      }
+
+poly emitProgram =
+  \prog : AnfProgram => emitProgramWithSuffix prog ""
 
 poly rec exprUsesReadWrite =
   \e : AnfExpr =>
@@ -1823,7 +2081,7 @@ poly rec listAnyUsesBoxed =
           \t : List AnfExpr => or (exprUsesBoxed h) (listAnyUsesBoxed t)
       )
 
-poly rec funcsUseBoxed =
+poly rec funcsUseBoxedObjects =
   \fns : List AnfFunc =>
     matchList
       [AnfFunc]
@@ -1834,8 +2092,19 @@ poly rec funcsUseBoxed =
         \h : AnfFunc =>
           \t : List AnfFunc =>
             match h [Bool] {
-              | MkAnfFunc name params body => or (exprUsesBoxed body) (funcsUseBoxed t)
+              | MkAnfFunc name params body => or (exprUsesBoxed body) (funcsUseBoxedObjects t)
             }
+      )
+
+poly funcsUseBoxed =
+  \fns : List AnfFunc =>
+    or
+      (funcsUseBoxedObjects fns)
+      (
+        match (collectClosedNames (prepareCallFuncs (buildGlobalIndex (Empty [List (List U8)]) fns) fns)) [Bool] {
+          | nil => false
+          | cons h t => true
+        }
       )
 
 poly compileSourceToLlvmText =

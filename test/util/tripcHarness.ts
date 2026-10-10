@@ -1,8 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 
 const TEST_TEMP_ROOT = process.env["TEST_TMPDIR"] ?? tmpdir();

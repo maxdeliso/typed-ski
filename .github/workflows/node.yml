@@ -76,19 +76,17 @@ jobs:
           path: bazel-testlogs/
           if-no-files-found: ignore
 
+      - name: Setup pinned release tools
+        if: matrix.os == 'ubuntu-24.04'
+        uses: ./.github/actions/setup-release-tools
+
       - name: Build and stage distribution artifacts for JSR dry run
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
         run: |
           bazel build //:dist_artifacts //:jsr_generated_src //lib/shared:version_generated_src
-          mkdir -p dist
-          install -m644 bazel-bin/dist_artifacts/tripc.js bazel-bin/dist_artifacts/tripc.min.js bazel-bin/dist_artifacts/tripc.node.js dist/
-          install -m755 bazel-bin/dist_artifacts/tripc dist/tripc
-          install -m644 bazel-bin/jsr.json jsr.json
-          install -m644 bazel-bin/lib/shared/version.generated.ts lib/shared/version.generated.ts
+          node scripts/release_prepare.js --stage-only
 
-      # jsr's Node CLI: no Deno toolchain to install (the runner already
-      # has Node), and it does not enter Deno's byonm mode, so it needs no
-      # node_modules/ install to resolve node: builtins or @types.
+      # Use the locked Node CLI; no separate Deno setup is required.
       - name: JSR dry run publish
         if: matrix.os == 'ubuntu-24.04' && github.ref != 'refs/heads/main'
-        run: npx --yes jsr@0.14.3 publish --dry-run
+        run: pnpm exec jsr publish --dry-run --allow-dirty

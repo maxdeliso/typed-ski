@@ -1,6 +1,5 @@
 import { describe, it } from "../util/test_shim.ts";
 import assert from "node:assert/strict";
-import { ParseError } from "../../lib/parser/parseError.ts";
 import { parseTripLang } from "../../lib/parser/tripLang.ts";
 import { parseSystemF } from "../../lib/parser/systemFTerm.ts";
 import { parseSKI } from "../../lib/parser/ski.ts";
@@ -16,8 +15,6 @@ import {
   parseNumericLiteral,
   skipWhitespace,
 } from "../../lib/parser/parserState.ts";
-import { parseChain } from "../../lib/parser/chain.ts";
-import { createTypedApp } from "../util/ast.ts";
 import { parseWithEOF } from "../../lib/parser/eof.ts";
 
 describe("Parser Error Coverage", () => {

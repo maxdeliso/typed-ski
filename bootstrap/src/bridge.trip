@@ -132,6 +132,10 @@ export elaborateProgramToCore
 
 export checkedLengthU8
 
+export bridgeAvlLookup
+
+export bridgeAvlInsert
+
 poly rec eqListU8 =
   \a : List U8 =>
     \b : List U8 =>

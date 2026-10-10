@@ -25,6 +25,7 @@ def _node_sharded_test_impl(ctx):
     dist_min_js_rootpath = dist_files["tripc.min.js"].short_path
     dist_node_js_rootpath = dist_files["tripc.node.js"].short_path
     dist_bin_rootpath = dist_files[dist_bin_name].short_path
+    esbuild_native_rootpath = ctx.file.esbuild_native_package.short_path + ("/esbuild.exe" if is_windows else "/bin/esbuild")
 
     if is_windows:
         node_bin = node_path.replace("/", "\\")
@@ -60,6 +61,7 @@ def _node_sharded_test_impl(ctx):
             "set \"TYPED_SKI_DIST_NODE_JS_PATH=%RUNFILES_ROOT%\\" + dist_node_js_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_BIN_PATH=%RUNFILES_ROOT%\\" + dist_bin_rootpath.replace("/", "\\") + "\"",
             "set \"TYPED_SKI_DIST_READY=1\"",
+            "set \"ESBUILD_BINARY_PATH=%RUNFILES_ROOT%\\" + esbuild_native_rootpath.replace("/", "\\") + "\"",
         ]
         if clang_rootpath:
             content_lines.append("set \"TYPED_SKI_CLANG=%RUNFILES_ROOT%\\" + clang_rootpath.replace("/", "\\") + "\"")
@@ -105,6 +107,7 @@ def _node_sharded_test_impl(ctx):
             "export TYPED_SKI_DIST_NODE_JS_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_node_js_rootpath) + "\"",
             "export TYPED_SKI_DIST_BIN_PATH=\"$runfiles_root/" + shell_dquote_literal(dist_bin_rootpath) + "\"",
             "export TYPED_SKI_DIST_READY=1",
+            "export ESBUILD_BINARY_PATH=\"$runfiles_root/" + shell_dquote_literal(esbuild_native_rootpath) + "\"",
         ]
         if clang_rootpath:
             content_lines.append("export TYPED_SKI_CLANG=\"$runfiles_root/" + shell_dquote_literal(clang_rootpath) + "\"")
@@ -122,7 +125,7 @@ def _node_sharded_test_impl(ctx):
     if ctx.file.generated_jsr:
         symlinks["jsr.json"] = ctx.file.generated_jsr
 
-    runfiles_files = ctx.files.data + [node_toolchain.nodeinfo.node] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
+    runfiles_files = ctx.files.data + [node_toolchain.nodeinfo.node, ctx.file.esbuild_native_package] + ctx.attr.dist[DefaultInfo].files.to_list() + ([ctx.file.generated_jsr] if ctx.file.generated_jsr else [])
     if ctx.attr.clang:
         runfiles_files.append(ctx.executable.clang)
     if ctx.attr.llvm_dist:
@@ -152,6 +155,11 @@ node_sharded_test = rule(
         ),
         "dist": attr.label(
             mandatory = True,
+        ),
+        "esbuild_native_package": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            cfg = "exec",
         ),
         "generated_jsr": attr.label(
             allow_single_file = True,

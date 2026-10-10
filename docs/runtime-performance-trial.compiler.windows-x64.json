@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "trial": "GPT-6.1 Sol Ultra performance trial against predecessor code revisions",
+  "recordedAt": "2026-10-04T00:02:52.395Z",
+  "scope": "Code-revision measurements on one machine; no intrinsic model ranking is established.",
+  "environment": {
+    "platform": "win32",
+    "arch": "x64",
+    "osRelease": "10.0.26300",
+    "cpu": "Intel(R) Core(TM) i7-7820X CPU @ 3.60GHz",
+    "logicalCpus": 16,
+    "node": "v26.8.1",
+    "clang": "clang version 20.1.7\nTarget: x86_64-pc-windows-msvc\nThread model: posix\nInstalledDir: C:\\Program Files\\LLVM\\bin"
+  },
+  "measurement": {
+    "timing": "Native monitor measures child process creation through termination, including runtime cleanup; one untimed warmup per version/workload, serial rotating run order.",
+    "peakMemory": "GetProcessMemoryInfo.PeakWorkingSetSize after child termination",
+    "pointerValidation": "Default runtime build; TRIP_RUNTIME_VALIDATE_POINTERS is not defined",
+    "outputModes": "TRIP_RUNTIME_BUFFER_OUTPUT=0 for defaults; =1 for explicitly labeled buffered/full-compiler trials, set identically on all revisions"
+  },
+  "command": [
+    "node",
+    "ts_out/scripts/runtimePerformance.js",
+    "--emission-only",
+    "--output",
+    "docs/runtime-performance-trial.compiler.windows-x64.json"
+  ],
+  "compilerFlags": ["-O3", "-std=c11"],
+  "parameters": {
+    "allocationCount": 1000000,
+    "accessCount": 4000000,
+    "ioBytes": 1048576,
+    "repetitions": 5,
+    "compilerRepetitions": 3
+  },
+  "fixtureSha256": "ab20f3ce6fd99a5a9af216c88c58c975c01ed9480d4c831bde230e4af4997abb",
+  "monitorSha256": "c421039b72184de7fe34e4c8ff5d28fadd7c2a58c27de0edcd5e16d4930003ae",
+  "executionIdentity": {
+    "executedHarnessPath": "ts_out/scripts/runtimePerformance.js",
+    "executedHarnessSha256": "978df5464272ee20cbdc6bf18b42f2973e91683711ebf94969612f832af91fcd",
+    "sourceHarnessSha256": "b47f0af803e4fbe43c96652c3178f53e6a5b3269a74ae836f37f88d041773d49",
+    "executedHostDirectory": "ts_out/lib",
+    "executedHost": {
+      "files": 87,
+      "sha256": "250696ab689e6e8ec99186c89b984af17e869c3a0c6acd18012ab71d2490805a"
+    },
+    "sourceHost": {
+      "files": 87,
+      "sha256": "9fc6aae7c747d283de63e8f17ecb70c3286e485ed61a520ed10aa519e641802c"
+    },
+    "node": "v26.8.1",
+    "lockfileSha256": "cdf266374b9f53aa07e4054652caccd2035de82e9060706e89186640836492be"
+  },
+  "runtimes": [
+    {
+      "label": "main",
+      "revision": "ea97a8286fe88a16f84cd4ec673a103cad0a1791",
+      "sourceSha256": "45bf75227d26bd51c2792e4a0f5e867db0f294a52b592e2c6f0ad21a55e52ad7",
+      "headerSha256": "aa1537be8c7b5c9c46c4648bbbe3b1bb5d2af6b4d2d09a1d3cbddb116b2eb9db"
+    },
+    {
+      "label": "prior-hardening",
+      "revision": "7a447a6d8a738815e6cc9964a4b320d88be5749d",
+      "sourceSha256": "0e9cd2e88b95ee079d93ba4f713773df0390ec8ee03ca7a9ad06d8c14cdcba86",
+      "headerSha256": "568297b28d9dc52a2a794515ee1eee9fea86a85c92b6bf554028ec3870fa7df0"
+    },
+    {
+      "label": "candidate",
+      "revision": "working-tree",
+      "sourceSha256": "cfac92e862d3a6e24fc187ea0be621107533e2c4e0378438c2f258a2503cb3db",
+      "headerSha256": "6640d9c47f9a58c330a0e931d2bd72fd62d10a16bd445172b00e77c14555d4f3"
+    }
+  ],
+  "compilerArtifacts": {
+    "fixedSourceRevision": "ea97a8286fe88a16f84cd4ec673a103cad0a1791",
+    "fixedLlvmSha256": "d0999ee68ff772cb188c7b24059151f1c2c2d43b415f2faf491de095979336f8",
+    "fixedInputBundleSha256": "645bab282acb7cfe39299672d897879045af2354b4404de1bd7c39b6a1b9ed28",
+    "hostCompilerSourceSha256": "9fc6aae7c747d283de63e8f17ecb70c3286e485ed61a520ed10aa519e641802c",
+    "candidateLlvmSha256": "98384fd0122853fd85496aee86e0a179dda5870e05455a59e9757afebb24bf2a",
+    "candidateSourceBundleSha256": "8ba0b1e79445821a0aca6140f6fce64a98cc98e80a51da9abbf4686ac8d223af"
+  },
+  "generatedCompilerCorrectness": {
+    "stage2Artifacts": [
+      {
+        "compiler": "predecessor-main-stage2-compiler",
+        "llvmSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+        "inputBundleSha256": "645bab282acb7cfe39299672d897879045af2354b4404de1bd7c39b6a1b9ed28",
+        "executablePath": ".tmp/runtime-performance/predecessor-main-stage2-compiler.exe",
+        "executableSha256": "d5fe94caef0b788c2089ac6eb9ca61a15f9595cdd5612242b94092a14e4fe23f"
+      },
+      {
+        "compiler": "candidate-stage2-compiler",
+        "llvmSha256": "0a266745d354c96e197bb7b7e248d8892b78046fa1d75adeeb524944199ff2b2",
+        "inputBundleSha256": "8ba0b1e79445821a0aca6140f6fce64a98cc98e80a51da9abbf4686ac8d223af",
+        "executablePath": ".tmp/runtime-performance/candidate-stage2-compiler.exe",
+        "executableSha256": "5271a9fc1783b7d13a9bd4cb918bdb7dac402169ee1da2b311220a0b511c74e0"
+      }
+    ],
+    "inputSha256": "0a8fc49bce4617771d2ca2919fcff2adcb2c4d5551a655ec5f661e55c826d9dc",
+    "anchors": [
+      {
+        "compiler": "predecessor-main-stage2-compiler",
+        "outputSha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd"
+      },
+      {
+        "compiler": "candidate-stage2-compiler",
+        "outputSha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd"
+      }
+    ]
+  },
+  "trials": [
+    {
+      "workload": "stage2-compiler-emission-full-bootstrap-compile-default-output",
+      "bufferedOutput": false,
+      "repetitions": 3,
+      "results": [
+        {
+          "version": "predecessor-main-stage2-compiler",
+          "medianMs": 16005.7225,
+          "minMs": 15944.9938,
+          "maxMs": 16168.3815,
+          "medianPeakRssBytes": 3165855744,
+          "samples": [
+            {
+              "elapsedMs": 16168.3815,
+              "peakRssBytes": 3165855744,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 125644176,
+                "objectBytes": 3147408592,
+                "reservedBytes": 3147831736,
+                "chunks": 3005
+              }
+            },
+            {
+              "elapsedMs": 16005.7225,
+              "peakRssBytes": 3165876224,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 125644176,
+                "objectBytes": 3147408592,
+                "reservedBytes": 3147831736,
+                "chunks": 3005
+              }
+            },
+            {
+              "elapsedMs": 15944.9938,
+              "peakRssBytes": 3165843456,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 125644176,
+                "objectBytes": 3147408592,
+                "reservedBytes": 3147831736,
+                "chunks": 3005
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate-stage2-compiler",
+          "medianMs": 15926.4116,
+          "minMs": 15876.061,
+          "maxMs": 16018.2634,
+          "medianPeakRssBytes": 2844332032,
+          "samples": [
+            {
+              "elapsedMs": 15876.061,
+              "peakRssBytes": 2844332032,
+              "outputBytes": 3400750,
+              "outputSha256": "91517b4082366ccd274cfb7425a76407b53559c8bc360d00de7737420d3510f8",
+              "allocations": {
+                "objects": 115718462,
+                "objectBytes": 2827138472,
+                "reservedBytes": 2828008736,
+                "chunks": 2700
+              }
+            },
+            {
+              "elapsedMs": 16018.2634,
+              "peakRssBytes": 2844356608,
+              "outputBytes": 3400750,
+              "outputSha256": "91517b4082366ccd274cfb7425a76407b53559c8bc360d00de7737420d3510f8",
+              "allocations": {
+                "objects": 115718462,
+                "objectBytes": 2827138472,
+                "reservedBytes": 2828008736,
+                "chunks": 2700
+              }
+            },
+            {
+              "elapsedMs": 15926.4116,
+              "peakRssBytes": 2844327936,
+              "outputBytes": 3400750,
+              "outputSha256": "91517b4082366ccd274cfb7425a76407b53559c8bc360d00de7737420d3510f8",
+              "allocations": {
+                "objects": 115718462,
+                "objectBytes": 2827138472,
+                "reservedBytes": 2828008736,
+                "chunks": 2700
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "stage2-compiler-emission-full-bootstrap-compile-buffered-opt-in",
+      "bufferedOutput": true,
+      "repetitions": 3,
+      "results": [
+        {
+          "version": "predecessor-main-stage2-compiler",
+          "medianMs": 3842.9573,
+          "minMs": 3826.2827,
+          "maxMs": 3893.6647,
+          "medianPeakRssBytes": 3165925376,
+          "samples": [
+            {
+              "elapsedMs": 3893.6647,
+              "peakRssBytes": 3165941760,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 125644176,
+                "objectBytes": 3147408592,
+                "reservedBytes": 3147831736,
+                "chunks": 3005
+              }
+            },
+            {
+              "elapsedMs": 3842.9573,
+              "peakRssBytes": 3165925376,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 125644176,
+                "objectBytes": 3147408592,
+                "reservedBytes": 3147831736,
+                "chunks": 3005
+              }
+            },
+            {
+              "elapsedMs": 3826.2827,
+              "peakRssBytes": 3165917184,
+              "outputBytes": 3401330,
+              "outputSha256": "c833c7a5aa61d7ea8453fda65685b77cd0705c8dca489b28ba336d1e9817a161",
+              "allocations": {
+                "objects": 125644176,
+                "objectBytes": 3147408592,
+                "reservedBytes": 3147831736,
+                "chunks": 3005
+              }
+            }
+          ]
+        },
+        {
+          "version": "candidate-stage2-compiler",
+          "medianMs": 3658.5226,
+          "minMs": 3625.595,
+          "maxMs": 3730.4923,
+          "medianPeakRssBytes": 2844405760,
+          "samples": [
+            {
+              "elapsedMs": 3730.4923,
+              "peakRssBytes": 2844385280,
+              "outputBytes": 3400750,
+              "outputSha256": "91517b4082366ccd274cfb7425a76407b53559c8bc360d00de7737420d3510f8",
+              "allocations": {
+                "objects": 115718462,
+                "objectBytes": 2827138472,
+                "reservedBytes": 2828008736,
+                "chunks": 2700
+              }
+            },
+            {
+              "elapsedMs": 3658.5226,
+              "peakRssBytes": 2844409856,
+              "outputBytes": 3400750,
+              "outputSha256": "91517b4082366ccd274cfb7425a76407b53559c8bc360d00de7737420d3510f8",
+              "allocations": {
+                "objects": 115718462,
+                "objectBytes": 2827138472,
+                "reservedBytes": 2828008736,
+                "chunks": 2700
+              }
+            },
+            {
+              "elapsedMs": 3625.595,
+              "peakRssBytes": 2844405760,
+              "outputBytes": 3400750,
+              "outputSha256": "91517b4082366ccd274cfb7425a76407b53559c8bc360d00de7737420d3510f8",
+              "allocations": {
+                "objects": 115718462,
+                "objectBytes": 2827138472,
+                "reservedBytes": 2828008736,
+                "chunks": 2700
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

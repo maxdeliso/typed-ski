@@ -9,10 +9,9 @@
  */
 
 import assert from "node:assert/strict";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { readFile, readdir, rm } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { readFile, readdir } from "node:fs/promises";
 import { describe, it } from "../util/test_shim.ts";
 import { workspaceRoot } from "../../lib/shared/workspaceRoot.ts";
 import { VERSION as generatedVersionConstant } from "../../lib/shared/version.generated.ts";
@@ -88,6 +87,10 @@ describe("JSR Packaging Configuration", () => {
       assert.ok(config.publish.include.includes("dist/**"));
       assert.ok(config.publish.include.includes("README.md"));
       assert.ok(config.publish.include.includes("SECURITY.md"));
+      // JSR must unignore the directory before traversing its ignored children.
+      assert.ok(config.publish.exclude.includes("!dist/"));
+      assert.ok(config.publish.exclude.includes("!dist/**"));
+      assert.ok(config.publish.exclude.includes("!lib/**/*.generated.ts"));
     });
 
     it("uses Deno's built-in Node types without requiring node_modules", async () => {

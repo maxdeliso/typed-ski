@@ -45,7 +45,7 @@ function unparseInstruction(
   instruction: BlockInstruction,
   module: BlockModule,
 ): string {
-  const renderedOp = unparseInstructionOp(instruction.op, module);
+  const renderedOp = unparseInstructionOp(instruction.op);
   if (!instruction.result) {
     return `${renderedOp} : ${formatType(
       instruction.resultType,
@@ -58,23 +58,20 @@ function unparseInstruction(
   )} !${instruction.effects}`;
 }
 
-function unparseInstructionOp(
-  op: BlockInstructionOp,
-  module: BlockModule,
-): string {
+function unparseInstructionOp(op: BlockInstructionOp): string {
   switch (op.kind) {
     case "prim":
     case "call":
     case "construct":
       return `${op.kind} ${op.name}(${op.args
-        .map((arg) => unparseValueRef(arg, module))
+        .map((arg) => unparseValueRef(arg))
         .join(", ")})`;
     case "runtimeCall":
       return `runtimeCall ${op.name}(${op.args
-        .map((arg) => unparseValueRef(arg, module))
+        .map((arg) => unparseValueRef(arg))
         .join(", ")})`;
     case "move":
-      return `move ${unparseValueRef(op.value, module)}`;
+      return `move ${unparseValueRef(op.value)}`;
   }
 }
 
@@ -85,22 +82,18 @@ function unparseTerminator(
   switch (terminator.kind) {
     case "return":
       return terminator.value
-        ? `return ${unparseValueRef(terminator.value, module)}`
+        ? `return ${unparseValueRef(terminator.value)}`
         : "return";
     case "jump":
-      return `jump ${formatTarget(terminator.target, terminator.args, module)}`;
+      return `jump ${formatTarget(terminator.target, terminator.args)}`;
     case "branch":
-      return `branch ${unparseValueRef(
-        terminator.condition,
-        module,
-      )} ${formatTarget(
+      return `branch ${unparseValueRef(terminator.condition)} ${formatTarget(
         terminator.thenTarget,
         terminator.thenArgs,
-        module,
-      )} ${formatTarget(terminator.elseTarget, terminator.elseArgs, module)}`;
+      )} ${formatTarget(terminator.elseTarget, terminator.elseArgs)}`;
     case "case":
       return [
-        `case ${unparseValueRef(terminator.scrutinee, module)} of`,
+        `case ${unparseValueRef(terminator.scrutinee)} of`,
         ...terminator.alts.map((alt) => indent(unparseCaseAlt(alt, module), 2)),
       ].join("\n");
     case "unreachable":
@@ -125,18 +118,14 @@ function unparseCaseAlt(alt: BlockCaseAlt, module: BlockModule): string {
     })),
     ...alt.args,
   ];
-  return `${pattern} -> ${formatTarget(alt.target, targetArgs, module)}`;
+  return `${pattern} -> ${formatTarget(alt.target, targetArgs)}`;
 }
 
-function formatTarget(
-  label: string,
-  args: BlockValueRef[],
-  module: BlockModule,
-): string {
-  return `${label}(${args.map((arg) => unparseValueRef(arg, module)).join(", ")})`;
+function formatTarget(label: string, args: BlockValueRef[]): string {
+  return `${label}(${args.map((arg) => unparseValueRef(arg)).join(", ")})`;
 }
 
-function unparseValueRef(value: BlockValueRef, module: BlockModule): string {
+function unparseValueRef(value: BlockValueRef): string {
   switch (value.kind) {
     case "local":
       return formatLocal(value.id, value.name);

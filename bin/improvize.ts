@@ -293,11 +293,11 @@ async function runLint(
         timeVerify = Date.now() - startSecond;
       }
 
-      return { file, input, result, afterFixResult, timeVerify };
+      return { file, result, afterFixResult, timeVerify };
     }),
   );
 
-  for (const { file, input, result, afterFixResult, timeVerify } of results) {
+  for (const { file, result, afterFixResult, timeVerify } of results) {
     if (result.diagnostics.length > 0) {
       hadDiagnostics = true;
     }

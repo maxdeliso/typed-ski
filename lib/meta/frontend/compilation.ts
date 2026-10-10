@@ -19,17 +19,13 @@ import {
   indexSymbols as indexSymbolsImpl,
 } from "./symbolTable.ts";
 import { elaborateTerms } from "./elaboration.ts";
-import {
-  resolveExternalProgramReferences,
-  resolveExternalTermReferences,
-} from "./substitution.ts";
+import { resolveExternalProgramReferences } from "./substitution.ts";
 import { externalReferences } from "./externalReferences.ts";
 import { parseTripLang } from "../../parser/tripLang.ts";
 import { expandDataDefinitions } from "./data.ts";
 import { emptySystemFContext, typecheckSystemF } from "../../types/systemF.ts";
 import type { BaseType } from "../../types/types.ts";
 import { CompilationError } from "./errors.ts";
-import { lower } from "./termLevel.ts";
 
 type ParsedProgram = TripLangProgram & {
   readonly __moniker: unique symbol;
